@@ -58,6 +58,30 @@ Append to `CLAUDE.md` (project-local):
 - Model pinning: Opus 4.7 for synthesis, council fires, plan-locking; Sonnet 4.6 for per-track TDD execution.
 - Skill kit reference: `bayesian-eval-discipline`, `llm-judge-calibration`, `append-only-evidence-design`, `ai-slop-sentinel` — invoke at the relevant track per below.
 
+### 1.5 · Pre-Track-A storage council fire ✅ FIRED 2026-06-04
+
+Storage-touching-change template (TEST-ARCH + SCHEMA + RELIABILITY + SECURITY) dispositioned four audit-context fragility clusters before Track A code lands. All seats returned BLOCKER-FOUND. Adopted A18–A23; deferred D5–D8. Raw outputs + synthesis at `docs/council-fires/2026-06-04-pre-track-a-storage/`. Outcome creates 1.5a (code) and 1.5b (docs) gates below.
+
+### 1.5a · Apply Phase 1.5 council code fixes (pre-Track-A blocker)
+
+Sequential or single-PR; touches storage only. ~150 LOC + 2 new migrations + 3 new smoke tests + typed exception module.
+
+- **A18** — `apply_pending`: replace `with conn:` + `executescript` with explicit `BEGIN IMMEDIATE` / statement-by-statement execution / `INSERT schema_migrations` / `COMMIT`, `ROLLBACK` on exception. New typed exceptions in `src/skill_harness/storage/errors.py` (`BootstrapError`, `MigrationApplyError`). Structured logging at each migration apply.
+- **A19** — `open_evidence` / `open_runtime` raise `BootstrapError` when `discover()` returns `[]`. Add smoke test `test_open_evidence_raises_on_no_migrations` that uses a tmp dir without migrations and asserts the raise (replacing/supplementing the current inverted-assertion test).
+- **A20** — new migration `migrations/evidence/0002_runs_trigger_split.sql`: DROP `runs_completed_at_once`, CREATE two named-column triggers (`runs_completed_at_set_once` + `runs_immutable_columns`). Add smoke test that an UPDATE of a non-frozen-non-completed_at column after completion succeeds (currently no such column exists, so test is parametric on the SQL primitive `BEFORE UPDATE OF`).
+- **A21** — new migration `migrations/runtime/0002_schema_migrations_triggers.sql`: add BEFORE UPDATE + BEFORE DELETE triggers on `runtime.schema_migrations`. Add smoke test mirroring `test_evidence_append_only_skills`.
+- **A22** — split `open_db()` to accept a pragma-set parameter OR per-DB helpers. `evidence` uses `PRAGMA synchronous = FULL`; `runtime` keeps `NORMAL`. Add smoke test asserting `PRAGMA synchronous` value per connection.
+
+**Gate**: `pytest -q` green (all new + existing tests); `mypy --strict` clean; `ruff check` clean. Ai-slop-sentinel review at the change boundary.
+
+### 1.5b · Apply Phase 1.5 council documentation updates
+
+Documentation-only; can land in parallel with 1.5a.
+
+- **A23** — `SECURITY.md` "Threat model" section gains three clauses (trust partition / filesystem substitution boundary / PRAGMA scope). Mirror trust-partition + filesystem boundary as a subsection under `docs/COUNCIL_FINDINGS.md` §A4. Note `synchronous=FULL`/`NORMAL` asymmetry in CLAUDE.md "Evidence model" section.
+
+**Gate**: documentation review — no acceptance criteria beyond "all three clauses present and accurate."
+
 ---
 
 ## Phase 2 — Parallel build via 5 worktrees (sessions 2–N)
@@ -187,7 +211,7 @@ Every track below has a council fire point declared up-front. These are not opti
 
 | When | Template | Seats | Why |
 |---|---|---|---|
-| Phase 1.5 (before any Track A code lands) | Custom | TEST-ARCH + SECURITY + RELIABILITY | The original PRD fire under-covered security and reliability lenses; close the gap before storage code goes in |
+| Phase 1.5 (before any Track A code lands) ✅ FIRED 2026-06-04 | Custom (Storage-touching) | TEST-ARCH + SCHEMA + SECURITY + RELIABILITY | Archive: `docs/council-fires/2026-06-04-pre-track-a-storage/`. Adopted A18–A23; deferred D5–D8. Phase 1.5a + 1.5b are the resulting blockers. |
 | Pre-Track A start | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Storage is the highest-stakes track; crash safety + adversarial input + write-time snapshot all need a coordinated review |
 | Pre-Track C start | Custom | EVAL-RESEARCH + SECURITY + COST + STAT | Judge module is where prompt-injection-by-adversarial-skill-output enters; STAT owns the verdict aggregation that downstream Track E depends on |
 | Pre-Track D start | Custom | STAT + COST + RELIABILITY + OPERATOR-DX | Ablation runner is the cost-hot-path and the user-visible long-running operation; dry-run UX is OPERATOR-DX's lane |

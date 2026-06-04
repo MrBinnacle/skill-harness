@@ -174,6 +174,10 @@ These are the concrete edits Phase 3 expects. Track B may produce a PR that appl
 | §17 | Schema migration runner with SHA-256 ledger | A4 |
 | §18 | `run` defaults dry-run; `--execute`, `--max-usd`, `--daily-cap` | A12 |
 | §19 | Add criterion #7: "No clause may be reported PASSED without frozen falsifying case at current metric_library version" | A15 |
+| §17 | Trust partition: evidence.db append-only/audited/load-bearing; runtime.db mutable by design | A23, SECURITY-F5 |
+| §17 | PRAGMA scope: `open_db()` is the sanctioned connection entry; FK enforcement is connection-scoped | A23, SECURITY-F5 |
+| §17 | `PRAGMA synchronous = FULL` for evidence; `NORMAL` for runtime | A22, RELIABILITY-F5 |
+| §17a (new) | Threat-model section: filesystem-substitution boundary; tamper-evidence is in-process, not file-replacement-resistant | A23, SECURITY-F5 |
 
 ---
 
@@ -248,3 +252,77 @@ Trail of Bits `supply-chain-risk-auditor` skill executed against production + de
 ### Citation verification
 
 Per `subagent-research-reliability` discipline, the subagent's CVE-specific claims were independently verified by direct `gh api` queries before mitigations were applied. CVE IDs, patch versions, and publication dates above are from primary source.
+
+---
+
+## Appendix B — Phase 1.5 pre-Track-A council fire (2026-06-04)
+
+Four-seat fire (TEST-ARCH + SCHEMA + RELIABILITY + SECURITY) dispositioned the four storage-layer fragility clusters surfaced by `audit-context-building`. All seats returned `STATUS: BLOCKER-FOUND`. Raw seat outputs + synthesis archived at `docs/council-fires/2026-06-04-pre-track-a-storage/`.
+
+### A18 · Migration apply atomicity via explicit transaction
+- **Drivers**: SCHEMA-F1, RELIABILITY-F1, TEST-ARCH-F1, SECURITY-F1, M1
+- **Decision**: Replace `with conn:` + `executescript` (which is a no-op for atomicity under `isolation_level=None`) with explicit `conn.execute("BEGIN IMMEDIATE")` + statement-by-statement execution + `INSERT INTO schema_migrations` + `conn.execute("COMMIT")`; `conn.execute("ROLLBACK")` on exception. Define typed `BootstrapError` / `MigrationApplyError`. Emit structured log lines (`migration_applying`, `migration_applied`, `migration_failed`). Add a smoke test for the half-applied recovery path.
+- **Status**: PENDING — implement in Phase 1.5a before Track A.
+- **Sources verified**: Python sqlite3 docs (https://docs.python.org/3/library/sqlite3.html); SQLite transaction docs (https://www.sqlite.org/lang_transaction.html); SQLite `executescript` semantics (https://www.sqlite.org/c3ref/exec.html).
+
+### A19 · `open_evidence` / `open_runtime` raise on empty migration discovery
+- **Drivers**: TEST-ARCH-F2, RELIABILITY-F2, SECURITY-F2, SCHEMA-F2, M2
+- **Decision**: When `discover()` returns `[]` from a configured migrations directory, `open_evidence` and `open_runtime` MUST raise `BootstrapError` (or `MigrationDiscoveryError`) naming the searched directory + resolved `REPO_ROOT` + `__file__`. Silent zero-migration is a vacuity hazard (per PRD §7) AND a forgeable "no findings" report (SECURITY's framing). Invert the integration assertion: `open_evidence()` never returns a usable-looking-but-empty DB. Long-term `importlib.resources` packaging deferred to D8.
+- **Status**: PENDING — implement in Phase 1.5a before Track A.
+
+### A20 · `runs` immutability is column-scoped, not row-scoped
+- **Drivers**: SCHEMA-F3, TEST-ARCH-F3, RELIABILITY-F3, M3
+- **Decision** (load-bearing intent statement): the intent IS column-immutable, NOT row-immutable. The current trigger (`migrations/evidence/0001_initial.sql:203-205`) contradicts its own comment + name + error message; that is implementation drift. Replace with two named-column triggers per SCHEMA's proposal:
+  ```sql
+  CREATE TRIGGER runs_completed_at_set_once BEFORE UPDATE OF completed_at ON runs
+      WHEN OLD.completed_at IS NOT NULL
+      BEGIN SELECT RAISE(ABORT, 'runs.completed_at is immutable once set'); END;
+  CREATE TRIGGER runs_immutable_columns BEFORE UPDATE OF run_id, skill_id, run_kind, config_json, started_at ON runs
+      BEGIN SELECT RAISE(ABORT, 'append_only_violation: runs immutable columns'); END;
+  ```
+- **Status**: PENDING — implement via new migration `migrations/evidence/0002_runs_trigger_split.sql` in Phase 1.5a. SQLite does not support direct trigger replacement in this case; the new migration DROPs the old trigger and creates the two named-column triggers. **Note**: `DROP TRIGGER` is the only legitimate operation on the migrations side that does NOT violate append-only on data — it modifies meta-schema, which is governed by the SHA-256 ledger (A4), not by row-level triggers.
+
+### A21 · `runtime.schema_migrations` triggered append-only (META vs DOMAIN framing)
+- **Drivers**: TEST-ARCH-F4, SECURITY-F4, RELIABILITY-F4, M4
+- **Council disposition**: 3 seats (TEST-ARCH + SECURITY + RELIABILITY) framed `schema_migrations` as a META table whose append-only nature is independent of the runtime/evidence partition (A2). SCHEMA dissented (treated it as intentional partition asymmetry). The 3-vs-1 vote on cross-talk-aware grounds adopts the META framing. SCHEMA's "uniformity" concern is documented but does not outweigh the tamper-evidence integrity loss.
+- **Decision**: Add `BEFORE UPDATE` and `BEFORE DELETE` triggers to `runtime.schema_migrations` only (NOT to other runtime tables — `run_progress`, `current_calibration`, `cost_ledger`, `run_budget`, `skill_imports_staging` remain mutable per A2). Add a smoke test mirroring `test_evidence_append_only_skills`.
+- **Status**: PENDING — implement via new migration `migrations/runtime/0002_schema_migrations_triggers.sql` in Phase 1.5a.
+
+### A22 · `synchronous = FULL` for evidence; `NORMAL` for runtime
+- **Drivers**: RELIABILITY-F5
+- **Decision**: `evidence.db` opens with `PRAGMA synchronous = FULL` (audit-trail invariant). `runtime.db` keeps `PRAGMA synchronous = NORMAL` (in-flight state, tolerant of replay-on-restart). Requires `open_db()` to accept a pragma-set parameter or splitting into `open_evidence_raw()` / `open_runtime_raw()`. Document the asymmetry in CLAUDE.md "Evidence model" section.
+- **Status**: PENDING — implement in Phase 1.5a alongside A18.
+- **Sources verified**: SQLite WAL durability docs (https://www.sqlite.org/wal.html); SQLite PRAGMA semantics (https://www.sqlite.org/pragma.html#pragma_synchronous).
+
+### A23 · Trust partition + tamper-evidence threat model documented
+- **Drivers**: SECURITY-F5 (cross-cutting; documentation-debt)
+- **Decision**: Update `SECURITY.md` "Threat model" section with three clauses:
+  1. **Trust partition**: `evidence.db` is append-only, audited, load-bearing. `runtime.db` is mutable by design. Compromise of runtime.db affects only FUTURE evidence rows via `current_calibration` snapshot at verdict write time (bounded by A3). Symmetry between the two databases is NOT a design goal.
+  2. **Filesystem substitution boundary**: append-only triggers + SHA-256 migration ledger defend against in-process unauthorized writes. They do NOT defend against an attacker who replaces the entire DB file at the filesystem layer. v0.1 threat model assumes filesystem integrity (local-trust).
+  3. **PRAGMA scope**: connections MUST go through `skill_harness.storage.migrations.open_db()`. Direct `sqlite3.connect()` bypasses connection-scoped pragmas including `foreign_keys = ON`.
+- Mirror clauses (1) + (2) as a "Trust partition" subsection under §A4 above.
+- **Status**: PENDING — documentation only; land in Phase 1.5b.
+
+---
+
+### Deferred to v0.2 (Phase 1.5 fire additions)
+
+#### D5 · `evidence.runs.terminal_state` enum column
+- **Driver**: RELIABILITY-F3 expansion
+- **Why deferred**: meaningful expansion of the run state machine but not blocking for Track A. Adding `terminal_state TEXT CHECK (terminal_state IN ('completed','failed','aborted_budget','crashed_reconciled'))` would clarify "why did the run end" as admissible evidence rather than implicit, and would unblock a crashed-run reconciler. v0.2 follow-up migration; preserves A1 via single-shot trigger on the new column.
+
+#### D6 · `db_identity` row + cross-DB identity check
+- **Driver**: RELIABILITY-F4 sub-finding
+- **Why deferred**: defense against silent runtime-DB restore-from-backup (e.g., post-disk-failure). v0.2 adds a single-row `db_identity` table holding a UUID generated at first open; cross-references on subsequent opens detect identity change. Necessary for production deployments; not blocking for v0.1 single-operator local-trust model.
+
+#### D7 · `skill audit` CLI command for cross-DB calibration audit
+- **Driver**: SECURITY-F4 sub-finding
+- **Why deferred**: A3's bound (calibration rewrites affect only future verdicts) is the load-bearing guarantee. Detection of a lying `current_calibration` requires an auditor to verify that every `oracle_verdicts.calibration_event_id` resolves to a `calibration_events` row whose `validated_at` ≤ verdict's `written_at` AND whose `expires_at` > verdict's `written_at`. v0.2 ships `skill audit` implementing this check. v0.1 documents the audit recipe in SECURITY.md without implementing the command.
+
+#### D8 · `importlib.resources` migration packaging
+- **Driver**: M2 long-term fix
+- **Why deferred**: A19's runtime assertion (raise on empty discovery) makes the failure loud immediately; the structural fix is to ship migrations as package data via `importlib.resources.files("skill_harness").joinpath("storage/migrations/evidence")`. v0.2 refactor; eliminates `parents[3]` brittleness entirely.
+
+### Cross-talk validation note
+
+7 of 8 cross-seat predictions were accurate. The substantive miss (SCHEMA + TEST-ARCH expecting SECURITY to BLOCKER M4) is healthy disagreement-discovery: SECURITY's explicit A3-bound is a sharper threat-model statement than other seats anticipated. The council pattern surfaced this; synthesis adopts SECURITY's framing (MAJOR not BLOCKER) for F4 while still requiring the trigger fix.
