@@ -64,6 +64,7 @@ These are the contracts that make the harness mean what it claims. A change that
 ### Evidence model
 - Persistence is SQLite, **append-only**. No `UPDATE` against evidence rows. No `DELETE` outside explicit retention jobs.
 - Provenance (source, oracle, version, admissibility state) is recorded at **write time** and never recomputed. Recomputing admissibility at read time would let calibration drift retroactively rewrite history — forbidden.
+- Durability is **asymmetric** per A22: `evidence.db` opens at `PRAGMA synchronous = FULL` (committed audit rows must survive power loss); `runtime.db` keeps `synchronous = NORMAL` (state can be re-derived from evidence after a crash). Code that bypasses `open_db()` and reaches `sqlite3.connect()` directly silently degrades durability (and loses connection-scoped `foreign_keys = ON`) — review-block any such PR.
 
 ### Aggregation rules
 - Only verdicts that are **both** `admissible` AND `non-confounded` enter aggregation. Inadmissible and confounded rows are stored for audit but cannot affect results.

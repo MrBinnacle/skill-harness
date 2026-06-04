@@ -34,6 +34,12 @@ and (where applicable) the PRD section that must be edited before v1.1 lock.
 - **Decision**: Numbered SQL files in `migrations/{evidence,runtime}/`. Each application records `(migration_id, file_sha256)` in append-only `schema_migrations`. On startup, file SHA mismatch against recorded SHA aborts with `MigrationTamperedError`.
 - **Status**: REALIZED in `storage/migrations.py`.
 
+#### A4 · Trust partition (Phase 1.5 mirror of SECURITY F5 / A23)
+
+The append-only triggers + SHA-256 ledger defend against *in-process* unauthorized writes (developer error, SQL-injection-style mutation, library bug). They do **not** defend against an attacker who replaces the entire `evidence.db` file at the filesystem layer — the SHA ledger checks file contents against an SHA recorded *inside* the same DB, so a whole-DB substitution supplies both the data and the baseline-it-is-checked-against. v0.1 assumes filesystem integrity (local-trust); file-replacement detection is deferred to v0.2 (candidate D6 `db_identity`).
+
+The runtime/evidence partition is itself a security boundary: `evidence.db` is append-only, audited, load-bearing; `runtime.db` is mutable by design. Compromise of `runtime.db` (`current_calibration` rewrite is the load-bearing target) affects only FUTURE verdicts because past verdicts have already snapshotted `admissibility_state` at write time and `oracle_verdicts` is append-only (A3 + A1). **Symmetry between the two DBs is not a design goal.** The single exception is `runtime.schema_migrations`, framed as META not DOMAIN — its append-only triggers (A21) live on the runtime side because the ledger's tamper-evidence is independent of operational mutability. See `SECURITY.md` "Threat model (informal)" for the canonical statement; this is the architectural-log mirror.
+
 ### A5 · Pairwise-only Tier-2 judge protocol
 - **Drivers**: EVAL-F5
 - **Decision**: §3.1's "forbid quality scoring" and §5 Tier 2's LLM judge are reconciled: the Tier-2 judge is admissible ONLY in pairwise-preference mode for one named axis. Judge prompts MUST present both candidates, MUST output `{A, B, tie}` for one axis, MUST NOT emit a numeric score. G-Eval-style scalar templates are explicitly forbidden.

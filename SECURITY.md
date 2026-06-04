@@ -38,12 +38,28 @@ The harness explicitly avoids:
 
 ## Threat model (informal)
 
-The harness runs locally, hits the Anthropic API, and writes to SQLite. The primary threats:
+The harness runs locally, hits the Anthropic API, and writes to SQLite. The default v0.1 trust model is **local-trust**: single operator, single host, evidence and runtime DB files live in the operator's filesystem. Remote network attackers, multi-tenant DB hosting, and hostile model providers replacing the SDK at runtime are out of scope. In scope: accidental developer mutation, dependency-tree compromise (passive), and filesystem-adjacent attackers with the same UID as the harness process.
 
-1. **Evidence tampering** — addressed by append-only triggers + SHA-256 migration ledger
-2. **Calibration drift hidden as admissible** — addressed by `expires_at` on calibration events + write-time snapshot
-3. **API key exfiltration** — read from environment, never logged, never persisted
-4. **Cost overrun via prompt injection in judged outputs** — bounded by per-run hard cap (`--max-usd`) and per-day rolling cap
+The primary threats:
+
+1. **Evidence tampering** — addressed by append-only triggers + SHA-256 migration ledger (see *Filesystem substitution boundary* below for the scope of this defense).
+2. **Calibration drift hidden as admissible** — addressed by `expires_at` on calibration events + write-time snapshot. The `current_calibration` runtime pointer can be rewritten by a filesystem-adjacent attacker, but this affects only FUTURE verdicts; past verdicts have already snapshotted their `admissibility_state` at write time and the append-only triggers on `oracle_verdicts` prevent rewriting them.
+3. **API key exfiltration** — read from environment, never logged, never persisted.
+4. **Cost overrun via prompt injection in judged outputs** — bounded by per-run hard cap (`--max-usd`) and per-day rolling cap.
+
+### Trust partition between `evidence.db` and `runtime.db`
+
+`evidence.db` is append-only, audited, and load-bearing. `runtime.db` is mutable by design (in-flight progress, current calibration pointer, cost ledger). Compromise of `runtime.db` affects only FUTURE evidence rows via `current_calibration` snapshot at verdict write time; past evidence rows are bounded by the write-time-admissibility-snapshot rule above. **Symmetry between the two databases is NOT a design goal.** A future contributor proposing to "harden runtime.db with triggers for symmetry" is going in the wrong direction; the only append-only structure on the runtime side is `schema_migrations` (the META tamper-evidence ledger, see A21), which is structurally distinct from the operational tables (`run_progress`, `current_calibration`, `cost_ledger`).
+
+### Filesystem substitution boundary
+
+The append-only triggers and SHA-256 migration ledger defend against **in-process** unauthorized writes — developer error, SQL-injection-style mutation, library bugs. They do **NOT** defend against an attacker who replaces the entire `evidence.db` file at the filesystem layer. The SHA ledger checks file contents against an SHA recorded *inside the DB*; if the whole DB is substituted, both the data and the baseline-it-is-checked-against come from the attacker. v0.1's threat model assumes filesystem integrity. Detection of file-replacement attacks is a v0.2 concern (candidate D6 `db_identity` row + cross-DB identity check).
+
+### PRAGMA scope
+
+Connections to `evidence.db` and `runtime.db` **MUST** go through `skill_harness.storage.migrations.open_db()`. `journal_mode = WAL` is persistent at the DB-file level (SQLite docs), but `foreign_keys = ON`, `synchronous`, and `busy_timeout` are **connection-scoped** — a future caller that opens a raw `sqlite3.Connection(path)` silently loses FK enforcement and the durability tier appropriate to the DB role. Repository APIs in `src/skill_harness/storage/` enforce this in code review; PRs that bypass `open_db()` are blocked at review.
+
+The durability tier itself is asymmetric and intentional: `evidence` opens at `synchronous = FULL` (audit rows must survive power loss), `runtime` at `synchronous = NORMAL` (in-flight state can be re-derived from evidence after a crash).
 
 If you identify a threat outside this model, please report it via the channels above.
 
