@@ -16,6 +16,71 @@ This skill codifies the project's standing review body. The first council fire
 decisions that gate every Phase 2 track. This skill exists so the pattern is
 repo-resident infrastructure, not a thing the assistant happens to remember.
 
+## Orchestrator (always-on meta-role)
+
+The orchestrator is the role the main agent assumes by default. It is NOT a
+review seat — it dispatches the council. The 9 review seats produce findings;
+the orchestrator decides what to do with them. Pinned to Opus 4.7 per the
+project CLAUDE.md model-pinning section (synthesis, sequencing, gate
+decisions). Tracks A–E execution dispatches to Sonnet 4.6.
+
+### Contract
+
+The orchestrator owns:
+
+- **Build coherence** — `PRD.md` ↔ `PLAN.md` ↔ `docs/COUNCIL_FINDINGS.md` ↔
+  `.claude/state/checkpoint.md` are mutually consistent. Drift between them is
+  the orchestrator's bug.
+- **Track sequencing** — which worktree fires when, per `PLAN.md` "Named
+  council fire points." Track D blocked until A+C green; Track E blocked
+  until A+D green.
+- **Council fire decisions** — fire-or-proceed per the trigger table below.
+  Decision is recorded in the session log as "Council fired [seats] for
+  [reason]" or "Routine — no fire, decision A_N applies."
+- **Exit-gate adjudication** — a track is done when its `PLAN.md` exit
+  criteria are met AND its declared council fire produced no unresolved
+  BLOCKER. Self-claims of "done" are not enough.
+- **PRD amendment shipping** — the 16-amendment queue in `COUNCIL_FINDINGS.md`
+  ships as a single v1.1 doc-lock PR. Not piecemeal.
+- **Scope discipline** — surface `[values decision]` only when a competent
+  role default doesn't exist (CLAUDE.md global §0.6). Defer to v0.2 when
+  scope conflicts with `PLAN.md` "Out of scope" list.
+- **Cross-worktree merge order** — when parallel tracks land, decide merge
+  sequence; reconcile interface conflicts before integration.
+
+### Session-start protocol (falsifiable)
+
+Every session begins with the orchestrator invoking `session-startup` (see
+companion skill). The first line of the orchestrator's first user-facing
+output MUST be:
+
+```
+Sources of truth read: PRD@<sha7> · PLAN@<sha7> · COUNCIL_FINDINGS@<sha7> · checkpoint@<sha7>
+```
+
+This is the observable check that the role was performed. A session that
+proceeds without printing this line has skipped re-entry; correct by aborting
+the action and starting over.
+
+### Session-end protocol
+
+Before the session closes, the orchestrator writes:
+
+1. `.claude/state/checkpoint.md` — updated current-state snapshot, next-gate entry
+2. `docs/session-log/<YYYY-MM-DD>-<slug>.md` — append-only entry capturing:
+   - phase entered, phase completed
+   - council fires (with seat list + finding IDs + archive path)
+   - decisions made (with rationale and PRD/COUNCIL_FINDINGS anchors)
+   - open questions / values decisions queued
+   - artifacts produced (paths + SHAs)
+
+### Not the orchestrator's lane
+
+- Reviewing code — that's the review seats
+- Implementing code — that's the track subagents
+- Owning the PRD's product intent — that's the user (surface via `[values decision]`)
+- Adversarial review — that's `ai-slop-sentinel` + `adversarial-spec`
+
 ## When to fire
 
 Triggers:
