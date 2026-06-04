@@ -332,3 +332,108 @@ Four-seat fire (TEST-ARCH + SCHEMA + RELIABILITY + SECURITY) dispositioned the f
 ### Cross-talk validation note
 
 7 of 8 cross-seat predictions were accurate. The substantive miss (SCHEMA + TEST-ARCH expecting SECURITY to BLOCKER M4) is healthy disagreement-discovery: SECURITY's explicit A3-bound is a sharper threat-model statement than other seats anticipated. The council pattern surfaced this; synthesis adopts SECURITY's framing (MAJOR not BLOCKER) for F4 while still requiring the trigger fix.
+
+---
+
+## Appendix C — Pre-Track-A implementation council (2026-06-04)
+
+Third council fire. PLAN.md row 2 of "Named council fire points" (Storage-touching change template). Distinct from the Phase 1.5 fire (Appendix B) which dispositioned audit-context fragility clusters; THIS fire dispositions Track A's IMPLEMENTATION DESIGN before code lands. Archive: `docs/council-fires/2026-06-04-pre-track-a-impl/`.
+
+Seats: SCHEMA + RELIABILITY + SECURITY + TEST-ARCH (4 seats). All returned `STATUS: BLOCKER-FOUND` across the 7 design questions. Synthesized: 5 BLOCKERs (Q2, Q3, Q4, Q6, Q7), 2 MAJORs (Q1, Q5). Substantive disagreement on Q2 ordering (SECURITY runtime-first vs. SCHEMA + RELIABILITY + TEST-ARCH evidence-first) resolved 3-vs-1 on cross-talk-aware grounds (PLAN Track D's pre-call budget check moots SECURITY's budget-bypass premise).
+
+### A24 · Repository pattern shape
+- **Drivers**: all 4 seats (Q1)
+- **Decision**: per-table modules under `src/skill_harness/storage/repositories/evidence/` (10 modules) and `src/skill_harness/storage/repositories/runtime/` (5 modules). **Functional API only** — no classes (closes subclass-override escape hatches; closes hidden-per-instance-state hazard). Pydantic write-models in `src/skill_harness/storage/models.py` with `model_config = ConfigDict(strict=True, extra='forbid', frozen=True)`. Per-model `field_validator` rejects NUL bytes + non-printable C0 controls except `\t\n\r`; configurable size caps (default `output_text` 256 KB, `clause_text` 64 KB) owned by the Python validator (NOT the DB-layer CHECK). Evidence repos export only `insert_*`/`get_*`/`select_*`/`list_*` — no `update_*`/`delete_*`/`set_*`/`patch_*`/`modify_*`/`remove_*` symbols. **AST-walker test** `tests/test_evidence_repo_surface.py` is the falsifying-case enforcement: regex scan over `repositories/evidence/*.py` rejects matching function names. Defense-in-depth over A1's SQL-layer triggers.
+- **Status**: PENDING Track A implementation.
+
+### A25 · Dual-DB transaction primitive — evidence-first ordering
+- **Drivers**: SCHEMA (BLOCKER, Q2) + RELIABILITY + TEST-ARCH (MAJOR, evidence-first); SECURITY dissented MAJOR (runtime-first)
+- **Decision**: writes that span both DBs (e.g., verdict + cost ledger, run-start + budget, calibration_event + current_calibration pointer) use `src/skill_harness/storage/dual_write.py::write_<op>_with_<companion>(evidence_conn, runtime_conn, ...)`. Sequence: `BEGIN IMMEDIATE` on evidence → INSERT evidence → COMMIT evidence → `BEGIN IMMEDIATE` on runtime → INSERT runtime → COMMIT runtime. On runtime COMMIT failure, log structured `dual_write_partial` event; the gap is reconciler-eligible (do NOT auto-insert phantom runtime row). **`ATTACH DATABASE` is forbidden in production code paths** (attached DBs share journal-mode/synchronous settings, defeating A22's FULL/NORMAL split); ATTACH allowed READ-ONLY in future `skill audit` (D7). SECURITY's runtime-first counter-framing recorded as load-bearing dissent (would re-evaluate if post-call accounting becomes the budget oracle or cost_ledger becomes part of admissibility). Cited as moot in v0.1 because PLAN Track D specifies pre-call budget cap check.
+- **Status**: PENDING Track A implementation.
+
+### A26 · Single-writer mechanism — SQLite native, no in-process queue
+- **Drivers**: RELIABILITY (BLOCKER, Q3); SCHEMA + TEST-ARCH MAJOR; SECURITY MINOR
+- **Decision**: v0.1 single-writer mechanism is **SQLite `BEGIN IMMEDIATE` + 5-second `busy_timeout`** (already set in `migrations.py:212`). NO `queue.Queue` + writer thread. Application discipline: writes from a single thread per DB connection. Documented in `storage/__init__.py` module docstring. `threading.Lock` per `Connection` adopted as optional belt-and-braces ONLY if used as a context-manager wrapper around `BEGIN IMMEDIATE` (not as a queue mechanism). Track D's sampling loop is single-threaded in v0.1; subprocess workers deferred to D11. `tests/test_concurrent_writers_serialize.py` proves the SQLite-level lock + `busy_timeout` behavior under 2-thread interleave.
+- **Status**: PENDING Track A documentation + test.
+
+### A27 · Property-based test design — two-property + separate crash-injection family
+- **Drivers**: TEST-ARCH (BLOCKER owned, Q4) + others MAJOR
+- **Decision**: `tests/property/test_evidence_append_only.py` with two properties:
+  - **P1** (all tables except `runs`): for all valid `r` drawn from `row_strategy(table)`, the sequence `[INSERT r; UPDATE table SET <any_col>=<any_val> WHERE pk=r.pk]` raises `sqlite3.IntegrityError` matching `r'append_only_violation: ' + table`. DELETE analogue.
+  - **P2** (runs-specific carve-out per A20): for all valid `r`, INSERT then UPDATE of `skill_id`/`run_kind`/`config_json`/`started_at` aborts; INSERT then single UPDATE of `completed_at` succeeds; INSERT then second UPDATE of `completed_at` aborts.
+
+  FK closure via schema introspection (`PRAGMA foreign_key_list`), NOT hand-coded. `@settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])`. Crash injection lives in a separate test family `tests/test_crash_recovery.py` (RELIABILITY framing — Hypothesis shrinking fails with side-effects-across-rules). SECURITY's adversarial corpus (`adversarial_text()` exporting NUL/control/oversized) imports into both families. `RuleBasedStateMachine` reserved for D13 (cross-write consistency property).
+- **Status**: PENDING Track A implementation.
+
+### A28 · Connection lifecycle — long-lived + structural enforcement + savepoint fixture
+- **Drivers**: SECURITY + TEST-ARCH (MAJOR, Q5); SCHEMA + RELIABILITY MINOR
+- **Decision**: long-lived per-process connection. `open_evidence`/`open_runtime` return a `Connection`; caller owns lifecycle. Repos take a `Connection` parameter (do NOT construct one). `src/skill_harness/storage/context.py::StorageContext` dataclass + `__enter__`/`__exit__` for CLI use. `src/skill_harness/storage/transaction.py::writer_transaction(conn) -> Iterator[None]` context manager (`BEGIN IMMEDIATE` on enter, COMMIT on clean exit, ROLLBACK on exception via `contextlib.suppress(sqlite3.Error)`). **Structural enforcement of A23 PRAGMA scope**: pre-commit grep ban `ripgrep -n 'sqlite3\.connect\(' src/ tests/ | grep -v 'storage/migrations.py'` MUST be empty (upgrades A23's "PR review" to CI-enforced). **Hypothesis savepoint fixture** (TEST-ARCH framing): `evidence_db_savepoint` wraps each `@given` example in `SAVEPOINT hyp_example; ...; ROLLBACK TO hyp_example;`. Property tests use this; smoke tests use the existing `evidence_db`. `tests/test_hypothesis_savepoint_isolation` verifies isolation. Plus smoke test asserting `PRAGMA foreign_keys` returns 1 on a freshly-opened repo connection.
+- **Status**: PENDING Track A implementation.
+
+### A29 · Admissibility filter — SQL VIEW + repo-function wrappers
+- **Drivers**: SCHEMA + SECURITY + TEST-ARCH (BLOCKER, Q6); RELIABILITY MAJOR
+- **Decision**: defense-in-depth on both layers. New migration `migrations/evidence/0003_admissible_verdicts_view.sql` creates a SQL VIEW `admissible_verdicts` that selects from `oracle_verdicts` where `admissibility_state = 'admissible'` AND no matching row exists in `confound_events` with `delta_kind = 'confound_flagged'` for the same `(run_id, primary_clause_id)`. The VIEW is the structural defense (ad-hoc `sqlite3` queries inherit safe defaults). Python repo functions: `get_admissible_verdicts(conn, run_id)` reads the VIEW; `audit_all_verdicts(conn, run_id)` reads raw `oracle_verdicts`. Names are load-bearing — `_for_audit` makes the wrong-call obvious. CI grep ban: any code outside `src/skill_harness/audit/` referencing raw `oracle_verdicts` in `SELECT` fails CI. Tests: `test_admissible_view_excludes_inadmissible`, `test_admissible_view_excludes_confounded`, `test_admissible_view_includes_clean_verdicts`. **Falsifying-case test for A3 promoted from D7 audit territory into Track A**: insert verdict; flip `runtime.current_calibration` post-write; assert verdict's `admissibility_state` is unchanged (proves write-time snapshot survives runtime tampering). Confound JOIN directionality (`primary_clause_id` vs `affected_clause_id`) flagged for EVAL-RESEARCH confirmation at next Track-D-prep council fire.
+- **Status**: PENDING Track A implementation + new migration.
+
+### A30 · Migration sequencing — per-track ranges + discover() duplicate-version guard + CODEOWNERS
+- **Drivers**: RELIABILITY (BLOCKER, Q7); SCHEMA + SECURITY + TEST-ARCH MAJOR
+- **Decision**: per-track migration number ranges (PLAN.md amendment):
+  - Track A: `0001-0099` (storage primitives)
+  - Track B: `0100-0199` (extractor)
+  - Track C: `0200-0299` (oracle / calibration)
+  - Track D: `0300-0399` (ablation runner)
+  - Track E: `0400-0499` (aggregation / status)
+
+  `discover()` raises `BootstrapError` on duplicate version numbers (smoke test `test_discover_rejects_duplicate_versions`). `migrations/README.md` documents the reservation. `.github/CODEOWNERS` requires SCHEMA + SECURITY seat sign-off on any PR touching `migrations/*` (upgrades PLAN's "Pre-merge council fire" from discretionary to mechanism).
+- **Status**: PENDING Track A implementation + `migrations/README.md` + `.github/CODEOWNERS`.
+
+---
+
+### Deferred to v0.2 (Phase 2-entry fire additions)
+
+#### D9 · `current_calibration` rewrite + verdict admissibility falsifying-case
+- **Driver**: TEST-ARCH (Q6 cross-talk)
+- **Status**: **NOT DEFERRED**. Adopted into Track A scope per A29 (the falsifying-case test for A3 write-time-snapshot lives in Track A, not Track E).
+
+#### D10 · `db_identity` row + cross-DB identity check
+- **Driver**: SECURITY Phase 1.5 F2 reinforced; carry-forward from D6
+- **Why deferred**: defense against silent runtime-DB restore-from-backup. Necessary for production but not v0.1 local-trust.
+
+#### D11 · Multi-process single-writer (subprocess workers)
+- **Driver**: RELIABILITY (Q3 future-work)
+- **Why deferred**: Track D in v0.1 is single-threaded sampling; subprocess workers require `queue.Queue` + writer thread OR shared FIFO + per-subprocess connection. v0.2 throughput optimization.
+
+#### D12 · Denormalized `confound_flagged` boolean on `oracle_verdicts`
+- **Driver**: SCHEMA + RELIABILITY (Q6 fallback)
+- **Why deferred**: trigger ONLY if A29's VIEW EXISTS subquery becomes performance-pathological at Track E scale. v0.2 perf migration.
+
+#### D13 · `RuleBasedStateMachine` consistency-across-writes property
+- **Driver**: SCHEMA + TEST-ARCH (Q4 future-work)
+- **Why deferred**: A27 covers per-INSERT append-only invariant; cross-write consistency (verdict-vs-cost-ledger reconciler test, calibration-vs-verdict snapshot test) is a separate property family.
+
+#### D14 · DB-layer CHECK on `output_text`/`clause_text` size
+- **Driver**: SECURITY (Q1 fallback)
+- **Why deferred**: trigger IF Python-layer cap proves insufficient under real-world adversarial input. v0.2 hardening migration.
+
+### PRD v1.1 amendments queued (this fire)
+
+In addition to the 20 amendments queued before this fire (16 original + 4 Phase 1.5):
+
+| Section | Amendment | Driver |
+|---|---|---|
+| §17 | Declare per-track migration number ranges (A 0001-0099, B 0100-0199, C 0200-0299, D 0300-0399, E 0400-0499) | A30 |
+| §17 | Declare `admissible_verdicts` SQL VIEW as canonical aggregation surface; raw `oracle_verdicts` access restricted to `audit/` module | A29 |
+| §17 | Declare SQLite `BEGIN IMMEDIATE` + 5s `busy_timeout` as v0.1 writer-exclusion mechanism (no in-process queue.Queue) | A26 |
+| §17 | Declare dual-DB write ordering: evidence-first; runtime gaps reconcilable from evidence; ATTACH forbidden in production paths | A25 |
+| §17 | Declare PRAGMA scope enforcement as STRUCTURAL (pre-commit grep ban on raw `sqlite3.connect` outside `migrations.py`), upgrading A23's "PR review" | A28 |
+| §17 | Declare repository surface restriction (evidence repos export `insert_*`/`get_*`/`select_*` only; AST-walker test) as defense-in-depth over A1 triggers | A24 |
+
+**Total PRD v1.1 amendments queued: 26.**
+
+### Cross-talk validation note (this fire)
+
+Cross-prediction quality: 6/12 prediction targets landed, 4 missed, 2 inverted. Down from 7/8 in Phase 1.5 fire — lower lens distinctness this round (RELIABILITY + TEST-ARCH overlap on test discipline; SCHEMA + RELIABILITY overlap on durability framing). For the next storage-touching fire, consider firing only 3 seats (drop one of the overlapping pair) OR sharpen the seat briefs to emphasize lens distinctness.
+
+The substantive cross-talk yield was the convergent finding combining RELIABILITY's "separate test families" + TEST-ARCH's "savepoint fixture" + SECURITY's "structural pre-commit grep enforcement" = a coherent test infrastructure shape that no single seat would have produced. Adopted into A27 + A28.
+
+Substantive disagreement on Q2 ordering surfaced cleanly — the orchestrator resolved by citing PRD Track D's pre-call cap check (moots SECURITY's premise without dismissing the framing). That's exactly the cross-talk-dispatch use case.

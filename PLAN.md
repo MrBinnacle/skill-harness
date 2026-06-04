@@ -82,6 +82,12 @@ Documentation-only; can land in parallel with 1.5a.
 
 **Gate**: documentation review — no acceptance criteria beyond "all three clauses present and accurate."
 
+### 1.5c · Pre-Track-A implementation council fire ✅ FIRED 2026-06-04
+
+Storage-touching-change template (SCHEMA + RELIABILITY + SECURITY + TEST-ARCH) dispositioned 7 Track A implementation design questions BEFORE Phase 2 dispatch. All seats returned BLOCKER-FOUND across the 7 Qs. Synthesis: 5 BLOCKERs (Q2, Q3, Q4, Q6, Q7), 2 MAJORs (Q1, Q5). Adopted A24–A30; deferred D10–D14. Raw outputs + synthesis at `docs/council-fires/2026-06-04-pre-track-a-impl/`. Outcome expands Track A scope below (no separate gate beyond Track A's own exit criteria).
+
+Substantive disagreement resolved: SECURITY argued runtime-first dual-DB ordering on audit-asymmetry grounds; SCHEMA + RELIABILITY + TEST-ARCH argued evidence-first on source-of-truth grounds. Orchestrator adopted evidence-first 3-vs-1 citing PLAN Track D's pre-call budget cap check, which moots SECURITY's bypass premise without dismissing the framing. SECURITY's runtime-first framing recorded as load-bearing dissent in `docs/COUNCIL_FINDINGS.md` §A25.
+
 ---
 
 ## Phase 2 — Parallel build via 5 worktrees (sessions 2–N)
@@ -98,17 +104,38 @@ git worktree add ../youwontdoit-track-c feat/track-c-oracle-library
 
 ### TRACK A · Storage layer
 
-**Scope**: idempotent migrations, repositories for skills/clauses/metric_versions/judges/calibration_events/runs/samples/oracle_verdicts/confound_events/frozen_cases, dual-DB transaction patterns, single-writer queue.
+**Scope** (expanded by 1.5c council per A24–A30):
+- Repositories: per-table modules under `src/skill_harness/storage/repositories/evidence/` (10 modules) + `src/skill_harness/storage/repositories/runtime/` (5 modules). Functional API only; no classes.
+- Pydantic write-models in `src/skill_harness/storage/models.py` (`strict=True, extra='forbid', frozen=True`; NUL + control-byte rejection; size caps on `output_text`/`clause_text`).
+- Transaction primitives: `src/skill_harness/storage/transaction.py::writer_transaction(conn)` context manager (`BEGIN IMMEDIATE` / COMMIT-or-ROLLBACK).
+- Dual-DB write helper: `src/skill_harness/storage/dual_write.py` — evidence-first ordering per A25; ATTACH forbidden in production paths.
+- Connection lifecycle: `src/skill_harness/storage/context.py::StorageContext` dataclass with `__enter__`/`__exit__` for CLI use.
+- New migration: `migrations/evidence/0003_admissible_verdicts_view.sql` — VIEW joining admissibility + confound exclusion per A29.
+- Discovery hardening: `discover()` raises `BootstrapError` on duplicate version numbers per A30.
+- Documentation: `migrations/README.md` documenting per-track number ranges; `.github/CODEOWNERS` requiring SCHEMA + SECURITY seat sign-off on `migrations/*` PRs.
+- Concurrency model: SQLite `BEGIN IMMEDIATE` + 5s `busy_timeout` is THE writer-exclusion mechanism for v0.1 per A26 (no in-process `queue.Queue`).
 
-**Driving findings**: A1, A2, A3, A4 (all SCHEMA seat).
+**Driving findings**: A1, A2, A3, A4 (original SCHEMA seat) + A24–A30 (1.5c council).
 
-**Skills loaded**: `append-only-evidence-design`, `sqlite-expert`, `property-based-testing` (for the append-only invariant — Hypothesis test that no UPDATE/DELETE on evidence tables succeeds for arbitrary valid INSERTs).
+**Skills loaded**: `append-only-evidence-design`, `sqlite-expert`, `property-based-testing` (for the append-only invariant — Hypothesis tests P1 generic + P2 runs-carve-out per A27), `windows-claude-code-env` (UTF-8 / regex traps on Windows).
 
 **Exit criteria**:
 - All 9 evidence tables + 5 runtime tables instantiated by `open_evidence()` / `open_runtime()`.
-- Property-based test: ∀ valid INSERT on any evidence table, ∄ subsequent UPDATE or DELETE that succeeds.
-- Repository module per table with typed read/write APIs.
-- `pytest -q` green; `mypy --strict src/` clean.
+- **Property-based test** (`tests/property/test_evidence_append_only.py`) per A27:
+  - **P1** (all tables except `runs`): `∀ valid r drawn from row_strategy(table), [INSERT r; UPDATE table SET <any_col>=<any_val> WHERE pk=r.pk] raises sqlite3.IntegrityError matching r'append_only_violation: ' + table`. DELETE analogue. FK closure via `PRAGMA foreign_key_list` introspection. `@settings(max_examples=50)`.
+  - **P2** (runs-specific carve-out per A20): `∀ valid r, INSERT then UPDATE of skill_id|run_kind|config_json|started_at aborts; INSERT then single UPDATE of completed_at succeeds; INSERT then second UPDATE aborts`.
+- **AST-walker test** (`tests/test_evidence_repo_surface.py`) per A24: regex scan over `repositories/evidence/*.py` rejects function names matching `^(update|delete|set|patch|modify|remove)_`.
+- **Admissibility VIEW tests** (`tests/test_admissible_view.py`) per A29: `test_admissible_view_excludes_inadmissible`, `test_admissible_view_excludes_confounded`, `test_admissible_view_includes_clean_verdicts`.
+- **A3 write-time-snapshot falsifying-case test** per A29 (promoted from D7 into Track A): insert verdict; flip `runtime.current_calibration` post-write; assert verdict's `admissibility_state` is unchanged.
+- **`discover()` duplicate-version guard test** (`tests/test_discover_rejects_duplicate_versions`) per A30.
+- **Hypothesis savepoint fixture** (`evidence_db_savepoint` in conftest) per A28 + `tests/test_hypothesis_savepoint_isolation` to verify between-example isolation.
+- **`PRAGMA foreign_keys = 1` smoke test** per A28: assert PRAGMA is set on freshly-opened repo connections.
+- **Concurrent-writers serialization test** (`tests/test_concurrent_writers_serialize.py`) per A26: 2-thread interleave under SQLite's lock + `busy_timeout` — both writes succeed.
+- **Dual-write fault-injection tests** (`tests/test_dual_write_partial.py`) per A25: `unittest.mock.patch` injection on each known dual-write call site; evidence row exists, runtime row absent, structured `dual_write_partial` log emitted, no exception propagates past helper.
+- **Crash-recovery test family** (`tests/test_crash_recovery.py`) per A27 (separate from property tests): kill between BEGIN/COMMIT during apply_pending (already covered); kill between evidence COMMIT and runtime BEGIN in dual-write; reopen DB after WAL truncation.
+- **Structural enforcement** per A28: pre-commit grep ban verified — `ripgrep -n 'sqlite3\.connect\(' src/ tests/ | grep -v 'storage/migrations.py'` returns empty.
+- **CI grep ban** per A29: any code outside `src/skill_harness/audit/` (stub OK) that uses raw `oracle_verdicts` in a `SELECT` fails CI.
+- `pytest -q` green; `mypy --strict src/` clean; `ruff check` clean; `ruff format --check` clean.
 
 ### TRACK B · Clause extractor
 
@@ -212,7 +239,7 @@ Every track below has a council fire point declared up-front. These are not opti
 | When | Template | Seats | Why |
 |---|---|---|---|
 | Phase 1.5 (before any Track A code lands) ✅ FIRED 2026-06-04 | Custom (Storage-touching) | TEST-ARCH + SCHEMA + SECURITY + RELIABILITY | Archive: `docs/council-fires/2026-06-04-pre-track-a-storage/`. Adopted A18–A23; deferred D5–D8. Phase 1.5a + 1.5b are the resulting blockers. |
-| Pre-Track A start | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Storage is the highest-stakes track; crash safety + adversarial input + write-time snapshot all need a coordinated review |
+| Phase 1.5c — Pre-Track A implementation council ✅ FIRED 2026-06-04 | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Archive: `docs/council-fires/2026-06-04-pre-track-a-impl/`. Adopted A24–A30; deferred D10–D14. Track A scope expanded; exit criteria expanded. Substantive disagreement on dual-DB ordering resolved 3-vs-1 (evidence-first) with SECURITY's runtime-first framing recorded as load-bearing dissent. |
 | Pre-Track C start | Custom | EVAL-RESEARCH + SECURITY + COST + STAT | Judge module is where prompt-injection-by-adversarial-skill-output enters; STAT owns the verdict aggregation that downstream Track E depends on |
 | Pre-Track D start | Custom | STAT + COST + RELIABILITY + OPERATOR-DX | Ablation runner is the cost-hot-path and the user-visible long-running operation; dry-run UX is OPERATOR-DX's lane |
 | Pre-merge for any PR touching `migrations/` | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Schema changes can silently break the append-only invariant; gate at PR time |
