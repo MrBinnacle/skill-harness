@@ -1,0 +1,92 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skill-harness"
+version = "0.1.0a0"
+description = "Clause-Ablation Differential Testing for LLM Skills"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "TBD" }
+authors = [{ name = "mlpgr", email = "mlp.gruber@gmail.com" }]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+  # anthropic >=0.87 enforces post-patch for GHSA-q5f5-3gjm-7mfm + GHSA-w828-4qhx-vxx3
+  # (Memory Tool CVEs, 2026-03-31; patched in 0.87.0). Memory Tool surface is not used.
+  "anthropic>=0.87",
+  "click>=8.1",
+  "pydantic>=2.6",
+  # rich is solo-maintainer (willmcgugan / Textualize). Use for terminal output only.
+  "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+  "pytest-cov>=4.1",
+  "pytest-xdist>=3.5",
+  "ruff>=0.5",
+  "mypy>=1.10",
+  "hypothesis>=6.100",
+]
+
+[project.scripts]
+skill-harness = "skill_harness.cli.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skill_harness"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = [
+  "-ra",
+  "--strict-markers",
+  "--strict-config",
+]
+markers = [
+  "slow: long-running tests (deselect with -m 'not slow')",
+  "live: hits the live Anthropic API (deselect by default)",
+]
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W",   # pycodestyle / pyflakes
+  "I",             # isort
+  "UP",            # pyupgrade
+  "B",             # bugbear
+  "SIM",           # simplify
+  "RUF",           # ruff-specific
+  "S",             # bandit (security)
+]
+ignore = [
+  "S101",  # assert is fine in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
