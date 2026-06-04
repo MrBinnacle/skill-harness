@@ -1,0 +1,553 @@
+"""Pydantic write-models for all evidence and runtime DB tables.
+
+Design constraints (per A24 council finding):
+- Every model uses ConfigDict(strict=True, extra='forbid', frozen=True).
+- Per-model field_validator rejects NUL bytes and non-printable C0 control
+  characters (Unicode category Cc / ASCII 0x00-0x1F), EXCEPT the three
+  printable whitespace characters: \\t (0x09), \\n (0x0A), \\r (0x0D).
+- Size caps are CONFIGURABLE CONSTANTS at module level, not hard-coded literals
+  in each model. Python-layer enforcement; DB-layer deferred to D14.
+- Write shapes only (Read shapes are Track E scope).
+- Timestamp columns are TEXT (ISO 8601) matching the schema DEFAULT expressions.
+"""
+
+from __future__ import annotations
+
+import re
+
+from pydantic import BaseModel, ConfigDict, field_validator
+
+# ---------------------------------------------------------------------------
+# Configurable size caps (bytes when UTF-8-encoded)
+# ---------------------------------------------------------------------------
+
+OUTPUT_TEXT_MAX_BYTES: int = 256 * 1024  # 256 KB — oracle_verdicts.output_text
+CLAUSE_TEXT_MAX_BYTES: int = 64 * 1024  # 64 KB  — clauses.clause_text
+
+# ---------------------------------------------------------------------------
+# Shared validator helpers
+# ---------------------------------------------------------------------------
+
+# Pre-compiled pattern: matches any C0 control char EXCEPT \t, \n, \r.
+# C0 range is 0x00-0x1F; we exclude 0x09 (\t), 0x0A (\n), 0x0D (\r).
+_FORBIDDEN_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _check_text(value: str, field_name: str = "value") -> str:
+    """Reject NUL bytes and forbidden C0 control characters."""
+    if _FORBIDDEN_CTRL.search(value):
+        raise ValueError(
+            f"{field_name}: contains forbidden control characters "
+            "(NUL or C0 0x00-0x1F excluding \\t, \\n, \\r)"
+        )
+    return value
+
+
+def _check_text_size(value: str, max_bytes: int, field_name: str = "value") -> str:
+    """Reject strings whose UTF-8 encoding exceeds max_bytes."""
+    encoded_len = len(value.encode("utf-8"))
+    if encoded_len > max_bytes:
+        raise ValueError(
+            f"{field_name}: UTF-8 size {encoded_len} bytes exceeds cap of {max_bytes} bytes"
+        )
+    return value
+
+
+# ---------------------------------------------------------------------------
+# Evidence-side write models
+# ---------------------------------------------------------------------------
+
+
+class SkillWrite(BaseModel):
+    """Insert shape for evidence.skills."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    skill_id: str
+    name: str
+    source_path: str
+    source_sha256: str
+    imported_at: str
+
+    @field_validator("skill_id", "name", "source_path", "source_sha256", "imported_at")
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+
+class ClauseWrite(BaseModel):
+    """Insert shape for evidence.clauses."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    clause_id: str
+    skill_id: str
+    clause_index: int
+    rendering_index: int
+    clause_text: str
+    axis: str
+    comparator: str
+    oracle_tier: int
+    vacuity_flag: str
+    falsifying_case_schema_sha256: str | None
+    created_at: str
+
+    @field_validator(
+        "clause_id",
+        "skill_id",
+        "clause_text",
+        "axis",
+        "comparator",
+        "vacuity_flag",
+        "created_at",
+    )
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("falsifying_case_schema_sha256", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "falsifying_case_schema_sha256")
+        return v
+
+    @field_validator("clause_text")
+    @classmethod
+    def clause_text_size_cap(cls, v: str) -> str:
+        return _check_text_size(v, CLAUSE_TEXT_MAX_BYTES, "clause_text")
+
+
+class MetricVersionWrite(BaseModel):
+    """Insert shape for evidence.metric_versions."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    metric_id: str
+    version: str
+    implementation_hash: str
+    tier: int
+    audited: int
+    mechanical_validity_test_passed: int
+    registered_at: str
+
+    @field_validator(
+        "metric_id",
+        "version",
+        "implementation_hash",
+        "registered_at",
+    )
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+
+class JudgeWrite(BaseModel):
+    """Insert shape for evidence.judges."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    judge_id: str
+    model_id: str
+    system_prompt_sha256: str
+    created_at: str
+
+    @field_validator("judge_id", "model_id", "system_prompt_sha256", "created_at")
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+
+class CalibrationEventWrite(BaseModel):
+    """Insert shape for evidence.calibration_events."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    calibration_event_id: str
+    judge_id: str
+    axis: str
+    pairwise_agreement: float
+    position_consistency: float
+    length_controlled_agreement: float | None
+    cohen_kappa: float | None
+    pair_set_size: int
+    pair_set_sha256: str
+    state: str
+    expires_at: str | None
+    validated_at: str
+
+    @field_validator(
+        "calibration_event_id",
+        "judge_id",
+        "axis",
+        "pair_set_sha256",
+        "state",
+        "validated_at",
+    )
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("expires_at", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "expires_at")
+        return v
+
+
+class RunWrite(BaseModel):
+    """Insert shape for evidence.runs."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    run_id: str
+    skill_id: str
+    run_kind: str
+    config_json: str
+    started_at: str
+    completed_at: str | None
+
+    @field_validator("run_id", "skill_id", "run_kind", "config_json", "started_at")
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("completed_at", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "completed_at")
+        return v
+
+
+class SampleWrite(BaseModel):
+    """Insert shape for evidence.samples."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    sample_id: str
+    run_id: str
+    clause_id: str
+    condition: str
+    subject_model: str
+    subject_seed: str | None
+    output_text: str
+    output_sha256: str
+    sampled_at: str
+
+    @field_validator(
+        "sample_id",
+        "run_id",
+        "clause_id",
+        "condition",
+        "subject_model",
+        "output_sha256",
+        "sampled_at",
+    )
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("subject_seed", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "subject_seed")
+        return v
+
+    @field_validator("output_text")
+    @classmethod
+    def output_text_size_cap(cls, v: str) -> str:
+        return _check_text_size(v, OUTPUT_TEXT_MAX_BYTES, "output_text")
+
+
+class OracleVerdictWrite(BaseModel):
+    """Insert shape for evidence.oracle_verdicts."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    verdict_id: str
+    run_id: str
+    clause_id: str
+    axis: str
+    comparison: str
+    sample_a_id: str
+    sample_b_id: str
+    observation: float
+    oracle_tier: int
+    metric_id: str | None
+    metric_version: str | None
+    judge_id: str | None
+    calibration_event_id: str | None
+    position_swap_agreement: int | None
+    admissibility_state: str
+    inadmissibility_reason: str | None
+    written_at: str
+
+    @field_validator(
+        "verdict_id",
+        "run_id",
+        "clause_id",
+        "axis",
+        "comparison",
+        "sample_a_id",
+        "sample_b_id",
+        "admissibility_state",
+        "written_at",
+    )
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator(
+        "metric_id",
+        "metric_version",
+        "judge_id",
+        "calibration_event_id",
+        "inadmissibility_reason",
+        mode="before",
+    )
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "optional_text_field")
+        return v
+
+
+class ConfoundEventWrite(BaseModel):
+    """Insert shape for evidence.confound_events."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    confound_event_id: str
+    run_id: str
+    primary_clause_id: str
+    affected_clause_id: str | None
+    axis: str
+    delta: float
+    null_sigma: float
+    k_threshold: float
+    delta_kind: str
+    detected_at: str
+
+    @field_validator(
+        "confound_event_id",
+        "run_id",
+        "primary_clause_id",
+        "axis",
+        "delta_kind",
+        "detected_at",
+    )
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("affected_clause_id", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "affected_clause_id")
+        return v
+
+
+class FrozenCaseWrite(BaseModel):
+    """Insert shape for evidence.frozen_cases."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    frozen_case_id: str
+    clause_id: str
+    failing_input_text: str
+    failing_input_sha256: str
+    oracle_source: str
+    labeled_by: str | None
+    labeled_at: str | None
+    metric_id: str | None
+    metric_version: str | None
+    implementation_hash: str | None
+    frozen_at: str
+
+    @field_validator(
+        "frozen_case_id",
+        "clause_id",
+        "failing_input_sha256",
+        "oracle_source",
+        "frozen_at",
+    )
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator(
+        "labeled_by",
+        "labeled_at",
+        "metric_id",
+        "metric_version",
+        "implementation_hash",
+        mode="before",
+    )
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "optional_text_field")
+        return v
+
+    @field_validator("failing_input_text")
+    @classmethod
+    def no_control_chars_input(cls, v: str) -> str:
+        # failing_input_text may legitimately contain any content; still reject
+        # C0 control bytes that would corrupt storage.
+        return _check_text(v, "failing_input_text")
+
+
+# ---------------------------------------------------------------------------
+# Runtime-side write models
+# ---------------------------------------------------------------------------
+
+
+class SkillImportsStagingWrite(BaseModel):
+    """Insert shape for runtime.skill_imports_staging."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    staging_id: str
+    source_path: str
+    state: str
+    notes: str | None
+    updated_at: str
+
+    @field_validator("staging_id", "source_path", "state", "updated_at")
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "notes")
+        return v
+
+
+class RunProgressWrite(BaseModel):
+    """Insert shape for runtime.run_progress."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    run_id: str
+    state: str
+    samples_planned: int
+    samples_collected: int
+    last_heartbeat: str
+    error: str | None
+
+    @field_validator("run_id", "state", "last_heartbeat")
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("error", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "error")
+        return v
+
+
+class CurrentCalibrationWrite(BaseModel):
+    """Insert/upsert shape for runtime.current_calibration."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    judge_id: str
+    axis: str
+    calibration_event_id: str
+    state: str
+    expires_at: str | None
+    updated_at: str
+
+    @field_validator("judge_id", "axis", "calibration_event_id", "state", "updated_at")
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("expires_at", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "expires_at")
+        return v
+
+
+class RunBudgetWrite(BaseModel):
+    """Insert shape for runtime.run_budget."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    run_id: str
+    hard_cap_usd: float
+    tokens_spent_in: int
+    tokens_spent_out: int
+    cache_write_in: int
+    cache_read_in: int
+    usd_spent: float
+    dry_run: int
+    aborted_at: str | None
+    last_updated: str
+
+    @field_validator("run_id", "last_updated")
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("aborted_at", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "aborted_at")
+        return v
+
+
+class CostLedgerWrite(BaseModel):
+    """Insert shape for runtime.cost_ledger (ledger_id is AUTOINCREMENT — omit on insert)."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    ts: str
+    run_id: str | None
+    skill_id: str | None
+    model_id: str
+    call_kind: str
+    input_tok: int
+    cache_write_tok: int
+    cache_read_tok: int
+    output_tok: int
+    usd: float
+
+    @field_validator("ts", "model_id", "call_kind")
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("run_id", "skill_id", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _check_text(v, "optional_text_field")
+        return v
