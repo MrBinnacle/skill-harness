@@ -1,0 +1,15 @@
+# Every change in this repo is reviewed by @MrBinnacle until a wider
+# team forms. Sub-paths can list additional reviewers later without
+# removing the global owner.
+
+* @MrBinnacle
+
+# Architectural artifacts — extra scrutiny zone. Any change to the
+# load-bearing invariants should be discussed in an issue first.
+/PRD.md                          @MrBinnacle
+/CLAUDE.md                       @MrBinnacle
+/PLAN.md                         @MrBinnacle
+/docs/COUNCIL_FINDINGS.md        @MrBinnacle
+/migrations/                     @MrBinnacle
+/.github/                        @MrBinnacle
+/SECURITY.md                     @MrBinnacle

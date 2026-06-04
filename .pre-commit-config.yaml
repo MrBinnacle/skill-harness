@@ -1,0 +1,57 @@
+# Skill Harness pre-commit hooks.
+#
+# Install once per clone:    pre-commit install
+# Run on all files:          pre-commit run --all-files
+# Update hook versions:      pre-commit autoupdate
+#
+# The pre-commit config intentionally does NOT run pytest — tests are
+# CI-gated, not commit-gated. Pre-commit catches the cheap-to-detect
+# issues so that CI focuses on the slow ones.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        exclude: \.(ps1|cmd|bat)$
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.15
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        files: ^(src|tests)/
+        additional_dependencies:
+          - anthropic>=0.87
+          - click>=8.1
+          - pydantic>=2.6
+          - rich>=13.7
+          - pytest>=7.4
+          - hypothesis>=6.100
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+ci:
+  autoupdate_schedule: monthly
+  skip: [mypy]  # mypy is heavy; CI runs it once per PR instead of every pre-commit.autoupdate

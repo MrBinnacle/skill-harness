@@ -1,0 +1,93 @@
+name: Bug report
+description: Report a reproducible defect in Skill Harness
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Skill Harness is pre-alpha; many things may be incomplete or rough. Please confirm this is a defect (something behaves contrary to the PRD or its tests) and not a missing feature before filing.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing what's wrong.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands or code that produce the bug.
+      placeholder: |
+        1. Create venv: `python -m venv .venv`
+        2. Install: `pip install -e ".[dev]"`
+        3. Run: `pytest -q tests/test_X.py::test_Y`
+        4. Observe: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen instead? Link the PRD section or COUNCIL_FINDINGS decision if relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happens. Include exact error messages and tracebacks.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: skill-harness version
+      placeholder: "0.1.0a0 (or commit SHA)"
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.13.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - Windows
+        - macOS
+        - Other (specify in extra context)
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Extra context
+      description: Logs, config, anything else relevant. Redact any API keys.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I have searched existing issues and confirmed this is not a duplicate
+          required: true
+        - label: I have read CONTRIBUTING.md
+          required: true
+        - label: This report contains no secrets (API keys, tokens, credentials)
+          required: true

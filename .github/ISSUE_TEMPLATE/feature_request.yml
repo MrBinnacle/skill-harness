@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest new functionality
+title: "[feat] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please skim `PRD.md` § 18 (CLI surface), `PLAN.md` (build tracks), and `docs/COUNCIL_FINDINGS.md` (D-deferred items). Many "missing features" are explicitly deferred to v0.2 or beyond — those don't need new issues.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can't you do today? Who is the user?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Sketch the design. Be concrete enough for someone else to estimate.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you weigh, and why does this proposal win?
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Inside PRD v1.0 scope (clarification / refinement)
+        - Inside PLAN.md track scope (build work)
+        - Inside COUNCIL_FINDINGS D-deferred items (post-v0.1)
+        - Outside current scope (extension proposal)
+    validations:
+      required: true
+
+  - type: textarea
+    id: prior-art
+    attributes:
+      label: Prior art
+      description: |
+        For statistical / eval-design proposals, cite the literature.
+        For SQLite / Python tooling, link the relevant docs.
+        New defaults without citations are unlikely to be accepted.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I have read PRD.md, PLAN.md, and CLAUDE.md
+          required: true
+        - label: This is not already covered by an existing PLAN.md track
+          required: true
