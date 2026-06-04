@@ -14,6 +14,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The invariants below are the ones most likely to be silently violated by code that "looks right."
 
+## Dev-team council (operating rule)
+
+This project treats multi-seat council review as the **default** way architectural decisions get made, not an ad-hoc tool the assistant remembers to use. The roster, triggers, and dispatch protocol live in `.claude/skills/dev-team-council/SKILL.md`. The first council fire (2026-06-03) is documented in `docs/COUNCIL_FINDINGS.md` and produced 17 adopted decisions that gate every Phase 2 track.
+
+**Fire the council BEFORE writing code** when any of the following holds:
+- The change introduces a new ADR-worthy architectural decision
+- The change touches `migrations/`, `src/skill_harness/storage/`, or judge-prompt code paths
+- The change crosses a load-bearing invariant listed below
+- A new external surface (CLI command, schema table, public API) is being added
+- Two prior reviewers disagree on an architectural call
+
+Do NOT fire for routine implementation following an already-decided invariant, dep bumps with no surface change, doc-only edits, or test refactors.
+
+Council findings are synthesized per `parallel-review-disposition-schema` and appended to `docs/COUNCIL_FINDINGS.md`. PRD amendments queue for the next doc-lock PR — they do not apply piecemeal.
+
 ## Skill kit (load these per phase)
 
 - `bayesian-eval-discipline` — Beta-Binomial traps, N_min floor, multiplicity. Track D + E.

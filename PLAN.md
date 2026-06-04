@@ -181,6 +181,21 @@ git worktree add ../youwontdoit-track-c feat/track-c-oracle-library
 
 ---
 
+## Named council fire points
+
+Every track below has a council fire point declared up-front. These are not optional; they are how the build maintains the coherence established in `docs/COUNCIL_FINDINGS.md`.
+
+| When | Template | Seats | Why |
+|---|---|---|---|
+| Phase 1.5 (before any Track A code lands) | Custom | TEST-ARCH + SECURITY + RELIABILITY | The original PRD fire under-covered security and reliability lenses; close the gap before storage code goes in |
+| Pre-Track A start | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Storage is the highest-stakes track; crash safety + adversarial input + write-time snapshot all need a coordinated review |
+| Pre-Track C start | Custom | EVAL-RESEARCH + SECURITY + COST + STAT | Judge module is where prompt-injection-by-adversarial-skill-output enters; STAT owns the verdict aggregation that downstream Track E depends on |
+| Pre-Track D start | Custom | STAT + COST + RELIABILITY + OPERATOR-DX | Ablation runner is the cost-hot-path and the user-visible long-running operation; dry-run UX is OPERATOR-DX's lane |
+| Pre-merge for any PR touching `migrations/` | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Schema changes can silently break the append-only invariant; gate at PR time |
+| Pre-v0.1 tag | Pre-tag launch council | All 9 seats | Last-look before public-facing release; full coverage |
+
+Each fire produces findings that synthesize into a `COUNCIL_FINDINGS.md` appendix. Phase progression GATES on council disposition: a track with a BLOCKER finding does not start until the BLOCKER is resolved or explicitly downgraded with documented rationale.
+
 ## Cross-cutting invariants (every track honors)
 
 - TDD per `superpowers:test-driven-development`: RED → GREEN → REFACTOR.
