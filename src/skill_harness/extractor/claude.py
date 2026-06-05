@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 import anthropic
+from pydantic import ValidationError
 
 from skill_harness.extractor.errors import ExtractorClaudeError
 from skill_harness.extractor.models import ExtractedClause, FalsifyingCaseSchema
@@ -206,6 +207,8 @@ def call_extract_clauses(body: str) -> list[ExtractedClause]:
         )
 
     # Deserialise each clause through the Pydantic model for validation.
+    # Any failure aborts: silent drop would record fewer clauses in evidence
+    # than the source_sha256 attests, corrupting Coverage/Contribution metrics.
     clauses: list[ExtractedClause] = []
     errors: list[str] = []
     for i, raw in enumerate(raw_clauses):
@@ -213,20 +216,16 @@ def call_extract_clauses(body: str) -> list[ExtractedClause]:
             errors.append(f"  clause[{i}]: not a dict, got {type(raw).__name__}")
             continue
         try:
-            # Build FalsifyingCaseSchema if present.
             fc_raw = raw.get("falsifying_case")
             if fc_raw is not None:
-                raw = dict(raw)  # don't mutate original
                 raw["falsifying_case"] = FalsifyingCaseSchema.model_validate(fc_raw)
-            clause = ExtractedClause.model_validate(raw)
-            clauses.append(clause)
-        except Exception as exc:
+            clauses.append(ExtractedClause.model_validate(raw))
+        except (ValidationError, ValueError) as exc:
             errors.append(f"  clause[{i}]: {exc}")
 
-    # Partial failures: log details but raise if ALL failed; partial success is acceptable.
-    if errors and not clauses:
+    if errors:
         raise ExtractorClaudeError(
-            f"All {len(raw_clauses)} clauses failed validation:\n" + "\n".join(errors)
+            f"{len(errors)} of {len(raw_clauses)} clauses failed validation:\n" + "\n".join(errors)
         )
 
     return clauses

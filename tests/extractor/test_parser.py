@@ -117,6 +117,20 @@ def test_completely_empty_file_raises_malformed(tmp_path: Path) -> None:
         parse_skill_file(p)
 
 
+def test_non_utf8_bytes_raise_malformed(tmp_path: Path) -> None:
+    """Non-UTF-8 input must raise, not silently produce U+FFFD-mangled text.
+
+    Silent replacement would produce a body that does not match the
+    source_sha256 audit trail (computed over raw bytes) — Coverage and
+    Contribution metrics would derive from a corrupted body while
+    provenance says "clean."
+    """
+    p = tmp_path / "latin1.md"
+    p.write_bytes(b"# Skill\n\nca\xe9 latte\n")  # 0xE9 = é in Latin-1, invalid UTF-8
+    with pytest.raises(MalformedSkillError, match="not valid UTF-8"):
+        parse_skill_file(p)
+
+
 def test_frontmatter_only_fixture_raises_malformed() -> None:
     """The frontmatter_only.md fixture should raise because body is empty."""
     with pytest.raises(MalformedSkillError):

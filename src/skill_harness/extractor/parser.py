@@ -60,8 +60,12 @@ def parse_skill_file(path: Path) -> ParsedSkill:
     raw_bytes = path.read_bytes()
     source_sha256 = hashlib.sha256(raw_bytes).hexdigest()
 
-    # Decode to text. Use UTF-8 with replacement for resilience.
-    text = raw_bytes.decode("utf-8", errors="replace")
+    # Strict UTF-8: silent replacement would corrupt the body while audit
+    # SHA-256 over raw bytes still says "clean" — violates write-time provenance.
+    try:
+        text = raw_bytes.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise MalformedSkillError(f"Skill file '{path}' is not valid UTF-8: {exc}") from exc
 
     frontmatter: dict[str, str] = {}
     body = text

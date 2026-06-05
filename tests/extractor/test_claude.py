@@ -177,8 +177,12 @@ def test_raises_extractor_claude_error_on_api_error(mock_anthropic_cls: MagicMoc
 
 
 @patch("skill_harness.extractor.claude.anthropic.Anthropic")
-def test_partial_validation_failure_returns_valid_subset(mock_anthropic_cls: MagicMock) -> None:
-    """When some clauses fail validation but at least one passes, return the valid ones."""
+def test_partial_validation_failure_raises(mock_anthropic_cls: MagicMock) -> None:
+    """Any per-clause validation failure aborts the whole extraction.
+
+    Silent drop would record fewer clauses in evidence than source_sha256
+    attests, corrupting Coverage/Contribution metrics.
+    """
     mock_client = MagicMock()
     mock_anthropic_cls.return_value = mock_client
 
@@ -196,9 +200,8 @@ def test_partial_validation_failure_returns_valid_subset(mock_anthropic_cls: Mag
         [_make_tool_use_block({"clauses": [_valid_raw_clause(0), invalid_raw]})]
     )
 
-    clauses = call_extract_clauses("Body.")
-    assert len(clauses) == 1
-    assert clauses[0].clause_index == 0
+    with pytest.raises(ExtractorClaudeError, match="1 of 2 clauses failed validation"):
+        call_extract_clauses("Body.")
 
 
 @patch("skill_harness.extractor.claude.anthropic.Anthropic")

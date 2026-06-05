@@ -96,18 +96,6 @@ class ExtractedClause(BaseModel):
             raise ValueError("falsifying_case must be None when vacuity_flag != 'none'")
         return self
 
-    def db_comparator(self) -> str:
-        """Map extractor comparator to the DB CHECK-constrained value.
-
-        DB accepts: increase | decrease | match
-        "preserve" maps to "match"; "comparator_unspecified" is returned
-        as-is and will fail the DB CHECK — callers should filter these
-        out or handle them before persistence.
-        """
-        if self.comparator == "preserve":
-            return "match"
-        return self.comparator
-
 
 class ExtractionResult(BaseModel):
     """The complete result of one skill extraction pass.

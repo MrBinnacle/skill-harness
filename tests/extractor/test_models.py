@@ -101,33 +101,6 @@ def test_extracted_clause_valid() -> None:
     assert clause.axis == "list_usage"
 
 
-def test_extracted_clause_db_comparator_increase() -> None:
-    clause = ExtractedClause.model_validate(_valid_clause(comparator="increase"))
-    assert clause.db_comparator() == "increase"
-
-
-def test_extracted_clause_db_comparator_decrease() -> None:
-    clause = ExtractedClause.model_validate(_valid_clause(comparator="decrease"))
-    assert clause.db_comparator() == "decrease"
-
-
-def test_extracted_clause_db_comparator_preserve_maps_to_match() -> None:
-    clause = ExtractedClause.model_validate(_valid_clause(comparator="preserve"))
-    assert clause.db_comparator() == "match"
-
-
-def test_extracted_clause_db_comparator_unspecified_passthrough() -> None:
-    """comparator_unspecified passes through from db_comparator; pipeline rejects it."""
-    clause = ExtractedClause.model_validate(
-        _valid_clause(
-            comparator="comparator_unspecified",
-            vacuity_flag="semantic_vacuous_pending_review",
-            falsifying_case=None,
-        )
-    )
-    assert clause.db_comparator() == "comparator_unspecified"
-
-
 # ---------------------------------------------------------------------------
 # ExtractedClause — vacuity / falsifying_case invariant
 # ---------------------------------------------------------------------------
