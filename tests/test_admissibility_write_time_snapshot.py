@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from skill_harness.audit import audit_all_verdicts
+from skill_harness.audit import audit_all_verdicts, get_verdict_by_id
 from skill_harness.storage.models import (
     CalibrationEventWrite,
     ClauseWrite,
@@ -224,7 +224,7 @@ class TestAdmissibilityWriteTimeSnapshot:
         )
 
         # Step 3: Read back and capture state before mutation
-        row_before = verdicts_repo.get_verdict_by_id(evidence_db, "v-snap")
+        row_before = get_verdict_by_id(evidence_db, "v-snap")
         assert row_before is not None
         assert row_before["admissibility_state"] == "admissible"
         assert row_before["calibration_event_id"] == "calib-original"

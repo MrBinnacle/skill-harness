@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import sqlite3
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -67,11 +68,33 @@ def _sha256(text: str) -> str:
 
 
 def discover(directory: Path) -> list[Migration]:
-    """Find numbered ``.sql`` files in ascending version order."""
+    """Find numbered ``.sql`` files in ascending version order.
+
+    Raises ``BootstrapError`` if any version number appears more than once in
+    the same directory (A30 duplicate-version guard).  The check runs BEFORE
+    filename validation so a duplicate-version error is distinguishable from a
+    malformed-filename error.
+    """
     if not directory.exists():
         return []
+    paths = sorted(directory.glob("*.sql"))
+
+    # A30 duplicate-version guard — group by the leading digit sequence.
+    # Run this pass BEFORE parsing stems so the error type is unambiguous.
+    version_to_paths: dict[str, list[str]] = defaultdict(list)
+    for path in paths:
+        version_str = path.stem.split("_")[0]
+        if version_str.isdigit():  # skip non-numeric stems (caught below)
+            version_to_paths[version_str].append(path.name)
+    for version_str, names in version_to_paths.items():
+        if len(names) > 1:
+            raise BootstrapError(
+                f"duplicate migration version {version_str} in {directory}: "
+                + ", ".join(sorted(names))
+            )
+
     out: list[Migration] = []
-    for path in sorted(directory.glob("*.sql")):
+    for path in paths:
         stem = path.stem
         version_str, _, name = stem.partition("_")
         if not version_str.isdigit():

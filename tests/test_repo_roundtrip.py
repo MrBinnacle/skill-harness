@@ -18,7 +18,12 @@ import sqlite3
 
 import pytest
 
-from skill_harness.audit import audit_all_verdicts
+from skill_harness.audit import (
+    audit_all_verdicts,
+    get_verdict_by_id,
+    list_verdicts_for_clause,
+    select_verdicts_by_admissibility,
+)
 from skill_harness.storage.models import (
     CalibrationEventWrite,
     ClauseWrite,
@@ -429,7 +434,7 @@ class TestOracleVerdictsRepo:
     def test_insert_and_get(self, evidence_db: sqlite3.Connection) -> None:
         self._setup(evidence_db)
         verdicts_repo.insert_oracle_verdict(evidence_db, self._make_verdict())
-        row = verdicts_repo.get_verdict_by_id(evidence_db, "v1")
+        row = get_verdict_by_id(evidence_db, "v1")
         assert row is not None
         assert row["admissibility_state"] == "admissible"
 
@@ -443,13 +448,13 @@ class TestOracleVerdictsRepo:
     def test_list_for_clause(self, evidence_db: sqlite3.Connection) -> None:
         self._setup(evidence_db)
         verdicts_repo.insert_oracle_verdict(evidence_db, self._make_verdict())
-        rows = verdicts_repo.list_verdicts_for_clause(evidence_db, "clause-1")
+        rows = list_verdicts_for_clause(evidence_db, "clause-1")
         assert len(rows) == 1
 
     def test_select_by_admissibility(self, evidence_db: sqlite3.Connection) -> None:
         self._setup(evidence_db)
         verdicts_repo.insert_oracle_verdict(evidence_db, self._make_verdict())
-        rows = verdicts_repo.select_verdicts_by_admissibility(evidence_db, "admissible")
+        rows = select_verdicts_by_admissibility(evidence_db, "admissible")
         assert len(rows) == 1
 
     def test_admissibility_snapshot_survives_calibration_change(
@@ -492,7 +497,7 @@ class TestOracleVerdictsRepo:
             (_TS,),
         )
         # Assert verdict's admissibility_state is UNCHANGED — still 'admissible'
-        row = verdicts_repo.get_verdict_by_id(evidence_db, "v-snapshot")
+        row = get_verdict_by_id(evidence_db, "v-snapshot")
         assert row is not None
         assert row["admissibility_state"] == "admissible", (
             "admissibility_state was recomputed from runtime — write-time snapshot violated"

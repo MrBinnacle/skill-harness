@@ -28,6 +28,7 @@ from typing import Any
 
 import pytest
 
+from skill_harness.audit import get_verdict_by_id
 from skill_harness.storage.dual_write import (
     write_calibration_event_with_pointer,
     write_run_start_with_budget,
@@ -53,9 +54,6 @@ from skill_harness.storage.repositories.evidence import (
 )
 from skill_harness.storage.repositories.evidence import (
     metric_versions as mv_repo,
-)
-from skill_harness.storage.repositories.evidence import (
-    oracle_verdicts as verdicts_repo,
 )
 from skill_harness.storage.repositories.evidence import (
     runs as runs_repo,
@@ -324,7 +322,7 @@ class TestWriteVerdictWithCostEntry:
                 write_verdict_with_cost_entry(e_conn, r_proxy, _make_verdict(), _make_cost_entry())
 
             # Evidence committed
-            row = verdicts_repo.get_verdict_by_id(e_conn, "v-001")
+            row = get_verdict_by_id(e_conn, "v-001")
             assert row is not None, "evidence verdict row must exist after partial write"
 
             # Runtime absent
@@ -356,7 +354,7 @@ class TestWriteVerdictWithCostEntry:
                 write_verdict_with_cost_entry(e_proxy, r_conn, _make_verdict(), _make_cost_entry())
 
             # Evidence absent
-            row = verdicts_repo.get_verdict_by_id(e_real, "v-001")
+            row = get_verdict_by_id(e_real, "v-001")
             assert row is None, "evidence verdict row must NOT exist after evidence INSERT failure"
 
             # Runtime absent

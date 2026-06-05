@@ -11,5 +11,8 @@
 /PLAN.md                         @MrBinnacle
 /docs/COUNCIL_FINDINGS.md        @MrBinnacle
 /migrations/                     @MrBinnacle
+
+# Storage / migrations gate — SCHEMA + SECURITY seat sign-off per A30 + dev-team-council
+migrations/*    @MrBinnacle
 /.github/                        @MrBinnacle
 /SECURITY.md                     @MrBinnacle
