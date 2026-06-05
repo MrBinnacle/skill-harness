@@ -209,8 +209,10 @@ def _assert_delete_raises(
 class TestP1Skills:
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_update_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_update_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             skill_id = f"sk-{suffix[:12]}"
@@ -231,8 +233,10 @@ class TestP1Skills:
 
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_delete_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_delete_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             skill_id = f"sk-{suffix[:12]}"
@@ -260,8 +264,10 @@ class TestP1Skills:
 class TestP1Clauses:
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_update_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_update_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             _seed_skill(conn)
@@ -289,8 +295,10 @@ class TestP1Clauses:
 
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_delete_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_delete_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             _seed_skill(conn)
@@ -325,8 +333,10 @@ class TestP1Clauses:
 class TestP1MetricVersions:
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_update_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_update_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             mid = f"m-{suffix[:10]}"
@@ -356,8 +366,10 @@ class TestP1MetricVersions:
 
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_delete_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_delete_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             mid = f"m-{suffix[:10]}"
@@ -393,8 +405,10 @@ class TestP1MetricVersions:
 class TestP1Judges:
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_update_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_update_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             jid = f"j-{suffix[:12]}"
@@ -409,8 +423,10 @@ class TestP1Judges:
 
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_delete_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_delete_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             jid = f"j-{suffix[:12]}"
@@ -432,8 +448,10 @@ class TestP1Judges:
 class TestP1CalibrationEvents:
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_update_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_update_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             _seed_judge(conn)
@@ -462,8 +480,10 @@ class TestP1CalibrationEvents:
 
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_delete_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_delete_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             _seed_judge(conn)
@@ -499,8 +519,10 @@ class TestP1CalibrationEvents:
 class TestP1Samples:
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_update_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_update_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         run_id = f"run-samp-{suffix[:8]}"
         conn.execute("SAVEPOINT hyp_example")
         try:
@@ -528,8 +550,10 @@ class TestP1Samples:
 
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_delete_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_delete_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         run_id = f"run-samp-{suffix[:8]}"
         conn.execute("SAVEPOINT hyp_example")
         try:
@@ -568,8 +592,10 @@ class TestP1OracleVerdicts:
 
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_update_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_update_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         run_id = f"run-ov-{suffix[:8]}"
         conn.execute("SAVEPOINT hyp_example")
         try:
@@ -605,8 +631,10 @@ class TestP1OracleVerdicts:
 
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_delete_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_delete_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         run_id = f"run-ov-{suffix[:8]}"
         conn.execute("SAVEPOINT hyp_example")
         try:
@@ -649,8 +677,10 @@ class TestP1OracleVerdicts:
 class TestP1ConfoundEvents:
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_update_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_update_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         run_id = f"run-ce-{suffix[:8]}"
         conn.execute("SAVEPOINT hyp_example")
         try:
@@ -679,8 +709,10 @@ class TestP1ConfoundEvents:
 
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_delete_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_delete_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         run_id = f"run-ce-{suffix[:8]}"
         conn.execute("SAVEPOINT hyp_example")
         try:
@@ -720,8 +752,10 @@ class TestP1FrozenCases:
 
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_update_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_update_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             _seed_clause(conn)
@@ -750,8 +784,10 @@ class TestP1FrozenCases:
 
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
-    def test_delete_raises(self, evidence_db_savepoint: sqlite3.Connection, suffix: str) -> None:
-        conn = evidence_db_savepoint
+    def test_delete_raises(
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
+    ) -> None:
+        conn = evidence_db_for_property_tests
         conn.execute("SAVEPOINT hyp_example")
         try:
             _seed_clause(conn)
@@ -790,11 +826,11 @@ class TestP2Runs:
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
     def test_update_immutable_columns_raises(
-        self, evidence_db_savepoint: sqlite3.Connection, suffix: str
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
     ) -> None:
         """UPDATE of skill_id, run_kind, config_json, or started_at raises
         IntegrityError matching the runs_immutable_columns trigger message."""
-        conn = evidence_db_savepoint
+        conn = evidence_db_for_property_tests
         run_id = f"r2-{suffix[:12]}"
         conn.execute("SAVEPOINT hyp_example")
         try:
@@ -832,10 +868,10 @@ class TestP2Runs:
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
     def test_completed_at_single_shot_succeeds(
-        self, evidence_db_savepoint: sqlite3.Connection, suffix: str
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
     ) -> None:
         """First UPDATE of completed_at (NULL → value) SUCCEEDS."""
-        conn = evidence_db_savepoint
+        conn = evidence_db_for_property_tests
         run_id = f"r2-ok-{suffix[:10]}"
         conn.execute("SAVEPOINT hyp_example")
         try:
@@ -866,10 +902,10 @@ class TestP2Runs:
     @given(suffix=_safe_text)
     @_PROP_SETTINGS
     def test_completed_at_second_update_raises(
-        self, evidence_db_savepoint: sqlite3.Connection, suffix: str
+        self, evidence_db_for_property_tests: sqlite3.Connection, suffix: str
     ) -> None:
         """Second UPDATE of completed_at raises IntegrityError (single-shot rule)."""
-        conn = evidence_db_savepoint
+        conn = evidence_db_for_property_tests
         run_id = f"r2-once-{suffix[:8]}"
         conn.execute("SAVEPOINT hyp_example")
         try:

@@ -46,7 +46,8 @@ def get_run_progress_by_id(conn: sqlite3.Connection, run_id: str) -> dict[str, A
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_run_progresses_by_state(conn: sqlite3.Connection, state: str) -> list[dict[str, Any]]:
@@ -56,7 +57,8 @@ def list_run_progresses_by_state(conn: sqlite3.Connection, state: str) -> list[d
         " FROM run_progress WHERE state = ?",
         (state,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def update_run_progress(
@@ -82,14 +84,3 @@ def update_run_progress(
 def delete_run_progress(conn: sqlite3.Connection, run_id: str) -> None:
     """Delete a run_progress row (cleanup after archival to evidence.runs)."""
     conn.execute("DELETE FROM run_progress WHERE run_id = ?", (run_id,))
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "run_id": row[0],
-        "state": row[1],
-        "samples_planned": row[2],
-        "samples_collected": row[3],
-        "last_heartbeat": row[4],
-        "error": row[5],
-    }

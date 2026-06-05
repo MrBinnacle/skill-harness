@@ -56,7 +56,8 @@ def get_run_by_id(conn: sqlite3.Connection, run_id: str) -> dict[str, Any] | Non
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_runs_for_skill(conn: sqlite3.Connection, skill_id: str) -> list[dict[str, Any]]:
@@ -68,7 +69,8 @@ def list_runs_for_skill(conn: sqlite3.Connection, skill_id: str) -> list[dict[st
         """,
         (skill_id,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_runs_by_kind(conn: sqlite3.Connection, run_kind: str) -> list[dict[str, Any]]:
@@ -80,7 +82,8 @@ def select_runs_by_kind(conn: sqlite3.Connection, run_kind: str) -> list[dict[st
         """,
         (run_kind,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def complete_run(conn: sqlite3.Connection, run_id: str, completed_at: str) -> None:
@@ -97,14 +100,3 @@ def complete_run(conn: sqlite3.Connection, run_id: str, completed_at: str) -> No
         "UPDATE runs SET completed_at = ? WHERE run_id = ?",
         (completed_at, run_id),
     )
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "run_id": row[0],
-        "skill_id": row[1],
-        "run_kind": row[2],
-        "config_json": row[3],
-        "started_at": row[4],
-        "completed_at": row[5],
-    }

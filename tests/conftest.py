@@ -32,11 +32,17 @@ def runtime_db(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 @pytest.fixture()
-def evidence_db_savepoint(evidence_db: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+def evidence_db_for_property_tests(evidence_db: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     """Provide the evidence DB connection for use in Hypothesis property tests.
 
-    Property tests should wrap EACH @given example body in a per-example
-    SAVEPOINT/ROLLBACK envelope so examples are isolated from each other:
+    This fixture does NOT acquire a SAVEPOINT itself. pytest's fixture scope
+    (function-level) and Hypothesis's example loop (many examples per test
+    function) make per-example isolation in the fixture impossible: the fixture
+    runs once when the test function is invoked, but @given drives many examples
+    inside that single function call.
+
+    CALLERS MUST manually wrap each @given body in SAVEPOINT / ROLLBACK TO /
+    RELEASE so that examples are isolated from each other:
 
         conn.execute("SAVEPOINT hyp_example")
         try:
@@ -45,10 +51,8 @@ def evidence_db_savepoint(evidence_db: sqlite3.Connection) -> Iterator[sqlite3.C
             conn.execute("ROLLBACK TO hyp_example")
             conn.execute("RELEASE hyp_example")
 
-    Per A28: property tests use this fixture; smoke tests use evidence_db.
-    The per-example SAVEPOINT must be managed inside the @given function body
-    because a pytest fixture runs once per test function, not once per Hypothesis
-    example.  This fixture guarantees a fresh DB (via evidence_db) and documents
-    the required SAVEPOINT usage pattern.
+    See tests/test_hypothesis_savepoint_isolation.py for the canonical pattern.
+
+    Per A28: property tests use this fixture; smoke tests use evidence_db directly.
     """
     yield evidence_db

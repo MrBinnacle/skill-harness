@@ -41,7 +41,8 @@ def get_skill_import_staging_by_id(
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_skill_import_stagings(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -50,7 +51,8 @@ def list_skill_import_stagings(conn: sqlite3.Connection) -> list[dict[str, Any]]
         "SELECT staging_id, source_path, state, notes, updated_at"
         " FROM skill_imports_staging ORDER BY updated_at"
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_skill_import_stagings_by_state(
@@ -62,7 +64,8 @@ def select_skill_import_stagings_by_state(
         " FROM skill_imports_staging WHERE state = ?",
         (state,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def update_skill_import_staging_state(
@@ -82,13 +85,3 @@ def delete_skill_import_staging(conn: sqlite3.Connection, staging_id: str) -> No
         "DELETE FROM skill_imports_staging WHERE staging_id = ?",
         (staging_id,),
     )
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "staging_id": row[0],
-        "source_path": row[1],
-        "state": row[2],
-        "notes": row[3],
-        "updated_at": row[4],
-    }

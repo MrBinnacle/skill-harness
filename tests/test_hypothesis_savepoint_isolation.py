@@ -1,4 +1,4 @@
-"""A28 — Verify that the evidence_db_savepoint fixture isolates Hypothesis examples.
+"""A28 — Verify that the evidence_db_for_property_tests fixture isolates Hypothesis examples.
 
 Usage pattern: property tests call conn.execute("SAVEPOINT hyp_example") at the
 start of the @given body and conn.execute("ROLLBACK TO hyp_example") + RELEASE at
@@ -32,14 +32,14 @@ def _insert_skill(conn: sqlite3.Connection, skill_id: str) -> None:
 
 class TestSavepointIsolation:
     def test_a_savepoint_rollback_undoes_insert(
-        self, evidence_db_savepoint: sqlite3.Connection
+        self, evidence_db_for_property_tests: sqlite3.Connection
     ) -> None:
         """SAVEPOINT / INSERT / ROLLBACK TO / RELEASE leaves the table empty.
 
         This is the mechanical correctness proof: SAVEPOINT semantics work on
         the evidence connection returned by the fixture.
         """
-        conn = evidence_db_savepoint
+        conn = evidence_db_for_property_tests
 
         # Verify table is empty at the start
         assert conn.execute("SELECT COUNT(*) FROM skills").fetchone()[0] == 0
@@ -55,7 +55,7 @@ class TestSavepointIsolation:
         assert conn.execute("SELECT COUNT(*) FROM skills").fetchone()[0] == 0
 
     def test_b_property_examples_are_isolated(
-        self, evidence_db_savepoint: sqlite3.Connection
+        self, evidence_db_for_property_tests: sqlite3.Connection
     ) -> None:
         """Each @given example that uses the SAVEPOINT pattern sees an empty table.
 
@@ -67,7 +67,7 @@ class TestSavepointIsolation:
                 conn.execute("ROLLBACK TO hyp_example")
                 conn.execute("RELEASE hyp_example")
         """
-        conn = evidence_db_savepoint
+        conn = evidence_db_for_property_tests
         example_count = [0]
 
         @given(skill_suffix=st.integers(min_value=1, max_value=9999))
@@ -98,10 +98,10 @@ class TestSavepointIsolation:
         assert example_count[0] == 10
 
     def test_c_exception_mid_body_leaves_table_clean(
-        self, evidence_db_savepoint: sqlite3.Connection
+        self, evidence_db_for_property_tests: sqlite3.Connection
     ) -> None:
         """When the test body raises, the finally-ROLLBACK undoes partial inserts."""
-        conn = evidence_db_savepoint
+        conn = evidence_db_for_property_tests
 
         conn.execute("SAVEPOINT hyp_example")
         try:

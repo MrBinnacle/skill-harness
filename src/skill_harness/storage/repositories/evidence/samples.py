@@ -56,7 +56,8 @@ def get_sample_by_id(conn: sqlite3.Connection, sample_id: str) -> dict[str, Any]
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_samples_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict[str, Any]]:
@@ -69,7 +70,8 @@ def list_samples_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict[str
         """,
         (run_id,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_samples_by_condition(
@@ -84,18 +86,5 @@ def select_samples_by_condition(
         """,
         (run_id, condition),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "sample_id": row[0],
-        "run_id": row[1],
-        "clause_id": row[2],
-        "condition": row[3],
-        "subject_model": row[4],
-        "subject_seed": row[5],
-        "output_text": row[6],
-        "output_sha256": row[7],
-        "sampled_at": row[8],
-    }
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]

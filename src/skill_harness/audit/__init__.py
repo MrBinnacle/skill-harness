@@ -17,34 +17,6 @@ import sqlite3
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Internal helper
-# ---------------------------------------------------------------------------
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    """Map a raw oracle_verdicts SELECT row (positional) to a named dict."""
-    return {
-        "verdict_id": row[0],
-        "run_id": row[1],
-        "clause_id": row[2],
-        "axis": row[3],
-        "comparison": row[4],
-        "sample_a_id": row[5],
-        "sample_b_id": row[6],
-        "observation": row[7],
-        "oracle_tier": row[8],
-        "metric_id": row[9],
-        "metric_version": row[10],
-        "judge_id": row[11],
-        "calibration_event_id": row[12],
-        "position_swap_agreement": row[13],
-        "admissibility_state": row[14],
-        "inadmissibility_reason": row[15],
-        "written_at": row[16],
-    }
-
-
-# ---------------------------------------------------------------------------
 # Audit functions (raw oracle_verdicts access — permitted only in this module)
 # ---------------------------------------------------------------------------
 
@@ -98,7 +70,8 @@ def get_verdict_by_id(conn: sqlite3.Connection, verdict_id: str) -> dict[str, An
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_verdicts_for_clause(conn: sqlite3.Connection, clause_id: str) -> list[dict[str, Any]]:
@@ -117,7 +90,8 @@ def list_verdicts_for_clause(conn: sqlite3.Connection, clause_id: str) -> list[d
         """,
         (clause_id,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_verdicts_by_admissibility(
@@ -138,4 +112,5 @@ def select_verdicts_by_admissibility(
         """,
         (admissibility_state,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]

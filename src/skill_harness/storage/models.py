@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
 # ---------------------------------------------------------------------------
 # Configurable size caps (bytes when UTF-8-encoded)
@@ -317,9 +317,9 @@ class OracleVerdictWrite(BaseModel):
         mode="before",
     )
     @classmethod
-    def no_control_chars_optional(cls, v: object) -> object:
+    def no_control_chars_optional(cls, v: object, info: ValidationInfo) -> object:
         if isinstance(v, str):
-            return _check_text(v, "optional_text_field")
+            return _check_text(v, info.field_name or "field")
         return v
 
 
@@ -398,9 +398,9 @@ class FrozenCaseWrite(BaseModel):
         mode="before",
     )
     @classmethod
-    def no_control_chars_optional(cls, v: object) -> object:
+    def no_control_chars_optional(cls, v: object, info: ValidationInfo) -> object:
         if isinstance(v, str):
-            return _check_text(v, "optional_text_field")
+            return _check_text(v, info.field_name or "field")
         return v
 
     @field_validator("failing_input_text")
@@ -547,7 +547,7 @@ class CostLedgerWrite(BaseModel):
 
     @field_validator("run_id", "skill_id", mode="before")
     @classmethod
-    def no_control_chars_optional(cls, v: object) -> object:
+    def no_control_chars_optional(cls, v: object, info: ValidationInfo) -> object:
         if isinstance(v, str):
-            return _check_text(v, "optional_text_field")
+            return _check_text(v, info.field_name or "field")
         return v

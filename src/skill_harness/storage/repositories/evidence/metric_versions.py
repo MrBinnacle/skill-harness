@@ -55,7 +55,8 @@ def get_metric_version(
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_metric_versions(conn: sqlite3.Connection, metric_id: str) -> list[dict[str, Any]]:
@@ -68,7 +69,8 @@ def list_metric_versions(conn: sqlite3.Connection, metric_id: str) -> list[dict[
         """,
         (metric_id,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_metric_versions_by_tier(conn: sqlite3.Connection, tier: int) -> list[dict[str, Any]]:
@@ -81,16 +83,5 @@ def select_metric_versions_by_tier(conn: sqlite3.Connection, tier: int) -> list[
         """,
         (tier,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "metric_id": row[0],
-        "version": row[1],
-        "implementation_hash": row[2],
-        "tier": row[3],
-        "audited": row[4],
-        "mechanical_validity_test_passed": row[5],
-        "registered_at": row[6],
-    }
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]

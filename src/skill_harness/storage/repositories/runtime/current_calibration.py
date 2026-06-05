@@ -53,7 +53,8 @@ def get_current_calibration(
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_current_calibrations(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -62,7 +63,8 @@ def list_current_calibrations(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         "SELECT judge_id, axis, calibration_event_id, state, expires_at, updated_at"
         " FROM current_calibration ORDER BY judge_id, axis"
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_current_calibrations_by_state(
@@ -74,7 +76,8 @@ def select_current_calibrations_by_state(
         " FROM current_calibration WHERE state = ?",
         (state,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def update_current_calibration(
@@ -125,14 +128,3 @@ def upsert_current_calibration(conn: sqlite3.Connection, cal: CurrentCalibration
             cal.updated_at,
         ),
     )
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "judge_id": row[0],
-        "axis": row[1],
-        "calibration_event_id": row[2],
-        "state": row[3],
-        "expires_at": row[4],
-        "updated_at": row[5],
-    }

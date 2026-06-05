@@ -58,7 +58,8 @@ def get_run_budget_by_id(conn: sqlite3.Connection, run_id: str) -> dict[str, Any
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_run_budgets(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -70,7 +71,8 @@ def list_run_budgets(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         FROM run_budget ORDER BY last_updated
         """
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_run_budgets_over_cap(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -82,7 +84,8 @@ def select_run_budgets_over_cap(conn: sqlite3.Connection) -> list[dict[str, Any]
         FROM run_budget WHERE usd_spent >= hard_cap_usd ORDER BY last_updated
         """
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def update_run_budget_spend(
@@ -125,18 +128,3 @@ def update_run_budget_aborted(
         "UPDATE run_budget SET aborted_at = ?, last_updated = ? WHERE run_id = ?",
         (aborted_at, last_updated, run_id),
     )
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "run_id": row[0],
-        "hard_cap_usd": row[1],
-        "tokens_spent_in": row[2],
-        "tokens_spent_out": row[3],
-        "cache_write_in": row[4],
-        "cache_read_in": row[5],
-        "usd_spent": row[6],
-        "dry_run": row[7],
-        "aborted_at": row[8],
-        "last_updated": row[9],
-    }

@@ -60,7 +60,8 @@ def get_cost_ledger_entry_by_id(conn: sqlite3.Connection, ledger_id: int) -> dic
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_cost_ledger_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict[str, Any]]:
@@ -73,7 +74,8 @@ def list_cost_ledger_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict
         """,
         (run_id,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_cost_ledger_since(conn: sqlite3.Connection, since_ts: str) -> list[dict[str, Any]]:
@@ -86,20 +88,5 @@ def select_cost_ledger_since(conn: sqlite3.Connection, since_ts: str) -> list[di
         """,
         (since_ts,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "ledger_id": row[0],
-        "ts": row[1],
-        "run_id": row[2],
-        "skill_id": row[3],
-        "model_id": row[4],
-        "call_kind": row[5],
-        "input_tok": row[6],
-        "cache_write_tok": row[7],
-        "cache_read_tok": row[8],
-        "output_tok": row[9],
-        "usd": row[10],
-    }
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]

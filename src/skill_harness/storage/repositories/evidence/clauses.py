@@ -62,7 +62,8 @@ def get_clause_by_id(conn: sqlite3.Connection, clause_id: str) -> dict[str, Any]
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_clauses_for_skill(conn: sqlite3.Connection, skill_id: str) -> list[dict[str, Any]]:
@@ -76,7 +77,8 @@ def list_clauses_for_skill(conn: sqlite3.Connection, skill_id: str) -> list[dict
         """,
         (skill_id,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_clauses_by_axis(conn: sqlite3.Connection, axis: str) -> list[dict[str, Any]]:
@@ -90,20 +92,5 @@ def select_clauses_by_axis(conn: sqlite3.Connection, axis: str) -> list[dict[str
         """,
         (axis,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "clause_id": row[0],
-        "skill_id": row[1],
-        "clause_index": row[2],
-        "rendering_index": row[3],
-        "clause_text": row[4],
-        "axis": row[5],
-        "comparator": row[6],
-        "oracle_tier": row[7],
-        "vacuity_flag": row[8],
-        "falsifying_case_schema_sha256": row[9],
-        "created_at": row[10],
-    }
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]

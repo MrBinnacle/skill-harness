@@ -62,7 +62,8 @@ def get_frozen_case_by_id(conn: sqlite3.Connection, frozen_case_id: str) -> dict
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_frozen_cases_for_clause(conn: sqlite3.Connection, clause_id: str) -> list[dict[str, Any]]:
@@ -76,7 +77,8 @@ def list_frozen_cases_for_clause(conn: sqlite3.Connection, clause_id: str) -> li
         """,
         (clause_id,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_frozen_cases_by_oracle_source(
@@ -92,20 +94,5 @@ def select_frozen_cases_by_oracle_source(
         """,
         (oracle_source,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "frozen_case_id": row[0],
-        "clause_id": row[1],
-        "failing_input_text": row[2],
-        "failing_input_sha256": row[3],
-        "oracle_source": row[4],
-        "labeled_by": row[5],
-        "labeled_at": row[6],
-        "metric_id": row[7],
-        "metric_version": row[8],
-        "implementation_hash": row[9],
-        "frozen_at": row[10],
-    }
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]

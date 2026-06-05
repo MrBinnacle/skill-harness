@@ -60,7 +60,8 @@ def get_confound_event_by_id(
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_confound_events_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict[str, Any]]:
@@ -73,7 +74,8 @@ def list_confound_events_for_run(conn: sqlite3.Connection, run_id: str) -> list[
         """,
         (run_id,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_confound_events_by_kind(
@@ -88,19 +90,5 @@ def select_confound_events_by_kind(
         """,
         (delta_kind,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "confound_event_id": row[0],
-        "run_id": row[1],
-        "primary_clause_id": row[2],
-        "affected_clause_id": row[3],
-        "axis": row[4],
-        "delta": row[5],
-        "null_sigma": row[6],
-        "k_threshold": row[7],
-        "delta_kind": row[8],
-        "detected_at": row[9],
-    }
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]

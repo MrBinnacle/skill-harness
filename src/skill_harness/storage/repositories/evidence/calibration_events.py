@@ -68,7 +68,8 @@ def get_calibration_event_by_id(
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_to_dict(row)
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row, strict=True))
 
 
 def list_calibration_events_for_judge_axis(
@@ -87,7 +88,8 @@ def list_calibration_events_for_judge_axis(
         """,
         (judge_id, axis),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
 def select_calibration_events_by_state(
@@ -104,21 +106,5 @@ def select_calibration_events_by_state(
         """,
         (state,),
     )
-    return [_row_to_dict(row) for row in cur.fetchall()]
-
-
-def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
-    return {
-        "calibration_event_id": row[0],
-        "judge_id": row[1],
-        "axis": row[2],
-        "pairwise_agreement": row[3],
-        "position_consistency": row[4],
-        "length_controlled_agreement": row[5],
-        "cohen_kappa": row[6],
-        "pair_set_size": row[7],
-        "pair_set_sha256": row[8],
-        "state": row[9],
-        "expires_at": row[10],
-        "validated_at": row[11],
-    }
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
