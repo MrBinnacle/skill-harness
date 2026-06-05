@@ -18,6 +18,7 @@ import sqlite3
 
 import pytest
 
+from skill_harness.audit import audit_all_verdicts
 from skill_harness.storage.models import (
     CalibrationEventWrite,
     ClauseWrite,
@@ -432,10 +433,11 @@ class TestOracleVerdictsRepo:
         assert row is not None
         assert row["admissibility_state"] == "admissible"
 
-    def test_get_all_verdicts_for_audit(self, evidence_db: sqlite3.Connection) -> None:
+    def test_audit_all_verdicts(self, evidence_db: sqlite3.Connection) -> None:
+        """audit_all_verdicts() is the A29 canonical home for raw oracle_verdicts access."""
         self._setup(evidence_db)
         verdicts_repo.insert_oracle_verdict(evidence_db, self._make_verdict())
-        rows = verdicts_repo.get_all_verdicts_for_audit(evidence_db, "run-1")
+        rows = audit_all_verdicts(evidence_db, "run-1")
         assert len(rows) == 1
 
     def test_list_for_clause(self, evidence_db: sqlite3.Connection) -> None:

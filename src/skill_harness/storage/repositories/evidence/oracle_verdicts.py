@@ -20,7 +20,7 @@ Columns (from migrations/evidence/0001_initial.sql):
     written_at              TEXT NOT NULL
 
 A29 — use get_admissible_verdicts() (queries the VIEW) for aggregation;
-      use get_all_verdicts_for_audit() (queries raw table) for auditing.
+      use audit_all_verdicts() in skill_harness.audit for auditing (raw table).
 """
 
 from __future__ import annotations
@@ -90,7 +90,7 @@ def get_admissible_verdicts(conn: sqlite3.Connection, run_id: str) -> list[dict[
     confound_events with delta_kind = 'confound_flagged' for the same
     (run_id, primary_clause_id).
 
-    Use this for aggregation. Use get_all_verdicts_for_audit() for auditing.
+    Use this for aggregation. Use audit_all_verdicts() in skill_harness.audit for auditing.
     """
     cur = conn.execute(
         "SELECT * FROM admissible_verdicts WHERE run_id = ?",
@@ -98,25 +98,6 @@ def get_admissible_verdicts(conn: sqlite3.Connection, run_id: str) -> list[dict[
     )
     cols = [d[0] for d in cur.description]
     return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
-
-
-def get_all_verdicts_for_audit(conn: sqlite3.Connection, run_id: str) -> list[dict[str, Any]]:
-    """Return ALL verdicts for a run (including inadmissible/confounded).
-
-    Per A29 naming discipline: the _for_audit suffix makes the intent explicit
-    and distinguishes this from the aggregation-safe get_admissible_verdicts().
-    """
-    cur = conn.execute(
-        """
-        SELECT verdict_id, run_id, clause_id, axis, comparison,
-               sample_a_id, sample_b_id, observation, oracle_tier,
-               metric_id, metric_version, judge_id, calibration_event_id,
-               position_swap_agreement, admissibility_state, inadmissibility_reason, written_at
-        FROM oracle_verdicts WHERE run_id = ? ORDER BY written_at
-        """,
-        (run_id,),
-    )
-    return [_row_to_dict(row) for row in cur.fetchall()]
 
 
 def list_verdicts_for_clause(conn: sqlite3.Connection, clause_id: str) -> list[dict[str, Any]]:
