@@ -102,6 +102,31 @@ def update_current_calibration(
     )
 
 
+def upsert_current_calibration(conn: sqlite3.Connection, cal: CurrentCalibrationWrite) -> None:
+    """INSERT OR REPLACE the current calibration pointer for (judge_id, axis).
+
+    Used by dual_write.write_calibration_event_with_pointer on the runtime side.
+    INSERT OR REPLACE (not INSERT ... ON CONFLICT) to keep compatibility with
+    SQLite 3.24+ which may not be available on all CI hosts; INSERT OR REPLACE
+    is universally supported.
+    """
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO current_calibration
+            (judge_id, axis, calibration_event_id, state, expires_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            cal.judge_id,
+            cal.axis,
+            cal.calibration_event_id,
+            cal.state,
+            cal.expires_at,
+            cal.updated_at,
+        ),
+    )
+
+
 def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
     return {
         "judge_id": row[0],
