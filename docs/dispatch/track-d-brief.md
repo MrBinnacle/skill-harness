@@ -60,7 +60,12 @@ RED → GREEN → REFACTOR per `superpowers:test-driven-development`. Each subtr
 - **Multiplicity provenance (A49):** every verdict carries `(run_id, clause_id, axis, comparison)`; run config records family size K×|axes| for Track E. (Multiplicity *correction* is Track E, not here.)
 - **Warmup-or-serialize (A43/COST-4):** first render of a shared prefix serialized so the cache-write lands before reads.
 
-**Exit criteria / tests.** Sequential-stop tests (pass/fail/underpowered_nmax); kill-at-1,732/4,000 resume test → exactly 4,000 samples, never 4,001; confound threshold-trigger test + write-side directionality assertion; budget cap race test (`test_budget_check_serializes`); kill-between-commits cost-reconciler test restores true spend; `runs.completed_at` written exactly once. Gates green.
+**Carry-forward from D.1 two-stage review (MUST address in D.2):**
+- **QUAL-1 (MAJOR):** the D.1 `AblationOperator` filler `[ABLATED]` is 4 tokens, so clauses of 1–2 tokens cannot hit the ±2-token matched-length tolerance — the operator silently returns an out-of-tolerance placeholder. **Before any verdict is emitted, D.2 must detect when the operator's achieved length-delta exceeds tolerance and either reject the clause or flag the resulting Ablated_k samples as length-confounded** (do NOT emit clean-looking verbosity evidence for them). Coordinate with `AblationOperator` — it may expose the achieved delta; if not, compute it. This is the #1 thing to close before a live run.
+- **QUAL-2 (MINOR):** pin `FILLER_UNIT_TOKENS` with an assertion (or delete the dangling docstring ref in `operator.py:27`).
+- **QUAL-3 (MINOR):** replace the collision-fragile `str.replace` oracle in `tests/ablation/test_render.py` with index-based reconstruction + add an overlapping-clause fixture.
+
+**Exit criteria / tests.** Sequential-stop tests (pass/fail/underpowered_nmax); kill-at-1,732/4,000 resume test → exactly 4,000 samples, never 4,001; confound threshold-trigger test + write-side directionality assertion; **sub-tolerance-clause confound-flag test (QUAL-1)**; budget cap race test (`test_budget_check_serializes`); kill-between-commits cost-reconciler test restores true spend; `runs.completed_at` written exactly once. Gates green.
 
 ### D.3 — CLI surface: dry-run, execute, resume, progress, reporting honesty
 
