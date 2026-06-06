@@ -1,0 +1,368 @@
+"""Calibration command orchestration (A34, A37; partial A36 storage side).
+
+Implements:
+- ``cohen_kappa_observed_marginals`` — κ formula with observed marginals (A34)
+- ``determine_state`` — three-tier admissibility logic (A34)
+- ``calibrate`` — full calibration orchestration: parse JSONL, run judge,
+  compute metrics, determine state, write to DB if calibrated/conditional.
+
+C.4 scope (NOT implemented here):
+- Cost projection formula and ``--max-usd`` enforcement
+- ``_warmup_first_call()`` serialization discipline
+- Dry-run output formatter (Rich table)
+- Length regression fit (β₁ computation via statsmodels OLS)
+"""
+
+from __future__ import annotations
+
+import sqlite3
+import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Protocol
+
+from skill_harness.oracles.calibration.jsonl_parser import (
+    CalibrationPair,
+    compute_pair_set_sha256,
+    parse_pair_set,
+)
+from skill_harness.storage.dual_write import write_calibration_event_with_pointer
+from skill_harness.storage.models import CalibrationEventWrite, CurrentCalibrationWrite
+
+# ---------------------------------------------------------------------------
+# JudgeClient protocol (avoids circular import with tier2.judge)
+# ---------------------------------------------------------------------------
+
+
+class _JudgeProtocol(Protocol):
+    """Structural protocol for JudgeClient.evaluate_pair (A31/A32)."""
+
+    def evaluate_pair(
+        self,
+        output_a: str,
+        output_b: str,
+        axis_name: str,
+        axis_rubric: str,
+    ) -> object:
+        """Evaluate a pair; return an object with .choice and .position_swap_agreement."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Admissibility thresholds (A34 / llm-judge-calibration Discipline 4)
+# ---------------------------------------------------------------------------
+
+_N_FLOOR_REJECTED: int = 50  # N < 50 → rejected
+_N_FLOOR_CONDITIONAL: int = 100  # 50 ≤ N < 100 → conditional; N ≥ 100 → checked
+
+_THRESHOLD_PAIRWISE_AGREEMENT: float = 0.70
+_THRESHOLD_POSITION_CONSISTENCY: float = 0.80
+_THRESHOLD_LENGTH_CONTROLLED: float = 0.65
+_THRESHOLD_COHEN_KAPPA: float = 0.40
+
+
+# ---------------------------------------------------------------------------
+# Cohen's κ — observed marginals (A34 / Cohen 1960)
+# ---------------------------------------------------------------------------
+
+
+def cohen_kappa_observed_marginals(
+    pairs: Sequence[tuple[str, str]],
+) -> tuple[float, float]:
+    """Compute Cohen's κ for 3-class pairwise judgement (A34).
+
+    Parameters
+    ----------
+    pairs:
+        Sequence of ``(human_choice, judge_choice)`` tuples where each
+        choice ∈ {``"A"``, ``"B"``, ``"tie"``}.
+
+    Returns
+    -------
+    (kappa, p_e)
+        ``kappa`` — chance-corrected agreement coefficient.
+        ``p_e`` — chance baseline (stored as ``chance_baseline`` per A34).
+
+    Formula (Cohen 1960):
+        p_o = observed agreement = fraction of pairs where human == judge
+        p_e = sum_c (n_human_c / N) * (n_judge_c / N)  for c in {A, B, tie}
+        kappa = (p_o - p_e) / (1 - p_e)
+
+    ``p_e`` uses *observed* marginals, NOT a uniform 1/3 assumption.
+    Both ``p_o`` and ``p_e`` are stored in the calibration_event so
+    the audit can re-derive κ if the formula is updated later (A34).
+    """
+    n = len(pairs)
+    if n == 0:
+        return (0.0, 0.0)
+
+    # --- Count observed agreements and marginals ---
+    n_human: dict[str, int] = {"A": 0, "B": 0, "tie": 0}
+    n_judge: dict[str, int] = {"A": 0, "B": 0, "tie": 0}
+    n_agree: int = 0
+
+    for human_choice, judge_choice in pairs:
+        n_human[human_choice] = n_human.get(human_choice, 0) + 1
+        n_judge[judge_choice] = n_judge.get(judge_choice, 0) + 1
+        if human_choice == judge_choice:
+            n_agree += 1
+
+    p_o = n_agree / n
+
+    # p_e uses observed marginals (NOT 1/3 uniform)
+    p_e = sum((n_human.get(c, 0) / n) * (n_judge.get(c, 0) / n) for c in ("A", "B", "tie"))
+
+    if abs(1.0 - p_e) < 1e-12:
+        # Edge case: perfect marginal alignment → κ is undefined; return 1.0
+        return (1.0, float(p_e))
+
+    kappa = (p_o - p_e) / (1.0 - p_e)
+    return (float(kappa), float(p_e))
+
+
+# ---------------------------------------------------------------------------
+# Three-tier admissibility
+# ---------------------------------------------------------------------------
+
+
+def determine_state(
+    n_pairs: int,
+    pairwise_agreement: float,
+    position_consistency: float,
+    length_controlled_agreement: float | None,
+    cohen_kappa: float,
+) -> tuple[str, str | None]:
+    """Determine three-tier calibration admissibility state (A34).
+
+    Returns
+    -------
+    (state, reason)
+        ``state`` ∈ {``"rejected"``, ``"conditional"``, ``"calibrated"``}.
+        ``reason`` is ``None`` when ``state == "calibrated"``; a short
+        machine-readable string otherwise.
+    """
+    if n_pairs < _N_FLOOR_REJECTED:
+        return ("rejected", "pair_set_size_below_floor")
+
+    if n_pairs < _N_FLOOR_CONDITIONAL:
+        return ("conditional", "underpowered_50_99")
+
+    # N ≥ 100 — check all four thresholds
+    if pairwise_agreement < _THRESHOLD_PAIRWISE_AGREEMENT:
+        return ("rejected", "pairwise_agreement_below_threshold")
+
+    if position_consistency < _THRESHOLD_POSITION_CONSISTENCY:
+        return ("rejected", "position_consistency_below_threshold")
+
+    if (
+        length_controlled_agreement is not None
+        and length_controlled_agreement < _THRESHOLD_LENGTH_CONTROLLED
+    ):
+        return ("rejected", "length_controlled_below_threshold")
+
+    if cohen_kappa < _THRESHOLD_COHEN_KAPPA:
+        return ("rejected", "cohen_kappa_below_threshold")
+
+    return ("calibrated", None)
+
+
+# ---------------------------------------------------------------------------
+# CalibrationResult dataclass (return value of calibrate())
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CalibrationResult:
+    """Summary of a calibration run.
+
+    Fields
+    ------
+    state : str
+        Three-tier admissibility outcome: "rejected" | "conditional" | "calibrated".
+    reason : str | None
+        Machine-readable rejection reason; None if state == "calibrated".
+    n_pairs : int
+        Number of pairs parsed from the JSONL.
+    pairwise_agreement : float
+        Fraction of pairs where judge and human agreed (raw, position-swap).
+    position_consistency : float
+        Fraction of pairs where judge verdict was consistent across position swap.
+    cohen_kappa : float
+        Chance-corrected agreement coefficient.
+    chance_baseline : float
+        p_e from the κ formula (stored for audit re-derivation).
+    pair_set_sha256 : str
+        Content hash of the canonical-sorted pair set.
+    calibration_event_id : str | None
+        UUID of the written calibration_event row; None if rejected (no write).
+    """
+
+    state: str
+    reason: str | None
+    n_pairs: int
+    pairwise_agreement: float
+    position_consistency: float
+    cohen_kappa: float
+    chance_baseline: float
+    pair_set_sha256: str
+    calibration_event_id: str | None
+
+
+# ---------------------------------------------------------------------------
+# calibrate() — main orchestration
+# ---------------------------------------------------------------------------
+
+
+def calibrate(
+    judge_id: str,
+    axis: str,
+    pair_set_path: Path,
+    judge_client: _JudgeProtocol,
+    evidence_conn: sqlite3.Connection,
+    runtime_conn: sqlite3.Connection,
+) -> CalibrationResult:
+    """Run calibration: parse JSONL, evaluate each pair via judge, write event.
+
+    Parameters
+    ----------
+    judge_id:
+        Opaque identifier for the judge (sha256(model_id || system_prompt_sha256
+        || tool_schema_sha256) per A31).
+    axis:
+        Axis name being calibrated (e.g. ``"citation_support"``).
+    pair_set_path:
+        Path to the JSONL file of ``CalibrationPair`` records.
+    judge_client:
+        A ``JudgeClient`` instance (from ``oracles.tier2.judge``).
+        Must expose ``evaluate_pair(response_a, response_b, axis_name, axis_rubric)
+        -> JudgeVerdict``.
+    evidence_conn:
+        Open evidence DB connection (``synchronous=FULL``).
+    runtime_conn:
+        Open runtime DB connection.
+
+    Returns
+    -------
+    CalibrationResult
+        Summary with state, metrics, and optional calibration_event_id.
+
+    Notes
+    -----
+    - N < 50 → rejected; no DB write; returns CalibrationResult(state="rejected").
+    - 50 ≤ N < 100 → conditional; DB write; returns state="conditional".
+    - N ≥ 100 → all thresholds checked; calibrated or rejected; DB write if
+      state is "calibrated" or "conditional".
+    - C.4 scope: cost projection, ``--max-usd`` enforcement,
+      ``_warmup_first_call()`` discipline, length regression fit.
+    """
+    # 1. Parse JSONL
+    pairs: list[CalibrationPair] = parse_pair_set(pair_set_path)
+    n_pairs = len(pairs)
+    pair_set_sha = compute_pair_set_sha256(pairs)
+
+    # 2. Early exit for N < 50 (never write a rejected event to DB)
+    if n_pairs < _N_FLOOR_REJECTED:
+        return CalibrationResult(
+            state="rejected",
+            reason="pair_set_size_below_floor",
+            n_pairs=n_pairs,
+            pairwise_agreement=0.0,
+            position_consistency=0.0,
+            cohen_kappa=0.0,
+            chance_baseline=0.0,
+            pair_set_sha256=pair_set_sha,
+            calibration_event_id=None,
+        )
+
+    # 3. Run judge on each pair (position-swap per JudgeClient.evaluate_pair)
+    human_judge_pairs: list[tuple[str, str]] = []
+    position_consistent_count = 0
+    n_judge_choices: dict[str, int] = {"A": 0, "B": 0, "tie": 0}
+
+    for pair in pairs:
+        verdict = judge_client.evaluate_pair(
+            output_a=pair.response_a,
+            output_b=pair.response_b,
+            axis_name=axis,
+            axis_rubric=axis,  # C.4 will extend with full rubric text
+        )
+        # Access verdict fields via getattr to work with both real and mock verdicts
+        judge_choice = str(getattr(verdict, "choice", "tie"))
+        swap_agree = int(getattr(verdict, "position_swap_agreement", 0))
+        human_judge_pairs.append((pair.human_preference, judge_choice))
+        position_consistent_count += swap_agree
+        n_judge_choices[judge_choice] = n_judge_choices.get(judge_choice, 0) + 1
+
+    # 4. Compute metrics
+    n_human: dict[str, int] = {"A": 0, "B": 0, "tie": 0}
+    for pair in pairs:
+        n_human[pair.human_preference] = n_human.get(pair.human_preference, 0) + 1
+
+    pairwise_agreement = sum(1 for h, j in human_judge_pairs if h == j) / n_pairs
+    position_consistency = position_consistent_count / n_pairs
+
+    kappa, chance_baseline = cohen_kappa_observed_marginals(human_judge_pairs)
+
+    # 5. Determine state
+    state, reason = determine_state(
+        n_pairs=n_pairs,
+        pairwise_agreement=pairwise_agreement,
+        position_consistency=position_consistency,
+        length_controlled_agreement=None,  # C.4 scope
+        cohen_kappa=kappa,
+    )
+
+    # 6. Write to DB if state is calibrated or conditional
+    calibration_event_id: str | None = None
+    if state in ("calibrated", "conditional"):
+        calibration_event_id = str(uuid.uuid4())
+        now_str = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        event = CalibrationEventWrite(
+            calibration_event_id=calibration_event_id,
+            judge_id=judge_id,
+            axis=axis,
+            pairwise_agreement=pairwise_agreement,
+            position_consistency=position_consistency,
+            length_controlled_agreement=None,  # C.4 scope
+            cohen_kappa=kappa,
+            pair_set_size=n_pairs,
+            pair_set_sha256=pair_set_sha,
+            state=state,
+            expires_at=None,  # 90-day logic is C.4 scope
+            validated_at=now_str,
+            # A37 STAT extensions
+            n_a=n_human.get("A", 0),
+            n_b=n_human.get("B", 0),
+            n_tie=n_human.get("tie", 0),
+            judge_n_a=n_judge_choices.get("A", 0),
+            judge_n_b=n_judge_choices.get("B", 0),
+            judge_n_tie=n_judge_choices.get("tie", 0),
+            length_regression_coefficient=None,  # C.4 scope
+            chance_baseline=chance_baseline,
+            # A37 COST extensions (C.4 fills these)
+            total_usd_spent=0.0,
+            cost_ledger_run_id=None,
+        )
+        pointer = CurrentCalibrationWrite(
+            judge_id=judge_id,
+            axis=axis,
+            calibration_event_id=calibration_event_id,
+            state=state,
+            expires_at=None,
+            updated_at=now_str,
+        )
+        write_calibration_event_with_pointer(evidence_conn, runtime_conn, event, pointer)
+
+    return CalibrationResult(
+        state=state,
+        reason=reason,
+        n_pairs=n_pairs,
+        pairwise_agreement=pairwise_agreement,
+        position_consistency=position_consistency,
+        cohen_kappa=kappa,
+        chance_baseline=chance_baseline,
+        pair_set_sha256=pair_set_sha,
+        calibration_event_id=calibration_event_id,
+    )

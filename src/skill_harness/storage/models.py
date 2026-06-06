@@ -163,7 +163,23 @@ class JudgeWrite(BaseModel):
 
 
 class CalibrationEventWrite(BaseModel):
-    """Insert shape for evidence.calibration_events."""
+    """Insert shape for evidence.calibration_events.
+
+    Extended by Track C.3 (A37) with 10 new fields:
+      STAT: n_a, n_b, n_tie (human-pref counts),
+            judge_n_a, judge_n_b, judge_n_tie (judge verdict counts),
+            length_regression_coefficient (β₁; None until C.4 fits regression),
+            chance_baseline (p_e from κ formula)
+      COST: total_usd_spent (C.4 fills via cost_ledger sum),
+            cost_ledger_run_id (cross-DB pointer; nullable in v0.1)
+
+    state enum per A37: 'calibrated' | 'conditional' | 'rejected' | 'expired'
+                        | 'uncalibrated'
+    Note: 'rejected' events (N<50) are never written to the DB — the command
+    layer refuses to call this model for rejected events.  The value IS valid
+    here so the orchestration layer can represent the outcome before deciding
+    not to write.
+    """
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
@@ -180,6 +196,24 @@ class CalibrationEventWrite(BaseModel):
     expires_at: str | None
     validated_at: str
 
+    # -----------------------------------------------------------------------
+    # A37 — STAT extensions
+    # -----------------------------------------------------------------------
+    n_a: int | None  # human-pref A count
+    n_b: int | None  # human-pref B count
+    n_tie: int | None  # human-pref tie count
+    judge_n_a: int | None  # judge verdict A count
+    judge_n_b: int | None  # judge verdict B count
+    judge_n_tie: int | None  # judge verdict tie count
+    length_regression_coefficient: float | None  # β₁; None until C.4 fits OLS
+    chance_baseline: float | None  # p_e from κ formula; None until computed
+
+    # -----------------------------------------------------------------------
+    # A37 — COST extensions
+    # -----------------------------------------------------------------------
+    total_usd_spent: float  # 0.0 until C.4 cost ledger sums
+    cost_ledger_run_id: str | None  # cross-DB pointer; nullable in v0.1
+
     @field_validator(
         "calibration_event_id",
         "judge_id",
@@ -193,11 +227,12 @@ class CalibrationEventWrite(BaseModel):
         field_name = getattr(info, "field_name", "field") if info else "field"
         return _check_text(v, field_name)
 
-    @field_validator("expires_at", mode="before")
+    @field_validator("expires_at", "cost_ledger_run_id", mode="before")
     @classmethod
-    def no_control_chars_optional(cls, v: object) -> object:
+    def no_control_chars_optional(cls, v: object, info: object) -> object:
         if isinstance(v, str):
-            return _check_text(v, "expires_at")
+            field_name = getattr(info, "field_name", "field") if info else "field"
+            return _check_text(v, field_name)
         return v
 
 

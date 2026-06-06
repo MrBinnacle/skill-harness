@@ -471,6 +471,17 @@ class TestP1CalibrationEvents:
                     state="calibrated",
                     expires_at=None,
                     validated_at=_TS,
+                    # A37 extensions (Track C.3)
+                    n_a=30,
+                    n_b=12,
+                    n_tie=8,
+                    judge_n_a=31,
+                    judge_n_b=11,
+                    judge_n_tie=8,
+                    length_regression_coefficient=None,
+                    chance_baseline=0.36,
+                    total_usd_spent=0.0,
+                    cost_ledger_run_id=None,
                 ),
             )
             _assert_update_raises(conn, "calibration_events", "calibration_event_id", cid)
@@ -503,6 +514,17 @@ class TestP1CalibrationEvents:
                     state="calibrated",
                     expires_at=None,
                     validated_at=_TS,
+                    # A37 extensions (Track C.3)
+                    n_a=30,
+                    n_b=12,
+                    n_tie=8,
+                    judge_n_a=31,
+                    judge_n_b=11,
+                    judge_n_tie=8,
+                    length_regression_coefficient=None,
+                    chance_baseline=0.36,
+                    total_usd_spent=0.0,
+                    cost_ledger_run_id=None,
                 ),
             )
             _assert_delete_raises(conn, "calibration_events", "calibration_event_id", cid)

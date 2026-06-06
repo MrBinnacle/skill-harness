@@ -160,6 +160,17 @@ def _make_calibration_event(
         state="calibrated",
         expires_at=None,
         validated_at=_TS,
+        # A37 extensions (Track C.3)
+        n_a=40,
+        n_b=7,
+        n_tie=3,
+        judge_n_a=41,
+        judge_n_b=6,
+        judge_n_tie=3,
+        length_regression_coefficient=None,
+        chance_baseline=0.35,
+        total_usd_spent=0.0,
+        cost_ledger_run_id=None,
     )
 
 
