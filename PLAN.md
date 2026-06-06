@@ -194,20 +194,31 @@ git worktree add ../youwontdoit-track-c feat/track-c-oracle-library
 
 ### TRACK D · Ablation runner
 
-**Scope**: Full / Ablated_k / Null orchestration; clause rendering reorder for cache reuse; sequential stopping rule; confound monitoring on all metric_library axes; budget enforcement.
+**Scope** (substantially expanded by Pre-Track-D council 2026-06-06 per A39–A52; archive `docs/council-fires/2026-06-06-pre-track-d/`): Full / Ablated_k / Null orchestration; **versioned neutral-substitution ablation operator** (not deletion); clause rendering for K-local cache reuse; sequential stopping rule; confound monitoring on all metric_library axes; budget enforcement; **sample-idempotency + crash-resumability**; **cost re-derivable from evidence**.
 
-**Driving findings**: A8, A11, A12, A13.
+**Driving findings**: A8, A11, A12, A13 (original) + **A39–A52** (Pre-Track-D council 2026-06-06). Trigger input: `docs/research/landscape-2026-06-06.md` (no-twin landscape sweep; LOO-is-inferior-estimator academic warning).
 
-**Skills loaded**: `bayesian-eval-discipline`, `claude-api` (prompt caching), `subagent-research-reliability` (if any sub-research is dispatched).
+**Skills loaded**: `bayesian-eval-discipline`, `claude-api` (prompt caching — A43 cache-marker discipline), `subagent-research-reliability`, `windows-claude-code-env`.
 
 **Depends on**: A (storage), C (oracles).
 
-**Exit criteria**:
-- `run ablation <skill_id>` dry-runs by default. Prints projected calls / tokens / cost using the F-COST-1 closed-form.
-- `--execute` flag invokes real API calls with prompt-cache breakpoints at end-of-system and end-of-skill-prefix.
-- Per-condition sampling honors `N_min=8`, `N_inc=4`, `N_max=40` defaults with sequential stop on `P(rate>0.60) ≥ 0.95` or `≤ 0.05`.
-- `confound_events` rows emitted for all axes in metric_library whose movement exceeds `2·σ_Null`.
-- Budget check inside writer transaction (no read-then-write race); abort with `aborted_budget` state if `--max-usd` exceeded.
+**New migration**: `migrations/evidence/0300_*.sql` (Track D range 0300-0399 per A30): adds `sample_index` + `UNIQUE(run_id, clause_id, condition, sample_index)` (A40), per-call cost columns on evidence rows (A41), `ablation_operator_id`/`implementation_hash` columns (A39). Preserves A22 `synchronous=FULL` + append-only triggers.
+
+**Exit criteria** (original 5 + the council additions):
+- `run ablation <skill_id>` dry-runs by default. **Offline projection** — constructs no DB conn, no `JudgeClient`, requires no API key (A51); prints the A12-(a) one-liner + a per-clause table (`N_proj`, `est_CI_width`, status `TESTABLE | VACUOUS-EXCLUDED | NO-FALSIFYING-CASE`); terminal line `NO CALLS MADE — re-run with --execute`.
+- `--execute` invokes real API calls with `cache_control:{type:ephemeral}` typed-block markers at end-of-system + end-of-skill-prefix, ablated-clause-last, warmup-or-serialize; **cache-marker assertion test** (A43).
+- **Ablation operator (A39)**: deterministic matched-length semantically-null placeholder, NOT deletion. `ablation_operator_id` + `implementation_hash` stamped on every verdict at write-time; no verdict writes without it. `--show-rendered <clause_id>` exposes verbatim Full/Ablated_k/Null + operator version (A52).
+- Per-condition sampling honors `N_min=8`, `N_inc=4`, `N_max=40` with sequential stop on `P(rate>0.60) ≥ 0.95` or `≤ 0.05`. **N_max-without-stop = hard stop → `UNMEASURED(underpowered)`** with achieved posterior + `stopping_reason` recorded; no batches past N_max (A44).
+- `confound_events` rows emitted (threshold-triggered only, no dense matrix — A47) for all metric_library axes whose movement exceeds `k·σ_Null` (k=2.0, σ per-(run,axis) at write-time, N_null≥30 floor; below floor → detection disabled, verdicts `UNMEASURED(underpowered)`). Two-table design, exclusion via VIEW at read-time, no verdict denormalization (A45). Write-side assertion `primary_clause_id == ablated_clause_id` (A46).
+- **Sample idempotency + resume (A40)**: `UNIQUE(run_id, clause_id, condition, sample_index)`; resume = set-difference vs frozen plan; retry(transient)/skip(permanent)/abort(budget); kill-at-N test resumes to exactly N, never N+1. `--resume <run_id>` flag with preview; bare re-run against incomplete prior run WARNS + names resumable run_id (A52).
+- **Budget (A42)**: cap check + reservation inside ONE `writer_transaction(runtime)`; abort with terminal `run_progress.state` if `--max-usd` exceeded; distinct `--max-usd` vs `--daily-cap` errors naming the flag (A51).
+- **Cost re-derivable from evidence (A41)**: per-call token/usd columns written inside the evidence transaction; `cost_ledger` is a projection; reconciler back-fills on sum-mismatch; ledger written from actual response `usage`, never projection. Kill-between-commits test shows the reconciler restores true spend.
+- **`runs.completed_at` single-shot (A40-adjacent / REL-1)**: written once via a dedicated `writer_transaction(evidence)` after the last verdict commits, gated on `samples_collected == samples_planned`, never in a per-sample loop; `run_progress.state` terminal value as the last runtime write (crash-vs-complete discriminator).
+- **UNMEASURED ≠ FAILED (A48)**: distinct render + exit codes (`0` all-verdicts-reached, `2` ≥1 UNMEASURED); falsifiable test that an underpowered clause exits 2.
+- **Reporting honesty (A50)**: Contribution labeled `single-clause LOO; lower-bound under redundancy`. Redundancy = documented limitation; triggered `--probe-redundancy` optional (reclassify-only, never →PASSED). Random-subset surrogate = v0.2.
+- **Multiplicity provenance (A49)**: every verdict carries `(run_id, clause_id, axis, comparison)`; run config records family size K×|axes| for Track E. Multiplicity correction itself is Track E (A9).
+- `rich.progress` per-clause + live dual-cap footer during `--execute` (A52).
+- `pytest -q` green; `mypy --strict src/` clean; `ruff check` clean; `ruff format --check` clean.
 
 ### TRACK E · Aggregation + reporting + CLI completion
 
@@ -268,7 +279,7 @@ Every track below has a council fire point declared up-front. These are not opti
 | Phase 1.5 (before any Track A code lands) ✅ FIRED 2026-06-04 | Custom (Storage-touching) | TEST-ARCH + SCHEMA + SECURITY + RELIABILITY | Archive: `docs/council-fires/2026-06-04-pre-track-a-storage/`. Adopted A18–A23; deferred D5–D8. Phase 1.5a + 1.5b are the resulting blockers. |
 | Phase 1.5c — Pre-Track A implementation council ✅ FIRED 2026-06-04 | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Archive: `docs/council-fires/2026-06-04-pre-track-a-impl/`. Adopted A24–A30; deferred D10–D14. Track A scope expanded; exit criteria expanded. Substantive disagreement on dual-DB ordering resolved 3-vs-1 (evidence-first) with SECURITY's runtime-first framing recorded as load-bearing dissent. |
 | Pre-Track C start | Custom | EVAL-RESEARCH + SECURITY + COST + STAT | Judge module is where prompt-injection-by-adversarial-skill-output enters; STAT owns the verdict aggregation that downstream Track E depends on |
-| Pre-Track D start | Custom | STAT + COST + RELIABILITY + OPERATOR-DX | Ablation runner is the cost-hot-path and the user-visible long-running operation; dry-run UX is OPERATOR-DX's lane |
+| Pre-Track D start ✅ FIRED 2026-06-06 | Custom | STAT + COST + RELIABILITY + OPERATOR-DX **+ EVAL-RESEARCH** | Archive: `docs/council-fires/2026-06-06-pre-track-d/`. EVAL-RESEARCH added (landscape sweep injected eval-methodology Qs). Adopted A39–A52; C2 resolved REFUSE; A29 confirmed; 3 citation corrections; PRD §1 reframe queued. Track D scope + exit criteria expanded above. No unresolved BLOCKER. |
 | Pre-merge for any PR touching `migrations/` | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Schema changes can silently break the append-only invariant; gate at PR time |
 | Pre-v0.1 tag | Pre-tag launch council | All 9 seats | Last-look before public-facing release; full coverage |
 
