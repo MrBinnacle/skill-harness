@@ -416,7 +416,13 @@ class ConfoundEventWrite(BaseModel):
 
 
 class FrozenCaseWrite(BaseModel):
-    """Insert shape for evidence.frozen_cases."""
+    """Insert shape for evidence.frozen_cases.
+
+    Extended by Track E.1 (A56) with three new fields:
+      verdict_id        -- FK to oracle_verdicts (nullable for legacy rows)
+      run_id            -- FK to runs (nullable for legacy rows)
+      axis              -- axis-specific frozen case (nullable for legacy rows)
+    """
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
@@ -431,6 +437,11 @@ class FrozenCaseWrite(BaseModel):
     metric_version: str | None
     implementation_hash: str | None
     frozen_at: str
+
+    # A56 — provenance extensions (migration 0400)
+    verdict_id: str | None = None
+    run_id: str | None = None
+    axis: str | None = None
 
     @field_validator(
         "frozen_case_id",
@@ -450,6 +461,9 @@ class FrozenCaseWrite(BaseModel):
         "metric_id",
         "metric_version",
         "implementation_hash",
+        "verdict_id",
+        "run_id",
+        "axis",
         mode="before",
     )
     @classmethod

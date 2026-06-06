@@ -23,6 +23,7 @@ from skill_harness.extractor import (
     extract_skill,
 )
 from skill_harness.storage.context import StorageContext
+from skill_harness.storage.recovery import find_resumable_run_for_skill
 
 _console = Console()
 
@@ -544,73 +545,70 @@ def _find_incomplete_run(
     skill_id: str,
     runtime_conn: sqlite3.Connection | None = None,
     runtime_db: Path | None = None,
+    evidence_db: Path | None = None,
 ) -> str | None:
-    """Return the run_id of an incomplete prior run for skill_id, or None (B1 fix).
+    """Return the run_id of an incomplete prior run for skill_id, or None.
 
-    Queries runtime.run_progress for this skill_id (via the run_id FK through
-    evidence.runs) where state NOT IN ('completed', 'failed', 'aborted_budget').
+    Delegates to storage.recovery.find_resumable_run_for_skill (A61).
 
-    Since run_progress does NOT store skill_id directly, we join via evidence.runs.
-    However, as runtime and evidence are separate DBs, we query run_progress for
-    all non-terminal states and return the first match by run_id found in any
-    incomplete row that belongs to this skill_id.
+    When evidence_db is provided: performs the full two-step runtime→evidence
+    lookup (skill_id-filtered) via find_resumable_run_for_skill.
 
-    The skill_id is stored in the runs.config_json (via RunConfig.skill_id).
-    We do a runtime-only query for speed: query run_progress for non-terminal rows,
-    then filter by loading config_json from evidence if needed. But since we do not
-    want to open evidence from here (this function is called before evidence opens),
-    we store skill_id in run_budget or run_progress.
-
-    NOTE: run_progress does NOT have a skill_id column. The approach: query
-    run_progress for all non-terminal rows, then open evidence READ-ONLY to
-    match the skill_id from runs.config_json for those run_ids.
-
-    If runtime_conn is provided, use it directly. Otherwise open runtime_db.
+    When only runtime_conn/runtime_db is provided (legacy call path, test compat):
+    falls back to querying run_progress for the first non-terminal row
+    (skill_id-agnostic, conservative; preserves B1 behaviour for single-skill DBs).
 
     Module-level so tests can patch it.
     """
-    # Build runtime connection
+    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.migrations import open_evidence_readonly, open_runtime
+
+    # --- prefer full two-step lookup when evidence path is available ---
+    if evidence_db is not None:
+        own_rt = False
+        rt: sqlite3.Connection | None = runtime_conn
+        if rt is None:
+            if runtime_db is None:
+                return None
+            try:
+                rt = open_runtime(runtime_db)
+                own_rt = True
+            except Exception:
+                return None
+        try:
+            ev_ro = open_evidence_readonly(evidence_db)
+        except (BootstrapError, Exception):
+            # evidence.db not yet created — no runs can exist
+            if own_rt and rt is not None:
+                rt.close()
+            return None
+        try:
+            return find_resumable_run_for_skill(skill_id, evidence_conn_ro=ev_ro, runtime_conn=rt)
+        except Exception:
+            return None
+        finally:
+            ev_ro.close()
+            if own_rt and rt is not None:
+                rt.close()
+
+    # --- legacy path: runtime-only (skill_id-agnostic, B1 compat) ---
     own_conn = False
     conn: sqlite3.Connection | None = runtime_conn
     if conn is None:
         if runtime_db is None:
             return None
         try:
-            from skill_harness.storage.migrations import open_runtime
-
             conn = open_runtime(runtime_db)
             own_conn = True
         except Exception:
             return None
-
     try:
-        # Query for non-terminal run_progress rows
         rows = conn.execute(
             "SELECT run_id FROM run_progress "
             "WHERE state NOT IN ('completed', 'failed', 'aborted_budget')"
         ).fetchall()
         if not rows:
             return None
-        # Each non-terminal run_id: check if it belongs to skill_id
-        # We need to look up skill_id from the run_id; since run_progress does not carry
-        # skill_id, we stored it in run_budget.skill_id... but run_budget also lacks skill_id.
-        # The authoritative source is evidence.runs.config_json.skill_id, but we cannot
-        # open evidence here (two DBs, not the same context).
-        #
-        # IMPLEMENTATION NOTE: We cannot cross-DB join. The only runtime table that
-        # carries skill_id is cost_ledger (which has a nullable skill_id). This is a
-        # schema limitation — the correct long-term fix is to add skill_id to run_progress
-        # (requires a SCHEMA-council change). For now, we use the run_id directly and
-        # match against the skill_id by opening evidence READ-ONLY.
-        #
-        # If runtime_db is provided alongside runtime_conn, we can infer the evidence path;
-        # otherwise we return the first non-terminal run_id (conservative: names the run_id
-        # so the operator can inspect, but may be from a different skill). The warning
-        # message names the run_id so the operator can always verify.
-        #
-        # For the common single-skill-per-DB case (v0.1 intent), returning the first
-        # non-terminal run_id is correct. For multi-skill DBs, the operator sees the
-        # run_id and can use --resume <correct_run_id> or ignore the warning.
         return str(rows[0][0])
     except Exception:
         return None
@@ -797,7 +795,9 @@ def _cmd_execute(
 
     # A52: bare re-run guard — detect incomplete prior run BEFORE opening DB (B1 fix)
     if resume_run_id is None:
-        incomplete_run_id = _find_incomplete_run(skill_id, runtime_db=runtime_db)
+        incomplete_run_id = _find_incomplete_run(
+            skill_id, runtime_db=runtime_db, evidence_db=evidence_db
+        )
         if incomplete_run_id is not None:
             _console.print(
                 f"\n[bold yellow]WARNING:[/] Incomplete prior run detected for skill {skill_id!r}."
