@@ -82,6 +82,7 @@ def test_calibrate_n_below_50_does_not_write(tmp_path: Path) -> None:
             judge_client=mock_judge,
             evidence_conn=MagicMock(),
             runtime_conn=MagicMock(),
+            dry_run=False,
         )
         mock_write.assert_not_called()
 
@@ -114,6 +115,7 @@ def test_calibrate_n_60_writes_conditional(tmp_path: Path) -> None:
             judge_client=mock_judge,
             evidence_conn=MagicMock(),
             runtime_conn=MagicMock(),
+            dry_run=False,
         )
         mock_write.assert_called_once()
         call_event = mock_write.call_args[0][2]  # positional: (ev_conn, rt_conn, event, pointer)
@@ -151,6 +153,7 @@ def test_calibrate_n_100_writes_calibrated_with_a37_fields(tmp_path: Path) -> No
             judge_client=mock_judge,
             evidence_conn=MagicMock(),
             runtime_conn=MagicMock(),
+            dry_run=False,
         )
         # May or may not be calibrated based on real metric values; just verify
         # the write was called and the event has all A37 fields.

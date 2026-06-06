@@ -41,6 +41,9 @@ dev = [
   # encoding which is stable across 0.x series; DO NOT upgrade without re-running
   # bit-equality corpus and updating IMPLEMENTATION_HASH in verbosity.py.
   "tiktoken>=0.7,<1.0",
+  # statsmodels: OLS for AlpacaEval-2 length regression (A35 observation-time half).
+  # Preferred over scipy.linregress for cleaner output statistics. C.4 only.
+  "statsmodels>=0.14",
 ]
 
 [project.scripts]
@@ -103,3 +106,8 @@ files = ["src", "tests"]
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+
+# statsmodels ships no py.typed marker or stubs; ignore missing imports (C.4 length regression)
+[[tool.mypy.overrides]]
+module = ["statsmodels", "statsmodels.*"]
+ignore_missing_imports = true
