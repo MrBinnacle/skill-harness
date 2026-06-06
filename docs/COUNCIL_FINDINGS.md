@@ -155,6 +155,15 @@ The runtime/evidence partition is itself a security boundary: `evidence.db` is a
 - **Default (provisional)**: half-update (pseudo-Bernoulli) per §A10
 - **Alternative**: drop ties — preserves Beta-Binomial conjugacy exactly, simpler reporting; cost is discarding any verdict where the judge said "tie"
 - **Recommendation to flip**: if Tier-2 judges show high tie rates (>15%) on real calibration sets, dropping ties wastes data; half-update is correct. If tie rates are low (<5%), drop ties for cleaner math.
+- **Dispositionable when**: Track C calibration_events rows accumulate (need `n_tie/N` and `judge_n_tie/N_calls` per A37). C1 cannot be resolved until at least one (judge_id, axis) calibration has landed.
+
+### C2 · Operator-self-label calibration tier (new, Pre-Track-C 2026-06-05)
+- **Question**: Should v0.1 admit `state = "operator_self_labeled"` as a bootstrap-grade calibration tier (where the operator running `calibrate` provides the labels themselves), or refuse all calibration that isn't externally human-labeled per `(judge_id, axis)`?
+- **Default if not flipped**: REFUSE — no `operator_self_labeled` tier. Track C ships requiring user-provided externally-labeled JSONL.
+- **Pro (COST framing)**: v0.1 ships testable; operator can calibrate against their own preferences without external rater infrastructure.
+- **Con (STAT framing)**: Methodologically suspect — judge calibrating against operator who'll be running the harness against operator's skills creates a closed loop. "κ on a self-labeled set is structurally κ-with-yourself ≈ 1.0."
+- **If flipped**: explicit `state = "operator_self_labeled"` flag; downstream aggregation MUST refuse to enter operator-self-labeled verdicts into the Beta-Binomial pool; admin UI surfaces flag prominently; re-calibration cadence shortened (e.g., 30 days vs A7's 90).
+- **Surfaced by**: Pre-Track-C council (full framing in `docs/council-fires/2026-06-05-pre-track-c/synthesis.md`).
 
 ---
 
@@ -439,3 +448,72 @@ Cross-prediction quality: 6/12 prediction targets landed, 4 missed, 2 inverted. 
 The substantive cross-talk yield was the convergent finding combining RELIABILITY's "separate test families" + TEST-ARCH's "savepoint fixture" + SECURITY's "structural pre-commit grep enforcement" = a coherent test infrastructure shape that no single seat would have produced. Adopted into A27 + A28.
 
 Substantive disagreement on Q2 ordering surfaced cleanly — the orchestrator resolved by citing PRD Track D's pre-call cap check (moots SECURITY's premise without dismissing the framing). That's exactly the cross-talk-dispatch use case.
+
+---
+
+## Appendix D — Pre-Track-C council fire (2026-06-05)
+
+**Trigger**: PLAN.md row 3 of "Named council fire points" — gates Track C dispatch.
+**Seats**: EVAL-RESEARCH + SECURITY + COST + STAT (4 seats, Custom template per PLAN).
+**Model**: Opus 4.7 per CLAUDE.md model pinning ("council fires").
+**Archive**: `docs/council-fires/2026-06-05-pre-track-c/` (4 raw seat outputs + README + synthesis).
+**Outcome**: all 4 seats `STATUS: BLOCKER-FOUND`. 6 BLOCKERs + 2 MAJORs synthesized (highest-severity per Q).
+
+### Question disposition summary
+
+| Q | EVAL-RESEARCH | SECURITY | COST | STAT | Synthesized | Adopted |
+|---|---|---|---|---|---|---|
+| Q1 (judge response shape) | MAJOR | BLOCKER | MAJOR | MAJOR | **BLOCKER** | **A31** |
+| Q2 (position-swap test) | MAJOR | MAJOR | OBSERVATION | MAJOR | **MAJOR** | **A32** |
+| Q3 (Tier-1 offline test) | MAJOR | BLOCKER | MINOR | MAJOR | **BLOCKER** | **A33** |
+| Q4 (calibration JSONL) | MAJOR | MAJOR | MAJOR | BLOCKER | **BLOCKER** | **A34** |
+| Q5 (length control) | MINOR | MAJOR | MINOR | MAJOR | **MAJOR** | **A35** |
+| Q6 (calibrate projection) | MINOR | MAJOR | BLOCKER | MINOR | **BLOCKER** | **A36** |
+| Q7 (CalibrationEventWrite extensions) | OBSERVATION | OBSERVATION | MAJOR | BLOCKER | **BLOCKER** | **A37** |
+| Q8 (adversarial injection) | BLOCKER | BLOCKER | MINOR | MAJOR | **BLOCKER** | **A38** |
+
+### Adopted decisions (A31–A38, summarized; full text in `docs/council-fires/2026-06-05-pre-track-c/synthesis.md`)
+
+- **A31 · Tier-2 judge response shape**: tool_use with `strict: true`, `tool_choice` forced, `report_verdict({choice: enum[A,B,tie], rationale_brief})`. `judge_id = sha256(model_id || system_prompt_sha256 || tool_schema_sha256)`. Rationale field is audit-only; displayed in UI with `[untrusted model output]` prefix.
+- **A32 · Position-swap test mechanics**: mock at SDK boundary (`anthropic.Anthropic.messages.create`); side-effect callable inspects prompt content; parameterized 9-cell (AB×BA) table; three minimum RED tests covering admissible / inadmissible-by-position-disagreement / tie-symmetry. EVAL's Track-C-abstraction framing recorded as MINOR dissent.
+- **A33 · Tier-1 mechanical validity audit primitive**: `pytest-socket` + bit-equality. Module-level `pytestmark = pytest.mark.disable_socket`. `metric_versions.mechanical_validity_test_passed = 1` flips only on tests pass AND zero socket attempts. `PYTHONHASHSEED=0` discipline.
+- **A34 · Calibration JSONL schema + three-tier admissibility**: 8-field strict JSONL (`pair_id, axis, prompt, response_a, response_b, human_preference, labeler_id, labeled_at`). State enum: `rejected` (N<50) / `conditional` (50≤N<100) / `calibrated` (N≥100). Cohen's κ on 3-class uses observed marginals (not 1/3 uniform). v0.1: NO starter set ships; user-provided. Operator-self-label is **value decision C2**.
+- **A35 · Length-controlled scoring**: both prompt-level (max_tokens=80, "length should not influence" instruction) AND observation-time AlpacaEval-2 regression. `length_regression_coefficient` stored separately from `length_controlled_agreement`. Apply correction at verdict-write time (not at read). Store both `raw_observation` and `length_adjusted_observation`. EVAL's observation-only framing recorded as MINOR dissent.
+- **A36 · Calibrate budget projection**: distinct formula from ablation (no per-pair cache; only system+schema prefix cacheable); shared envelope with ablation (per-run `--max-usd` $5 + shared daily `cost_ledger` cap $20). `_warmup_first_call()` serialization discipline before fan-out. Dry-run output includes STAT's `est_SE_pairwise_agreement` + `est_CI_95_width`. PRD §18 amendment queued.
+- **A37 · `CalibrationEventWrite` extensions**: 10 new fields — STAT (`n_a, n_b, n_tie, judge_n_a, judge_n_b, judge_n_tie, length_regression_coefficient, chance_baseline`) + COST (`total_usd_spent, cost_ledger_run_id`). New migration `migrations/evidence/0200_calibration_event_extensions.sql` (first Track C migration per A30 range). SECURITY's A25 dissent does NOT become load-bearing for this write per SECURITY's own self-assessment.
+- **A38 · Adversarial injection defense**: 7-layer concentric defense — tool_use schema (A31) + 8KB output truncation + XML-delimited sandboxing + meta-token regex short-circuit + position-swap (PARTIAL not complete per STAT correction) + null-baseline distributional check (STAT contribution, amortized with A11 confound pairs) + rationale UI prefix.
+
+### Deferred to v0.2 (Phase 2-entry fire additions)
+
+- **D15 · Multi-rater Krippendorff α calibration** — v0.1 single-rater baseline.
+- **D16 · `--bootstrap-with-judge-labels` opt-in** — gated on C2 user disposition.
+- **D17 · Sanitization pre-pass for adversarial calibration sets** — only if real-world injection rate > 1%.
+- **D18 · Multi-axis calibration parallelization (`--parallel-axes`)** — 4× cache-write cost trade-off.
+- **D19 · PII redaction policy for calibration JSONLs** — append-only constraint requires upstream policy.
+- **D20 · Anthropic Batches API for calibration** — 50% cost saving, 24h SLA, v0.2.
+
+### New value decision
+
+- **C2 · Operator-self-label calibration tier** — surface to user. Default: refuse. See `synthesis.md` for full framing.
+
+### PRD v1.1 amendments queued (this fire)
+
+Total queue: **34** (26 prior + 8 from this fire):
+
+| Section | Amendment | Driver |
+|---|---|---|
+| §18 / A12-(a) | Doctrine names `calibrate` alongside `run ablation` and `run evaluate-skill` as dry-run-default commands | A36 |
+| §6/§7 | Calibration JSONL schema + three-tier admissibility states (`rejected`/`conditional`/`calibrated`) | A34 |
+| §6 | Length-control both-sides + `length_regression_coefficient` storage + raw vs length-adjusted observation separation | A35 |
+| §7 | `CalibrationEventWrite` extension fields (n_a/n_b/n_tie, judge_n_*, length_regression_coefficient, chance_baseline, total_usd_spent, cost_ledger_run_id) | A37 |
+| §6 | Adversarial injection defense layers (tool_use + truncation + XML + meta-token + null-baseline + rationale UI prefix) | A38 |
+| §12 | Tier-1 mechanical metric validity audit primitive (`pytest-socket` + bit-equality + `PYTHONHASHSEED=0`) | A33 |
+| §5 Tier 2 | Judge `judge_id = sha256(model_id || system_prompt_sha256 || tool_schema_sha256)` — tool schema part of calibration scope | A31 |
+| §5 Tier 2 | AlpacaEval-2 length-regression protocol named with citation (Dubois et al. 2404.04475) | A35 |
+
+### Cross-talk validation (this fire)
+
+- **Predictions landed**: 4+ (STAT predicted EVAL's calibration-vs-runtime separation; EVAL predicted STAT's tie-rate signal; COST predicted SEC's no-signed-JSONL restraint; SEC self-resolved own A25 dissent as non-load-bearing for this write).
+- **Cross-derived findings**: 1 (Q8 content-anchored injection caveat from STAT's self-correction — STAT did the empirical work within their own response, the load-bearing move per `cross-talk-council-dispatch` skill).
+- **Genuine disagreements surfaced**: Q7 (EVAL+SEC vs STAT+COST) — clean 2-vs-2 split by lens distinctness. Resolved by adopting BOTH extension sets (statistical + cost-provenance) since they are load-bearing for different downstream concerns.
+- **Yield rate**: ~50% prediction landing rate consistent with prior fires; Track C surface is genuinely contested (8 questions, 4 distinct lenses, multiple legitimate positions).

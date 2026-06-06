@@ -153,17 +153,44 @@ git worktree add ../youwontdoit-track-c feat/track-c-oracle-library
 
 ### TRACK C · Oracle library
 
-**Scope**: Tier-1 mechanical metrics with audit gate; Tier-2 judge module with pairwise + position-swap discipline; calibration_events writer.
+**Scope**: Tier-1 mechanical metrics with audit gate; Tier-2 judge module with pairwise + position-swap discipline + adversarial-injection defense; calibration_events writer with statistical + cost-provenance fields.
 
-**Driving findings**: A5, A6, A7, A14.
+**Driving findings**: A5, A6, A7, A14 (original) + **A31–A38** (Pre-Track-C council 2026-06-05).
 
-**Skills loaded**: `llm-judge-calibration`, `claude-api`, `append-only-evidence-design` (for calibration_events writes), `windows-claude-code-env` (UTF-8 / regex traps on Windows).
+**Skills loaded**: `llm-judge-calibration`, `claude-api`, `append-only-evidence-design`, `bayesian-eval-discipline`, `windows-claude-code-env`.
 
-**Exit criteria**:
+**Dev deps to add (per A33)**: `pytest-socket`, `tiktoken` (offline tokenizer, version-pinned).
+
+**Exit criteria** (substantially expanded by Pre-Track-C council 2026-06-05; archive: `docs/council-fires/2026-06-05-pre-track-c/`):
+
+*Tier-1 mechanical validity (A33):*
 - Tier-1 registry seeded with the 4 honestly-mechanical metrics (Hedge Index with frozen wordlist, Verbosity, Structure Score, redefined Compliance Proxy).
-- Each Tier-1 metric ships with `mechanical_validity_test` that runs offline (network blocked) and produces identical output across two invocations on the same input. Pass flips `metric_versions.mechanical_validity_test_passed = 1`.
-- Tier-2 judge module invokes Anthropic with pairwise + position-swapped pairs, writes `oracle_verdicts` with `position_swap_agreement` populated and `admissibility_state` resolved at write time.
-- `calibrate <judge_id> <axis> <pair_set.jsonl>` command computes `pairwise_agreement`, `position_consistency`, `length_controlled_agreement`, `cohen_kappa`, writes `calibration_events` row and updates `current_calibration`.
+- Each Tier-1 metric ships with `mechanical_validity_test` under `pytest-socket` `--disable-socket` module marker + bit-equality assertion (`metric(case) == metric(case)`) over fixed 3-5 input corpus + `PYTHONHASHSEED=0` discipline. Plus meta-test verifies pytest-socket itself fires.
+- `metric_versions.mechanical_validity_test_passed = 1` flips ONLY when tests pass AND zero socket attempts. Auto-downgrade to Tier 2 at registry-insert time on failure.
+
+*Tier-2 judge module (A31, A32, A35, A38):*
+- Anthropic SDK `tool_use` with `strict: true`, forced `tool_choice={"type":"tool","name":"report_verdict"}`, schema `{choice: enum[A,B,tie], rationale_brief: str(maxLength=500)}`. `thinking={"type":"disabled"}`. `max_tokens=80`. `judge_id = sha256(model_id || system_prompt_sha256 || tool_schema_sha256)`.
+- Pairwise + position-swapped pairs; deterministic SDK-boundary mocking (`anthropic.Anthropic.messages.create` side-effect callable); 9-cell (AB×BA) parameterized test table covering admissible / inadmissible / tie-symmetry paths. `admissibility_state` resolved at write time.
+- Length control: both prompt-level ("length should not influence" instruction, `max_tokens=80` ceiling) AND observation-time AlpacaEval-2 regression (Dubois et al. 2404.04475). `length_regression_coefficient` stored separately; correction applied at verdict-write time. Both `raw_observation` and `length_adjusted_observation` stored on `oracle_verdicts`.
+- 7-layer adversarial injection defense: tool_use schema + 8KB output truncation + XML-delimited sandboxing + meta-token regex short-circuit (`src/skill_harness/oracles/tier2/injection_guard.py`) + position-swap (PARTIAL not complete) + null-baseline distributional check (amortized with A11 confound pairs, N=30) + `[untrusted model output]` UI prefix on rationale.
+
+*Calibration command (A34, A36, A37):*
+- `calibrate <judge_id> <axis> <pair_set.jsonl> [--max-usd USD] [--daily-cap USD]` defaults to dry-run; `--execute` required.
+- JSONL strict Pydantic schema (`extra='forbid'`): 8 fields per line (`pair_id`, `axis`, `prompt`, `response_a`, `response_b`, `human_preference ∈ {A,B,tie}`, `labeler_id`, `labeled_at`). NUL/control-char validation reuses Track A.2 `_check_text`.
+- Three-tier admissibility state: `rejected` (N<50, refuse-to-write) / `conditional` (50≤N<100, write with credible-interval-widening penalty downstream) / `calibrated` (N≥100, all four thresholds: pairwise_agreement ≥ 0.7, position_consistency ≥ 0.8, length_controlled_agreement ≥ 0.65, cohen_kappa ≥ 0.4).
+- Cohen's κ on 3-class with observed marginals (Cohen 1960): `p_e = Σ_c (n_human_c/N) × (n_judge_c/N)`. Store both `p_o` and `p_e` (chance_baseline) so audit can re-derive κ.
+- v0.1 sourcing: NO starter calibration set ships; user provides. Operator-self-label tier is **value decision C2** (default: refuse).
+
+*Storage extensions (A37):*
+- New migration `migrations/evidence/0200_calibration_event_extensions.sql` (first Track C migration per A30 range 0200-0299). Adds 10 columns to `evidence.calibration_events`: `n_a, n_b, n_tie, judge_n_a, judge_n_b, judge_n_tie, length_regression_coefficient, chance_baseline, total_usd_spent, cost_ledger_run_id`. Preserves A22 `synchronous = FULL` + A21 append-only triggers.
+- `CalibrationEventWrite` Pydantic model extended in `src/skill_harness/storage/models.py`. State enum gains: `"conditional"`, `"rejected"`, `"expired"`, `"uncalibrated"` (plus `"operator_self_labeled"` gated on C2 user disposition).
+- Reuses Track A.2 `write_calibration_event_with_pointer` helper at `dual_write.py:145` (no signature change).
+
+*Budget projection (A36):*
+- Projection formula: `N_calls = N_pairs × 2`; cacheable prefix (system + tool schema) vs unique tail (per-pair candidates); net ~71% input-token cache reuse.
+- `_warmup_first_call()` serializes first call (await first streamed token) before fanning out 2..N (cache-write must complete before reads).
+- Shared `cost_ledger` envelope with ablation (per-day cap shared); per-run `--max-usd` independent. Hard ceiling on `--daily-cap` ($100) prevents operator bypass.
+- Dry-run output includes `est_SE_pairwise_agreement` + `est_CI_95_width` per STAT discipline.
 
 ### TRACK D · Ablation runner
 
