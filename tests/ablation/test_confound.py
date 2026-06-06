@@ -321,3 +321,129 @@ class TestDeltaToObservation:
     def test_just_above_tolerance_win(self) -> None:
         """Delta just above tolerance -> Win."""
         assert delta_to_observation(0.6, tie_tolerance=0.5) == 1.0
+
+
+# ---------------------------------------------------------------------------
+# T2: QUAL-1 sub-tolerance branch — unconditional assertion (not guarded by if)
+# ---------------------------------------------------------------------------
+
+
+class TestT2Qual1SubToleranceForcedBranch:
+    """T2: Force the sub-tolerance QUAL-1 branch and assert length_confounded=True + 0
+    samples UNCONDITIONALLY. The previous test only asserted under `if result.length_confounded`.
+    """
+
+    def test_sub_tolerance_clause_forces_length_confounded_true(self) -> None:
+        """T2 FALSIFYING: monkeypatch check_operator_length_tolerance to return False
+        (out-of-tolerance) and assert length_confounded=True + 0 samples unconditionally.
+
+        This exercises the QUAL-1 branch in _run_clause regardless of actual tokenization,
+        making the test deterministic and independent of tiktoken behavior.
+
+        Must be RED if the code does not set length_confounded=True when within_tolerance=False.
+        """
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from skill_harness.ablation.runner import AblationRunner, ClauseSpec
+        from skill_harness.storage.migrations import open_evidence, open_runtime
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            ev = open_evidence(tmp / "evidence.db")
+            rt = open_runtime(tmp / "runtime.db")
+
+            try:
+                from skill_harness.storage.models import ClauseWrite, SkillWrite
+                from skill_harness.storage.repositories.evidence.clauses import insert_clause
+                from skill_harness.storage.repositories.evidence.skills import insert_skill
+                from skill_harness.storage.transaction import writer_transaction
+
+                _SKILL = "skill-t2"
+                _TS_T2 = "2026-06-06T00:00:00.000000+00:00"
+                _SHA_T2 = "a" * 64
+
+                with writer_transaction(ev):
+                    insert_skill(
+                        ev,
+                        SkillWrite(
+                            skill_id=_SKILL,
+                            name="T2 Skill",
+                            source_path="/test/t2.md",
+                            source_sha256=_SHA_T2,
+                            imported_at=_TS_T2,
+                        ),
+                    )
+
+                clause = ClauseSpec(
+                    clause_id="c-t2",
+                    clause_text="Be concise.",
+                    clause_index=0,
+                    axis="verbosity",
+                    oracle_tier=1,
+                    metric_id="verbosity",
+                )
+
+                with writer_transaction(ev):
+                    insert_clause(
+                        ev,
+                        ClauseWrite(
+                            clause_id=clause.clause_id,
+                            skill_id=_SKILL,
+                            clause_index=clause.clause_index,
+                            rendering_index=clause.clause_index,
+                            clause_text=clause.clause_text,
+                            axis=clause.axis,
+                            comparator="increase",
+                            oracle_tier=clause.oracle_tier,
+                            vacuity_flag="none",
+                            falsifying_case_schema_sha256=None,
+                            created_at=_TS_T2,
+                        ),
+                    )
+
+                from unittest.mock import MagicMock
+
+                fake_scorers = {"verbosity": lambda t: float(len(t.split()))}
+                runner = AblationRunner(
+                    evidence_conn=ev,
+                    runtime_conn=rt,
+                    subject_client=MagicMock(),
+                    scorers=fake_scorers,
+                    max_retries=0,
+                    retry_delay_s=0.0,
+                    null_floor=2,
+                )
+
+                # Force out-of-tolerance by monkeypatching check_operator_length_tolerance
+                # within=False, clause=1tok, placeholder=4tok, tolerance=2
+                with patch(
+                    "skill_harness.ablation.runner.check_operator_length_tolerance",
+                    return_value=(False, 1, 4, 2),
+                ):
+                    results = runner.run_ablation(
+                        skill_id=_SKILL,
+                        clauses=[clause],
+                        user_message="Write a test.",
+                        max_usd=10.0,
+                    )
+
+                result = results[0]
+
+                # T2: UNCONDITIONAL assertions — no `if result.length_confounded:` guard
+                assert result.length_confounded is True, (
+                    "T2: QUAL-1 branch must set length_confounded=True when operator is "
+                    "out of tolerance (check_operator_length_tolerance returns False)"
+                )
+                n_samples = ev.execute(
+                    "SELECT COUNT(*) FROM samples WHERE clause_id = ?",
+                    (clause.clause_id,),
+                ).fetchone()[0]
+                assert n_samples == 0, (
+                    f"T2: QUAL-1: length-confounded clause must produce 0 samples, got {n_samples}"
+                )
+
+            finally:
+                ev.close()
+                rt.close()

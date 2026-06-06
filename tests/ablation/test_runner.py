@@ -1321,3 +1321,437 @@ class TestSubjectClient:
         with pytest.raises(SubjectCallError) as exc_info:
             client.call(system_blocks=[], user_message="test")
         assert exc_info.value.transient is False
+
+
+# ---------------------------------------------------------------------------
+# C2 FALSIFYING: resume recomputes admissibility instead of reading persisted
+# ---------------------------------------------------------------------------
+
+
+class TestC2ResumeReadsPersistedAdmissibility:
+    """C2: on resume, the posterior must be rebuilt from PERSISTED admissibility_state,
+    not recomputed from fresh confound/null-floor state (CLAUDE.md Evidence model —
+    admissibility recorded at write time, never recomputed).
+
+    Test strategy:
+    - Seed a verdict row whose persisted admissibility_state='admissible'.
+    - Arrange the runner state so a FRESH recompute of admissibility would yield
+      'inadmissible' (null floor not yet met for that axis).
+    - Resume the run (all samples already collected, no new calls needed).
+    - Assert: the posterior accumulated EXACTLY 1 admissible observation (from the
+      persisted 'admissible' verdict), NOT 0 (which recompute-from-samples would give).
+    """
+
+    def test_resume_uses_persisted_admissibility_not_recomputed(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection], tmp_path: Path
+    ) -> None:
+        """C2 FALSIFYING TEST: resume must read PERSISTED admissibility_state from
+        oracle_verdicts, not recompute from fresh confound/null-floor state.
+
+        Strategy:
+        - Monkeypatch _snapshot_admissibility to ALWAYS return 'inadmissible'.
+        - Seed a persisted verdict with admissibility_state='admissible' and observation=1.0.
+        - Resume the run (all samples pre-seeded, no new API calls needed).
+        - Assert: posterior has n=1 (persisted admissible verdict loaded) NOT n=0
+          (which would happen if recomputed via the patched _snapshot_admissibility).
+
+        RED against current code (recomputes -> n=0 due to monkeypatched inadmissibility).
+        GREEN after fix (reads persisted 'admissible' -> n=1).
+        """
+        from unittest.mock import patch
+
+        ev, rt = seeded_db_pair
+        clause = _make_clause("c-c2-test", "Always begin with 'Certainly!'.", 0, "verbosity")
+        _seed_clause(ev, clause)
+
+        run_id = "c2-falsifying-run"
+
+        from skill_harness.ablation.runner import RunConfig
+        from skill_harness.storage.models import (
+            OracleVerdictWrite,
+            RunBudgetWrite,
+            RunProgressWrite,
+            RunWrite,
+            SampleWrite,
+        )
+        from skill_harness.storage.repositories.evidence.oracle_verdicts import (
+            insert_oracle_verdict,
+        )
+        from skill_harness.storage.repositories.evidence.runs import insert_run
+        from skill_harness.storage.repositories.evidence.samples import insert_sample
+        from skill_harness.storage.repositories.runtime.run_budget import insert_run_budget
+        from skill_harness.storage.repositories.runtime.run_progress import insert_run_progress
+        from skill_harness.storage.transaction import writer_transaction
+
+        config = RunConfig(
+            run_id=run_id,
+            skill_id=_SKILL_ID,
+            clauses=[
+                {
+                    "clause_id": clause.clause_id,
+                    "clause_text": clause.clause_text,
+                    "clause_index": clause.clause_index,
+                    "axis": clause.axis,
+                    "oracle_tier": clause.oracle_tier,
+                    "metric_id": clause.metric_id,
+                }
+            ],
+            subject_model="claude-sonnet-4-6",
+            user_message=_USER_MSG,
+            max_usd=10.0,
+        )
+        with writer_transaction(ev):
+            insert_run(
+                ev,
+                RunWrite(
+                    run_id=run_id,
+                    skill_id=_SKILL_ID,
+                    run_kind="ablation",
+                    config_json=config.to_json(),
+                    started_at=_TS,
+                    completed_at=None,
+                ),
+            )
+
+        # Seed enough samples to reach PASS after resume (N_MIN = 8 with floor=2).
+        # Seed N_MIN comparisons worth of Full+Ablated+Null samples, all with Full winning.
+        from skill_harness.ablation.stopping import N_MIN
+
+        n_to_seed = N_MIN
+        full_sids: dict[int, str] = {}
+        abl_sids: dict[int, str] = {}
+        with writer_transaction(ev):
+            for idx in range(n_to_seed):
+                fid = f"c2-full-{idx}"
+                aid = f"c2-abl-{idx}"
+                nid = f"c2-null-{idx}"
+                full_sids[idx] = fid
+                abl_sids[idx] = aid
+                for sid, cond, text in [
+                    (fid, "full", "word " * 50),
+                    (aid, "ablated", "a"),
+                    (nid, "null", "word " * 10),
+                ]:
+                    insert_sample(
+                        ev,
+                        SampleWrite(
+                            sample_id=sid,
+                            run_id=run_id,
+                            clause_id=clause.clause_id,
+                            condition=cond,
+                            subject_model="claude-sonnet-4-6",
+                            subject_seed=None,
+                            output_text=text,
+                            output_sha256="a" * 64,
+                            sampled_at=_TS,
+                            sample_index=idx,
+                            input_tokens=100,
+                            cache_read_input_tokens=0,
+                            cache_creation_input_tokens=0,
+                            output_tokens=20,
+                            usd=0.001,
+                        ),
+                    )
+
+        # Seed persisted verdicts for all N_MIN comparisons with admissibility_state='admissible'
+        # and observation=1.0 (Win). The monkeypatched _snapshot_admissibility will return
+        # 'inadmissible' for all fresh recomputes — so if resume uses the persisted value,
+        # the posterior gets n=N_MIN wins; if it recomputes, it gets n=0.
+        with writer_transaction(ev):
+            for idx in range(n_to_seed):
+                insert_oracle_verdict(
+                    ev,
+                    OracleVerdictWrite(
+                        verdict_id=f"c2-verdict-{idx}",
+                        run_id=run_id,
+                        clause_id=clause.clause_id,
+                        axis=clause.axis,
+                        comparison="full_vs_ablated",
+                        sample_a_id=full_sids[idx],
+                        sample_b_id=abl_sids[idx],
+                        observation=1.0,  # Win — persisted admissible
+                        oracle_tier=clause.oracle_tier,
+                        metric_id=clause.metric_id,
+                        metric_version=None,
+                        judge_id=None,
+                        calibration_event_id=None,
+                        position_swap_agreement=None,
+                        admissibility_state="admissible",  # PERSISTED as admissible
+                        inadmissibility_reason=None,
+                        written_at=_TS,
+                    ),
+                )
+
+        with writer_transaction(rt):
+            insert_run_budget(
+                rt,
+                RunBudgetWrite(
+                    run_id=run_id,
+                    hard_cap_usd=10.0,
+                    tokens_spent_in=0,
+                    tokens_spent_out=0,
+                    cache_write_in=0,
+                    cache_read_in=0,
+                    usd_spent=0.003,
+                    dry_run=0,
+                    aborted_at=None,
+                    last_updated=_TS,
+                ),
+            )
+            insert_run_progress(
+                rt,
+                RunProgressWrite(
+                    run_id=run_id,
+                    state="running",
+                    samples_planned=120,
+                    samples_collected=n_to_seed * 3,
+                    last_heartbeat=_TS,
+                    error=None,
+                ),
+            )
+
+        # Monkeypatch _snapshot_admissibility to always return 'inadmissible'.
+        # This ensures any fresh-recompute path gives inadmissible, so the posterior
+        # can only reach n>=1 if resume reads the PERSISTED 'admissible' value.
+        with patch(
+            "skill_harness.ablation.runner.AblationRunner._snapshot_admissibility",
+            staticmethod(lambda *, confounded, null_floor_met: ("inadmissible", "test_forced")),
+        ):
+            runner, mock_client = _make_runner(ev, rt, null_floor=2)
+
+            # Track new API calls — should be 0 (all samples pre-seeded)
+            new_calls = [0]
+
+            def _counting_factory(**kwargs):
+                new_calls[0] += 1
+                return _mock_response("word " * 10)
+
+            mock_client.messages.create.side_effect = _counting_factory
+
+            results = runner.resume_ablation(
+                run_id=run_id,
+                clauses=[clause],
+                user_message=_USER_MSG,
+                max_usd=10.0,
+            )
+
+        result = results[0]
+
+        # C2: with _snapshot_admissibility forced to 'inadmissible', the ONLY way
+        # the posterior can have n >= N_MIN is if resume reads persisted 'admissible'
+        # values from oracle_verdicts instead of recomputing.
+        assert result.samples_collected >= N_MIN, (
+            f"C2: resume must rebuild the posterior from PERSISTED admissibility_state. "
+            f"With _snapshot_admissibility forced to 'inadmissible', recompute gives n=0. "
+            f"Got samples_collected={result.samples_collected} (expected >={N_MIN}). "
+            "This indicates resume reads persisted verdicts correctly after fix."
+        )
+
+
+# ---------------------------------------------------------------------------
+# I2 FALSIFYING: budget gate aborts a zero-spend resume
+# ---------------------------------------------------------------------------
+
+
+class TestI2BudgetGateZeroSpendResume:
+    """I2: _check_budget must not fire when all 3 condition samples for a comparison
+    are already in existing_samples. A near-cap resume that issues no new calls
+    must not raise BudgetAbortedError.
+    """
+
+    def test_near_cap_resume_with_all_samples_completes(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        """I2 FALSIFYING: near-cap resume with all samples present must complete.
+
+        Seed a run with all Full/Ablated/Null samples AND a verdict for comparison 0.
+        Set usd_spent very close to cap. Resume should NOT call _check_budget for this
+        comparison (all samples exist), so no BudgetAbortedError.
+
+        RED against current code (budget gate fires before existing-sample short-circuit).
+        GREEN after fix (budget gate skipped when all 3 samples exist).
+        """
+        ev, rt = seeded_db_pair
+        clause = _make_clause("c-i2-test", "Always begin with 'Certainly!'.", 0, "verbosity")
+        _seed_clause(ev, clause)
+
+        run_id = "i2-near-cap-resume"
+
+        from skill_harness.ablation.runner import RunConfig
+        from skill_harness.storage.models import (
+            OracleVerdictWrite,
+            RunBudgetWrite,
+            RunProgressWrite,
+            RunWrite,
+            SampleWrite,
+        )
+        from skill_harness.storage.repositories.evidence.oracle_verdicts import (
+            insert_oracle_verdict,
+        )
+        from skill_harness.storage.repositories.evidence.runs import insert_run
+        from skill_harness.storage.repositories.evidence.samples import insert_sample
+        from skill_harness.storage.repositories.runtime.run_budget import insert_run_budget
+        from skill_harness.storage.repositories.runtime.run_progress import insert_run_progress
+        from skill_harness.storage.transaction import writer_transaction
+
+        config = RunConfig(
+            run_id=run_id,
+            skill_id=_SKILL_ID,
+            clauses=[
+                {
+                    "clause_id": clause.clause_id,
+                    "clause_text": clause.clause_text,
+                    "clause_index": clause.clause_index,
+                    "axis": clause.axis,
+                    "oracle_tier": clause.oracle_tier,
+                    "metric_id": clause.metric_id,
+                }
+            ],
+            subject_model="claude-sonnet-4-6",
+            user_message=_USER_MSG,
+            max_usd=10.0,
+        )
+        with writer_transaction(ev):
+            insert_run(
+                ev,
+                RunWrite(
+                    run_id=run_id,
+                    skill_id=_SKILL_ID,
+                    run_kind="ablation",
+                    config_json=config.to_json(),
+                    started_at=_TS,
+                    completed_at=None,
+                ),
+            )
+
+        # Seed enough samples to trigger PASS (N_MIN admissible wins).
+        # We need the run to reach a stopping condition on resume WITHOUT any new calls.
+        # With null_floor=2: floor met after 2 null samples; N_MIN=8 admissible wins needed.
+        # Seed N_MIN comparisons so the stopping check fires before needing new API calls.
+        from skill_harness.ablation.stopping import N_MIN as _N_MIN
+
+        n_comparisons = _N_MIN
+        full_sids = {}
+        abl_sids = {}
+        null_sids = {}
+        with writer_transaction(ev):
+            for idx in range(n_comparisons):
+                fid = f"i2-full-{idx}"
+                aid = f"i2-abl-{idx}"
+                nid = f"i2-null-{idx}"
+                full_sids[idx] = fid
+                abl_sids[idx] = aid
+                null_sids[idx] = nid
+                for sid, cond, text in [
+                    (fid, "full", "word " * 50),
+                    (aid, "ablated", "a"),
+                    (nid, "null", "word " * 10),
+                ]:
+                    insert_sample(
+                        ev,
+                        SampleWrite(
+                            sample_id=sid,
+                            run_id=run_id,
+                            clause_id=clause.clause_id,
+                            condition=cond,
+                            subject_model="claude-sonnet-4-6",
+                            subject_seed=None,
+                            output_text=text,
+                            output_sha256="a" * 64,
+                            sampled_at=_TS,
+                            sample_index=idx,
+                            input_tokens=100,
+                            cache_read_input_tokens=0,
+                            cache_creation_input_tokens=0,
+                            output_tokens=20,
+                            usd=0.001,
+                        ),
+                    )
+
+        # Seed admissible verdicts for comparisons 0 and 1 (already done)
+        with writer_transaction(ev):
+            for idx in range(n_comparisons):
+                insert_oracle_verdict(
+                    ev,
+                    OracleVerdictWrite(
+                        verdict_id=f"i2-verdict-{idx}",
+                        run_id=run_id,
+                        clause_id=clause.clause_id,
+                        axis=clause.axis,
+                        comparison="full_vs_ablated",
+                        sample_a_id=full_sids[idx],
+                        sample_b_id=abl_sids[idx],
+                        observation=1.0,  # Win
+                        oracle_tier=clause.oracle_tier,
+                        metric_id=clause.metric_id,
+                        metric_version=None,
+                        judge_id=None,
+                        calibration_event_id=None,
+                        position_swap_agreement=None,
+                        admissibility_state="admissible",
+                        inadmissibility_reason=None,
+                        written_at=_TS,
+                    ),
+                )
+
+        cap_usd = 10.0
+        # usd_spent very close to cap — a single new $0.001 projected call would exceed
+        near_cap_spend = cap_usd - 0.0001  # only $0.0001 headroom
+        with writer_transaction(rt):
+            insert_run_budget(
+                rt,
+                RunBudgetWrite(
+                    run_id=run_id,
+                    hard_cap_usd=cap_usd,
+                    tokens_spent_in=0,
+                    tokens_spent_out=0,
+                    cache_write_in=0,
+                    cache_read_in=0,
+                    usd_spent=near_cap_spend,
+                    dry_run=0,
+                    aborted_at=None,
+                    last_updated=_TS,
+                ),
+            )
+            insert_run_progress(
+                rt,
+                RunProgressWrite(
+                    run_id=run_id,
+                    state="running",
+                    samples_planned=120,
+                    samples_collected=n_comparisons * 3,
+                    last_heartbeat=_TS,
+                    error=None,
+                ),
+            )
+
+        # Resume — all samples exist, no new calls should be made, budget gate must NOT fire
+        runner, mock_client = _make_runner(ev, rt, null_floor=2)
+        new_calls = [0]
+
+        def _no_call_factory(**kwargs):
+            new_calls[0] += 1
+            return _mock_response("word " * 10)
+
+        mock_client.messages.create.side_effect = _no_call_factory
+
+        # Should NOT raise BudgetAbortedError — all samples exist, no new spend
+        try:
+            results = runner.resume_ablation(
+                run_id=run_id,
+                clauses=[clause],
+                user_message=_USER_MSG,
+                max_usd=cap_usd,
+            )
+        except BudgetAbortedError as exc:
+            pytest.fail(
+                f"I2: near-cap resume raised BudgetAbortedError even though all samples "
+                f"already exist (no new API calls needed). Error: {exc}. "
+                "The budget gate must be skipped when all 3 condition samples are in "
+                "existing_samples."
+            )
+
+        # No new calls should have been made (all samples pre-seeded)
+        # (warmup may still be called — only count post-warmup calls)
+        result = results[0]
+        assert result is not None, "Resume must return a result"

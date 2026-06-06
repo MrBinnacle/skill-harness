@@ -25,10 +25,18 @@ Design:
     {
       "full":       {"system_text": str, "system_blocks": list[dict]},
       "null":       {"system_text": str, "system_blocks": list[dict]},
-      "ablated_k":  {"system_text": str, "system_blocks": list[dict]},
+      "ablated_k":  {"system_text": str, "system_blocks": list[dict],
+                     "ablated_clause_marker": str},
     }
-  where ``system_text`` is the concatenated system string (for assertions/tests)
-  and ``system_blocks`` is the block list for the SDK ``system`` parameter.
+  where ``system_text`` is the faithful concatenation of the block texts (the
+  wire prompt the model receives), ``system_blocks`` is the block list for the
+  SDK ``system`` parameter, and ``ablated_clause_marker`` is the inspection
+  label returned SEPARATELY (never injected into block text — A39 invariant).
+
+- A39 length-axis invariant: the ABLATED_CLAUSE_MARKER must NEVER be included
+  in any block text sent to the subject model. Injecting it would add tokens to
+  the ablated side only, contaminating the length axis. The marker is returned
+  as a separate metadata field for --show-rendered / test introspection only.
 
 - This module builds the request STRUCTURE only — it does NOT call the SDK.
   The runner (D.2) injects the blocks into the SDK call.
@@ -55,8 +63,12 @@ _BASE_SYSTEM: str = (
     "Follow the instructions provided in the skill block below precisely."
 )
 
-# Sentinel marker embedded in the ablated-clause block text for test introspection.
-# Format: "[CLAUSE {k} — ABLATED]" so tests can locate it in the block text.
+# Sentinel marker for inspection / --show-rendered / test introspection.
+# Format: "[CLAUSE {k} — ABLATED]".
+# INVARIANT (A39): this marker must NEVER be placed in any system_blocks block text
+# sent to the subject model. Doing so adds tokens to the ablated side only,
+# contaminating the length axis. The marker is returned as a separate metadata field
+# ("ablated_clause_marker") in the ablated condition dict — never in block text.
 ABLATED_CLAUSE_MARKER: str = "[CLAUSE {k} — ABLATED]"
 
 
@@ -138,7 +150,7 @@ class ConditionRenderer:
 
         blocks = [base_block, skill_block]
         return {
-            "system_text": self._base_system + "\n" + skill_text,
+            "system_text": "".join(b["text"] for b in blocks),
             "system_blocks": blocks,
         }
 
@@ -149,9 +161,10 @@ class ConditionRenderer:
             "text": self._base_system,
             "cache_control": {"type": "ephemeral"},
         }
+        blocks = [base_block]
         return {
-            "system_text": self._base_system,
-            "system_blocks": [base_block],
+            "system_text": "".join(b["text"] for b in blocks),
+            "system_blocks": blocks,
         }
 
     def _render_ablated(
@@ -190,32 +203,31 @@ class ConditionRenderer:
             "cache_control": {"type": "ephemeral"},
         }
 
-        # Ablated-clause block (last — maximizes shared prefix per A43)
-        # Include a sentinel marker for test introspection alongside the placeholder.
-        marker = ABLATED_CLAUSE_MARKER.format(k=k)
+        # Ablated-clause block (last — maximizes shared prefix per A43).
+        # INVARIANT (A39): the block text contains ONLY the placeholder — never the
+        # ABLATED_CLAUSE_MARKER. Injecting the marker adds tokens to the ablated side
+        # only, contaminating the length axis. The marker is returned as a separate
+        # metadata field for --show-rendered / test introspection.
         ablated_block: dict[str, Any] = {
             "type": "text",
-            "text": f"{marker}\n{placeholder}",
+            "text": placeholder,
         }
 
         blocks = [base_block, prefix_block, ablated_block]
 
-        # Reconstruct the system_text for the Full-equivalent comparison:
-        # We need system_text to match the Full condition's text when we replace
-        # the placeholder with the original clause. To make the diff test work:
-        #   ablated_text == full_text.replace(clause_k, placeholder, 1)
-        # We must build system_text in the SAME order as Full's system_text.
-        # Full's system_text = base + all_clauses (in authoring order).
-        # Our ablated rendering has prefix+placeholder in authoring order.
-        # We reconstruct the system_text by building the clauses in authoring order
-        # with the substitution applied.
-        substituted_clauses = [(placeholder if i == k else clauses[i]) for i in range(len(clauses))]
-        skill_text_with_sub = self._format_clauses(substituted_clauses)
-        system_text = self._base_system + "\n" + skill_text_with_sub
+        # system_text is the faithful concatenation of block texts — the wire prompt
+        # the model receives. This equals the Full condition's system_text with clause k
+        # substituted by the placeholder (authoring order, no marker).
+        # Faithful wire = concatenated block texts (no extra content).
+        system_text = "".join(b["text"] for b in blocks)
+
+        # Inspection marker returned as SEPARATE field — never in block text (A39).
+        marker = ABLATED_CLAUSE_MARKER.format(k=k)
 
         return {
             "system_text": system_text,
             "system_blocks": blocks,
+            "ablated_clause_marker": marker,
         }
 
     # ------------------------------------------------------------------

@@ -16,7 +16,7 @@ Non-negotiable invariants (CLAUDE.md load-bearing):
 - Budget cap check + reservation in ONE writer_transaction(runtime) (A42).
 - Cost written from actual response usage, never projection (A41).
 - primary_clause_id == ablated_clause_id write-side assertion (A46).
-- runs.completed_at written once, gated on samples_collected == samples_planned (D.2 spec).
+- runs.completed_at written once after the clause loop completes (natural stop per clause).
 - Warmup-or-serialize before fan-out across conditions (A43/COST-4).
 
 Design principles:
@@ -460,9 +460,11 @@ class AblationRunner:
                 )
             raise
 
-        # Stamp completed_at exactly ONCE (A20 carve-out, single-shot per REL-1 spec)
-        # Gated on samples_collected == samples_planned (or early stop is fine -- completed means
-        # the run reached its natural stopping condition, not that every sample was collected).
+        # Stamp completed_at exactly ONCE (A20 carve-out, single-shot per REL-1 spec).
+        # "Completed" means the clause loop reached its natural stopping condition for each
+        # clause — early stop (PASSED/FAILED) or N_MAX exhaustion (UNDERPOWERED_NMAX).
+        # It does NOT require samples_collected == samples_planned; that ceiling is never
+        # reached under early stopping (which is the common case).
         completed_ts = self._now()
         with writer_transaction(self._evidence):
             complete_run(self._evidence, run_id, completed_ts)
@@ -678,6 +680,11 @@ class AblationRunner:
         # On resume we re-build the posterior from prior verdicts but never APPEND a
         # duplicate verdict for an already-recorded comparison.
         existing_verdict_indexes = self._existing_verdict_keys(run_id, clause_id)
+        # C2 (Evidence model): snapshot the pre-existing verdict indexes at loop entry.
+        # Only verdicts that existed BEFORE this iteration started have persisted
+        # admissibility_state that must be read (not recomputed). Verdicts written in
+        # THIS iteration use the freshly computed admissibility_state (write-time snapshot).
+        pre_existing_verdict_indexes = frozenset(existing_verdict_indexes)
 
         # Collect Null samples (needed for confound sigma estimation)
         # We collect Null samples interleaved with Full/Ablated_k pairs.
@@ -708,13 +715,26 @@ class AblationRunner:
                 comparison_index = sample_index_full
                 comparisons_issued += 1
 
-                # Budget gate (A42): check BEFORE issuing any API call
-                projected_cost = project_call_cost(
-                    model=self._subject._model,
-                    estimated_input_tokens=512,  # conservative estimate
-                    estimated_output_tokens=512,
+                # I2: Skip the budget gate when ALL three condition samples for this
+                # comparison are already collected. A zero-spend resume that issues no
+                # new API calls must not be aborted by a pre-call budget check.
+                full_key_check = (run_id, clause_id, "full", sample_index_full)
+                abl_key_check = (run_id, clause_id, "ablated", sample_index_ablated)
+                null_key_check = (run_id, clause_id, "null", sample_index_null)
+                all_samples_exist = (
+                    full_key_check in existing_samples
+                    and abl_key_check in existing_samples
+                    and null_key_check in existing_samples
                 )
-                self._check_budget(run_id, max_usd, projected_cost * 3)  # 3 calls per iteration
+
+                if not all_samples_exist:
+                    # Budget gate (A42): check BEFORE issuing any API call
+                    projected_cost = project_call_cost(
+                        model=self._subject._model,
+                        estimated_input_tokens=512,  # conservative estimate
+                        estimated_output_tokens=512,
+                    )
+                    self._check_budget(run_id, max_usd, projected_cost * 3)  # 3 calls per iteration
 
                 # Issue Full call (if not already collected for this index)
                 full_key = (run_id, clause_id, "full", sample_index_full)
@@ -854,10 +874,23 @@ class AblationRunner:
                     )
                     existing_verdict_indexes.add(comparison_index)
 
-                # MAJOR-1: only admissible (non-confounded, powered) observations move the
-                # stopping posterior, so the runner's PASS/FAIL matches the aggregation VIEW.
-                if admissibility_state == "admissible":
-                    acc.add(observation)
+                # MAJOR-1 / C2 (Evidence model): only admissible observations move the
+                # stopping posterior. For comparison indexes that had a persisted verdict
+                # BEFORE this resume iteration started, use the PERSISTED admissibility_state
+                # and observation — never freshly recomputed values — so the posterior
+                # matches the written audit trail (CLAUDE.md: admissibility recorded at
+                # write time, never recomputed at read time).
+                if comparison_index in pre_existing_verdict_indexes:
+                    persisted = self._load_persisted_verdict(run_id, clause_id, comparison_index)
+                    if persisted is not None:
+                        acc_observation, acc_admissibility = persisted
+                    else:
+                        acc_observation, acc_admissibility = observation, admissibility_state
+                else:
+                    acc_observation, acc_admissibility = observation, admissibility_state
+
+                if acc_admissibility == "admissible":
+                    acc.add(acc_observation)
 
             # Check stop after reaching target
             stop_decision = acc.check_stop()
@@ -1261,6 +1294,35 @@ class AblationRunner:
         if row is None:
             return "", ""
         return row[0], row[1]
+
+    def _load_persisted_verdict(
+        self, run_id: str, clause_id: str, comparison_index: int
+    ) -> tuple[float, str] | None:
+        """Load persisted (observation, admissibility_state) for a comparison index.
+
+        C2 fix: on resume, comparison indexes that already have a verdict must have
+        their posterior contribution rebuilt from the PERSISTED observation and
+        admissibility_state — never recomputed from fresh confound/null-floor state
+        (CLAUDE.md Evidence model: admissibility recorded at write time, never recomputed).
+
+        Joins oracle_verdicts -> samples via sample_a_id to map Full sample_index ->
+        verdict. Returns (observation, admissibility_state) or None if not found.
+        """
+        cur = self._evidence.execute(
+            """
+            SELECT v.observation, v.admissibility_state
+            FROM oracle_verdicts v
+            JOIN samples s ON s.sample_id = v.sample_a_id
+            WHERE v.run_id = ? AND v.clause_id = ? AND s.condition = 'full'
+              AND s.sample_index = ?
+            LIMIT 1
+            """,
+            (run_id, clause_id, comparison_index),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        return float(row[0]), str(row[1])
 
     def _existing_verdict_keys(self, run_id: str, clause_id: str) -> set[int]:
         """Return the set of comparison sample_indexes already recorded as verdicts.

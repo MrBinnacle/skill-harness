@@ -720,25 +720,36 @@ def _load_clauses_from_db(
 
 def _check_daily_cap(runtime_db: Path, daily_cap: float) -> None:
     """Compute trailing-24h SUM(usd) from runtime.cost_ledger; raise _DailyCapExceededError
-    if it would exceed daily_cap (B2 fix).
+    if it would exceed daily_cap (B2 fix, A42).
+
+    Fail-CLOSED discipline (I1): a spend guard must never silently allow a billed run
+    when the ledger is unreadable due to a non-absent error.
+    - Absent ledger (BootstrapError: DB not yet created) → treat as $0 trailing spend (allow).
+      This is the legitimate "no prior spend" case for a fresh install.
+    - Any other read error → re-raise so the caller refuses the run. Silently permitting
+      a billed run when the ledger is corrupt or inaccessible is the OPPOSITE of conservative.
 
     Uses a read-only query on the runtime DB (already writable by --execute).
     The since_ts cutoff is 24 hours ago in ISO 8601 UTC.
     """
+    from skill_harness.storage.errors import BootstrapError
     from skill_harness.storage.migrations import open_runtime
     from skill_harness.storage.repositories.runtime.cost_ledger import select_cost_ledger_since
 
     since_ts = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
     conn: sqlite3.Connection | None = None
+    trailing_spend = 0.0
     try:
         conn = open_runtime(runtime_db)
         rows = select_cost_ledger_since(conn, since_ts)
         trailing_spend = sum(r["usd"] for r in rows)
-    except Exception:
-        return  # Conservative: if we can't read, don't block
+    except BootstrapError:
+        # Ledger absent (DB not yet created) — no prior spend, allow the run.
+        trailing_spend = 0.0
     finally:
         if conn is not None:
             conn.close()
+    # All other exceptions propagate to the caller (fail-closed: refuse the run).
 
     if trailing_spend >= daily_cap:
         raise _DailyCapExceededError(trailing_spend, daily_cap)
@@ -829,15 +840,14 @@ def _cmd_execute(
 
     _render_ablation_report(clause_results, probe_redundancy=probe_redundancy)
 
-    # M4: dual-cap footer — spent $X / cap $Y (run) · $Z / $W (day)
-    # Post-run spend: sum from cost_ledger for this run would require loading the run_id.
-    # We render a summary footer from what we know: max_usd (per-run cap), daily_cap.
-    # The run-level spend is available on results but not directly summed here;
-    # we show the caps and a reminder so the operator can audit.
+    # M4: caps footer (I4 honesty fix).
+    # Labels as caps-only — actual run spend requires the run_id from the runner
+    # which is not threaded to _cmd_execute. To audit actual spend, query cost_ledger
+    # directly via the runtime DB.
     _console.print(
-        f"\n[dim]─ spend summary ─[/]"
+        f"\n[dim]─ caps only (not spend) ─[/]"
         f"\n  Per-run cap: ${max_usd:.2f} (run)  ·  Daily cap: ${daily_cap:.2f} (day)"
-        f"\n  [dim]Run 'skill clauses <skill_id>' to audit spend per clause.[/]"
+        f"\n  [dim]Audit actual spend: query runtime.cost_ledger for the run_id.[/]"
     )
 
     # Exit-code contract (A48): 0=all reached, 2=≥1 UNMEASURED
