@@ -47,6 +47,7 @@ __all__ = [
     "discover",
     "open_db",
     "open_evidence",
+    "open_evidence_readonly",
     "open_runtime",
 ]
 
@@ -211,7 +212,12 @@ def apply_pending(conn: sqlite3.Connection, migrations: list[Migration]) -> list
 _VALID_SYNCHRONOUS = frozenset({"NORMAL", "FULL"})
 
 
-def open_db(path: str | Path, *, synchronous: str = "NORMAL") -> sqlite3.Connection:
+def open_db(
+    path: str | Path,
+    *,
+    synchronous: str = "NORMAL",
+    _uri: bool = False,
+) -> sqlite3.Connection:
     """Open a SQLite connection with the harness's standard pragmas.
 
     ``synchronous`` is the load-bearing knob: ``FULL`` is required for the
@@ -221,6 +227,12 @@ def open_db(path: str | Path, *, synchronous: str = "NORMAL") -> sqlite3.Connect
 
     journal_mode=WAL is set OUTSIDE of any transaction — it is a persistent
     PRAGMA, so this matters on first open of the file.
+
+    ``_uri`` (private — only for ``open_evidence_readonly``): when True, the
+    path is passed as a SQLite URI (e.g. ``file:/path?mode=ro``) and
+    ``sqlite3.connect`` is called with ``uri=True``.  External callers must
+    NOT use this flag directly; it exists solely to let the council-sanctioned
+    read-only helper reuse the pragma/FK discipline of this function.
     """
     # synchronous is interpolated into a PRAGMA; validate against an allowlist
     # so a typo can't enable e.g. OFF and silently degrade durability.
@@ -228,7 +240,7 @@ def open_db(path: str | Path, *, synchronous: str = "NORMAL") -> sqlite3.Connect
         raise ValueError(
             f"synchronous must be one of {sorted(_VALID_SYNCHRONOUS)}, got {synchronous!r}"
         )
-    conn = sqlite3.connect(str(path), isolation_level=None)  # autocommit
+    conn = sqlite3.connect(str(path), isolation_level=None, uri=_uri)  # autocommit
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute(f"PRAGMA synchronous = {synchronous}")
@@ -262,4 +274,36 @@ def open_runtime(path: str | Path) -> sqlite3.Connection:
     except BaseException:
         conn.close()
         raise
+    return conn
+
+
+def open_evidence_readonly(path: str | Path) -> sqlite3.Connection:
+    """Open ``evidence.db`` READ-ONLY for dry-run clause enumeration (A51 / council-sanctioned).
+
+    Contract (ratified by A51 micro-council 2026-06-06 RATIFY-WITH-AMENDMENT, 3-0):
+    - Opens ``file:<path>?mode=ro`` through ``open_db`` (reuses pragma/FK discipline).
+    - Sets ``PRAGMA query_only = ON`` as a defence-in-depth write barrier.
+    - Does NOT call ``apply_pending`` — read-only open must not write schema_migrations.
+    - Raises ``BootstrapError`` (does NOT create) when the file is absent.
+
+    This is the ONLY sanctioned way to open evidence.db read-only.  Callers must
+    NOT use raw ``sqlite3.connect()`` (A23 §3 — bypasses FK enforcement and durability
+    pragmas).
+
+    Use case: ``run ablation --dry-run`` enumerates clauses from the evidence DB without
+    any API calls, writes, or migration-apply.  The caller must close the connection when
+    done.
+    """
+    resolved = Path(path).resolve()
+    if not resolved.exists():
+        raise BootstrapError(
+            f"evidence.db not found at {resolved}; "
+            "skill not imported — run 'skill init <path>' first"
+        )
+    # Build SQLite URI for read-only access. mode=ro (NOT immutable=1) — correct for a
+    # possibly-concurrent WAL DB where a concurrent --execute may be writing.
+    uri = f"file:{resolved.as_posix()}?mode=ro"
+    conn = open_db(uri, synchronous="NORMAL", _uri=True)
+    # Defence-in-depth: PRAGMA query_only prevents any write even if caller makes mistake.
+    conn.execute("PRAGMA query_only = ON")
     return conn

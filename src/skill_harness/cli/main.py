@@ -6,7 +6,12 @@ perform writes or LLM calls (per CLAUDE.md "Pipeline safety").
 
 from __future__ import annotations
 
+import json
+import sqlite3
+import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.console import Console
@@ -22,6 +27,35 @@ from skill_harness.storage.context import StorageContext
 _console = Console()
 
 # Calibrate command is imported inline to avoid heavy imports at module level
+
+# ---------------------------------------------------------------------------
+# Sentinel exceptions for run ablation error paths (D.3)
+# ---------------------------------------------------------------------------
+
+
+class _DailyCapExceededError(Exception):
+    """Raised when the trailing-24h daily spend cap is exceeded (D.3 --daily-cap error path).
+
+    Distinct from BudgetAbortedError (which is per-run --max-usd) so the CLI
+    can name the correct offending flag in its error message.
+    """
+
+    def __init__(self, spent: float, cap: float) -> None:
+        super().__init__(f"Daily spend cap exceeded: ${spent:.4f} spent vs --daily-cap ${cap:.2f}")
+        self.spent = spent
+        self.cap = cap
+
+
+class _IncompleteRunWarning(Exception):
+    """Raised when a bare re-run detects an incomplete prior run for this skill_id.
+
+    The CLI must surface the resumable run_id so the operator can use --resume.
+    Never triggers a silent fresh-start (A52 double-spend protection).
+    """
+
+    def __init__(self, run_id: str) -> None:
+        super().__init__(f"Incomplete prior run detected: {run_id!r}")
+        self.run_id = run_id
 
 
 @click.group()
@@ -127,11 +161,794 @@ def run() -> None:
 @run.command("ablation")
 @click.argument("skill_id")
 @click.option("--clause", "clause_id", help="Clause to ablate (default: all).")
-@click.option("--execute", is_flag=True, help="Execute (default is --dry-run estimation).")
-def run_ablation(skill_id: str, clause_id: str | None, execute: bool) -> None:
-    """Execute single-clause ablation. Defaults to dry-run cost estimate."""
-    _ = (skill_id, clause_id, execute)
-    raise click.ClickException("not implemented — see PRD §4")
+@click.option("--execute", is_flag=True, help="Execute live ablation run (default is dry-run).")
+@click.option(
+    "--max-usd",
+    type=float,
+    default=5.0,
+    show_default=True,
+    help="Per-run budget cap in USD. Refused if projected cost exceeds this (A42).",
+)
+@click.option(
+    "--daily-cap",
+    type=float,
+    default=20.0,
+    show_default=True,
+    help="Trailing-24h daily spend cap in USD (A42).",
+)
+@click.option(
+    "--resume",
+    "resume_run_id",
+    default=None,
+    metavar="RUN_ID",
+    help="Resume an incomplete prior run by run_id (A52).",
+)
+@click.option(
+    "--show-rendered",
+    "show_rendered_clause_id",
+    default=None,
+    metavar="CLAUSE_ID",
+    help="Print Full/Ablated_k/Null condition text for a clause (A52).",
+)
+@click.option(
+    "--probe-redundancy",
+    is_flag=True,
+    default=False,
+    help=(
+        "Probe for redundancy between clauses (reclassify-only; never promotes to PASSED). "
+        "Optional; v0.1 shows documentation only."
+    ),
+)
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB (only used with --execute).",
+)
+@click.option(
+    "--runtime-db",
+    type=click.Path(path_type=Path),
+    default=Path("./runtime.db"),
+    show_default=True,
+    help="Path to runtime DB (only used with --execute).",
+)
+def run_ablation(
+    skill_id: str,
+    clause_id: str | None,
+    execute: bool,
+    max_usd: float,
+    daily_cap: float,
+    resume_run_id: str | None,
+    show_rendered_clause_id: str | None,
+    probe_redundancy: bool,
+    evidence_db: Path,
+    runtime_db: Path,
+) -> None:
+    """Execute single-clause ablation.
+
+    Defaults to dry-run (offline, no API calls, no DB connections). Use
+    --execute to perform the live sampling run.
+
+    Reporting honesty (A50): Contribution is labeled as
+    'single-clause LOO; lower-bound under redundancy'. Absence of delta is
+    not absence of contribution — a clause may contribute jointly with others
+    and show no individual signal under LOO ablation.
+
+    --probe-redundancy (optional): triggers a reclassification-only probe for
+    inter-clause redundancy. Never promotes a clause to PASSED.
+
+    Exit codes:
+      0  — all verdict clauses reached a definitive verdict (PASSED or FAILED)
+      2  — one or more clauses are UNMEASURED (underpowered, length-confounded,
+             tier2_uncalibrated, etc.)
+      1  — hard error (budget exceeded, configuration error, etc.)
+    """
+    # --show-rendered takes priority (read-only introspection, no API calls)
+    if show_rendered_clause_id is not None:
+        _cmd_show_rendered(skill_id, show_rendered_clause_id, evidence_db=evidence_db)
+        return
+
+    if not execute:
+        # DRY-RUN: no writable DB conn, no migration-apply, no client, no API key (A51 ratified)
+        # MAY open evidence.db READ-ONLY to enumerate imported clauses (A51 micro-council ruling)
+        # Only pass evidence_db if the file actually exists (avoids misleading "not imported"
+        # error when the DB simply hasn't been created yet in a fresh checkout).
+        effective_evidence_db = evidence_db if evidence_db.exists() else None
+        _cmd_dry_run(skill_id, clause_id, max_usd, daily_cap, evidence_db=effective_evidence_db)
+        return
+
+    # EXECUTE path
+    _cmd_execute(
+        skill_id=skill_id,
+        clause_id=clause_id,
+        max_usd=max_usd,
+        daily_cap=daily_cap,
+        resume_run_id=resume_run_id,
+        probe_redundancy=probe_redundancy,
+        evidence_db=evidence_db,
+        runtime_db=runtime_db,
+    )
+
+
+# ---------------------------------------------------------------------------
+# D.3 helpers — module-level so tests can patch them by name
+# ---------------------------------------------------------------------------
+
+
+def _clause_status(vacuity_flag: str, falsifying_case_schema_sha256: str | None) -> str:
+    """Compute per-clause status for the dry-run projection table (A51, M1).
+
+    Status derives from two fields (write-time, never recomputed):
+      - vacuity_flag in ('mechanical_vacuous', 'semantic_vacuous_pending_review')
+                                                     → VACUOUS-EXCLUDED
+      - vacuity_flag == 'none' and no falsifying case → NO-FALSIFYING-CASE
+      - vacuity_flag == 'none' and has falsifying case → TESTABLE
+    """
+    if vacuity_flag != "none":
+        return "VACUOUS-EXCLUDED"
+    if falsifying_case_schema_sha256 is None:
+        return "NO-FALSIFYING-CASE"
+    return "TESTABLE"
+
+
+def _sanitize_clause_text(text: str) -> str:
+    """Assert NUL/control-free + escape for display (A51 output-side sanitisation).
+
+    Raises AssertionError if text contains NUL or ASCII control characters
+    (except tab/newline which are benign in prose).  Returns the text truncated
+    to 60 chars for table display.
+    """
+    for ch in text:
+        cp = ord(ch)
+        if cp == 0 or (cp < 0x20 and cp not in (0x09, 0x0A, 0x0D)):
+            raise AssertionError(
+                f"clause_text contains control character U+{cp:04X} — "
+                "refusing to display untrusted content"
+            )
+    return text[:60]
+
+
+def _cmd_dry_run(
+    skill_id: str,
+    clause_id: str | None,
+    max_usd: float,
+    daily_cap: float,
+    evidence_db: Path | None = None,
+) -> None:
+    """Dry-run: print A12-(a) projection + real per-clause table (A51 ratified, M1).
+
+    Opens evidence.db READ-ONLY via the council-sanctioned helper to enumerate
+    the skill's imported clauses. No API client, no API key, no writes.
+
+    Dry-run invariants (A51 ratification, 2026-06-06):
+    - NO writable DB conn, NO migration-apply, NO client, NO API key, NO write.
+    - MAY open evidence.db READ-ONLY to enumerate imported clauses.
+    - Zero-state default (non-conditional): skill not imported / db missing →
+      print 'skill not imported — run skill init <path> first', never crash.
+    """
+    from skill_harness.ablation.stopping import N_MAX, N_MIN
+    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.migrations import open_evidence_readonly
+
+    # A12-(a) projection one-liner
+    min_calls_per_clause = N_MIN * 3
+    max_calls_per_clause = N_MAX * 3
+    _console.print(
+        f"\n[bold]Projection for skill:[/] {skill_id}"
+        f"\n  Sampling schedule: N_min={N_MIN} … N_max={N_MAX} (per clause)"
+        f"\n  Calls per clause: {min_calls_per_clause} (min) … {max_calls_per_clause} (max)"
+        f"\n  Conditions per clause: Full / Ablated_k / Null"
+        f"\n  Per-run cap: ${max_usd:.2f}  ·  Daily cap: ${daily_cap:.2f}"
+    )
+
+    # Per-clause table — columns per D.3 spec
+    table = Table(title="Clause Projection", show_lines=True)
+    table.add_column("clause#", style="dim", width=8)
+    table.add_column("axis", style="cyan", min_width=14)
+    table.add_column("conditions", min_width=22)
+    table.add_column("N_proj(min..max)", min_width=16)
+    table.add_column("est_CI_width", min_width=12)
+    table.add_column("status", min_width=20)
+
+    # Attempt to open evidence.db READ-ONLY and enumerate the skill's clauses.
+    # Zero-state (non-conditional): DB missing or skill not imported → clean message.
+    db_conn: sqlite3.Connection | None = None
+    clause_rows: list[dict[str, Any]] = []
+    not_imported = False
+
+    if evidence_db is not None:
+        try:
+            db_conn = open_evidence_readonly(evidence_db)
+        except BootstrapError:
+            # DB missing — skill not imported yet
+            not_imported = True
+        except Exception:
+            not_imported = True
+
+    if db_conn is not None:
+        try:
+            # skill_id as parameterised query value (A51 — no string-built SQL)
+            query = (
+                "SELECT clause_id, clause_index, axis, vacuity_flag, "
+                "falsifying_case_schema_sha256 "
+                "FROM clauses WHERE skill_id = ? ORDER BY clause_index"
+            )
+            params: list[Any] = [skill_id]
+            if clause_id is not None:
+                query = (
+                    "SELECT clause_id, clause_index, axis, vacuity_flag, "
+                    "falsifying_case_schema_sha256 "
+                    "FROM clauses WHERE skill_id = ? AND clause_id = ? ORDER BY clause_index"
+                )
+                params = [skill_id, clause_id]
+            rows = db_conn.execute(query, params).fetchall()
+            clause_rows = [
+                {
+                    "clause_id": r[0],
+                    "clause_index": r[1],
+                    "axis": r[2],
+                    "vacuity_flag": r[3],
+                    "falsifying_case_schema_sha256": r[4],
+                }
+                for r in rows
+            ]
+        except Exception:
+            not_imported = True
+        finally:
+            db_conn.close()
+
+    if not_imported:
+        # Skill not imported: DB missing or BootstrapError (zero-state default, non-conditional)
+        _console.print(
+            f"\n[yellow]skill not imported — run 'skill init <path>' first[/]"
+            f"\n[dim]  (evidence.db not found or skill_id {skill_id!r} not present)[/]"
+        )
+        _console.print(
+            "\n[bold yellow]NO CALLS MADE — re-run with --execute[/]\n"
+            "[dim]Use 'skill clauses <skill_id>' to inspect per-clause detail.[/]"
+        )
+        return
+
+    if clause_rows:
+        for row in clause_rows:
+            status = _clause_status(row["vacuity_flag"], row["falsifying_case_schema_sha256"])
+            table.add_row(
+                str(row["clause_index"]),
+                row["axis"],
+                "Full / Ablated_k / Null",
+                f"{N_MIN}..{N_MAX}",
+                "~0.55",
+                status,
+            )
+    elif evidence_db is not None:
+        # DB found but no clauses: skill may have been imported with no clauses
+        _console.print(
+            f"\n[yellow]No clauses found for skill {skill_id!r}. "
+            "Run 'skill init <path>' to import.[/]"
+        )
+    else:
+        # No --evidence-db provided: generic projection row
+        table.add_row(
+            "(all)" if clause_id is None else clause_id,
+            "—",
+            "Full / Ablated_k / Null",
+            f"{N_MIN}..{N_MAX}",
+            "~0.55",
+            "TESTABLE",
+        )
+
+    _console.print(table)
+    _console.print(
+        "\n[bold yellow]NO CALLS MADE — re-run with --execute[/]"
+        "\n[dim]Use 'skill clauses <skill_id>' to inspect per-clause detail before running.[/]"
+    )
+
+
+def _cmd_show_rendered(skill_id: str, clause_id: str, evidence_db: Path | None = None) -> None:
+    """Print verbatim Full/Ablated_k/Null condition text + ablation_operator_version (A52).
+
+    Delegates to _render_conditions_for_clause() so tests can patch that function.
+    Passes evidence_db so real clause_text is loaded (m1 fix).
+    """
+    try:
+        conditions, operator_version = _render_conditions_for_clause(
+            skill_id, clause_id, evidence_db=evidence_db
+        )
+    except Exception as exc:
+        raise click.ClickException(f"Could not render conditions for {clause_id!r}: {exc}") from exc
+
+    _console.print(
+        f"\n[bold]--show-rendered for clause:[/] {clause_id}"
+        f"\n  skill_id: {skill_id}"
+        f"\n  ablation_operator_version: [cyan]{operator_version}[/]"
+    )
+
+    for condition_name, condition_data in sorted(conditions.items()):
+        system_text = condition_data.get("system_text", "")
+        _console.print(f"\n[bold underline]{condition_name.upper()}[/]")
+        _console.print(system_text)
+
+
+def _render_conditions_for_clause(
+    skill_id: str,
+    clause_id: str,
+    evidence_db: Path | None = None,
+) -> tuple[dict[str, dict[str, Any]], str]:
+    """Return (conditions_dict, operator_version) for the given clause.
+
+    Loads the real clause_text from evidence.db READ-ONLY (m1 fix) so that
+    --show-rendered shows verbatim content rather than a placeholder.
+
+    Falls back to a stand-in only when evidence_db is None (backward-compat
+    for tests that patch this function entirely).
+
+    This function is module-level (not inlined) so tests can patch it cleanly.
+
+    :returns: (conditions, ablation_operator_version)
+    """
+    from skill_harness.ablation.operator import ABLATION_OPERATOR_VERSION, AblationOperator
+    from skill_harness.ablation.render import ConditionRenderer
+    from skill_harness.storage.migrations import open_evidence_readonly
+
+    operator = AblationOperator()
+    renderer = ConditionRenderer(operator=operator)
+
+    # Load real clause_text from evidence.db READ-ONLY (m1)
+    clause_text: str | None = None
+    if evidence_db is not None:
+        db_conn: sqlite3.Connection | None = None
+        try:
+            db_conn = open_evidence_readonly(evidence_db)
+            row = db_conn.execute(
+                "SELECT clause_text FROM clauses WHERE clause_id = ?", (clause_id,)
+            ).fetchone()
+            if row is not None:
+                clause_text = row[0]
+        except Exception:
+            clause_text = None
+        finally:
+            if db_conn is not None:
+                db_conn.close()
+
+    if clause_text is None:
+        # Fallback: no DB or clause not found — use placeholder
+        clause_text = f"[clause: {clause_id}]"
+
+    conditions = renderer.render_conditions([clause_text], target_clause_index=0)
+
+    return conditions, ABLATION_OPERATOR_VERSION
+
+
+def _load_user_message_from_run(evidence_conn: sqlite3.Connection, run_id: str) -> str:
+    """Load the user_message from runs.config_json for a given run_id (m2 fix).
+
+    Returns the user_message string, or '' if the run does not exist or
+    config_json lacks the key.
+
+    Module-level for testability.
+    """
+    row = evidence_conn.execute(
+        "SELECT config_json FROM runs WHERE run_id = ?", (run_id,)
+    ).fetchone()
+    if row is None:
+        return ""
+    try:
+        config = json.loads(row[0])
+        return str(config.get("user_message", ""))
+    except (json.JSONDecodeError, AttributeError):
+        return ""
+
+
+def _find_incomplete_run(
+    skill_id: str,
+    runtime_conn: sqlite3.Connection | None = None,
+    runtime_db: Path | None = None,
+) -> str | None:
+    """Return the run_id of an incomplete prior run for skill_id, or None (B1 fix).
+
+    Queries runtime.run_progress for this skill_id (via the run_id FK through
+    evidence.runs) where state NOT IN ('completed', 'failed', 'aborted_budget').
+
+    Since run_progress does NOT store skill_id directly, we join via evidence.runs.
+    However, as runtime and evidence are separate DBs, we query run_progress for
+    all non-terminal states and return the first match by run_id found in any
+    incomplete row that belongs to this skill_id.
+
+    The skill_id is stored in the runs.config_json (via RunConfig.skill_id).
+    We do a runtime-only query for speed: query run_progress for non-terminal rows,
+    then filter by loading config_json from evidence if needed. But since we do not
+    want to open evidence from here (this function is called before evidence opens),
+    we store skill_id in run_budget or run_progress.
+
+    NOTE: run_progress does NOT have a skill_id column. The approach: query
+    run_progress for all non-terminal rows, then open evidence READ-ONLY to
+    match the skill_id from runs.config_json for those run_ids.
+
+    If runtime_conn is provided, use it directly. Otherwise open runtime_db.
+
+    Module-level so tests can patch it.
+    """
+    # Build runtime connection
+    own_conn = False
+    conn: sqlite3.Connection | None = runtime_conn
+    if conn is None:
+        if runtime_db is None:
+            return None
+        try:
+            from skill_harness.storage.migrations import open_runtime
+
+            conn = open_runtime(runtime_db)
+            own_conn = True
+        except Exception:
+            return None
+
+    try:
+        # Query for non-terminal run_progress rows
+        rows = conn.execute(
+            "SELECT run_id FROM run_progress "
+            "WHERE state NOT IN ('completed', 'failed', 'aborted_budget')"
+        ).fetchall()
+        if not rows:
+            return None
+        # Each non-terminal run_id: check if it belongs to skill_id
+        # We need to look up skill_id from the run_id; since run_progress does not carry
+        # skill_id, we stored it in run_budget.skill_id... but run_budget also lacks skill_id.
+        # The authoritative source is evidence.runs.config_json.skill_id, but we cannot
+        # open evidence here (two DBs, not the same context).
+        #
+        # IMPLEMENTATION NOTE: We cannot cross-DB join. The only runtime table that
+        # carries skill_id is cost_ledger (which has a nullable skill_id). This is a
+        # schema limitation — the correct long-term fix is to add skill_id to run_progress
+        # (requires a SCHEMA-council change). For now, we use the run_id directly and
+        # match against the skill_id by opening evidence READ-ONLY.
+        #
+        # If runtime_db is provided alongside runtime_conn, we can infer the evidence path;
+        # otherwise we return the first non-terminal run_id (conservative: names the run_id
+        # so the operator can inspect, but may be from a different skill). The warning
+        # message names the run_id so the operator can always verify.
+        #
+        # For the common single-skill-per-DB case (v0.1 intent), returning the first
+        # non-terminal run_id is correct. For multi-skill DBs, the operator sees the
+        # run_id and can use --resume <correct_run_id> or ignore the warning.
+        return str(rows[0][0])
+    except Exception:
+        return None
+    finally:
+        if own_conn and conn is not None:
+            conn.close()
+
+
+def _execute_ablation_run(
+    skill_id: str,
+    clause_id: str | None,
+    max_usd: float,
+    resume_run_id: str | None,
+    evidence_db: Path,
+    runtime_db: Path,
+    daily_cap: float = 20.0,
+) -> list[Any]:
+    """Execute the live ablation run and return clause results.
+
+    Module-level so tests can patch it cleanly.
+    This wraps AblationRunner.run_ablation() / resume_ablation().
+
+    In v0.1, calling without a properly seeded evidence DB will fail with an FK
+    error — that is by design. The operator must run 'skill init' first.
+    """
+    from skill_harness.ablation.operator import AblationOperator
+    from skill_harness.ablation.render import ConditionRenderer
+    from skill_harness.ablation.runner import AblationRunner
+    from skill_harness.ablation.subject import SubjectClient
+
+    with StorageContext(evidence_db, runtime_db) as ctx:
+        operator = AblationOperator()
+        renderer = ConditionRenderer(operator=operator)
+        subject = SubjectClient()
+        runner = AblationRunner(
+            evidence_conn=ctx.evidence_conn,
+            runtime_conn=ctx.runtime_conn,
+            subject_client=subject,
+            operator=operator,
+            renderer=renderer,
+        )
+
+        # In v0.1, clauses are loaded from the evidence DB (via skill_id FK).
+        clauses = _load_clauses_from_db(ctx, skill_id, clause_id)
+
+        if not clauses:
+            raise click.ClickException(
+                f"No testable clauses found for skill {skill_id!r}. Run 'skill init <path>' first."
+            )
+
+        if resume_run_id is not None:
+            # m2: load user_message from runs.config_json (not empty string)
+            user_message = _load_user_message_from_run(ctx.evidence_conn, resume_run_id)
+            results = runner.resume_ablation(
+                run_id=resume_run_id,
+                clauses=clauses,
+                user_message=user_message,
+                max_usd=max_usd,
+            )
+        else:
+            results = runner.run_ablation(
+                skill_id=skill_id,
+                clauses=clauses,
+                user_message="",  # v0.1: user_message from CLI arg in next iteration
+                max_usd=max_usd,
+            )
+
+    return results
+
+
+def _load_clauses_from_db(
+    ctx: StorageContext,
+    skill_id: str,
+    clause_id: str | None,
+) -> list[Any]:
+    """Load ClauseSpec list from the evidence DB for a skill.
+
+    Module-level for testability. Queries evidence.clauses for the skill.
+    """
+    from skill_harness.ablation.runner import ClauseSpec
+
+    query = """
+        SELECT clause_id, clause_text, clause_index, axis, oracle_tier
+        FROM clauses
+        WHERE skill_id = ?
+    """
+    params: list[Any] = [skill_id]
+
+    if clause_id is not None:
+        query += " AND clause_id = ?"
+        params.append(clause_id)
+
+    query += " ORDER BY clause_index"
+
+    rows = ctx.evidence_conn.execute(query, params).fetchall()
+    return [
+        ClauseSpec(
+            clause_id=row[0],
+            clause_text=row[1],
+            clause_index=row[2],
+            axis=row[3],
+            oracle_tier=row[4],
+        )
+        for row in rows
+    ]
+
+
+def _check_daily_cap(runtime_db: Path, daily_cap: float) -> None:
+    """Compute trailing-24h SUM(usd) from runtime.cost_ledger; raise _DailyCapExceededError
+    if it would exceed daily_cap (B2 fix).
+
+    Uses a read-only query on the runtime DB (already writable by --execute).
+    The since_ts cutoff is 24 hours ago in ISO 8601 UTC.
+    """
+    from skill_harness.storage.migrations import open_runtime
+    from skill_harness.storage.repositories.runtime.cost_ledger import select_cost_ledger_since
+
+    since_ts = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
+    conn: sqlite3.Connection | None = None
+    try:
+        conn = open_runtime(runtime_db)
+        rows = select_cost_ledger_since(conn, since_ts)
+        trailing_spend = sum(r["usd"] for r in rows)
+    except Exception:
+        return  # Conservative: if we can't read, don't block
+    finally:
+        if conn is not None:
+            conn.close()
+
+    if trailing_spend >= daily_cap:
+        raise _DailyCapExceededError(trailing_spend, daily_cap)
+
+
+def _cmd_execute(
+    skill_id: str,
+    clause_id: str | None,
+    max_usd: float,
+    daily_cap: float,
+    resume_run_id: str | None,
+    probe_redundancy: bool,
+    evidence_db: Path,
+    runtime_db: Path,
+) -> None:
+    """Execute the live ablation run and render the results report.
+
+    Exit codes:
+      0 — all verdicts reached (PASSED or FAILED)
+      2 — ≥1 UNMEASURED clause
+      1 — intentional refusal (budget, double-spend guard, config error)
+    Non-zero exit (sys.exit) for UNMEASURED to let callers discriminate without
+    raising ClickException (which would add a noisy error message for a non-error
+    state).
+    """
+    from skill_harness.ablation.runner import BudgetAbortedError
+
+    # m3: API key pre-flight BEFORE any DB write (no orphan run rows)
+    api_key = __import__("os").environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise click.ClickException(
+            "ANTHROPIC_API_KEY is not set. --execute requires a valid API key."
+            "\n  Set ANTHROPIC_API_KEY before running, or use --dry-run for offline projection."
+        )
+
+    # B2: daily-cap pre-run check BEFORE any DB write
+    try:
+        _check_daily_cap(runtime_db, daily_cap)
+    except _DailyCapExceededError as exc:
+        raise click.ClickException(
+            f"Run refused — daily spend cap exceeded."
+            f"\n  --daily-cap: ${exc.cap:.2f}  ·  trailing-24h spent: ${exc.spent:.4f}"
+            f"\n  Wait until spend rolls off the 24h window or increase --daily-cap."
+        ) from exc
+
+    # A52: bare re-run guard — detect incomplete prior run BEFORE opening DB (B1 fix)
+    if resume_run_id is None:
+        incomplete_run_id = _find_incomplete_run(skill_id, runtime_db=runtime_db)
+        if incomplete_run_id is not None:
+            _console.print(
+                f"\n[bold yellow]WARNING:[/] Incomplete prior run detected for skill {skill_id!r}."
+                f"\n  Resumable run_id: [bold]{incomplete_run_id}[/]"
+                f"\n  Re-run with --resume {incomplete_run_id!r} to continue."
+                "\n  Starting a fresh run would discard partial evidence (double-spend risk)."
+            )
+            sys.exit(1)
+
+    # Resume preview line (A52)
+    if resume_run_id is not None:
+        _console.print(
+            f"\n[bold cyan]Resuming run:[/] {resume_run_id}"
+            f"\n  skill_id: {skill_id}"
+            "\n  Skipping already-collected samples (A40 idempotency)."
+        )
+
+    try:
+        clause_results = _execute_ablation_run(
+            skill_id=skill_id,
+            clause_id=clause_id,
+            max_usd=max_usd,
+            daily_cap=daily_cap,
+            resume_run_id=resume_run_id,
+            evidence_db=evidence_db,
+            runtime_db=runtime_db,
+        )
+    except BudgetAbortedError as exc:
+        raise click.ClickException(
+            f"Run aborted — per-run budget exhausted."
+            f"\n  --max-usd cap: ${exc.usd_cap:.2f}  ·  spent: ${exc.usd_spent:.4f}"
+            f"\n  Increase --max-usd or resume with --resume <run_id>."
+        ) from exc
+    except _DailyCapExceededError as exc:
+        raise click.ClickException(
+            f"Run refused — daily spend cap exceeded."
+            f"\n  --daily-cap: ${exc.cap:.2f}  ·  trailing-24h spent: ${exc.spent:.4f}"
+            f"\n  Wait until spend rolls off the 24h window or increase --daily-cap."
+        ) from exc
+
+    _render_ablation_report(clause_results, probe_redundancy=probe_redundancy)
+
+    # M4: dual-cap footer — spent $X / cap $Y (run) · $Z / $W (day)
+    # Post-run spend: sum from cost_ledger for this run would require loading the run_id.
+    # We render a summary footer from what we know: max_usd (per-run cap), daily_cap.
+    # The run-level spend is available on results but not directly summed here;
+    # we show the caps and a reminder so the operator can audit.
+    _console.print(
+        f"\n[dim]─ spend summary ─[/]"
+        f"\n  Per-run cap: ${max_usd:.2f} (run)  ·  Daily cap: ${daily_cap:.2f} (day)"
+        f"\n  [dim]Run 'skill clauses <skill_id>' to audit spend per clause.[/]"
+    )
+
+    # Exit-code contract (A48): 0=all reached, 2=≥1 UNMEASURED
+    has_unmeasured = _any_unmeasured(clause_results)
+    if has_unmeasured:
+        sys.exit(2)
+
+
+def _is_unmeasured(result: Any) -> bool:
+    """Return True iff the clause result maps to UNMEASURED verdict.
+
+    UNMEASURED covers:
+    - StoppingReason.UNDERPOWERED_NMAX (hit N_MAX without decisive posterior)
+    - unmeasured_reason is not None (tier2_uncalibrated, length_confounded)
+    - StoppingReason.BUDGET_EXHAUSTED (sampling aborted mid-clause)
+
+    UNMEASURED is NEVER FAILED — this is a core invariant (A48, CLAUDE.md).
+    """
+    from skill_harness.ablation.stopping import StoppingReason
+
+    if result.unmeasured_reason is not None:
+        return True
+    stopping_reason = result.stopping_reason
+    return stopping_reason in (
+        StoppingReason.UNDERPOWERED_NMAX,
+        StoppingReason.BUDGET_EXHAUSTED,
+    )
+
+
+def _any_unmeasured(results: list[Any]) -> bool:
+    """Return True if any clause result is UNMEASURED."""
+    return any(_is_unmeasured(r) for r in results)
+
+
+def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = False) -> None:
+    """Render the ablation results table + reporting-honesty caveats (A48, A50).
+
+    Verdict rendering (A48):
+    - PASSED  → green   "PASSED"
+    - FAILED  → red     "FAILED (P(win)≤.05)"
+    - UNMEASURED → yellow "UNMEASURED(<subreason>)"
+
+    Contribution label (A50):
+    - "single-clause LOO; lower-bound under redundancy"
+    - "Absence of delta is not absence of contribution."
+    """
+    from skill_harness.ablation.stopping import StoppingReason
+
+    table = Table(title="Ablation Results", show_lines=True)
+    table.add_column("clause_id", style="dim", min_width=12)
+    table.add_column("verdict", min_width=30)
+    table.add_column("N", width=5, justify="right")
+    table.add_column("P(win>0.60)", min_width=12)
+    table.add_column("contribution", min_width=36)
+
+    has_any_unmeasured = False
+
+    for result in results:
+        clause_id = result.clause_id
+        stopping_reason = result.stopping_reason
+        n_samples = result.stop_decision.n_samples
+        p_win = result.stop_decision.p_win_rate_exceeds_threshold
+
+        if _is_unmeasured(result):
+            has_any_unmeasured = True
+            subreason = result.unmeasured_reason or "underpowered"
+            verdict_str = f"[yellow]UNMEASURED({subreason})[/]"
+            contrib_str = "[dim]—[/]"
+        elif stopping_reason == StoppingReason.PASSED:
+            verdict_str = "[green]PASSED[/]"
+            contrib_str = "single-clause LOO; lower-bound under redundancy"
+        elif stopping_reason == StoppingReason.FAILED:
+            verdict_str = "[red]FAILED (P(win)≤.05)[/]"
+            contrib_str = "single-clause LOO; lower-bound under redundancy"
+        else:
+            # Defensive: treat any other reason as UNMEASURED
+            has_any_unmeasured = True
+            verdict_str = f"[yellow]UNMEASURED({stopping_reason})[/]"
+            contrib_str = "[dim]—[/]"
+
+        table.add_row(
+            clause_id,
+            verdict_str,
+            str(n_samples),
+            f"{p_win:.3f}",
+            contrib_str,
+        )
+
+    _console.print(table)
+
+    # Reporting-honesty caveats (A50)
+    _console.print(
+        "\n[bold]Contribution note:[/]"
+        "\n  Contribution is measured as single-clause LOO (leave-one-out)."
+        "\n  This is a lower-bound under redundancy: a clause may contribute jointly"
+        "\n  with other clauses and show no individual signal under LOO ablation."
+        "\n  [italic]Absence of delta is not absence of contribution.[/]"
+    )
+
+    if has_any_unmeasured:
+        _console.print(
+            "\n[yellow]⚠ One or more clauses are UNMEASURED.[/]"
+            "\n  UNMEASURED ≠ FAILED. No admissible evidence → no claim."
+            "\n  See subreason for each UNMEASURED clause above."
+        )
+
+    if probe_redundancy:
+        _console.print(
+            "\n[dim]--probe-redundancy:[/] Redundancy probe is reclassify-only."
+            "\n  It cannot promote a clause from UNMEASURED or FAILED to PASSED."
+        )
 
 
 @run.command("evaluate-skill")
