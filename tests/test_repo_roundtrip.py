@@ -186,7 +186,10 @@ def _make_run(run_id: str = "run-1", skill_id: str = "skill-1") -> RunWrite:
 
 
 def _make_sample(
-    sample_id: str = "sample-1", run_id: str = "run-1", clause_id: str = "clause-1"
+    sample_id: str = "sample-1",
+    run_id: str = "run-1",
+    clause_id: str = "clause-1",
+    sample_index: int = 0,
 ) -> SampleWrite:
     return SampleWrite(
         sample_id=sample_id,
@@ -198,6 +201,7 @@ def _make_sample(
         output_text="Here is the output with [1] citation.",
         output_sha256=_SHA,
         sampled_at=_TS,
+        sample_index=sample_index,
     )
 
 
@@ -400,8 +404,9 @@ class TestSamplesRepo:
 
     def test_list_for_run(self, evidence_db: sqlite3.Connection) -> None:
         self._setup(evidence_db)
-        samples_repo.insert_sample(evidence_db, _make_sample("s1"))
-        samples_repo.insert_sample(evidence_db, _make_sample("s2"))
+        # A40: samples with the same (run_id, clause_id, condition) need distinct sample_index
+        samples_repo.insert_sample(evidence_db, _make_sample("s1", sample_index=0))
+        samples_repo.insert_sample(evidence_db, _make_sample("s2", sample_index=1))
         rows = samples_repo.list_samples_for_run(evidence_db, "run-1")
         assert len(rows) == 2
 
@@ -418,8 +423,9 @@ class TestOracleVerdictsRepo:
         clauses_repo.insert_clause(conn, _make_clause())
         mv_repo.insert_metric_version(conn, _make_metric_version())
         runs_repo.insert_run(conn, _make_run())
-        samples_repo.insert_sample(conn, _make_sample("s1"))
-        samples_repo.insert_sample(conn, _make_sample("s2"))
+        # A40: distinct sample_index values within (run_id, clause_id, condition)
+        samples_repo.insert_sample(conn, _make_sample("s1", sample_index=0))
+        samples_repo.insert_sample(conn, _make_sample("s2", sample_index=1))
 
     def _make_verdict(self, verdict_id: str = "v1") -> OracleVerdictWrite:
         return OracleVerdictWrite(

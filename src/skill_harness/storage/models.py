@@ -263,7 +263,17 @@ class RunWrite(BaseModel):
 
 
 class SampleWrite(BaseModel):
-    """Insert shape for evidence.samples."""
+    """Insert shape for evidence.samples.
+
+    Migration 0300 (Track D, A40) added:
+    - ``sample_index`` — positional key for idempotency + resume.
+      ``UNIQUE(run_id, clause_id, condition, sample_index)`` prevents double-counting
+      w/n in the Beta-Binomial on crash-resume. Default 0 for backward compat with
+      tests that insert a single sample per (run_id, clause_id, condition) tuple.
+    - Per-call cost columns (A41): ``input_tokens``, ``cache_read_input_tokens``,
+      ``cache_creation_input_tokens``, ``output_tokens``, ``usd``. All optional
+      (None for non-API-generating rows and pre-migration rows).
+    """
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
@@ -276,6 +286,16 @@ class SampleWrite(BaseModel):
     output_text: str
     output_sha256: str
     sampled_at: str
+
+    # A40 — idempotency key (migration 0300)
+    sample_index: int = 0
+
+    # A41 — per-call cost columns (migration 0300); None for non-API rows
+    input_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
+    cache_creation_input_tokens: int | None = None
+    output_tokens: int | None = None
+    usd: float | None = None
 
     @field_validator(
         "sample_id",
