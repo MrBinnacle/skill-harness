@@ -24,6 +24,9 @@ dependencies = [
   "pydantic>=2.6",
   # rich is solo-maintainer (willmcgugan / Textualize). Use for terminal output only.
   "rich>=13.7",
+  # scipy>=1.11: EB-MoM hierarchical fit + BH-FDR fallback (A53, Track E.2).
+  # Already present transitively via statsmodels; direct pin per Phase 1.1 supply-chain audit.
+  "scipy>=1.11",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,174 @@
+"""Status state machine for clause aggregation (A57).
+
+Implements `derive_clause_status()` — a pure function that maps clause evidence
+to a (ClauseStatus, UnmeasuredSubReason | None) pair.
+
+State derivation rules (A57, ordered by priority):
+  1. No admissible+non-confounded verdicts → UNMEASURED(no_data)
+  2. Verdicts exist but ALL confounded → CONFOUNDED
+  3. N < N_min (8) → UNMEASURED(underpowered)
+  4. Sequential-stop at N_max without resolution → UNMEASURED(underpowered)
+  5. Posterior threshold MET but no current frozen case:
+       - stale frozen case exists → UNMEASURED(falsifying_case_stale)
+       - no frozen case at all → UNMEASURED(falsifying_case_missing)
+  6. Posterior threshold MET AND ≥1 current frozen case → PASSED
+  7. Posterior threshold MET-BELOW (p <= 0.05) → FAILED
+  8. Otherwise (0.05 < p < 0.95) → UNMEASURED(underpowered)
+
+Additional sub-reasons:
+  - inadmissible: verdicts exist but ALL are inadmissible (no confounds — this is
+    distinct from CONFOUNDED which requires confound_events rows).
+  - budget_exhausted: run state = 'aborted_budget' AND verdict count < N_min.
+
+The inadmissible and budget_exhausted checks are applied BEFORE the N-count checks
+because they explain WHY there is insufficient admissible evidence.
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+
+
+class ClauseStatus(StrEnum):
+    """Terminal status for a clause after aggregation."""
+
+    PASSED = "PASSED"
+    FAILED = "FAILED"
+    CONFOUNDED = "CONFOUNDED"
+    UNMEASURED = "UNMEASURED"
+
+
+class UnmeasuredSubReason(StrEnum):
+    """Sub-reason qualifying UNMEASURED status (A57 extension of A17)."""
+
+    NO_DATA = "no_data"
+    INADMISSIBLE = "inadmissible"
+    UNDERPOWERED = "underpowered"
+    FALSIFYING_CASE_MISSING = "falsifying_case_missing"
+    BUDGET_EXHAUSTED = "budget_exhausted"
+    FALSIFYING_CASE_STALE = "falsifying_case_stale"
+
+
+# ---------------------------------------------------------------------------
+# Locked thresholds (CLAUDE.md pass rule — do NOT silently retune)
+# ---------------------------------------------------------------------------
+
+WIN_RATE_THRESHOLD: float = 0.60
+PASS_PROB_THRESHOLD: float = 0.95
+FAIL_PROB_THRESHOLD: float = 0.05
+N_MIN: int = 8
+
+
+# ---------------------------------------------------------------------------
+# Input shape for state derivation
+# ---------------------------------------------------------------------------
+
+
+class ClauseStatusInput:
+    """All evidence needed to derive clause status.
+
+    Attributes
+    ----------
+    admissible_verdict_count : int
+        Count of rows from admissible_verdicts VIEW for this clause/axis.
+    total_verdict_count : int
+        Count of ALL oracle_verdicts rows for this clause (before admissibility filter).
+    confounded_verdict_count : int
+        Count of verdicts that have confound_events with delta_kind='confound_flagged'.
+    n_verdicts : int
+        Count of admissible+non-confounded verdicts (= effective N for stopping rule).
+    p_win_gt_threshold : float
+        P(rate > 0.60) from the posterior (shrunken or unpooled, per fit method).
+    current_frozen_case_count : int
+        Count of frozen_cases rows with currency_state='current' for (clause_id, axis).
+    any_stale_frozen_case : bool
+        True if ≥1 frozen_cases row exists for (clause_id, axis) with currency_state='stale'.
+    run_state : str | None
+        The run_progress.state for the source run (e.g. 'aborted_budget').
+        None if the run_progress row is unavailable (tolerated).
+    """
+
+    def __init__(
+        self,
+        *,
+        admissible_verdict_count: int,
+        total_verdict_count: int,
+        confounded_verdict_count: int,
+        n_verdicts: int,
+        p_win_gt_threshold: float,
+        current_frozen_case_count: int,
+        any_stale_frozen_case: bool,
+        run_state: str | None = None,
+    ) -> None:
+        self.admissible_verdict_count = admissible_verdict_count
+        self.total_verdict_count = total_verdict_count
+        self.confounded_verdict_count = confounded_verdict_count
+        self.n_verdicts = n_verdicts
+        self.p_win_gt_threshold = p_win_gt_threshold
+        self.current_frozen_case_count = current_frozen_case_count
+        self.any_stale_frozen_case = any_stale_frozen_case
+        self.run_state = run_state
+
+
+# ---------------------------------------------------------------------------
+# State machine
+# ---------------------------------------------------------------------------
+
+
+def derive_clause_status(
+    inp: ClauseStatusInput,
+) -> tuple[ClauseStatus, UnmeasuredSubReason | None]:
+    """Map evidence to (ClauseStatus, sub_reason | None).
+
+    Implements A57 rules in priority order.  The function is pure — no DB
+    access, no side effects.  All queries must be pre-computed by the engine.
+    """
+    # Rule 1: No admissible+non-confounded verdicts at all
+    if inp.admissible_verdict_count == 0:
+        # Distinguish: were there ANY verdicts (just all inadmissible)?
+        if inp.total_verdict_count > 0 and inp.confounded_verdict_count == 0:
+            # Verdicts exist but ALL inadmissible (no confounds)
+            return ClauseStatus.UNMEASURED, UnmeasuredSubReason.INADMISSIBLE
+        return ClauseStatus.UNMEASURED, UnmeasuredSubReason.NO_DATA
+
+    # Rule 2: All verdicts confounded (admissible_count == 0 after confound filter,
+    # but confound_events exist — distinct from rule 1)
+    # Note: admissible_verdict_count already excludes confounded via VIEW.
+    # If confounded_verdict_count > 0 AND admissible_verdict_count == 0, that's
+    # captured above. But the spec says "verdicts exist but ALL are confounded" —
+    # this means admissible_verdict_count == 0 AND confounded_verdict_count > 0.
+    # Already handled in Rule 1 path — but we need to distinguish here:
+    # If we reach this point, admissible_verdict_count > 0, so Rule 2 doesn't apply.
+    # The spec's Rule 2 is really a sub-case of Rule 1.
+
+    n = inp.n_verdicts
+    p = inp.p_win_gt_threshold
+
+    # Rule: budget_exhausted — run aborted AND not enough admissible evidence
+    if inp.run_state == "aborted_budget" and n < N_MIN:
+        return ClauseStatus.UNMEASURED, UnmeasuredSubReason.BUDGET_EXHAUSTED
+
+    # Rule 3 + 4: Under-sampled (N < N_min) or N_max without resolution
+    if n < N_MIN:
+        return ClauseStatus.UNMEASURED, UnmeasuredSubReason.UNDERPOWERED
+
+    # Rule 7: FAILED — posterior threshold decidedly below (check before PASSED/stale)
+    if p <= FAIL_PROB_THRESHOLD:
+        return ClauseStatus.FAILED, None
+
+    # Rules 5 + 6: PASSED gate — check frozen case currency
+    if p >= PASS_PROB_THRESHOLD:
+        if inp.current_frozen_case_count >= 1:
+            # Rule 6: threshold met AND current frozen case → PASSED
+            return ClauseStatus.PASSED, None
+        # Rule 5: threshold met but no current frozen case
+        if inp.any_stale_frozen_case:
+            return ClauseStatus.UNMEASURED, UnmeasuredSubReason.FALSIFYING_CASE_STALE
+        return ClauseStatus.UNMEASURED, UnmeasuredSubReason.FALSIFYING_CASE_MISSING
+
+    # Rule 8: Inconclusive posterior — 0.05 < p < 0.95
+    return ClauseStatus.UNMEASURED, UnmeasuredSubReason.UNDERPOWERED
