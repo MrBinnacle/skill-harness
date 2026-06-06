@@ -4,7 +4,9 @@ Covers B1, B2, M1, M2, M3, M4, m1, m2, m3, m4 + open_evidence_readonly unit test
 
 All tests are tagged 'not live' (no real API calls). Mock discipline:
 SubjectClient is the ONLY network surface patched for the integration tests;
-_execute_ablation_run and _find_incomplete_run are NOT patched in B1/M2/M3 tests.
+_execute_ablation_run is NOT patched in B1/M2/M3 tests.
+B1 tests migrated from _find_incomplete_run (shim deleted in E.3) to
+find_resumable_run_for_skill from storage.recovery.
 """
 
 from __future__ import annotations
@@ -177,68 +179,107 @@ def _seed_run_progress(
 
 
 class TestB1FindIncompleteRunUnpatched:
-    """B1: _find_incomplete_run must query real runtime.run_progress (not stub)."""
+    """B1: find_resumable_run_for_skill must query real runtime.run_progress (not stub).
+
+    Migrated from _find_incomplete_run (shim deleted in E.3) to
+    find_resumable_run_for_skill from storage.recovery (E.1).
+    """
 
     def test_find_incomplete_run_returns_none_when_no_incomplete(self, tmp_path: Path) -> None:
-        """When no run is in-progress, _find_incomplete_run returns None."""
-        from skill_harness.cli.main import _find_incomplete_run
+        """When no run is in-progress, find_resumable_run_for_skill returns None."""
+        from skill_harness.storage.migrations import open_evidence_readonly
+        from skill_harness.storage.recovery import find_resumable_run_for_skill
 
         ev, rt = _open_pair(tmp_path)
         try:
             # No rows at all — should return None
-            result = _find_incomplete_run(_SKILL_ID, runtime_conn=rt)
+            ev_ro = open_evidence_readonly(tmp_path / "evidence.db")
+            try:
+                result = find_resumable_run_for_skill(
+                    _SKILL_ID, evidence_conn_ro=ev_ro, runtime_conn=rt
+                )
+            finally:
+                ev_ro.close()
             assert result is None
         finally:
             _close_pair(ev, rt)
 
     def test_find_incomplete_run_returns_run_id_for_running_state(self, tmp_path: Path) -> None:
         """With a state='running' row in runtime.run_progress, returns that run_id."""
-        from skill_harness.cli.main import _find_incomplete_run
+        from skill_harness.storage.migrations import open_evidence_readonly
+        from skill_harness.storage.recovery import find_resumable_run_for_skill
 
         ev, rt = _open_pair(tmp_path)
         try:
             _seed_skill(ev)
             _seed_run_progress(rt, "run-incomplete-001", state="running", ev=ev)
-            result = _find_incomplete_run(_SKILL_ID, runtime_conn=rt)
+            ev_ro = open_evidence_readonly(tmp_path / "evidence.db")
+            try:
+                result = find_resumable_run_for_skill(
+                    _SKILL_ID, evidence_conn_ro=ev_ro, runtime_conn=rt
+                )
+            finally:
+                ev_ro.close()
             assert result == "run-incomplete-001"
         finally:
             _close_pair(ev, rt)
 
     def test_find_incomplete_run_ignores_completed_runs(self, tmp_path: Path) -> None:
         """Completed runs are NOT returned as incomplete."""
-        from skill_harness.cli.main import _find_incomplete_run
+        from skill_harness.storage.migrations import open_evidence_readonly
+        from skill_harness.storage.recovery import find_resumable_run_for_skill
 
         ev, rt = _open_pair(tmp_path)
         try:
             _seed_skill(ev)
             _seed_run_progress(rt, "run-done-001", state="completed", ev=ev)
-            result = _find_incomplete_run(_SKILL_ID, runtime_conn=rt)
+            ev_ro = open_evidence_readonly(tmp_path / "evidence.db")
+            try:
+                result = find_resumable_run_for_skill(
+                    _SKILL_ID, evidence_conn_ro=ev_ro, runtime_conn=rt
+                )
+            finally:
+                ev_ro.close()
             assert result is None
         finally:
             _close_pair(ev, rt)
 
     def test_find_incomplete_run_ignores_failed_runs(self, tmp_path: Path) -> None:
         """Failed runs are NOT returned as incomplete."""
-        from skill_harness.cli.main import _find_incomplete_run
+        from skill_harness.storage.migrations import open_evidence_readonly
+        from skill_harness.storage.recovery import find_resumable_run_for_skill
 
         ev, rt = _open_pair(tmp_path)
         try:
             _seed_skill(ev)
             _seed_run_progress(rt, "run-failed-001", state="failed", ev=ev)
-            result = _find_incomplete_run(_SKILL_ID, runtime_conn=rt)
+            ev_ro = open_evidence_readonly(tmp_path / "evidence.db")
+            try:
+                result = find_resumable_run_for_skill(
+                    _SKILL_ID, evidence_conn_ro=ev_ro, runtime_conn=rt
+                )
+            finally:
+                ev_ro.close()
             assert result is None
         finally:
             _close_pair(ev, rt)
 
     def test_find_incomplete_run_ignores_aborted_budget_runs(self, tmp_path: Path) -> None:
         """aborted_budget runs are NOT returned as incomplete."""
-        from skill_harness.cli.main import _find_incomplete_run
+        from skill_harness.storage.migrations import open_evidence_readonly
+        from skill_harness.storage.recovery import find_resumable_run_for_skill
 
         ev, rt = _open_pair(tmp_path)
         try:
             _seed_skill(ev)
             _seed_run_progress(rt, "run-aborted-001", state="aborted_budget", ev=ev)
-            result = _find_incomplete_run(_SKILL_ID, runtime_conn=rt)
+            ev_ro = open_evidence_readonly(tmp_path / "evidence.db")
+            try:
+                result = find_resumable_run_for_skill(
+                    _SKILL_ID, evidence_conn_ro=ev_ro, runtime_conn=rt
+                )
+            finally:
+                ev_ro.close()
             assert result is None
         finally:
             _close_pair(ev, rt)
@@ -1003,9 +1044,13 @@ class TestM4ExitCodeContract:
         )
 
     def test_bare_rerun_guard_exits_one_not_two(self, tmp_path: Path) -> None:
-        """Bare-rerun guard (A52) must exit 1 (intentional refusal), not 2."""
+        """Bare-rerun guard (A52) must exit 1 (intentional refusal), not 2.
+
+        Patches _find_incomplete_run_for_execute at the cli.main module level
+        (the private helper that wraps find_resumable_run_for_skill in E.3).
+        """
         with patch(
-            "skill_harness.cli.main._find_incomplete_run",
+            "skill_harness.cli.main._find_incomplete_run_for_execute",
             return_value="run-blocking-001",
         ):
             result = _invoke(

@@ -17,6 +17,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+from skill_harness.aggregation import aggregate_skill
 from skill_harness.extractor import (
     ExtractionError,
     ExtractionResult,
@@ -541,80 +542,45 @@ def _load_user_message_from_run(evidence_conn: sqlite3.Connection, run_id: str) 
         return ""
 
 
-def _find_incomplete_run(
+def _find_incomplete_run_for_execute(
     skill_id: str,
-    runtime_conn: sqlite3.Connection | None = None,
     runtime_db: Path | None = None,
     evidence_db: Path | None = None,
 ) -> str | None:
-    """Return the run_id of an incomplete prior run for skill_id, or None.
+    """Return the run_id of an incomplete prior run for skill_id, or None (A52, E.3).
 
-    Delegates to storage.recovery.find_resumable_run_for_skill (A61).
+    Used exclusively by `_cmd_execute` bare-rerun guard. Opens both DBs read-only,
+    delegates to find_resumable_run_for_skill (storage.recovery, A61).
 
-    When evidence_db is provided: performs the full two-step runtime→evidence
-    lookup (skill_id-filtered) via find_resumable_run_for_skill.
-
-    When only runtime_conn/runtime_db is provided (legacy call path, test compat):
-    falls back to querying run_progress for the first non-terminal row
-    (skill_id-agnostic, conservative; preserves B1 behaviour for single-skill DBs).
-
-    Module-level so tests can patch it.
+    Module-level so tests can patch find_resumable_run_for_skill at cli.main scope.
+    Returns None when either DB is absent (no prior runs possible).
     """
     from skill_harness.storage.errors import BootstrapError
     from skill_harness.storage.migrations import open_evidence_readonly, open_runtime
 
-    # --- prefer full two-step lookup when evidence path is available ---
-    if evidence_db is not None:
-        own_rt = False
-        rt: sqlite3.Connection | None = runtime_conn
-        if rt is None:
-            if runtime_db is None:
-                return None
-            try:
-                rt = open_runtime(runtime_db)
-                own_rt = True
-            except Exception:
-                return None
+    if runtime_db is None or evidence_db is None:
+        return None
+
+    rt: sqlite3.Connection | None = None
+    ev_ro: sqlite3.Connection | None = None
+    try:
+        try:
+            rt = open_runtime(runtime_db)
+        except Exception:
+            return None
         try:
             ev_ro = open_evidence_readonly(evidence_db)
         except (BootstrapError, Exception):
             # evidence.db not yet created — no runs can exist
-            if own_rt and rt is not None:
-                rt.close()
             return None
-        try:
-            return find_resumable_run_for_skill(skill_id, evidence_conn_ro=ev_ro, runtime_conn=rt)
-        except Exception:
-            return None
-        finally:
-            ev_ro.close()
-            if own_rt and rt is not None:
-                rt.close()
-
-    # --- legacy path: runtime-only (skill_id-agnostic, B1 compat) ---
-    own_conn = False
-    conn: sqlite3.Connection | None = runtime_conn
-    if conn is None:
-        if runtime_db is None:
-            return None
-        try:
-            conn = open_runtime(runtime_db)
-            own_conn = True
-        except Exception:
-            return None
-    try:
-        rows = conn.execute(
-            "SELECT run_id FROM run_progress "
-            "WHERE state NOT IN ('completed', 'failed', 'aborted_budget')"
-        ).fetchall()
-        if not rows:
-            return None
-        return str(rows[0][0])
+        return find_resumable_run_for_skill(skill_id, evidence_conn_ro=ev_ro, runtime_conn=rt)
     except Exception:
         return None
     finally:
-        if own_conn and conn is not None:
-            conn.close()
+        if ev_ro is not None:
+            ev_ro.close()
+        if rt is not None:
+            rt.close()
 
 
 def _execute_ablation_run(
@@ -793,9 +759,10 @@ def _cmd_execute(
             f"\n  Wait until spend rolls off the 24h window or increase --daily-cap."
         ) from exc
 
-    # A52: bare re-run guard — detect incomplete prior run BEFORE opening DB (B1 fix)
+    # A52: bare re-run guard — detect incomplete prior run BEFORE opening DB (B1 fix, E.3 refactor)
+    # Uses find_resumable_run_for_skill (storage.recovery) directly — shim deleted in E.3.
     if resume_run_id is None:
-        incomplete_run_id = _find_incomplete_run(
+        incomplete_run_id = _find_incomplete_run_for_execute(
             skill_id, runtime_db=runtime_db, evidence_db=evidence_db
         )
         if incomplete_run_id is not None:
@@ -898,6 +865,7 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
 
     table = Table(title="Ablation Results", show_lines=True)
     table.add_column("clause_id", style="dim", min_width=12)
+    table.add_column("verdict_id", style="dim", min_width=36)
     table.add_column("verdict", min_width=30)
     table.add_column("N", width=5, justify="right")
     table.add_column("P(win>0.60)", min_width=12)
@@ -907,6 +875,10 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
 
     for result in results:
         clause_id = result.clause_id
+        # verdict_id: surfaced for `freeze` discoverability (A56).
+        # ClauseResult doesn't carry verdict_id in v0.1 (Track D type) — use getattr
+        # so tests with mock objects exposing verdict_id work, and real results show '—'.
+        verdict_id_str = str(getattr(result, "verdict_id", None) or "—")
         stopping_reason = result.stopping_reason
         n_samples = result.stop_decision.n_samples
         p_win = result.stop_decision.p_win_rate_exceeds_threshold
@@ -930,6 +902,7 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
 
         table.add_row(
             clause_id,
+            verdict_id_str,
             verdict_str,
             str(n_samples),
             f"{p_win:.3f}",
@@ -963,28 +936,751 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
 
 @run.command("evaluate-skill")
 @click.argument("skill_id")
-@click.option("--execute", is_flag=True, help="Execute (default is --dry-run estimation).")
-def run_evaluate_skill(skill_id: str, execute: bool) -> None:
-    """Run the full evaluation suite against a skill."""
-    _ = (skill_id, execute)
-    raise click.ClickException("not implemented — see PRD §16")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+    help="Output format: rich table (default) or JSON bytes.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help=(
+        "Preflight only: shows what would be aggregated "
+        "(run_ids discovered, clause count, axes). "
+        "NO AGGREGATION DONE — re-run without --dry-run."
+    ),
+)
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB.",
+)
+@click.option(
+    "--runtime-db",
+    type=click.Path(path_type=Path),
+    default=Path("./runtime.db"),
+    show_default=True,
+    help="Path to runtime DB.",
+)
+def run_evaluate_skill(
+    skill_id: str,
+    output_format: str,
+    dry_run: bool,
+    evidence_db: Path,
+    runtime_db: Path,
+) -> None:
+    """Run the full evaluation suite against a skill (A54).
+
+    Aggregates admissible+non-confounded verdicts for SKILL_ID into a SkillReport.
+    Checks for incomplete runs first — if found, WARN and exit 1.
+
+    Reporting honesty (A50): Contribution is labeled as
+    'single-clause LOO; lower-bound under redundancy'.
+
+    Exit codes:
+      0  — no UNMEASURED in the family (all PASSED / FAILED / CONFOUNDED)
+      2  — >=1 UNMEASURED clause
+      1  — hard error (incomplete runs, precondition fail, aggregation bug)
+    """
+    import importlib.metadata
+
+    from skill_harness.aggregation.errors import PreconditionError
+    from skill_harness.aggregation.report import to_json_bytes
+    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.migrations import open_evidence_readonly, open_runtime
+    from skill_harness.storage.recovery import find_incomplete_runs
+
+    # ------------------------------------------------------------------
+    # Read harness_version from installed metadata (A54 spec)
+    # ------------------------------------------------------------------
+    try:
+        harness_version = importlib.metadata.version("skill-harness")
+    except importlib.metadata.PackageNotFoundError:
+        harness_version = "0.1.0a0"  # fallback to pyproject.toml version
+
+    # ------------------------------------------------------------------
+    # Open DB connections
+    # ------------------------------------------------------------------
+    ev_ro: sqlite3.Connection | None = None
+    rt_conn: sqlite3.Connection | None = None
+    try:
+        try:
+            ev_ro = open_evidence_readonly(evidence_db)
+        except BootstrapError as exc:
+            raise click.ClickException(
+                f"Evidence DB not found at {evidence_db}. "
+                "Run 'skill-harness skill init <path> --execute' first."
+            ) from exc
+
+        try:
+            rt_conn = open_runtime(runtime_db)
+        except Exception as exc:
+            raise click.ClickException(f"Cannot open runtime DB at {runtime_db}: {exc}") from exc
+
+        # ------------------------------------------------------------------
+        # Precondition: no incomplete runs (A54 spec step 1)
+        # ------------------------------------------------------------------
+        incomplete = find_incomplete_runs(skill_id, evidence_conn_ro=ev_ro, runtime_conn=rt_conn)
+        if incomplete:
+            stderr_console = Console(stderr=True)
+            for run in incomplete:
+                stderr_console.print(
+                    f"[bold yellow]WARN:[/] Incomplete run {run.run_id!r} "
+                    f"(state={run.state!r}) for skill {skill_id!r}."
+                )
+                stderr_console.print(
+                    f"  Suggest: skill-harness run ablation {skill_id} --resume {run.run_id}"
+                )
+            sys.exit(1)
+
+        # ------------------------------------------------------------------
+        # Dry-run path: preflight only, no aggregation
+        # ------------------------------------------------------------------
+        if dry_run:
+            # Enumerate run_ids and clauses — read-only
+            try:
+                run_rows = ev_ro.execute(
+                    "SELECT run_id FROM runs WHERE skill_id = ? AND completed_at IS NOT NULL",
+                    (skill_id,),
+                ).fetchall()
+                clause_rows = ev_ro.execute(
+                    "SELECT clause_id, axis FROM clauses WHERE skill_id = ?",
+                    (skill_id,),
+                ).fetchall()
+            except Exception as exc:
+                raise click.ClickException(f"Failed to read evidence DB: {exc}") from exc
+
+            _console.print(
+                f"\n[bold]Preflight for skill:[/] {skill_id}"
+                f"\n  completed run_ids: {[r[0] for r in run_rows]}"
+                f"\n  clause count: {len(clause_rows)}"
+                f"\n  axes: {sorted({r[1] for r in clause_rows})}"
+            )
+            _console.print("\n[bold yellow]NO AGGREGATION DONE — re-run without --dry-run[/]")
+            return
+
+        # ------------------------------------------------------------------
+        # Aggregate
+        # ------------------------------------------------------------------
+        generated_at_utc = datetime.now(UTC).isoformat()
+        try:
+            report = aggregate_skill(
+                skill_id,
+                evidence_conn_ro=ev_ro,
+                runtime_conn=rt_conn,
+                harness_version=harness_version,
+                generated_at_utc=generated_at_utc,
+            )
+        except PreconditionError as exc:
+            if exc.code == "no_completed_runs":
+                raise click.ClickException(
+                    f"No completed ablation runs found for skill {skill_id!r}. "
+                    f"Run 'skill-harness run ablation {skill_id} --execute' first."
+                ) from exc
+            raise click.ClickException(str(exc)) from exc
+
+    finally:
+        if ev_ro is not None:
+            ev_ro.close()
+        if rt_conn is not None:
+            rt_conn.close()
+
+    # ------------------------------------------------------------------
+    # Render
+    # ------------------------------------------------------------------
+    if output_format == "json":
+        sys.stdout.buffer.write(to_json_bytes(report))
+    else:
+        _render_evaluate_skill_report(report)
+
+    # ------------------------------------------------------------------
+    # Exit code (A58)
+    # ------------------------------------------------------------------
+    has_unmeasured = any(c.status == "UNMEASURED" for c in report.clauses)
+    if has_unmeasured:
+        sys.exit(2)
 
 
-@cli.command("diff")
-@click.argument("skill_a")
-@click.argument("skill_b")
-def diff_skill(skill_a: str, skill_b: str) -> None:
-    """Compare two skill revisions."""
-    _ = (skill_a, skill_b)
-    raise click.ClickException("not implemented — see PRD §16")
+@cli.group("diff")
+def diff_group() -> None:
+    """Diff commands (PRD §18)."""
+
+
+@diff_group.command("skill")
+@click.argument("skill_id_a")
+@click.argument("skill_id_b")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+    help="Output format: rich table (default) or JSON.",
+)
+@click.option(
+    "--exit-on-divergence",
+    is_flag=True,
+    default=False,
+    help="Exit 2 if any clause status differs from 'unchanged'.",
+)
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB.",
+)
+@click.option(
+    "--runtime-db",
+    type=click.Path(path_type=Path),
+    default=Path("./runtime.db"),
+    show_default=True,
+    help="Path to runtime DB.",
+)
+def diff_skill(
+    skill_id_a: str,
+    skill_id_b: str,
+    output_format: str,
+    exit_on_divergence: bool,
+    evidence_db: Path,
+    runtime_db: Path,
+) -> None:
+    """Compare two skill revisions clause-by-clause (A55).
+
+    Aggregates each skill independently and aligns clauses by
+    (axis, sha256(clause_text)). Reports per-clause status deltas.
+
+    Status delta ordering: FAILED < CONFOUNDED < UNMEASURED < PASSED.
+
+    Exit codes (A58):
+      0  — diff ran (semantic success; default even if clauses differ)
+      2  — divergence detected AND --exit-on-divergence set
+      1  — hard error (precondition fail for either skill)
+    """
+    import hashlib
+    import importlib.metadata
+
+    from skill_harness.aggregation import aggregate_skill
+    from skill_harness.aggregation.errors import PreconditionError
+    from skill_harness.cli.diff_report import (
+        REPORT_SCHEMA_VERSION,
+        ClauseDiff,
+        DiffReport,
+        status_delta,
+        to_json_bytes,
+    )
+    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.migrations import open_evidence_readonly, open_runtime
+    from skill_harness.storage.recovery import find_incomplete_runs
+
+    try:
+        harness_version = importlib.metadata.version("skill-harness")
+    except importlib.metadata.PackageNotFoundError:
+        harness_version = "0.1.0a0"
+
+    # ------------------------------------------------------------------
+    # Open connections
+    # ------------------------------------------------------------------
+    ev_ro: sqlite3.Connection | None = None
+    rt_conn: sqlite3.Connection | None = None
+    try:
+        try:
+            ev_ro = open_evidence_readonly(evidence_db)
+        except BootstrapError as exc:
+            raise click.ClickException(
+                f"Evidence DB not found at {evidence_db}. "
+                "Run 'skill-harness skill init <path> --execute' first."
+            ) from exc
+
+        try:
+            rt_conn = open_runtime(runtime_db)
+        except Exception as exc:
+            raise click.ClickException(f"Cannot open runtime DB at {runtime_db}: {exc}") from exc
+
+        # ------------------------------------------------------------------
+        # Precondition check: both skills must have no incomplete runs and
+        # at least one completed run (A55 spec step 1)
+        # ------------------------------------------------------------------
+        for sid in [skill_id_a, skill_id_b]:
+            incomplete = find_incomplete_runs(sid, evidence_conn_ro=ev_ro, runtime_conn=rt_conn)
+            if incomplete:
+                stderr_console = Console(stderr=True)
+                for run in incomplete:
+                    stderr_console.print(
+                        f"[bold yellow]WARN:[/] Incomplete run {run.run_id!r} "
+                        f"(state={run.state!r}) for skill {sid!r}."
+                    )
+                sys.exit(1)
+
+        # ------------------------------------------------------------------
+        # Aggregate both skills
+        # ------------------------------------------------------------------
+        generated_at_utc = datetime.now(UTC).isoformat()
+        reports = []
+        for sid in [skill_id_a, skill_id_b]:
+            try:
+                rep = aggregate_skill(
+                    sid,
+                    evidence_conn_ro=ev_ro,
+                    runtime_conn=rt_conn,
+                    harness_version=harness_version,
+                    generated_at_utc=generated_at_utc,
+                )
+                reports.append(rep)
+            except PreconditionError as exc:
+                raise click.ClickException(
+                    f"Precondition failed for skill {sid!r}: {exc.code}. "
+                    "Run 'skill-harness run ablation <skill_id> --execute' first."
+                ) from exc
+
+        report_a, report_b = reports
+
+        # ------------------------------------------------------------------
+        # Clause alignment: read clause_text for both skills (A55 step 3)
+        # Match by (axis, sha256(clause_text))
+        # ------------------------------------------------------------------
+        def _load_clause_texts(skill_id: str) -> dict[str, str]:
+            """clause_id -> clause_text for a skill."""
+            rows = ev_ro.execute(
+                "SELECT clause_id, clause_text FROM clauses WHERE skill_id = ?",
+                (skill_id,),
+            ).fetchall()
+            return {r[0]: r[1] for r in rows}
+
+        texts_a = _load_clause_texts(skill_id_a)
+        texts_b = _load_clause_texts(skill_id_b)
+
+        def _sha(text: str) -> str:
+            return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+        # Build maps: (axis, sha256) -> ClauseReport
+        key_a: dict[tuple[str, str], Any] = {}
+        for cr in report_a.clauses:
+            text = texts_a.get(cr.clause_id, "")
+            key = (cr.metric_id_per_axis.get("", cr.clause_id), _sha(text))
+            # Use axis from the ClauseReport (derived from the verdict axis)
+            # Build with (first axis key, sha256)
+            axis_key = next(iter(cr.metric_id_per_axis.keys()), "")
+            key_a[(axis_key, _sha(text))] = cr
+
+        key_b: dict[tuple[str, str], Any] = {}
+        for cr in report_b.clauses:
+            text = texts_b.get(cr.clause_id, "")
+            axis_key = next(iter(cr.metric_id_per_axis.keys()), "")
+            key_b[(axis_key, _sha(text))] = cr
+
+        # ------------------------------------------------------------------
+        # Build per-clause diffs
+        # ------------------------------------------------------------------
+        clause_diffs: list[ClauseDiff] = []
+        all_keys = set(key_a.keys()) | set(key_b.keys())
+
+        for key in sorted(all_keys):
+            axis_key, sha = key
+            cr_a = key_a.get(key)
+            cr_b = key_b.get(key)
+
+            if cr_a is None:
+                # new in B
+                assert cr_b is not None
+                clause_diffs.append(
+                    ClauseDiff(
+                        clause_text_sha256=sha,
+                        axis=axis_key,
+                        status_a=None,
+                        status_b=cr_b.status,
+                        delta="new",
+                        metric_drift_reason=None,
+                    )
+                )
+            elif cr_b is None:
+                # removed in B
+                clause_diffs.append(
+                    ClauseDiff(
+                        clause_text_sha256=sha,
+                        axis=axis_key,
+                        status_a=cr_a.status,
+                        status_b=None,
+                        delta="removed",
+                        metric_drift_reason=None,
+                    )
+                )
+            else:
+                # Both present: check metric_drift first (A55)
+                drift_reason: str | None = None
+                if cr_a.metric_id_per_axis != cr_b.metric_id_per_axis:
+                    drift_reason = (
+                        f"metric_id differs: A={cr_a.metric_id_per_axis} "
+                        f"B={cr_b.metric_id_per_axis}"
+                    )
+                elif cr_a.metric_version_per_axis != cr_b.metric_version_per_axis:
+                    drift_reason = (
+                        f"metric_version differs: A={cr_a.metric_version_per_axis} "
+                        f"B={cr_b.metric_version_per_axis}"
+                    )
+                elif cr_a.ablation_operator_hash != cr_b.ablation_operator_hash:
+                    drift_reason = (
+                        f"ablation_operator_hash differs: A={cr_a.ablation_operator_hash!r} "
+                        f"B={cr_b.ablation_operator_hash!r}"
+                    )
+
+                if drift_reason is not None:
+                    delta = "metric_drift"
+                else:
+                    delta = status_delta(cr_a.status, cr_b.status)
+
+                clause_diffs.append(
+                    ClauseDiff(
+                        clause_text_sha256=sha,
+                        axis=axis_key,
+                        status_a=cr_a.status,
+                        status_b=cr_b.status,
+                        delta=delta,
+                        metric_drift_reason=drift_reason,
+                    )
+                )
+
+    finally:
+        if ev_ro is not None:
+            ev_ro.close()
+        if rt_conn is not None:
+            rt_conn.close()
+
+    divergent = any(cd.delta != "unchanged" for cd in clause_diffs)
+    diff_report = DiffReport(
+        report_schema_version=REPORT_SCHEMA_VERSION,
+        skill_id_a=skill_id_a,
+        skill_id_b=skill_id_b,
+        generated_at_utc=generated_at_utc,
+        harness_version=harness_version,
+        clauses=tuple(clause_diffs),
+        divergent=divergent,
+    )
+
+    # ------------------------------------------------------------------
+    # Render
+    # ------------------------------------------------------------------
+    if output_format == "json":
+        sys.stdout.buffer.write(to_json_bytes(diff_report))
+    else:
+        _render_diff_report(diff_report)
+
+    # ------------------------------------------------------------------
+    # Exit code (A58)
+    # ------------------------------------------------------------------
+    if exit_on_divergence and divergent:
+        sys.exit(2)
 
 
 @cli.command("freeze")
-@click.argument("sample_id")
-def freeze(sample_id: str) -> None:
-    """Promote a failure into the frozen regression suite."""
-    _ = sample_id
-    raise click.ClickException("not implemented — see PRD §9")
+@click.argument("verdict_id")
+@click.option(
+    "--execute",
+    is_flag=True,
+    default=False,
+    help="Write to frozen_cases (default: dry-run, no writes).",
+)
+@click.option(
+    "--oracle-source",
+    default="mechanical",
+    show_default=True,
+    help="Oracle source for the frozen case (Tier-1 only in v0.1).",
+)
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB.",
+)
+@click.option(
+    "--runtime-db",
+    type=click.Path(path_type=Path),
+    default=Path("./runtime.db"),
+    show_default=True,
+    help="Path to runtime DB (unused in v0.1 freeze; reserved).",
+)
+def freeze(
+    verdict_id: str,
+    execute: bool,
+    oracle_source: str,
+    evidence_db: Path,
+    runtime_db: Path,
+) -> None:
+    """Promote a FAILING verdict into the frozen regression suite (A56).
+
+    Eligibility:
+      - verdict.observation in {0.0, 0.5}  (FAILING side)
+      - verdict.admissibility_state == 'admissible'
+      - verdict.oracle_source == 'mechanical' (Tier-1 only in v0.1)
+      - verdict's parent run must be complete (completed_at IS NOT NULL)
+
+    Defaults to dry-run — use --execute to write.
+    Idempotent: double-freeze exits 0 with 'already frozen' message (A48).
+
+    Exit codes (A58):
+      0  — frozen or already frozen
+      1  — validation refused (ineligibility, missing verdict, incomplete parent)
+    """
+    import sqlite3 as _sqlite3
+
+    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.migrations import open_evidence
+    from skill_harness.storage.repositories.evidence.frozen_cases import freeze_verdict
+
+    # Open evidence DB (writable for --execute, read preview for dry-run)
+    ev_conn: sqlite3.Connection | None = None
+    try:
+        try:
+            ev_conn = open_evidence(evidence_db)
+        except (BootstrapError, Exception) as exc:
+            raise click.ClickException(f"Cannot open evidence DB at {evidence_db}: {exc}") from exc
+
+        # ------------------------------------------------------------------
+        # Validate: verdict exists
+        # ------------------------------------------------------------------
+        verdict_row = ev_conn.execute(
+            """SELECT verdict_id, clause_id, axis, observation,
+                      admissibility_state, sample_b_id
+               FROM oracle_verdicts WHERE verdict_id = ?""",
+            (verdict_id,),
+        ).fetchone()
+
+        if verdict_row is None:
+            raise click.ClickException(f"verdict_id {verdict_id!r} not found in oracle_verdicts.")
+
+        (
+            _vrd_id,
+            clause_id,
+            axis,
+            observation,
+            admissibility_state,
+            sample_b_id,
+        ) = verdict_row
+
+        # ------------------------------------------------------------------
+        # Eligibility checks (A56)
+        # ------------------------------------------------------------------
+        if observation not in (0.0, 0.5):
+            raise click.ClickException(
+                f"verdict {verdict_id!r} has observation={observation!r} "
+                "(PASSING side — only FAILING verdicts with observation in {0.0, 0.5} can be "
+                "frozen)."
+            )
+        if admissibility_state != "admissible":
+            raise click.ClickException(
+                f"verdict {verdict_id!r} is {admissibility_state!r} "
+                "(only 'admissible' verdicts can be frozen)."
+            )
+
+        # Look up parent run's completion status
+        run_row = ev_conn.execute(
+            "SELECT run_id, completed_at FROM runs "
+            "WHERE run_id = (SELECT run_id FROM oracle_verdicts WHERE verdict_id = ?)",
+            (verdict_id,),
+        ).fetchone()
+        if run_row is None or run_row[1] is None:
+            run_id_str = run_row[0] if run_row is not None else "unknown"
+            raise click.ClickException(
+                f"Parent run {run_id_str!r} is incomplete (completed_at IS NULL). "
+                "Finish the ablation run before freezing a verdict."
+            )
+
+        # Compute failing_input_sha256 for dry-run display
+        sample_row = ev_conn.execute(
+            "SELECT output_sha256 FROM samples WHERE sample_id = ?",
+            (sample_b_id,),
+        ).fetchone()
+        failing_sha = sample_row[0] if sample_row else "(unknown)"
+
+        # ------------------------------------------------------------------
+        # Dry-run path
+        # ------------------------------------------------------------------
+        if not execute:
+            _console.print(
+                f"\n[bold yellow]DRY-RUN[/] (no writes — use --execute to write)"
+                f"\nWOULD freeze verdict [bold]{verdict_id}[/]:"
+                f"\n  clause_id:              {clause_id}"
+                f"\n  axis:                   {axis}"
+                f"\n  observation:            {observation}"
+                f"\n  failing_input_sha256:   {failing_sha}"
+                f"\n  oracle_source:          {oracle_source}"
+            )
+            return
+
+        # ------------------------------------------------------------------
+        # Execute path: write to frozen_cases
+        # ------------------------------------------------------------------
+        try:
+            frozen_case_id = freeze_verdict(ev_conn, verdict_id, oracle_source=oracle_source)
+            _console.print(
+                f"\n[green]frozen[/] verdict [bold]{verdict_id}[/] "
+                f"→ frozen_case_id=[bold]{frozen_case_id}[/]"
+            )
+        except _sqlite3.IntegrityError:
+            # Already frozen — look up existing frozen_case_id (idempotent per A48)
+            existing_row = ev_conn.execute(
+                "SELECT frozen_case_id FROM frozen_cases WHERE verdict_id = ?",
+                (verdict_id,),
+            ).fetchone()
+            existing_id = existing_row[0] if existing_row else "(unknown)"
+            _console.print(
+                f"[yellow]verdict {verdict_id!r} already frozen "
+                f"as frozen_case_id={existing_id!r}[/]"
+            )
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+    finally:
+        if ev_conn is not None:
+            ev_conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Render helpers for evaluate-skill and diff skill
+# ---------------------------------------------------------------------------
+
+
+def _render_evaluate_skill_report(report: Any) -> None:
+    """Rich table render for SkillReport (A54 / A50).
+
+    Renders two tables:
+    1. Vector summary (Passed / Failed / Confounded / Unmeasured / Coverage)
+    2. Per-clause detail (clause_id / status / sub_reason / posterior_mean / CI)
+
+    UNMEASURED rows → YELLOW; FAILED rows → RED; PASSED rows → GREEN;
+    CONFOUNDED rows → MAGENTA. (A54 spec)
+
+    Footer cites A50 framing (single-clause LOO; lower-bound under redundancy).
+    """
+    # Vector summary table
+    vec = report.vector
+    vec_table = Table(title="Skill Vector Summary", show_lines=True)
+    vec_table.add_column("Passed", style="green", justify="right")
+    vec_table.add_column("Failed", style="red", justify="right")
+    vec_table.add_column("Confounded", style="magenta", justify="right")
+    vec_table.add_column("Unmeasured", style="yellow", justify="right")
+    vec_table.add_column("Coverage", justify="right")
+    vec_table.add_column("Contribution", min_width=40)
+
+    contrib = report.contribution
+    contrib_label = getattr(contrib, "label", "single-clause LOO; lower-bound under redundancy")
+    delta = getattr(contrib, "full_vs_null_delta", None)
+    contrib_str = f"{contrib_label} (Δ={delta:.3f})" if delta is not None else contrib_label
+    vec_table.add_row(
+        str(vec.passed),
+        str(vec.failed),
+        str(vec.confounded),
+        str(vec.unmeasured),
+        f"{report.coverage:.1%}",
+        contrib_str,
+    )
+    _console.print(vec_table)
+
+    # Per-clause detail table
+    clause_table = Table(title="Per-Clause Results", show_lines=True)
+    clause_table.add_column("clause_id", style="dim", min_width=20)
+    clause_table.add_column("status", min_width=12)
+    clause_table.add_column("sub_reason", min_width=20)
+    clause_table.add_column("posterior_mean", min_width=14, justify="right")
+    clause_table.add_column("CI 95%", min_width=16, justify="right")
+
+    for clause in report.clauses:
+        status = clause.status
+        sub_reason = clause.sub_reason or "—"
+        ci_lo, ci_hi = clause.credible_interval_95
+        ci_str = f"[{ci_lo:.3f}, {ci_hi:.3f}]"
+
+        if status == "UNMEASURED":
+            status_str = f"[yellow]{status}[/]"
+        elif status == "FAILED":
+            status_str = f"[red]{status}[/]"
+        elif status == "PASSED":
+            status_str = f"[green]{status}[/]"
+        elif status == "CONFOUNDED":
+            status_str = f"[magenta]{status}[/]"
+        else:
+            status_str = status
+
+        clause_table.add_row(
+            clause.clause_id,
+            status_str,
+            sub_reason,
+            f"{clause.posterior_mean:.3f}",
+            ci_str,
+        )
+
+    _console.print(clause_table)
+
+    # A50 footer
+    _console.print(
+        "\n[bold]Contribution (A50):[/] single-clause LOO; lower-bound under redundancy."
+        "\n  Absence of delta is not absence of contribution."
+    )
+
+
+def _render_diff_report(diff_report: Any) -> None:
+    """Rich table render for DiffReport (A55)."""
+
+    table = Table(
+        title=f"Diff: {diff_report.skill_id_a} vs {diff_report.skill_id_b}",
+        show_lines=True,
+    )
+    table.add_column("axis", style="cyan", min_width=12)
+    table.add_column("sha256[:12]", style="dim", min_width=14)
+    table.add_column("status_a", min_width=12)
+    table.add_column("status_b", min_width=12)
+    table.add_column("delta", min_width=14)
+    table.add_column("detail", min_width=30)
+
+    _STATUS_COLORS = {
+        "PASSED": "green",
+        "FAILED": "red",
+        "UNMEASURED": "yellow",
+        "CONFOUNDED": "magenta",
+    }
+
+    def _fmt_status(s: str | None) -> str:
+        if s is None:
+            return "[dim]—[/]"
+        color = _STATUS_COLORS.get(s, "white")
+        return f"[{color}]{s}[/]"
+
+    _DELTA_COLORS = {
+        "unchanged": "dim",
+        "improved": "green",
+        "regressed": "red",
+        "new": "blue",
+        "removed": "magenta",
+        "metric_drift": "yellow",
+    }
+
+    for cd in diff_report.clauses:
+        sha_short = cd.clause_text_sha256[:12]
+        delta_color = _DELTA_COLORS.get(cd.delta, "white")
+        delta_str = f"[{delta_color}]{cd.delta}[/]"
+        detail = cd.metric_drift_reason or ""
+        table.add_row(
+            cd.axis,
+            sha_short,
+            _fmt_status(cd.status_a),
+            _fmt_status(cd.status_b),
+            delta_str,
+            detail[:60],
+        )
+
+    _console.print(table)
+
+    divergent_str = "[red]DIVERGENT[/]" if diff_report.divergent else "[green]IDENTICAL[/]"
+    _console.print(f"\n  Diff result: {divergent_str}")
+    if diff_report.divergent:
+        _console.print("  [dim]Use --exit-on-divergence to signal divergence via exit code.[/]")
 
 
 # ---------------------------------------------------------------------------

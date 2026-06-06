@@ -394,7 +394,7 @@ class TestResumeFlag:
         run and surface the run_id so the operator can use --resume.
         """
         with patch(
-            "skill_harness.cli.main._find_incomplete_run",
+            "skill_harness.cli.main._find_incomplete_run_for_execute",
             return_value="run-incomplete-001",
         ):
             result = _invoke("run", "ablation", "skill-abc", "--execute")
