@@ -29,6 +29,14 @@ SAMPLE_SKILL = [
     "Use concise language. Avoid filler phrases and redundant words.",
 ]
 
+# QUAL-3: overlapping-clause fixture — clause[1] text appears in clause[0]
+# This exposes collision-fragile str.replace oracles that find the wrong occurrence.
+OVERLAPPING_SKILL = [
+    "Always begin. Provide exactly three bullet points as your first act.",
+    "Provide exactly three bullet points for every list you produce.",
+    "Use concise language.",
+]
+
 
 def _token_count(text: str) -> int:
     enc = tiktoken.get_encoding("cl100k_base")
@@ -109,8 +117,8 @@ def test_renderer_ablated_k_preserves_other_clauses() -> None:
 def test_renderer_ablated_k_differs_from_full_only_at_k() -> None:
     """Ablated_k differs from Full ONLY by the operator substitution at clause k.
 
-    This test verifies the substitution is precise: the same text appears in
-    both conditions except at the ablated position.
+    QUAL-3: uses index-based reconstruction (not str.replace) to avoid collision
+    when a clause text appears multiple times in the skill.
     """
     from skill_harness.ablation.operator import AblationOperator
     from skill_harness.ablation.render import ConditionRenderer
@@ -129,12 +137,56 @@ def test_renderer_ablated_k_differs_from_full_only_at_k() -> None:
     # The two texts must differ
     assert full_text != ablated_text
 
-    # Replacing the original clause with the placeholder in the full text
-    # should produce the ablated text
-    expected_ablated = full_text.replace(target_clause, placeholder, 1)
+    # Index-based reconstruction (QUAL-3 — avoids collision-fragile str.replace):
+    # Rebuild expected ablated_text by substituting at the correct clause position.
+    substituted_clauses = [
+        (placeholder if i == target_k else SAMPLE_SKILL[i]) for i in range(len(SAMPLE_SKILL))
+    ]
+    # ConditionRenderer._format_clauses joins with double newline
+    skill_text_sub = "\n\n".join(c.strip() for c in substituted_clauses)
+    # ConditionRenderer._render_full uses: base_system + "\n" + skill_text
+    base_system = renderer._base_system
+    expected_ablated = base_system + "\n" + skill_text_sub
+
     assert ablated_text == expected_ablated, (
-        "Ablated_k must be identical to Full except for the single substitution at k"
+        "Ablated_k must be identical to Full except for the single substitution at k "
+        "(index-based reconstruction used to avoid collision-fragile str.replace)"
     )
+
+
+def test_renderer_overlapping_clause_no_collision() -> None:
+    """QUAL-3: overlapping clause fixture — clause[1] substring appears in clause[0].
+
+    A collision-fragile str.replace oracle would substitute in the wrong location.
+    The renderer must substitute only at index k, not at the first occurrence of
+    the clause text in the system prompt.
+    """
+    from skill_harness.ablation.operator import AblationOperator
+    from skill_harness.ablation.render import ConditionRenderer
+
+    op = AblationOperator()
+    renderer = ConditionRenderer(operator=op)
+
+    # OVERLAPPING_SKILL[1] = "Provide exactly three bullet points for every list you produce."
+    # OVERLAPPING_SKILL[0] contains "Provide exactly three bullet points as your first act."
+    # which shares the prefix "Provide exactly three bullet points"
+    target_k = 1
+    result = renderer.render_conditions(OVERLAPPING_SKILL, target_clause_index=target_k)
+    ablated_text = result[f"ablated_{target_k}"]["system_text"]
+
+    # The original clause at index k must NOT appear in the ablated text
+    assert OVERLAPPING_SKILL[target_k] not in ablated_text, (
+        "Original clause at index k must be replaced by the placeholder"
+    )
+
+    # The other clause (index 0) must still be present
+    assert "Provide exactly three bullet points as your first act." in ablated_text, (
+        "Clause[0] text (which shares a prefix with clause[1]) must still be present"
+    )
+
+    # The placeholder must appear
+    placeholder = op.render(OVERLAPPING_SKILL[target_k])
+    assert placeholder in ablated_text, "Placeholder must appear in ablated text"
 
 
 def test_renderer_cache_markers_present_in_system_blocks() -> None:

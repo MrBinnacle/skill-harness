@@ -44,6 +44,8 @@ import tiktoken
 ABLATION_OPERATOR_VERSION: Final[str] = "neutral-filler-v1"
 """Stable version identifier for this operator implementation."""
 
+_ENCODING_NAME: Final[str] = "cl100k_base"
+
 # Semantically null filler phrase. Chosen to be:
 # - Grammatically neutral (imperative-ish but content-free)
 # - Stable tokenization in cl100k_base across the 0.7.x series
@@ -51,7 +53,16 @@ ABLATION_OPERATOR_VERSION: Final[str] = "neutral-filler-v1"
 _FILLER_UNIT: Final[str] = "[ABLATED]"
 """Base filler atom. Repeated to match target token count."""
 
-_ENCODING_NAME: Final[str] = "cl100k_base"
+# QUAL-2: pin FILLER_UNIT_TOKENS as a module-level constant so it is assertable by callers
+# and not just private instance state. Computed once at module import time via tiktoken.
+# This resolves the dangling docstring reference "verified in ``FILLER_UNIT_TOKENS``" (line 27).
+FILLER_UNIT_TOKENS: Final[int] = len(tiktoken.get_encoding(_ENCODING_NAME).encode(_FILLER_UNIT))
+"""Stable token count of one _FILLER_UNIT atom in cl100k_base.
+
+Pinned as a module constant (QUAL-2) so callers can assert invariants and the
+docstring reference on line 27 ("verified in ``FILLER_UNIT_TOKENS``") resolves.
+Change this constant whenever _FILLER_UNIT or _ENCODING_NAME changes.
+"""
 
 # Tolerance for matched-length: ±10% of clause token count, minimum ±2 tokens.
 TOKEN_LENGTH_TOLERANCE_FRACTION: Final[float] = 0.10
@@ -98,8 +109,12 @@ class AblationOperator:
     def __init__(self) -> None:
         # Encoding loaded once per instance; tiktoken caches the BPE data globally.
         self._enc: tiktoken.Encoding = tiktoken.get_encoding(_ENCODING_NAME)
-        # Token count of one filler atom — computed once and cached.
-        self._filler_unit_tokens: int = len(self._enc.encode(_FILLER_UNIT))
+        # Token count of one filler atom — pinned by FILLER_UNIT_TOKENS module constant (QUAL-2).
+        self._filler_unit_tokens: int = FILLER_UNIT_TOKENS
+        assert self._filler_unit_tokens > 0, (
+            f"FILLER_UNIT_TOKENS must be > 0; got {self._filler_unit_tokens!r} "
+            f"(QUAL-2: assertion on module constant)"
+        )
 
     # ------------------------------------------------------------------
     # Public API
