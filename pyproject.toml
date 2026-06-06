@@ -34,6 +34,13 @@ dev = [
   "ruff>=0.5",
   "mypy>=1.10",
   "hypothesis>=6.100",
+  # C.1 — Tier-1 mechanical-validity gate (A33)
+  # pytest-socket blocks network calls in offline Tier-1 tests; module-level autouse fixture.
+  "pytest-socket>=0.7",
+  # tiktoken: offline tokenizer for Verbosity metric (A35). Version-pinned to cl100k_base
+  # encoding which is stable across 0.x series; DO NOT upgrade without re-running
+  # bit-equality corpus and updating IMPLEMENTATION_HASH in verbosity.py.
+  "tiktoken>=0.7,<1.0",
 ]
 
 [project.scripts]
@@ -53,6 +60,12 @@ addopts = [
 markers = [
   "slow: long-running tests (deselect with -m 'not slow')",
   "live: hits the live Anthropic API (deselect by default)",
+  # C.1 A33 — no_network: Tier-1 mechanical tests run offline (pytest-socket enforced).
+  # Autouse fixture in tests/oracles/tier1/conftest.py covers ALL tests in that package.
+  # PYTHONHASHSEED=0 REQUIRED for Tier-1 bit-equality discipline (A33).
+  # Run Tier-1 tests with: PYTHONHASHSEED=0 pytest tests/oracles/tier1/
+  # If PYTHONHASHSEED is not set, tests/oracles/tier1/conftest.py raises AssertionError.
+  "no_network: test must run fully offline (pytest-socket blocks sockets)",
 ]
 filterwarnings = ["error"]
 
