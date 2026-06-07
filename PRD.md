@@ -4,9 +4,13 @@
 
 Skill Harness: Clause-Ablation Differential Testing for LLM Skills
 
-Version: 1.0
+Version: 1.1
 Status: Draft
 Author: TBD
+
+<!-- v1.1 changelog: 47 amendments applied (45 from Phase 3.5 audit + 2 from Appendix G).
+     Rationale per amendment lives in docs/COUNCIL_FINDINGS.md (main table + Appendices B–G).
+     PRD stays spec; Council stays rationale. -->
 
 ---
 
@@ -22,12 +26,9 @@ Traditional software testing assumes:
 
 Skills possess none of these properties.
 
-Skill Harness introduces four manufactured primitives that replace those assumptions:
+The harness's novel and defensible claim is the *evidentiary discipline* — falsifiable directional contracts with write-time admissibility-gated, append-only provenance. This is the P4 signature (zero hits in the eval domain at the time of design). The estimator (Leave-One-Out clause ablation) is deliberately conservative: under-crediting contribution is a safe failure for an adversarial audit (false-negative on contribution, never false-positive on a PASS).
 
-1. Oracle → Directional Pairing
-2. Isolation → Clause Ablation
-3. Determinism → Variance Budgeting
-4. Trust → Admissible Oracles
+Skill Harness applies clause-level prompt-component ablation — as in Sclar et al. (arXiv:2310.11324, FormatSpread / component ablation), Longpre et al. (arXiv:2301.13688, FLAN component ablations) — to skill artifacts, with three disciplines: directional-only oracles, admissibility gating, and append-only provenance. Redundancy cancellation (JoPA, Chang et al. arXiv:2405.20404) is a documented v0.1 limitation; LOO under-credits contribution when clauses are jointly redundant, never over-credits.
 
 The system evaluates whether a skill clause produces a measurable directional effect when present versus absent.
 
@@ -78,6 +79,8 @@ Required:
 
 * A beats B on axis X
 
+Reconciliation with §5 Tier 2: the Tier-2 LLM judge is admissible **only** in pairwise-preference mode for one named axis at a time. Judge prompts MUST present both candidates, MUST output one of `{A, B, tie}` for one axis, and MUST NOT emit a numeric score. G-Eval-style scalar templates (Liu et al. arXiv:2303.16634) are explicitly forbidden under §3.1.
+
 ---
 
 ## 3.2 Clause Isolation
@@ -107,6 +110,14 @@ No component may self-certify its own reliability.
 A clause is not considered tested until it has at least one falsifying case.
 
 A clause without a possible failure mode is metadata, not a contract.
+
+---
+
+## 3.4a Falsifying Case Schema
+
+Each clause declares the triple `(input_population_spec, expected_directional_pair, min_reproducibility)`. Until that schema is frozen (SHA-256 stored in `clauses.falsifying_case_schema_sha256`), the clause cannot transition to PASSED — regardless of posterior.
+
+Formal gate: `PASSED ⇔ posterior_threshold_met ∧ ≥1 frozen_case_at_current_metric_version`.
 
 ---
 
@@ -213,6 +224,11 @@ Requirements:
 * human-labeled calibration set
 * tracked agreement score
 * admissibility enforcement
+* pairwise mode only — output one of `{A, B, tie}` for one named axis; numeric/scalar grading forbidden
+* mandatory position swap — every verdict requires both `(A, B)` and `(B, A)` orderings; disagreement on swap → `position_swap_agreement = 0` → `admissibility_state = 'inadmissible'` (reason `position_disagreement`)
+* length-controlled scoring — AlpacaEval-2 length-regression protocol (Dubois et al. arXiv:2404.04475) applied both at prompt-time (max_tokens=80 with "length should not influence" instruction) and observation-time; `length_regression_coefficient` stored separately from `length_controlled_agreement`; both raw and length-adjusted observations persisted at write time
+* judge identity is bound to `judge_id = sha256(model_id || system_prompt_sha256 || tool_schema_sha256)`; the tool schema is part of the calibration scope, NOT swappable post-calibration
+* judge invoked via tool_use with `strict: true`, `tool_choice` forced, schema `report_verdict({choice: enum[A,B,tie], rationale_brief})`; rationale field is audit-only, displayed in UI with `[untrusted model output]` prefix; defense layers (tool_use schema + 8KB output truncation + XML-delimited sandboxing + meta-token regex short-circuit + position-swap + null-baseline distributional check + rationale UI prefix) all required before a verdict can be written
 
 The judge is an instrument.
 It is never the source of truth.
@@ -231,6 +247,8 @@ Examples:
 
 Highest authority when available.
 
+**v0.1 status: DEFERRED.** No published precedent attributes a real-world outcome to a single skill clause; whole-tool effects (Peng et al. arXiv:2302.06590; Cui et al. 4000+ devs) do not satisfy clause-level instrumentation. Lag time weeks-to-months; SNR effectively zero without a clause-instrumented RCT. `frozen_cases.oracle_source` CHECK constraint excludes `'real_world'` for v0.1. Re-evaluate post-v0.1 dogfooding.
+
 ---
 
 # 6. Admissibility System
@@ -243,11 +261,37 @@ Prevent unvalidated judges from entering scoring.
 
 ## Rule
 
-Tier-2 verdicts are inadmissible unless:
+Tier-2 verdicts are inadmissible unless ALL of the following hold for the `(judge_id, axis)` pair:
 
-`(judge_id, axis)`
+* a calibrated record exists with `pairwise_agreement ≥ 0.7`
+* `position_consistency ≥ 0.8`
+* `length_controlled_agreement` recorded; Cohen's κ stored as secondary chance-corrected reporting
+* calibration set size `≥ 50` pairs
+* re-calibration cadence ≤ 90 days OR no model-version bump since
 
-has a calibrated record.
+See §5 Tier 2 for the seven-layer adversarial defense stack required for any Tier-2 verdict to enter the admissibility pipeline.
+
+---
+
+## §6.1 Calibration input schema
+
+Calibration inputs are strict JSONL with eight required fields: `pair_id, axis, prompt, response_a, response_b, human_preference, labeler_id, labeled_at`.
+
+State enum (admissibility classes by pair-set size N):
+
+* `rejected` (N < 50) — calibration refused; downstream verdicts inadmissible
+* `conditional` (50 ≤ N < 100) — admissible with size-warning surfaced in reports
+* `calibrated` (N ≥ 100) — admissible
+
+Cohen's κ on the 3-class outcome (A/B/tie) uses observed marginals, NOT 1/3 uniform.
+
+v0.1: no starter set ships; user-provided JSONL only. Operator-self-label admissibility is rejected (resolved 2026-06-06 by SME verdict on independence-collapse grounds; see Appendix E C2 resolution).
+
+---
+
+## §6.2 Length-control storage
+
+Length-control storage: `oracle_verdicts` persists both `raw_observation` and `length_adjusted_observation`; the regression coefficient is stored at calibration time in `calibration_events.length_regression_coefficient`. Correction is applied at verdict-write time, never at read time.
 
 ---
 
@@ -299,13 +343,13 @@ Each clause contains:
 
 ## Vacuity Detection
 
-A clause is vacuous if:
+A clause has one of three vacuity states (`clauses.vacuity_flag` enum):
 
-* no observable delta can be defined
-* no falsifying case can be constructed
-* no measurable axis exists
+* `not_vacuous` — has an observable delta and a constructible falsifying case
+* `mechanical_vacuous` — claimed axis is not in `metric_library`; deterministic, auto-excluded from testing
+* `semantic_vacuous_pending_review` — extractor judged the clause has no measurable axis or no constructible falsifying case (LLM judgment); stored as `UNMEASURED` with reason, NOT silently excluded
 
-Vacuous clauses are excluded from testing.
+The extractor is itself a Tier-2 judge. v0.1 uses uncalibrated extraction with the `semantic_vacuous_pending_review` sentinel; `(extractor_id, skill_genre)` calibration is deferred to v0.2 (D4).
 
 ---
 
@@ -320,6 +364,10 @@ Coverage is measured by:
 where:
 
 `tested_clause = clause with ≥1 falsifying case`
+
+In v0.1, `total_clauses` is the authored clause set including all vacuity_flag values. v0.2 will additionally report `(tested / (total − mechanical_vacuous))` per Council D3, gated on extractor-calibration audit (D4).
+
+≥15% extractor-flagged vacuity rate on a representative skill triggers D3 ship in v0.1.x.
 
 ---
 
@@ -396,11 +444,16 @@ Removing one clause may unintentionally alter another axis.
 
 ## Detection
 
-During ablation:
-all clause metrics are monitored.
+During ablation, every axis in `metric_library_v1` is monitored — not only clause-claimed axes.
 
-If removal of clause N causes a different clause axis to move beyond threshold:
-confound event is recorded.
+Threshold: `delta > k · σ_axis(Null)`, with defaults `k = 2.0` and `N_null ≥ 30` for variance estimation. Below the N_null floor, confound detection is disabled for that axis and affected verdicts are reported as `UNMEASURED(underpowered)`. Uncalibrated Tier-2 axes are excluded from σ(Null) estimation.
+
+`confound_events.delta_kind` enum:
+
+* `observed_unclaimed_delta` — movement on a non-claimed axis; audit-only, never aggregated
+* `confound_flagged` — movement on a claimed-but-other-clause axis; verdict outcome becomes `FLAGGED_CONFOUNDED`
+
+Storage is threshold-triggered event-row only (no dense per-sample × axis matrix). All-axes deltas are computed in-memory per condition-cell at orchestration time.
 
 ---
 
@@ -422,45 +475,26 @@ A contaminated delta must never be reported as clean evidence.
 
 # 12. Mechanical Metric Library (Initial)
 
-## Supported
+## Demoted from Tier 1 (NOT mechanical without further support)
 
-### Assertion Density
+* **Assertion Density** (`factual_claims / sentences`) — requires NLI / claim extraction
+* **Unsupported Claim Ratio** — requires claim extraction + evidence-attribution
+* **Compliance Proxy** — requires directive classifier (heuristic, fragile)
+* **Citation Density** (regex) — false-positives on markdown code blocks
+* **Hedge Index** — depends on a corpus-bound, context-blind wordlist
 
-`factual_claims / sentences`
+## Tier 1 admissible honest heuristics (deterministic, network-blocked)
 
----
-
-### Unsupported Claim Ratio
-
-`unsupported_claims / claims`
-
----
-
-### Hedge Index
-
-`hedge_tokens / sentences`
+* `assertion_density := declarative_sentences / total_sentences` (regex on punctuation + leading-verb)
+* `unsupported_claim_ratio := sentences_lacking_inline_citation_marker / declarative_sentences` (regex for `[N]`, `[Author Year]`, URL, `(source: …)`)
+* `verbosity := tokens / instruction_units`
+* `structure_score` — derived from `header_ratio`, `bullet_ratio`, `section_balance`
 
 ---
 
-### Compliance Proxy
+## §12.1 Mechanical validity audit gate
 
-`directive_sentences / total_sentences`
-
----
-
-### Verbosity
-
-`tokens / instruction_units`
-
----
-
-### Structure Score
-
-Derived from:
-
-* header ratio
-* bullet ratio
-* section balance
+Every Tier-1 metric must pass an offline-only, network-blocked, deterministic-output test before its `tier = 1` row inserts into `metric_versions`. Implementation primitive: `pytest-socket` + bit-equality assertion + `PYTHONHASHSEED=0` discipline; test modules carry `pytestmark = pytest.mark.disable_socket`. `metric_versions.mechanical_validity_test_passed = 1` flips only on tests-pass AND zero socket attempts. Failures auto-downgrade the metric to Tier 2.
 
 ---
 
@@ -491,16 +525,18 @@ Human-labeled frozen pair set.
 
 ## Outputs
 
-* agreement score
-* calibration state
-* validation timestamp
+**Calibration metric (primary, for pairwise mode):** position-swap-symmetric pairwise-preference agreement vs human labels.
 
----
+**Thresholds:**
 
-## Rule
+* pairwise-preference agreement `≥ 0.7`
+* position-consistency `≥ 0.8`
+* Cohen's κ stored as secondary chance-corrected reporting (no fixed threshold; observed-marginal calculation)
+* minimum calibration set size = 50 pairs per `(judge_id, axis)`
 
-Calibration is axis-specific.
-No cross-axis inheritance allowed.
+**Re-calibration cadence:** every 90 days OR at the next model version bump (whichever first).
+
+Calibration is axis-specific. No cross-axis inheritance allowed (load-bearing invariant — see CLAUDE.md Oracle tiering).
 
 ---
 
@@ -542,6 +578,42 @@ For every clause:
 
 ---
 
+## §14.1 Sampling rule
+
+**Sampling rule (default):**
+
+* `N_min = 8` per condition pair (above STAT-F3's analytic floor of 5)
+* `N_inc = 4` (batch size between stop checks)
+* `N_max = 40`
+* Stop when `P(rate > 0.60) ≥ 0.95` (PASS) OR `P(rate > 0.60) ≤ 0.05` (FAIL); else add `N_inc`
+* No batches past N_max. Reaching N_max without stop → hard stop → clause status `UNMEASURED(underpowered_nmax)`
+* `stopping_reason ∈ {passed, failed, underpowered_nmax, budget_exhausted}` recorded on `runs.config_json`
+* Variance budgeting: per-clause posterior-width stop rule + global token budget; greedy allocation by `1/posterior_width`
+
+---
+
+## §14.2 Multiplicity / pooling
+
+For K clauses per skill, posterior estimates are pooled via hyperprior `Beta(α_skill, β_skill)`. This shrinks weak signals toward the skill mean and is self-immunizing against family-wise false positives.
+
+**v0.1 fit method:** Empirical-Bayes Method-of-Moments (`scipy.stats`, closed-form, deterministic, no MCMC). Per-clause posterior stays `Beta(1+w, 1+n−w)` (PRD §14 Pass Rule locked); hyperprior `Beta(α̂_skill, β̂_skill)` fit via MoM over per-clause `(w_k, n_k)`.
+
+**Convergence failure:** `α̂ ≤ 0 ∨ β̂ ≤ 0 ∨ var_between < 1e-6` → BH-FDR fallback (Benjamini-Hochberg 1995, q = 0.05) over per-clause `p_exceeds` from unpooled posterior.
+
+**K < 10:** EB hyperprior estimate is noisy (BDA3 §5). Default to UNPOOLED reporting with `aggregation_method = unpooled (K<10)` logged warning; hierarchical fit only triggers at K ≥ 10.
+
+**Determinism:** `PYTHONHASHSEED=0` environment discipline. PyMC MCMC NUTS hyperprior fit deferred to v0.2 (D21).
+
+---
+
+## §14.3 Tie encoding (provisional)
+
+Tie encoding is provisionally **half-update**: each observation with `observation = 0.5` is treated as two updates (half-win + half-loss). Same posterior mean as 0.5 encoding, slightly different variance, Bayesian semantics honest (pseudo-Bernoulli). Tie count stored separately so the operator can switch to drop-ties at report time without re-sampling.
+
+**Open (C1):** flip to drop-ties preserves Beta-Binomial conjugacy exactly. Data-blocked until first `(judge_id, axis)` calibration event lands.
+
+---
+
 ## Pass Rule
 
 Clause passes when:
@@ -573,7 +645,33 @@ Interaction contamination detected.
 
 ### UNMEASURED
 
-No admissible evidence exists.
+One of the following sub-reasons applies; reported as `UNMEASURED(<sub_reason>)`:
+
+* `no_data` — no verdicts written for this clause
+* `inadmissible` — verdicts written, all inadmissible (tokens were spent; this is NOT silent skipping)
+* `underpowered` — verdicts admissible but N below sampling-rule stop conditions, or σ(Null) below floor for confound detection
+* `falsifying_case_missing` — clause has no frozen falsifying case (per §3.4 / §7a)
+* `falsifying_case_stale` — clause's only frozen cases are at non-current metric_versions (see definition of "current" below)
+* `budget_exhausted` — sampling halted because `--max-usd` or `--daily-cap` was hit before stop conditions
+
+---
+
+## §15.1 Current metric_version
+
+"Current" metric_version for a metric is derived (no stored pointer):
+
+```sql
+SELECT version, implementation_hash FROM metric_versions
+ WHERE metric_id = ?
+   AND audited = 1
+   AND mechanical_validity_test_passed = 1
+ ORDER BY registered_at DESC
+ LIMIT 1
+```
+
+The `audited + validity_passed` filter is load-bearing: a metric_version that failed §12.1's mechanical-validity audit must NOT be considered current.
+
+**Auto-flip rule:** a clause whose only frozen cases are at non-current metric_versions transitions to `UNMEASURED(falsifying_case_stale)`. Stale cases remain in `frozen_cases` (audit trail) but do NOT count toward the §19 #7 PASSED gate. **No re-freeze command** — the operator re-runs `freeze` with a new verdict collected under the current metric_version (append-only; no stamp-renewal-without-evidence path).
 
 ---
 
@@ -592,6 +690,32 @@ Never as a scalar score.
 * Unmeasured Clauses
 * Coverage
 * Full-vs-Null Contribution
+
+---
+
+## §16.1 Wire format
+
+Reports are emitted in two formats via `--format=rich|json` (default `rich` for operator terminal use).
+
+**JSON output** ships with mandatory top-level `report_schema_version "1.0.0"` (semver). v0.1 lifetime is `1.x` additive-only: additions = minor bump; removals/renames/type-changes = major bump (breaks `diff skill` consumers).
+
+**Required top-level keys:**
+`report_schema_version, skill_id, generated_at_utc, harness_version, aggregation_method ∈ {ebmom_hierarchical, bh_fdr_fallback, unpooled}, aggregation_provenance, clauses[], vector (Passed/Failed/Confounded/Unmeasured/Coverage/Contribution), coverage, contribution`.
+
+**Per-clause fields:**
+`clause_id, status, sub_reason (when UNMEASURED), posterior_mean, credible_interval_95, p_win_gt_threshold, frozen_case_count_at_current_metric_version, metric_id_per_axis, metric_version_per_axis, ablation_operator_hash, run_ids_aggregated`.
+
+**Byte-stable for identical evidence:** JSON output is sorted-keys, no internal timestamps inside the payload (single `generated_at_utc` at top level only).
+
+**Pipeline discipline:** `--format=json` writes ONLY to stdout; warnings (UNMEASURED count, A50 LOO-honesty caveat, incomplete-run warn) go to stderr.
+
+**Rejected for v0.1:** `--format=csv|md` (CSV is lossy on credible intervals + provenance; deferred).
+
+**`aggregation_provenance` required sub-keys (when `aggregation_method = ebmom_hierarchical`):** `alpha_hat, beta_hat, sample_mean, sample_var, K_clauses, pythonhashseed`.
+
+**`aggregation_provenance` required sub-keys (when `aggregation_method = bh_fdr_fallback`):** `fallback_reason ∈ {var_below_threshold, alpha_hat_nonpositive, beta_hat_nonpositive, unknown}`, `attempted = {alpha_hat, beta_hat, sample_mean, sample_var}` (the EB-MoM attempt that failed), `q_value` (BH-FDR q parameter, default 0.05), `pythonhashseed`.
+
+**`aggregation_provenance` required sub-keys (when `aggregation_method = unpooled`):** `K_clauses, k_min_for_eb` (= 10), `pythonhashseed`.
 
 ---
 
@@ -641,8 +765,57 @@ They never own control flow.
 
 ## Persistence
 
-SQLite.
-Append-only evidence model.
+SQLite. **Append-only evidence model.** Every evidence table carries `BEFORE UPDATE` and `BEFORE DELETE` triggers raising `RAISE(ABORT, 'append_only_violation: <table>')`. Application-layer contract alone is insufficient — bypassable via any SQLite REPL.
+
+**Two-database partition:**
+
+* `evidence.db` — all append-only domain state (skills, clauses, metric_versions, judges, calibration_events, samples, oracle_verdicts, confound_events, frozen_cases, runs)
+* `runtime.db` — all mutable operational state (run_progress, current_calibration, cost_ledger, run_budget, skill_imports_staging, schema_migrations)
+
+Cross-DB FKs enforced at application layer; never via SQL.
+
+**Cost ledger:** `runtime.cost_ledger` records per-call token + USD spend; `runtime.run_budget` records per-run cap. Three-layer cost cap: (a) `run ablation` / `run evaluate-skill` / `calibrate` default to dry-run; `--execute` required; (b) per-run `--max-usd <X>` (default $5); (c) per-day rolling `--daily-cap <X>` (default $20).
+
+**Schema migration discipline:** numbered SQL files in `migrations/{evidence,runtime}/`. Each application records `(migration_id, file_sha256)` in append-only `schema_migrations`. On startup, file-SHA mismatch against recorded SHA aborts with `MigrationTamperedError`.
+
+Per-track migration number ranges:
+
+* Track A — `0001-0099` (storage primitives)
+* Track B — `0100-0199` (extractor)
+* Track C — `0200-0299` (oracle / calibration)
+* Track D — `0300-0399` (ablation runner)
+* Track E — `0400-0499` (aggregation / status)
+
+`discover()` raises `BootstrapError` on duplicate version numbers.
+
+**Track E migrations:**
+
+* `0400_freeze_provenance.sql` — extends `frozen_cases` with `verdict_id` FK, `run_id` FK, `axis`, unique-index on `(clause_id, axis, failing_input_sha256)`, and BEFORE INSERT trigger refusing rows whose joined `runs.completed_at IS NULL`
+* `0401_stale_frozen_view.sql` — creates `current_metric_versions` VIEW and `frozen_cases_with_currency` VIEW (per §15.1 "current metric_version" derivation)
+
+**Durability asymmetry:** `evidence.db` opens with `PRAGMA synchronous = FULL` (audit-trail invariant). `runtime.db` opens with `PRAGMA synchronous = NORMAL` (in-flight state, tolerant of replay-on-restart).
+
+**Single-writer mechanism (v0.1):** SQLite `BEGIN IMMEDIATE` + 5-second `busy_timeout`. No in-process `queue.Queue` or writer thread. Application discipline: writes from a single thread per DB connection. Subprocess workers deferred to v0.2 (D11).
+
+**Dual-DB write ordering:** writes spanning both DBs use `storage/dual_write.py::write_<op>_with_<companion>`. Sequence: `BEGIN IMMEDIATE` on evidence → INSERT evidence → COMMIT evidence → `BEGIN IMMEDIATE` on runtime → INSERT runtime → COMMIT runtime. On runtime COMMIT failure, log structured `dual_write_partial` event; the gap is reconciler-eligible (do NOT auto-insert phantom runtime row). **`ATTACH DATABASE` is forbidden in production code paths** (defeats A22 FULL/NORMAL split); read-only ATTACH allowed in future `skill audit` (D7).
+
+**Cost re-derivable from evidence:** per-call token + USD cost columns written onto evidence rows inside the evidence transaction. `cost_ledger` becomes a projection; reconciler back-fills runs whose sums disagree (cost written from actual response `usage`, never from projection).
+
+**Aggregation surface:** the canonical read-side for aggregation is the SQL VIEW `admissible_verdicts` (migration `0003_admissible_verdicts_view.sql`), which selects from `oracle_verdicts` where `admissibility_state = 'admissible'` AND no matching row in `confound_events` with `delta_kind = 'confound_flagged'` for the same `(run_id, primary_clause_id)`. Raw `oracle_verdicts` access is restricted to the `audit/` module (CI grep ban on non-audit `SELECT … FROM oracle_verdicts`).
+
+**Repository surface:** per-table modules under `storage/repositories/evidence/` and `storage/repositories/runtime/`. Functional API only — no classes (closes subclass-override escape hatches; closes per-instance-state hazard). Pydantic write-models with `model_config = ConfigDict(strict=True, extra='forbid', frozen=True)`. Evidence repos export only `insert_*` / `get_*` / `select_*` / `list_*` — no `update_*` / `delete_*` / `set_*` / `patch_*` / `modify_*` / `remove_*`. AST-walker test (`tests/test_evidence_repo_surface.py`) is the falsifying-case enforcement: regex scan rejects matching function names.
+
+---
+
+# 17a. Threat Model (informal)
+
+**Trust partition.** `evidence.db` is append-only, audited, load-bearing. `runtime.db` is mutable by design. Compromise of `runtime.db` (`current_calibration` rewrite is the load-bearing target) affects only FUTURE verdicts because past verdicts have already snapshotted `admissibility_state` at write time (§6) and `oracle_verdicts` is append-only. Symmetry between the two DBs is NOT a design goal.
+
+**Filesystem substitution boundary.** Append-only triggers + SHA-256 migration ledger defend against in-process unauthorized writes (developer error, SQL-injection-style mutation, library bug). They do NOT defend against an attacker who replaces the entire `evidence.db` file at the filesystem layer — the SHA ledger checks file contents against an SHA recorded inside the same DB, so a whole-DB substitution supplies both the data and the baseline. v0.1 assumes filesystem integrity (local-trust). File-replacement detection deferred to v0.2 (D6 `db_identity`).
+
+**PRAGMA scope.** Connections MUST go through `skill_harness.storage.migrations.open_db()`. Direct `sqlite3.connect()` bypasses connection-scoped pragmas including `foreign_keys = ON`.
+
+**Structural enforcement:** pre-commit + CI grep ban — `ripgrep -n 'sqlite3\.connect\(' src/ tests/ | grep -v 'storage/migrations.py'` MUST return empty. Upgrades the documented PRAGMA-scope discipline from PR-review to mechanism.
 
 ---
 
@@ -664,23 +837,71 @@ Inspect clause inventory.
 
 Execute single-clause ablation.
 
+**Cost discipline (applies to `run ablation`, `calibrate`):**
+
+* default behaviour is **dry-run**. Prints projected calls, tokens (cached / uncached split), USD on the chosen model, and cache reuse %.
+* `--execute` required to make API calls.
+* `--max-usd <X>` per-run hard ceiling (default $5).
+* `--daily-cap <X>` per-day rolling ceiling over the trailing 24h (default $20).
+* `--max-usd` and `--daily-cap` errors name the offending flag distinctly.
+
+The dry-run / `--execute` / `--max-usd` / `--daily-cap` doctrine in §18 applies to `calibrate` in addition to `run ablation`. Note: `calibrate` projection uses a distinct formula from ablation (no per-pair cache; only system+schema prefix cacheable). Dry-run output includes `est_SE_pairwise_agreement` and `est_CI_95_width`.
+
+**Resume / progress / inspection (flags only; no new commands — §18 surface is locked):**
+
+* `--resume <run_id>` with resume-preview
+* Bare re-run against an incomplete prior run WARNS + names the resumable `run_id` (no silent fresh-start / double-spend)
+* `rich.progress` per-clause + live dual-cap footer
+* `--show-rendered <clause_id>` prints verbatim Full / Ablated_k / Null + `ablation_operator_version`
+
 ---
 
 ## `run evaluate-skill`
 
-Run full suite.
+Aggregate completed ablation runs into a skill report. **Read-side only — no LLM API calls, no `--max-usd`, no `--execute` flag, no `ANTHROPIC_API_KEY` required.**
+
+Discovers all `runs` rows for the given `skill_id` with `run_kind='ablation'` and `completed_at IS NOT NULL`. Preflight: incomplete prior runs → refuse-to-start exit 1. No completed runs → exit 1 with operator-readable message. Aggregation uses the `admissible_verdicts` VIEW.
+
+May optionally mint a `runs.run_kind='evaluate_skill'` envelope as audit-trail metadata (run_ids aggregated + EB-MoM hyperprior parameters + `aggregation_method`) so the report is reproducible — NOT a sampling run.
 
 ---
 
 ## `diff skill`
 
-Compare skill revisions.
+`diff skill <skill_id_a> <skill_id_b>` — compare skill revisions (revisions = distinct `skill_id` rows; `clause_id` does NOT persist across revisions).
+
+**Clause comparability key:** `(axis, clause_text_sha256)`. Exact match first; unaligned clauses → `ADDED` / `REMOVED`.
+
+**`metric_drift` guard:** per-clause status delta is `metric_drift` whenever ANY of `(metric_id, metric_version)`, `ablation_operator_hash`, `subject_model`, `user_message_sha256` diverge between A's verdict and B's verdict — the two posteriors are NOT commensurable when the measurement changed.
+
+**Status delta enum:** `regressed | improved | unchanged | new | removed | metric_drift`.
+
+**Exit codes:** default exit `0` if diff ran (semantic success is not the default signal); `--exit-on-divergence` flips exit to `2` when any clause status differs A↔B; exit `1` on hard error.
 
 ---
 
 ## `freeze`
 
-Promote failure into regression suite.
+`freeze <verdict_id>` — promote a failing verdict into the regression suite.
+
+**v0.1 eligibility:** `observation ∈ {0.0, 0.5}` (FAILING side) AND `admissibility_state = 'admissible'` AND `oracle_source = 'mechanical'` (Tier-1 only; Tier-2 freezing deferred to v0.2 D22).
+
+**Idempotent:** duplicate freeze of same `(clause_id, axis, failing_input_sha256)` raises UNIQUE → exit 0 with `"already frozen"` stderr (not silent no-op).
+
+**Dry-run default** (consistent with `skill init`, `run ablation`, `calibrate`).
+
+**Discoverability:** Track D ablation report adds a `verdict_id` column for operator lookup.
+
+---
+
+## §18.1 Exit codes
+
+**Exit code convention (uniform across `run ablation`, `run evaluate-skill`, `diff skill`, `freeze`):**
+
+* `0` = operation completed; every clause reached a verdict
+* `1` = precondition fail (no completed ablation, incomplete prior run, aggregation error, validation refused for freeze, hard error for diff)
+* `2` = operation completed but ≥1 UNMEASURED clause (for `evaluate-skill` / `ablation`); `--exit-on-divergence` flag flipped to 2 (for `diff`)
+* Sub-reason discrimination lives in `report.sub_reason` field + stderr human-readable message (NOT in distinct exit codes — `UNMEASURED(underpowered)` vs `UNMEASURED(falsifying_case_stale)` both exit 2).
 
 ---
 
@@ -694,6 +915,7 @@ The system succeeds if it can:
 4. Preserve oracle and metric provenance.
 5. Surface confounded measurements instead of silently aggregating them.
 6. Produce reproducible clause-level evidence across skill versions.
+7. Refuse to report any clause as `PASSED` without a non-stale frozen falsifying case at the current metric_version (per §3.4 / §7a and §15.1).
 
 ---
 
