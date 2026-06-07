@@ -526,31 +526,40 @@ class TestEvaluateSkillAllPassed:
         assert report["report_schema_version"] == "1.1.0"  # bumped in C1 fix-loop per A60
 
     def test_json_output_to_stdout_warnings_to_stderr(self, tmp_path: Path) -> None:
-        """T8: --format=json output is byte-stable JSON even when a warning is logged.
+        """T8: --format=json stdout is clean JSON; warnings go to stderr (Click 8.2+ API).
 
-        Uses a patched aggregate_skill that injects a warning to verify that the
-        JSON report on stdout is not contaminated by log output. The CLI uses
-        sys.stdout.buffer.write (bytes-only) for JSON, so log messages go to stderr
-        via the logging handler — they must not appear in result.output.
+        Click 8.2+ separates stderr/stdout by default. Uses result.stderr direct assertion
+        (not a merged result.output check) to verify shell-pipeline safety: a warning
+        written to sys.stderr during aggregate_skill must NOT contaminate result.stdout.
+
+        Replaces the prior weaker approach (logging.getLogger(...).warning()) which did
+        not assert result.stderr — the test name promised stderr separation but only proved
+        happy-path JSON parses. This test uses sys.stderr.write directly so CliRunner
+        captures the write in result.stderr, providing a falsifiable assertion.
         """
-        import logging
+        import sys
         from functools import wraps
 
         from skill_harness.aggregation import aggregate_skill as real_aggregate_skill
-        from skill_harness.aggregation.report import SkillReport
+        from skill_harness.aggregation.report import SkillReport, to_json_bytes
 
         ev, rt = open_both(tmp_path)
         _seed_all_passed(ev, rt)
         ev.close()
         rt.close()
 
-        sentinel_warning = "test-sentinel-warning-t8-stderr-separation"
+        sentinel_warning = "test-sentinel-warning-t8-stderr-separation\n"
+        captured_report: list[SkillReport] = []
 
         @wraps(real_aggregate_skill)
         def aggregate_skill_with_warning(*args: object, **kwargs: object) -> SkillReport:
-            logging.getLogger("skill_harness.aggregation.engine").warning(sentinel_warning)
-            return real_aggregate_skill(*args, **kwargs)  # type: ignore[arg-type]
+            sys.stderr.write(sentinel_warning)
+            report = real_aggregate_skill(*args, **kwargs)  # type: ignore[arg-type]
+            captured_report.append(report)
+            return report
 
+        # Click 8.2+: CliRunner() separates stdout/stderr by default.
+        # result.stdout = stdout only; result.stderr = stderr only.
         runner = CliRunner()
         with patch("skill_harness.cli.main.aggregate_skill", new=aggregate_skill_with_warning):
             result = runner.invoke(
@@ -569,14 +578,18 @@ class TestEvaluateSkillAllPassed:
             )
 
         assert result.exit_code == 0, f"Expected exit 0:\n{result.output}"
-        # output must be valid JSON (no log contamination on stdout)
-        parsed = json.loads(result.output)
-        assert parsed["skill_id"] == SKILL_ID
-        assert "clauses" in parsed
-        # The JSON output must be byte-equal to to_json_bytes(report)
-        # We verify this by checking it parses without error and has all expected keys
-        assert "report_schema_version" in parsed
-        assert parsed["report_schema_version"] == "1.1.0"
+        # result.stderr must contain the injected warning (Click 8.2+ API)
+        assert sentinel_warning in result.stderr, (
+            f"Expected sentinel warning in result.stderr.\n"
+            f"stderr: {result.stderr!r}\nstdout: {result.stdout!r}"
+        )
+        # result.stdout must be byte-equal to to_json_bytes(report) — clean JSON only
+        assert len(captured_report) == 1, "aggregate_skill_with_warning must be called once"
+        expected_bytes = to_json_bytes(captured_report[0])
+        assert result.stdout.encode("utf-8") == expected_bytes, (
+            f"result.stdout must be byte-equal to to_json_bytes(report).\n"
+            f"stdout: {result.stdout!r}\nexpected: {expected_bytes!r}"
+        )
 
 
 # ---------------------------------------------------------------------------

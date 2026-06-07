@@ -218,6 +218,15 @@ class ClauseResult:
     'length_confounded' (QUAL-1, operator out of tolerance), or None.
     """
 
+    verdict_id: str | None = None
+    """UUID of the last verdict written for this clause (CF-E3-1).
+
+    Populated for clauses that reach the sampling loop and write at least one
+    verdict; ``None`` for genuinely verdictless paths (BLOCKER-1 tier2_uncalibrated,
+    QUAL-1 length_confounded). Enables ``freeze <verdict_id>`` to be discovered
+    directly from the ablation report output.
+    """
+
 
 # ---------------------------------------------------------------------------
 # BudgetAbortedError -- raised internally when budget is exceeded
@@ -694,6 +703,7 @@ class AblationRunner:
 
         stop_decision: StopDecision | None = None
         stopping_reason: StoppingReason | None = None
+        last_verdict_id: str | None = None  # CF-E3-1: track last written verdict UUID
 
         # Hard cap on comparisons ISSUED (not just admissible adds). Inadmissible
         # comparisons (below Null floor / confounded) do not advance acc.n, so the
@@ -861,7 +871,7 @@ class AblationRunner:
                 # SCHEMA-3 / BLOCKER-2.2: write a verdict only if one doesn't already exist
                 # for this comparison index (resume must not double-write verdicts).
                 if comparison_index not in existing_verdict_indexes:
-                    self._write_verdict_and_confounds(
+                    last_verdict_id = self._write_verdict_and_confounds(
                         run_id=run_id,
                         clause_id=clause_id,
                         clause_spec=clause_spec,
@@ -871,7 +881,7 @@ class AblationRunner:
                         admissibility_state=admissibility_state,
                         inadmissibility_reason=inadmissibility_reason,
                         confound_events=confound_events_out,
-                    )
+                    )  # CF-E3-1: capture last verdict_id written
                     existing_verdict_indexes.add(comparison_index)
 
                 # MAJOR-1 / C2 (Evidence model): only admissible observations move the
@@ -880,10 +890,14 @@ class AblationRunner:
                 # and observation — never freshly recomputed values — so the posterior
                 # matches the written audit trail (CLAUDE.md: admissibility recorded at
                 # write time, never recomputed at read time).
+                # CF-E3-1: also carry the persisted verdict_id so resumed runs populate
+                # ClauseResult.verdict_id (otherwise stays None when all verdicts are
+                # pre-existing and the write-branch is never entered).
                 if comparison_index in pre_existing_verdict_indexes:
                     persisted = self._load_persisted_verdict(run_id, clause_id, comparison_index)
                     if persisted is not None:
-                        acc_observation, acc_admissibility = persisted
+                        acc_observation, acc_admissibility, persisted_verdict_id = persisted
+                        last_verdict_id = persisted_verdict_id  # CF-E3-1: track from DB
                     else:
                         acc_observation, acc_admissibility = observation, admissibility_state
                 else:
@@ -922,6 +936,7 @@ class AblationRunner:
                 stop_decision=stop_decision,
                 samples_collected=acc.n,
                 length_confounded=False,
+                verdict_id=last_verdict_id,  # CF-E3-1: UUID of last written verdict
             ),
         )
 
@@ -1040,7 +1055,7 @@ class AblationRunner:
         admissibility_state: str,
         inadmissibility_reason: str | None,
         confound_events: list[ConfoundEvent],
-    ) -> None:
+    ) -> str:
         """Write verdict + confound events to evidence.db (A25 evidence-first).
 
         A46: primary_clause_id == ablated_clause_id -- enforced by caller assertion.
@@ -1051,6 +1066,10 @@ class AblationRunner:
         BLOCKER-2.1: ``full_sample_id``/``abl_sample_id`` MUST be real sample ids (the
         NOT NULL FK columns reference samples.sample_id with foreign_keys=ON). A blank id
         is a caller bug — fail loudly rather than substitute verdict_id.
+
+        :returns: The ``verdict_id`` UUID string for the written verdict (CF-E3-1).
+            Callers thread this into ``ClauseResult.verdict_id`` so the ablation report
+            renders the UUID and ``freeze <verdict_id>`` is discoverable.
         """
         now = self._now()
         verdict_id = str(uuid.uuid4())
@@ -1108,6 +1127,8 @@ class AblationRunner:
                     detected_at=now,
                 )
                 insert_confound_event(self._evidence, cev)
+
+        return verdict_id  # CF-E3-1: caller threads into ClauseResult.verdict_id
 
     # ------------------------------------------------------------------
     # Oracle scoring
@@ -1297,20 +1318,24 @@ class AblationRunner:
 
     def _load_persisted_verdict(
         self, run_id: str, clause_id: str, comparison_index: int
-    ) -> tuple[float, str] | None:
-        """Load persisted (observation, admissibility_state) for a comparison index.
+    ) -> tuple[float, str, str] | None:
+        """Load persisted (observation, admissibility_state, verdict_id) for a comparison.
 
         C2 fix: on resume, comparison indexes that already have a verdict must have
         their posterior contribution rebuilt from the PERSISTED observation and
         admissibility_state — never recomputed from fresh confound/null-floor state
         (CLAUDE.md Evidence model: admissibility recorded at write time, never recomputed).
 
+        CF-E3-1: also returns verdict_id so the resume path can populate
+        ClauseResult.verdict_id with the last written verdict UUID.
+
         Joins oracle_verdicts -> samples via sample_a_id to map Full sample_index ->
-        verdict. Returns (observation, admissibility_state) or None if not found.
+        verdict. Returns (observation, admissibility_state, verdict_id) or None if
+        not found.
         """
         cur = self._evidence.execute(
             """
-            SELECT v.observation, v.admissibility_state
+            SELECT v.observation, v.admissibility_state, v.verdict_id
             FROM oracle_verdicts v
             JOIN samples s ON s.sample_id = v.sample_a_id
             WHERE v.run_id = ? AND v.clause_id = ? AND s.condition = 'full'
@@ -1322,7 +1347,7 @@ class AblationRunner:
         row = cur.fetchone()
         if row is None:
             return None
-        return float(row[0]), str(row[1])
+        return float(row[0]), str(row[1]), str(row[2])
 
     def _existing_verdict_keys(self, run_id: str, clause_id: str) -> set[int]:
         """Return the set of comparison sample_indexes already recorded as verdicts.

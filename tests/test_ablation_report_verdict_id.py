@@ -1,17 +1,13 @@
 """Tests that the ablation report renders a verdict_id column (Track E.3, A56).
 
-IMPORTANT — scope and limitations of this test module (T7 from ai-slop fix-loop):
-These tests assert RENDERING SHAPE, not real-run behavior.
+CF-E3-1 (Phase 3 carry-forward, now complete): verdict_id is threaded through
+ClauseResult (ablation/runner.py). Real ablation runs render the UUID in the
+verdict_id column, making `freeze <verdict_id>` discoverable from the report.
 
-Real ClauseResult (ablation/runner.py) has NO verdict_id field — fields are:
-  clause_id, stopping_reason, stop_decision, samples_collected, length_confounded,
-  unmeasured_reason.
-The existing tests use MagicMock with .verdict_id manually set, which proves only
-"if the mock has the attribute, _render includes it." Real ablation runs render
-"—" via the getattr(result, 'verdict_id', None) or '—' fallback.
-
-Threading verdict_id through ClauseResult is CF-E3-1 (Phase 3 follow-up, NOT in this
-module's scope). See docs/dispatch/track-e-ai-slop-fix-brief.md § T7 for details.
+Mock-based tests (TestAblationReportVerdictIdColumn) verify rendering shape.
+Real-ClauseResult tests (TestRealClauseResultRendersVerdictId) verify that the
+field is populated and rendered for sampled clauses, and None/'—' for verdictless
+paths (BLOCKER-1 tier2_uncalibrated, QUAL-1 length_confounded).
 """
 
 from __future__ import annotations
@@ -184,19 +180,17 @@ class TestAblationReportVerdictIdColumn:
 
 
 # ---------------------------------------------------------------------------
-# T7: real ClauseResult (no verdict_id field) renders "—" for verdict_id column
+# CF-E3-1: real ClauseResult WITH verdict_id renders the UUID (not "—")
 # ---------------------------------------------------------------------------
 
 
-class TestRealClauseResultRendersPlaceholder:
-    def test_real_clause_result_renders_dash_for_verdict_id(self) -> None:
-        """T7: a REAL ClauseResult (not MagicMock) has no verdict_id attribute.
+class TestRealClauseResultRendersVerdictId:
+    def test_real_clause_result_renders_verdict_id_uuid(self) -> None:
+        """CF-E3-1: a real ClauseResult with verdict_id renders the UUID in the report.
 
-        The ablation report renderer uses getattr(result, 'verdict_id', None) or '—'
-        as a fallback. This test proves real ablation runs render '—' for the
-        verdict_id column — the existing mock-based tests only prove the mock works.
-
-        Threading verdict_id through ClauseResult is CF-E3-1 (Phase 3 follow-up).
+        After CF-E3-1 threads verdict_id through ClauseResult, real ablation runs
+        should render the UUID (not "—") in the verdict_id column, making
+        `freeze <verdict_id>` discoverable from the ablation report output.
         """
         real_stop_decision = StopDecision(
             should_stop=True,
@@ -207,18 +201,19 @@ class TestRealClauseResultRendersPlaceholder:
             n_samples=11,
             w_accumulator=9.0,
         )
+        expected_verdict_id = "cf-e3-1-real-uuid-12345678"
         real_result = ClauseResult(
-            clause_id="real-clause-001",
+            clause_id="real-clause-cf-e3-1",
             stopping_reason=StoppingReason.PASSED,
             stop_decision=real_stop_decision,
             samples_collected=11,
             length_confounded=False,
+            verdict_id=expected_verdict_id,
         )
-        # Confirm no verdict_id on a real ClauseResult
-        assert not hasattr(real_result, "verdict_id"), (
-            "ClauseResult gained a verdict_id field — CF-E3-1 was implemented. "
-            "Update this test to verify the real UUID is rendered instead."
+        assert hasattr(real_result, "verdict_id"), (
+            "ClauseResult must have a verdict_id field after CF-E3-1 is implemented."
         )
+        assert real_result.verdict_id == expected_verdict_id
 
         with patch(
             "skill_harness.cli.main._execute_ablation_run",
@@ -233,8 +228,50 @@ class TestRealClauseResultRendersPlaceholder:
             )
 
         assert result.exit_code == 0, f"Expected exit 0:\n{result.output}"
-        # Real ClauseResult has no verdict_id → fallback "—" must appear
-        assert "—" in result.output, (
-            f"Expected '—' placeholder for verdict_id in ablation report for real ClauseResult.\n"
+        assert expected_verdict_id in result.output, (
+            f"verdict_id {expected_verdict_id!r} must appear in ablation report.\n"
             f"Output:\n{result.output}"
+        )
+
+    def test_real_clause_result_verdictless_renders_dash(self) -> None:
+        """CF-E3-1: a real ClauseResult with verdict_id=None renders '—'.
+
+        Genuinely verdictless clauses (UNMEASURED before sampling: tier2_uncalibrated,
+        length_confounded) set verdict_id=None. The renderer must still show '—'.
+        """
+        real_stop_decision = StopDecision(
+            should_stop=True,
+            stopping_reason=StoppingReason.UNDERPOWERED_NMAX,
+            posterior_alpha=1.0,
+            posterior_beta=1.0,
+            p_win_rate_exceeds_threshold=0.0,
+            n_samples=0,
+            w_accumulator=0.0,
+        )
+        real_result = ClauseResult(
+            clause_id="real-clause-unmeasured",
+            stopping_reason=StoppingReason.UNDERPOWERED_NMAX,
+            stop_decision=real_stop_decision,
+            samples_collected=0,
+            length_confounded=False,
+            unmeasured_reason="tier2_uncalibrated",
+            verdict_id=None,
+        )
+        assert real_result.verdict_id is None
+
+        with patch(
+            "skill_harness.cli.main._execute_ablation_run",
+            return_value=[real_result],
+        ):
+            result = _invoke(
+                "run",
+                "ablation",
+                "skill-test",
+                "--execute",
+                env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
+            )
+
+        assert result.exit_code == 2, f"Expected exit 2 (UNMEASURED):\n{result.output}"
+        assert "—" in result.output, (
+            f"Expected '—' placeholder for None verdict_id.\nOutput:\n{result.output}"
         )
