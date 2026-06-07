@@ -523,7 +523,8 @@ class TestEvaluateSkillAllPassed:
         report = json.loads(result.output)
         assert report["skill_id"] == SKILL_ID
         assert "clauses" in report
-        assert report["report_schema_version"] == "1.1.0"  # bumped in C1 fix-loop per A60
+        # 1.1.0 bumped in C1 A60; 1.2.0 bumped in M3 (coverage_warnings)
+        assert report["report_schema_version"] == "1.2.0"
 
     def test_json_output_to_stdout_warnings_to_stderr(self, tmp_path: Path) -> None:
         """T8: --format=json stdout is clean JSON; warnings go to stderr (Click 8.2+ API).

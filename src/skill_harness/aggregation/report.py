@@ -1,6 +1,8 @@
 """SkillReport dataclass + JSON serialisation (A60).
 
-Schema version: "1.0.0" (semver). v0.1 lifetime is 1.x additive-only.
+Schema version: "1.2.0" (semver). v0.1 lifetime is 1.x additive-only.
+  1.1.0 — A55 comparability axes (subject_model, user_message_sha256).
+  1.2.0 — coverage_warnings field on VectorSummary (M3 pre-tag fix).
 Any breaking change (field removal, type change, rename) requires:
   1. Major version bump.
   2. A ``diff skill`` consumer compatibility check (E.3 territory).
@@ -21,10 +23,10 @@ Caller responsibilities:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-REPORT_SCHEMA_VERSION = "1.1.0"
+REPORT_SCHEMA_VERSION = "1.2.0"
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,8 @@ class VectorSummary:
     unmeasured: int
     unmeasured_breakdown: dict[str, int]  # sub_reason -> count
     coverage: float  # tested_clauses / total_clauses
+    # per-root-cause UNMEASURED explanations (M3 pre-tag fix)
+    coverage_warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -132,6 +136,7 @@ def _vector_to_dict(vector: VectorSummary) -> dict[str, object]:
         "unmeasured": vector.unmeasured,
         "unmeasured_breakdown": dict(vector.unmeasured_breakdown),
         "coverage": vector.coverage,
+        "coverage_warnings": list(vector.coverage_warnings),
     }
 
 
@@ -225,6 +230,7 @@ def skill_report_from_dict(d: dict[str, Any]) -> SkillReport:
         unmeasured=int(vec["unmeasured"]),
         unmeasured_breakdown=dict(vec["unmeasured_breakdown"]),
         coverage=float(vec["coverage"]),
+        coverage_warnings=list(vec.get("coverage_warnings", [])),
     )
     contrib: dict[str, Any] = d["contribution"]
     delta = contrib["full_vs_null_delta"]

@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import sqlite3
 from collections import defaultdict
 from sqlite3 import Connection
@@ -445,8 +446,25 @@ def aggregate_skill(
     )
 
     # ------------------------------------------------------------------
-    # VectorSummary (§16)
+    # VectorSummary (§16) with coverage_warnings (M3)
     # ------------------------------------------------------------------
+    coverage_warnings: list[str] = []
+    n_no_scorer = unmeasured_breakdown.get("no_data", 0)
+    n_no_fc = unmeasured_breakdown.get("falsifying_case_missing", 0)
+    n_stale = unmeasured_breakdown.get("falsifying_case_stale", 0)
+    if n_no_scorer:
+        coverage_warnings.append(
+            f"{n_no_scorer} clause(s) UNMEASURED: no registered Tier-1 scorer"
+            " or no admissible verdicts"
+        )
+    if n_no_fc:
+        coverage_warnings.append(
+            f"{n_no_fc} clause(s) UNMEASURED: no falsifying case at current metric version"
+        )
+    if n_stale:
+        coverage_warnings.append(
+            f"{n_stale} clause(s) UNMEASURED: falsifying case stale (metric version changed)"
+        )
     vector = VectorSummary(
         passed=status_counts["PASSED"],
         failed=status_counts["FAILED"],
@@ -454,6 +472,7 @@ def aggregate_skill(
         unmeasured=status_counts["UNMEASURED"],
         unmeasured_breakdown=dict(unmeasured_breakdown),
         coverage=coverage,
+        coverage_warnings=coverage_warnings,
     )
 
     # ------------------------------------------------------------------
@@ -464,6 +483,7 @@ def aggregate_skill(
         prov = dict(fit_result.aggregation_provenance)
 
     prov["family_size_used"] = family_size
+    prov["pythonhashseed"] = int(os.environ.get("PYTHONHASHSEED", -1))
     agg_method = fit_result.aggregation_method if fit_result is not None else "unpooled"
 
     return SkillReport(

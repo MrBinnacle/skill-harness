@@ -638,7 +638,7 @@ class TestHealthyAggregation:
             ev.close()
             rt.close()
 
-    def test_report_schema_version_is_1_0_0(self, tmp_path: Path) -> None:
+    def test_report_schema_version_is_current(self, tmp_path: Path) -> None:
         ev, rt = open_both(tmp_path)
         try:
             _seed_healthy_evidence(ev, rt)
@@ -649,7 +649,9 @@ class TestHealthyAggregation:
                 harness_version=_HARNESS_VER,
                 generated_at_utc=_GEN_AT,
             )
-            assert report.report_schema_version == "1.1.0"  # bumped in C1 fix-loop per A60
+            # 1.1.0 bumped in C1 fix-loop per A60 (A55 axes)
+            # 1.2.0 bumped in M3 pre-tag fix (coverage_warnings)
+            assert report.report_schema_version == "1.2.0"
         finally:
             ev.close()
             rt.close()
@@ -790,6 +792,33 @@ class TestHealthyAggregation:
             )
             assert "family_size_used" in report.aggregation_provenance
             assert report.aggregation_provenance["family_size_used"] == 3
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_provenance_has_pythonhashseed_for_all_methods(self, tmp_path: Path) -> None:
+        """aggregation_provenance always contains pythonhashseed (STAT-6 / PRD §16.1)."""
+        ev, rt = open_both(tmp_path)
+        try:
+            _seed_healthy_evidence(ev, rt)
+            report = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+            assert "pythonhashseed" in report.aggregation_provenance
+            # Value is an int (may be -1 if PYTHONHASHSEED not set, or 0..2**32-1 if set)
+            assert isinstance(report.aggregation_provenance["pythonhashseed"], int)
+            # Verify it round-trips through JSON serialisation
+            from skill_harness.aggregation.report import to_json_bytes
+
+            raw = to_json_bytes(report)
+            import json as _json
+
+            d = _json.loads(raw)
+            assert "pythonhashseed" in d["aggregation_provenance"]
         finally:
             ev.close()
             rt.close()

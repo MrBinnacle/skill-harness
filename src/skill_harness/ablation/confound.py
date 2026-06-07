@@ -42,6 +42,7 @@ AXIS_VERBOSITY: Final[str] = "verbosity"
 AXIS_HEDGE_INDEX: Final[str] = "hedge_index"
 AXIS_STRUCTURE_SCORE: Final[str] = "structure_score"
 AXIS_COMPLIANCE_PROXY: Final[str] = "compliance_proxy"
+AXIS_CITATION_PRESENCE_PER_FLAG: Final[str] = "citation_presence_per_flag"
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -92,6 +93,9 @@ def get_default_tier1_scorers() -> dict[str, MetricFn]:
     Only imports when called (avoids import-time side effects in tests).
     These are the Tier-1 metrics available per A14/A33.
     """
+    from skill_harness.oracles.tier1.citation_presence_per_flag import (
+        compute_citation_presence_per_flag,
+    )
     from skill_harness.oracles.tier1.compliance_proxy import compute_compliance_proxy
     from skill_harness.oracles.tier1.hedge_index import compute_hedge_index
     from skill_harness.oracles.tier1.structure_score import compute_structure_score
@@ -102,6 +106,7 @@ def get_default_tier1_scorers() -> dict[str, MetricFn]:
         AXIS_HEDGE_INDEX: compute_hedge_index,
         AXIS_STRUCTURE_SCORE: compute_structure_score,
         AXIS_COMPLIANCE_PROXY: compute_compliance_proxy,
+        AXIS_CITATION_PRESENCE_PER_FLAG: compute_citation_presence_per_flag,
     }
 
 

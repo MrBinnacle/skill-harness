@@ -70,8 +70,9 @@ skill-harness skill clauses <skill-id>
 skill-harness run ablation <skill-id>                # defaults to --dry-run (cost projection)
 skill-harness run ablation <skill-id> --execute      # real API calls
 skill-harness run evaluate-skill <skill-id>
-skill-harness diff <skill-a> <skill-b>
+skill-harness diff skill <skill-id-a> <skill-id-b>
 skill-harness freeze <verdict-id>
+skill-harness calibrate <judge_id> <axis> <pair_set.jsonl>
 ```
 
 ## Architecture

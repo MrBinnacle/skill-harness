@@ -197,12 +197,6 @@ class ConditionRenderer:
         other_clauses = [c for i, c in enumerate(clauses) if i != k]
         prefix_text = self._format_clauses(other_clauses)
 
-        prefix_block: dict[str, Any] = {
-            "type": "text",
-            "text": prefix_text,
-            "cache_control": {"type": "ephemeral"},
-        }
-
         # Ablated-clause block (last — maximizes shared prefix per A43).
         # INVARIANT (A39): the block text contains ONLY the placeholder — never the
         # ABLATED_CLAUSE_MARKER. Injecting the marker adds tokens to the ablated side
@@ -213,7 +207,20 @@ class ConditionRenderer:
             "text": placeholder,
         }
 
-        blocks = [base_block, prefix_block, ablated_block]
+        if prefix_text:
+            # Non-empty prefix: include the prefix block with cache marker so the shared
+            # prefix [base] + [other clauses] is cacheable across Full and Ablated_k.
+            prefix_block: dict[str, Any] = {
+                "type": "text",
+                "text": prefix_text,
+                "cache_control": {"type": "ephemeral"},
+            }
+            blocks = [base_block, prefix_block, ablated_block]
+        else:
+            # Empty prefix (e.g. single-clause skill or single-clause --clause run):
+            # omit the prefix block entirely — an empty text block with cache_control
+            # is rejected by the API (400 "cache_control cannot be set for empty text blocks").
+            blocks = [base_block, ablated_block]
 
         # system_text is the faithful concatenation of block texts — the wire prompt
         # the model receives. This equals the Full condition's system_text with clause k

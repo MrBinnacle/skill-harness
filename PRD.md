@@ -697,7 +697,11 @@ Never as a scalar score.
 
 Reports are emitted in two formats via `--format=rich|json` (default `rich` for operator terminal use).
 
-**JSON output** ships with mandatory top-level `report_schema_version "1.0.0"` (semver). v0.1 lifetime is `1.x` additive-only: additions = minor bump; removals/renames/type-changes = major bump (breaks `diff skill` consumers).
+**JSON output** ships with mandatory top-level `report_schema_version` (semver). v0.1 lifetime is `1.x` additive-only: additions = minor bump; removals/renames/type-changes = major bump (breaks `diff skill` consumers).
+
+**Wire-format version by command (independent schemas):**
+- `run evaluate-skill` report: `"1.2.0"` — initial `"1.0.0"`, bumped to `"1.1.0"` for A55 comparability axes (`subject_model`, `user_message_sha256`), bumped to `"1.2.0"` for `coverage_warnings` field on `vector` (M3 pre-tag fix).
+- `diff skill` report: `"1.0.0"` — independent schema; additive bumps track only diff-report-specific field changes.
 
 **Required top-level keys:**
 `report_schema_version, skill_id, generated_at_utc, harness_version, aggregation_method ∈ {ebmom_hierarchical, bh_fdr_fallback, unpooled}, aggregation_provenance, clauses[], vector (Passed/Failed/Confounded/Unmeasured/Coverage/Contribution), coverage, contribution`.
@@ -891,6 +895,18 @@ May optionally mint a `runs.run_kind='evaluate_skill'` envelope as audit-trail m
 **Dry-run default** (consistent with `skill init`, `run ablation`, `calibrate`).
 
 **Discoverability:** Track D ablation report adds a `verdict_id` column for operator lookup.
+
+---
+
+## `calibrate`
+
+`calibrate <judge_id> <axis> <pair_set.jsonl>` — register a calibrated `(judge_id, axis)` record from a JSONL pairwise calibration set.
+
+**Dry-run default** (consistent with `skill init`, `run ablation`, `freeze`). `--execute` required to write calibration record.
+
+**Cost discipline:** `--max-usd` and `--daily-cap` apply. Projection uses a distinct formula from ablation (no per-pair cache; only system+schema prefix cacheable). Dry-run output includes `est_SE_pairwise_agreement` and `est_CI_95_width`.
+
+**Minimum calibration set:** 50 pairs per `(judge_id, axis)` (A7). Admission gate: `pairwise_agreement >= 0.7`.
 
 ---
 

@@ -143,6 +143,21 @@ def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
         )
 
     _console.print(table)
+
+    # M2: warn about Tier-1 axes with no registered scorer (TEST-ARCH-2)
+    try:
+        from skill_harness.ablation.confound import get_default_tier1_scorers
+
+        scorers = get_default_tier1_scorers()
+        for clause in result.clauses:
+            if clause.oracle_tier == 1 and clause.axis not in scorers:
+                _console.print(
+                    f"[yellow][!] axis {clause.axis!r} has no registered Tier-1 scorer;"
+                    f" will return UNMEASURED at run ablation.[/]"
+                )
+    except Exception:  # noqa: S110
+        pass  # never crash skill init on a warning
+
     if not persisted:
         _console.print("[yellow]Dry-run: no data written. Use --execute to persist.[/]")
 
@@ -152,7 +167,11 @@ def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
 def skill_clauses(skill_id: str) -> None:
     """Inspect the extracted clause inventory for a skill."""
     _ = skill_id
-    raise click.ClickException("not implemented — see PRD §7")
+    _console.print(
+        "[yellow]skill clauses: not yet implemented in v0.1."
+        " Query evidence.db `clauses` table directly. v0.2.[/]"
+    )
+    return
 
 
 @cli.group()
@@ -165,6 +184,13 @@ def run() -> None:
 @click.option("--clause", "clause_id", help="Clause to ablate (default: all).")
 @click.option("--execute", is_flag=True, help="Execute live ablation run (default is dry-run).")
 @click.option(
+    "--user-message",
+    "user_message",
+    default="Review this code for AI-slop patterns and produce a structured flag report.",
+    show_default=True,
+    help="Task prompt sent to the subject model for every condition sample.",
+)
+@click.option(
     "--max-usd",
     type=float,
     default=5.0,
@@ -176,7 +202,11 @@ def run() -> None:
     type=float,
     default=20.0,
     show_default=True,
-    help="Trailing-24h daily spend cap in USD (A42).",
+    help=(
+        "Trailing-24h daily spend cap in USD per runtime.db (A42)."
+        " NOTE: scope is per-runtime.db; parallel worktrees with separate"
+        " runtime DBs do NOT share the cap."
+    ),
 )
 @click.option(
     "--resume",
@@ -219,6 +249,7 @@ def run_ablation(
     skill_id: str,
     clause_id: str | None,
     execute: bool,
+    user_message: str,
     max_usd: float,
     daily_cap: float,
     resume_run_id: str | None,
@@ -264,6 +295,7 @@ def run_ablation(
     _cmd_execute(
         skill_id=skill_id,
         clause_id=clause_id,
+        user_message=user_message,
         max_usd=max_usd,
         daily_cap=daily_cap,
         resume_run_id=resume_run_id,
@@ -342,6 +374,8 @@ def _cmd_dry_run(
         f"\n  Calls per clause: {min_calls_per_clause} (min) … {max_calls_per_clause} (max)"
         f"\n  Conditions per clause: Full / Ablated_k / Null"
         f"\n  Per-run cap: ${max_usd:.2f}  ·  Daily cap: ${daily_cap:.2f}"
+        "\n  Estimated cache reuse: ~70% on K>=5 skills"
+        " (prefix shared; ablated clause renders last per A13)."
     )
 
     # Per-clause table — columns per D.3 spec
@@ -585,6 +619,7 @@ def _find_incomplete_run_for_execute(
 def _execute_ablation_run(
     skill_id: str,
     clause_id: str | None,
+    user_message: str,
     max_usd: float,
     resume_run_id: str | None,
     evidence_db: Path,
@@ -637,7 +672,7 @@ def _execute_ablation_run(
             results = runner.run_ablation(
                 skill_id=skill_id,
                 clauses=clauses,
-                user_message="",  # v0.1: user_message from CLI arg in next iteration
+                user_message=user_message,
                 max_usd=max_usd,
             )
 
@@ -676,6 +711,9 @@ def _load_clauses_from_db(
             clause_index=row[2],
             axis=row[3],
             oracle_tier=row[4],
+            # Tier-1 clauses require metric_id IS NOT NULL (schema CHECK constraint).
+            # Use the axis name as metric_id — the axis IS the registered scorer key.
+            metric_id=row[3] if row[4] == 1 else None,
         )
         for row in rows
     ]
@@ -721,6 +759,7 @@ def _check_daily_cap(runtime_db: Path, daily_cap: float) -> None:
 def _cmd_execute(
     skill_id: str,
     clause_id: str | None,
+    user_message: str,
     max_usd: float,
     daily_cap: float,
     resume_run_id: str | None,
@@ -785,6 +824,7 @@ def _cmd_execute(
         clause_results = _execute_ablation_run(
             skill_id=skill_id,
             clause_id=clause_id,
+            user_message=user_message,
             max_usd=max_usd,
             daily_cap=daily_cap,
             resume_run_id=resume_run_id,
@@ -920,8 +960,8 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
 
     if has_any_unmeasured:
         _console.print(
-            "\n[yellow]⚠ One or more clauses are UNMEASURED.[/]"
-            "\n  UNMEASURED ≠ FAILED. No admissible evidence → no claim."
+            "\n[yellow][!] One or more clauses are UNMEASURED.[/]"
+            "\n  UNMEASURED != FAILED. No admissible evidence -> no claim."
             "\n  See subreason for each UNMEASURED clause above."
         )
 
@@ -1081,6 +1121,11 @@ def run_evaluate_skill(
                 raise click.ClickException(
                     f"No completed ablation runs found for skill {skill_id!r}. "
                     f"Run 'skill-harness run ablation {skill_id} --execute' first."
+                ) from exc
+            elif exc.code == "no_clauses":
+                raise click.ClickException(
+                    f"No clauses found for skill {skill_id!r}. "
+                    f"Run 'skill-harness skill init <artifact>' first."
                 ) from exc
             raise click.ClickException(str(exc)) from exc
 
@@ -1655,6 +1700,15 @@ def _render_evaluate_skill_report(report: Any, vacuity_count: int = 0) -> None:
 
     _console.print(clause_table)
 
+    # M5: bridge note for UNMEASURED(no_data) → ablation sub_reason mapping
+    has_no_data = any(c.sub_reason == "no_data" for c in report.clauses)
+    if has_no_data:
+        _console.print(
+            "[dim]Note: UNMEASURED(no_data) at evaluate-skill maps to"
+            " UNMEASURED(tier2_uncalibrated) at ablation time when oracle gate fires"
+            " before verdict write.[/]"
+        )
+
     # A50 footer
     _console.print(
         "\n[bold]Contribution (A50):[/] single-clause LOO; lower-bound under redundancy."
@@ -1748,8 +1802,9 @@ def _render_diff_report(diff_report: Any) -> None:
     default=20.0,
     show_default=True,
     help=(
-        "Per-day rolling cost cap in USD. Hard ceiling at $100 "
-        "(override via SKILL_HARNESS_DAILY_CAP_OVERRIDE=1). (A36)"
+        "Trailing-24h daily spend cap in USD per runtime.db (A36). Hard ceiling at $100 "
+        "(override via SKILL_HARNESS_DAILY_CAP_OVERRIDE=1). NOTE: scope is per-runtime.db; "
+        "parallel worktrees with separate runtime DBs do NOT share the cap."
     ),
 )
 @click.option(

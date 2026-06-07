@@ -53,15 +53,16 @@ release notes to be updated at tag-cut time.
 
 ### CLI surface (PRD §18)
 
-All six commands from PRD §18 are implemented:
+Six commands implemented; `skill clauses` is a v0.2 placeholder:
 
 ```
 skill init             — import a skill artifact and extract clauses
-skill clauses          — inspect clause inventory
+skill clauses          — v0.2 placeholder; query evidence.db clauses table directly
 run ablation           — execute single-clause ablation (dry-run default; --execute required)
 run evaluate-skill     — full suite with sequential stopping
 diff skill             — compare skill revisions; --exit-on-divergence exits 2 on regression
 freeze                 — promote a failure into the regression suite
+calibrate              — register a calibrated (judge_id, axis) record from a JSONL pairwise set
 ```
 
 ### Statistical model
@@ -79,13 +80,17 @@ evidence tables, SHA-256 tamper-evidence migration ledger, per-DB synchronous
 pragma split, `runs.completed_at` single-shot trigger, `schema_migrations` append-only
 triggers on both DBs.
 
-### JSON report wire format v1.0.0 (A60)
+### JSON report wire format (A60)
+
+Two independent schemas ship in v0.1:
+- **`run evaluate-skill` report: `"1.2.0"`** — `"1.0.0"` initial; `"1.1.0"` A55 comparability axes (`subject_model`, `user_message_sha256`); `"1.2.0"` `coverage_warnings` field on `vector` (M3 pre-tag fix).
+- **`diff skill` report: `"1.0.0"`** — independent schema; additive bumps track only diff-report-specific field changes.
 
 Per-clause fields: `clause_id`, `status`, `sub_reason`, `posterior_mean`,
 `credible_interval_95`, `p_win_gt_threshold`, `frozen_case_count_at_current_metric_version`,
 `metric_id_per_axis`, `metric_version_per_axis`, `ablation_operator_hash`,
-`run_ids_aggregated`. Top-level: `report_schema_version = "1.1.0"`, `aggregation_provenance`
-block (method + family size + K clauses). Output is sorted-key, compact-separator JSON
+`run_ids_aggregated`. Top-level: `report_schema_version`, `aggregation_provenance`
+block (method + family size + K clauses + `pythonhashseed`). Output is sorted-key, compact-separator JSON
 (byte-stable for identical evidence).
 
 ---
@@ -152,6 +157,15 @@ matches local gate intent.
 `tie_count`, `win_count`, and `loss_count` are not in the §16.1 per-clause wire
 format. The §14.3 drop-ties flexibility is aspirational for v0.1 (no calibrated
 Tier-2 judge configured). v0.2 adds raw observation counts.
+
+### `--daily-cap` scope is per-runtime.db (RELIABILITY-7 / COST-1)
+
+The `--daily-cap` ceiling is enforced per `runtime.db` file. Running `run ablation`
+or `calibrate` from parallel worktrees with separate `runtime.db` files does NOT
+share the cap — each worktree tracks its own trailing-24h spend independently.
+
+**Workaround**: use a single shared `runtime.db` path via `--runtime-db <shared-path>`
+across all worktrees, or manually aggregate spend before starting cross-worktree sessions.
 
 ---
 

@@ -172,8 +172,10 @@ def test_skill_init_missing_file_exits_nonzero(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_skill_clauses_still_raises_not_implemented() -> None:
+def test_skill_clauses_placeholder_message() -> None:
+    """MN3: skill clauses emits a v0.2 placeholder message with exit 0 (not a crash)."""
     runner = CliRunner()
     result = runner.invoke(cli, ["skill", "clauses", "some-skill-id"])
-    assert result.exit_code != 0
-    assert "not implemented" in result.output.lower()
+    assert result.exit_code == 0
+    assert "not yet implemented" in result.output.lower()
+    assert "v0.2" in result.output

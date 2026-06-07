@@ -18,6 +18,8 @@ Available metrics (registered on import of their respective modules):
   verbosity.py       — Token count via tiktoken cl100k_base (offline).
   structure_score.py — Heading + paragraph-break density.
   compliance_proxy.py — Directive-keyword density (honest heuristic).
+  citation_presence_per_flag.py — Flag-citation ratio for sentinel-style
+                                   review outputs (ai-slop-sentinel clause 0).
 """
 
 __all__: list[str] = []

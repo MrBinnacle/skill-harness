@@ -53,6 +53,14 @@ should beat B on the axis
   * min_reproducibility: fraction of draws that should reproduce the direction (0.0-1.0)
 - clause_index must be 0-based and reflect authoring order.
 - Do not invent clauses not present in the document.
+
+Registered Tier-1 mechanical scorer names (PREFER these exact strings for axis when the \
+clause semantics match — an exact match enables automatic mechanical measurement):
+  verbosity                     — output token/word count
+  hedge_index                   — proportion of hedge words (maybe, perhaps, could, etc.)
+  structure_score               — heading and paragraph-break density
+  compliance_proxy              — directive-keyword density
+  citation_presence_per_flag    — fraction of flagged items that include a citation marker
 """
 
 # JSON Schema for the extract_clauses tool input.
