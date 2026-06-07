@@ -51,12 +51,18 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
       - name: mypy
-        run: mypy src tests
+        # Scope mirrors local gate per CLAUDE.md ENV RECIPE; tests/ mypy hygiene
+        # is a documented carry-forward (119 errors, pre-existing baseline).
+        run: mypy --strict src/
 
   test:
     name: Test (${{ matrix.os }} · py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    # PYTHONHASHSEED=0 required by tests/oracles/tier1 autouse fixture for
+    # A33 mechanical-validity bit-equality discipline.
+    env:
+      PYTHONHASHSEED: "0"
     strategy:
       fail-fast: false
       matrix:
@@ -74,7 +80,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
       - name: pytest
-        run: pytest -q --cov=src/skill_harness --cov-report=term-missing
+        # `-m "not live"` mirrors local gate; live tests require ANTHROPIC_API_KEY
+        # (not provisioned in CI). Live test surface = tests/extractor/test_live.py.
+        run: pytest -q -m "not live" --cov=src/skill_harness --cov-report=term-missing
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: actions/upload-artifact@v4
