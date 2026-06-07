@@ -18,6 +18,7 @@ import json
 import sqlite3
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from click.testing import CliRunner
 
@@ -457,4 +458,87 @@ class TestFreezeEligibilityRefusals:
 
         assert result.exit_code == 1, (
             f"Expected exit 1 for missing verdict_id, got {result.exit_code}:\n{result.output}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: I4 — dry-run opens evidence DB read-only (least-privilege)
+# ---------------------------------------------------------------------------
+
+
+class TestFreezeDryRunOpensReadonly:
+    """I4: freeze dry-run must open evidence DB read-only, not writable.
+
+    Strategy: mock-based assertion (Windows chmod does not reliably deny
+    sqlite3 write access on NTFS). Patches open_evidence (writable) to raise
+    PermissionError — dry-run must succeed (fixed code uses open_evidence_readonly);
+    --execute must use the writable variant.
+    """
+
+    def test_dry_run_succeeds_when_writable_open_would_raise(self, tmp_path: Path) -> None:
+        """I4: freeze dry-run must NOT call open_evidence (writable).
+
+        If dry-run calls open_evidence and it raises PermissionError, the
+        command exits non-zero (RED on current code). After the fix, dry-run
+        calls open_evidence_readonly and the PermissionError is never triggered.
+        """
+        ev, rt = open_both(tmp_path)
+        _seed_freezable_verdict(ev)
+        ev.close()
+        rt.close()
+
+        # Patch open_evidence at the migrations module level.
+        # Local imports inside freeze command draw from this module.
+        # Current code (pre-fix): calls open_evidence → PermissionError → exit 1.
+        # Fixed code: calls open_evidence_readonly → succeeds → exit 0.
+        with patch(
+            "skill_harness.storage.migrations.open_evidence",
+            side_effect=PermissionError("simulated: DB is read-only"),
+        ):
+            result = _invoke(
+                "freeze",
+                _VERDICT_ID,
+                "--evidence-db",
+                str(tmp_path / "evidence.db"),
+                "--runtime-db",
+                str(tmp_path / "runtime.db"),
+            )
+
+        assert result.exit_code == 0, (
+            "freeze dry-run must succeed even when open_evidence (writable) raises; "
+            "fixed code should call open_evidence_readonly instead. "
+            f"Got exit_code={result.exit_code}:\n{result.output}"
+        )
+
+    def test_execute_calls_open_evidence_writable(self, tmp_path: Path) -> None:
+        """I4 complement: freeze --execute must call open_evidence (writable)."""
+        ev, rt = open_both(tmp_path)
+        _seed_freezable_verdict(ev)
+        ev.close()
+        rt.close()
+
+        writable_calls: list[Any] = []
+        from skill_harness.storage.migrations import open_evidence as _real_oe
+
+        def tracking_open_evidence(path: Any) -> Any:
+            writable_calls.append(path)
+            return _real_oe(path)
+
+        with patch("skill_harness.storage.migrations.open_evidence", tracking_open_evidence):
+            result = _invoke(
+                "freeze",
+                _VERDICT_ID,
+                "--execute",
+                "--evidence-db",
+                str(tmp_path / "evidence.db"),
+                "--runtime-db",
+                str(tmp_path / "runtime.db"),
+            )
+
+        assert result.exit_code == 0, (
+            f"Execute must exit 0, got {result.exit_code}:\n{result.output}"
+        )
+        assert len(writable_calls) >= 1, (
+            "freeze --execute must call open_evidence (writable) at least once; "
+            f"recorded calls: {writable_calls}"
         )

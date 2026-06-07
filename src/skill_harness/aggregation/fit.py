@@ -291,8 +291,8 @@ def _ebmom(sample_mean: float, sample_var: float) -> tuple[float, float]:
     if v < VAR_FLOOR:
         raise ConvergenceFailure(
             reason="var_below_threshold",
-            alpha_hat=float("nan"),
-            beta_hat=float("nan"),
+            alpha_hat=None,
+            beta_hat=None,
             sample_mean=m,
             sample_var=v,
         )

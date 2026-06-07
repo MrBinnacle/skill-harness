@@ -14,6 +14,9 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
+
+from skill_harness.aggregation.errors import PreconditionError
 from skill_harness.storage.migrations import open_evidence, open_runtime
 from skill_harness.storage.recovery import (
     IncompleteRun,
@@ -373,6 +376,56 @@ class TestFindResumableRunForSkill:
 
             result = find_resumable_run_for_skill("sk1", evidence_conn_ro=ev, runtime_conn=rt)
             assert result is None
+        finally:
+            ev.close()
+            rt.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: S1 fail-closed precondition (falsifying tests — S1 fix-loop)
+# ---------------------------------------------------------------------------
+
+
+class TestFindIncompleteRunsFailClosed:
+    """S1: find_incomplete_runs must raise on sqlite3.Error, not silently return [].
+
+    Falsifying test: drop run_progress table (runtime DB corruption) then call
+    find_incomplete_runs.  Prior code returns []; correct code raises
+    PreconditionError (or propagates sqlite3.OperationalError).
+    """
+
+    def test_runtime_db_missing_run_progress_table_raises(self, tmp_path: Path) -> None:
+        """DROP run_progress from runtime DB — Step 1 query must raise, not return []."""
+        ev = open_evidence(tmp_path / "evidence.db")
+        rt = open_runtime(tmp_path / "runtime.db")
+        try:
+            # Corrupt the runtime DB by dropping the run_progress table.
+            rt.execute("DROP TABLE run_progress")
+            rt.commit()
+
+            with pytest.raises((PreconditionError, sqlite3.OperationalError)):
+                find_incomplete_runs("sk1", evidence_conn_ro=ev, runtime_conn=rt)
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_evidence_db_missing_runs_table_raises(self, tmp_path: Path) -> None:
+        """DROP runs from evidence DB — Step 2 query must raise, not return [].
+
+        Seed runtime DB with a non-terminal run so Step 1 succeeds and Step 2
+        is reached.
+        """
+        ev = open_evidence(tmp_path / "evidence.db")
+        rt = open_runtime(tmp_path / "runtime.db")
+        try:
+            # Insert a run_progress row so Step 1 returns a non-empty list.
+            _insert_run_progress(rt, "run-orphan", state="running")
+            # Corrupt evidence by dropping the runs table.
+            ev.execute("DROP TABLE runs")
+            ev.commit()
+
+            with pytest.raises((PreconditionError, sqlite3.OperationalError)):
+                find_incomplete_runs("sk1", evidence_conn_ro=ev, runtime_conn=rt)
         finally:
             ev.close()
             rt.close()

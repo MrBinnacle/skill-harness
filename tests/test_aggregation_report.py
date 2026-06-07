@@ -343,3 +343,110 @@ class TestRoundTrip:
         reconstructed = skill_report_from_dict(to_json_dict(report))
         assert reconstructed.vector.passed == report.vector.passed
         assert reconstructed.vector.coverage == report.vector.coverage
+
+
+# ---------------------------------------------------------------------------
+# I1 · NaN-in-JSON fix — strict RFC 8259 roundtrip for BH-FDR fallback report
+#   RED on current code: NaN literal in JSON stream → strict parser rejects.
+#   GREEN after fix: None → null in JSON → strict parser accepts.
+# ---------------------------------------------------------------------------
+
+
+def make_bh_fdr_fallback_report() -> SkillReport:
+    """SkillReport with aggregation_provenance from BH-FDR fallback (var_below_threshold).
+
+    Before fix: attempted dict contains alpha_hat=NaN → to_json_bytes emits literal NaN.
+    After fix: alpha_hat=None → to_json_bytes emits null → RFC 8259 compliant.
+    """
+    vector = VectorSummary(
+        passed=0,
+        failed=0,
+        confounded=0,
+        unmeasured=10,
+        unmeasured_breakdown={"no_data": 10},
+        coverage=0.0,
+    )
+    contribution = ContributionSummary(full_vs_null_delta=None)
+    # Provenance as produced by fit_skill on 10 identical clauses (var_below_threshold)
+    # After fix: alpha_hat and beta_hat are None, not float("nan")
+    return SkillReport(
+        report_schema_version=REPORT_SCHEMA_VERSION,
+        skill_id="skill-bh-fdr",
+        generated_at_utc="2026-06-07T00:00:00.000Z",
+        harness_version="0.1.0a0",
+        aggregation_method="bh_fdr_fallback",
+        aggregation_provenance={
+            "q": 0.05,
+            "k_clauses": 10,
+            "fallback_reason": "var_below_threshold",
+            "attempted": {
+                "alpha_hat": None,  # None after fix (was float("nan") before)
+                "beta_hat": None,  # None after fix (was float("nan") before)
+                "sample_mean": 0.5,
+                "sample_var": 0.0,
+            },
+            "family_size_used": 10,
+        },
+        clauses=tuple(
+            make_clause_report(f"c{i}", status="UNMEASURED", sub_reason="no_data")
+            for i in range(10)
+        ),
+        vector=vector,
+        coverage=0.0,
+        contribution=contribution,
+    )
+
+
+def _strict_parse_constant(x: str) -> object:
+    """Reject NaN/Infinity literals — RFC 8259 does not allow them."""
+    raise ValueError(f"Non-standard JSON constant encountered: {x!r}")
+
+
+class TestI1NanInJsonFix:
+    def test_bh_fdr_fallback_report_strict_json_roundtrip(self) -> None:
+        """I1: to_json_bytes on a BH-FDR fallback report must produce strict RFC 8259 JSON.
+
+        Before fix: NaN literal in stream → json.loads with parse_constant raises ValueError.
+        After fix: null in stream → strict parse succeeds.
+        """
+        report = make_bh_fdr_fallback_report()
+        raw = to_json_bytes(report)
+        # Strict parse: parse_constant fires on NaN/Infinity literals
+        parsed = json.loads(raw, parse_constant=_strict_parse_constant)
+        prov = parsed["aggregation_provenance"]
+        assert prov["attempted"]["alpha_hat"] is None
+        assert prov["attempted"]["beta_hat"] is None
+        assert prov["attempted"]["sample_mean"] == 0.5
+
+    def test_allow_nan_false_raises_on_nan_float(self) -> None:
+        """I1 guard: to_json_bytes must raise ValueError if a NaN slips through.
+
+        Verifies that allow_nan=False is set in json.dumps — future regressions
+        surface loudly at write time rather than emitting invalid JSON silently.
+        """
+        # Build a report with NaN in provenance (simulating a pre-fix regression)
+        vector = VectorSummary(
+            passed=0,
+            failed=0,
+            confounded=0,
+            unmeasured=1,
+            unmeasured_breakdown={},
+            coverage=0.0,
+        )
+        bad_report = SkillReport(
+            report_schema_version=REPORT_SCHEMA_VERSION,
+            skill_id="bad",
+            generated_at_utc="2026-06-07T00:00:00Z",
+            harness_version="0.1.0a0",
+            aggregation_method="bh_fdr_fallback",
+            aggregation_provenance={"attempted": {"alpha_hat": float("nan")}},
+            clauses=(),
+            vector=vector,
+            coverage=0.0,
+            contribution=ContributionSummary(full_vs_null_delta=None),
+        )
+        # With allow_nan=False, json.dumps must raise ValueError on NaN
+        import pytest as _pytest
+
+        with _pytest.raises(ValueError):
+            to_json_bytes(bad_report)

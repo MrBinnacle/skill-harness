@@ -665,9 +665,12 @@ def test_bh_fdr_fallback_reason_field() -> None:
 
 
 def test_bh_fdr_fallback_attempted_dict() -> None:
-    """M11: aggregation_provenance["attempted"] must be a dict with float values.
+    """M11: aggregation_provenance["attempted"] must be a dict with the four expected keys.
 
     Mutation sets attempted=None → isinstance check fails → RED.
+
+    After I1 fix: alpha_hat and beta_hat are None (not-computable) for the
+    var_below_threshold path; sample_mean and sample_var remain float.
     """
     clauses = _make_degenerate_clauses_k10()
     result = fit_skill(clauses)
@@ -677,9 +680,16 @@ def test_bh_fdr_fallback_attempted_dict() -> None:
     assert isinstance(attempted, dict), f"Expected dict, got {type(attempted)!r}"
     for key in ("alpha_hat", "beta_hat", "sample_mean", "sample_var"):
         assert key in attempted, f"Key {key!r} missing from attempted dict"
-        assert isinstance(attempted[key], float), (
-            f"attempted[{key!r}] should be float, got {type(attempted[key])!r}"
-        )
+    # alpha_hat/beta_hat are None for var_below_threshold (not-computable);
+    # sample_mean and sample_var are always float.
+    assert attempted["alpha_hat"] is None, (
+        f"expected None for alpha_hat in var_below_threshold path, got {attempted['alpha_hat']!r}"
+    )
+    assert attempted["beta_hat"] is None, (
+        f"expected None for beta_hat in var_below_threshold path, got {attempted['beta_hat']!r}"
+    )
+    assert isinstance(attempted["sample_mean"], float)
+    assert isinstance(attempted["sample_var"], float)
 
 
 # ---------------------------------------------------------------------------
@@ -741,3 +751,42 @@ def test_fit_result_is_frozen() -> None:
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
         fit_result.aggregation_method = "hacked"  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# I1 · NaN-in-JSON fix — var_below_threshold path must NOT produce NaN
+#   RED on current code: exc.alpha_hat/beta_hat are float("nan"), packing NaN
+#   into attempted dict. GREEN after fix: None replaces NaN at the raise site.
+# ---------------------------------------------------------------------------
+
+
+def test_var_below_threshold_attempted_has_no_nan() -> None:
+    """I1: ConvergenceFailure(var_below_threshold) must not carry NaN floats.
+
+    10 clauses with identical (w=5, n=10) → sample_var = 0 < VAR_FLOOR → BH-FDR
+    fallback via var_below_threshold. The attempted dict alpha_hat + beta_hat must
+    be None (not-computable), not float('nan').
+
+    RED on current code: alpha_hat=float('nan') / beta_hat=float('nan') → nan floats.
+    GREEN after fix: alpha_hat=None / beta_hat=None.
+    """
+    import math
+
+    clauses = make_clauses([(5, 10)] * 10)
+    result = fit_skill(clauses)
+    assert result.aggregation_method == "bh_fdr_fallback"
+    prov = result.aggregation_provenance
+    attempted = prov["attempted"]
+    assert isinstance(attempted, dict)
+    alpha_val = attempted["alpha_hat"]
+    beta_val = attempted["beta_hat"]
+    # After fix: None. Before fix: float("nan") → this assertion goes RED.
+    assert alpha_val is None, (
+        f"Expected None for alpha_hat, got {alpha_val!r} (NaN is RFC 8259 violation)"
+    )
+    assert beta_val is None, (
+        f"Expected None for beta_hat, got {beta_val!r} (NaN is RFC 8259 violation)"
+    )
+    # sample_mean and sample_var are computable; must remain float (not None)
+    assert isinstance(attempted["sample_mean"], float) and not math.isnan(attempted["sample_mean"])
+    assert isinstance(attempted["sample_var"], float) and not math.isnan(attempted["sample_var"])

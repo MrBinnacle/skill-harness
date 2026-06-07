@@ -175,7 +175,10 @@ def to_json_bytes(report: SkillReport) -> bytes:
     All other fields are derived from the DB evidence deterministically.
     """
     d = to_json_dict(report)
-    return json.dumps(d, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+    return (
+        json.dumps(d, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        + b"\n"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -68,6 +68,7 @@ def aggregate_skill(
     Preconditions checked (raises if violated):
     - any incomplete runs for skill_id → PreconditionError('incomplete_runs', [run_ids])
     - no completed runs for skill_id → PreconditionError('no_completed_runs')
+    - no clauses authored for skill_id → PreconditionError('no_clauses')
     """
     # ------------------------------------------------------------------
     # Precondition 1: No incomplete runs (would bias aggregation)
@@ -108,7 +109,8 @@ def aggregate_skill(
     clause_axis_run_ids: dict[tuple[str, str], set[str]] = defaultdict(set)
     clause_axis_metric_id: dict[tuple[str, str], str | None] = {}
     clause_axis_metric_version: dict[tuple[str, str], str | None] = {}
-    clause_axis_operator_hash: dict[tuple[str, str], str | None] = {}
+    # I2: collect ALL op_hashes per (clause_id, axis) — detect divergence at resolution time
+    clause_axis_op_hashes: dict[tuple[str, str], set[str]] = defaultdict(set)
 
     # A55 comparability axes: track per-run subject_model + user_message_sha256
     run_id_to_subject_model: dict[str, str | None] = {}
@@ -210,7 +212,7 @@ def aggregate_skill(
         op_hash = config.get("ablation_operator_hash") or "unknown"
         for key in clause_axis_run_ids:
             if run_id in clause_axis_run_ids[key]:
-                clause_axis_operator_hash.setdefault(key, op_hash)
+                clause_axis_op_hashes[key].add(op_hash)
 
         # A55: capture subject_model + user_message_sha256 per run
         run_id_to_subject_model[run_id] = config.get("subject_model")
@@ -395,7 +397,9 @@ def aggregate_skill(
                 frozen_case_count_at_current_metric_version=frozen_current_counts.get(key, 0),
                 metric_id_per_axis={axis: metric_id_val} if metric_id_val else {},
                 metric_version_per_axis={axis: metric_ver_val} if metric_ver_val else {},
-                ablation_operator_hash=clause_axis_operator_hash.get(key) or "unknown",
+                ablation_operator_hash=_resolve_op_hash(
+                    clause_axis_op_hashes.get(key, set()), skill_id, key
+                ),
                 run_ids_aggregated=tuple(sorted(clause_axis_run_ids.get(key, set()))),
                 n_verdicts=n,
                 w_observation_sum=w,
@@ -422,7 +426,10 @@ def aggregate_skill(
         else set()
     )
 
-    coverage = len(tested_clause_ids) / total_clause_count if total_clause_count > 0 else 0.0
+    # OBS-G2: zero clauses is a precondition failure — Coverage: 0% on zero clauses is a falsehood.
+    if total_clause_count == 0:
+        raise PreconditionError("no_clauses")
+    coverage = len(tested_clause_ids) / total_clause_count
 
     # ------------------------------------------------------------------
     # ContributionSummary (A50): mean full_vs_null delta
@@ -553,6 +560,34 @@ def _read_family_size(completed_runs: list[dict[str, object]]) -> int:
                 pass
 
     return int(family_size)
+
+
+def _resolve_op_hash(
+    op_hashes: set[str],
+    skill_id: str,
+    key: tuple[str, str],
+) -> str:
+    """Resolve the ablation_operator_hash for a (clause_id, axis) key.
+
+    Mirrors the subject_model MIXED pattern from _derive_a55_fields (Phase 3.2 C1).
+    If multiple distinct hashes are present, emits a data-integrity warning and
+    returns "MIXED". Single hash returns that hash. Empty set returns "unknown".
+    """
+    if len(op_hashes) > 1:
+        clause_id, axis = key
+        logger.warning(
+            "[data-integrity] skill %r clause %r axis %r: ablation_operator_hash diverges "
+            "across aggregated runs: %r. Setting ablation_operator_hash='MIXED'. "
+            "Metric drift may be present per A55.",
+            skill_id,
+            clause_id,
+            axis,
+            sorted(op_hashes),
+        )
+        return "MIXED"
+    if len(op_hashes) == 1:
+        return next(iter(op_hashes))
+    return "unknown"
 
 
 def _derive_a55_fields(

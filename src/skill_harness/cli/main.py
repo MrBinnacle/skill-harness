@@ -555,7 +555,6 @@ def _find_incomplete_run_for_execute(
     Module-level so tests can patch find_resumable_run_for_skill at cli.main scope.
     Returns None when either DB is absent (no prior runs possible).
     """
-    from skill_harness.storage.errors import BootstrapError
     from skill_harness.storage.migrations import open_evidence_readonly, open_runtime
 
     if runtime_db is None or evidence_db is None:
@@ -570,7 +569,7 @@ def _find_incomplete_run_for_execute(
             return None
         try:
             ev_ro = open_evidence_readonly(evidence_db)
-        except (BootstrapError, Exception):
+        except Exception:  # includes BootstrapError when DB not yet bootstrapped
             # evidence.db not yet created — no runs can exist
             return None
         return find_resumable_run_for_skill(skill_id, evidence_conn_ro=ev_ro, runtime_conn=rt)
@@ -876,9 +875,8 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
     for result in results:
         clause_id = result.clause_id
         # verdict_id: surfaced for `freeze` discoverability (A56).
-        # ClauseResult doesn't carry verdict_id in v0.1 (Track D type) — use getattr
-        # so tests with mock objects exposing verdict_id work, and real results show '—'.
-        verdict_id_str = str(getattr(result, "verdict_id", None) or "—")
+        # CF-E3-1 (commit 32f3ad4): ClauseResult.verdict_id: str | None is always present.
+        verdict_id_str = str(result.verdict_id or "—")
         stopping_reason = result.stopping_reason
         n_samples = result.stop_decision.n_samples
         p_win = result.stop_decision.p_win_rate_exceeds_threshold
@@ -1009,6 +1007,7 @@ def run_evaluate_skill(
     # ------------------------------------------------------------------
     ev_ro: sqlite3.Connection | None = None
     rt_conn: sqlite3.Connection | None = None
+    mech_vacuous_count: int = 0  # OBS-G5: populated before ev_ro closes, rich render only
     try:
         try:
             ev_ro = open_evidence_readonly(evidence_db)
@@ -1085,6 +1084,20 @@ def run_evaluate_skill(
                 ) from exc
             raise click.ClickException(str(exc)) from exc
 
+        # OBS-G5: read mech-vacuous count for rich-render adjunct.
+        # Must happen before ev_ro is closed. No wire-format change.
+        mech_vacuous_count = 0
+        if output_format != "json" and ev_ro is not None:
+            try:
+                row = ev_ro.execute(
+                    "SELECT COUNT(*) FROM clauses"
+                    " WHERE skill_id = ? AND vacuity_flag = 'mechanical_vacuous'",
+                    (skill_id,),
+                ).fetchone()
+                mech_vacuous_count = int(row[0]) if row else 0
+            except Exception:
+                mech_vacuous_count = 0
+
     finally:
         if ev_ro is not None:
             ev_ro.close()
@@ -1097,7 +1110,7 @@ def run_evaluate_skill(
     if output_format == "json":
         sys.stdout.buffer.write(to_json_bytes(report))
     else:
-        _render_evaluate_skill_report(report)
+        _render_evaluate_skill_report(report, vacuity_count=mech_vacuous_count)
 
     # ------------------------------------------------------------------
     # Exit code (A58)
@@ -1263,7 +1276,6 @@ def diff_skill(
         key_a: dict[tuple[str, str], Any] = {}
         for cr in report_a.clauses:
             text = texts_a.get(cr.clause_id, "")
-            key = (cr.metric_id_per_axis.get("", cr.clause_id), _sha(text))
             # Use axis from the ClauseReport (derived from the verdict axis)
             # Build with (first axis key, sha256)
             # v0.2 limitation: clauses with zero admissible verdicts (metric_id_per_axis == {})
@@ -1440,16 +1452,16 @@ def freeze(
       0  — frozen or already frozen
       1  — validation refused (ineligibility, missing verdict, incomplete parent)
     """
-    from skill_harness.storage.errors import BootstrapError
-    from skill_harness.storage.migrations import open_evidence
+    from skill_harness.storage.migrations import open_evidence, open_evidence_readonly
     from skill_harness.storage.repositories.evidence.frozen_cases import freeze_verdict
 
-    # Open evidence DB (writable for --execute, read preview for dry-run)
+    # I4: open read-only for dry-run (least-privilege); writable only on --execute.
+    # Mirrors open_evidence_readonly used by run evaluate-skill (main.py:1014).
     ev_conn: sqlite3.Connection | None = None
     try:
         try:
-            ev_conn = open_evidence(evidence_db)
-        except (BootstrapError, Exception) as exc:
+            ev_conn = open_evidence(evidence_db) if execute else open_evidence_readonly(evidence_db)
+        except Exception as exc:  # includes BootstrapError when DB not found
             raise click.ClickException(f"Cannot open evidence DB at {evidence_db}: {exc}") from exc
 
         # ------------------------------------------------------------------
@@ -1557,7 +1569,7 @@ def freeze(
 # ---------------------------------------------------------------------------
 
 
-def _render_evaluate_skill_report(report: Any) -> None:
+def _render_evaluate_skill_report(report: Any, vacuity_count: int = 0) -> None:
     """Rich table render for SkillReport (A54 / A50).
 
     Renders two tables:
@@ -1568,6 +1580,10 @@ def _render_evaluate_skill_report(report: Any) -> None:
     CONFOUNDED rows → MAGENTA. (A54 spec)
 
     Footer cites A50 framing (single-clause LOO; lower-bound under redundancy).
+
+    OBS-G5 (Appendix G): when vacuity_count > 0, Coverage cell gains adjunct:
+      "50.0% (1 verified / 2 authored; 1 mech-vacuous excluded from testing)"
+    Read-side derivation only; no wire-format change.
     """
     # Vector summary table
     vec = report.vector
@@ -1583,12 +1599,23 @@ def _render_evaluate_skill_report(report: Any) -> None:
     contrib_label = getattr(contrib, "label", "single-clause LOO; lower-bound under redundancy")
     delta = getattr(contrib, "full_vs_null_delta", None)
     contrib_str = f"{contrib_label} (Δ={delta:.3f})" if delta is not None else contrib_label
+    # OBS-G5: coverage adjunct when mech-vacuous clauses exist.
+    total_authored = vec.passed + vec.failed + vec.confounded + vec.unmeasured
+    verified = round(report.coverage * total_authored)
+    if vacuity_count > 0:
+        coverage_str = (
+            f"{report.coverage:.1%}"
+            f" ({verified} verified / {total_authored} authored;"
+            f" {vacuity_count} mech-vacuous excluded from testing)"
+        )
+    else:
+        coverage_str = f"{report.coverage:.1%}"
     vec_table.add_row(
         str(vec.passed),
         str(vec.failed),
         str(vec.confounded),
         str(vec.unmeasured),
-        f"{report.coverage:.1%}",
+        coverage_str,
         contrib_str,
     )
     _console.print(vec_table)

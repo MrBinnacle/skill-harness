@@ -11,8 +11,11 @@ layer — no ATTACH or cross-DB SQL joins.
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import dataclass
 from sqlite3 import Connection
+
+from skill_harness.aggregation.errors import PreconditionError
 
 
 @dataclass(frozen=True)
@@ -46,13 +49,16 @@ def find_incomplete_runs(
     Sorted by run_progress.last_heartbeat DESC if available (most-recent first).
     """
     # Step 1: find non-terminal run_ids from runtime
+    # Fail-closed: a DB error must NOT silently return [] (which would bypass the
+    # A52/A54 precondition and allow aggregation to proceed on a corrupted DB).
+    # Mirror run_is_complete's fail-closed shape.
     try:
         rows = runtime_conn.execute(
             "SELECT run_id, state, last_heartbeat FROM run_progress "
             "WHERE state NOT IN ('completed', 'failed', 'aborted_budget')"
         ).fetchall()
-    except Exception:
-        return []
+    except sqlite3.Error as exc:
+        raise PreconditionError("recovery_query_failed", None) from exc
 
     if not rows:
         return []
@@ -65,14 +71,15 @@ def find_incomplete_runs(
 
     # Step 2: cross-reference with evidence.runs for skill_id filtering
     # Python-layer join — no ATTACH, no cross-DB SQL.
+    # Fail-closed: same discipline as Step 1 — DB error raises, never returns [].
     placeholders = ",".join("?" for _ in run_id_to_runtime)
     try:
         ev_rows = evidence_conn_ro.execute(
             f"SELECT run_id, config_json FROM runs WHERE run_id IN ({placeholders})",  # noqa: S608
             list(run_id_to_runtime.keys()),
         ).fetchall()
-    except Exception:
-        return []
+    except sqlite3.Error as exc:
+        raise PreconditionError("recovery_query_failed", None) from exc
 
     results: list[IncompleteRun] = []
     for ev_run_id, config_json in ev_rows:

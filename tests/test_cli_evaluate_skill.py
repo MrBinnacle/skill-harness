@@ -747,3 +747,93 @@ class TestEvaluateSkillFormatRejected:
         """M6: --format=md is not in click.Choice(['rich', 'json']) → exit 2."""
         result = _invoke("run", "evaluate-skill", "any-skill", "--format=md")
         assert result.exit_code == 2, f"Expected exit 2 for --format=md, got {result.exit_code}"
+
+
+# ---------------------------------------------------------------------------
+# Tests: OBS-G5 — rich render vacuity adjunct
+# ---------------------------------------------------------------------------
+
+
+class TestEvaluateSkillVacuityAdjunct:
+    """OBS-G5: coverage string gains adjunct when mech-vacuous count > 0.
+
+    Ref: docs/COUNCIL_FINDINGS.md Appendix G, OBS-G5 (OPERATOR-DX-additional).
+    Adjunct format: "Coverage: 60.0% (6 verified / 10 authored; 2 mech-vacuous excluded)"
+    No wire/JSON change — rich render path only.
+    """
+
+    def _insert_clause_vacuous(
+        self,
+        conn: sqlite3.Connection,
+        clause_id: str,
+        skill_id: str = SKILL_ID,
+        axis: str = AXIS,
+        clause_index: int = 1,
+    ) -> None:
+        """Insert a clause with mechanical_vacuous flag."""
+        conn.execute(
+            "INSERT INTO clauses (clause_id, skill_id, clause_index, rendering_index,"
+            " clause_text, axis, comparator, oracle_tier, vacuity_flag)"
+            " VALUES (?, ?, ?, ?, ?, ?, 'decrease', 1, 'mechanical_vacuous')",
+            (clause_id, skill_id, clause_index, clause_index, f"Vacuous clause {clause_id}", axis),
+        )
+
+    def test_vacuity_adjunct_present_when_mech_vacuous_count_gt_0(self, tmp_path: Path) -> None:
+        """OBS-G5 RED test: output must contain vacuity adjunct when mech-vacuous count > 0.
+
+        Seed: 1 testable passed clause + 1 mechanical_vacuous clause.
+        Expected adjunct in coverage cell: "(1 verified / 2 authored; 1 mech-vacuous excluded)"
+        """
+        ev, rt = open_both(tmp_path)
+        _seed_all_passed(ev, rt)  # clause-eval-001 with vacuity_flag='none'
+        self._insert_clause_vacuous(ev, clause_id="clause-vacuous-001", clause_index=1)
+        ev.close()
+        rt.close()
+
+        result = _invoke(
+            "run",
+            "evaluate-skill",
+            SKILL_ID,
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+            "--runtime-db",
+            str(tmp_path / "runtime.db"),
+        )
+
+        assert result.exit_code in (0, 2), (
+            f"Expected exit 0 or 2, got {result.exit_code}:\n{result.output}"
+        )
+        output = result.output
+        # Must show the adjunct format with authored/vacuous info
+        assert "authored" in output.lower(), (
+            f"Coverage cell must show 'authored' count in adjunct when mech-vacuous > 0:\n{output}"
+        )
+        assert "mech-vacuous" in output.lower(), (
+            f"Coverage cell must show 'mech-vacuous' in adjunct when count > 0:\n{output}"
+        )
+
+    def test_no_vacuity_adjunct_when_no_mech_vacuous(self, tmp_path: Path) -> None:
+        """OBS-G5: plain coverage scalar when no mech-vacuous clauses (no adjunct)."""
+        ev, rt = open_both(tmp_path)
+        _seed_all_passed(ev, rt)  # all clauses have vacuity_flag='none'
+        ev.close()
+        rt.close()
+
+        result = _invoke(
+            "run",
+            "evaluate-skill",
+            SKILL_ID,
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+            "--runtime-db",
+            str(tmp_path / "runtime.db"),
+        )
+
+        assert result.exit_code == 0, f"Expected exit 0:\n{result.output}"
+        # No vacuity adjunct when count == 0
+        assert "mech-vacuous" not in result.output.lower(), (
+            f"Coverage must NOT have vacuity adjunct when no mech-vacuous clauses:\n{result.output}"
+        )
+        assert "authored" not in result.output.lower(), (
+            f"Coverage must NOT have 'authored' when no mech-vacuous clauses:\n{result.output}"
+        )

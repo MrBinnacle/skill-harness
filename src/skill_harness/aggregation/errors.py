@@ -58,10 +58,10 @@ class ConvergenceFailure(Exception):
     ----------
     reason : str
         ``"alpha_le_zero"`` | ``"beta_le_zero"`` | ``"var_below_threshold"``
-    alpha_hat : float
-        Estimated alpha (may be <= 0).
-    beta_hat : float
-        Estimated beta (may be <= 0).
+    alpha_hat : float | None
+        Estimated alpha (may be <= 0, or None when not computable e.g. var_below_threshold).
+    beta_hat : float | None
+        Estimated beta (may be <= 0, or None when not computable e.g. var_below_threshold).
     sample_mean : float
     sample_var : float
     """
@@ -69,8 +69,8 @@ class ConvergenceFailure(Exception):
     def __init__(
         self,
         reason: str,
-        alpha_hat: float,
-        beta_hat: float,
+        alpha_hat: float | None,
+        beta_hat: float | None,
         sample_mean: float,
         sample_var: float,
     ) -> None:
@@ -79,8 +79,10 @@ class ConvergenceFailure(Exception):
         self.beta_hat = beta_hat
         self.sample_mean = sample_mean
         self.sample_var = sample_var
+        alpha_str = f"{alpha_hat:.4f}" if alpha_hat is not None else "None"
+        beta_str = f"{beta_hat:.4f}" if beta_hat is not None else "None"
         super().__init__(
             f"ConvergenceFailure({reason!r}, "
-            f"alpha_hat={alpha_hat:.4f}, beta_hat={beta_hat:.4f}, "
+            f"alpha_hat={alpha_str}, beta_hat={beta_str}, "
             f"sample_mean={sample_mean:.4f}, sample_var={sample_var:.6f})"
         )

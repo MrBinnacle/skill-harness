@@ -1189,3 +1189,217 @@ class TestMultiClauseSkill:
         finally:
             ev.close()
             rt.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: I2 — ablation_operator_hash MIXED detection
+# ---------------------------------------------------------------------------
+
+
+def _insert_run_with_op_hash(
+    ev: sqlite3.Connection,
+    rt: sqlite3.Connection,
+    run_id: str,
+    skill_id: str,
+    clause_id: str,
+    axis: str,
+    op_hash: str,
+) -> None:
+    """Insert a completed run with a specific ablation_operator_hash in config_json."""
+    config = json.dumps(
+        {
+            "run_id": run_id,
+            "skill_id": skill_id,
+            "clauses": [{"clause_id": clause_id, "axis": axis}],
+            "subject_model": "claude-sonnet-4-6",
+            "user_message": "test",
+            "family_size": 1,
+            "stopping_reasons": {},
+            "ablation_operator_hash": op_hash,
+        },
+        sort_keys=True,
+    )
+    ev.execute(
+        "INSERT INTO runs (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+        " VALUES (?, ?, 'ablation', ?, ?, ?)",
+        (run_id, skill_id, config, _TS, _TS2),
+    )
+    rt.execute(
+        "INSERT INTO run_progress"
+        " (run_id, state, samples_planned, samples_collected, last_heartbeat)"
+        " VALUES (?, 'completed', 10, 10, ?)",
+        (run_id, _TS2),
+    )
+
+
+class TestAblationOperatorHashMIXED:
+    """I2: divergent ablation_operator_hash within a skill's aggregated runs must be detected."""
+
+    def test_divergent_op_hash_sets_mixed_and_warns(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Divergent op_hash across runs → 'MIXED' + data-integrity warning."""
+        import logging
+
+        ev, rt = open_both(tmp_path)
+        try:
+            sk_id = "skill-op-hash-test"
+            cl_id = "clause-op-hash-001"
+            run1 = "run-op-hash-001"
+            run2 = "run-op-hash-002"
+
+            insert_skill(ev, skill_id=sk_id)
+            insert_clause(ev, clause_id=cl_id, skill_id=sk_id)
+            insert_metric_version(ev)
+
+            _insert_run_with_op_hash(ev, rt, run1, sk_id, cl_id, AXIS, "hash-aaa")
+            _insert_run_with_op_hash(ev, rt, run2, sk_id, cl_id, AXIS, "hash-bbb")
+
+            # Seed admissible verdicts for both runs
+            for i, (run_id, sa, sb) in enumerate([(run1, "sa1", "sb1"), (run2, "sa2", "sb2")]):
+                insert_sample(
+                    ev, sa, run_id=run_id, clause_id=cl_id, condition="full", sample_index=i
+                )
+                insert_sample(
+                    ev, sb, run_id=run_id, clause_id=cl_id, condition="ablated", sample_index=i
+                )
+                insert_verdict(
+                    ev,
+                    verdict_id=f"v-op-{i}",
+                    run_id=run_id,
+                    clause_id=cl_id,
+                    axis=AXIS,
+                    sample_a_id=sa,
+                    sample_b_id=sb,
+                    observation=1.0,
+                )
+
+            with caplog.at_level(logging.WARNING, logger="skill_harness.aggregation.engine"):
+                report = aggregate_skill(
+                    sk_id,
+                    evidence_conn_ro=ev,
+                    runtime_conn=rt,
+                    harness_version=_HARNESS_VER,
+                    generated_at_utc=_GEN_AT,
+                )
+
+            assert len(report.clauses) == 1
+            assert report.clauses[0].ablation_operator_hash == "MIXED"
+            # A data-integrity warning must have been logged
+            assert any(
+                "data-integrity" in rec.message and "ablation_operator_hash" in rec.message
+                for rec in caplog.records
+            ), "Expected data-integrity warning for ablation_operator_hash divergence"
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_identical_op_hash_not_mixed(self, tmp_path: Path) -> None:
+        """Two runs with the same ablation_operator_hash → not 'MIXED'."""
+        ev, rt = open_both(tmp_path)
+        try:
+            sk_id = "skill-op-hash-same"
+            cl_id = "clause-op-hash-same-001"
+            run1 = "run-op-hash-same-001"
+            run2 = "run-op-hash-same-002"
+
+            insert_skill(ev, skill_id=sk_id)
+            insert_clause(ev, clause_id=cl_id, skill_id=sk_id)
+            insert_metric_version(ev)
+
+            _insert_run_with_op_hash(ev, rt, run1, sk_id, cl_id, AXIS, "hash-aaa")
+            _insert_run_with_op_hash(ev, rt, run2, sk_id, cl_id, AXIS, "hash-aaa")
+
+            for i, (run_id, sa, sb) in enumerate(
+                [(run1, "sa-s1", "sb-s1"), (run2, "sa-s2", "sb-s2")]
+            ):
+                insert_sample(
+                    ev, sa, run_id=run_id, clause_id=cl_id, condition="full", sample_index=i
+                )
+                insert_sample(
+                    ev, sb, run_id=run_id, clause_id=cl_id, condition="ablated", sample_index=i
+                )
+                insert_verdict(
+                    ev,
+                    verdict_id=f"v-s-{i}",
+                    run_id=run_id,
+                    clause_id=cl_id,
+                    axis=AXIS,
+                    sample_a_id=sa,
+                    sample_b_id=sb,
+                    observation=1.0,
+                )
+
+            report = aggregate_skill(
+                sk_id,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+
+            assert len(report.clauses) == 1
+            assert report.clauses[0].ablation_operator_hash == "hash-aaa"
+        finally:
+            ev.close()
+            rt.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: OBS-G2 — zero-clauses precondition refusal
+# ---------------------------------------------------------------------------
+
+
+class TestZeroClausesPreconditionError:
+    """OBS-G2: aggregate_skill raises PreconditionError('no_clauses') for zero-clause skills."""
+
+    def test_zero_clauses_raises_precondition_error(self, tmp_path: Path) -> None:
+        """A skill with zero authored clauses raises PreconditionError('no_clauses').
+
+        Coverage: 0% on zero clauses is a falsehood — the engine must refuse.
+        """
+        ev, rt = open_both(tmp_path)
+        try:
+            sk_id = "skill-no-clauses"
+            run_id = "run-no-clauses-001"
+
+            insert_skill(ev, skill_id=sk_id)
+            # Insert a completed run but NO clauses
+            config = json.dumps(
+                {
+                    "run_id": run_id,
+                    "skill_id": sk_id,
+                    "clauses": [],
+                    "subject_model": "claude-sonnet-4-6",
+                    "user_message": "test",
+                    "family_size": 1,
+                    "stopping_reasons": {},
+                },
+                sort_keys=True,
+            )
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES (?, ?, 'ablation', ?, ?, ?)",
+                (run_id, sk_id, config, _TS, _TS2),
+            )
+            rt.execute(
+                "INSERT INTO run_progress"
+                " (run_id, state, samples_planned, samples_collected, last_heartbeat)"
+                " VALUES (?, 'completed', 0, 0, ?)",
+                (run_id, _TS2),
+            )
+
+            with pytest.raises(PreconditionError) as exc_info:
+                aggregate_skill(
+                    sk_id,
+                    evidence_conn_ro=ev,
+                    runtime_conn=rt,
+                    harness_version=_HARNESS_VER,
+                    generated_at_utc=_GEN_AT,
+                )
+            assert exc_info.value.code == "no_clauses"
+            assert exc_info.value.payload is None
+        finally:
+            ev.close()
+            rt.close()
