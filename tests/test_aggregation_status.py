@@ -15,6 +15,8 @@ One falsifying test per rule (8 rules + sub-reason edge cases):
 
 from __future__ import annotations
 
+import pytest
+
 from skill_harness.aggregation.status import (
     N_MIN,
     ClauseStatus,
@@ -372,3 +374,64 @@ class TestEnumValues:
         assert UnmeasuredSubReason.FALSIFYING_CASE_MISSING == "falsifying_case_missing"
         assert UnmeasuredSubReason.BUDGET_EXHAUSTED == "budget_exhausted"
         assert UnmeasuredSubReason.FALSIFYING_CASE_STALE == "falsifying_case_stale"
+
+
+# ---------------------------------------------------------------------------
+# M7 · mut_107 · N_MIN = 8 → N_MIN = 9 boundary
+#   Kills mutation: N_MIN raised to 9 causes n=8 to be classified as underpowered.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "n, expected_status, expected_sub",
+    [
+        (7, ClauseStatus.UNMEASURED, UnmeasuredSubReason.UNDERPOWERED),  # always underpowered
+        (8, ClauseStatus.PASSED, None),  # exactly at N_MIN — eligible; mutation: underpowered
+        (9, ClauseStatus.PASSED, None),  # above N_MIN — eligible in both current + mutation
+    ],
+)
+def test_nmin_boundary(
+    n: int,
+    expected_status: ClauseStatus,
+    expected_sub: UnmeasuredSubReason | None,
+) -> None:
+    """M7: N_MIN=8 boundary. n=8 must be eligible (not underpowered).
+
+    Under mutation N_MIN=9: n=8 < 9 → UNMEASURED(underpowered). Test for n=8 goes RED.
+    """
+    inp = make_input(
+        admissible_verdict_count=n,
+        total_verdict_count=n,
+        n_verdicts=n,
+        p_win_gt_threshold=0.97,  # above PASS_PROB_THRESHOLD
+        current_frozen_case_count=1,  # current frozen case present → PASSED if eligible
+    )
+    status, sub = derive_clause_status(inp)
+    assert status == expected_status, f"n={n}: expected {expected_status}, got {status}"
+    assert sub == expected_sub, f"n={n}: expected sub_reason={expected_sub}, got {sub}"
+
+
+# ---------------------------------------------------------------------------
+# M8 · mut_119 · `total_verdict_count > 0` ↔ `total_verdict_count > 1`
+#   Kills mutation: 1 inadmissible verdict → mutation returns NO_DATA instead of INADMISSIBLE
+# ---------------------------------------------------------------------------
+
+
+def test_single_inadmissible_verdict_gives_inadmissible_subreason() -> None:
+    """M8: exactly 1 inadmissible verdict → UNMEASURED(inadmissible), not NO_DATA.
+
+    Under mutation (total_verdict_count > 1), with total=1 the condition is False,
+    so it falls through to NO_DATA. Test goes RED.
+    """
+    inp = make_input(
+        admissible_verdict_count=0,
+        total_verdict_count=1,  # exactly 1 verdict (inadmissible)
+        confounded_verdict_count=0,  # no confounds — pure inadmissible
+        n_verdicts=0,
+        p_win_gt_threshold=0.5,
+    )
+    status, sub = derive_clause_status(inp)
+    assert status == ClauseStatus.UNMEASURED
+    assert sub == UnmeasuredSubReason.INADMISSIBLE, (
+        f"Expected INADMISSIBLE with 1 inadmissible verdict, got {sub!r}"
+    )

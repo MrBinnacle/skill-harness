@@ -13,6 +13,8 @@ Coverage:
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -22,6 +24,8 @@ from skill_harness.aggregation.fit import (
     K_MIN_FOR_EB,
     VAR_FLOOR,
     ClauseObservations,
+    ClausePosterior,
+    FitResult,
     _bh_fdr,
     _ebmom,
     fit_skill,
@@ -423,3 +427,317 @@ def test_posteriors_are_valid_betas(wn_pairs: list[tuple[float, int]]) -> None:
         assert p.posterior_beta > 0
         assert 0.0 <= p.posterior_mean <= 1.0
         assert 0.0 <= p.p_win_gt_threshold <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# M1 · mut_84 · EB-MoM convergence guard: valid alpha_hat > 0 must not raise
+#   Kills mutation: alpha_hat <= 0.0 → alpha_hat <= 1.0
+#   At m=0.5, v = 0.25/(alpha_hat + 0.5). alpha_hat=beta_hat by symmetry.
+# ---------------------------------------------------------------------------
+
+
+def _var_for_alpha_hat(alpha_hat: float, m: float = 0.5) -> float:
+    """Back-compute sample_var that produces given alpha_hat at given mean.
+
+    From alpha_hat = m * (m*(1-m)/v - 1):
+        v = m*(1-m) / (alpha_hat/m + 1)
+    """
+    return m * (1.0 - m) / (alpha_hat / m + 1.0)
+
+
+@pytest.mark.parametrize(
+    "alpha_hat_target, should_raise",
+    [
+        (-0.001, True),
+        (0.0, True),
+        (0.001, False),
+        (0.5, False),
+        (1.0, False),
+        (1.5, False),
+        (5.0, False),
+    ],
+)
+def test_ebmom_convergence_guard_alpha_hat_boundary(
+    alpha_hat_target: float, should_raise: bool
+) -> None:
+    """M1: alpha_hat <= 0 must raise; alpha_hat > 0 must not raise.
+
+    Killing test: mutation alpha_hat<=0.0 → alpha_hat<=1.0 causes alpha_hat in
+    (0, 1] to raise, failing the should_raise=False cases.
+    """
+    m = 0.5
+    if alpha_hat_target <= 0.0:
+        # var must be > VAR_FLOOR to reach the alpha_hat check.
+        # At m=0.5, common=0 → alpha_hat=0 when v = m*(1-m) = 0.25.
+        # For negative: v slightly > 0.25 → common < 0 → alpha_hat < 0.
+        v = 0.25 / (alpha_hat_target / m + 1.0) if alpha_hat_target != 0.0 else 0.25 + 1e-9
+        # Ensure v is well above VAR_FLOOR so we reach the alpha/beta check.
+        assert v > VAR_FLOOR * 1000, f"v={v} too small; test design error"
+    else:
+        v = _var_for_alpha_hat(alpha_hat_target, m)
+        assert v > VAR_FLOOR * 1000
+
+    if should_raise:
+        with pytest.raises(ConvergenceFailure):
+            _ebmom(m, v)
+    else:
+        alpha_hat, beta_hat = _ebmom(m, v)
+        assert alpha_hat > 0.0
+        assert beta_hat > 0.0
+
+
+# ---------------------------------------------------------------------------
+# M2 · mut_6 · VAR_FLOOR = 1e-6 doubling boundary
+#   Kills mutation: VAR_FLOOR = 1e-6 → VAR_FLOOR = 2e-6
+# ---------------------------------------------------------------------------
+
+
+class TestVarFloorBoundary:
+    def test_var_above_var_floor_does_not_raise(self) -> None:
+        """M2: var == 1.5e-6 > VAR_FLOOR=1e-6 → no ConvergenceFailure.
+
+        Under mutation (VAR_FLOOR=2e-6), 1.5e-6 < 2e-6 → raises. Test goes RED.
+        """
+        # m=0.5, v=1.5e-6: common = 0.25/1.5e-6 - 1 ≈ 166666 → alpha_hat > 0
+        alpha_hat, beta_hat = _ebmom(0.5, 1.5e-6)
+        assert alpha_hat > 0.0
+        assert beta_hat > 0.0
+
+    def test_var_below_var_floor_raises(self) -> None:
+        """M2: var == 0.5e-6 < VAR_FLOOR=1e-6 → ConvergenceFailure(var_below_threshold)."""
+        with pytest.raises(ConvergenceFailure) as exc_info:
+            _ebmom(0.5, 0.5e-6)
+        assert exc_info.value.reason == "var_below_threshold"
+
+
+# ---------------------------------------------------------------------------
+# M3 · mut_69 · `if v < VAR_FLOOR` ↔ `v <= VAR_FLOOR` boundary
+#   Kills mutation: v < VAR_FLOOR → v <= VAR_FLOOR
+#   At v == VAR_FLOOR exactly, current code allows fit; mutation raises.
+# ---------------------------------------------------------------------------
+
+
+def test_var_exactly_at_floor_does_not_raise() -> None:
+    """M3: var == VAR_FLOOR (1e-6) exactly → no ConvergenceFailure under current code.
+
+    Under mutation (v <= VAR_FLOOR raises), this test goes RED.
+    """
+    # At m=0.5, v=1e-6: common = 0.25/1e-6 - 1 = 250000 - 1 = 249999 → alpha > 0
+    alpha_hat, beta_hat = _ebmom(0.5, VAR_FLOOR)
+    assert alpha_hat > 0.0
+    assert beta_hat > 0.0
+
+
+# ---------------------------------------------------------------------------
+# M4 · mut_83 · `alpha_hat <= 0.0` ↔ `alpha_hat < 0.0` boundary
+#   Kills mutation: alpha_hat <= 0.0 → alpha_hat < 0.0
+#   alpha_hat == 0.0 exactly: current code raises; mutation does not.
+# ---------------------------------------------------------------------------
+
+
+def test_ebmom_alpha_hat_exactly_zero_raises_alpha_reason() -> None:
+    """M4: alpha_hat==0.0 must raise ConvergenceFailure with reason 'alpha_le_zero'.
+
+    At m=0.5, v=0.25: common=0 → alpha_hat=0.0, beta_hat=0.0.
+    Current code (alpha_hat<=0.0): alpha guard fires first → reason='alpha_le_zero'.
+    Mutation (alpha_hat<0.0): alpha guard skips alpha=0; beta guard fires → reason='beta_le_zero'.
+    Test asserts reason=='alpha_le_zero' → goes RED under mutation.
+    """
+    m = 0.5
+    v = 0.25  # common = 0.25/0.25 - 1 = 0 → alpha_hat = beta_hat = 0.0
+    with pytest.raises(ConvergenceFailure) as exc_info:
+        _ebmom(m, v)
+    assert exc_info.value.reason == "alpha_le_zero", (
+        f"Expected reason='alpha_le_zero' from alpha guard, got {exc_info.value.reason!r}"
+    )
+
+
+def test_ebmom_alpha_hat_negative_raises() -> None:
+    """M4 companion: alpha_hat < 0.0 must also raise."""
+    m = 0.5
+    # v > 0.25 → common < 0 → alpha_hat < 0
+    v = 0.25 / (1.0 + (-0.001) / m)  # engineered for alpha_hat ≈ -0.001
+    with pytest.raises(ConvergenceFailure):
+        _ebmom(m, v)
+
+
+def test_ebmom_alpha_hat_small_positive_succeeds() -> None:
+    """M4 companion: alpha_hat==0.001 > 0 must NOT raise."""
+    m = 0.5
+    v = _var_for_alpha_hat(0.001, m)
+    alpha_hat, beta_hat = _ebmom(m, v)
+    assert alpha_hat > 0.0
+    assert beta_hat > 0.0
+
+
+# ---------------------------------------------------------------------------
+# M5 · mut_85 · RE-CLASSIFIED EQUIVALENT-IN-CURRENT-ARCHITECTURE
+#   The beta_hat guard cannot be triggered independently of the alpha_hat guard
+#   in `_ebmom`: MoM produces beta_hat <= 0 only when alpha_hat also fails the
+#   sign check (both alpha_hat and beta_hat are proportional to the shared
+#   `common` factor), and the alpha_hat guard fires first. A killer test would
+#   require refactoring the guards into independent functions — deferred to
+#   Phase 3.3-bis or v0.2 cleanup. No M5 test ships in this fix loop.
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# M6 · mut_37 · BH-FDR `<= (rank/k)*q` ↔ `< (rank/k)*q` boundary
+#   Kills mutation: <= → < loses the rejection at the exact threshold.
+# ---------------------------------------------------------------------------
+
+
+def test_bh_fdr_exact_threshold_included() -> None:
+    """M6: p-value EXACTLY on BH threshold IS included (uses <= comparison).
+
+    With k=1, rank=1, q=0.05: threshold = 1/1 * 0.05 = 0.05.
+    p=0.05 <= 0.05 → True → passes under current code.
+    Under mutation (p < 0.05): 0.05 < 0.05 → False → not included.
+    """
+    p_values = [0.05]
+    result = _bh_fdr(p_values, q=0.05)
+    assert result == frozenset({0}), (
+        f"Expected frozenset({{0}}) — p=0.05 must be included at exact BH threshold. Got {result!r}"
+    )
+
+
+def test_bh_fdr_just_above_threshold_excluded() -> None:
+    """M6 companion: p just above threshold is correctly excluded."""
+    p_values = [0.05 + 1e-12]
+    result = _bh_fdr(p_values, q=0.05)
+    assert result == frozenset()
+
+
+# ---------------------------------------------------------------------------
+# M9 · mut_134 · `_bh_fdr` `if k == 0` ↔ `k == 1`
+#   Kills mutation: single-element list that PASSES is returned early as empty.
+# ---------------------------------------------------------------------------
+
+
+def test_bh_fdr_single_passing_p_value() -> None:
+    """M9: _bh_fdr([0.01], q=0.05) must return frozenset({0}).
+
+    With k=1: threshold = 1/1 * 0.05 = 0.05. p=0.01 <= 0.05 → passes.
+    Under mutation (if k == 1: return frozenset()), returns empty — RED.
+    """
+    result = _bh_fdr([0.01], q=0.05)
+    assert result == frozenset({0}), (
+        f"Single passing p-value must return frozenset({{0}}), got {result!r}"
+    )
+
+
+def test_bh_fdr_single_failing_p_value() -> None:
+    """M9 companion: _bh_fdr([0.5], q=0.05) → frozenset() (doesn't pass threshold)."""
+    result = _bh_fdr([0.5], q=0.05)
+    assert result == frozenset()
+
+
+# ---------------------------------------------------------------------------
+# M10 · mut_57 · BH-FDR fallback fallback_reason field
+#   Kills mutation: fallback_reason = exc.reason → fallback_reason = None
+# ---------------------------------------------------------------------------
+
+
+def _make_degenerate_clauses_k10() -> list[ClauseObservations]:
+    """K=10 clauses all identical → sample_var=0 < VAR_FLOOR → BH-FDR fallback."""
+    return make_clauses([(6, 10)] * 10)
+
+
+def test_bh_fdr_fallback_reason_field() -> None:
+    """M10: aggregation_provenance["fallback_reason"] must equal the ConvergenceFailure reason.
+
+    Degenerate clauses (all identical) → var_between=0 → ConvergenceFailure(var_below_threshold).
+    Mutation sets fallback_reason=None → assertion fails → RED.
+    """
+    clauses = _make_degenerate_clauses_k10()
+    result = fit_skill(clauses)
+    assert result.aggregation_method == "bh_fdr_fallback"
+    prov = result.aggregation_provenance
+    assert prov["fallback_reason"] == "var_below_threshold", (
+        f"Expected 'var_below_threshold', got {prov['fallback_reason']!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# M11 · mut_58 · BH-FDR fallback `attempted` dict not None
+#   Kills mutation: attempted = {...} → attempted = None
+# ---------------------------------------------------------------------------
+
+
+def test_bh_fdr_fallback_attempted_dict() -> None:
+    """M11: aggregation_provenance["attempted"] must be a dict with float values.
+
+    Mutation sets attempted=None → isinstance check fails → RED.
+    """
+    clauses = _make_degenerate_clauses_k10()
+    result = fit_skill(clauses)
+    assert result.aggregation_method == "bh_fdr_fallback"
+    prov = result.aggregation_provenance
+    attempted = prov["attempted"]
+    assert isinstance(attempted, dict), f"Expected dict, got {type(attempted)!r}"
+    for key in ("alpha_hat", "beta_hat", "sample_mean", "sample_var"):
+        assert key in attempted, f"Key {key!r} missing from attempted dict"
+        assert isinstance(attempted[key], float), (
+            f"attempted[{key!r}] should be float, got {type(attempted[key])!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# M12 · mut_8 · ClauseObservations frozen=True invariant
+#   Kills mutation: @dataclass(frozen=True) → @dataclass(frozen=False)
+# ---------------------------------------------------------------------------
+
+
+def test_clause_observations_is_frozen() -> None:
+    """M12: ClauseObservations must be a frozen dataclass.
+
+    Under mutation (frozen=False), assignment succeeds → FrozenInstanceError not raised → RED.
+    """
+    obs = ClauseObservations(clause_id="c1", w=5.0, n=10)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        obs.w = 99.9  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# M13 · mut_10 · ClausePosterior frozen=True invariant
+# ---------------------------------------------------------------------------
+
+
+def test_clause_posterior_is_frozen() -> None:
+    """M13: ClausePosterior must be a frozen dataclass.
+
+    Under mutation (frozen=False), assignment succeeds → FrozenInstanceError not raised → RED.
+    """
+    posterior = ClausePosterior(
+        clause_id="c1",
+        posterior_alpha=2.0,
+        posterior_beta=3.0,
+        posterior_mean=0.4,
+        credible_interval_lo=0.1,
+        credible_interval_hi=0.8,
+        p_win_gt_threshold=0.3,
+        is_shrunken=False,
+        w=4.0,
+        n=10,
+    )
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        posterior.posterior_alpha = 99.9  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# M14 · mut_12 · FitResult frozen=True invariant
+# ---------------------------------------------------------------------------
+
+
+def test_fit_result_is_frozen() -> None:
+    """M14: FitResult must be a frozen dataclass.
+
+    Under mutation (frozen=False), assignment succeeds → FrozenInstanceError not raised → RED.
+    """
+    fit_result = FitResult(
+        aggregation_method="unpooled",
+        aggregation_provenance={"k_clauses": 1, "reason": "k_below_10"},
+        posteriors=(),
+    )
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        fit_result.aggregation_method = "hacked"  # type: ignore[misc]

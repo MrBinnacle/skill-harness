@@ -38,8 +38,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 WIN_RATE_THRESHOLD: float = 0.60
-PASS_PROB_THRESHOLD: float = 0.95
-FAIL_PROB_THRESHOLD: float = 0.05
 
 # BDA3 §5 — K floor for EB hyperprior reliability.
 K_MIN_FOR_EB: int = 10

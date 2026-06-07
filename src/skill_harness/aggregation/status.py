@@ -57,7 +57,6 @@ class UnmeasuredSubReason(StrEnum):
 # Locked thresholds (CLAUDE.md pass rule — do NOT silently retune)
 # ---------------------------------------------------------------------------
 
-WIN_RATE_THRESHOLD: float = 0.60
 PASS_PROB_THRESHOLD: float = 0.95
 FAIL_PROB_THRESHOLD: float = 0.05
 N_MIN: int = 8
