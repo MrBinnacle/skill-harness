@@ -636,3 +636,54 @@ In addition to the 34 amendments queued before this fire:
 - **Genuine disagreements resolved**: (1) STAT EB-MoM vs EVAL-RESEARCH PyMC NUTS — adopted EB-MoM; PyMC → D21. (2) STAT exit 3 vs OPERATOR-DX uniform exit 2 — OPERATOR-DX wins on A48 clean-shape; STAT concern met via stderr. (3) TEST-ARCH audited+validity_passed filter vs SCHEMA raw registered_at — TEST-ARCH's filter is correct.
 - **Citation discipline**: EVAL-RESEARCH verified at primary source: arXiv:2510.04265 (Pass@k Bayesian) + arXiv:2505.05602 (HiBayES) + PyMC canonical hierarchical pooling example URL + lm-evaluation-harness `evaluation_tracker.py` (no schema version field, confirmed) + HELM open issues #2322 #2484 + AlpacaEval README + arXiv:2602.10371 (model-diffing; not transferable, confirmed).
 - **Lens distinctness**: 6 seats with 9 questions kept lens distinctness high. RELIABILITY + OPERATOR-DX overlap on CF-D3-1 warning UX (both correct, complementary not redundant). EVAL-RESEARCH provided 4 net-new citations + the `metric_drift` framing that TEST-ARCH adopted under different naming.
+
+---
+
+## Appendix G — Phase 3.4 fire: M1-r Coverage Law denominator (2026-06-07)
+
+**Template:** Custom 4-seat — TEST-ARCH + STAT + EVAL-RESEARCH + OPERATOR-DX (CORE roster, SCHEMA omitted because no schema touched, COST omitted because no API call surface). Opus 4.7, parallel, read-only. Archive: this Appendix only (no separate dispatch dir — fire was values-decision-narrow, 4 self-contained outputs synthesized inline). Trigger: Phase 3.4 code-review-sentinel surfaced M1-r as a `[values decision]`; user override directed "Deliberate with the council - Azimuth as applicable."
+
+**Outcome:** 1 finding adopted (A62); 5 observations surfaced (1 fix-loop scope expansion, 1 doc-lock companion-pass item, 3 v0.2 punch-list items). 0 unresolved BLOCKER. Azimuth explicitly skipped — M1-r is a sub-decision (downside bounded; reversibility high); azimuth scope is initiative-level go/no-go and reserved for the v0.1 launch council per PLAN.md §4.2.
+
+**Vote tally:**
+
+| Seat | Reading | Severity-if-wrong | v0.1 action recommended |
+|---|---|---|---|
+| TEST-ARCH | C | MAJOR | No engine change; PRD §8 sentence pointing at D3 |
+| STAT | C | MAJOR | No engine change; PRD §8 sentence |
+| EVAL-RESEARCH | C | MINOR | No engine change; cite Stryker + DO-178C + MMLU-Redux |
+| OPERATOR-DX | A | MAJOR | No engine change; add rich-render vacuity adjunct |
+
+Functionally unanimous on v0.1 behavior. Reading A and Reading C are identical at the wire (no engine change either way); they differ only on whether the PRD §8 disambiguating sentence + D3-deferral note land in v1.1 doc-lock.
+
+### Adopted finding
+
+- **A62 · Coverage Law denominator v0.1 = Reading A (`tested / authored`); D3 two-numerator deferral preserved.** Engine code at `src/skill_harness/aggregation/engine.py:94-95, 425` already implements Reading A; no engine change. PRD §8 gains a disambiguating sentence in v1.1 doc-lock: *"In v0.1, `total_clauses` is the authored clause set including all vacuity_flag values. v0.2 will additionally report `(tested / (total − mechanical_vacuous))` per Council D3, gated on extractor-calibration audit (D4)."* Reading A's behavioral nudge — "your skill has unverifiable surface area; this counts against you" — is the load-bearing v0.1 signal per PRD §20 ("A clause that cannot be falsified is not a contract. It is metadata.") and the Goodhart-resistance argument (Reading B incentivizes over-flagging clauses as vacuous to inflate Coverage). Reading C's two-numerator endpoint is field-standard per Stryker Mutator (`detected/valid` AND `detected/covered`), DO-178C §6.4.4.3 (uncovered code requires positive justification, not silent denominator removal), and MMLU-Redux (reports BOTH `Original EM` and `OK/Erroneous EM`). **Driver**: TEST-ARCH-M1r-1 + STAT-M1r-1 + EVAL-RESEARCH-M1r-1 + OPERATOR-DX-M1r-1 + Phase 3.4 code-review M1-r. **Dissent**: none material — OPERATOR-DX's READING-A is operationally identical to TEST-ARCH/STAT/EVAL-RESEARCH's READING-C for v0.1 wire output. **Flip condition**: (a) v0.1 dogfooding shows extractor-flagged vacuity rate ≥15% on ≥20% of imported skills AND operators report Reading A as actively misleading-discouraging (Goodhart pattern surfacing); (b) Reading B becomes a wire requirement before D4 extractor calibration lands — at which point D3's v0.2 ship accelerates into v0.1.x.
+
+### Observations (5)
+
+- **OBS-G1 (TEST-ARCH-M1r-2) · D3 formula clarification for v0.2.** D3's verbatim formula `(total − mechanical_vacuous)` excludes only the deterministic vacuous bucket and KEEPS `semantic_vacuous_pending_review` in the denominator (per A16's framing — semantic vacuous is UNMEASURED, not silently excluded). This is defensible but should be stated explicitly when D3 ships in v0.2 so the implementor doesn't re-derive it from A16 + A17 + D3. **Action**: surface to Phase 3.5 doc-lock companion pass on COUNCIL_FINDINGS.md D3 entry.
+- **OBS-G2 (STAT-additional) · `total_clause_count == 0` precondition refusal.** Today `engine.py:425` returns `0.0` when no clauses are authored — meaningless. Should raise `PreconditionError("no_clauses")` so the CLI surfaces a clear operator message instead of a `Coverage: 0%` falsehood. **Action**: add to Phase 3.4 fix-loop scope (~10 LOC). Severity: MINOR.
+- **OBS-G3 (EVAL-RESEARCH-additional) · DO-178C three-disposition pattern for v0.2 D3.** v0.2 D3 work should mirror DO-178C §6.4.4.3's three-disposition pattern: every vacuous clause should have an explicit disposition `fixable_by_rewrite | retain_as_metadata | mechanical_no_metric_exists`, not just a binary "vacuous" flag. Aligns with A16's existing mechanical-vs-semantic split. **Action**: surface to Phase 3.5 doc-lock as D3 expansion text.
+- **OBS-G4 (EVAL-RESEARCH-flip) · v0.2 D3 acceleration trigger.** If v0.1 corpus shows extractor-flagged vacuity rate ≥15% on a representative skill, pressure to ship Reading B becomes operationally justified before extractor calibration (D4) completes. Document as a "watch-for-v0.2-acceleration" trigger in PRD §8. **Action**: include in Phase 3.5 PRD §8 amendment text.
+- **OBS-G5 (OPERATOR-DX-additional) · Rich render vacuity adjunct.** Today `cli/main.py:1591` displays `f"{report.coverage:.1%}"` as a bare scalar. Additive UX upgrade: render `"Coverage: 60.0% (6 verified / 10 authored; 2 mech-vacuous excluded from testing)"` when vacuity_flag count is non-zero. No wire format change; rich-render only. **Action**: add to Phase 3.4 fix-loop scope (~15 LOC). Severity: MINOR.
+
+### Cross-talk validation (this fire)
+
+- **Functional unanimity on v0.1 behavior**: all 4 seats agree on the engine's current behavior. Disagreement is entirely on the PRD §8 / doc-lock framing (Reading A vs Reading C labeling) — both produce identical wire output for v0.1.
+- **Predictions landed (9+ accurate)**: TEST-ARCH→STAT C with rate-semantics-purity rationale (correct); TEST-ARCH→OPERATOR-DX A-with-vacuity-adjunct (correct); STAT→TEST-ARCH C citing UNMEASURED-orthogonality (correct); STAT→EVAL-RESEARCH C citing prior art (correct); STAT→OPERATOR-DX split A-or-C with vacuity surfacing (correct — OPERATOR-DX went A); EVAL-RESEARCH→TEST-ARCH A (predicted A, actual C; partial — TEST-ARCH's recommendation IS A behavior, framed as C); EVAL-RESEARCH→STAT C with denominator-confound argument (correct); EVAL-RESEARCH→OPERATOR-DX A for v0.1 with D3 v0.2 support (correct); OPERATOR-DX→TEST-ARCH A on §20 anchor (partial — TEST-ARCH framed as C); OPERATOR-DX→STAT A or C on rate-semantics (correct); OPERATOR-DX→EVAL-RESEARCH B on lcov analogy (wrong — EVAL-RESEARCH went C citing Stryker dual-numerator practice).
+- **Cross-derived findings (5 net-new)**: D3 formula clarification (TEST-ARCH cross-derived from A16 + D3 alignment check); precondition refusal for zero-clauses (STAT cross-derived from Reading A's degenerate-case analysis); DO-178C three-disposition pattern (EVAL-RESEARCH primary-source-driven); v0.2 D3 acceleration trigger (EVAL-RESEARCH operationalization); rich-render vacuity adjunct (OPERATOR-DX cross-derived during the Scenario 1 analysis).
+- **Genuine disagreements resolved**: A vs C framing — synthesizes to "Reading A behavior with D3 deferral acknowledged in PRD," which is operationally Reading C and labeled A by the OPERATOR-DX seat. No material disagreement.
+- **Citation discipline**: EVAL-RESEARCH verified at primary source — Stryker Mutator metrics docs (URL fetched), DO-178C §6.4.4.3 via LDRA (URL fetched), MMLU-Redux arXiv:2406.04127 (abstract + HTML fetched). STAT cited MMLU recall-from-training (flagged ABSTRACT-ONLY for HELM, training-memory for MMLU). external-citations-verified: YES with appropriate caveats.
+- **Lens distinctness**: 4 seats with 1 question kept lens distinctness high. TEST-ARCH owned PRD §20 invariant. STAT owned rate-semantics + denominator-confound. EVAL-RESEARCH owned prior art (3 frameworks). OPERATOR-DX owned wire format + UX scenarios with concrete numbers. No redundancy; complementary.
+
+### PRD v1.1 amendments queued (this fire)
+
+In addition to the 45 amendments queued by the Phase 3.5 audit:
+
+| Section | Amendment | Driver |
+|---|---|---|
+| §8 | Disambiguating sentence: "In v0.1, `total_clauses` is the authored clause set including all vacuity_flag values. v0.2 will additionally report `(tested / (total − mechanical_vacuous))` per Council D3, gated on extractor-calibration audit (D4)." | A62 |
+| §8 | "Watch-for-v0.2-acceleration" trigger note: ≥15% extractor-flagged vacuity rate on a representative skill triggers D3 ship in v0.1.x. | OBS-G4 |
+
+**Total PRD v1.1 amendments queued: 47** (45 from Phase 3.5 audit + 2 from this fire). CF-Phase-3-4-1 in Phase 3.4 fix-brief retired (replaced by these two specific amendments).
