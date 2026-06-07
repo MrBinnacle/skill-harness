@@ -1266,6 +1266,9 @@ def diff_skill(
             key = (cr.metric_id_per_axis.get("", cr.clause_id), _sha(text))
             # Use axis from the ClauseReport (derived from the verdict axis)
             # Build with (first axis key, sha256)
+            # v0.2 limitation: clauses with zero admissible verdicts (metric_id_per_axis == {})
+            # collapse to axis_key="" and align by sha256 only. Multiple zero-verdict clauses
+            # with the same clause_text_sha256 collapse to one bucket. See T9 regression test.
             axis_key = next(iter(cr.metric_id_per_axis.keys()), "")
             key_a[(axis_key, _sha(text))] = cr
 
@@ -1312,7 +1315,7 @@ def diff_skill(
                     )
                 )
             else:
-                # Both present: check metric_drift first (A55)
+                # Both present: check metric_drift first (A55, all four axes)
                 drift_reason: str | None = None
                 if cr_a.metric_id_per_axis != cr_b.metric_id_per_axis:
                     drift_reason = (
@@ -1328,6 +1331,15 @@ def diff_skill(
                     drift_reason = (
                         f"ablation_operator_hash differs: A={cr_a.ablation_operator_hash!r} "
                         f"B={cr_b.ablation_operator_hash!r}"
+                    )
+                elif cr_a.subject_model != cr_b.subject_model:
+                    drift_reason = (
+                        f"subject_model differs: A={cr_a.subject_model!r} B={cr_b.subject_model!r}"
+                    )
+                elif cr_a.user_message_sha256 != cr_b.user_message_sha256:
+                    drift_reason = (
+                        f"user_message_sha256 differs: A={cr_a.user_message_sha256!r} "
+                        f"B={cr_b.user_message_sha256!r}"
                     )
 
                 if drift_reason is not None:
@@ -1428,8 +1440,6 @@ def freeze(
       0  — frozen or already frozen
       1  — validation refused (ineligibility, missing verdict, incomplete parent)
     """
-    import sqlite3 as _sqlite3
-
     from skill_harness.storage.errors import BootstrapError
     from skill_harness.storage.migrations import open_evidence
     from skill_harness.storage.repositories.evidence.frozen_cases import freeze_verdict
@@ -1523,7 +1533,7 @@ def freeze(
                 f"\n[green]frozen[/] verdict [bold]{verdict_id}[/] "
                 f"→ frozen_case_id=[bold]{frozen_case_id}[/]"
             )
-        except _sqlite3.IntegrityError:
+        except sqlite3.IntegrityError:
             # Already frozen — look up existing frozen_case_id (idempotent per A48)
             existing_row = ev_conn.execute(
                 "SELECT frozen_case_id FROM frozen_cases WHERE verdict_id = ?",

@@ -22,7 +22,7 @@ class IncompleteRun:
     run_id: str
     state: str  # from runtime.run_progress.state
     skill_id: str  # extracted from evidence.runs.config_json
-    last_heartbeat_at: str | None  # if available
+    last_heartbeat_at: str  # ISO8601; last_heartbeat is NOT NULL in run_progress schema
 
 
 def find_incomplete_runs(
@@ -58,13 +58,10 @@ def find_incomplete_runs(
         return []
 
     # Build a map: run_id -> (state, last_heartbeat)
-    run_id_to_runtime: dict[str, tuple[str, str | None]] = {}
+    run_id_to_runtime: dict[str, tuple[str, str]] = {}
     for row in rows:
-        run_id, state, last_heartbeat = row[0], row[1], row[2] if len(row) > 2 else None
+        run_id, state, last_heartbeat = row
         run_id_to_runtime[run_id] = (state, last_heartbeat)
-
-    if not run_id_to_runtime:
-        return []
 
     # Step 2: cross-reference with evidence.runs for skill_id filtering
     # Python-layer join — no ATTACH, no cross-DB SQL.
@@ -86,7 +83,7 @@ def find_incomplete_runs(
         row_skill_id = config.get("skill_id")
         if row_skill_id != skill_id:
             continue
-        state, last_heartbeat = run_id_to_runtime.get(ev_run_id, ("unknown", None))
+        state, last_heartbeat = run_id_to_runtime.get(ev_run_id, ("unknown", ""))
         results.append(
             IncompleteRun(
                 run_id=ev_run_id,
@@ -96,8 +93,8 @@ def find_incomplete_runs(
             )
         )
 
-    # Sort most-recent-first by last_heartbeat_at DESC (None sorts last)
-    results.sort(key=lambda r: r.last_heartbeat_at or "", reverse=True)
+    # Sort most-recent-first by last_heartbeat_at DESC (NOT NULL; str is directly sortable)
+    results.sort(key=lambda r: r.last_heartbeat_at, reverse=True)
     return results
 
 

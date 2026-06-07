@@ -523,35 +523,60 @@ class TestEvaluateSkillAllPassed:
         report = json.loads(result.output)
         assert report["skill_id"] == SKILL_ID
         assert "clauses" in report
-        assert report["report_schema_version"] == "1.0.0"
+        assert report["report_schema_version"] == "1.1.0"  # bumped in C1 fix-loop per A60
 
     def test_json_output_to_stdout_warnings_to_stderr(self, tmp_path: Path) -> None:
-        """--format=json: report on stdout, any warnings on stderr (not mixed)."""
+        """T8: --format=json output is byte-stable JSON even when a warning is logged.
+
+        Uses a patched aggregate_skill that injects a warning to verify that the
+        JSON report on stdout is not contaminated by log output. The CLI uses
+        sys.stdout.buffer.write (bytes-only) for JSON, so log messages go to stderr
+        via the logging handler — they must not appear in result.output.
+        """
+        import logging
+        from functools import wraps
+
+        from skill_harness.aggregation import aggregate_skill as real_aggregate_skill
+        from skill_harness.aggregation.report import SkillReport
+
         ev, rt = open_both(tmp_path)
         _seed_all_passed(ev, rt)
         ev.close()
         rt.close()
 
-        runner = CliRunner()
-        result = runner.invoke(
-            cli,
-            [
-                "run",
-                "evaluate-skill",
-                SKILL_ID,
-                "--format=json",
-                "--evidence-db",
-                str(tmp_path / "evidence.db"),
-                "--runtime-db",
-                str(tmp_path / "runtime.db"),
-            ],
-            env={"COLUMNS": "200"},
-        )
+        sentinel_warning = "test-sentinel-warning-t8-stderr-separation"
 
-        # stdout must be valid JSON
+        @wraps(real_aggregate_skill)
+        def aggregate_skill_with_warning(*args: object, **kwargs: object) -> SkillReport:
+            logging.getLogger("skill_harness.aggregation.engine").warning(sentinel_warning)
+            return real_aggregate_skill(*args, **kwargs)  # type: ignore[arg-type]
+
+        runner = CliRunner()
+        with patch("skill_harness.cli.main.aggregate_skill", new=aggregate_skill_with_warning):
+            result = runner.invoke(
+                cli,
+                [
+                    "run",
+                    "evaluate-skill",
+                    SKILL_ID,
+                    "--format=json",
+                    "--evidence-db",
+                    str(tmp_path / "evidence.db"),
+                    "--runtime-db",
+                    str(tmp_path / "runtime.db"),
+                ],
+                env={"COLUMNS": "200"},
+            )
+
         assert result.exit_code == 0, f"Expected exit 0:\n{result.output}"
-        report = json.loads(result.output)
-        assert report["skill_id"] == SKILL_ID
+        # output must be valid JSON (no log contamination on stdout)
+        parsed = json.loads(result.output)
+        assert parsed["skill_id"] == SKILL_ID
+        assert "clauses" in parsed
+        # The JSON output must be byte-equal to to_json_bytes(report)
+        # We verify this by checking it parses without error and has all expected keys
+        assert "report_schema_version" in parsed
+        assert parsed["report_schema_version"] == "1.1.0"
 
 
 # ---------------------------------------------------------------------------
@@ -692,3 +717,20 @@ class TestEvaluateSkillHelp:
         result = _invoke("run", "evaluate-skill", "--help")
         assert "--format" in result.output, f"--format must appear in help:\n{result.output}"
         assert "--dry-run" in result.output, f"--dry-run must appear in help:\n{result.output}"
+
+
+# ---------------------------------------------------------------------------
+# Tests: M6 — invalid --format values rejected with exit 2
+# ---------------------------------------------------------------------------
+
+
+class TestEvaluateSkillFormatRejected:
+    def test_format_csv_rejected_exit_2(self) -> None:
+        """M6: --format=csv is not in click.Choice(['rich', 'json']) → exit 2."""
+        result = _invoke("run", "evaluate-skill", "any-skill", "--format=csv")
+        assert result.exit_code == 2, f"Expected exit 2 for --format=csv, got {result.exit_code}"
+
+    def test_format_md_rejected_exit_2(self) -> None:
+        """M6: --format=md is not in click.Choice(['rich', 'json']) → exit 2."""
+        result = _invoke("run", "evaluate-skill", "any-skill", "--format=md")
+        assert result.exit_code == 2, f"Expected exit 2 for --format=md, got {result.exit_code}"

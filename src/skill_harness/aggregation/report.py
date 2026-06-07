@@ -24,7 +24,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-REPORT_SCHEMA_VERSION = "1.0.0"
+REPORT_SCHEMA_VERSION = "1.1.0"
 
 
 @dataclass(frozen=True)
@@ -72,6 +72,9 @@ class ClauseReport:
     run_ids_aggregated: tuple[str, ...]
     n_verdicts: int
     w_observation_sum: float
+    # A55 comparability axes added in schema 1.1.0 (A60 additive bump)
+    subject_model: str | None  # model used for all runs; "MIXED" if divergent across runs
+    user_message_sha256: str | None  # sha256 of user_message from config_json; "MIXED" if divergent
 
 
 @dataclass(frozen=True)
@@ -82,7 +85,7 @@ class SkillReport:
     ``to_json_bytes()``. Rich/Markdown rendering is E.3 territory.
     """
 
-    report_schema_version: str  # always REPORT_SCHEMA_VERSION ("1.0.0")
+    report_schema_version: str  # always REPORT_SCHEMA_VERSION ("1.1.0")
     skill_id: str
     generated_at_utc: str  # ISO8601 — caller-supplied; never datetime.now() here
     harness_version: str
@@ -116,6 +119,8 @@ def _clause_to_dict(clause: ClauseReport) -> dict[str, object]:
         "run_ids_aggregated": list(clause.run_ids_aggregated),
         "n_verdicts": clause.n_verdicts,
         "w_observation_sum": clause.w_observation_sum,
+        "subject_model": clause.subject_model,
+        "user_message_sha256": clause.user_message_sha256,
     }
 
 
@@ -204,6 +209,8 @@ def skill_report_from_dict(d: dict[str, Any]) -> SkillReport:
             run_ids_aggregated=tuple(str(r) for r in c["run_ids_aggregated"]),
             n_verdicts=int(c["n_verdicts"]),
             w_observation_sum=float(c["w_observation_sum"]),
+            subject_model=c.get("subject_model"),
+            user_message_sha256=c.get("user_message_sha256"),
         )
         for c in d["clauses"]
     )

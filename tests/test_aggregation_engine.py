@@ -313,6 +313,48 @@ class TestPreconditionErrors:
 
 
 # ---------------------------------------------------------------------------
+# Tests: I1 — _fetch_completed_ablation_runs single-shot SQL
+# ---------------------------------------------------------------------------
+
+
+class TestFetchCompletedAblationRunsSingleShot:
+    def test_execute_called_exactly_once(self, tmp_path: Path) -> None:
+        """I1: _fetch_completed_ablation_runs must issue exactly 1 SQL execute call.
+
+        Before the fix, it executed the same SELECT twice (once for rows, once for
+        cur.description), doubling read I/O. This test mocks Connection.execute to
+        count calls and asserts exactly 1.
+        """
+        import sqlite3
+        from unittest.mock import MagicMock
+
+        from skill_harness.aggregation.engine import _fetch_completed_ablation_runs
+
+        # Build a real cursor-like mock so the function can use .description and .fetchall()
+        mock_cursor = MagicMock()
+        mock_cursor.description = [
+            ("run_id",),
+            ("skill_id",),
+            ("run_kind",),
+            ("config_json",),
+            ("started_at",),
+            ("completed_at",),
+        ]
+        mock_cursor.fetchall.return_value = []
+
+        mock_conn = MagicMock(spec=sqlite3.Connection)
+        mock_conn.execute.return_value = mock_cursor
+
+        result = _fetch_completed_ablation_runs(mock_conn, "skill-test")
+
+        assert mock_conn.execute.call_count == 1, (
+            f"Expected exactly 1 execute call, got {mock_conn.execute.call_count}. "
+            "Duplicate SQL query was not eliminated (I1 fix regression)."
+        )
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
 # Tests: MalformedRunConfig
 # ---------------------------------------------------------------------------
 
@@ -335,6 +377,158 @@ class TestMalformedRunConfig:
                     generated_at_utc=_GEN_AT,
                 )
             assert "family_size" in exc_info.value.reason
+        finally:
+            ev.close()
+            rt.close()
+
+    @pytest.mark.parametrize(
+        "bad_family_size",
+        [0, -1, "2", None, 1.5],
+        ids=["zero", "negative", "string", "none", "float"],
+    )
+    def test_family_size_malformed_type_raises(
+        self, tmp_path: Path, bad_family_size: object
+    ) -> None:
+        """T6: all invalid family_size values raise MalformedRunConfig (not just zero)."""
+        ev, rt = open_both(tmp_path)
+        try:
+            insert_skill(ev)
+            # Bypass insert_run's int family_size — write raw config_json
+            config = json.dumps(
+                {
+                    "run_id": RUN_ID,
+                    "skill_id": SKILL_ID,
+                    "clauses": [{"clause_id": CLAUSE_ID, "axis": AXIS}],
+                    "subject_model": "claude-sonnet-4-6",
+                    "user_message": "test",
+                    "family_size": bad_family_size,
+                    "stopping_reasons": {},
+                },
+                sort_keys=True,
+            )
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES (?, ?, 'ablation', ?, ?, ?)",
+                (RUN_ID, SKILL_ID, config, _TS, _TS2),
+            )
+            insert_run_progress(rt, state="completed")
+
+            with pytest.raises(MalformedRunConfig):
+                aggregate_skill(
+                    SKILL_ID,
+                    evidence_conn_ro=ev,
+                    runtime_conn=rt,
+                    harness_version=_HARNESS_VER,
+                    generated_at_utc=_GEN_AT,
+                )
+        finally:
+            ev.close()
+            rt.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: family_size mismatch warning (A59 + A41)
+# ---------------------------------------------------------------------------
+
+
+class TestFamilySizeMismatchWarning:
+    def test_family_size_mismatch_emits_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """T5: two runs with different family_size → warning logged, first run's value used."""
+        import logging
+
+        ev, rt = open_both(tmp_path)
+        try:
+            insert_skill(ev)
+            insert_clause(ev)
+            insert_metric_version(ev)
+
+            # Run 1: family_size=2
+            run1_config = json.dumps(
+                {
+                    "run_id": "run-fs-1",
+                    "skill_id": SKILL_ID,
+                    "clauses": [{"clause_id": CLAUSE_ID, "axis": AXIS}],
+                    "subject_model": "claude-sonnet-4-6",
+                    "user_message": "test",
+                    "family_size": 2,
+                    "stopping_reasons": {},
+                },
+                sort_keys=True,
+            )
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES (?, ?, 'ablation', ?, ?, ?)",
+                ("run-fs-1", SKILL_ID, run1_config, _TS, _TS2),
+            )
+            # Run 2: family_size=4 (mismatch!)
+            run2_config = json.dumps(
+                {
+                    "run_id": "run-fs-2",
+                    "skill_id": SKILL_ID,
+                    "clauses": [{"clause_id": CLAUSE_ID, "axis": AXIS}],
+                    "subject_model": "claude-sonnet-4-6",
+                    "user_message": "test",
+                    "family_size": 4,
+                    "stopping_reasons": {},
+                },
+                sort_keys=True,
+            )
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES (?, ?, 'ablation', ?, ?, ?)",
+                ("run-fs-2", SKILL_ID, run2_config, _TS2, _TS2),
+            )
+            insert_run_progress(rt, "run-fs-1", state="completed")
+            insert_run_progress(rt, "run-fs-2", state="completed")
+
+            # Seed minimal verdicts for run1 so aggregate_skill has data
+            for i in range(3):
+                sa, sb = f"r1sa-{i}", f"r1sb-{i}"
+                insert_sample(
+                    ev, sa, run_id="run-fs-1", clause_id=CLAUSE_ID, condition="full", sample_index=i
+                )
+                insert_sample(
+                    ev,
+                    sb,
+                    run_id="run-fs-1",
+                    clause_id=CLAUSE_ID,
+                    condition="ablated",
+                    sample_index=i,
+                )
+                insert_verdict(
+                    ev,
+                    verdict_id=f"r1v-{i}",
+                    run_id="run-fs-1",
+                    clause_id=CLAUSE_ID,
+                    axis=AXIS,
+                    sample_a_id=sa,
+                    sample_b_id=sb,
+                    observation=1.0,
+                )
+
+            with caplog.at_level(logging.WARNING, logger="skill_harness.aggregation.engine"):
+                report = aggregate_skill(
+                    SKILL_ID,
+                    evidence_conn_ro=ev,
+                    runtime_conn=rt,
+                    harness_version=_HARNESS_VER,
+                    generated_at_utc=_GEN_AT,
+                )
+
+            # Warning must have been emitted
+            assert any(
+                "family_size" in r.message and "mismatch" in r.message for r in caplog.records
+            ), f"Expected family_size mismatch warning. Got: {[r.message for r in caplog.records]}"
+            # First-run's value (2) must be used
+            assert report.aggregation_provenance["family_size_used"] == 2, (
+                f"Expected family_size_used=2 (first run), got "
+                f"{report.aggregation_provenance['family_size_used']!r}"
+            )
         finally:
             ev.close()
             rt.close()
@@ -455,7 +649,7 @@ class TestHealthyAggregation:
                 harness_version=_HARNESS_VER,
                 generated_at_utc=_GEN_AT,
             )
-            assert report.report_schema_version == "1.0.0"
+            assert report.report_schema_version == "1.1.0"  # bumped in C1 fix-loop per A60
         finally:
             ev.close()
             rt.close()
@@ -636,6 +830,104 @@ class TestHealthyAggregation:
 
 
 # ---------------------------------------------------------------------------
+# Tests: I3 — UNMEASURED(falsifying_case_stale) end-to-end integration
+# ---------------------------------------------------------------------------
+
+
+class TestStaleFrozenCaseIntegration:
+    def test_unmeasured_falsifying_case_stale_when_newer_metric_registered(
+        self, tmp_path: Path
+    ) -> None:
+        """I3: engine-level integration for UNMEASURED(falsifying_case_stale).
+
+        Covers the full path from frozen_cases_with_currency VIEW feeding the engine:
+        1. Register metric_version v1 (audited+passed) at _TS.
+        2. Insert verdicts with v1 driving p_win >= 0.95.
+        3. Insert a frozen_case referencing v1 (metric_version='1.0.0', implementation_hash=_SHA2).
+        4. Register metric_version v2 (audited+passed) at _TS2 > _TS — makes v1 stale.
+        5. aggregate_skill must report UNMEASURED with sub_reason='falsifying_case_stale'.
+        """
+        ev, rt = open_both(tmp_path)
+        try:
+            insert_skill(ev)
+            insert_clause(ev)
+
+            # Step 1: register v1
+            insert_metric_version(ev, version="1.0.0", implementation_hash=_SHA2)
+
+            # Step 2: insert verdicts with v1 (enough wins for p_win >= 0.95)
+            insert_run(ev, family_size=1)
+            insert_run_progress(rt, state="completed")
+            for i in range(30):
+                sa, sb = f"sa-i3-{i}", f"sb-i3-{i}"
+                insert_sample(ev, sa, clause_id=CLAUSE_ID, condition="full", sample_index=i)
+                insert_sample(ev, sb, clause_id=CLAUSE_ID, condition="ablated", sample_index=i)
+                insert_verdict(
+                    ev,
+                    verdict_id=f"vi3-{i}",
+                    clause_id=CLAUSE_ID,
+                    axis=AXIS,
+                    sample_a_id=sa,
+                    sample_b_id=sb,
+                    observation=1.0,
+                    metric_version="1.0.0",
+                )
+
+            # Step 3: insert frozen_case at v1
+            fail_text = "i3-failing-input"
+            fail_sha = sha256_of(fail_text)
+            ev.execute(
+                """INSERT INTO frozen_cases (
+                    frozen_case_id, clause_id, failing_input_text, failing_input_sha256,
+                    oracle_source, metric_id, metric_version, implementation_hash,
+                    run_id, axis
+                ) VALUES (?, ?, ?, ?, 'mechanical', ?, '1.0.0', ?, ?, ?)""",
+                (
+                    "fc-i3-stale",
+                    CLAUSE_ID,
+                    fail_text,
+                    fail_sha,
+                    AXIS,
+                    _SHA2,  # implementation_hash matches v1
+                    RUN_ID,
+                    AXIS,
+                ),
+            )
+
+            # Step 4: register v2 at later timestamp — makes v1 stale
+            ev.execute(
+                "INSERT INTO metric_versions"
+                " (metric_id, version, implementation_hash, tier,"
+                " audited, mechanical_validity_test_passed, registered_at)"
+                " VALUES (?, '2.0.0', ?, 1, 1, 1, ?)",
+                (AXIS, _SHA3, _TS2),
+            )
+
+            # Step 5: aggregate — must return UNMEASURED(falsifying_case_stale)
+            report = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+
+            assert len(report.clauses) == 1
+            clause = report.clauses[0]
+            assert clause.status == "UNMEASURED", (
+                f"Expected UNMEASURED, got {clause.status!r}. "
+                "The frozen_cases_with_currency VIEW → engine path may be broken."
+            )
+            assert clause.sub_reason == "falsifying_case_stale", (
+                f"Expected sub_reason='falsifying_case_stale', got {clause.sub_reason!r}. "
+                "The frozen case at v1 should be stale now that v2 is registered."
+            )
+        finally:
+            ev.close()
+            rt.close()
+
+
+# ---------------------------------------------------------------------------
 # Tests: Coverage field
 # ---------------------------------------------------------------------------
 
@@ -702,6 +994,55 @@ class TestEngineByteSability:
                 generated_at_utc=_GEN_AT,
             )
             assert to_json_bytes(r1) == to_json_bytes(r2)
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_engine_does_not_read_wall_clock(self, tmp_path: Path) -> None:
+        """T4: aggregate_skill must not call datetime.now() or time.time() internally.
+
+        Verifies the determinism contract by asserting:
+        1. engine.py does not import 'time' at module level (grep-style assertion).
+        2. Two calls with identical evidence + identical generated_at_utc return
+           byte-identical output — if anything inside read a wall clock, they'd diverge.
+
+        Note: patching datetime.datetime.utcnow directly is not possible in CPython 3.12+
+        (immutable built-in type). This test uses the structural + byte-stability approach
+        instead. Any future addition of datetime.now() to engine.py will break
+        test_same_evidence_same_bytes which runs in the same class.
+        """
+        import skill_harness.aggregation.engine as engine_module
+
+        # Structural check: engine module must not have 'time' or 'datetime' attributes
+        # (it imports neither — they are not needed since generated_at_utc is caller-supplied)
+        assert not hasattr(engine_module, "time"), (
+            "engine.py imported 'time' module — violates wall-clock-free determinism contract. "
+            "All timestamps must come from caller-supplied generated_at_utc."
+        )
+
+        ev, rt = open_both(tmp_path)
+        try:
+            _seed_healthy_evidence(ev, rt, with_frozen_case=True)
+
+            # Call twice with the same generated_at_utc — bytes must be identical
+            r1 = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+            r2 = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+            assert to_json_bytes(r1) == to_json_bytes(r2), (
+                "aggregate_skill returned different bytes for identical evidence + identical "
+                "generated_at_utc. A wall-clock read inside the engine is the most likely cause."
+            )
         finally:
             ev.close()
             rt.close()

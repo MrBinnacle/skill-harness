@@ -94,13 +94,14 @@ def _insert_run(
     skill_id: str,
     clause_id: str,
     completed: bool = True,
+    subject_model: str = "claude-sonnet-4-6",
 ) -> None:
     config = json.dumps(
         {
             "run_id": run_id,
             "skill_id": skill_id,
             "clauses": [{"clause_id": clause_id, "axis": AXIS}],
-            "subject_model": "claude-sonnet-4-6",
+            "subject_model": subject_model,
             "user_message": "test",
             "family_size": 1,
             "stopping_reasons": {},
@@ -218,12 +219,15 @@ def _seed_skill_with_passed_clause(
     clause_id: str,
     clause_text: str = "Default clause text for testing purposes.",
     n_wins: int = 9,
+    subject_model: str = "claude-sonnet-4-6",
 ) -> None:
     """Seed a skill with enough evidence to produce a PASSED clause + frozen case."""
     _insert_skill(ev, skill_id=skill_id)
     _insert_clause(ev, clause_id=clause_id, skill_id=skill_id, clause_text=clause_text)
     _insert_metric_version(ev)
-    _insert_run(ev, run_id=run_id, skill_id=skill_id, clause_id=clause_id)
+    _insert_run(
+        ev, run_id=run_id, skill_id=skill_id, clause_id=clause_id, subject_model=subject_model
+    )
     _insert_run_progress(rt, run_id=run_id, state="completed")
     for i in range(n_wins):
         sa = f"sa-{run_id}-{i}"
@@ -564,3 +568,164 @@ class TestDiffSkillHelp:
         assert "--exit-on-divergence" in result.output, (
             f"--exit-on-divergence must appear in help:\n{result.output}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests: M6 — invalid --format values rejected with exit 2
+# ---------------------------------------------------------------------------
+
+
+class TestDiffSkillFormatRejected:
+    def test_format_csv_rejected_exit_2(self) -> None:
+        """M6: --format=csv is not in click.Choice(['rich', 'json']) → exit 2."""
+        result = _invoke("diff", "skill", "skill-a", "skill-b", "--format=csv")
+        assert result.exit_code == 2, f"Expected exit 2 for --format=csv, got {result.exit_code}"
+
+    def test_format_md_rejected_exit_2(self) -> None:
+        """M6: --format=md is not in click.Choice(['rich', 'json']) → exit 2."""
+        result = _invoke("diff", "skill", "skill-a", "skill-b", "--format=md")
+        assert result.exit_code == 2, f"Expected exit 2 for --format=md, got {result.exit_code}"
+
+
+# ---------------------------------------------------------------------------
+# Tests: C1 — subject_model swap triggers metric_drift
+# ---------------------------------------------------------------------------
+
+_CLAUSE_TEXT_C1 = "Clause text for C1 subject_model metric_drift test."
+SKILL_C1_A = "skill-c1-sonnet"
+SKILL_C1_B = "skill-c1-opus"
+RUN_C1_A = "run-c1-sonnet"
+RUN_C1_B = "run-c1-opus"
+CLAUSE_C1_A = "clause-c1-a"
+CLAUSE_C1_B = "clause-c1-b"
+
+
+class TestDiffSkillSubjectModelMetricDrift:
+    def test_diff_skill_subject_model_swap_marks_metric_drift(self, tmp_path: Path) -> None:
+        """C1 falsifying test: skill A (sonnet) vs skill B (opus) → metric_drift.
+
+        A55 mandates metric_drift triggers on ANY of four axes. subject_model is
+        one of those axes. Two otherwise-identical skills that differ only in
+        subject_model must be flagged as metric_drift (not regressed/improved).
+
+        Was RED against the pre-fix code (subject_model not checked).
+        Must be GREEN after C1 fix (subject_model threaded through ClauseReport
+        and checked in diff_skill).
+        """
+        ev, rt = open_both(tmp_path)
+        _seed_skill_with_passed_clause(
+            ev,
+            rt,
+            SKILL_C1_A,
+            RUN_C1_A,
+            CLAUSE_C1_A,
+            clause_text=_CLAUSE_TEXT_C1,
+            n_wins=30,
+            subject_model="claude-sonnet-4-6",
+        )
+        _seed_skill_with_passed_clause(
+            ev,
+            rt,
+            SKILL_C1_B,
+            RUN_C1_B,
+            CLAUSE_C1_B,
+            clause_text=_CLAUSE_TEXT_C1,
+            n_wins=30,
+            subject_model="claude-opus-4-7",
+        )
+        ev.close()
+        rt.close()
+
+        result = _invoke(
+            "diff",
+            "skill",
+            SKILL_C1_A,
+            SKILL_C1_B,
+            "--format=json",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+            "--runtime-db",
+            str(tmp_path / "runtime.db"),
+        )
+
+        assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}:\n{result.output}"
+        diff = json.loads(result.output)
+        assert "clauses" in diff
+        assert len(diff["clauses"]) > 0, "Expected at least one clause diff"
+
+        clause_diff = diff["clauses"][0]
+        assert clause_diff["delta"] == "metric_drift", (
+            f"Expected delta='metric_drift' when subject_model differs, "
+            f"got {clause_diff['delta']!r}. "
+            "subject_model is a required A55 comparability axis (C1 fix)."
+        )
+        assert "metric_drift_reason" in clause_diff
+        assert clause_diff["metric_drift_reason"] is not None
+        assert "subject_model" in clause_diff["metric_drift_reason"], (
+            f"Expected 'subject_model' in metric_drift_reason, got "
+            f"{clause_diff['metric_drift_reason']!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: T9 zero-axis alignment pinning
+# ---------------------------------------------------------------------------
+
+
+def _seed_no_verdict_skill(
+    ev: sqlite3.Connection,
+    rt: sqlite3.Connection,
+    skill_id: str,
+    run_id: str,
+    clause_id: str,
+    clause_text: str = "Clause with no verdicts for alignment test.",
+) -> None:
+    """Seed a skill with a run but NO verdicts → UNMEASURED(no_data), metric_id_per_axis={}."""
+    _insert_skill(ev, skill_id=skill_id)
+    _insert_clause(ev, clause_id=clause_id, skill_id=skill_id, clause_text=clause_text)
+    _insert_metric_version(ev)
+    _insert_run(ev, run_id=run_id, skill_id=skill_id, clause_id=clause_id)
+    _insert_run_progress(rt, run_id=run_id, state="completed")
+    # No samples or verdicts inserted → clause has no admissible data
+
+
+class TestDiffSkillZeroAxisAlignment:
+    def test_zero_verdict_clause_uses_empty_axis_key(self, tmp_path: Path) -> None:
+        """T9: clause with no admissible verdicts → axis_key='' and delta='unchanged'.
+
+        When metric_id_per_axis == {} (no verdicts), the alignment key defaults to "".
+        Two skills with an identical zero-verdict clause must align as "unchanged".
+        This pins the v0.2 limitation documented at cli/main.py:1269.
+        """
+        ev, rt = open_both(tmp_path)
+        clause_text = "Zero-verdict clause text for alignment pinning test."
+        _seed_no_verdict_skill(ev, rt, SKILL_A, RUN_A, CLAUSE_A, clause_text=clause_text)
+        _seed_no_verdict_skill(ev, rt, SKILL_B, RUN_B, CLAUSE_B, clause_text=clause_text)
+        ev.close()
+        rt.close()
+
+        result = _invoke(
+            "diff",
+            "skill",
+            SKILL_A,
+            SKILL_B,
+            "--format=json",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+            "--runtime-db",
+            str(tmp_path / "runtime.db"),
+        )
+
+        assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}:\n{result.output}"
+        diff = json.loads(result.output)
+        assert "clauses" in diff
+        assert len(diff["clauses"]) > 0, "Expected at least one clause diff"
+
+        for clause_diff in diff["clauses"]:
+            assert clause_diff["axis"] == "", (
+                f"Expected axis_key='' for zero-verdict clause, got {clause_diff['axis']!r}"
+            )
+            assert clause_diff["delta"] == "unchanged", (
+                f"Expected delta='unchanged' for matching zero-verdict clauses, "
+                f"got {clause_diff['delta']!r}"
+            )

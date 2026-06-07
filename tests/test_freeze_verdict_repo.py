@@ -300,3 +300,27 @@ class TestFreezeVerdictIdempotency:
         # Attempt second freeze of same verdict — same (clause, axis, input sha256)
         with pytest.raises(sqlite3.IntegrityError):
             freeze_verdict(evidence_db, "vrd1", oracle_source="mechanical")
+
+    def test_duplicate_freeze_raises_unique_specifically(
+        self, evidence_db: sqlite3.Connection
+    ) -> None:
+        """T2: UNIQUE constraint pinning — failure must be UNIQUE (not FK/NOT NULL/trigger).
+
+        A56 pins idempotency to idx_frozen_unique(clause_id, axis, failing_input_sha256).
+        Any other constraint (FK, NOT NULL, future CHECK) would also raise IntegrityError —
+        this test distinguishes UNIQUE from those alternatives.
+        """
+        from skill_harness.storage.repositories.evidence.frozen_cases import (
+            list_frozen_cases_for_clause,
+        )
+
+        _seed_standard(evidence_db)
+        freeze_verdict(evidence_db, "vrd1", oracle_source="mechanical")
+
+        # Second freeze must raise with UNIQUE message
+        with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+            freeze_verdict(evidence_db, "vrd1", oracle_source="mechanical")
+
+        # Only one frozen case must exist — idempotent, not duplicated
+        cases = list_frozen_cases_for_clause(evidence_db, "cl1")
+        assert len(cases) == 1, f"Expected exactly 1 frozen case, got {len(cases)}"

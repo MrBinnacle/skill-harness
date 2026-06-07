@@ -341,6 +341,28 @@ class TestFindResumableRunForSkill:
             ev.close()
             rt.close()
 
+    def test_returns_most_recently_heartbeated_run(self, tmp_path: Path) -> None:
+        """T1: heartbeat-DESC ordering — run2 has later heartbeat, must be returned first."""
+        ev = open_evidence(tmp_path / "evidence.db")
+        rt = open_runtime(tmp_path / "runtime.db")
+        try:
+            _insert_skill(ev, "sk1")
+            _insert_run(ev, "run1", "sk1", completed=False)
+            _insert_run(ev, "run2", "sk1", completed=False)
+            # run1 has earlier heartbeat _TS; run2 has later heartbeat _TS2
+            _insert_run_progress(rt, "run1", state="running", last_heartbeat=_TS)
+            _insert_run_progress(rt, "run2", state="running", last_heartbeat=_TS2)
+
+            result = find_resumable_run_for_skill("sk1", evidence_conn_ro=ev, runtime_conn=rt)
+            # run2 has the most recent heartbeat — must be returned
+            assert result == "run2", (
+                f"Expected run2 (later heartbeat), got {result!r}. "
+                "Reversing reverse=True → reverse=False at recovery.py:100 would break this."
+            )
+        finally:
+            ev.close()
+            rt.close()
+
     def test_returns_none_when_only_completed_runs_exist(self, tmp_path: Path) -> None:
         ev = open_evidence(tmp_path / "evidence.db")
         rt = open_runtime(tmp_path / "runtime.db")

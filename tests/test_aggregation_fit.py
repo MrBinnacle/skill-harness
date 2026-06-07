@@ -22,6 +22,7 @@ from skill_harness.aggregation.fit import (
     K_MIN_FOR_EB,
     VAR_FLOOR,
     ClauseObservations,
+    _bh_fdr,
     _ebmom,
     fit_skill,
 )
@@ -270,6 +271,83 @@ class TestFitSkillBhFdrFallback:
         # p_value for BH = 1 - 0.5 = 0.5 → likely doesn't pass BH-FDR at q=0.05
         # Result: none or few pass. Just check the type.
         assert isinstance(result.bh_fdr_passes, frozenset)
+
+
+# ---------------------------------------------------------------------------
+# T3: BH-FDR direct unit tests + fit-level test with obvious winner
+# ---------------------------------------------------------------------------
+
+
+class TestBhFdrDirect:
+    def test_bh_fdr_known_input_known_output(self) -> None:
+        """T3a: hand-computed _bh_fdr with known input → known output set.
+
+        BH at q=0.05, k=4 clauses, p-values: [0.001, 0.01, 0.04, 0.5]
+        Sorted ascending: [0.001, 0.01, 0.04, 0.5]
+        BH thresholds (rank/k * q): [1/4*0.05, 2/4*0.05, 3/4*0.05, 4/4*0.05]
+                                   = [0.0125,    0.025,    0.0375,   0.05]
+        Comparisons:
+          rank 1: p=0.001 <= 0.0125 → PASS (index 0)
+          rank 2: p=0.01  <= 0.025  → PASS (index 1)
+          rank 3: p=0.04  > 0.0375  → FAIL; but BH step-up: largest passing rank=2,
+                                       so indices at ranks 1+2 pass = {0, 1}
+          rank 4: p=0.5   > 0.05    → FAIL
+        Expected: {0, 1}
+        """
+        p_values = [0.001, 0.01, 0.04, 0.5]
+        result = _bh_fdr(p_values, q=0.05)
+        assert isinstance(result, frozenset)
+        assert result == frozenset({0, 1}), (
+            f"Expected {{0, 1}} (indices of p=0.001 and p=0.01), got {result}"
+        )
+
+    def test_bh_fdr_all_pass_when_very_small(self) -> None:
+        """T3a: all p-values tiny → all indices pass."""
+        p_values = [0.0001, 0.0002, 0.0003]
+        result = _bh_fdr(p_values, q=0.05)
+        assert result == frozenset({0, 1, 2})
+
+    def test_bh_fdr_none_pass_when_large(self) -> None:
+        """T3a: all p-values large → empty set."""
+        p_values = [0.5, 0.6, 0.7]
+        result = _bh_fdr(p_values, q=0.05)
+        assert result == frozenset()
+
+    def test_bh_fdr_empty_input_returns_empty(self) -> None:
+        """T3a: empty input → frozenset()."""
+        result = _bh_fdr([], q=0.05)
+        assert result == frozenset()
+
+    def test_fit_fallback_with_obvious_winner_clause_in_bh_fdr_passes(self) -> None:
+        """T3b: bimodal distribution → alpha_le_zero fallback fires AND winner in bh_fdr_passes.
+
+        Strategy: 5 all-loss clauses (w=0, n=10) + 4 all-win clauses (w=10, n=10) + 1 winner.
+        Bimodal distribution (mean=0.5, var=mean*(1-mean)) makes alpha_hat → 0 → fallback.
+        The all-wins winner must appear in bh_fdr_passes (p ≈ 0 → survives BH correction).
+        """
+        # 5 pure-loss + 4 pure-win clauses → bimodal → alpha_hat = 0 → fallback
+        clauses: list[ClauseObservations] = []
+        for i in range(5):
+            clauses.append(ClauseObservations(clause_id=f"loss-{i}", w=0.0, n=10))
+        for i in range(4):
+            clauses.append(ClauseObservations(clause_id=f"win-{i}", w=10.0, n=10))
+        winner = ClauseObservations(clause_id="winner-clause", w=10.0, n=10)
+        clauses.append(winner)
+        assert len(clauses) == 10  # K=10 to satisfy EB eligibility gate
+
+        result = fit_skill(clauses)
+
+        # Verify fallback was triggered (alpha_le_zero from bimodal distribution)
+        assert result.aggregation_method == "bh_fdr_fallback", (
+            f"Expected bh_fdr_fallback, got {result.aggregation_method!r}"
+        )
+        assert result.bh_fdr_passes is not None
+
+        # The obvious winner (p_value ≈ 0) must be in bh_fdr_passes
+        assert "winner-clause" in result.bh_fdr_passes, (
+            f"winner-clause (all-wins) not in bh_fdr_passes={result.bh_fdr_passes!r}. "
+            "BH-FDR selection logic may be broken."
+        )
 
 
 # ---------------------------------------------------------------------------

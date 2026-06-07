@@ -18,14 +18,16 @@ Design:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import sqlite3
 from collections import defaultdict
 from sqlite3 import Connection
 from typing import Any
 
 from skill_harness.aggregation.errors import MalformedRunConfig, PreconditionError
-from skill_harness.aggregation.fit import ClauseObservations, FitResult, fit_skill
+from skill_harness.aggregation.fit import ClauseObservations, ClausePosterior, FitResult, fit_skill
 from skill_harness.aggregation.report import (
     REPORT_SCHEMA_VERSION,
     ClauseReport,
@@ -107,6 +109,10 @@ def aggregate_skill(
     clause_axis_metric_id: dict[tuple[str, str], str | None] = {}
     clause_axis_metric_version: dict[tuple[str, str], str | None] = {}
     clause_axis_operator_hash: dict[tuple[str, str], str | None] = {}
+
+    # A55 comparability axes: track per-run subject_model + user_message_sha256
+    run_id_to_subject_model: dict[str, str | None] = {}
+    run_id_to_user_msg_sha: dict[str, str | None] = {}
 
     # Track full_vs_null observations for ContributionSummary (A50)
     full_vs_null_observations: list[float] = []
@@ -195,7 +201,7 @@ def aggregate_skill(
             ).fetchone()
             clause_confounded_verdicts[key] += cnt[0] if cnt else 0
 
-        # Ablation operator hash — read from runs.config_json
+        # Ablation operator hash + A55 comparability fields — read from runs.config_json
         config_json = run.get("config_json", "{}")
         try:
             config = json.loads(config_json)
@@ -205,6 +211,16 @@ def aggregate_skill(
         for key in clause_axis_run_ids:
             if run_id in clause_axis_run_ids[key]:
                 clause_axis_operator_hash.setdefault(key, op_hash)
+
+        # A55: capture subject_model + user_message_sha256 per run
+        run_id_to_subject_model[run_id] = config.get("subject_model")
+        user_msg = config.get("user_message")
+        if user_msg is not None:
+            run_id_to_user_msg_sha[run_id] = hashlib.sha256(
+                str(user_msg).encode("utf-8")
+            ).hexdigest()
+        else:
+            run_id_to_user_msg_sha[run_id] = None
 
     # ------------------------------------------------------------------
     # Frozen case currency counts per (clause_id, axis) from VIEW
@@ -258,7 +274,7 @@ def aggregate_skill(
     ]
 
     fit_result: FitResult | None = None
-    posteriors_by_key: dict[tuple[str, str], object] = {}
+    posteriors_by_key: dict[tuple[str, str], ClausePosterior] = {}
 
     if obs_inputs:
         fit_result = fit_skill(obs_inputs)
@@ -286,8 +302,6 @@ def aggregate_skill(
         # Get posterior if available
         posterior = posteriors_by_key.get(key)
         if posterior is not None:
-            from skill_harness.aggregation.fit import ClausePosterior
-
             assert isinstance(posterior, ClausePosterior)
             p_win = posterior.p_win_gt_threshold
             post_mean = posterior.posterior_mean
@@ -360,6 +374,16 @@ def aggregate_skill(
         metric_id_val = clause_axis_metric_id.get(key)
         metric_ver_val = clause_axis_metric_version.get(key)
 
+        # A55 comparability: derive subject_model + user_message_sha256 for this clause
+        clause_run_ids_for_key = clause_axis_run_ids.get(key, set())
+        subject_model_val, user_msg_sha256_val = _derive_a55_fields(
+            clause_run_ids_for_key,
+            run_ids_seen,
+            run_id_to_subject_model,
+            run_id_to_user_msg_sha,
+            skill_id=skill_id,
+        )
+
         clause_reports.append(
             ClauseReport(
                 clause_id=clause_id,
@@ -375,6 +399,8 @@ def aggregate_skill(
                 run_ids_aggregated=tuple(sorted(clause_axis_run_ids.get(key, set()))),
                 n_verdicts=n,
                 w_observation_sum=w,
+                subject_model=subject_model_val,
+                user_message_sha256=user_msg_sha256_val,
             )
         )
 
@@ -453,21 +479,7 @@ def aggregate_skill(
 
 
 def _fetch_completed_ablation_runs(conn: Connection, skill_id: str) -> list[dict[str, Any]]:
-    """Fetch completed ablation runs for skill_id."""
-    rows = conn.execute(
-        """
-        SELECT run_id, skill_id, run_kind, config_json, started_at, completed_at
-        FROM runs
-        WHERE skill_id = ?
-          AND run_kind = 'ablation'
-          AND completed_at IS NOT NULL
-        ORDER BY started_at
-        """,
-        (skill_id,),
-    ).fetchall()
-    if not rows:
-        return []
-    # Use description for column names
+    """Fetch completed ablation runs for skill_id (single-shot query)."""
     cur = conn.execute(
         """
         SELECT run_id, skill_id, run_kind, config_json, started_at, completed_at
@@ -480,7 +492,10 @@ def _fetch_completed_ablation_runs(conn: Connection, skill_id: str) -> list[dict
         (skill_id,),
     )
     cols = [d[0] for d in cur.description]
-    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
+    rows = cur.fetchall()
+    if not rows:
+        return []
+    return [dict(zip(cols, row, strict=True)) for row in rows]
 
 
 def _fetch_clauses(conn: Connection, skill_id: str) -> list[dict[str, Any]]:
@@ -540,6 +555,53 @@ def _read_family_size(completed_runs: list[dict[str, object]]) -> int:
     return int(family_size)
 
 
+def _derive_a55_fields(
+    clause_run_ids: set[str],
+    all_run_ids_in_skill: set[str],
+    run_id_to_subject_model: dict[str, str | None],
+    run_id_to_user_msg_sha: dict[str, str | None],
+    *,
+    skill_id: str,
+) -> tuple[str | None, str | None]:
+    """Derive subject_model and user_message_sha256 for a clause's aggregated runs.
+
+    For clauses with no run data, falls back to all completed runs for the skill.
+    Returns ("MIXED", ...) when subject_model diverges across the pool — this is
+    a data-integrity anomaly per A41 / A55; a warning is logged.
+    """
+    # Use clause-specific runs if available; else all skill runs
+    run_ids = clause_run_ids if clause_run_ids else all_run_ids_in_skill
+
+    subject_models: set[str] = {
+        v for rid in run_ids if (v := run_id_to_subject_model.get(rid)) is not None
+    }
+    user_msg_shas: set[str] = {
+        v for rid in run_ids if (v := run_id_to_user_msg_sha.get(rid)) is not None
+    }
+
+    if len(subject_models) > 1:
+        logger.warning(
+            "[data-integrity] skill %r: subject_model diverges across aggregated runs: %r. "
+            "Setting subject_model='MIXED'. Cross-pool comparison is invalid per A55.",
+            skill_id,
+            sorted(subject_models),
+        )
+        subject_model: str | None = "MIXED"
+    elif len(subject_models) == 1:
+        subject_model = next(iter(subject_models))
+    else:
+        subject_model = None
+
+    if len(user_msg_shas) > 1:
+        user_message_sha256: str | None = "MIXED"
+    elif len(user_msg_shas) == 1:
+        user_message_sha256 = next(iter(user_msg_shas))
+    else:
+        user_message_sha256 = None
+
+    return subject_model, user_message_sha256
+
+
 def _fetch_run_state(runtime_conn: Connection, run_id: str) -> str | None:
     """Fetch the run_progress.state for a run_id, or None if not found."""
     try:
@@ -548,5 +610,6 @@ def _fetch_run_state(runtime_conn: Connection, run_id: str) -> str | None:
             (run_id,),
         ).fetchone()
         return row[0] if row else None
-    except Exception:
+    except sqlite3.Error as exc:
+        logger.warning("_fetch_run_state failed for run_id=%r: %s", run_id, exc)
         return None

@@ -2,7 +2,7 @@
 
 Coverage:
 - to_json_dict produces all required top-level keys
-- report_schema_version = "1.0.0"
+- report_schema_version = "1.1.0" (bumped in C1 fix-loop per A60)
 - to_json_bytes is byte-stable for identical input
 - to_json_bytes is UTF-8 with trailing newline
 - Nested structures serialise correctly (tuples → lists, etc.)
@@ -36,6 +36,8 @@ def make_clause_report(
     p: float = 0.97,
     n: int = 12,
     w: float = 9.0,
+    subject_model: str | None = "claude-sonnet-4-6",
+    user_message_sha256: str | None = "a" * 64,
 ) -> ClauseReport:
     return ClauseReport(
         clause_id=clause_id,
@@ -51,6 +53,8 @@ def make_clause_report(
         run_ids_aggregated=("run-001",),
         n_verdicts=n,
         w_observation_sum=w,
+        subject_model=subject_model,
+        user_message_sha256=user_message_sha256,
     )
 
 
@@ -100,17 +104,17 @@ def make_skill_report(
 
 class TestSchemaVersion:
     def test_report_schema_version_constant(self) -> None:
-        assert REPORT_SCHEMA_VERSION == "1.0.0"
+        assert REPORT_SCHEMA_VERSION == "1.1.0"  # bumped in fix-loop (C1 A60 wire bump)
 
     def test_schema_version_in_dict(self) -> None:
         report = make_skill_report()
         d = to_json_dict(report)
-        assert d["report_schema_version"] == "1.0.0"
+        assert d["report_schema_version"] == "1.1.0"
 
     def test_schema_version_in_bytes(self) -> None:
         report = make_skill_report()
         data = json.loads(to_json_bytes(report))
-        assert data["report_schema_version"] == "1.0.0"
+        assert data["report_schema_version"] == "1.1.0"
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +160,9 @@ class TestRequiredKeys:
             "run_ids_aggregated",
             "n_verdicts",
             "w_observation_sum",
+            # A55 comparability axes added in schema 1.1.0 (C1 fix-loop)
+            "subject_model",
+            "user_message_sha256",
         }
         for clause_dict in d["clauses"]:  # type: ignore[union-attr]
             missing = clause_keys - set(clause_dict.keys())

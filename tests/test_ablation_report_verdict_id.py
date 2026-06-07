@@ -1,8 +1,17 @@
 """Tests that the ablation report renders a verdict_id column (Track E.3, A56).
 
-The existing ablation report at _render_ablation_report does not surface verdict_id,
-making `freeze <verdict_id>` unusable without separate DB queries. This test
-verifies the column appears after the E.3 fix.
+IMPORTANT — scope and limitations of this test module (T7 from ai-slop fix-loop):
+These tests assert RENDERING SHAPE, not real-run behavior.
+
+Real ClauseResult (ablation/runner.py) has NO verdict_id field — fields are:
+  clause_id, stopping_reason, stop_decision, samples_collected, length_confounded,
+  unmeasured_reason.
+The existing tests use MagicMock with .verdict_id manually set, which proves only
+"if the mock has the attribute, _render includes it." Real ablation runs render
+"—" via the getattr(result, 'verdict_id', None) or '—' fallback.
+
+Threading verdict_id through ClauseResult is CF-E3-1 (Phase 3 follow-up, NOT in this
+module's scope). See docs/dispatch/track-e-ai-slop-fix-brief.md § T7 for details.
 """
 
 from __future__ import annotations
@@ -12,7 +21,8 @@ from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
-from skill_harness.ablation.stopping import StoppingReason
+from skill_harness.ablation.runner import ClauseResult
+from skill_harness.ablation.stopping import StopDecision, StoppingReason
 from skill_harness.cli.main import cli
 
 # ---------------------------------------------------------------------------
@@ -170,4 +180,61 @@ class TestAblationReportVerdictIdColumn:
         )
         assert verdict_id_2 in result.output, (
             f"verdict_id_2 {verdict_id_2!r} must appear:\n{result.output}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# T7: real ClauseResult (no verdict_id field) renders "—" for verdict_id column
+# ---------------------------------------------------------------------------
+
+
+class TestRealClauseResultRendersPlaceholder:
+    def test_real_clause_result_renders_dash_for_verdict_id(self) -> None:
+        """T7: a REAL ClauseResult (not MagicMock) has no verdict_id attribute.
+
+        The ablation report renderer uses getattr(result, 'verdict_id', None) or '—'
+        as a fallback. This test proves real ablation runs render '—' for the
+        verdict_id column — the existing mock-based tests only prove the mock works.
+
+        Threading verdict_id through ClauseResult is CF-E3-1 (Phase 3 follow-up).
+        """
+        real_stop_decision = StopDecision(
+            should_stop=True,
+            stopping_reason=StoppingReason.PASSED,
+            posterior_alpha=10.0,
+            posterior_beta=2.0,
+            p_win_rate_exceeds_threshold=0.97,
+            n_samples=11,
+            w_accumulator=9.0,
+        )
+        real_result = ClauseResult(
+            clause_id="real-clause-001",
+            stopping_reason=StoppingReason.PASSED,
+            stop_decision=real_stop_decision,
+            samples_collected=11,
+            length_confounded=False,
+        )
+        # Confirm no verdict_id on a real ClauseResult
+        assert not hasattr(real_result, "verdict_id"), (
+            "ClauseResult gained a verdict_id field — CF-E3-1 was implemented. "
+            "Update this test to verify the real UUID is rendered instead."
+        )
+
+        with patch(
+            "skill_harness.cli.main._execute_ablation_run",
+            return_value=[real_result],
+        ):
+            result = _invoke(
+                "run",
+                "ablation",
+                "skill-test",
+                "--execute",
+                env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
+            )
+
+        assert result.exit_code == 0, f"Expected exit 0:\n{result.output}"
+        # Real ClauseResult has no verdict_id → fallback "—" must appear
+        assert "—" in result.output, (
+            f"Expected '—' placeholder for verdict_id in ablation report for real ClauseResult.\n"
+            f"Output:\n{result.output}"
         )
