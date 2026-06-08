@@ -136,13 +136,35 @@ agent escalates per-segment.
 - Post-return: synthesize via the `parallel-review-disposition-schema` mechanical pattern. Verify every external citation per `subagent-research-reliability` discipline before adopting any finding.
 - Adopted decisions append to `docs/COUNCIL_FINDINGS.md` with seat-finding IDs as provenance. PRD amendments queue for v(N+1) doc lock, NOT piecemeal edits.
 
+## Precondition check (mandatory pre-fire step)
+
+Before firing the subject-matter seats in any template below, the orchestrator
+verifies that PM-owned resources required by the proposed work are accessible.
+PM-owned resources include but are not limited to: API keys for any external
+service the work touches, budget allocation, network/access tokens, third-party
+account permissions, hardware/runtime not in the orchestrator's environment.
+
+If a required resource is unverified, surface to PM as a **single closed-form
+question** BEFORE dispatching subject-matter seats. Do not dispatch on the
+assumption that resources are available; subject-matter seats are expensive to
+run and their findings are wasted if the work cannot be executed.
+
+This step exists because skipping it has caused real wasted-fire incidents
+(2026-06-08: T3 tracer dispatched Tier 1 + Tier 2 against `openai` SDK before
+verifying PM had OpenAI access; PM had OpenRouter instead, requiring the
+fire to be re-scoped after both subject-matter seats had completed). The
+discipline of *checking access before checking correctness* is load-bearing
+regardless of how minor the work feels.
+
 ## Standard council templates
 
 Four named templates so common fires don't require re-thinking the roster.
+ALL templates run the precondition check first.
 
 - **PRD pressure-test (pre-build)** — 5 CORE + SECURITY + RELIABILITY. The expanded original (the first fire's 5-seat roster + the two specialist seats it under-covered).
 - **Storage-touching change** — SCHEMA + RELIABILITY + SECURITY + TEST-ARCH. 4 seats.
 - **CLI / surface change** — OPERATOR-DX + DOCS-DX + COST + SECURITY. 4 seats.
+- **External-vendor / API-surface change** — precondition check (PM resource availability) + COST + SECURITY + RELIABILITY. 3 seats after the precondition. Use when the work adds a new external service dependency (vendor SDK, API gateway, third-party service). Distinct from "CLI / surface change" because the load-bearing pre-fire question is "does the PM have access?" not "is the CLI shape right?"
 - **Pre-tag launch council** — all 9 seats.
 
 ## Antecedents
