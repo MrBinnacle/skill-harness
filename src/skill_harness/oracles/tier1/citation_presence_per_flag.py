@@ -60,14 +60,27 @@ _FENCED_CODE_BLOCK: Final[re.Pattern[str]] = re.compile(r"```.*?```", re.DOTALL)
 # We remove the whole [text](url) construct; keep "text" but drop "(url)"
 _MARKDOWN_LINK: Final[re.Pattern[str]] = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 
-# Flag marker: bullet line starting with -, *, or ** that contains a severity word
-# Matches lines like:
-#   - **CRITICAL**: foo
-#   * Important: bar
-#   - [FLAG] baz
-#   **FLAG:** something
+# Flag marker: a line that identifies a specific flag entry in a sentinel review.
+# The severity word must appear at a recognizable flag-entry position:
+#   - **CRITICAL**: foo         (bullet + severity word)
+#   * IMPORTANT: bar            (bullet + severity word)
+#   ## FLAG 1 — CRITICAL        (ATX heading where "FLAG" is followed by a number/ID)
+#   ### FLAG 001 — IMPORTANT    (same)
+#   **CRITICAL**                (bold severity label as a standalone token)
+#   **FLAG:**                   (bold FLAG label)
+#
+# Excluded by this regex:
+#   # Slop Flag Report          (heading where "Flag" is part of a title phrase, not a flag-ID)
+#     → "# Slop Flag" does not match because FLAG must follow a "FLAG " prefix with number
+#       OR must be a severity word (CRITICAL/IMPORTANT/MINOR) or followed by ":"
 _FLAG_LINE: Final[re.Pattern[str]] = re.compile(
-    r"^[ \t]*(?:[-*]|\*{1,2})\s*.*?\b(?:CRITICAL|IMPORTANT|MINOR|FLAG)\b",
+    r"^[ \t]*(?:"
+    r"[-*]\s.*?\b(?:CRITICAL|IMPORTANT|MINOR)\b"  # bullet + severity word
+    r"|[-*]\s.*?\bFLAG\b"  # bullet + FLAG word
+    r"|#{1,6}\s+FLAG\s+\w"  # ATX heading: ## FLAG <id>
+    r"|#{1,6}\s.*?\b(?:CRITICAL|IMPORTANT|MINOR)\b"  # ATX heading + severity
+    r"|\*{1,2}(?:CRITICAL|IMPORTANT|MINOR|FLAG)\*{0,2}"  # bold severity label
+    r")",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -113,8 +126,9 @@ def _strip_markup(text: str) -> str:
 def _extract_flag_blocks(text: str) -> list[str]:
     """Return a list of text blocks, one per detected flag.
 
-    Each block starts at the flag line and extends to the next paragraph
-    separator or the next flag line (whichever comes first).
+    Each block starts at the flag line and extends to the next flag line.
+    The full block (heading + body) is included to capture citations that
+    may appear in the paragraph body below a heading-style flag marker.
     """
     matches = list(_FLAG_LINE.finditer(text))
     if not matches:
@@ -123,13 +137,11 @@ def _extract_flag_blocks(text: str) -> list[str]:
     blocks: list[str] = []
     for i, m in enumerate(matches):
         start = m.start()
-        # Determine end: next flag start or paragraph break
-        next_flag_start = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-
-        # Find earliest paragraph break between start and next_flag_start
-        para_m = _PARA_SEP.search(text, start, next_flag_start)
-        end = para_m.start() if para_m else next_flag_start
-
+        # Block extends to the next flag start (or end of text).
+        # Do NOT cut at paragraph breaks — heading-style flags (e.g.
+        # "## FLAG 1 — CRITICAL\n\n**Pattern:**...") have their citations
+        # in the body paragraphs below the heading line.
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         blocks.append(text[start:end])
 
     return blocks
