@@ -5,7 +5,7 @@
 Skill Harness: Clause-Ablation Differential Testing for LLM Skills
 
 Version: 1.1
-Status: Draft
+Status: Ratified
 Author: TBD
 
 <!-- v1.1 changelog: 47 amendments applied (45 from Phase 3.5 audit + 2 from Appendix G).
