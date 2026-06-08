@@ -1,10 +1,26 @@
 # T3 Tracer Round — Findings
 
+**CURRENT STATUS: HALTED-AT-ENVIRONMENT-COMPOUNDING-MISMATCH (PHASE B' pre-flight).**
+**Prior status: HALTED-AT-SCORER-REGISTRY-DRIFT (PHASE B step 1).**
+
+Each phase's HALT is preserved as part of the audit trail; the current
+status reflects the most-recent halt (PHASE B'). The earlier HALT (PHASE B
+on registry drift) led to a re-pre-registration; the PHASE B' re-pre-
+registered experiment then encountered a separate set of pre-flight
+mismatches and halted in turn.
+
+Total subject API cost across PHASE A + A.5 + B + B' (all phases of T3
+to date): **$0.00**.
+
+---
+
+## PHASE B — registry-drift halt (original; preserved as audit trail)
+
 **STATUS: HALTED-AT-SCORER-REGISTRY-DRIFT (PHASE B step 1)**
 
 PHASE B was halted at step 1 (scorer-registry drift check) BEFORE any subject
 API call. No `skill init` or `run ablation` invocation occurred against the
-OpenRouter-routed GPT-5.5 subject. Total subject API cost: **$0.00**.
+OpenRouter-routed GPT-5.5 subject. Total subject API cost (this phase): **$0.00**.
 
 ---
 
@@ -189,3 +205,279 @@ $ curl -H "Authorization: Bearer $OPENROUTER_API_KEY" https://openrouter.ai/api/
   }
 }
 ```
+
+---
+
+# PHASE B' — Re-baseline + cross-vendor attempt (2026-06-08)
+
+**STATUS: HALTED-AT-ENVIRONMENT-COMPOUNDING-MISMATCH (pre-flight before live calls)**
+
+PHASE B' was halted at the environment + harness-state pre-flight check
+BEFORE any subject API call. The re-pre-registration commit landed first
+(`267858d`), preserving peeking-immunization. No `skill init`, no `run
+ablation`, no subject-model output was observed in PHASE B'. Total subject
+API cost across PHASE B + PHASE B': **$0.00**.
+
+## Re-pre-registration (verbatim, committed at `267858d`)
+
+```
+Predicted shape:
+  V_baseline_claude == V_baseline_gpt5  (byte-stable §16 vector equality)
+
+Where V_baseline_claude and V_baseline_gpt5 are §16 vectors from the SAME
+aggregation against claude-sonnet-4-6 and openai/gpt-5.5 (via OpenRouter)
+respectively, under identical (skill_id, extractor, scorer registry,
+N_min=8, max_usd=$5, PYTHONHASHSEED=0).
+
+Falsification: any field-level inequality between the two vectors.
+```
+
+Full text at `docs/dispatch/t3-pre-registration.md` under "PHASE B' —
+RE-PRE-REGISTRATION (2026-06-08)".
+
+## Halt reason: compounding environment + framework-state mismatches
+
+The dispatch brief's PHASE C+D plan assumed three preconditions that turn
+out NOT to hold. Each, in isolation, would be a soft adaptation; together
+they exceed the dispatch brief's adaptation budget and require orchestrator
+direction.
+
+### Mismatch 1: `ANTHROPIC_API_KEY` is absent; PM has `OPENROUTER_API_KEY` only
+
+```
+$ env | grep -iE "ANTHROPIC|OPENROUTER" | head -10
+setx=ANTHROPIC_API_KEY                   # malformed entry; literally a name with no value
+OPENROUTER_API_KEY=sk-or-v1-...          # the only routable LLM key
+```
+
+The PHASE B' dispatch brief's PHASE C step 3 specifies:
+```
+skill-harness run ablation <skill_id_C> --execute --max-usd 5 --subject-model claude-sonnet-4-6
+```
+This invokes the direct-Anthropic `AnthropicSubjectClient` path, which
+calls `anthropic.Anthropic()` and reads `ANTHROPIC_API_KEY`. With no key,
+the SDK constructor raises and the run aborts before any sampling.
+
+PHASE A.5 already authorized OpenRouter routing as a general pivot
+("PM has `OPENROUTER_API_KEY` (not OpenAI direct), confirmed SET").
+The symmetric move for Claude exists in the harness:
+```
+make_subject_client("anthropic/claude-sonnet-4.6")
+# returns OpenAISubjectClient(model="anthropic/claude-sonnet-4.6",
+#                             base_url="https://openrouter.ai/api/v1")
+```
+This was VERIFIED in the worktree (and the underlying OpenRouter `/models`
+query confirms `anthropic/claude-sonnet-4.6` is a registered, pinnable
+id with 1M context). Same Anthropic Sonnet 4.6 model identity, different
+gateway. Subject-call output equivalence vs the original direct-API
+dogfooding has NOT been verified empirically — OpenRouter is intended as
+a pass-through proxy but introduces a deterministic-equivalence question
+that the original PHASE B' pre-registration did not anticipate.
+
+### Mismatch 2: the CLI does not expose `--subject-model`
+
+```
+$ skill-harness run ablation --help | grep -i subject
+(no match — flag does not exist)
+```
+
+The CLI hard-codes `SubjectClient()` (= `AnthropicSubjectClient`) inside
+`src/skill_harness/cli/main.py:_execute_ablation_run`. The library-level
+`AblationRunner` and `make_subject_client` factory DO accept a `subject_model`
+parameter (PHASE A wired this), so a driver script that invokes
+`AblationRunner.run_ablation(subject_model=...)` directly works around the
+CLI surface gap. This is the dispatch brief's implicit assumption (the
+brief command requires a flag that doesn't exist on the CLI surface).
+
+Writing a driver script is using the library as-intended (not adding new
+surface), so this mismatch alone is within docs-only adaptation budget.
+
+### Mismatch 3: pre-existing `evidence.db` state blocks `aggregate_skill`
+
+A pre-existing `evidence.db` exists in the main checkout (`./evidence.db`)
+that holds the ai-slop-sentinel skill_id `074595b7a61821d4...` with **15
+clauses** (note: the dogfooding doc reported 17; the extractor is stochastic
+on the same source SHA per its own footnote). It also holds **8 prior
+ablation runs**, of which **5 are incomplete** (`completed_at IS NULL`)
+and 3 are completed.
+
+```
+=== runs ===
+incomplete (5): 9b6a4700, 079486b3, 87d4d01b, 6827b0b2, de2c037e
+completed  (3): 19e85593, c3481f27, 073dd0da
+```
+
+`aggregate_skill` (`src/skill_harness/aggregation/engine.py:54`) enforces:
+
+> "any incomplete runs for skill_id → PreconditionError('incomplete_runs',
+>  [run_ids])"
+
+So `skill-harness run evaluate-skill <skill_id>` will raise on this
+evidence.db until the 5 incomplete runs are resolved (either completed
+via resume, or excluded via a hypothetical filter that does not exist).
+Aggregation across runs is also skill-wide — there's no built-in
+per-run_id aggregation, contrary to the dispatch brief's suggestion
+("query the runs table for the GPT-5 run_id specifically and aggregate
+over just that run"). Doing this cleanly requires a custom aggregator,
+which is code work, not docs work.
+
+The alternative — starting fresh with an empty evidence.db — requires
+`skill init` (extraction), which requires `ANTHROPIC_API_KEY` (Mismatch 1).
+There is no extractor route through OpenRouter; the extractor uses
+Anthropic's tool-calling API path directly.
+
+## Net: PHASE C cannot be executed under the dispatch brief's parameters without:
+
+1. Either an `ANTHROPIC_API_KEY` (orchestrator-provided), OR explicit
+   authorization to route Claude via OpenRouter (`anthropic/claude-sonnet-4.6`)
+   on the assumption it's a deterministic pass-through (load-bearing
+   assumption that has not been verified).
+2. A driver script bypassing the missing CLI flag (within docs-only adaptation
+   budget; can write).
+3. EITHER a clean `evidence.db` (requires extractor, requires ANTHROPIC_API_KEY)
+   OR completion/exclusion of the 5 incomplete prior runs in
+   `evidence.db` (requires a NON-trivial framework decision —
+   `aggregate_skill`'s precondition is load-bearing per A50/A53)
+   OR a custom per-run_id aggregator (code work, outside docs-only scope).
+
+Each path has a different load-bearing assumption the orchestrator has
+explicit authority over. None can be silently chosen.
+
+## Subject route confirmation (PHASE A.5 wiring still verified, not exercised)
+
+PHASE A.5 OpenRouter routing remains built and tested. No subject call
+has been issued at any point in T3 (PHASE A → PHASE A.5 → PHASE B HALT
+→ PHASE B' re-pre-registration → PHASE B' HALT). Total subject API
+cost across all phases: **$0.00**.
+
+`anthropic/claude-sonnet-4.6` factory dispatch verified in-worktree:
+```
+$ PYTHONHASHSEED=0 PYTHONPATH="$PWD/src" python -c "
+from skill_harness.ablation.subject import make_subject_client
+c = make_subject_client('anthropic/claude-sonnet-4.6')
+print('class:', type(c).__name__)
+print('model:', c._model)
+print('base_url:', c._base_url)
+"
+class: OpenAISubjectClient
+model: anthropic/claude-sonnet-4.6
+base_url: https://openrouter.ai/api/v1
+```
+
+OpenRouter `/models` listing for the two pre-registered subject IDs:
+```
+openai/gpt-5.5            created=1777051893 ctx=1050000  prompt $5.00/MTok  completion $30.00/MTok
+anthropic/claude-sonnet-4.6 created=1771342990 ctx=1000000 (pricing not queried; live cost will record via cost_source)
+```
+
+## PHASE C results — Claude baseline at corrected registry
+
+**Not produced.** PHASE B' halted at pre-flight before any extraction or
+ablation could run.
+
+## PHASE D results — GPT-5 cross-vendor
+
+**Not produced.** PHASE B' halted at pre-flight before any extraction or
+ablation could run.
+
+## Comparison
+
+Not applicable.
+
+## Disposition
+
+**HALTED-AT-ENVIRONMENT-COMPOUNDING-MISMATCH.**
+
+## Recommended forward paths (research-and-recommend; final call belongs to orchestrator)
+
+These are surfaced for orchestrator decision, ranked by minimum framework
+risk:
+
+### Path R1 — Route Claude via OpenRouter, write a driver script, use a fresh evidence.db (requires extractor work)
+
+- Authorize `anthropic/claude-sonnet-4.6` (via OpenRouter) as the PHASE C
+  subject. Document the assumption "OpenRouter is a deterministic
+  pass-through for Anthropic models" with a one-off byte-equivalence
+  spot-check against a single known direct-Anthropic call IF an
+  ANTHROPIC_API_KEY can be borrowed for the spot-check (otherwise this
+  assumption rides as an explicit limitation in the findings).
+- Write a driver script that calls `AblationRunner.run_ablation(
+  subject_model=...)` directly (library use; not new surface).
+- Use a fresh evidence.db (no pre-existing run pollution). REQUIRES
+  extractor → requires ANTHROPIC_API_KEY → so this path needs orchestrator
+  to provide an ANTHROPIC_API_KEY for the extractor step ONLY. The two
+  subject ablation runs themselves stay on OpenRouter.
+
+**Pro**: cleanest experimental state; honors the re-pre-registration
+shape literally. **Con**: requires orchestrator to provide
+ANTHROPIC_API_KEY for one extractor call.
+
+### Path R2 — Route Claude via OpenRouter, reuse the existing skill_id, complete or filter incomplete runs
+
+- Authorize OpenRouter for Claude (same as R1).
+- Reuse the existing skill_id `074595b7a618...` (15 clauses) from the
+  main checkout's evidence.db (copied into the worktree).
+- Resolve the 5 incomplete prior runs by either: (a) running `resume`
+  on each until completion, or (b) marking them as aborted in a
+  documented one-off mutation.
+
+**Pro**: no ANTHROPIC_API_KEY required (since OpenRouter routes both
+subjects). **Con**: the prior 3 completed runs ALSO get aggregated
+into the §16 vector, contaminating the per-subject comparison unless
+a custom per-run_id aggregator is built. Building that aggregator is
+code work, not docs work.
+
+### Path R3 — Provide ANTHROPIC_API_KEY, re-fire the original PHASE B' dispatch
+
+- PM exports `ANTHROPIC_API_KEY` to env.
+- Original PHASE B' dispatch runs as-written, hitting direct Anthropic
+  for Claude and OpenRouter for GPT-5. Asymmetric routing (different
+  gateway per subject) is the only methodological note.
+
+**Pro**: matches the dispatch brief literally; minimal adaptation.
+**Con**: asymmetric gateway is a less-controlled experiment than R1
+(adds OpenRouter-as-confounder for GPT-5 only). And requires PM to
+expose a key the worktree currently sees as ABSENT.
+
+### Path R4 — Park PHASE B'; the registry-drift HALT discovery (PHASE B) stands as the headline
+
+- Treat the registry-drift HALT as the deliverable; the PM has already
+  authorized that the HALT discovery is the case study's headline (per
+  the orchestrator's dispatch context).
+- Skip PHASE C+D entirely. Future cross-vendor tracer rounds run with
+  intact preconditions on a different experimental cycle.
+
+**Pro**: zero additional adaptation; aligns with the orchestrator's
+explicit framing ("the HALT discovery is the most interesting finding
+of T3 so far"). **Con**: leaves the subject-invariance claim
+empirically unverified; the next tracer round must re-establish it.
+
+## Honest caveats
+
+- The PHASE B' re-pre-registration's "byte-stable §16 vector equality"
+  claim was always a strong prediction (Tier-1 mechanical scores are
+  deterministic, but confound-monitoring + Null-accumulator interactions
+  introduce subject-output-dependence). A byte-stable match would be
+  STRONG evidence of subject-invariance; a non-match would still be
+  diagnostic (per the falsification taxonomy in the re-pre-registration).
+- The dispatch brief's per-run_id aggregation suggestion does not match
+  the actual `aggregate_skill` API (which is skill-wide with an incomplete-
+  run precondition). This is a discrepancy between the brief and the
+  framework that the orchestrator may want to surface as a separate
+  finding regardless of which forward path is chosen.
+
+## Peeking-immunization confirmation
+
+- PHASE A commit `ed0e004` — predated any subject API call (Anthropic
+  or OpenAI/OpenRouter).
+- PHASE A.5 commit `1e09119` — predated any subject API call.
+- PHASE B HALT findings `330bbce` — pre-flight check on framework state;
+  no subject output observed.
+- PHASE B' re-pre-registration `267858d` — predates any subject API call.
+- This PHASE B' findings update — written before any subject API call,
+  predicts no further subject calls until orchestrator chooses a
+  forward path.
+
+The two pre-registrations (original at `ed0e004`/`1e09119`; revised at
+`267858d`) and this HALT findings doc together preserve the audit trail
+required to ratify a future PHASE C+D run under any chosen path.
