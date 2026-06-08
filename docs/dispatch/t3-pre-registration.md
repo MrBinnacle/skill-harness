@@ -145,3 +145,120 @@ No such peeking has occurred at the time of this commit. Specifically:
 - PHASE A.5 commit (this doc + code changes) predates any subject API call.
 - No `skill-harness run ablation` invocation has been issued against any
   OpenRouter-routed subject between PHASE A and the PHASE A.5 commit.
+
+---
+
+# PHASE B' — RE-PRE-REGISTRATION (2026-06-08)
+
+**STATUS: SUPERSEDES the original "17 UNMEASURED / $0.00" prediction above.**
+
+The original prediction was falsified at the PHASE B pre-flight check by a
+scorer-registry drift that occurred BETWEEN the baseline dogfooding run
+(`66510f9`, 2026-06-07 15:54 EDT) and the v0.1.0 tag (`fd782b1`, 2026-06-07
+21:47 EDT). Full audit trail: `docs/dispatch/t3-findings.md` HALT report
+(committed at `b7ba643` per dispatch context; the in-worktree equivalent is
+`330bbce`). The original prediction's content is dead; the experimental
+SHAPE is preserved here as a re-pre-registration.
+
+## Re-pre-registered prediction (shape-level)
+
+```
+V_baseline_claude == V_baseline_gpt5  (byte-stable §16 vector equality)
+
+Where:
+  V_baseline_claude  = §16 vector from `run evaluate-skill` after running
+                       ablation against claude-sonnet-4-6
+  V_baseline_gpt5    = §16 vector from the SAME aggregation against
+                       openai/gpt-5.5 (via OpenRouter)
+  Run conditions held identical: same skill_id (source-SHA-stable),
+                       same extractor (claude-sonnet-4-6),
+                       same Tier-1 scorer registry (5-scorer set),
+                       same N_min=8, same max_usd=$5, same PYTHONHASHSEED=0.
+
+Pre-registered field-level expectations:
+  passed       : V_baseline_claude.passed       == V_baseline_gpt5.passed
+  failed       : V_baseline_claude.failed       == V_baseline_gpt5.failed
+  confounded   : V_baseline_claude.confounded   == V_baseline_gpt5.confounded
+  unmeasured   : V_baseline_claude.unmeasured   == V_baseline_gpt5.unmeasured
+  coverage     : V_baseline_claude.coverage     == V_baseline_gpt5.coverage
+  unmeasured_breakdown:
+                 V_baseline_claude.unmeasured_breakdown
+                 == V_baseline_gpt5.unmeasured_breakdown
+
+CONTENT of the vectors is UNKNOWN until PHASE C+D runs; the COMPARISON
+(shape-level byte-equality) is the pre-registered prediction. We are not
+predicting a specific number; we are predicting that two subjects under
+identical (skill, extractor, registry, constraints) produce identical §16
+vectors.
+```
+
+## Falsification condition
+
+Any field-level inequality between V_baseline_claude and V_baseline_gpt5
+falsifies the prediction. Per-mechanism analysis in the findings doc will
+distinguish between:
+
+- **Tier-1 path divergence** (mechanical, deterministic; SHOULD be byte-
+  stable if confound monitoring + scorer code are subject-invariant).
+  Falsification on a Tier-1 clause = framework bug or scorer
+  non-determinism.
+- **Tier-2 path divergence** (judge-driven; subject-dependent BY DESIGN
+  when a calibrated judge is available — though in v0.1 no calibrated
+  judge exists for these axes, so Tier-2 clauses currently produce
+  `UNMEASURED(tier2_uncalibrated)` regardless of subject).
+- **Confound-monitoring divergence** (the Null accumulator's sigma
+  depends on subject-model outputs; clauses sitting near the confound
+  threshold may flip admissible/inadmissible across subjects). This is
+  a known second-order subject-dependence.
+- **Sample-count divergence** (sequential stop fires at different N for
+  different subjects; this is expected and is NOT a falsifying field
+  unless it changes the verdict).
+
+## Confounders to control (PHASE B' re-pre-registration)
+
+Held constant:
+- **Extractor model**: `claude-sonnet-4-6` (CRITICAL — extractor is the
+  shared input; both subjects evaluate the SAME extracted clause set).
+- **Skill source SHA**: `074595b7a618...` (must match for both runs;
+  HALT if not).
+- **Scorer registry**: 5 scorers
+  `{verbosity, hedge_index, structure_score, compliance_proxy,
+   citation_presence_per_flag}` (HALT if drift again).
+- **PYTHONHASHSEED**: `0`.
+- **N_min**: `8`. **N_max**: framework default. **max_usd**: `$5.00`.
+- **Harness HEAD**: a single commit (no harness changes between PHASE C
+  and PHASE D runs).
+
+Allowed to vary:
+- **subject_model**: `claude-sonnet-4-6` (PHASE C) vs `openai/gpt-5.5`
+  (PHASE D).
+- **cost_source**: `local_estimate` for Anthropic; `openrouter_response`
+  for OpenRouter (this is provenance, not a comparison axis).
+
+## Peeking-immunization for PHASE B'
+
+This re-pre-registration commits BEFORE the first PHASE C `skill init`
+or `run ablation` invocation. The two ablation runs (PHASE C Claude,
+PHASE D GPT-5) will be executed AFTER this commit lands. The §16
+vectors will be compared in the findings doc; the COMPARISON itself is
+the test.
+
+No subject API call against either subject has been issued at the time
+of this commit. The HALT findings doc (committed in PHASE B) reported a
+pre-flight check on framework state, not a peek at any result.
+
+The order of operations is locked:
+1. This re-pre-registration lands first (this commit).
+2. PHASE C runs (Claude baseline at corrected registry).
+3. PHASE D runs (GPT-5 cross-vendor).
+4. Findings doc appended with both vectors + comparison + disposition.
+5. Single cohesive commit for PHASE B' contains: this re-pre-registration
+   AS WELL AS the findings-doc updates. (Per dispatch brief: "single
+   cohesive commit at end. Subject: `docs(t3-findings): PHASE B' —
+   Claude baseline + GPT-5 cross-vendor at corrected registry`.")
+
+That single commit's tree captures the pre-registration BEFORE the
+findings, but BOTH ride in one commit. The audit-trail discipline is
+preserved by the fact that no subject call could have informed this
+re-pre-registration (the pre-flight HALT was structural; no subject
+output existed to peek at).
