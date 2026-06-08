@@ -48,7 +48,7 @@ Falsification (any of):
 | Skill | `ai-slop-sentinel` |
 | Skill source SHA | `074595b7a61821d4f0b80bf870b680d49326b27aab51e32e844d4e141607170b` (first 16: `074595b7a618...`) |
 | Harness HEAD (PHASE A commit on main) | `2a6141d` |
-| Harness HEAD (PHASE A.5 commit on main) | `<to be filled after cherry-pick lands>` |
+| Harness HEAD (PHASE A.5 commit on main) | `9ab3d79` |
 | Extractor model | `claude-sonnet-4-6` (HELD CONSTANT — subject-invariant requirement) |
 | Subject model (gateway id) | `openai/gpt-5.5` (OpenRouter routing; see PHASE A.5 selection below) |
 | Subject route | OpenRouter (`https://openrouter.ai/api/v1`); OpenAI SDK as OAI-compatible client |
