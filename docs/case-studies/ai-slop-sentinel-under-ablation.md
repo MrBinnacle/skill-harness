@@ -1,121 +1,312 @@
-# A widely-used LLM review skill, evaluated honestly: 17 UNMEASURED, 0 PASSED
+# AI agent self-audit infrastructure: a case study in catching myself
 
-**A reproducible case study from Skill Harness v0.1.0.**
+> What if most of the LLM-prompted skills you use today can't be honestly
+> evaluated by any framework you're using today?
 
-This is what happens when you try to actually measure whether the clauses in a popular AI review skill are doing what they claim. It is not a flattering result. It is the first one most LLM eval frameworks would have hidden behind a number.
+## I built the framework. I built the skill. The framework refused to validate the skill. Twice.
 
-## Setup
+I am the author of Skill Harness — a deterministic evaluation framework
+for LLM skills. I am also the author of three of the most heavily-dogfooded
+skills the harness was built to evaluate (`ai-slop-sentinel`,
+`bayesian-eval-discipline`, `verbatim-content-subagent-dispatch`).
 
-`ai-slop-sentinel` is a Claude Code skill that asks the assistant to review AI-generated code against a curated "watch" of AI-slop anti-patterns, citing the watch by entry for each flag. It is in active use. It has been refined over multiple sessions. By any conventional rubric it is "a good prompt."
+When I tried to publish a reproducible cross-vendor result on one of those
+skills, the framework I built refused to run — twice in a row, for two
+different classes of inconsistency in my own setup, before any subject
+model was called and before any number could be shipped. A third class was
+caught upstream of that by another seat in the dev-team-council process I
+run on this repo.
 
-We ran it through `skill-harness run evaluate-skill` on v0.1.0 with `claude-sonnet-4-6` as the subject model. The harness extracted 17 testable clauses, of which the extractor declared 7 as Tier-1 (mechanically scorable) and 10 as Tier-2 (judge-required). The full per-clause inventory and run metadata is in `docs/dogfooding-ai-slop-sentinel-2026-06-07.md`.
+This case study is the audit trail of that catching. It is the deliverable
+because the catching is the demonstration. The original deliverable — a
+cross-vendor measurement — was less informative than what replaced it.
 
-The Tier-1 axes declared by the extractor included things like `citation_presence_per_flag`, `watch_entry_metadata_completeness`, `flag_severity_classification_and_citation`, `review_gate_enforcement_coverage`. These are concrete, countable properties of a review output — exactly what you'd want a deterministic scorer to verify.
+## What I was trying to do
 
-## What a conventional LLM eval framework would have reported
+`ai-slop-sentinel` is one of the active Claude Code skills I author. It
+asks the assistant to review AI-generated code against a curated "watch"
+of slop anti-patterns, citing the watch by entry for each flag. Phase 4.4
+of this project dogfooded it through the harness against
+`claude-sonnet-4-6`. The harness reported a vector. The vector showed all
+clauses came back **UNMEASURED**: no registered Tier-1 mechanical scorer
+matched the extracted axes, no calibrated Tier-2 judge existed for them,
+so the discipline refused to fabricate a contribution metric. Cost: $0.00.
 
-If you fed `ai-slop-sentinel` into the current generation of LLM eval tooling — pairwise preference judges, LMArena-style ELO, MT-Bench, G-Eval scalar scoring, or any number of "we asked GPT-4 to grade it" frameworks — you would get back a number. Probably something between 6.4 and 8.7 out of 10. The exact value would depend on the judge prompt, the rubric, and the eval framework's particular calibration choices. The number would feel real. It would be cited in a deck. Some of those frameworks would even attach a confidence interval.
+I wanted to confirm that result was subject-invariant: that running the
+same skill against a different vendor's model (`openai/gpt-5.5` via
+OpenRouter) would produce the same vector, because the UNMEASURED verdict
+arises from framework state, not subject behavior. Pre-registered the
+prediction with peeking-immunization, committed the prediction before
+any subject call, hardened the audit trail. Standard
+`bayesian-eval-discipline` pattern.
 
-None of those numbers would mean what they appear to mean.
+The experiment never ran. The framework caught the setup twice instead.
 
-The unstated assumption behind every scalar quality score is that the rater (whether human or LLM judge) was actually able to verify that the skill's clauses did the thing the clauses claim. For a skill like `ai-slop-sentinel`, where the clauses are domain-specific assertions about citation presence, severity classification, watch-entry currency, gate enforcement coverage — verifying any of these requires a mechanical procedure that can count, parse, or check the relevant property in the output. The judge LLM does not run that procedure. It pattern-matches. The resulting score is a function of how plausible the output looks, not whether the clauses are load-bearing.
+## HALT 1 — documentation drift in my own work
 
-This is a known problem in the LLM eval literature. It is rarely surfaced as the headline result.
+The first pre-flight check inside the tracer dispatch compares the
+currently-registered Tier-1 scorer set against the scorer set cited in
+the dogfooding doc the case study was anchored to. The dogfooding doc
+(commit `66510f9`, 2026-06-07 15:54 EDT) cites four scorers:
+`verbosity`, `hedge_index`, `structure_score`, `compliance_proxy`. The
+v0.1.0 tag (commit `fd782b1`, 2026-06-07 21:47 EDT) and current main
+register **five** — the same four plus `citation_presence_per_flag`,
+added in the pretag fix-sprint at `3f6b0a9` and `4583669` between the
+dogfooding run and the tag.
 
-## What Skill Harness reported
+That single added scorer happens to match clause 0's extracted axis. At
+the v0.1.0 tag the case study cites for reproducibility, the headline
+"17 UNMEASURED / 0 PASSED" is no longer recoverable — at-least one
+clause now reaches the sampling loop and produces a measured result. The
+framework noticed. The pre-flight gate refused to issue any subject call.
 
-```json
-{
-  "passed": 0,
-  "failed": 0,
-  "confounded": 0,
-  "unmeasured": 17,
-  "unmeasured_breakdown": {"no_data": 17},
-  "coverage": 0.0
-}
-```
+I had drifted my own published number against my own tagged framework
+between writing it down and shipping it. The discipline I built — to
+catch exactly this class of error — caught me.
 
-Zero clauses passed. Zero failed. Zero confounded. **All 17 clauses came back UNMEASURED with sub_reason `no_data`.**
+Audit trail in public history: pre-registration `1e09119`, PHASE A.5
+amendment `9ab3d79`, HALT findings doc `b7ba643`. Zero subject calls,
+$0.00 cost.
 
-The run made zero subject-model API calls. Cost: $0.00. The harness refused to ablate any clause because none of the extracted axes matched a registered Tier-1 mechanical scorer. The four currently-registered Tier-1 scorers are `verbosity`, `hedge_index`, `structure_score`, and `compliance_proxy`. None of them are valid instruments for measuring `citation_presence_per_flag` or `flag_severity_classification_and_citation`. The harness recognized this, gated the run, and reported the result that was actually available to report: nothing.
+The engineer reflex is to silently re-baseline at HEAD, quietly correct
+the case study, re-run the experiment, ship the corrected number. That
+is what most teams will do when this happens to them. I have to assume
+that's what most LLM evaluation results in circulation today are — a
+silently-corrected version of an original miss that didn't survive
+contact with the framework's own discipline. The corrected number leaves
+no trail.
 
-## Why this is the honest answer
+I committed the HALT instead and re-pre-registered at the shape level.
 
-The honest answer to "does `ai-slop-sentinel` clause-by-clause do what it claims?" — given the current Tier-1 scorer registry — is "we don't know." Not "8/10." Not "67% confidence interval." We do not know, because we do not have the mechanical instruments to measure the things the clauses are actually claiming.
+## HALT 2 — operational state mismatch (three compounding)
 
-UNMEASURED is a first-class verdict in Skill Harness. It is not a synonym for failure. It is the verdict that means: the test that would discriminate between "this clause is load-bearing" and "this clause is decoration" was not run, because the necessary instrument does not exist in this version of the framework. Producing a number anyway — by handing the question to an LLM judge and asking for a vibe-score — would be lying about what was measured.
+The re-pre-registration was tighter: rather than predicting a specific
+17-element vector, predict only that the same skill, evaluated under
+identical conditions against two different subjects, would yield
+byte-stable equal §16 result vectors. Field-level equality. No specific
+number claimed.
 
-The harness was designed to refuse this lie. The Phase 4.4 dogfooding result is the first time it has refused it on a real, popular, actively-used skill. The result is exactly the result the discipline was built to produce. It is also exactly the result that would never appear in a conventional eval framework's output, because conventional eval frameworks have no representation for "we don't know."
+The framework refused to run again. This time the pre-flight check
+caught three operational mismatches stacking:
 
-## This is not a one-off
+1. **`ANTHROPIC_API_KEY` is absent** because Claude Code (my dev
+   environment) authenticates by subscription, not API key. The CLI's
+   default subject path (`AnthropicSubjectClient`) constructs
+   `anthropic.Anthropic()` which fails without the env var. I had built
+   a framework whose default subject client couldn't run on the machine
+   I built it on.
+2. **The CLI does not expose `--subject-model`.** A factory
+   `make_subject_client(model)` exists at the library layer (added in
+   PHASE A.5 for OpenRouter routing) but is unreachable from
+   `run ablation`. The dispatch brief assumed a flag that doesn't exist
+   on the CLI surface.
+3. **The pre-existing `evidence.db` has five incomplete prior runs.**
+   `aggregate_skill` enforces "no incomplete runs per skill_id" as a
+   precondition (invariant A50/A53). Any new evaluation aggregates the
+   wrong evidence set unless those rows are resolved.
 
-We ran the same procedure against two more popular Claude Code skills on the same harness build, same subject model, same constraints. The result is a class-level pattern, not a single curiosity.
+Each in isolation is fixable. Together they exceed any sensible
+"adaptation budget" for an experimental dispatch and require explicit
+orchestrator direction to resolve. The pre-flight gate refused to
+proceed.
 
-**`bayesian-eval-discipline`** (24 testable clauses): 0 PASSED / 0 FAILED / 24 UNMEASURED. Sub-reason: `no_data`. Root cause distinct from ai-slop-sentinel — this is a meta-skill. Its clauses are discipline advice to developers ("use position-swap symmetric pairwise-preference agreement," "set N_min = 8 per condition pair"), not directives that produce observable changes in a subject-model output. The harness correctly refused to fabricate a contribution metric on advice-clauses. Field-conventional eval would have produced a number anyway. Raw run: `docs/dogfooding-bayesian-eval-discipline-2026-06-07.md`.
+Audit trail in public history: re-pre-registration `205fef9`, HALT
+findings doc `703f40d`. Zero subject calls, $0.00 cost.
 
-**`verbatim-content-subagent-dispatch`** (21 testable clauses): 0 PASSED / 0 FAILED / 21 UNMEASURED. Sub-reason: `no_data`. Root cause distinct again — 15 of 16 testable clauses are Tier-2 (LLM-judge-required) for axes like `embellishment_rate`, `spec_compliance_rate`, `halt_on_ambiguity_rate`. No calibrated `(judge_id, axis)` record exists. Harness refused to spend tokens on uncalibrated judge calls. Raw run: `docs/dogfooding-verbatim-content-subagent-dispatch-2026-06-07.md`.
+Items 1 and 2 are real product gaps in the harness — engineering work
+queued for a follow-on dispatch. They are gaps I built into my own
+framework and only surfaced by trying to evaluate my own skill on my
+own machine. The framework caught them in front of me.
 
-So three skills, three different mechanisms producing the same honest verdict:
+## HALT 3 — orchestrator precondition gap (upstream of HALTs 1 and 2)
 
-| Skill | Mechanism | Result |
-|---|---|---|
-| `ai-slop-sentinel` | Tier-1 axes declared, but no registered mechanical scorer for them | 17 UNMEASURED |
-| `bayesian-eval-discipline` | Meta-skill: clauses are advice, no subject-observable behavior | 24 UNMEASURED |
-| `verbatim-content-subagent-dispatch` | Tier-2 dominant, no calibrated judge for the axes | 21 UNMEASURED |
+The original tracer dispatch assumed I had an `ANTHROPIC_API_KEY`
+available. I do not, and the orchestration layer (a separate skill,
+`dev-team-council`, which runs the dev-team-style council fires that
+gate architectural decisions on this repo) had no pre-flight step
+asking. A subject-matter agent (the supply-chain auditor and the
+EVAL-RESEARCH single-seat) was dispatched on the assumption of a
+resource I cannot in fact provide.
 
-Three different reasons. One discipline. UNMEASURED is the verdict the framework was built to produce when any of these conditions holds. Conventional frameworks have no slot for any of these three; they would have produced three numbers, all confident, all wrong about what they measured.
+This is orchestrator error. I surfaced it as a user with skin in the
+game, not as the framework author — the same person, two hats. The
+council SOP gained a new pre-fire step the same session
+(commit `62391eb`): "verify all required external resources are
+PM-confirmed available, in writing, before any subject-matter seat is
+dispatched."
 
-The pattern is class-level. A reader trying to refute the case study has to either (a) refute that any of these three is a legitimate "we don't have the instrument" condition, or (b) accept that most of the LLM-prompted skills currently deployed in production sit in one of these three categories and that their quality scores are unfalsifiable for the same reasons.
+A new template, "External-vendor / API-surface change," was added. The
+amendment is small and was small to write. The point is: the same
+discipline that caught HALTs 1 and 2 — refusal to proceed when the
+state is inconsistent — was extended one level upstream the moment we
+noticed it was missing there.
 
-## What this implies about the rest of the field
+Three HALTs. Three different layers (documentation drift; operational
+state; orchestrator preconditions). All three caught in public history
+before any contaminated result shipped.
 
-`ai-slop-sentinel` is not unusual. Most LLM-prompted skills currently deployed in production carry domain-specific axes (citation correctness, claim grounding, severity classification, rubric adherence) that are not measurable by any registered mechanical scorer in any current eval framework. The standard pattern is to score them anyway — with a holistic judge, a pairwise preference, or a scalar rubric — and report the number as if it were evidence about the clauses.
+## What three HALTs amount to
 
-Under Skill Harness's discipline, most of those numbers should be UNMEASURED. The fact that they are not is a property of the framework producing them, not the artifact being measured.
+I tried to publish a confident cross-vendor result. The framework caught
+me drifting at the documentation layer. The framework caught me drifting
+at the operational layer. My own user-feedback caught my orchestrator
+drifting at the precondition layer.
 
-This is not a claim that other eval frameworks are useless. They measure something. The honest thing to say is that what they measure is "does the output look plausible to a judge with this rubric." That is not "do the clauses contribute load-bearing structure." The two questions can produce wildly different answers on the same artifact. The field has not been careful about distinguishing them.
+Zero subject calls. $0.00 in vendor spend. Zero confident-false numbers
+shipped. Three commits worth of audit trail in public git history before
+this case study was rewritten.
 
-Skill Harness's contribution is the refusal to conflate them.
+This is what doing this honestly looks like. It does not look like a
+table of numbers. It looks like a stack of caught mistakes, all caught
+by the discipline they were claims about, all caught in front of an
+audience.
 
-## Reproducibility
+That is the artifact.
 
-This case study is reproducible by anyone with the v0.1.0 tag. The full instructions are in the project README. The summary:
+## The category I am claiming
+
+`ai-slop-sentinel` and the other dogfooded skills will not be in any
+LLM-eval leaderboard. They cannot be: there is no MMLU-style benchmark
+for "did the skill's clauses do what they claim." LMArena and MT-Bench
+and G-Eval and pairwise-preference judges measure something else
+entirely — they measure whether the output looks plausible to a rater
+with a rubric. That is not the question.
+
+The question Skill Harness asks is: when this clause is removed, does
+the subject's behavior on the axis the clause claims to govern actually
+change? Differential ablation. A is compared against B on axis X. No
+holistic grade. No vibe score. No LLM judge as a source of truth.
+
+The relevant category is not "LLM eval framework." It is
+**AI agent self-audit infrastructure**: tooling whose job is to let a
+team running production AI agents audit, in a falsifiable way, whether
+the prompts/skills/system messages in the loop are load-bearing. The
+audit can produce a measurement. It can also refuse to produce one and
+publish the refusal. Both are valid outcomes; the second is what most
+of the field cannot represent in their data model.
+
+I am the only thing in the category, today, because the category did
+not exist as a named thing before this artifact. I expect that to
+change. When it does, the category will exist as a named thing — which
+is itself a more useful contribution than a number on a leaderboard.
+
+## The asymmetric attack
+
+The argument I am making is not "Skill Harness is more honest than
+other frameworks." That argument requires the reader to admit Skill
+Harness is better, which is a high psychological cost and they will
+default to disagreement.
+
+The argument I am making is: **other LLM-eval frameworks are dishonest
+by construction.** A holistic LLM judge cannot verify a clause-level
+claim it cannot mechanically check. A pairwise-preference judge can
+tell you which response is preferred; it cannot tell you whether the
+specific clause "cite the watch entry for each flagged finding" is
+load-bearing in producing the preferred response. The conflation
+between those two questions is structural. It is in the framework, not
+the user.
+
+The reader does not have to like Skill Harness to agree with that
+sentence. They only have to admit the field has a representation gap.
+Anyone numerate who reads the literature already half-believes it.
+
+## What you'd see if you tried to reproduce this
+
+You don't reproduce the original experiment — there isn't one. The
+discipline refused to run it. What you reproduce is the audit trail:
 
 ```bash
 git clone https://github.com/MrBinnacle/skill-harness
-cd skill-harness && git checkout v0.1.0
-# install per README env recipe
-$py = ".venv/Scripts/python.exe"
-$env:PYTHONHASHSEED = 0; $env:PYTHONUTF8 = 1
-$env:PYTHONPATH = "src"
-& $py -m skill_harness init <path-to-ai-slop-sentinel-SKILL.md>
-& $py -m skill_harness run ablation <skill_id> --execute
-& $py -m skill_harness run evaluate-skill <skill_id>
+cd skill-harness
+git checkout v0.1.0
+
+# Read the audit trail in order:
+git show 2a6141d   # T3 PHASE A — openai adapter + initial pre-registration
+git show 62391eb   # SOP amendment — precondition-check pre-fire step
+git show 9ab3d79   # PHASE A.5 amendment — OpenRouter routing
+git show b7ba643   # HALT 1 — scorer registry drift findings
+git show 43432b7   # PHASE A.5 SHA fill on main after cherry-pick
+git show 205fef9   # PHASE B' re-pre-registration (shape-level)
+git show 703f40d   # HALT 2 — environment + CLI + persistence findings
 ```
 
-You will get the same vector. `PYTHONHASHSEED=0` plus the BLOCKER-1 gate firing on all clauses means there is no sampling randomness in this particular run. Byte-stable JSON output is verified across re-runs.
+Each commit shows a specific decision, with the framework state at the
+time, with no peeking at a result that wasn't there to peek at. The
+sequence is the artifact. Anyone running the same discipline against
+their own setup would have caught the same classes of inconsistency in
+their own setup — or, if they were lucky enough to have a clean setup
+on the first try, would not have needed to.
 
-The 17 axes the extractor produced are stochastic — re-extraction with the same source SHA may shift the clause count by 1-2. The UNMEASURED result is not stochastic.
+The reproducibility claim Skill Harness makes is that the discipline
+can be applied to any AI-agent skill artifact a team is running in
+production. The case study is not the experiment; the case study is
+the discipline catching its own author.
 
-## What this does not show
+The framework state needed to apply the discipline to your own skills
+is on `main`. The two engineering gaps surfaced by HALT 2 (`--subject-
+model` CLI flag, ANTHROPIC fallback path) are queued and will land
+before T1 frame-legibility readers are invited.
 
-This case study does not show that `ai-slop-sentinel` is a bad skill. It might be a very effective skill. It almost certainly has clauses that meaningfully shape the output. We cannot prove that one way or the other without the Tier-1 scorers that would let us run the differential-ablation test honestly.
+## What this case study does not claim
 
-That asymmetry — between "we cannot prove it works" and "it does not work" — is exactly the asymmetry conventional eval frameworks erase. Skill Harness preserves it. Live with the discomfort or extend the scorer registry. Both are valid moves. Pretending the number is the answer is not.
+It does not claim `ai-slop-sentinel` is a bad skill. It does not claim
+the harness measured that. The harness explicitly refused to measure
+that with the current scorer registry and the current set of calibrated
+Tier-2 judges (none). The asymmetry between "we cannot prove it works"
+and "it does not work" is preserved. Most LLM evaluation frameworks
+erase that asymmetry by producing a confident number anyway. Skill
+Harness's discipline is to preserve it. Live with the discomfort, extend
+the Tier-1 scorer registry, or calibrate a Tier-2 judge. All three are
+legitimate moves. Producing the number anyway is not.
+
+It also does not claim author-of-discipline + author-of-skill +
+author-of-orchestrator is the only honest way to run a framework like
+this. It is what made the catching uncopyable in this specific case.
+Other teams will have weaker skin-in-the-game alignment and different
+catches. That is fine. The discipline is what generalizes; the
+particulars of who got caught are not.
 
 ## What would change this result
 
-The result would change in one of two ways:
+Three classes of move would each produce a different deliverable:
 
-1. **Extend the Tier-1 scorer registry.** Implement mechanical scorers for the specific axes the extractor produces — `citation_presence_per_flag` is a counted property of the output; `watch_entry_metadata_completeness` is a schema check; `flag_severity_classification_and_citation` is a label parser. Each of these is a finite, well-defined piece of code. Once a scorer is registered, the gate opens and the harness will run the ablation honestly.
-2. **Calibrate a Tier-2 judge for the relevant axes.** Per the framework's discipline, a Tier-2 LLM judge is admissible only after it passes a calibration audit against a labeled set: position-swap agreement ≥0.7, position consistency ≥0.8, on ≥50 pairs per axis. No calibrated judge exists for these axes today. One could exist.
+1. **Extend the Tier-1 scorer registry.** A mechanical scorer for
+   `citation_presence_per_flag` already landed pre-tag (and triggered
+   HALT 1 by doing so). Scorers for the other 16 axes are finite,
+   well-defined pieces of code. Each registered scorer opens one more
+   clause to honest measurement. Producing a vector of mostly-measured
+   clauses for `ai-slop-sentinel` is straightforward engineering once
+   the registry is extended; it is a deliberate choice to ship v0.1.0
+   without that work done, because the discipline of refusing to
+   measure without a registered scorer is the load-bearing claim.
+2. **Calibrate a Tier-2 LLM judge for the relevant axes.** Per
+   framework discipline, a Tier-2 judge is admissible only after it
+   passes position-swap and length-control calibration on a labeled
+   set (≥50 pairs per axis, observed Cohen's κ on three-class
+   marginals). No calibrated judge exists today. One could exist; it
+   is a labeling project, not a prompting project.
+3. **Catch more of my own work publicly.** The HALT pattern catches
+   author drift; the more the framework catches, in public, the more
+   credible the discipline becomes. The next tracer round may catch a
+   different class. That is the point. The compounding audit trail is
+   what generalizes.
 
-The first move is faster and produces more durable infrastructure. The second move scales to axes that resist mechanical scoring. Both are legitimate paths.
-
-What is not a legitimate path: handing the question to an uncalibrated judge and reporting the number as if it were evidence. That is the path the field is currently on.
+The fourth move — handing the question to an uncalibrated judge and
+reporting the number as if it were evidence — is the path the field is
+on. It is not a path Skill Harness takes. The discipline of refusing
+that path is the artifact.
 
 ---
 
-*Reproducible artifact: Skill Harness v0.1.0 · tag `v0.1.0` · `f99649d` · 2026-06-07. Raw run metadata at `docs/dogfooding-ai-slop-sentinel-2026-06-07.md`. PRD specification at `PRD.md` v1.1. Council-adopted invariants at `docs/COUNCIL_FINDINGS.md` A1-A62.*
+*Reproducible artifact: Skill Harness on `main` at HEAD `f3a1fd1`. Tag
+`v0.1.0` (commit `fd782b1`). Audit-trail commits cited inline above; HALT
+findings at `docs/dispatch/t3-findings.md`; pre-registrations at
+`docs/dispatch/t3-pre-registration.md`; SOP amendment in
+`.claude/skills/dev-team-council/SKILL.md` at `62391eb`.
+PRD specification at `PRD.md` v1.1. Council-adopted invariants at
+`docs/COUNCIL_FINDINGS.md` A1-A62. The dogfooding result that triggered
+this story is at `docs/dogfooding-ai-slop-sentinel-2026-06-07.md`
+(baseline-state, pre-registry-expansion).*
 
-*Questions, reactions, refutations welcome. The discipline this case study describes is falsifiable by construction; the artifact is the test.*
+*The discipline this case study describes is falsifiable by construction.
+The audit trail is the test.*
