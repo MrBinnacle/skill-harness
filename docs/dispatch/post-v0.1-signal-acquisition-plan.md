@@ -15,7 +15,8 @@ Companion to the outward-facing case study at
 | 1 | Case study draft | orchestrator | landed 2026-06-08 | ✅ committed |
 | 2 | First-touch hardening punch list | orchestrator → dispatched | week 1 (target land by 2026-06-15) | ⏳ this doc |
 | 3 | Targeted-send list shape | orchestrator surfaces persona; PM picks names | 2026-06-08, before sends begin | ⏳ this doc |
-| 4 | Targeted sends | PM | 2026-06-15 → 2026-06-22 window | PM-owned |
+| 3.5 | **One-reader frame-legibility tracer (T1)** | PM picks ONE reader from persona profile | 2026-06-15 → 2026-06-18 window | tracer gate before batch |
+| 4 | Targeted sends (batch of 5-10) | PM | 2026-06-18 → 2026-06-22 window (only AFTER T1 passes) | PM-owned |
 | 5 | Reaction collection | PM + orchestrator | 2026-06-22 → 2026-07-08 | PM-owned |
 | 6 | v0.2-commitment re-eval | PM | **2026-07-08** | calendared |
 
@@ -85,6 +86,33 @@ the demonstration.
 Single Sonnet 4.6 implementer in a worktree. Single cohesive commit per
 `feedback-commit-shape`. Target land: 2026-06-15. Estimated 4-6 hours of
 agent work + orchestrator review.
+
+## #3.5 · One-reader frame-legibility tracer (T1)
+
+Before the batch of 5-10 sends goes out, send the case study to **one** credible-skeptic reader as a tracer round. Their feedback either confirms the frame is legible or surfaces a specific failure point. Cheap, fast, falsifiable. The cost of skipping this step is the batch lands and 5 readers bounce off the same problem one would have told us about.
+
+### The tracer reader
+
+Same persona profile as the batch (§#3 below), but one person specifically chosen for two extra qualities:
+
+- **Will give a real reaction within 72 hours.** A delayed-reaction tracer is a magazine round, not a tracer. Pick someone who responds quickly when they engage at all.
+- **Will tell us where they got lost, not just whether they liked it.** "Reads well" is not a tracer outcome. The valuable outputs are "I lost the thread at section X" or "I don't believe claim Y because Z."
+
+### What we're testing
+
+The case study's frame is: "three skills, three mechanisms, same UNMEASURED verdict, here's why this is the honest answer." We are NOT testing whether the frame is persuasive. We are testing whether it is **legible** — whether a credibly-skeptical reader can follow the argument enough to either accept or reject it on its actual merits.
+
+### Pass / fail
+
+- **Pass**: the reader understands the case study's claim, can name the three mechanisms back, and reacts substantively (agrees, disagrees, asks pointed questions). Batch send (§#4) proceeds.
+- **Fail (frame-illegible)**: the reader bounces off the framing without engaging substance. Stop. Rewrite the case study using their specific failure point. Re-tracer with a different reader.
+- **Fail (substance-rejected)**: the reader engages and tells us we're wrong, with a reason that stands up. Stop. Either update the case study with the rebuttal-and-response, or — if the rebuttal invalidates the frame — pause the entire signal-acquisition cycle and re-evaluate the thesis.
+
+### What we don't do with the T1 reader
+
+- Don't argue. Listen. Adjust.
+- Don't treat their reaction as the final answer for the batch. T1 calibrates the case study; T1 is not the audience verdict.
+- Don't make them part of the batch later. They've burned their first-touch surprise; their batch reaction would be contaminated.
 
 ## #3 · Targeted-send list shape
 

@@ -47,6 +47,26 @@ UNMEASURED is a first-class verdict in Skill Harness. It is not a synonym for fa
 
 The harness was designed to refuse this lie. The Phase 4.4 dogfooding result is the first time it has refused it on a real, popular, actively-used skill. The result is exactly the result the discipline was built to produce. It is also exactly the result that would never appear in a conventional eval framework's output, because conventional eval frameworks have no representation for "we don't know."
 
+## This is not a one-off
+
+We ran the same procedure against two more popular Claude Code skills on the same harness build, same subject model, same constraints. The result is a class-level pattern, not a single curiosity.
+
+**`bayesian-eval-discipline`** (24 testable clauses): 0 PASSED / 0 FAILED / 24 UNMEASURED. Sub-reason: `no_data`. Root cause distinct from ai-slop-sentinel — this is a meta-skill. Its clauses are discipline advice to developers ("use position-swap symmetric pairwise-preference agreement," "set N_min = 8 per condition pair"), not directives that produce observable changes in a subject-model output. The harness correctly refused to fabricate a contribution metric on advice-clauses. Field-conventional eval would have produced a number anyway. Raw run: `docs/dogfooding-bayesian-eval-discipline-2026-06-07.md`.
+
+**`verbatim-content-subagent-dispatch`** (21 testable clauses): 0 PASSED / 0 FAILED / 21 UNMEASURED. Sub-reason: `no_data`. Root cause distinct again — 15 of 16 testable clauses are Tier-2 (LLM-judge-required) for axes like `embellishment_rate`, `spec_compliance_rate`, `halt_on_ambiguity_rate`. No calibrated `(judge_id, axis)` record exists. Harness refused to spend tokens on uncalibrated judge calls. Raw run: `docs/dogfooding-verbatim-content-subagent-dispatch-2026-06-07.md`.
+
+So three skills, three different mechanisms producing the same honest verdict:
+
+| Skill | Mechanism | Result |
+|---|---|---|
+| `ai-slop-sentinel` | Tier-1 axes declared, but no registered mechanical scorer for them | 17 UNMEASURED |
+| `bayesian-eval-discipline` | Meta-skill: clauses are advice, no subject-observable behavior | 24 UNMEASURED |
+| `verbatim-content-subagent-dispatch` | Tier-2 dominant, no calibrated judge for the axes | 21 UNMEASURED |
+
+Three different reasons. One discipline. UNMEASURED is the verdict the framework was built to produce when any of these conditions holds. Conventional frameworks have no slot for any of these three; they would have produced three numbers, all confident, all wrong about what they measured.
+
+The pattern is class-level. A reader trying to refute the case study has to either (a) refute that any of these three is a legitimate "we don't have the instrument" condition, or (b) accept that most of the LLM-prompted skills currently deployed in production sit in one of these three categories and that their quality scores are unfalsifiable for the same reasons.
+
 ## What this implies about the rest of the field
 
 `ai-slop-sentinel` is not unusual. Most LLM-prompted skills currently deployed in production carry domain-specific axes (citation correctness, claim grounding, severity classification, rubric adherence) that are not measurable by any registered mechanical scorer in any current eval framework. The standard pattern is to score them anyway — with a holistic judge, a pairwise preference, or a scalar rubric — and report the number as if it were evidence about the clauses.
