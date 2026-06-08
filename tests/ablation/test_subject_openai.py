@@ -366,3 +366,227 @@ def test_openai_sub_surface_exclusion_beta_not_loaded() -> None:
             "This namespace is excluded per supply-chain audit "
             ".supply-chain-risk-auditor/openai-audit-2026-06-08.md"
         )
+
+
+# ---------------------------------------------------------------------------
+# PHASE A.5 — OpenRouter routing tests
+# ---------------------------------------------------------------------------
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+def test_factory_openrouter_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Model ids containing '/' route to OpenAISubjectClient with OpenRouter base_url.
+
+    Per Phase A.5 pivot: OpenRouter convention is `<provider>/<model>` (e.g.
+    `openai/gpt-5.5`). The factory must:
+      1. Recognize the '/' pattern as OpenRouter routing.
+      2. Pass the FULL id through (OpenRouter expects the provider-prefixed id).
+      3. Construct OpenAISubjectClient with base_url=OPENROUTER_BASE_URL.
+    """
+    from openai import OpenAI
+
+    from skill_harness.ablation.subject import OpenAISubjectClient, make_subject_client
+
+    # Provide an OPENROUTER_API_KEY so OpenAI() instantiation does not fail when
+    # the factory passes both base_url + api_key from environment.
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-or-key-not-real")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    captured_kwargs: dict[str, object] = {}
+
+    def _capture(**kwargs: object) -> MagicMock:
+        captured_kwargs.update(kwargs)
+        return MagicMock(spec=OpenAI)
+
+    with patch("skill_harness.ablation.subject.OpenAI", side_effect=_capture):
+        client = make_subject_client("openai/gpt-5.5")
+
+    assert isinstance(client, OpenAISubjectClient)
+    assert captured_kwargs.get("base_url") == OPENROUTER_BASE_URL
+    # Full provider-prefixed id must be preserved (OpenRouter routes on it).
+    assert client._model == "openai/gpt-5.5"
+
+
+def test_factory_openrouter_unknown_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OpenRouter ids with unknown provider prefix still route (OpenRouter validates).
+
+    The factory must NOT early-reject `someunknown/foo` — OpenRouter is the
+    authoritative validator. The factory only enforces the '/' shape heuristic.
+    """
+    from openai import OpenAI
+
+    from skill_harness.ablation.subject import OpenAISubjectClient, make_subject_client
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-or-key-not-real")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with patch("skill_harness.ablation.subject.OpenAI", return_value=MagicMock(spec=OpenAI)):
+        client = make_subject_client("someunknown/foo-model")
+
+    assert isinstance(client, OpenAISubjectClient)
+    assert client._model == "someunknown/foo-model"
+
+
+def test_factory_legacy_prefix_dispatch_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PHASE A factory contracts unchanged: claude-* and gpt-* still dispatch correctly.
+
+    No '/' in the model id -> existing prefix dispatch fires (claude-* -> Anthropic;
+    gpt-* / o<digit>-* -> direct OpenAI, NO base_url).
+    """
+    from openai import OpenAI
+
+    from skill_harness.ablation.subject import (
+        AnthropicSubjectClient,
+        OpenAISubjectClient,
+        make_subject_client,
+    )
+
+    # claude-* -> Anthropic
+    client_a = make_subject_client("claude-sonnet-4-6")
+    assert isinstance(client_a, AnthropicSubjectClient)
+
+    # gpt-* -> direct OpenAI (no base_url -> uses default)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-oa-key-not-real")
+    captured_kwargs: dict[str, object] = {}
+
+    def _capture(**kwargs: object) -> MagicMock:
+        captured_kwargs.update(kwargs)
+        return MagicMock(spec=OpenAI)
+
+    with patch("skill_harness.ablation.subject.OpenAI", side_effect=_capture):
+        client_g = make_subject_client("gpt-5.5")
+    assert isinstance(client_g, OpenAISubjectClient)
+    # Direct OpenAI path -> NO base_url passed (or base_url is None)
+    assert captured_kwargs.get("base_url") is None or "base_url" not in captured_kwargs
+    assert client_g._model == "gpt-5.5"
+
+
+def test_openai_client_cost_from_openrouter_field() -> None:
+    """When usage.cost is present, SubjectResponse.usd uses it directly.
+
+    OpenRouter exposes per-request cost in usage.cost (USD float). When the
+    OpenAISubjectClient is configured for OpenRouter, this value is more
+    accurate than local pricing (OpenRouter applies per-provider rates + margin).
+    Cost provenance is recorded in cost_source="openrouter_response" (A41).
+    """
+    from skill_harness.ablation.subject import OpenAISubjectClient
+
+    mock_resp = _make_openai_response(
+        prompt_tokens=200,
+        completion_tokens=40,
+        cached_tokens=80,
+        model="openai/gpt-5.5",
+    )
+    # Inject usage.cost field (OpenRouter response shape)
+    mock_resp.usage.cost = 0.0042
+
+    mock_openai_client = MagicMock()
+    mock_openai_client.chat.completions.create.return_value = mock_resp
+
+    client = OpenAISubjectClient(
+        client=mock_openai_client,
+        model="openai/gpt-5.5",
+        base_url=OPENROUTER_BASE_URL,
+    )
+    response = client.call(system_blocks=[], user_message="test")
+
+    assert response.usd == 0.0042
+    assert response.cost_source == "openrouter_response"
+
+
+def test_openai_client_cost_fallback() -> None:
+    """When usage.cost is absent, fall back to local estimate; cost_source records it.
+
+    Older OpenRouter responses (or direct OpenAI responses, which never have
+    usage.cost) trigger _estimate_usd_openai with the de-prefixed model id.
+    cost_source="local_estimate" preserves audit-trail provenance (A41).
+    """
+    from skill_harness.ablation.subject import OpenAISubjectClient
+
+    mock_resp = _make_openai_response(
+        prompt_tokens=200,
+        completion_tokens=40,
+        cached_tokens=80,
+        model="openai/gpt-5.5",
+    )
+
+    # usage.cost field is ABSENT — getattr(usage, "cost", None) must return None.
+    # MagicMock auto-creates attributes; explicitly configure to ensure
+    # getattr returns None (not a MagicMock).
+    type(mock_resp.usage).cost = property(lambda self: None)  # type: ignore[misc]
+
+    mock_openai_client = MagicMock()
+    mock_openai_client.chat.completions.create.return_value = mock_resp
+
+    client = OpenAISubjectClient(
+        client=mock_openai_client,
+        model="openai/gpt-5.5",
+        base_url=OPENROUTER_BASE_URL,
+    )
+    response = client.call(system_blocks=[], user_message="test")
+
+    # Fallback: local estimate must fire — usd is computed, non-zero.
+    assert response.usd > 0.0
+    assert response.cost_source == "local_estimate"
+
+
+def test_openai_client_direct_path_uses_local_estimate() -> None:
+    """Direct OpenAI calls (no base_url) always use local estimate.
+
+    Even when usage.cost is somehow present (it shouldn't be on direct OpenAI),
+    the direct path must use local pricing to maintain consistency with
+    pre-PHASE-A.5 behavior. cost_source records "local_estimate".
+    """
+    from skill_harness.ablation.subject import OpenAISubjectClient
+
+    mock_resp = _make_openai_response(
+        prompt_tokens=100,
+        completion_tokens=20,
+        cached_tokens=0,
+        model="gpt-5.5",
+    )
+
+    mock_openai_client = MagicMock()
+    mock_openai_client.chat.completions.create.return_value = mock_resp
+
+    # base_url=None -> direct OpenAI path -> always local estimate
+    client = OpenAISubjectClient(client=mock_openai_client, model="gpt-5.5")
+    response = client.call(system_blocks=[], user_message="test")
+
+    assert response.usd > 0.0
+    assert response.cost_source == "local_estimate"
+
+
+def test_openrouter_route_excludes_beta_surfaces() -> None:
+    """OpenRouter route preserves sub-surface exclusion (no openai.beta etc).
+
+    Re-checks the exclusion invariant after the OpenRouter pivot. Constructing
+    a client for an OpenRouter id MUST NOT load any excluded namespaces.
+    """
+    from openai import OpenAI
+
+    from skill_harness.ablation.subject import OpenAISubjectClient
+
+    mock_openai_client = MagicMock(spec=OpenAI)
+    # Construct an OpenRouter-routed client
+    _ = OpenAISubjectClient(
+        client=mock_openai_client,
+        model="openai/gpt-5.5",
+        base_url=OPENROUTER_BASE_URL,
+    )
+
+    excluded = [
+        "openai.beta",
+        "openai.resources.assistants",
+        "openai.resources.realtime",
+        "openai.resources.files",
+        "openai.resources.vector_stores",
+        "openai.resources.uploads",
+        "openai.resources.webhooks",
+    ]
+    for ns in excluded:
+        assert ns not in sys.modules, (
+            f"Sub-surface exclusion violation after OpenRouter route construction: "
+            f"'{ns}' loaded in sys.modules"
+        )

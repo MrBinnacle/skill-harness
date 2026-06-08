@@ -32,8 +32,10 @@ Per CLAUDE.md load-bearing invariants:
 from __future__ import annotations
 
 import hashlib
+import logging
+import os
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 import anthropic
 
@@ -86,6 +88,20 @@ _DEFAULT_MAX_TOKENS: int = 512
 # Transient HTTP status codes — caller should retry.
 _TRANSIENT_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 
+# OpenRouter base URL (Phase A.5 pivot).
+# The OpenAI SDK is used as an OpenAI-compatible gateway client; no new SDK to audit.
+# OpenRouter exposes per-request cost in response.usage.cost (USD float).
+_OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+
+# cost_source Literal alias (A41 provenance):
+# "openrouter_response" — usd taken directly from response.usage.cost (preferred when
+#   routing through OpenRouter; reflects OpenRouter's per-provider rates + margin).
+# "local_estimate"      — usd computed via _estimate_usd_openai using local pricing
+#   table (used for direct OpenAI calls and as fallback when usage.cost is absent).
+CostSource = Literal["openrouter_response", "local_estimate"]
+
+_logger = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # SubjectResponse
@@ -115,6 +131,16 @@ class SubjectResponse:
         The model ID actually used.
     stop_reason : str
         Stop reason from the API response (e.g. "end_turn", "max_tokens").
+    cost_source : CostSource
+        Provenance of the ``usd`` value (A41 audit trail). Phase A.5:
+          - "openrouter_response": pulled from ``response.usage.cost`` (preferred
+            when routing through OpenRouter; reflects OpenRouter's per-provider
+            rates + margin).
+          - "local_estimate": computed via ``_estimate_usd_openai`` /
+            ``_estimate_usd`` from the local pricing table (used for direct OpenAI
+            and Anthropic, and as fallback when ``usage.cost`` is absent).
+        Defaults to "local_estimate" — every code path constructing a
+        SubjectResponse sets this explicitly except for back-compat callers.
     """
 
     output_text: str
@@ -125,6 +151,7 @@ class SubjectResponse:
     usd: float
     model: str
     stop_reason: str
+    cost_source: CostSource = "local_estimate"
 
 
 # ---------------------------------------------------------------------------
@@ -417,14 +444,30 @@ class OpenAISubjectClient:
       prompt_tokens_details.cached_tokens -> cache_read_input_tokens.
     - cache_creation_input_tokens is always 0 (OpenAI has no write-cache cost analog).
 
+    Phase A.5 — OpenRouter routing:
+    When ``base_url`` is set (typically to ``_OPENROUTER_BASE_URL``), the underlying
+    OpenAI client is constructed with ``base_url=...`` plus an API key resolved from
+    ``OPENROUTER_API_KEY`` (taking priority) or ``OPENAI_API_KEY``. The OpenAI SDK
+    is used as an OpenAI-compatible gateway client — no new SDK to audit; same
+    supply-chain decision applies. OpenRouter exposes per-request cost in
+    ``response.usage.cost``; when present (and ``base_url`` is set), that value
+    overrides the local pricing estimate, and ``cost_source`` records the
+    provenance ("openrouter_response" vs "local_estimate") for the A41 audit trail.
+
     Parameters
     ----------
     client : OpenAI | None
-        SDK client. If None, one is created from the environment (OPENAI_API_KEY).
+        SDK client. If None, one is created from the environment (OPENAI_API_KEY
+        or OPENROUTER_API_KEY depending on ``base_url``).
     model : str
-        Subject model ID (e.g. 'gpt-5.5', 'gpt-5.4').
+        Subject model ID. For direct OpenAI: e.g. 'gpt-5.5', 'gpt-5.4'.
+        For OpenRouter (when ``base_url`` is set): the full provider-prefixed id
+        e.g. 'openai/gpt-5.5' — pass-through to OpenRouter's routing layer.
     max_tokens : int
         Maximum completion tokens per call.
+    base_url : str | None
+        Optional override for the OpenAI SDK base URL. Set to OpenRouter's URL
+        (``_OPENROUTER_BASE_URL``) to route via OpenRouter. When None, direct OpenAI.
     """
 
     def __init__(
@@ -432,8 +475,19 @@ class OpenAISubjectClient:
         client: OpenAI | None = None,
         model: str = "gpt-5.5",
         max_tokens: int = _DEFAULT_MAX_TOKENS,
+        base_url: str | None = None,
     ) -> None:
-        self._client = client if client is not None else OpenAI()
+        self._base_url: str | None = base_url
+        if client is not None:
+            self._client = client
+        elif base_url is not None:
+            # OpenRouter (or other OpenAI-compatible gateway) path.
+            # OPENROUTER_API_KEY takes priority; fall back to OPENAI_API_KEY.
+            api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
+            self._client = OpenAI(api_key=api_key, base_url=base_url)
+        else:
+            # Direct OpenAI path: SDK auto-resolves OPENAI_API_KEY from env.
+            self._client = OpenAI()
         self._model = model
         self._max_tokens = max_tokens
 
@@ -505,12 +559,39 @@ class OpenAISubjectClient:
             if details is not None:
                 cache_read = getattr(details, "cached_tokens", 0) or 0
 
-        usd = _estimate_usd_openai(
-            model=self._model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cache_read_input_tokens=cache_read,
-        )
+        # Cost-source resolution (Phase A.5, A41 provenance):
+        # 1. OpenRouter path AND usage.cost present  -> use it; cost_source="openrouter_response"
+        # 2. OpenRouter path AND usage.cost absent   -> log warning, fall back; "local_estimate"
+        # 3. Direct OpenAI path                      -> always local estimate; "local_estimate"
+        # The local-estimate fallback de-prefixes the model id ('openai/gpt-5.5' -> 'gpt-5.5')
+        # so the local pricing table lookup matches.
+        usd: float
+        cost_source: CostSource
+        usage_cost = None
+        if usage is not None and self._base_url is not None:
+            usage_cost = getattr(usage, "cost", None)
+
+        if usage_cost is not None:
+            usd = float(usage_cost)
+            cost_source = "openrouter_response"
+        else:
+            if self._base_url is not None:
+                _logger.warning(
+                    "OpenRouter response missing usage.cost for model %r; "
+                    "falling back to local pricing estimate. A41 audit trail "
+                    "records cost_source='local_estimate'.",
+                    self._model,
+                )
+            # De-prefix provider-routed ids so local pricing table matches
+            # (e.g. 'openai/gpt-5.5' -> 'gpt-5.5'). Pure 'gpt-5.5' is unchanged.
+            local_model_id = self._model.split("/", 1)[-1] if "/" in self._model else self._model
+            usd = _estimate_usd_openai(
+                model=local_model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_input_tokens=cache_read,
+            )
+            cost_source = "local_estimate"
 
         stop_reason = getattr(response.choices[0], "finish_reason", None) or "unknown"
 
@@ -523,6 +604,7 @@ class OpenAISubjectClient:
             usd=usd,
             model=response.model,
             stop_reason=stop_reason,
+            cost_source=cost_source,
         )
 
     def warmup_shared_prefix(
@@ -551,14 +633,30 @@ def make_subject_client(model: str) -> SubjectAdapter:
     """Factory: return a SubjectAdapter for the given model.
 
     Dispatch table:
+    - ``<provider>/<model>`` (contains '/') -> OpenAISubjectClient routed via OpenRouter
+      (base_url = ``_OPENROUTER_BASE_URL``). The FULL provider-prefixed id is passed
+      through; OpenRouter expects it in ``client.chat.completions.create(model=...)``.
+      OpenRouter is the authoritative validator for the provider segment — the factory
+      does NOT early-reject unknown providers.
     - ``claude-*``    -> AnthropicSubjectClient
-    - ``gpt-*``       -> OpenAISubjectClient
-    - ``o*-*``        -> OpenAISubjectClient (e.g. o4-mini, o3-mini)
+    - ``gpt-*``       -> OpenAISubjectClient (direct OpenAI, no base_url)
+    - ``o<digit>-*``  -> OpenAISubjectClient (direct OpenAI; o-series e.g. o4-mini)
 
-    :param model: Model ID string (e.g. 'claude-sonnet-4-6', 'gpt-5.5', 'o4-mini').
+    :param model: Model ID string. Examples:
+        - 'claude-sonnet-4-6' (Anthropic direct)
+        - 'gpt-5.5' (OpenAI direct)
+        - 'o4-mini' (OpenAI o-series direct)
+        - 'openai/gpt-5.5' (OpenAI via OpenRouter)
+        - 'anthropic/claude-3-opus' (Anthropic via OpenRouter)
+        - 'google/gemini-2-pro' (Google via OpenRouter)
     :returns: A SubjectAdapter instance configured for the given model.
-    :raises ValueError: If the model prefix is not recognized.
+    :raises ValueError: If the model id matches no recognized pattern.
     """
+    # OpenRouter form: any model id containing '/' routes through OpenRouter.
+    # OpenRouter performs its own validation on the provider segment, so the factory
+    # only enforces the '/' shape — see test_factory_openrouter_unknown_provider.
+    if "/" in model:
+        return OpenAISubjectClient(model=model, base_url=_OPENROUTER_BASE_URL)
     if model.startswith("claude-"):
         return AnthropicSubjectClient(model=model)
     if model.startswith("gpt-"):
@@ -567,9 +665,10 @@ def make_subject_client(model: str) -> SubjectAdapter:
     if len(model) >= 2 and model[0] == "o" and model[1].isdigit():
         return OpenAISubjectClient(model=model)
     raise ValueError(
-        f"Unrecognized model prefix for {model!r}. "
-        "Supported: 'claude-*' (Anthropic), 'gpt-*' (OpenAI), 'o<digit>-*' (OpenAI o-series). "
-        "Add a new prefix mapping in make_subject_client() for new providers."
+        f"Unrecognized model prefix for {model!r}. Supported patterns: "
+        "'<provider>/<model>' (OpenRouter), 'claude-*' (Anthropic direct), "
+        "'gpt-*' (OpenAI direct), 'o<digit>-*' (OpenAI o-series). "
+        "Add a new prefix mapping in make_subject_client() for new direct-API providers."
     )
 
 
