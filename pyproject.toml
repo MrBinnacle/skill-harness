@@ -20,6 +20,8 @@ dependencies = [
   # anthropic >=0.87 enforces post-patch for GHSA-q5f5-3gjm-7mfm + GHSA-w828-4qhx-vxx3
   # (Memory Tool CVEs, 2026-03-31; patched in 0.87.0). Memory Tool surface is not used.
   "anthropic>=0.87",
+  # T3 tracer adapter; supply-chain audit at .supply-chain-risk-auditor/openai-audit-2026-06-08.md
+  "openai>=2.41",
   "click>=8.1",
   "pydantic>=2.6",
   # rich is solo-maintainer (willmcgugan / Textualize). Use for terminal output only.

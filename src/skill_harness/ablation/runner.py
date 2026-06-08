@@ -59,9 +59,10 @@ from skill_harness.ablation.stopping import (
     next_check_at,
 )
 from skill_harness.ablation.subject import (
+    SubjectAdapter,
     SubjectCallError,
-    SubjectClient,
     SubjectResponse,
+    make_subject_client,
     project_call_cost,
     sha256_of_output,
 )
@@ -259,8 +260,11 @@ class AblationRunner:
         Open evidence DB connection (synchronous=FULL, via open_evidence()).
     runtime_conn : sqlite3.Connection
         Open runtime DB connection (via open_runtime()).
-    subject_client : SubjectClient | None
-        Subject model client. If None, one is created (reads ANTHROPIC_API_KEY).
+    subject_client : SubjectAdapter | None
+        Subject model client. If None, one is created via make_subject_client using
+        the subject_model parameter from run_ablation (defaults to claude-sonnet-4-6).
+        Accepts any SubjectAdapter: AnthropicSubjectClient, OpenAISubjectClient, or
+        SubjectClient (backward-compatible alias for AnthropicSubjectClient).
     operator : AblationOperator | None
         Ablation operator (injected for testing).
     renderer : ConditionRenderer | None
@@ -275,25 +279,35 @@ class AblationRunner:
         Minimum Null samples per axis before confound detection activates and a
         verdict can be admissible (A47). Defaults to ``N_NULL_FLOOR`` (30). Lowered
         ONLY in tests for speed/determinism — production runs use the default.
+    subject_model : str
+        Subject model ID used when subject_client is None (to construct via factory).
+        Defaults to ``claude-sonnet-4-6``.
     """
 
     def __init__(
         self,
         evidence_conn: sqlite3.Connection,
         runtime_conn: sqlite3.Connection,
-        subject_client: SubjectClient | None = None,
+        subject_client: SubjectAdapter | None = None,
         operator: AblationOperator | None = None,
         renderer: ConditionRenderer | None = None,
         scorers: dict[str, MetricFn] | None = None,
         max_retries: int = 3,
         retry_delay_s: float = 1.0,
         null_floor: int = N_NULL_FLOOR,
+        subject_model: str = "claude-sonnet-4-6",
     ) -> None:
         self._evidence = evidence_conn
         self._runtime = runtime_conn
-        self._subject: SubjectClient = (
-            subject_client if subject_client is not None else SubjectClient()
+        # Use injected client or construct via factory (dispatches on model prefix).
+        # SubjectClient (backward-compat alias) is also accepted since isinstance
+        # check is not performed here — duck-typing via SubjectAdapter Protocol.
+        self._subject: SubjectAdapter = (
+            subject_client if subject_client is not None else make_subject_client(subject_model)
         )
+        # Store the model ID for use in sample/cost writes.
+        # Concrete clients expose _model; fall back to the subject_model constructor arg.
+        self._subject_model_id: str = getattr(self._subject, "_model", subject_model)
         self._operator: AblationOperator = operator if operator is not None else AblationOperator()
         self._renderer: ConditionRenderer = (
             renderer if renderer is not None else ConditionRenderer(operator=self._operator)
@@ -740,7 +754,7 @@ class AblationRunner:
                 if not all_samples_exist:
                     # Budget gate (A42): check BEFORE issuing any API call
                     projected_cost = project_call_cost(
-                        model=self._subject._model,
+                        model=self._subject_model_id,
                         estimated_input_tokens=512,  # conservative estimate
                         estimated_output_tokens=512,
                     )
@@ -760,9 +774,9 @@ class AblationRunner:
                         full_resp,
                         full_now,
                         full_sample_id,
-                        self._subject._model,
+                        self._subject_model_id,
                     )
-                    self._write_cost_ledger(run_id, full_resp, full_now, self._subject._model)
+                    self._write_cost_ledger(run_id, full_resp, full_now, self._subject_model_id)
                     self._update_budget_spend(run_id, full_resp)
                     samples_collected += 1
                     sample_index_full += 1
@@ -788,9 +802,9 @@ class AblationRunner:
                         abl_resp,
                         abl_now,
                         abl_sample_id,
-                        self._subject._model,
+                        self._subject_model_id,
                     )
-                    self._write_cost_ledger(run_id, abl_resp, abl_now, self._subject._model)
+                    self._write_cost_ledger(run_id, abl_resp, abl_now, self._subject_model_id)
                     self._update_budget_spend(run_id, abl_resp)
                     samples_collected += 1
                     sample_index_ablated += 1
@@ -815,9 +829,9 @@ class AblationRunner:
                         null_resp,
                         null_now,
                         null_sample_id,
-                        self._subject._model,
+                        self._subject_model_id,
                     )
-                    self._write_cost_ledger(run_id, null_resp, null_now, self._subject._model)
+                    self._write_cost_ledger(run_id, null_resp, null_now, self._subject_model_id)
                     self._update_budget_spend(run_id, null_resp)
                     samples_collected += 1
                     sample_index_null += 1
