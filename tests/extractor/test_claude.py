@@ -225,3 +225,75 @@ def test_all_clauses_fail_validation_raises(mock_anthropic_cls: MagicMock) -> No
 
     with pytest.raises(ExtractorClaudeError, match="failed validation"):
         call_extract_clauses("Body.")
+
+
+# ---------------------------------------------------------------------------
+# call_extract_clauses — retry on transient 'clauses field of unexpected type: str'
+# ---------------------------------------------------------------------------
+
+
+@patch("skill_harness.extractor.claude.time.sleep")
+@patch("skill_harness.extractor.claude.anthropic.Anthropic")
+def test_retries_once_on_clauses_field_unexpected_type_str(
+    mock_anthropic_cls: MagicMock,
+    mock_sleep: MagicMock,
+) -> None:
+    """First call returns 'clauses' as a str (transient anomaly); second call succeeds.
+
+    The extractor must retry exactly once and return the clauses from the
+    second call.  One retry is the bounded scope per the punch-list spec.
+    """
+    mock_client = MagicMock()
+    mock_anthropic_cls.return_value = mock_client
+
+    # First response: 'clauses' is a string — the observed transient anomaly
+    bad_response = _make_response([_make_tool_use_block({"clauses": "unexpected string content"})])
+    # Second response: valid
+    good_response = _make_response([_make_tool_use_block({"clauses": [_valid_raw_clause(0)]})])
+    mock_client.messages.create.side_effect = [bad_response, good_response]
+
+    clauses = call_extract_clauses("Some skill body text.")
+    assert len(clauses) == 1
+    assert clauses[0].clause_index == 0
+    assert mock_client.messages.create.call_count == 2
+    mock_sleep.assert_called_once_with(1)
+
+
+@patch("skill_harness.extractor.claude.time.sleep")
+@patch("skill_harness.extractor.claude.anthropic.Anthropic")
+def test_no_retry_flag_raises_immediately_on_clauses_field_str(
+    mock_anthropic_cls: MagicMock,
+    mock_sleep: MagicMock,
+) -> None:
+    """With no_retry=True the error propagates on the first call without a retry."""
+    mock_client = MagicMock()
+    mock_anthropic_cls.return_value = mock_client
+
+    bad_response = _make_response([_make_tool_use_block({"clauses": "unexpected string content"})])
+    mock_client.messages.create.return_value = bad_response
+
+    with pytest.raises(ExtractorClaudeError, match="unexpected type"):
+        call_extract_clauses("Some body.", no_retry=True)
+
+    assert mock_client.messages.create.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+@patch("skill_harness.extractor.claude.time.sleep")
+@patch("skill_harness.extractor.claude.anthropic.Anthropic")
+def test_retry_exhausted_raises_after_two_calls(
+    mock_anthropic_cls: MagicMock,
+    mock_sleep: MagicMock,
+) -> None:
+    """When both calls return the transient error, the second raises ExtractorClaudeError."""
+    mock_client = MagicMock()
+    mock_anthropic_cls.return_value = mock_client
+
+    bad_response = _make_response([_make_tool_use_block({"clauses": "unexpected string content"})])
+    mock_client.messages.create.return_value = bad_response
+
+    with pytest.raises(ExtractorClaudeError, match="unexpected type"):
+        call_extract_clauses("Some body.")
+
+    assert mock_client.messages.create.call_count == 2
+    mock_sleep.assert_called_once_with(1)

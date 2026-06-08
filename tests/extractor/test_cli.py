@@ -179,3 +179,21 @@ def test_skill_clauses_placeholder_message() -> None:
     assert result.exit_code == 0
     assert "not yet implemented" in result.output.lower()
     assert "v0.2" in result.output
+
+
+def test_skill_clauses_legend_in_output() -> None:
+    """Item 5: skill clauses output must include a legend explaining the three load-bearing columns.
+
+    axis, oracle_tier, and vacuity_flag must be explained in the footer so a
+    first-time reader is not left with opaque column names.
+    """
+    runner = CliRunner()
+    result = runner.invoke(cli, ["skill", "clauses", "some-skill-id"])
+    assert result.exit_code == 0
+    output = result.output.lower()
+    # Each of the three load-bearing columns must be explained in the legend footer
+    assert "axis" in output
+    assert "oracle_tier" in output or "oracle tier" in output
+    assert "vacuity_flag" in output or "vacuity flag" in output
+    # The legend must explain what these mean, not just name them
+    assert "tier-1" in output or "tier 1" in output or "mechanical" in output

@@ -17,6 +17,8 @@ skill_genre) record is written here.
 
 from __future__ import annotations
 
+import sys
+import time
 from typing import Any
 
 import anthropic
@@ -146,16 +148,13 @@ _EXTRACT_CLAUSES_SCHEMA: dict[str, Any] = {
 }
 
 
-def call_extract_clauses(body: str) -> list[ExtractedClause]:
-    """Call Claude to extract clauses from ``body``.
+def _call_once(client: anthropic.Anthropic, body: str) -> list[Any]:
+    """Make a single API call and return the raw clauses list.
 
-    :param body: The skill document body text (post-frontmatter).
-    :returns: List of ``ExtractedClause`` objects.
-    :raises ExtractorClaudeError: On API error, empty result, or validation
-        failure deserializing the tool call response.
+    :raises ExtractorClaudeError: On API error, missing tool block, wrong input type,
+        or 'clauses' field of unexpected type.  The last error is the transient
+        anomaly that the retry path handles.
     """
-    client = anthropic.Anthropic()
-
     try:
         response = client.messages.create(
             model=_MODEL,
@@ -208,6 +207,38 @@ def call_extract_clauses(body: str) -> list[ExtractedClause]:
         raise ExtractorClaudeError(
             f"Claude returned 'clauses' field of unexpected type: {type(raw_clauses).__name__}"
         )
+    return raw_clauses
+
+
+def call_extract_clauses(body: str, *, no_retry: bool = False) -> list[ExtractedClause]:
+    """Call Claude to extract clauses from ``body``.
+
+    :param body: The skill document body text (post-frontmatter).
+    :param no_retry: If True, disable the single retry on transient
+        ``'clauses' field of unexpected type: str`` anomaly.  Use in CI or
+        test contexts that require strict-fail behaviour.
+    :returns: List of ``ExtractedClause`` objects.
+    :raises ExtractorClaudeError: On API error, empty result, or validation
+        failure deserializing the tool call response.
+    """
+    client = anthropic.Anthropic()
+
+    try:
+        raw_clauses = _call_once(client, body)
+    except ExtractorClaudeError as exc:
+        # Retry only the specific transient anomaly where the API returns the
+        # 'clauses' field as a string instead of a list.  This was observed
+        # once during dogfooding (2026-06-07); a second identical call succeeds.
+        # Bounded scope: this error string only, one retry, no other retries.
+        if not no_retry and "unexpected type" in str(exc) and "'clauses'" in str(exc):
+            print(
+                "[INFO] skill init: retrying transient extractor response anomaly...",
+                file=sys.stderr,
+            )
+            time.sleep(1)
+            raw_clauses = _call_once(client, body)
+        else:
+            raise
 
     if not raw_clauses:
         raise ExtractorClaudeError(

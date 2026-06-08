@@ -162,6 +162,17 @@ def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
         _console.print("[yellow]Dry-run: no data written. Use --execute to persist.[/]")
 
 
+_SKILL_CLAUSES_LEGEND = """\
+Column legend:
+  axis         — the metric being asserted by the clause \
+(e.g. verbosity, citation_presence_per_flag).
+  oracle_tier  — Tier-1: mechanical/deterministic scorer; \
+Tier-2: human-calibrated judge; Tier-3: real-world consequence.
+  vacuity_flag — none: clause is testable; \
+mechanical_vacuous: no metric exists for this axis; \
+semantic_vacuous_pending_review: extractor judged clause un-falsifiable."""
+
+
 @skill.command("clauses")
 @click.argument("skill_id")
 def skill_clauses(skill_id: str) -> None:
@@ -171,6 +182,7 @@ def skill_clauses(skill_id: str) -> None:
         "[yellow]skill clauses: not yet implemented in v0.1."
         " Query evidence.db `clauses` table directly. v0.2.[/]"
     )
+    _console.print(_SKILL_CLAUSES_LEGEND)
     return
 
 
@@ -1714,6 +1726,13 @@ def _render_evaluate_skill_report(report: Any, vacuity_count: int = 0) -> None:
         "\n[bold]Contribution (A50):[/] single-clause LOO; lower-bound under redundancy."
         "\n  Absence of delta is not absence of contribution."
     )
+
+    # Link to UNMEASURED explanation when any clause is UNMEASURED
+    if any(c.status == "UNMEASURED" for c in report.clauses):
+        _console.print(
+            "\n[dim]UNMEASURED is not a failure — see"
+            " docs/concepts/why-unmeasured.md for sub-reason explanations.[/]"
+        )
 
 
 def _render_diff_report(diff_report: Any) -> None:
