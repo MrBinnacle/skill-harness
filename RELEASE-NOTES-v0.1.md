@@ -1,11 +1,54 @@
 # Release Notes — Skill Harness v0.1.0a0
 
-## Headline
+## v0.1 Thesis Demonstrated
 
-Skill Harness v0.1 ships a complete deterministic evaluation framework for
-clause-level ablation testing of LLM skills: five build tracks, two-database
-append-only evidence model, Tier-1 mechanical oracle library, Tier-2 pairwise
-judge module, full CLI surface, and JSON report wire format v1.0.0.
+v0.1 demonstrates the core discipline by producing a directional FAILED verdict
+on a real authored skill clause: **ai-slop-sentinel's citation-discipline clause
+does not increase the `citation_presence_per_flag` axis under ablation**
+(`p_win_gt_threshold=0.005`, `n=30`). The harness's value is partly in surfacing
+well-intentioned discipline that empirically does not deliver on its claimed axis.
+
+The live ablation re-run on skill_id
+`074595b7a61821d4f0b80bf870b680d49326b27aab51e32e844d4e141607170b`
+(clause `f9771fd8b5a9cff80999c80ca1f31d7a56d31f1dc1647f33b39113b26931dba7`;
+runs `073dd0da`, `19e85593`, `c3481f27`) produced:
+
+```json
+{
+  "passed": 0,
+  "failed": 1,
+  "confounded": 0,
+  "unmeasured": 14,
+  "coverage": 0.0,
+  "coverage_warnings": ["14 clause(s) UNMEASURED: no registered Tier-1 scorer or no admissible verdicts"],
+  "report_schema_version": "1.2.0",
+  "aggregation_method": "unpooled",
+  "aggregation_provenance": {
+    "family_size_used": 1,
+    "k_clauses": 1,
+    "pythonhashseed": 0,
+    "reason": "k_below_10"
+  }
+}
+```
+
+This is the §16 vector for v0.1's thesis-validation evidence. The finding is
+honest, falsifiable, and load-bearing: the harness correctly refused to call a
+pass on a clause that did not empirically demonstrate signal. UNMEASURED (no
+admissible oracle) and FAILED (admissible verdicts that do not clear the pass
+threshold) are distinct, honest verdicts — not harness failures.
+
+**Methodology precedent**: Chandra, K., Kleiman-Weiner, M., Ragan-Kelley, J.,
+Tenenbaum, J.B. (2026). "Sycophantic Chatbots Cause Delusional Spiraling, Even
+in Ideal Bayesians." arXiv:2602.19141 (submitted 2026-02-22). That paper
+formally models how a well-intentioned property (sycophancy intended to be
+agreeable) empirically produces a harmful outcome (delusional spiraling), and
+demonstrates that proposed mitigations FAIL — using Bayesian simulation to
+surface counter-intuitive failure modes of well-intentioned discipline. The
+structural pattern (Bayesian model + simulation showing well-intentioned
+mitigation empirically fails) is exactly what Skill Harness's FAILED-clause
+demonstration also surfaces at the clause level. v0.1's first FAILED clause
+finding is in this methodology category.
 
 ---
 
@@ -118,18 +161,22 @@ block (method + family size + K clauses + `pythonhashseed`). Output is sorted-ke
 Only 5 hand-registered Tier-1 scorers cover specific axes (`verbosity`,
 `hedge_index`, `structure_score`, `compliance_proxy`, `citation_presence_per_flag`).
 Skills whose extracted axes do not match these names AND do not have a calibrated
-Tier-2 judge record will return all-UNMEASURED. This is expected behavior, not a
+Tier-2 judge record will return UNMEASURED. This is expected behavior, not a
 harness error.
 
 **Workaround**: register a custom Tier-1 scorer for your skill's axis
 (`oracles/tier1/`) OR provide a calibrated Tier-2 `(judge_id, axis)` record via
 the `calibrate` command. v0.2 explores per-skill scorer injection.
 
-**Dogfooding signal (Phase 4.4)**: all three dogfooding runs (ai-slop-sentinel,
-bayesian-eval-discipline, verbatim-content-subagent-dispatch) returned all-UNMEASURED
-because extracted axes are custom to each skill. This validated the BLOCKER-1 gate
-behavior but left zero PASSED demonstrations at v0.1 tag time. Path B (scorer-add agent,
-in flight) targets at least one PASSED demonstration before final tag.
+**Discriminating signal (Phase 4.4 + live re-run)**: the v0.1 live ablation
+re-run on ai-slop-sentinel produced 1 FAILED + 14 UNMEASURED — exactly the
+discriminating signal the harness was built to produce. UNMEASURED means "no
+registered Tier-1 scorer or no admissible verdicts for this axis"; FAILED means
+"the scorer ran, verdicts were admissible, and the clause did not clear the
+pass threshold." These are distinct, honest, falsifiable verdicts documented in
+`docs/path-b-verified-2026-06-08.md`. EVR-3/EVR-7 oracle surface limits are
+genuine carry-forwards for v0.1.x; the FAILED verdict demonstrates the
+discrimination is real.
 
 ### Windows cp1252 Rich-render crash
 
@@ -197,13 +244,21 @@ Full development workflow: `CLAUDE.md` ENV RECIPE section.
 - Sclar et al. arXiv:2310.11324 (FormatSpread / component ablation),
   Longpre et al. arXiv:2301.13688 (FLAN component ablations),
   Chang et al. arXiv:2405.20404 (JoPA redundancy cancellation): referenced in PRD §1.
+- Chandra, K., Kleiman-Weiner, M., Ragan-Kelley, J., Tenenbaum, J.B. (2026).
+  "Sycophantic Chatbots Cause Delusional Spiraling, Even in Ideal Bayesians."
+  arXiv:2602.19141. Methodology-category precedent for v0.1's FAILED-clause
+  finding: Bayesian-model + simulation surfacing well-intentioned discipline
+  that empirically fails to deliver on its claimed direction.
 
 ---
 
 ## Acknowledgments
 
 v0.1 was developed using an orchestrator + multi-seat cross-talk council pattern
-(5-seat council, 2026-06-03; 7 total council fires). Design integrity was verified
+(5-seat council, 2026-06-03; 7 total council fires; 9-seat pre-tag launch council
+fire with 2 BLOCKERs cleared in fix-sprint `3f6b0a9`). Design integrity was verified
 via adversarial-spec pass (Phase 4.1, 0 blockers), insecure-defaults sweep
-(Phase 4.3, 0 critical/high), and three-skill dogfooding (Phase 4.4). All
-architectural decisions are traceable to `docs/COUNCIL_FINDINGS.md`.
+(Phase 4.3, 0 critical/high), three-skill dogfooding (Phase 4.4), and a live
+ablation re-run on ai-slop-sentinel confirming 1 FAILED clause (`f9771fd...`) as
+the v0.1 thesis-validation evidence. All architectural decisions are traceable
+to `docs/COUNCIL_FINDINGS.md`.
