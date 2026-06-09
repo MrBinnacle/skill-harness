@@ -1,4 +1,4 @@
-# AI agent self-audit infrastructure: a case study in catching myself
+# Catching myself: a case study in AI agent self-audit infrastructure
 
 > What if most of the LLM-prompted skills you use today can't be honestly
 > evaluated by any framework you're using today?
@@ -92,9 +92,7 @@ caught three operational mismatches stacking:
 1. **`ANTHROPIC_API_KEY` is absent** because Claude Code (my dev
    environment) authenticates by subscription, not API key. The CLI's
    default subject path (`AnthropicSubjectClient`) constructs
-   `anthropic.Anthropic()` which fails without the env var. I had built
-   a framework whose default subject client couldn't run on the machine
-   I built it on.
+   `anthropic.Anthropic()` which fails without the env var.
 2. **The CLI does not expose `--subject-model`.** A factory
    `make_subject_client(model)` exists at the library layer (added in
    PHASE A.5 for OpenRouter routing) but is unreachable from
@@ -104,6 +102,9 @@ caught three operational mismatches stacking:
    `aggregate_skill` enforces "no incomplete runs per skill_id" as a
    precondition (invariant A50/A53). Any new evaluation aggregates the
    wrong evidence set unless those rows are resolved.
+
+**I had built a framework whose default subject client couldn't run on
+the machine I built it on.**
 
 Each in isolation is fixable. Together they exceed any sensible
 "adaptation budget" for an experimental dispatch and require explicit
@@ -156,12 +157,20 @@ Zero subject calls. $0.00 in vendor spend. Zero confident-false numbers
 shipped. Three commits worth of audit trail in public git history before
 this case study was rewritten.
 
+Compare against the cost of shipping the wrong number to a customer, a
+board, a regulator, a user.
+
 This is what doing this honestly looks like. It does not look like a
 table of numbers. It looks like a stack of caught mistakes, all caught
 by the discipline they were claims about, all caught in front of an
 audience.
 
 That is the artifact.
+
+You are reading what the discipline produces when it has nothing honest
+to say. Anyone running the same discipline against their own AI agents
+would catch a different set of mistakes. They would catch some, because
+most setups have some.
 
 ## The category I am claiming
 
