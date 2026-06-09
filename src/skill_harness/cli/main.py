@@ -203,6 +203,19 @@ def run() -> None:
     help="Task prompt sent to the subject model for every condition sample.",
 )
 @click.option(
+    "--subject-model",
+    "subject_model",
+    default="claude-sonnet-4-6",
+    show_default=True,
+    help=(
+        "Subject model id. Direct: 'claude-sonnet-4-6' (Anthropic), 'gpt-5.5' (OpenAI), "
+        "'o4-mini' (OpenAI o-series). Via OpenRouter: '<provider>/<model>' e.g. "
+        "'openai/gpt-5.5', 'anthropic/claude-sonnet-4-6', 'google/gemini-2-pro'. "
+        "If only OPENROUTER_API_KEY is set, direct claude-* / gpt-* / o<N>-* models "
+        "are auto-routed through OpenRouter with a stderr warning."
+    ),
+)
+@click.option(
     "--max-usd",
     type=float,
     default=5.0,
@@ -262,6 +275,7 @@ def run_ablation(
     clause_id: str | None,
     execute: bool,
     user_message: str,
+    subject_model: str,
     max_usd: float,
     daily_cap: float,
     resume_run_id: str | None,
@@ -308,6 +322,7 @@ def run_ablation(
         skill_id=skill_id,
         clause_id=clause_id,
         user_message=user_message,
+        subject_model=subject_model,
         max_usd=max_usd,
         daily_cap=daily_cap,
         resume_run_id=resume_run_id,
@@ -631,6 +646,7 @@ def _find_incomplete_run_for_execute(
 def _execute_ablation_run(
     skill_id: str,
     clause_id: str | None,
+    subject_model: str,
     user_message: str,
     max_usd: float,
     resume_run_id: str | None,
@@ -649,12 +665,12 @@ def _execute_ablation_run(
     from skill_harness.ablation.operator import AblationOperator
     from skill_harness.ablation.render import ConditionRenderer
     from skill_harness.ablation.runner import AblationRunner
-    from skill_harness.ablation.subject import SubjectClient
+    from skill_harness.ablation.subject import make_subject_client
 
     with StorageContext(evidence_db, runtime_db) as ctx:
         operator = AblationOperator()
         renderer = ConditionRenderer(operator=operator)
-        subject = SubjectClient()
+        subject = make_subject_client(subject_model)
         runner = AblationRunner(
             evidence_conn=ctx.evidence_conn,
             runtime_conn=ctx.runtime_conn,
@@ -731,6 +747,91 @@ def _load_clauses_from_db(
     ]
 
 
+def _resolve_subject_model_with_fallback(subject_model: str) -> str:
+    """Resolve subject_model against the available API keys; auto-route to OpenRouter
+    as fallback. Emit warnings to stderr when a fallback rewrite happens. Raise
+    click.ClickException if no usable key is present for the requested model.
+
+    Rules:
+    - If subject_model already contains '/' (explicit OpenRouter form): require
+      OPENROUTER_API_KEY. Return subject_model unchanged.
+    - If subject_model starts with 'claude-': require ANTHROPIC_API_KEY first;
+      if absent and OPENROUTER_API_KEY is present, return 'anthropic/' + subject_model
+      and emit a stderr warning naming the rewrite + the reason.
+    - If subject_model starts with 'gpt-' or matches '^o[0-9]+-': require
+      OPENAI_API_KEY first; if absent and OPENROUTER_API_KEY is present, return
+      'openai/' + subject_model and emit a stderr warning.
+    - If neither the direct key nor OPENROUTER_API_KEY is present for the model
+      class, raise click.ClickException with a message naming BOTH env vars the
+      operator could set (direct + OpenRouter).
+    - If subject_model matches no recognised pattern, raise click.ClickException
+      delegating to the factory's own error message.
+    """
+    import os
+    import re
+
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
+
+    # Explicit OpenRouter form: 'provider/model'
+    if "/" in subject_model:
+        if not openrouter_key:
+            raise click.ClickException(
+                f"Subject model {subject_model!r} requires OPENROUTER_API_KEY (explicit"
+                " OpenRouter provider/model form). Set OPENROUTER_API_KEY to proceed."
+            )
+        return subject_model
+
+    # Anthropic direct: claude-*
+    if subject_model.startswith("claude-"):
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if anthropic_key:
+            return subject_model
+        if openrouter_key:
+            rewritten = f"anthropic/{subject_model}"
+            click.echo(
+                f"Warning: ANTHROPIC_API_KEY not set; routing {subject_model!r} via "
+                f"OpenRouter as {rewritten!r}. Set ANTHROPIC_API_KEY to use Anthropic "
+                "direct.",
+                err=True,
+            )
+            return rewritten
+        raise click.ClickException(
+            f"Subject model {subject_model!r} requires ANTHROPIC_API_KEY (Anthropic direct)"
+            " or OPENROUTER_API_KEY (OpenRouter fallback). Set one to proceed."
+        )
+
+    # OpenAI direct: gpt-* or o<digit>-* (o-series)
+    is_gpt = subject_model.startswith("gpt-")
+    is_o_series = bool(re.match(r"^o[0-9]+-", subject_model))
+    if is_gpt or is_o_series:
+        openai_key = os.environ.get("OPENAI_API_KEY", "")
+        if openai_key:
+            return subject_model
+        if openrouter_key:
+            rewritten = f"openai/{subject_model}"
+            click.echo(
+                f"Warning: OPENAI_API_KEY not set; routing {subject_model!r} via "
+                f"OpenRouter as {rewritten!r}. Set OPENAI_API_KEY to use OpenAI "
+                "direct.",
+                err=True,
+            )
+            return rewritten
+        raise click.ClickException(
+            f"Subject model {subject_model!r} requires OPENAI_API_KEY (OpenAI direct)"
+            " or OPENROUTER_API_KEY (OpenRouter fallback). Set one to proceed."
+        )
+
+    # Unrecognized pattern: delegate to factory for precise error message
+    from skill_harness.ablation.subject import make_subject_client
+
+    try:
+        make_subject_client(subject_model)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    # If factory succeeded (e.g. future prefix added), trust it and return unchanged.
+    return subject_model
+
+
 def _check_daily_cap(runtime_db: Path, daily_cap: float) -> None:
     """Compute trailing-24h SUM(usd) from runtime.cost_ledger; raise _DailyCapExceededError
     if it would exceed daily_cap (B2 fix, A42).
@@ -772,6 +873,7 @@ def _cmd_execute(
     skill_id: str,
     clause_id: str | None,
     user_message: str,
+    subject_model: str,
     max_usd: float,
     daily_cap: float,
     resume_run_id: str | None,
@@ -791,13 +893,8 @@ def _cmd_execute(
     """
     from skill_harness.ablation.runner import BudgetAbortedError
 
-    # m3: API key pre-flight BEFORE any DB write (no orphan run rows)
-    api_key = __import__("os").environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise click.ClickException(
-            "ANTHROPIC_API_KEY is not set. --execute requires a valid API key."
-            "\n  Set ANTHROPIC_API_KEY before running, or use --dry-run for offline projection."
-        )
+    # m3: model-aware API key pre-flight BEFORE any DB write (no orphan run rows)
+    resolved_model = _resolve_subject_model_with_fallback(subject_model)
 
     # B2: daily-cap pre-run check BEFORE any DB write
     try:
@@ -836,6 +933,7 @@ def _cmd_execute(
         clause_results = _execute_ablation_run(
             skill_id=skill_id,
             clause_id=clause_id,
+            subject_model=resolved_model,
             user_message=user_message,
             max_usd=max_usd,
             daily_cap=daily_cap,

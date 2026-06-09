@@ -964,7 +964,13 @@ class TestM3ApiKeyPreflight:
     """m3: missing ANTHROPIC_API_KEY on --execute must be refused BEFORE any DB write."""
 
     def test_missing_api_key_refused_before_db_write(self, tmp_path: Path) -> None:
-        """--execute without ANTHROPIC_API_KEY must refuse BEFORE inserting any run row.
+        """--execute without any usable API key must refuse BEFORE inserting any run row.
+
+        The pre-flight check is now model-aware (_resolve_subject_model_with_fallback).
+        Removing only ANTHROPIC_API_KEY is insufficient if OPENROUTER_API_KEY is set
+        (the resolver would auto-route via OpenRouter and proceed). We must strip both
+        ANTHROPIC_API_KEY and OPENROUTER_API_KEY to test the "no keys at all → refuse"
+        path for the default claude-* subject model.
 
         Confirmed by checking that no run_progress row exists after the refusal.
         """
@@ -974,7 +980,16 @@ class TestM3ApiKeyPreflight:
         ev.close()
         rt.close()
 
-        clean_env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        # Build override dict: pass None for the two key vars so CliRunner deletes them
+        # from os.environ during the invocation. Simply omitting a key from the override
+        # dict does NOT remove it from os.environ — CliRunner only applies listed overrides.
+        clean_env: dict[str, str | None] = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("ANTHROPIC_API_KEY", "OPENROUTER_API_KEY")
+        }
+        clean_env["ANTHROPIC_API_KEY"] = None  # delete from os.environ if present
+        clean_env["OPENROUTER_API_KEY"] = None  # delete from os.environ if present
         clean_env["COLUMNS"] = "200"
         runner = CliRunner()
         result = runner.invoke(
