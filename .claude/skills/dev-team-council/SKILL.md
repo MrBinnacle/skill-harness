@@ -140,14 +140,42 @@ agent escalates per-segment.
 
 Before firing the subject-matter seats in any template below, the orchestrator
 verifies that PM-owned resources required by the proposed work are accessible.
-PM-owned resources include but are not limited to: API keys for any external
-service the work touches, budget allocation, network/access tokens, third-party
-account permissions, hardware/runtime not in the orchestrator's environment.
 
-If a required resource is unverified, surface to PM as a **single closed-form
-question** BEFORE dispatching subject-matter seats. Do not dispatch on the
-assumption that resources are available; subject-matter seats are expensive to
-run and their findings are wasted if the work cannot be executed.
+PM-owned resources include, but are not limited to:
+
+- **Technical infrastructure**: API keys for any external service the work
+  touches, network/access tokens, third-party account permissions,
+  hardware/runtime not in the orchestrator's environment, CI/infra capacity.
+- **Monetary**: budget allocation for the specific work, AND cumulative
+  spend awareness (where the work sits against any rolling or absolute cap
+  the PM is tracking).
+- **Human / relational**: testers, reviewers, authors, peers, recipients of
+  outbound communication; whether the PM has the network or audience access
+  required by any "send" or "publish" step in the work.
+- **PM bandwidth**: calendar availability for review checkpoints, attention
+  budget for synchronous discussion, deadline conflicts with other
+  commitments the PM is carrying.
+- **Data / labeling**: human-labeled calibration sets (e.g., for the v0.2
+  Tier-1 scorer registry expansion), evaluation corpora, golden datasets,
+  or any other artifact that must exist before the work is reproducible.
+- **Governance / disclosure**: timing constraints from external commitments
+  — regulatory windows, embargo dates, partner notification cadences,
+  pre-registered analysis plans, public-disclosure sequencing.
+
+If any required resource is unverified, surface to PM as a **single
+closed-form question** BEFORE dispatching subject-matter seats. Do not
+dispatch on the assumption that resources are available; subject-matter
+seats are expensive to run and their findings are wasted if the work
+cannot be executed.
+
+**The load-bearing reason this check exists**: the human knows things about
+their own life, network, calendar, psychology, and relationships that the
+LLM categorically cannot. The precondition check is a query to a knower
+whose domain the LLM cannot reach by introspection — no amount of careful
+reasoning over repo state will surface a calendar conflict, a soured
+relationship with a tester, a regulatory window the PM is tracking, or a
+credit-card cap the PM has not written down. The check is not caution; it
+is epistemic asymmetry compensation.
 
 This step exists because skipping it has caused real wasted-fire incidents
 (2026-06-08: T3 tracer dispatched Tier 1 + Tier 2 against `openai` SDK before
