@@ -253,8 +253,14 @@ the discipline catching its own author.
 
 The framework state needed to apply the discipline to your own skills
 is on `main`. The two engineering gaps surfaced by HALT 2 (`--subject-
-model` CLI flag, ANTHROPIC fallback path) are queued and will land
-before T1 frame-legibility readers are invited.
+model` CLI flag, ANTHROPIC fallback path for `run ablation`) landed in
+commits `a9bdacc` and `f6201a8` on 2026-06-09 — the audit trail of the
+fixes is itself part of the discipline-catching-itself arc this case
+study describes. One adjacent gap remains: the extractor on `skill init`
+is still Anthropic-direct, with no OpenRouter fallback. Operators on
+Claude Code subscription auth without a direct Anthropic key cannot run
+`skill init` end-to-end against the current `main`. That gap is on the
+v0.2 backlog as the symmetric follow-on to the W2 work.
 
 ## What this case study does not claim
 

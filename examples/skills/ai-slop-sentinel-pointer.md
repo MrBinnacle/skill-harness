@@ -22,13 +22,18 @@ $env:PYTHONPATH = "src"
 
 ## If the skill is not installed
 
-Install it via the Claude Code skills registry:
+The skill ships as part of the Claude Code skills ecosystem. If the registry
+supports it, install via:
 
 ```powershell
 npx skills add ai-slop-sentinel
 ```
 
-Then locate it at `~/.claude/skills/ai-slop-sentinel/SKILL.md`.
+Then locate it at `~/.claude/skills/ai-slop-sentinel/SKILL.md`. Registry
+availability is not guaranteed for every skill at all times — if the command
+above fails with "not found," obtain the SKILL.md file from the skill's source
+repository or from a colleague who has it locally, and pass the absolute path
+directly to `skill init`.
 
 ## What the skill contains
 

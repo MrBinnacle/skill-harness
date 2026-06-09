@@ -13,7 +13,7 @@ Companion to the outward-facing case study at
 | # | Item | Owner | Calendar | Status |
 |---|---|---|---|---|
 | 1 | Case study draft | orchestrator | landed 2026-06-08 | ✅ committed |
-| 2 | First-touch hardening punch list | orchestrator → dispatched | week 1 (target land by 2026-06-15) | ⏳ this doc |
+| 2 | First-touch hardening punch list | orchestrator → dispatched | week 1 (target land by 2026-06-15) | ✅ landed 2026-06-08 (`09af6ae`, items 1-4 + 6) + 2026-06-09 ([this commit] item-5 legend placement fix + doc-honesty pass) |
 | 3 | Targeted-send list shape | orchestrator surfaces persona; PM picks names | 2026-06-08, before sends begin | ⏳ this doc |
 | 3.5 | **One-reader frame-legibility tracer (T1)** | PM picks ONE reader from persona profile | 2026-06-15 → 2026-06-18 window | tracer gate before batch |
 | 4 | Targeted sends (batch of 5-10) | PM | 2026-06-18 → 2026-06-22 window (only AFTER T1 passes) | PM-owned |
@@ -26,6 +26,16 @@ The friction set between `git clone` and "I see the demonstration on my own
 machine running against my own skill." Not features. The specific reasons a
 smart skeptic, given 30 minutes, would put the project down before reaching
 the demonstration.
+
+**Status (2026-06-09)**: ✅ substantially landed. Items 1-4 and 6 landed
+in commit `09af6ae` (2026-06-08). Item 5 (legend placement) and a
+doc-honesty pass on the extractor / OpenRouter API-key asymmetry — surfaced
+by walking the reproduction recipe as a T1 reader on Claude Code
+subscription auth, the case study's own author profile — landed in [this
+commit] (2026-06-09). One follow-on engineering item surfaced by that
+walk: extractor OpenRouter fallback (currently `skill init` requires
+`ANTHROPIC_API_KEY`; v0.2 backlog candidate, symmetric to the W2 work that
+fixed the same gap on `run ablation`).
 
 ### Punch items
 

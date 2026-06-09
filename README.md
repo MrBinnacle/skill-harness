@@ -22,7 +22,7 @@ shows this distinction on a real, widely-used skill.
 
 ```powershell
 git clone https://github.com/MrBinnacle/skill-harness
-cd skill-harness && git checkout v0.1.0
+cd skill-harness && git checkout main   # see "Why not v0.1.0?" below
 python -m venv .venv && .venv\Scripts\pip install -e ".[dev]"
 
 # Required on Windows to avoid encoding errors and non-deterministic hashes
@@ -40,11 +40,39 @@ See [`docs/concepts/why-pythonutf8-on-windows.md`](docs/concepts/why-pythonutf8-
 for detail. For `<path-to-ai-slop-sentinel-SKILL.md>` and a one-shot reproduction
 script, see [`examples/`](examples/).
 
+### API-key requirements (current state, honest)
+
+Two API surfaces, two requirements:
+
+- **`skill init`** calls the Claude API to extract clauses from your skill artifact. It
+  currently requires `ANTHROPIC_API_KEY` to be set in the environment. There is no
+  OpenRouter fallback for the extractor yet — operators on Claude Code subscription
+  auth or other no-direct-key environments cannot run `skill init` end-to-end against
+  the current `main`. Extractor OpenRouter fallback is a v0.2 backlog candidate.
+- **`run ablation --execute`** calls the subject model. It accepts EITHER
+  `ANTHROPIC_API_KEY` (direct Anthropic) OR `OPENROUTER_API_KEY` (auto-routed via
+  OpenRouter with a stderr warning). The `--subject-model` flag selects the model id;
+  see `--help` for the matrix of direct vs OpenRouter forms.
+
+The case study's own author hit this exact asymmetry in real time — see the case
+study's HALT 2 narrative for the audit trail.
+
+### Why not `git checkout v0.1.0`?
+
+The case-study reproduction recipe used to pin `v0.1.0` (commit `fd782b1`). The
+v0.1.0 tag is the harness state the case study was written against, but it predates
+the W2 CLI engineering work (commits `a9bdacc` + `f6201a8`) that added
+`--subject-model` and the OpenRouter fallback for `run ablation`. Operators on
+direct Anthropic API can reproduce at either tag; operators on OpenRouter-only
+environments need `main` (or a future v0.1.1 tag) for the `run ablation` step.
+
 ## Case study
 
 [`docs/case-studies/ai-slop-sentinel-under-ablation.md`](docs/case-studies/ai-slop-sentinel-under-ablation.md)
-— a real run against a widely-used skill, with 17 UNMEASURED clauses and the explanation
-of why that result is honest rather than a failure.
+— a real audit trail of the discipline catching its own author across three classes
+of inconsistency (documentation drift, operational state, orchestrator precondition
+gap) before any contaminated result shipped. The deliverable is the chain of
+refusals, not a number.
 
 Why UNMEASURED is not a failure:
 [`docs/concepts/why-unmeasured.md`](docs/concepts/why-unmeasured.md)

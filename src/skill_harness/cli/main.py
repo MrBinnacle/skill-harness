@@ -143,6 +143,7 @@ def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
         )
 
     _console.print(table)
+    _console.print(_SKILL_CLAUSES_LEGEND)
 
     # M2: warn about Tier-1 axes with no registered scorer (TEST-ARCH-2)
     try:

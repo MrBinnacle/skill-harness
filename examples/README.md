@@ -25,3 +25,17 @@ your own machine.
 
 The script sets `PYTHONUTF8=1` and `PYTHONHASHSEED=0` before running. See
 `docs/concepts/why-pythonutf8-on-windows.md` for why these are required.
+
+## API-key requirements (honest)
+
+`skill init` calls the Claude API and **currently requires `ANTHROPIC_API_KEY`** — the
+extractor has no OpenRouter fallback yet (v0.2 backlog). The reproduction script will
+exit with a helpful error if the key is missing.
+
+`run ablation --execute` (called by this script) accepts either `ANTHROPIC_API_KEY`
+(direct) or `OPENROUTER_API_KEY` (auto-routed). Pass `-SubjectModel` to vary the
+model id; see the script's `--help` for the matrix.
+
+If you are on Claude Code subscription auth without a direct Anthropic key, the
+`skill init` step is currently a hard wall. See the case study's HALT 2 narrative for
+the full context (the case study's own author hit this same asymmetry).
