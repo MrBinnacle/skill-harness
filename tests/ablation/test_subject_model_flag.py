@@ -206,6 +206,72 @@ def test_resolver_explicit_openrouter_form_passes_with_openrouter_key(
 
 
 # ---------------------------------------------------------------------------
+# 8a. gpt-* + no keys: raise with both var names (mirror of test 3 for OpenAI)
+# ---------------------------------------------------------------------------
+
+
+def test_resolver_gpt_with_no_keys_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Neither OPENAI_API_KEY nor OPENROUTER_API_KEY: raise ClickException naming both."""
+    import click
+
+    _empty_env(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc_info:
+        _resolve_subject_model_with_fallback("gpt-5.5")
+
+    msg = exc_info.value.format_message()
+    assert "OPENAI_API_KEY" in msg
+    assert "OPENROUTER_API_KEY" in msg
+
+
+# ---------------------------------------------------------------------------
+# 8b. o-series + no keys: raise with both var names (mirror of test 3 for o-series)
+# ---------------------------------------------------------------------------
+
+
+def test_resolver_o_series_with_no_keys_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Neither OPENAI_API_KEY nor OPENROUTER_API_KEY: raise ClickException naming both."""
+    import click
+
+    _empty_env(monkeypatch)
+
+    with pytest.raises(click.ClickException) as exc_info:
+        _resolve_subject_model_with_fallback("o4-mini")
+
+    msg = exc_info.value.format_message()
+    assert "OPENAI_API_KEY" in msg
+    assert "OPENROUTER_API_KEY" in msg
+
+
+# ---------------------------------------------------------------------------
+# 8c. Bare o-series name (no dash) + only OPENROUTER_API_KEY: rewrites + warns
+#     Regression guard for resolver/factory regex alignment (quality review on
+#     a9bdacc): factory accepts bare 'o4' via `model[0]=='o' and model[1].isdigit()`;
+#     resolver must match to avoid routing bare names through the unrecognized-model
+#     probe and missing the OpenRouter fallback contract.
+# ---------------------------------------------------------------------------
+
+
+def test_resolver_o_series_bare_with_only_openrouter_rewrites(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Bare 'o4' (no dash) with no OPENAI_API_KEY but OPENROUTER_API_KEY: rewrite."""
+    _empty_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+
+    result = _resolve_subject_model_with_fallback("o4")
+    assert result == "openai/o4"
+
+    captured = capsys.readouterr()
+    assert "openai/o4" in captured.err
+    assert "OPENAI_API_KEY" in captured.err
+
+
+# ---------------------------------------------------------------------------
 # 9. CLI: --subject-model flag is accepted (not an unknown option)
 # ---------------------------------------------------------------------------
 

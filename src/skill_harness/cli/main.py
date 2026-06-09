@@ -800,9 +800,14 @@ def _resolve_subject_model_with_fallback(subject_model: str) -> str:
             " or OPENROUTER_API_KEY (OpenRouter fallback). Set one to proceed."
         )
 
-    # OpenAI direct: gpt-* or o<digit>-* (o-series)
+    # OpenAI direct: gpt-* or o<digit>* (o-series).
+    # The o-series regex matches the factory's permissive pattern at
+    # make_subject_client (subject.py: `model[0] == 'o' and model[1].isdigit()`).
+    # Both bare 'o4' and dashed 'o4-mini' are accepted — divergence would route
+    # bare names through the unrecognized-model probe and miss the OpenRouter
+    # fallback contract.
     is_gpt = subject_model.startswith("gpt-")
-    is_o_series = bool(re.match(r"^o[0-9]+-", subject_model))
+    is_o_series = bool(re.match(r"^o[0-9]", subject_model))
     if is_gpt or is_o_series:
         openai_key = os.environ.get("OPENAI_API_KEY", "")
         if openai_key:
