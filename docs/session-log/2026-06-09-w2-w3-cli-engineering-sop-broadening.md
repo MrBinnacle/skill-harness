@@ -184,9 +184,89 @@ Orchestrator decision on URL verification: ACCEPT. `https://openrouter.ai/api/v1
 
 Fast-forward merged to main at this turn.
 
-### 13 · Closeout
+### 13 · Closeout (initial)
 
-Doc updates (this section + checkpoint update) committed and pushed as the final closeout commit.
+Doc updates committed and pushed as the closeout commit `e00c9f7`. T1 frame-legibility reader pick named as the next PM-owned gate. At this point the day's substantive engineering and doc work was complete.
+
+### 14 · /claudeception second-pass + skill-family-curation discipline build
+
+User invoked explicit `/claudeception`. Initial pass had already extracted 3 skills + 1 update mid-session and 1 new skill (`anthropic-sdk-via-openrouter`) after Phase B. This second pass surfaced two more extraction candidates from the post-Phase-B arc:
+
+- **`walk-the-recipe-as-target-user`** — validation discipline (simulate the target user's environment, not the dev's). The discipline that produced the Phase A doc-honesty pass and surfaced the extractor gap.
+- **`two-phase-doc-honesty-then-engineering`** — execution pattern after state-drift catches surface both doc and engineering gaps. Phase A inline + Phase B dispatched. The shape used by today's `6c9ff3f` → `b5b9fe6+7d86687` arc.
+
+In the closing summary, the orchestrator noted (out loud, as a meta-observation): "4 of 6 skills relate to the discipline of 'look before you trust...' — there may be a single higher-order skill that subsumes the family, OR they may be best left as distinct triggers." This was a candidate hypothesis surfaced explicitly as hypothesis.
+
+User pushed: "what is the dynamic script/loop that accomplishes what you're implying going forward and doesn't produce slop silently."
+
+### 15 · Skill-family-curation discipline build (collaborative)
+
+Designed the curation mechanism through dialogue:
+
+- Initial proposal: three touchpoints (extraction/promotion/search), falsifiability gate (3 tests), registry file, PM-dispositioned.
+- Ran the gate on the orchestrator's own "look before you trust" hypothesis → **REJECTED-AS-MANUFACTURED** on all three tests (no unique trigger coverage, vacuous parent response, single-session evidence).
+- User returned hardened critique with 5 items: Graduation cleanup (defends against doc rot), mechanical tracer-bullet for Test A (defends against Theater), structured 3-line OIR-style disposition format, instruction-budget protection, glossary in CLAUDE.md §1.
+
+**First framework-verification catch** (this session): user's critique invoked vocabulary I couldn't verify in our codebase — `CDX-001 Stop-hook predicates`, `OIR` acronym, `§1 ubiquitous language dictionary in CLAUDE.md`. Empirical grep across project, skills, memory, and global CLAUDE.md returned zero matches for any of these as established structure. Project CLAUDE.md §1 is "Dev-team council"; global §1 is "Layer Placement Rule"; neither is a glossary. Surfaced honestly with cite-evidence; accepted the 4 substantive disciplines (which stand on their own merits), declined the framework attributions.
+
+User response: explicit acknowledgment — "Importing hypothetical artifacts like 'CDX-001' or manufacturing acronyms like 'OIR' was a failure of epistemic integrity—a violation of the 'look before you trust' principle." Clarified the 300-400 instruction budget was empirical LLM behavior, not local codebase structure (legitimate). Aligned on the route-via-auto-memory path for vocabulary instead of CLAUDE.md modification.
+
+Built the hardened skill incorporating all four disciplines:
+
+- `~/.claude/skills/_quarantine/skill-family-curation/SKILL.md` — three touchpoints, falsifiability gate with literal-fixture-plus-pseudocode Test A, structured `Evidence · Cost-of-action · Disposition` 3-line format, atomic Graduation cleanup, explicit "do NOT load from CLAUDE.md" discipline.
+- `~/.claude/skills/_quarantine/_family-candidates.md` — append-only registry, seeded with FAMILY-001 as a worked REJECTED-AS-MANUFACTURED example (the orchestrator's own hypothesis caught by the gate, full Test A/B/C reasoning preserved).
+- `~/.claude/projects/.../memory/project-skill-curation-vocabulary.md` — vocabulary memory entry covering all new terms (falsifiability gate, Graduation, Theater, the 5 disposition enum values) + architectural-placement rationale for auto-memory route over CLAUDE.md section.
+- MEMORY.md updated with the new vocabulary entry pointer.
+
+### 16 · Second framework-verification catch (WI-089 vs writ project)
+
+User followed with two options: "(1) WI-089 structural reset arc (Deliverable #1) Stop-hook predicates 3 & 5 with shared JSONL transcript_path extractor, OR (2) §1.5 review to promote the new curation skill."
+
+Applied the just-built falsifiability discipline to the prompt itself. Empirical grep: `WI-089` exists, but in the user's `writ` project at `C:\Users\mlpgr\2026_Projects\writ\` (refs in `WRIT_STATE.md`, council-fire decisions, planning docs for cite-or-skip / Bellingcat-proxy predicates). Zero matches in this Skill Harness repo. Different failure mode than the first catch (vocabulary from an adjacent project, pulled by association, not invented).
+
+Surfaced honestly with cite-evidence. Option 2 (§1.5 review) is legitimate. Option 1 belongs to writ. User confirmed by switching contexts (had Claude Code open in writ) and asked for a handoff message instead.
+
+### 17 · Writ handoff authored
+
+Drafted a copy-paste-ready message for the writ session covering: the six new skills + one update on disk, paths, applicability triggers per skill, the specific `skill-family-curation` pitch with worked example pointer, defensive recommendations ("don't auto-promote", "don't add curation vocabulary to writ's CLAUDE.md", "don't import youwontdoit's registry wholesale"), and the explicit instruction to run the discipline on the message itself before adopting from it. Honored downstream-instruction-framing per the established skill.
+
+### 18 · Closeout (final)
+
+User: "Let's focus on this repo only now" + "conduct all session close and SOP memory tasks."
+
+Memory tasks completed:
+- New feedback memory `feedback-verify-framework-citations.md` capturing today's twice-occurring pattern of asserted-as-established framework vocabulary that didn't verify. The discipline: verify against actual files before silently accepting, even from the PM. Companion to `feedback-route-to-most-expert` (for framework-existence claims specifically).
+- MEMORY.md index updated with the new feedback entry.
+
+Session-log finalized with this section + checkpoint updated.
+
+## Decisions of note — continued
+
+- **Built `skill-family-curation` as the long-term entropy defense for the growing skill library.** Three touchpoints, mechanical tracer-bullet falsifiability gate, atomic Graduation cleanup. Skill seeded with its own first worked-rejection example (FAMILY-001). User collaborated on the design through a critique-cycle that resulted in 4 substantive hardenings.
+- **Twice today, asserted-as-established framework vocabulary didn't verify against actual files.** Both times the substantive principle attached to the assertion was good and was adopted; the framework attribution was the part that failed verification. The catch was explicitly rewarded both times. Codified as `feedback-verify-framework-citations` memory + applies to all future sessions.
+- **The discipline is consistent across scope levels.** The same falsifiability gate that `skill-family-curation` applies to candidate skill consolidations was applied this session to the orchestrator's own meta-hypothesis (REJECTED), to the user's framework citations (caught twice), and to the user's "WI-089" option offering (deflected to the correct project). Consistency under iteration is the test.
+
+## Carry-forwards — updated
+
+- **Quarantine skills extracted/updated this session (cumulative, 7 total)**:
+  - `halt-as-deliverable` v1.0.0 → v1.1.0 (updated with stale-doc variant)
+  - `click-clirunner-env-none-deletes` (new)
+  - `exit-worktree-cwd-override-merge-from-worktree` (new)
+  - `anthropic-sdk-via-openrouter` (new)
+  - `walk-the-recipe-as-target-user` (new)
+  - `two-phase-doc-honesty-then-engineering` (new)
+  - `skill-family-curation` (new — the discipline for managing the others)
+  - Plus the seeded registry file `_quarantine/_family-candidates.md` (FAMILY-001 REJECTED)
+- **Project-memory entries added (cumulative this session, 2 total)**:
+  - `project-skill-curation-vocabulary` (new — vocabulary for skill-family-curation discipline)
+  - `feedback-verify-framework-citations` (new — verify asserted framework before acting)
+- **§1.5 promotion review of these 7 quarantine skills**: pending. `skill-family-curation` is its own first test case at promotion time — can the discipline survive applying itself?
+
+## Final state
+
+`main` HEAD `e00c9f7` + post-closeout session-log update commit. 957 tests pass · all 4 gates clean. Case study reproducible end-to-end on both direct-Anthropic and OpenRouter-only environments. Skill library hygiene defense built and quarantined. Two new project-memory entries capture today's learnings durably across sessions.
+
+T1 frame-legibility reader pick remains the next SOP gate (PM-owned).
 
 ## Decisions of note — continued
 
