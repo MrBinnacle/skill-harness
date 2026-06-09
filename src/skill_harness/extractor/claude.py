@@ -17,6 +17,7 @@ skill_genre) record is written here.
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from typing import Any
@@ -28,6 +29,15 @@ from skill_harness.extractor.errors import ExtractorClaudeError
 from skill_harness.extractor.models import ExtractedClause, FalsifyingCaseSchema
 
 _MODEL = "claude-sonnet-4-6"
+
+# OpenRouter Anthropic-compatible Messages API endpoint.
+# Verified from https://openrouter.ai/anthropic/claude-sonnet-4.6/api (2026-06-09):
+# the quickstart shows anthropic.Anthropic(base_url="https://openrouter.ai/api/v1").
+_OPENROUTER_ANTHROPIC_BASE_URL = "https://openrouter.ai/api/v1"
+
+# Provider-prefixed model ID required by the OpenRouter Anthropic-compat endpoint.
+# OpenRouter model slugs use dots (4.6), not dashes (4-6) as Anthropic direct does.
+_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6"
 
 _SYSTEM_PROMPT = """\
 You are a clause extraction specialist for a deterministic LLM skill evaluation harness.
@@ -148,7 +158,47 @@ _EXTRACT_CLAUSES_SCHEMA: dict[str, Any] = {
 }
 
 
-def _call_once(client: anthropic.Anthropic, body: str) -> list[Any]:
+def _make_extractor_client() -> tuple[anthropic.Anthropic, str]:
+    """Resolve the Anthropic client for clause extraction.
+
+    Returns a ``(client, model_id)`` tuple.  The ``model_id`` is what should be
+    passed to ``messages.create`` — for direct Anthropic it is the bare model name
+    (``_MODEL``); for the OpenRouter fallback it is the provider-prefixed form
+    (``_OPENROUTER_MODEL``, e.g. ``"anthropic/claude-sonnet-4.6"``).
+
+    Resolution rules:
+
+    - If ``ANTHROPIC_API_KEY`` is set: return a default Anthropic client + bare model.
+    - Else if ``OPENROUTER_API_KEY`` is set: return an Anthropic SDK client with
+      ``base_url=_OPENROUTER_ANTHROPIC_BASE_URL`` + ``api_key=OPENROUTER_API_KEY``,
+      and emit a stderr warning.
+    - Else: raise :class:`ExtractorClaudeError` naming both env vars.
+    """
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if anthropic_key:
+        return anthropic.Anthropic(), _MODEL
+
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if openrouter_key:
+        print(
+            f"[INFO] skill init: ANTHROPIC_API_KEY not set; routing extractor via OpenRouter"
+            f" (base_url={_OPENROUTER_ANTHROPIC_BASE_URL}) using OPENROUTER_API_KEY."
+            f" The Anthropic SDK is unchanged; only the endpoint differs.",
+            file=sys.stderr,
+        )
+        client = anthropic.Anthropic(
+            api_key=openrouter_key,
+            base_url=_OPENROUTER_ANTHROPIC_BASE_URL,
+        )
+        return client, _OPENROUTER_MODEL
+
+    raise ExtractorClaudeError(
+        "No API key found for clause extraction. Set ANTHROPIC_API_KEY (Anthropic direct)"
+        " or OPENROUTER_API_KEY (OpenRouter fallback) to proceed."
+    )
+
+
+def _call_once(client: anthropic.Anthropic, body: str, model: str = _MODEL) -> list[Any]:
     """Make a single API call and return the raw clauses list.
 
     :raises ExtractorClaudeError: On API error, missing tool block, wrong input type,
@@ -157,7 +207,7 @@ def _call_once(client: anthropic.Anthropic, body: str) -> list[Any]:
     """
     try:
         response = client.messages.create(
-            model=_MODEL,
+            model=model,
             max_tokens=8192,
             system=_SYSTEM_PROMPT,
             tools=[
@@ -221,10 +271,10 @@ def call_extract_clauses(body: str, *, no_retry: bool = False) -> list[Extracted
     :raises ExtractorClaudeError: On API error, empty result, or validation
         failure deserializing the tool call response.
     """
-    client = anthropic.Anthropic()
+    client, _model_for_routing = _make_extractor_client()
 
     try:
-        raw_clauses = _call_once(client, body)
+        raw_clauses = _call_once(client, body, _model_for_routing)
     except ExtractorClaudeError as exc:
         # Retry only the specific transient anomaly where the API returns the
         # 'clauses' field as a string instead of a list.  This was observed
@@ -236,7 +286,7 @@ def call_extract_clauses(body: str, *, no_retry: bool = False) -> list[Extracted
                 file=sys.stderr,
             )
             time.sleep(1)
-            raw_clauses = _call_once(client, body)
+            raw_clauses = _call_once(client, body, _model_for_routing)
         else:
             raise
 
