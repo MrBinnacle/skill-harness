@@ -27,9 +27,6 @@ from skill_harness.extractor.errors import ExtractorClaudeError
 # https://openrouter.ai/anthropic/claude-sonnet-4.6/api).
 _OPENROUTER_ANTHROPIC_BASE_URL = "https://openrouter.ai/api/v1"
 
-# The provider-prefixed model ID required by OpenRouter Anthropic-compat endpoint.
-_OPENROUTER_MODEL_ID = "anthropic/claude-sonnet-4.6"
-
 
 # ---------------------------------------------------------------------------
 # Helpers (mirrors test_claude.py pattern)
@@ -110,6 +107,53 @@ def test_extractor_client_anthropic_direct_when_key_present(
     assert captured.err == "", "No warning expected on direct Anthropic path"
 
     # Model id should be the bare Anthropic model name
+    assert not model_id.startswith("anthropic/"), (
+        "Direct path model_id must be bare (e.g. 'claude-sonnet-4-6'), not provider-prefixed"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 1b: BOTH keys set — ANTHROPIC_API_KEY wins (precedence rule)
+# ---------------------------------------------------------------------------
+
+
+def test_extractor_client_anthropic_direct_when_both_keys_set(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Both ANTHROPIC_API_KEY and OPENROUTER_API_KEY set: ANTHROPIC_API_KEY wins.
+
+    Makes the precedence rule (ANTHROPIC first, OPENROUTER second) explicit-by-test
+    rather than implicit-by-code-reading. Mirrors test 1's shape: no base_url
+    override, no stderr warning, bare model name returned.
+    """
+    _empty_env(monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+
+    with patch("skill_harness.extractor.claude.anthropic.Anthropic") as mock_cls:
+        mock_client = MagicMock()
+        mock_cls.return_value = mock_client
+
+        from skill_harness.extractor.claude import _make_extractor_client
+
+        _client, model_id = _make_extractor_client()
+
+    # ANTHROPIC_API_KEY wins: no base_url kwarg passed
+    mock_cls.assert_called_once()
+    call_kwargs = mock_cls.call_args.kwargs
+    assert "base_url" not in call_kwargs, (
+        "When both keys are set, ANTHROPIC_API_KEY wins — no base_url override expected"
+    )
+
+    # No stderr warning (we did not fall back to OpenRouter)
+    captured = capsys.readouterr()
+    assert captured.err == "", (
+        "No warning expected when ANTHROPIC_API_KEY is present,"
+        " even with OPENROUTER_API_KEY also set"
+    )
+
+    # Model id should be the bare Anthropic model name (not provider-prefixed)
     assert not model_id.startswith("anthropic/"), (
         "Direct path model_id must be bare (e.g. 'claude-sonnet-4-6'), not provider-prefixed"
     )
