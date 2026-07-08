@@ -56,3 +56,8 @@ logs/
 .env
 .env.*
 !.env.example
+# Internal scan reports (local-only)
+.supply-chain-risk-auditor/
+
+# Claire tool worktree remnants (stale, local-only)
+.claire/

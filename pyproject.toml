@@ -8,19 +8,21 @@ version = "0.1.0a0"
 description = "Clause-Ablation Differential Testing for LLM Skills"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "TBD" }
+license = { text = "MIT" }
 authors = [{ name = "mlpgr", email = "mlp.gruber@gmail.com" }]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
   # anthropic >=0.87 enforces post-patch for GHSA-q5f5-3gjm-7mfm + GHSA-w828-4qhx-vxx3
   # (Memory Tool CVEs, 2026-03-31; patched in 0.87.0). Memory Tool surface is not used.
   "anthropic>=0.87",
-  # T3 tracer adapter; supply-chain audit at .supply-chain-risk-auditor/openai-audit-2026-06-08.md
+  # T3 tracer adapter; supply-chain audit at docs/supply-chain/openai-audit-2026-06-08.md
   "openai>=2.41",
   "click>=8.1",
   "pydantic>=2.6",
