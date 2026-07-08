@@ -61,3 +61,8 @@ logs/
 
 # Claire tool worktree remnants (stale, local-only)
 .claire/
+
+# Internal process records + agent config (removed from public HEAD 2026-07-08)
+.private/
+.claude/
+/CLAUDE.md

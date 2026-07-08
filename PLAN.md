@@ -1,8 +1,13 @@
 # Skill Harness — v0.1 Implementation Plan
 
 **Status**: LOCKED — exit criteria are testable, no open questions.
-**Input**: `PRD.md` (v1.0) + `docs/COUNCIL_FINDINGS.md` (5-seat synthesis, 2026-06-03)
-**Owner**: this plan executes across multiple sessions; per-session checkpoint at `.claude/state/checkpoint.md`.
+**Input**: `PRD.md` (v1.0) + internal 5-seat council synthesis (2026-06-03)
+**Owner**: this plan executes across multiple sessions; per-session checkpoint kept internally.
+
+> **Note (2026-07-08):** internal process records cited below (`docs/council-fires/`,
+> `docs/session-log/`, `docs/dispatch/`, `docs/COUNCIL_FINDINGS.md`, `.claude/`) are
+> maintained privately and are not published in this repository. Citations are retained
+> as provenance markers in this historical plan.
 
 ---
 

@@ -85,5 +85,7 @@ and the invariants the framework is built around.
 
 ## Architecture and internals
 
-[`docs/internals/README.md`](docs/internals/README.md) — track layout, database
-partition, discipline rationale, and development setup.
+[`PLAN.md`](PLAN.md) — track layout (A–E) and the locked v0.1 implementation plan.
+[`PRD.md`](PRD.md) — the evidence model, oracle tiers, and discipline rationale.
+Database partition: `migrations/evidence/` (append-only, trigger-enforced) +
+`migrations/runtime/` (mutable operational state).

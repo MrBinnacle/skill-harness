@@ -7,7 +7,7 @@ Thanks for your interest. This project is pre-alpha and changing fast, but contr
 Read these in order:
 
 1. [`PRD.md`](PRD.md) — what the harness is and what it claims to measure
-2. [`docs/COUNCIL_FINDINGS.md`](docs/COUNCIL_FINDINGS.md) — the architectural decisions that gate every design choice
+2. [`PRD.md`](PRD.md) §3 / §6 / §14 — the locked invariants (evaluation shape, admissibility, pass rules) that gate every design choice; the full internal ADR log is not published
 3. [`PLAN.md`](PLAN.md) — the locked v0.1 implementation plan; tracks A–E
 4. [`CLAUDE.md`](CLAUDE.md) — operating rules (these apply to AI assistants and human contributors alike)
 
@@ -52,7 +52,7 @@ PRs that add code without tests are rejected. PRs that disable tests to make cod
 
 Code that writes to evidence tables MUST go through the repository APIs in `src/skill_harness/storage/`. Direct SQL against `oracle_verdicts`, `samples`, `frozen_cases`, `calibration_events`, or `confound_events` from anywhere else in the codebase is a bug.
 
-If you find yourself reaching for a workaround to "fix" an inadmissible historical verdict, the system is working as designed — see [`docs/COUNCIL_FINDINGS.md`](docs/COUNCIL_FINDINGS.md) §A3.
+If you find yourself reaching for a workaround to "fix" an inadmissible historical verdict, the system is working as designed — admissibility is snapshotted at write time and gated via VIEW, never recomputed (see `PRD.md` §6).
 
 ### Statistical claims need citations
 
@@ -60,7 +60,7 @@ Code paths that compute posteriors, apply thresholds, or claim "PASSED" are subj
 
 ### Judge protocols are pairwise-only
 
-Tier-2 judges output `{A, B, tie}` for one named axis. Scalar grading and Likert-scale templates are explicitly forbidden by [`docs/COUNCIL_FINDINGS.md`](docs/COUNCIL_FINDINGS.md) §A5. Position swap is mandatory; length control is part of calibration. See `~/.claude/skills/llm-judge-calibration/` for the discipline.
+Tier-2 judges output `{A, B, tie}` for one named axis. Scalar grading and Likert-scale templates are explicitly forbidden (`PRD.md` §3.1). Position swap is mandatory; length control is part of calibration (`PRD.md` §6).
 
 ## PR conventions
 

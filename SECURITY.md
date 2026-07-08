@@ -22,7 +22,7 @@ Skill Harness is currently in pre-alpha (`0.1.0a0`). Until a stable release is t
 
 This project takes dependency provenance seriously. The discipline:
 
-- **All production dependencies pinned above their last CVE-patched version.** The current `anthropic` pin (`>=0.87`) reflects the patches for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool, 2026-03-31). See [`docs/COUNCIL_FINDINGS.md`](docs/COUNCIL_FINDINGS.md) Appendix A for the full audit record.
+- **All production dependencies pinned above their last CVE-patched version.** The current `anthropic` pin (`>=0.87`) reflects the patches for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool, 2026-03-31). See [`docs/supply-chain/`](docs/supply-chain/) for published dependency audit records.
 - **Supply-chain audit re-run quarterly** and at every major version bump of `anthropic`, `pydantic`, or `pytest`. The audit lives at `.supply-chain-risk-auditor/results.md`.
 - **Dependabot enabled** for `pip`, `github-actions`, and `pre-commit` ecosystems. See `.github/dependabot.yml`.
 - **CodeQL** runs on every PR and weekly on `main`. See `.github/workflows/codeql.yml`.
