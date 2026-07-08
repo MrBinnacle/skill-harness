@@ -18,6 +18,25 @@ measurable directional change on its claimed axis. When no mechanical scorer exi
 for the axis, the result is UNMEASURED, not an estimated score. The case study below
 shows this distinction on a real, widely-used skill.
 
+## Why this exists
+
+Naive with-skill vs without-skill benchmarking — now common practice at k≈3 repetitions —
+is trap-laden: run-to-run noise (measured CV ≈ 17.6% on agentic tasks) swallows all but
+huge effects, matched tasks sample on the dependent variable, deterministic pass/fail
+banks price a skill's standing *cost* while structurally missing its *benefit*, and
+synthetic oracles leak their own answers through test-hygiene docstrings. The measured
+findings behind each of those claims, with evidence grades:
+[`docs/findings/why-naive-skill-benchmarks-mislead.md`](docs/findings/why-naive-skill-benchmarks-mislead.md).
+This harness is the counter-design: directional verdicts, calibrated judges, admissibility
+gating, and UNMEASURED as the honest default.
+
+**v0.2 direction (locked, pre-registered gate):** whole-skill Full-vs-Null becomes the
+primary contrast (clause ablation demotes to drill-down on signal), an agentic multi-turn
+subject layer joins the single-turn adapter, and transcript-derived outcome oracles
+(tests-pass, lint delta, diff size, turns, cost) join the stylometric Tier-1 set. Entry
+conditions and pre-registration fields:
+[`docs/findings/v0.2-reaim-gate.md`](docs/findings/v0.2-reaim-gate.md).
+
 ## Reproduce the case study (Windows)
 
 ```powershell
