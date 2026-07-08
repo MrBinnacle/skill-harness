@@ -45,10 +45,11 @@ script, see [`examples/`](examples/).
 Two API surfaces, two requirements:
 
 - **`skill init`** calls the Claude API to extract clauses from your skill artifact. It
-  currently requires `ANTHROPIC_API_KEY` to be set in the environment. There is no
-  OpenRouter fallback for the extractor yet — operators on Claude Code subscription
-  auth or other no-direct-key environments cannot run `skill init` end-to-end against
-  the current `main`. Extractor OpenRouter fallback is a v0.2 backlog candidate.
+  accepts EITHER `ANTHROPIC_API_KEY` (direct Anthropic) OR `OPENROUTER_API_KEY`
+  (auto-routed via OpenRouter's Anthropic-compatible endpoint) — the fallback landed
+  on `main` 2026-06-09 (`b5b9fe6`). Operators on Claude Code subscription auth with
+  only an OpenRouter key can now run `skill init` end-to-end against `main`
+  (not against the `v0.1.0` tag, which predates the fallback).
 - **`run ablation --execute`** calls the subject model. It accepts EITHER
   `ANTHROPIC_API_KEY` (direct Anthropic) OR `OPENROUTER_API_KEY` (auto-routed via
   OpenRouter with a stderr warning). The `--subject-model` flag selects the model id;
