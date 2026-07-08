@@ -112,7 +112,7 @@ def list_calibration_events_for_judge_axis(
         + """
         FROM calibration_events
         WHERE judge_id = ? AND axis = ?
-        ORDER BY validated_at DESC
+        ORDER BY validated_at DESC, calibration_event_id DESC
         """,
         (judge_id, axis),
     )
