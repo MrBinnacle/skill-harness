@@ -29,9 +29,12 @@ from skill_harness.storage.errors import (
     MigrationTamperedError,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-EVIDENCE_MIGRATIONS_DIR = REPO_ROOT / "migrations" / "evidence"
-RUNTIME_MIGRATIONS_DIR = REPO_ROOT / "migrations" / "runtime"
+# SQL migrations ship INSIDE the package (migrations_sql/) so installed copies
+# work. A repo-root path here broke every `pip install`ed copy of v0.1 — the
+# storage layer could not bootstrap outside a source checkout.
+_SQL_ROOT = Path(__file__).resolve().parent / "migrations_sql"
+EVIDENCE_MIGRATIONS_DIR = _SQL_ROOT / "evidence"
+RUNTIME_MIGRATIONS_DIR = _SQL_ROOT / "runtime"
 
 # Re-export so existing `from skill_harness.storage.migrations import
 # MigrationTamperedError` callers keep working.

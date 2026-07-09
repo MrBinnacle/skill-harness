@@ -31,6 +31,15 @@ dependencies = [
   # scipy>=1.11: EB-MoM hierarchical fit + BH-FDR fallback (A53, Track E.2).
   # Already present transitively via statsmodels; direct pin per Phase 1.1 supply-chain audit.
   "scipy>=1.11",
+  # tiktoken: offline tokenizer for Verbosity metric (A35). Version-pinned to cl100k_base
+  # encoding which is stable across 0.x series; DO NOT upgrade without re-running
+  # bit-equality corpus and updating IMPLEMENTATION_HASH in verbosity.py.
+  # RUNTIME dep (imported by oracles/tier1/verbosity.py) — was mis-filed under dev
+  # extras, which broke every non-dev install at the first Tier-1 code path.
+  "tiktoken>=0.7,<1.0",
+  # statsmodels: OLS for AlpacaEval-2 length regression (A35 observation-time half).
+  # RUNTIME dep (imported by calibration/length_regression.py) — same dev-extras mis-file.
+  "statsmodels>=0.14",
 ]
 
 [project.optional-dependencies]
@@ -44,13 +53,6 @@ dev = [
   # C.1 — Tier-1 mechanical-validity gate (A33)
   # pytest-socket blocks network calls in offline Tier-1 tests; module-level autouse fixture.
   "pytest-socket>=0.7",
-  # tiktoken: offline tokenizer for Verbosity metric (A35). Version-pinned to cl100k_base
-  # encoding which is stable across 0.x series; DO NOT upgrade without re-running
-  # bit-equality corpus and updating IMPLEMENTATION_HASH in verbosity.py.
-  "tiktoken>=0.7,<1.0",
-  # statsmodels: OLS for AlpacaEval-2 length regression (A35 observation-time half).
-  # Preferred over scipy.linregress for cleaner output statistics. C.4 only.
-  "statsmodels>=0.14",
 ]
 
 [project.scripts]

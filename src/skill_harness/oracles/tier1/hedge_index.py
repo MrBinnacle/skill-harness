@@ -2,8 +2,12 @@
 
 Hedge Index = number_of_hedge_token_matches / max(word_count, 1)
 
-The wordlist is loaded once at import time from a committed JSON fixture:
-  tests/oracles/tier1/fixtures/hedge_wordlist.json
+The wordlist is loaded once at import time from a committed JSON fixture
+shipped as package data:
+  src/skill_harness/oracles/tier1/fixtures/hedge_wordlist.json
+
+(It previously lived under tests/, which broke every installed copy — a
+runtime dependency must ship inside the package.)
 
 The SHA-256 of that file becomes this metric's implementation_hash so that
 frozen regression cases can be re-audited when the wordlist changes.
@@ -32,13 +36,9 @@ from typing import Final
 # Wordlist fixture path
 # ---------------------------------------------------------------------------
 
-# Resolved relative to this file's location: src/skill_harness/oracles/tier1/
-# -> up 4 levels to project root -> tests/oracles/tier1/fixtures/
+# Package data, resolved relative to this file so installed copies work.
 _THIS_DIR: Final[Path] = Path(__file__).parent
-_PROJECT_ROOT: Final[Path] = _THIS_DIR.parents[3]  # src/../../../
-WORDLIST_PATH: Final[Path] = (
-    _PROJECT_ROOT / "tests" / "oracles" / "tier1" / "fixtures" / "hedge_wordlist.json"
-)
+WORDLIST_PATH: Final[Path] = _THIS_DIR / "fixtures" / "hedge_wordlist.json"
 
 
 def implementation_hash() -> str:
