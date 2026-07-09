@@ -11,7 +11,7 @@ Before you submit, please confirm:
 - [ ] New tests cover the new behavior (TDD discipline — see CONTRIBUTING.md)
 
 If this PR touches PRD §-tagged invariants, link the relevant
-COUNCIL_FINDINGS.md decision ID (e.g. A1, A5, A12).
+docs/PRD.md section.
 -->
 
 ## Summary
@@ -30,10 +30,10 @@ D=runner, E=aggregation, CLI=cli, DOCS=docs, CI=ci, OTHER=specify. -->
 - [ ] E — Aggregation + CLI
 - [ ] DOCS / CI / OTHER (specify):
 
-## COUNCIL_FINDINGS reference
+## Invariant / decision reference
 
-<!-- If this PR realizes or modifies an adopted decision, name it.
-Otherwise: N/A. -->
+<!-- If this PR realizes or modifies a locked invariant (docs/PRD.md) or a
+published finding (docs/findings/), name it. Otherwise: N/A. -->
 
 ## Test plan
 

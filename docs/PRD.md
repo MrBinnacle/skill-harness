@@ -9,7 +9,7 @@ Status: Ratified
 Author: TBD
 
 <!-- v1.1 changelog: 47 amendments applied (45 from Phase 3.5 audit + 2 from Appendix G).
-     Rationale per amendment lives in docs/COUNCIL_FINDINGS.md (main table + Appendices B–G).
+     Rationale per amendment lives in the internal council findings log (not published).
      PRD stays spec; Council stays rationale. -->
 
 ---

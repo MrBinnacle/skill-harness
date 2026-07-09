@@ -33,7 +33,7 @@ body:
     id: expected
     attributes:
       label: Expected behavior
-      description: What should happen instead? Link the PRD section or COUNCIL_FINDINGS decision if relevant.
+      description: What should happen instead? Link the docs/PRD.md section if relevant.
     validations:
       required: true
 

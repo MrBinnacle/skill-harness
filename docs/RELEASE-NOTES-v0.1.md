@@ -239,7 +239,7 @@ Full development workflow: `CLAUDE.md` ENV RECIPE section.
 ## Citations
 
 - 17 council-adopted decisions (A1–A23, C1–C3, D1–D11) + 47 PRD v1.1 amendments
-  documented in `docs/COUNCIL_FINDINGS.md` (main table + Appendices B–G).
+  documented in the internal council findings log (not published).
 - 47 amendments derived from 7 council fires; full provenance preserved.
 - Sclar et al. arXiv:2310.11324 (FormatSpread / component ablation),
   Longpre et al. arXiv:2301.13688 (FLAN component ablations),
@@ -261,4 +261,4 @@ via adversarial-spec pass (Phase 4.1, 0 blockers), insecure-defaults sweep
 (Phase 4.3, 0 critical/high), three-skill dogfooding (Phase 4.4), and a live
 ablation re-run on ai-slop-sentinel confirming 1 FAILED clause (`f9771fd...`) as
 the v0.1 thesis-validation evidence. All architectural decisions are traceable
-to `docs/COUNCIL_FINDINGS.md`.
+to the internal council findings log (not published).

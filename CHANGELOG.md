@@ -27,7 +27,7 @@ rather than asserted. Methodology precedent: Chandra et al. arXiv:2602.19141.
   - **Track C** — Tier-1 scorer registry (5 scorers) + Tier-2 pairwise judge module
   - **Track D** — Ablation runner: sequential stopping, cost caps, dry-run default, confound monitoring
   - **Track E** — EB-MoM hierarchical pooling, JSON wire format, six CLI commands
-- 47 PRD v1.1 amendments from 7 council fires; full provenance in `docs/COUNCIL_FINDINGS.md`.
+- 47 PRD v1.1 amendments from 7 council fires; full provenance in the internal council findings log (not published).
 - 9-seat pre-tag launch council fire; 2 BLOCKERs (OPERATOR-DX-1 + M3 coverage_warnings)
   cleared in fix-sprint `3f6b0a9`.
 - Live ablation re-run on ai-slop-sentinel: 1 FAILED clause empirically demonstrated
@@ -64,8 +64,8 @@ Initial scaffold. Pre-alpha — schema realized and trigger-enforced, CLI surfac
 - SHA-256 migration ledger with tamper-evidence (`MigrationTamperedError` on mutated migration files)
 - CLI entry point with 6 PRD §18 commands stubbed
 - 8 smoke tests including append-only trigger verification + `runs.completed_at` single-shot mutation
-- Comprehensive architectural decision record at `docs/COUNCIL_FINDINGS.md` (17 adopted decisions, 16 PRD amendments queued for v1.1)
-- Implementation plan at `PLAN.md` (5 build tracks A–E with exit criteria)
+- Comprehensive architectural decision record in the internal council findings log (not published) (17 adopted decisions, 16 PRD amendments queued for v1.1)
+- Implementation plan at `docs/PLAN.md` (5 build tracks A–E with exit criteria)
 - Supply-chain audit at `.supply-chain-risk-auditor/results.md` — PROCEED-WITH-MITIGATIONS
 - Standard repo docs: `README.md`, `LICENSE` (MIT), `CONTRIBUTING.md`, `SECURITY.md`
 - CI workflow: ruff + mypy --strict + pytest matrix on Ubuntu + Windows x Python 3.11/3.12/3.13

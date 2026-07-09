@@ -318,8 +318,8 @@ that path is the artifact.
 findings at `docs/dispatch/t3-findings.md`; pre-registrations at
 `docs/dispatch/t3-pre-registration.md`; SOP amendment in
 `.claude/skills/dev-team-council/SKILL.md` at `62391eb`.
-PRD specification at `PRD.md` v1.1. Council-adopted invariants at
-`docs/COUNCIL_FINDINGS.md` A1-A62. The dogfooding result that triggered
+PRD specification at `docs/PRD.md` v1.1. Council-adopted invariants at
+the internal council findings log A1-A62 (not published). The dogfooding result that triggered
 this story is at `docs/dogfooding-ai-slop-sentinel-2026-06-07.md`
 (baseline-state, pre-registry-expansion).*
 

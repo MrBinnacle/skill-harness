@@ -6,10 +6,8 @@
 
 # Architectural artifacts — extra scrutiny zone. Any change to the
 # load-bearing invariants should be discussed in an issue first.
-/PRD.md                          @MrBinnacle
-/CLAUDE.md                       @MrBinnacle
-/PLAN.md                         @MrBinnacle
-/docs/COUNCIL_FINDINGS.md        @MrBinnacle
+/docs/PRD.md                     @MrBinnacle
+/docs/PLAN.md                    @MrBinnacle
 /migrations/                     @MrBinnacle
 
 # Storage / migrations gate — SCHEMA + SECURITY seat sign-off per A30 + dev-team-council

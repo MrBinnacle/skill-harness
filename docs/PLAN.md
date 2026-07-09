@@ -5,7 +5,7 @@
 **Owner**: this plan executes across multiple sessions; per-session checkpoint kept internally.
 
 > **Note (2026-07-08):** internal process records cited below (`docs/council-fires/`,
-> `docs/session-log/`, `docs/dispatch/`, `docs/COUNCIL_FINDINGS.md`, `.claude/`) are
+> `docs/session-log/`, `docs/dispatch/`, the internal council findings log (not published), `.claude/`) are
 > maintained privately and are not published in this repository. Citations are retained
 > as provenance markers in this historical plan.
 
@@ -37,7 +37,7 @@ python -m venv .venv
 
 Invoke `supply-chain-risk-auditor:supply-chain-risk-auditor` against `pyproject.toml`. Deps in scope: `anthropic`, `click`, `pydantic`, `rich`, `pytest`, `ruff`, `mypy`, `hypothesis`.
 
-**Gate**: no MAJOR or BLOCKER risk findings. Any MINOR is logged in `docs/COUNCIL_FINDINGS.md` Appendix and accepted.
+**Gate**: no MAJOR or BLOCKER risk findings. Any MINOR is logged in the internal council findings log (not published) Appendix and accepted.
 
 ### 1.2 · Permission allowlist
 
@@ -83,7 +83,7 @@ Sequential or single-PR; touches storage only. ~150 LOC + 2 new migrations + 3 n
 
 Documentation-only; can land in parallel with 1.5a.
 
-- **A23** — `SECURITY.md` "Threat model" section gains three clauses (trust partition / filesystem substitution boundary / PRAGMA scope). Mirror trust-partition + filesystem boundary as a subsection under `docs/COUNCIL_FINDINGS.md` §A4. Note `synchronous=FULL`/`NORMAL` asymmetry in CLAUDE.md "Evidence model" section.
+- **A23** — `SECURITY.md` "Threat model" section gains three clauses (trust partition / filesystem substitution boundary / PRAGMA scope). Mirror trust-partition + filesystem boundary as a subsection under the internal council findings log (not published) §A4. Note `synchronous=FULL`/`NORMAL` asymmetry in CLAUDE.md "Evidence model" section.
 
 **Gate**: documentation review — no acceptance criteria beyond "all three clauses present and accurate."
 
@@ -91,7 +91,7 @@ Documentation-only; can land in parallel with 1.5a.
 
 Storage-touching-change template (SCHEMA + RELIABILITY + SECURITY + TEST-ARCH) dispositioned 7 Track A implementation design questions BEFORE Phase 2 dispatch. All seats returned BLOCKER-FOUND across the 7 Qs. Synthesis: 5 BLOCKERs (Q2, Q3, Q4, Q6, Q7), 2 MAJORs (Q1, Q5). Adopted A24–A30; deferred D10–D14. Raw outputs + synthesis at `docs/council-fires/2026-06-04-pre-track-a-impl/`. Outcome expands Track A scope below (no separate gate beyond Track A's own exit criteria).
 
-Substantive disagreement resolved: SECURITY argued runtime-first dual-DB ordering on audit-asymmetry grounds; SCHEMA + RELIABILITY + TEST-ARCH argued evidence-first on source-of-truth grounds. Orchestrator adopted evidence-first 3-vs-1 citing PLAN Track D's pre-call budget cap check, which moots SECURITY's bypass premise without dismissing the framing. SECURITY's runtime-first framing recorded as load-bearing dissent in `docs/COUNCIL_FINDINGS.md` §A25.
+Substantive disagreement resolved: SECURITY argued runtime-first dual-DB ordering on audit-asymmetry grounds; SCHEMA + RELIABILITY + TEST-ARCH argued evidence-first on source-of-truth grounds. Orchestrator adopted evidence-first 3-vs-1 citing PLAN Track D's pre-call budget cap check, which moots SECURITY's bypass premise without dismissing the framing. SECURITY's runtime-first framing recorded as load-bearing dissent in the internal council findings log (not published) §A25.
 
 ---
 
@@ -250,7 +250,7 @@ git worktree add ../youwontdoit-track-c feat/track-c-oracle-library
 3.2 · `ai-slop-sentinel` review pass across all 5 tracks (fresh context, per-track).
 3.3 · `mutation-testing:mutation-testing` on the storage + aggregation modules — confirm tests would catch real bugs.
 3.4 · `code-review-sentinel` on the full diff before merge.
-3.5 · Update `PRD.md` → v1.1 applying the 16 amendments from `docs/COUNCIL_FINDINGS.md`.
+3.5 · Update `PRD.md` → v1.1 applying the 16 amendments from the internal council findings log (not published).
 3.6 · `verify` skill: drive the CLI through the §19 success criteria checklist; document each as a manual-verified line item.
 3.7 · `superpowers:verification-before-completion` final gate.
 
@@ -277,7 +277,7 @@ git worktree add ../youwontdoit-track-c feat/track-c-oracle-library
 
 ## Named council fire points
 
-Every track below has a council fire point declared up-front. These are not optional; they are how the build maintains the coherence established in `docs/COUNCIL_FINDINGS.md`.
+Every track below has a council fire point declared up-front. These are not optional; they are how the build maintains the coherence established in the internal council findings log (not published).
 
 | When | Template | Seats | Why |
 |---|---|---|---|
@@ -288,7 +288,7 @@ Every track below has a council fire point declared up-front. These are not opti
 | Pre-merge for any PR touching `migrations/` | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Schema changes can silently break the append-only invariant; gate at PR time |
 | Pre-v0.1 tag | Pre-tag launch council | All 9 seats | Last-look before public-facing release; full coverage |
 
-Each fire produces findings that synthesize into a `COUNCIL_FINDINGS.md` appendix. Phase progression GATES on council disposition: a track with a BLOCKER finding does not start until the BLOCKER is resolved or explicitly downgraded with documented rationale.
+Each fire produces findings that synthesize into an internal council-findings appendix (not published). Phase progression GATES on council disposition: a track with a BLOCKER finding does not start until the BLOCKER is resolved or explicitly downgraded with documented rationale.
 
 ## Cross-cutting invariants (every track honors)
 

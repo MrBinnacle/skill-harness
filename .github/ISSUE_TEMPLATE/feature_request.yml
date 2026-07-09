@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before filing, please skim `PRD.md` § 18 (CLI surface), `PLAN.md` (build tracks), and `docs/COUNCIL_FINDINGS.md` (D-deferred items). Many "missing features" are explicitly deferred to v0.2 or beyond — those don't need new issues.
+        Before filing, please skim `docs/PRD.md` § 18 (CLI surface), `docs/PLAN.md` (build tracks), and the "Out of scope for v0.1" section of `docs/PLAN.md`. Many "missing features" are explicitly deferred to v0.2 or beyond — those don't need new issues.
 
   - type: textarea
     id: problem
@@ -36,8 +36,8 @@ body:
       label: Scope
       options:
         - Inside PRD v1.0 scope (clarification / refinement)
-        - Inside PLAN.md track scope (build work)
-        - Inside COUNCIL_FINDINGS D-deferred items (post-v0.1)
+        - Inside docs/PLAN.md track scope (build work)
+        - Explicitly deferred past v0.1 (docs/PLAN.md “Out of scope”)
         - Outside current scope (extension proposal)
     validations:
       required: true
@@ -56,7 +56,7 @@ body:
     attributes:
       label: Pre-flight
       options:
-        - label: I have read PRD.md, PLAN.md, and CLAUDE.md
+        - label: I have read docs/PRD.md and docs/PLAN.md
           required: true
-        - label: This is not already covered by an existing PLAN.md track
+        - label: This is not already covered by an existing docs/PLAN.md track
           required: true
