@@ -21,6 +21,7 @@ from skill_harness.aggregation import aggregate_skill
 from skill_harness.extractor import (
     ExtractionError,
     ExtractionResult,
+    MalformedSkillError,
     extract_skill,
 )
 from skill_harness.storage.context import StorageContext
@@ -172,6 +173,68 @@ Tier-2: human-calibrated judge; Tier-3: real-world consequence.
   vacuity_flag — none: clause is testable; \
 mechanical_vacuous: no metric exists for this axis; \
 semantic_vacuous_pending_review: extractor judged clause un-falsifiable."""
+
+
+@skill.command("audit")
+@click.argument("path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--strict",
+    is_flag=True,
+    default=False,
+    help="Exit 1 if any warning is found (for CI gates).",
+)
+@click.pass_context
+def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
+    """Offline preflight of a skill artifact — no API key, no DB, no cost.
+
+    Structural lint against Anthropic's published authoring spec, plus an
+    evaluability preflight: which axes a paid evaluation could mechanically
+    measure today, and which claims would honestly come back UNMEASURED.
+    """
+    from skill_harness.preflight import audit_skill_artifact
+
+    try:
+        report = audit_skill_artifact(path)
+    except MalformedSkillError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    _console.print("\n[bold]OFFLINE AUDIT[/] — no API calls, no cost")
+    _console.print(f"  skill:  [bold]{report.name}[/]")
+    _console.print(f"  source: {report.source_path}")
+    _console.print(f"  sha256: {report.source_sha256[:16]}…")
+    _console.print(
+        f"  body:   {report.body_lines} lines / {report.body_words} words · "
+        f"frontmatter keys: {', '.join(report.frontmatter_keys) or '(none)'}"
+    )
+
+    table = Table(title="Structure (Anthropic authoring spec)", show_lines=False)
+    table.add_column("Level", width=6)
+    table.add_column("Check", style="cyan", min_width=18)
+    table.add_column("Finding", min_width=40)
+    level_style = {"pass": "[green]PASS[/]", "warn": "[yellow]WARN[/]", "info": "[dim]INFO[/]"}
+    for finding in report.findings:
+        table.add_row(level_style[finding.level], finding.code, finding.message)
+    _console.print(table)
+
+    _console.print("[bold]Evaluability preflight[/] — what a paid run could measure today:")
+    _console.print(
+        f"  Tier-1 mechanical axes: [cyan]{', '.join(report.measurable_axes)}[/] "
+        "(style-shaped only)."
+    )
+    _console.print(
+        "  Behavior-shaped claims (correctness, tool use, outcomes): no mechanical"
+        " instrument in v0.1 → verdict would be [bold]UNMEASURED[/], not an estimate."
+    )
+    _console.print(
+        "  Judge-graded axes: require a calibrated (judge, axis) pair — none exists"
+        " in a fresh install → UNMEASURED until you run `calibrate`."
+    )
+    _console.print(
+        f"\nSummary: {report.pass_count} pass · {report.warn_count} warn — "
+        "UNMEASURED is a verdict, not a failure (docs/concepts/why-unmeasured.md)."
+    )
+    if strict and report.warn_count > 0:
+        ctx.exit(1)
 
 
 @skill.command("clauses")
