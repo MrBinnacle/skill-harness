@@ -28,14 +28,15 @@ The script sets `PYTHONUTF8=1` and `PYTHONHASHSEED=0` before running. See
 
 ## API-key requirements (honest)
 
-`skill init` calls the Claude API and **currently requires `ANTHROPIC_API_KEY`** — the
-extractor has no OpenRouter fallback yet (v0.2 backlog). The reproduction script will
-exit with a helpful error if the key is missing.
+Both API surfaces accept EITHER `ANTHROPIC_API_KEY` (direct Anthropic) OR
+`OPENROUTER_API_KEY` (auto-routed via OpenRouter's Anthropic-compatible endpoint):
 
-`run ablation --execute` (called by this script) accepts either `ANTHROPIC_API_KEY`
-(direct) or `OPENROUTER_API_KEY` (auto-routed). Pass `-SubjectModel` to vary the
-model id; see the script's `--help` for the matrix.
+- `skill init` — the extractor's OpenRouter fallback landed on `main` 2026-06-09
+  (`b5b9fe6`). It is NOT in the `v0.1.0` tag; reproduce against `main`.
+- `run ablation --execute` — accepts either key (OpenRouter routing emits a stderr
+  warning). Pass `-SubjectModel` to vary the model id; see the script's `--help`
+  for the matrix.
 
-If you are on Claude Code subscription auth without a direct Anthropic key, the
-`skill init` step is currently a hard wall. See the case study's HALT 2 narrative for
-the full context (the case study's own author hit this same asymmetry).
+The reproduction script exits with a helpful error if neither key is present. The
+case study's HALT 2 narrative records the author hitting the pre-fallback asymmetry
+in real time — historical context, no longer a wall on `main`.
