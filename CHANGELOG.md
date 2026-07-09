@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- v0.2 subject layer (`skill_harness.subject`, optional `[inspect]` extra):
+  `HarnessPin.capture()` — the subject-harness configuration captured from the live
+  environment as an admissibility field (refuses `version="auto"`), and
+  `build_paired_tasks()` — the Full-vs-Null contrast as two Inspect tasks identical
+  except for the skill under test (`inspect_swe.claude_code(skills=…)`), with
+  `file_contains` / `command_succeeds` outcome oracles resolved against the agent's
+  pinned cwd. Supply-chain review: `docs/supply-chain/inspect-audit-2026-07-09.md`.
 - `skill-harness skill audit <SKILL.md>` — fully offline preflight (no API key, no DB,
   no cost): structural lint against Anthropic's published authoring spec plus an
   evaluability report stating which axes a paid run could mechanically measure and

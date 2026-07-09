@@ -43,6 +43,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Agentic subject layer (v0.2): Inspect runs the sandboxed Claude Code subject;
+# skill-harness keeps pairing/admissibility/evidence. Opt-in — the core package
+# (audit, evidence store, aggregation) has no agent-execution surface without it.
+# Supply-chain note: docs/supply-chain/inspect-audit-2026-07-09.md.
+inspect = [
+  "inspect-ai>=0.3.245",
+  "inspect-swe>=0.2.65",
+]
 dev = [
   "pytest>=7.4",
   "pytest-cov>=4.1",
@@ -131,4 +139,10 @@ disable_error_code = ["attr-defined", "arg-type", "comparison-overlap", "no-any-
 # statsmodels ships no py.typed marker or stubs; ignore missing imports (C.4 length regression)
 [[tool.mypy.overrides]]
 module = ["statsmodels", "statsmodels.*"]
+ignore_missing_imports = true
+
+# inspect_ai / inspect_swe are the OPTIONAL [inspect] extra (agentic subject layer);
+# not installed in the default dev/CI environment, imports are lazy behind a typed error.
+[[tool.mypy.overrides]]
+module = ["inspect_ai", "inspect_ai.*", "inspect_swe", "inspect_swe.*"]
 ignore_missing_imports = true
