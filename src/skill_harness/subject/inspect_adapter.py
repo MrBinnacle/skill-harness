@@ -8,12 +8,19 @@ Design constraints (all load-bearing, all POC-established 2026-07-09):
   answers "does adding this skill to a normal setup change outcomes."
 - The agent's working directory is pinned explicitly and outcome oracles
   resolve paths against it — the sandbox default cwd differs from the agent's.
+- The sandbox image is ENFORCED, not merely recorded: both arms run a
+  generated compose file whose image is the pin's digest reference (Inspect's
+  own default compose uses the floating tag "aisiuk/inspect-tool-support",
+  which can drift under an unchanged config). ``env`` and
+  ``disallowed_tools`` likewise flow from the SAME pin into both arms.
 - ``inspect_ai`` / ``inspect_swe`` are an OPTIONAL extra: imports are lazy so
   the core package (audit, evidence store, aggregation) works without them.
 """
 
 from __future__ import annotations
 
+import hashlib
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -29,9 +36,50 @@ _INSTALL_HINT = (
 Condition = Literal["full", "null"]
 AGENT_CWD = "/root"  # inspect_swe claude_code default; oracles resolve against this
 
+# Mirrors inspect_ai's auto-generated COMPOSE_GENERIC_YAML exactly, except the
+# image is the pin's digest reference instead of the floating default tag.
+_PINNED_COMPOSE_YAML = """# skill-harness pinned compose (generated from the harness pin)
+# Mirrors inspect_ai's auto-compose; image is digest-pinned for admissibility.
+services:
+  default:
+    image: "{image}"
+    command: "tail -f /dev/null"
+    init: true
+    network_mode: none
+    stop_grace_period: 1s
+"""
+
 
 class SubjectLayerNotInstalledError(RuntimeError):
     """Raised when inspect_ai/inspect_swe are missing (optional extra)."""
+
+
+def write_pinned_compose(pin: HarnessPin, compose_dir: Path | None = None) -> Path:
+    """Write the digest-pinned compose file for ``pin`` and return its path.
+
+    Content is a pure function of the pin's ``sandbox_image``, so the file
+    name carries a content hash and rewrites are idempotent. Pure stdlib —
+    testable without the optional extra.
+
+    :raises ValueError: ``pin.sandbox`` is not "docker" (compose injection is
+        a docker mechanism; other sandbox types have no pinned path yet) or
+        ``pin.sandbox_image`` is not a digest reference.
+    """
+    if pin.sandbox != "docker":
+        raise ValueError(
+            f"sandbox {pin.sandbox!r} has no pinned-image mechanism; only 'docker' is supported"
+        )
+    if "@sha256:" not in pin.sandbox_image:
+        raise ValueError(
+            f"sandbox_image {pin.sandbox_image!r} is not digest-pinned; "
+            "capture the pin via HarnessPin.capture()"
+        )
+    directory = compose_dir if compose_dir is not None else Path(tempfile.gettempdir())
+    content = _PINNED_COMPOSE_YAML.format(image=pin.sandbox_image)
+    name_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
+    path = directory / f"skill-harness-compose-{name_hash}.yaml"
+    path.write_text(content, encoding="utf-8")
+    return path
 
 
 def build_paired_tasks(
@@ -42,6 +90,8 @@ def build_paired_tasks(
     oracle_arg: str,
     oracle_target: str = "",
     pin: HarnessPin,
+    epochs: int = 1,
+    compose_dir: Path | None = None,
 ) -> dict[Condition, Task]:
     """Return {'full': Task, 'null': Task} differing ONLY by the skill.
 
@@ -53,10 +103,17 @@ def build_paired_tasks(
         ``command_succeeds`` — run ``oracle_arg`` in the sandbox at the agent
         cwd and pass iff exit code 0 (the tests-pass oracle shape).
     :param pin: harness pin; ``pin.cwd`` is passed to the agent so oracle
-        paths and agent paths agree. The SAME pin object builds both arms —
-        cross-arm pin equality holds by construction.
+        paths and agent paths agree, ``pin.sandbox_image`` is injected into
+        both arms via a generated compose file, and ``pin.env`` /
+        ``pin.disallowed_tools`` flow into both agents. The SAME pin object
+        builds both arms — cross-arm pin equality holds by construction.
+    :param epochs: paired repeats per arm (one .eval log per arm carries all
+        epochs; the ingest write path pairs verdicts by epoch).
+    :param compose_dir: where the pinned compose file is written (defaults to
+        the system temp dir; the file must outlive the eval() call).
     :raises SubjectLayerNotInstalledError: optional extra not installed.
     :raises FileNotFoundError: ``skill_dir`` has no SKILL.md.
+    :raises ValueError: pin not digest-pinned or sandbox type unsupported.
     """
     try:
         from inspect_ai import Task
@@ -68,6 +125,7 @@ def build_paired_tasks(
     if not (skill_dir / "SKILL.md").is_file():
         raise FileNotFoundError(f"no SKILL.md in skill_dir: {skill_dir}")
 
+    compose_path = write_pinned_compose(pin, compose_dir)
     scorer = _build_scorer(oracle, oracle_arg, oracle_target, pin.cwd)
 
     def make_task(condition: Condition) -> Task:
@@ -76,6 +134,8 @@ def build_paired_tasks(
             model=pin.model,
             version=pin.agent_version,
             cwd=pin.cwd,
+            env=dict(pin.env) if pin.env else None,
+            disallowed_tools=list(pin.disallowed_tools) if pin.disallowed_tools else None,
         )
         return Task(
             dataset=[
@@ -92,7 +152,8 @@ def build_paired_tasks(
             ],
             solver=agent,
             scorer=scorer,
-            sandbox=pin.sandbox,
+            sandbox=(pin.sandbox, str(compose_path)),
+            epochs=epochs,
             name=f"{skill_dir.name}-{condition}",
         )
 

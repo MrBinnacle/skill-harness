@@ -18,12 +18,18 @@ from skill_harness.subject.pin import HarnessPin
 INSPECT_INSTALLED = find_spec("inspect_ai") is not None
 
 
-def make_pin(**overrides: str) -> HarnessPin:
-    kwargs: dict[str, str] = {
+# Digest-pinned reference: capture() accepts it as-is (content-addressed),
+# so no Docker daemon is needed in the dev/CI environment.
+PINNED_IMAGE = "aisiuk/inspect-tool-support@sha256:" + "a" * 64
+
+
+def make_pin(**overrides: object) -> HarnessPin:
+    kwargs: dict[str, object] = {
         "agent_version": "2.1.197",
         "model": "openrouter/anthropic/claude-haiku-4.5",
         "sandbox": "docker",
         "cwd": "/root",
+        "sandbox_image": PINNED_IMAGE,
     }
     kwargs.update(overrides)
     return HarnessPin.capture(**kwargs)  # type: ignore[arg-type]
@@ -58,6 +64,93 @@ def test_pin_is_frozen() -> None:
     pin = make_pin()
     with pytest.raises(ValidationError):
         pin.model = "other"  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# HarnessPin — sandbox image / env / disallowed_tools (pre-reg pin row)
+# ---------------------------------------------------------------------------
+
+
+def test_capture_accepts_digest_reference_without_docker() -> None:
+    # content-addressed reference — no daemon consulted, used verbatim
+    assert make_pin().sandbox_image == PINNED_IMAGE
+
+
+def test_capture_refuses_unresolvable_floating_tag(monkeypatch: pytest.MonkeyPatch) -> None:
+    import skill_harness.subject.pin as pin_mod
+
+    def no_daemon(cmd: list[str], *, timeout: int) -> object:
+        raise ValueError("docker unavailable while resolving the sandbox image")
+
+    monkeypatch.setattr(pin_mod, "_run_docker", no_daemon)
+    with pytest.raises(ValueError, match="docker unavailable"):
+        make_pin(sandbox_image="aisiuk/inspect-tool-support")
+
+
+def test_capture_resolves_floating_tag_via_docker(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    import skill_harness.subject.pin as pin_mod
+
+    def fake_docker(cmd: list[str], *, timeout: int) -> subprocess.CompletedProcess[str]:
+        assert cmd[:3] == ["docker", "image", "inspect"]
+        return subprocess.CompletedProcess(cmd, 0, stdout=PINNED_IMAGE + "\n", stderr="")
+
+    monkeypatch.setattr(pin_mod, "_run_docker", fake_docker)
+    pin = make_pin(sandbox_image="aisiuk/inspect-tool-support")
+    assert pin.sandbox_image == PINNED_IMAGE
+
+
+def test_disallowed_tools_sorted_for_canonical_fingerprint() -> None:
+    a = make_pin(disallowed_tools=("WebSearch", "Bash"))
+    b = make_pin(disallowed_tools=("Bash", "WebSearch"))
+    assert a.disallowed_tools == ("Bash", "WebSearch")
+    assert a.fingerprint() == b.fingerprint()
+
+
+def test_env_and_disallowed_tools_discriminate_fingerprints() -> None:
+    base = make_pin()
+    assert make_pin(env={"FOO": "1"}).fingerprint() != base.fingerprint()
+    assert make_pin(disallowed_tools=("Bash",)).fingerprint() != base.fingerprint()
+    assert make_pin(sandbox_image=PINNED_IMAGE.replace("a" * 64, "b" * 64)).fingerprint() != (
+        base.fingerprint()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pinned compose generation (pure — no extra required)
+# ---------------------------------------------------------------------------
+
+
+def test_write_pinned_compose_injects_digest_and_mirrors_generic(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    path = write_pinned_compose(make_pin(), compose_dir=tmp_path)
+    content = path.read_text(encoding="utf-8")
+    assert f'image: "{PINNED_IMAGE}"' in content
+    # mirror inspect_ai's generic compose knobs exactly
+    for line in ('command: "tail -f /dev/null"', "init: true", "network_mode: none"):
+        assert line in content
+    # content-hashed name → rewrites are idempotent
+    assert path == write_pinned_compose(make_pin(), compose_dir=tmp_path)
+
+
+def test_write_pinned_compose_refuses_unpinned_or_nondocker(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    with pytest.raises(ValueError, match="only 'docker'"):
+        write_pinned_compose(make_pin(sandbox="local"), compose_dir=tmp_path)
+    unpinned = HarnessPin(
+        inspect_ai_version="x",
+        inspect_swe_version="x",
+        agent_version="2.1.197",
+        model="m",
+        sandbox="docker",
+        sandbox_image="aisiuk/inspect-tool-support",  # floating tag
+        cwd="/root",
+    )
+    with pytest.raises(ValueError, match="not digest-pinned"):
+        write_pinned_compose(unpinned, compose_dir=tmp_path)
 
 
 # ---------------------------------------------------------------------------
