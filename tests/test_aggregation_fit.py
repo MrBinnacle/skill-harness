@@ -217,7 +217,7 @@ class TestFitSkillEbmom:
         """Clause with w/n=0.9 across K=10 clauses should have high p_exceeds."""
         # All clauses identical → no variance → would fall to BH-FDR
         # Mix rates so EB-MoM converges; one clause at high rate
-        pairs: list[tuple[float, int]] = [(5, 10)] * 9 + [(9, 10)]
+        pairs: list[tuple[float, int]] = [(5.0, 10)] * 9 + [(9.0, 10)]
         clauses = make_clauses(pairs)
         result = fit_skill(clauses)
         # The high-rate clause should have p_win_gt_threshold > 0

@@ -32,7 +32,7 @@ from skill_harness.cli.main import _resolve_subject_model_with_fallback, cli
 
 def _invoke(*args: str, env: dict[str, str] | None = None) -> object:
     """Invoke CLI with given args; COLUMNS=200 for rich-table width."""
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()  # click >=8.2: stderr is separate by default; mix_stderr removed
     merged_env: dict[str, str] = {"COLUMNS": "200"}
     if env is not None:
         merged_env.update(env)

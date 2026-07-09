@@ -10,6 +10,20 @@ import pytest
 from skill_harness.extractor.claude import call_extract_clauses
 from skill_harness.extractor.errors import ExtractorClaudeError
 
+
+@pytest.fixture(autouse=True)
+def _dummy_anthropic_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the direct-Anthropic auth path regardless of host environment.
+
+    These are mocked-SDK unit tests, but ``_make_extractor_client`` resolves auth
+    from env BEFORE the mocked client is constructed — with no key (CI) every test
+    raised ExtractorClaudeError; with a real OPENROUTER_API_KEY (a dev machine) the
+    fallback path would silently swap the model id under test.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-dummy-key")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+
 # ---------------------------------------------------------------------------
 # Helpers to build fake Anthropic response objects
 # ---------------------------------------------------------------------------
