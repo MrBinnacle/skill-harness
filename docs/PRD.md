@@ -780,7 +780,7 @@ Cross-DB FKs enforced at application layer; never via SQL.
 
 **Cost ledger:** `runtime.cost_ledger` records per-call token + USD spend; `runtime.run_budget` records per-run cap. Three-layer cost cap: (a) `run ablation` / `run evaluate-skill` / `calibrate` default to dry-run; `--execute` required; (b) per-run `--max-usd <X>` (default $5); (c) per-day rolling `--daily-cap <X>` (default $20).
 
-**Schema migration discipline:** numbered SQL files in `migrations/{evidence,runtime}/`. Each application records `(migration_id, file_sha256)` in append-only `schema_migrations`. On startup, file-SHA mismatch against recorded SHA aborts with `MigrationTamperedError`.
+**Schema migration discipline:** numbered SQL files in `src/skill_harness/storage/migrations_sql/{evidence,runtime}/` (shipped as package data). Each application records `(migration_id, file_sha256)` in append-only `schema_migrations`. On startup, file-SHA mismatch against recorded SHA aborts with `MigrationTamperedError`.
 
 Per-track migration number ranges:
 

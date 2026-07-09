@@ -8,9 +8,9 @@
 # load-bearing invariants should be discussed in an issue first.
 /docs/PRD.md                     @MrBinnacle
 /docs/PLAN.md                    @MrBinnacle
-/migrations/                     @MrBinnacle
+/src/skill_harness/storage/migrations_sql/  @MrBinnacle
 
 # Storage / migrations gate — SCHEMA + SECURITY seat sign-off per A30 + dev-team-council
-migrations/*    @MrBinnacle
+src/skill_harness/storage/migrations_sql/*    @MrBinnacle
 /.github/                        @MrBinnacle
 /SECURITY.md                     @MrBinnacle

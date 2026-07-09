@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `skill-harness skill audit <SKILL.md>` — fully offline preflight (no API key, no DB,
+  no cost): structural lint against Anthropic's published authoring spec plus an
+  evaluability report stating which axes a paid run could mechanically measure and
+  which claims would return UNMEASURED. `--strict` exits 1 on warnings for CI.
+
+### Fixed
+- **Installed copies of v0.1 were broken** (worked only from a source checkout);
+  caught by a fresh-venv install test:
+  - `hedge_index` loaded its wordlist from `tests/…` (not shipped in the wheel) —
+    now package data at `src/skill_harness/oracles/tier1/fixtures/`.
+  - SQL migrations resolved from the repo root — now package data at
+    `src/skill_harness/storage/migrations_sql/`; installed copies can bootstrap DBs.
+  - `tiktoken` and `statsmodels` were imported at runtime but declared only in dev
+    extras — now runtime dependencies.
+- `examples/README.md` still claimed the extractor had no OpenRouter fallback
+  (stale since `b5b9fe6`).
+- Repaired all references left dangling by the 2026-07-08 privacy scrub
+  (COUNCIL_FINDINGS.md, root CLAUDE.md) across CONTRIBUTING, CODEOWNERS, PR/issue
+  templates, CHANGELOG, PRD, PLAN, release notes, and the case study.
+
+### Changed
+- README rewritten for its actual audience (Claude Code users with a skills folder):
+  value proposition first, two-command keyless quickstart, honest pre-alpha status,
+  fact-checked comparison table (skill-eval-harness, promptfoo, Inspect).
+- `PRD.md`, `PLAN.md`, `RELEASE-NOTES-v0.1.md` moved under `docs/`.
+- `docs/findings/v0.2-reaim-gate.md` amended after the 2026-07-09 competitive sweep:
+  adds "Harness pin" and "Differentiation vs field" pre-registration fields and a
+  correction block recording that the original lock predated the sweep.
+
 ## [0.1.0] — Released 2026-06-08
 
 v0.1 delivers a complete deterministic evaluation framework for clause-level
