@@ -16,6 +16,8 @@ Columns (from migrations/evidence/0001_initial.sql + 0300_track_d_ablation.sql):
     cache_creation_input_tokens INTEGER DEFAULT NULL
     output_tokens               INTEGER DEFAULT NULL
     usd                         REAL DEFAULT NULL
+    harness_pin_json            TEXT DEFAULT NULL            (0500 v0.2 subject pin)
+    harness_pin_fingerprint     TEXT DEFAULT NULL            (0500 v0.2 subject pin)
 """
 
 from __future__ import annotations
@@ -27,15 +29,16 @@ from skill_harness.storage.models import SampleWrite
 
 
 def insert_sample(conn: sqlite3.Connection, sample: SampleWrite) -> None:
-    """Insert a new sample row (including A40 sample_index + A41 cost columns)."""
+    """Insert a new sample row (A40 sample_index + A41 cost + 0500 pin columns)."""
     conn.execute(
         """
         INSERT INTO samples (
             sample_id, run_id, clause_id, condition,
             subject_model, subject_seed, output_text, output_sha256, sampled_at,
             sample_index, input_tokens, cache_read_input_tokens,
-            cache_creation_input_tokens, output_tokens, usd
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            cache_creation_input_tokens, output_tokens, usd,
+            harness_pin_json, harness_pin_fingerprint
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             sample.sample_id,
@@ -53,6 +56,8 @@ def insert_sample(conn: sqlite3.Connection, sample: SampleWrite) -> None:
             sample.cache_creation_input_tokens,
             sample.output_tokens,
             sample.usd,
+            sample.harness_pin_json,
+            sample.harness_pin_fingerprint,
         ),
     )
 

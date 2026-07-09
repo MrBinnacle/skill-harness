@@ -273,6 +273,12 @@ class SampleWrite(BaseModel):
     - Per-call cost columns (A41): ``input_tokens``, ``cache_read_input_tokens``,
       ``cache_creation_input_tokens``, ``output_tokens``, ``usd``. All optional
       (None for non-API-generating rows and pre-migration rows).
+
+    Migration 0500 (v0.2 subject layer) added:
+    - ``harness_pin_json`` / ``harness_pin_fingerprint`` — the subject-harness
+      configuration recorded per trial (pre-reg "Harness pin" row). None for
+      non-agentic rows; cross-arm fingerprint equality is checked at write time
+      by ``skill_harness.subject.ingest``.
     """
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
@@ -297,6 +303,10 @@ class SampleWrite(BaseModel):
     output_tokens: int | None = None
     usd: float | None = None
 
+    # v0.2 — harness-pin fields (migration 0500); None for non-agentic rows
+    harness_pin_json: str | None = None
+    harness_pin_fingerprint: str | None = None
+
     @field_validator(
         "sample_id",
         "run_id",
@@ -311,11 +321,11 @@ class SampleWrite(BaseModel):
         field_name = getattr(info, "field_name", "field") if info else "field"
         return _check_text(v, field_name)
 
-    @field_validator("subject_seed", mode="before")
+    @field_validator("subject_seed", "harness_pin_json", "harness_pin_fingerprint", mode="before")
     @classmethod
-    def no_control_chars_optional(cls, v: object) -> object:
+    def no_control_chars_optional(cls, v: object, info: ValidationInfo) -> object:
         if isinstance(v, str):
-            return _check_text(v, "subject_seed")
+            return _check_text(v, info.field_name or "field")
         return v
 
     @field_validator("output_text")
