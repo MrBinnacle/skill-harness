@@ -177,3 +177,37 @@ def test_build_paired_tasks_raises_typed_error_without_extra(tmp_path) -> None: 
             oracle_target="ok",
             pin=make_pin(),
         )
+
+
+# ---------------------------------------------------------------------------
+# files_as_data_uris (pure stdlib — the sandbox-files delivery guard)
+# ---------------------------------------------------------------------------
+
+
+def test_files_as_data_uris_round_trips_contents() -> None:
+    import base64
+
+    from skill_harness.subject.inspect_adapter import files_as_data_uris
+
+    files = {"/root/repo/a.py": "print('hi')\n", "/root/repo/pkg/__init__.py": ""}
+    encoded = files_as_data_uris(files)
+
+    assert set(encoded) == set(files)
+    for dest, uri in encoded.items():
+        prefix = "data:text/plain;base64,"
+        assert uri.startswith(prefix)
+        assert base64.b64decode(uri[len(prefix) :]).decode("utf-8") == files[dest]
+
+
+def test_files_as_data_uris_empty_string_never_resolves_as_a_path() -> None:
+    # Regression: Inspect resolves Sample.files values against the local
+    # filesystem first; a raw "" names the cwd and pulls the entire working
+    # directory into the sandbox. The encoded form must not be a valid path.
+    from pathlib import Path
+
+    from skill_harness.subject.inspect_adapter import files_as_data_uris
+
+    encoded = files_as_data_uris({"/root/repo/pkg/__init__.py": ""})
+    (uri,) = encoded.values()
+    assert uri == "data:text/plain;base64,"
+    assert not Path(uri).exists()

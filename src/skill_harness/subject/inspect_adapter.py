@@ -19,6 +19,7 @@ Design constraints (all load-bearing, all POC-established 2026-07-09):
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import tempfile
 from pathlib import Path
@@ -52,6 +53,24 @@ services:
 
 class SubjectLayerNotInstalledError(RuntimeError):
     """Raised when inspect_ai/inspect_swe are missing (optional extra)."""
+
+
+def files_as_data_uris(files: dict[str, str]) -> dict[str, str]:
+    """Encode sample-file contents as data URIs for verbatim delivery.
+
+    Inspect resolves each ``Sample.files`` VALUE against the local
+    filesystem first: a value naming an existing directory is copied
+    recursively (an EMPTY STRING resolves to the cwd and pulls the whole
+    working directory into the sandbox), a value naming an existing file is
+    replaced by that file's bytes, and inline text is only the fallback
+    (``inspect_ai._eval.task.sandbox.resolve_sample_files``). Data URIs
+    short-circuit that resolution, so contents arrive verbatim by
+    construction. Pure stdlib — testable without the optional extra.
+    """
+    return {
+        dest: "data:text/plain;base64," + base64.b64encode(content.encode("utf-8")).decode("ascii")
+        for dest, content in files.items()
+    }
 
 
 def write_pinned_compose(pin: HarnessPin, compose_dir: Path | None = None) -> Path:
@@ -114,7 +133,10 @@ def build_paired_tasks(
         the system temp dir; the file must outlive the eval() call).
     :param files: sandbox files materialized before the agent runs (Inspect
         ``Sample.files``: destination path → contents), e.g. a fixture repo
-        the task operates on. The SAME mapping goes to both arms.
+        the task operates on. Contents are data-URI-encoded before reaching
+        Inspect so they are delivered verbatim (see ``files_as_data_uris``
+        for the path-resolution footgun this defends against). The SAME
+        mapping goes to both arms.
     :raises SubjectLayerNotInstalledError: optional extra not installed.
     :raises FileNotFoundError: ``skill_dir`` has no SKILL.md.
     :raises ValueError: pin not digest-pinned or sandbox type unsupported.
@@ -146,7 +168,7 @@ def build_paired_tasks(
                 Sample(
                     input=prompt,
                     target=oracle_target or oracle_arg,
-                    files=dict(files) if files else None,
+                    files=files_as_data_uris(files) if files else None,
                     metadata={
                         "condition": condition,
                         "skill": skill_dir.name,
