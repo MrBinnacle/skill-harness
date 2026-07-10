@@ -14,15 +14,19 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import pytest
+
+if TYPE_CHECKING:
+    from skill_harness.oracles.calibration.jsonl_parser import CalibrationPair
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _write_jsonl(pairs: list[dict], path: Path) -> None:
+def _write_jsonl(pairs: list[dict[str, Any]], path: Path) -> None:
     """Write a list of pair dicts as JSONL to path."""
     with path.open("w", encoding="utf-8") as fh:
         for p in pairs:
@@ -33,7 +37,7 @@ def _valid_pair(
     pair_id: str = "p1",
     axis: str = "citation_support",
     human_preference: str = "A",
-) -> dict:
+) -> dict[str, Any]:
     return {
         "pair_id": pair_id,
         "axis": axis,
@@ -90,7 +94,7 @@ def test_parse_pair_set_rejects_wrong_type_for_pair_id(tmp_path: Path) -> None:
     from skill_harness.oracles.calibration.jsonl_parser import parse_pair_set
 
     p = _valid_pair()
-    p["pair_id"] = 42  # type: ignore[assignment]
+    p["pair_id"] = 42
     path = tmp_path / "pairs.jsonl"
     _write_jsonl([p], path)
     with pytest.raises(ValueError):
@@ -229,7 +233,7 @@ def test_parse_pair_set_returns_all_three_preferences(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _parse_with_sha(path: Path):  # type: ignore[return]
+def _parse_with_sha(path: Path) -> tuple[list[CalibrationPair], str]:
     """Call parse_pair_set and return (pairs, pair_set_sha256)."""
     from skill_harness.oracles.calibration.jsonl_parser import (
         parse_pair_set,

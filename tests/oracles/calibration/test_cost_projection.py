@@ -140,7 +140,7 @@ class TestCostProjectionModel:
         """CostProjection is immutable (frozen Pydantic model)."""
         p = self._make_projection()
         with pytest.raises(Exception):
-            p.n_calls = 999  # type: ignore[misc]
+            p.n_calls = 999
 
 
 # ------------------------------------------------------------------

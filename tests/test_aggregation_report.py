@@ -166,7 +166,9 @@ class TestRequiredKeys:
             "subject_model",
             "user_message_sha256",
         }
-        for clause_dict in d["clauses"]:  # type: ignore[union-attr]
+        clauses = d["clauses"]
+        assert isinstance(clauses, list)
+        for clause_dict in clauses:
             missing = clause_keys - set(clause_dict.keys())
             assert not missing, f"Missing clause keys: {missing}"
 
@@ -183,7 +185,7 @@ class TestRequiredKeys:
         }
         vec = d["vector"]
         assert isinstance(vec, dict)
-        missing = vector_keys - set(vec.keys())  # type: ignore[union-attr]
+        missing = vector_keys - set(vec.keys())
         assert not missing
 
     def test_contribution_required_keys(self) -> None:
@@ -192,7 +194,7 @@ class TestRequiredKeys:
         contrib_keys = {"full_vs_null_delta", "label"}
         contrib = d["contribution"]
         assert isinstance(contrib, dict)
-        missing = contrib_keys - set(contrib.keys())  # type: ignore[union-attr]
+        missing = contrib_keys - set(contrib.keys())
         assert not missing
 
 
@@ -263,7 +265,7 @@ class TestSerialisationCorrectness:
         report = make_skill_report()
         d = to_json_dict(report)
         clause = d["clauses"][0]  # type: ignore[index]
-        ci = clause["credible_interval_95"]  # type: ignore[index]
+        ci = clause["credible_interval_95"]
         assert isinstance(ci, list)
         assert len(ci) == 2
 
@@ -271,7 +273,7 @@ class TestSerialisationCorrectness:
         report = make_skill_report()
         d = to_json_dict(report)
         clause = d["clauses"][0]  # type: ignore[index]
-        assert isinstance(clause["run_ids_aggregated"], list)  # type: ignore[index]
+        assert isinstance(clause["run_ids_aggregated"], list)
 
     def test_sub_reason_none_serialised(self) -> None:
         """PASSED clause with sub_reason=None → null in JSON."""
@@ -279,7 +281,7 @@ class TestSerialisationCorrectness:
         d = to_json_dict(report)
         clause = d["clauses"][0]  # type: ignore[index]
         assert clause["status"] == "PASSED"
-        assert clause["sub_reason"] is None  # type: ignore[index]
+        assert clause["sub_reason"] is None
 
     def test_unmeasured_with_sub_reason(self) -> None:
         """UNMEASURED clause with sub_reason → serialised correctly."""
@@ -291,8 +293,8 @@ class TestSerialisationCorrectness:
         report = make_skill_report(clause_reports=(cr,))
         d = to_json_dict(report)
         clause = d["clauses"][0]  # type: ignore[index]
-        assert clause["status"] == "UNMEASURED"  # type: ignore[index]
-        assert clause["sub_reason"] == "no_data"  # type: ignore[index]
+        assert clause["status"] == "UNMEASURED"
+        assert clause["sub_reason"] == "no_data"
 
     def test_full_vs_null_delta_none(self) -> None:
         """ContributionSummary with delta=None → null in JSON."""

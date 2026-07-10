@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -82,7 +83,7 @@ def _mock_response(
 def _make_runner(
     evidence_conn: sqlite3.Connection,
     runtime_conn: sqlite3.Connection,
-    response_factory: Any = None,
+    response_factory: Callable[[int], MagicMock] | None = None,
     null_floor: int = 2,
 ) -> tuple[AblationRunner, MagicMock]:
     """Create an AblationRunner with a mocked SDK client.
@@ -180,7 +181,7 @@ def _seed_clause(evidence_conn: sqlite3.Connection, clause: ClauseSpec) -> None:
 
 
 @pytest.fixture()
-def db_pair(tmp_path: Path):
+def db_pair(tmp_path: Path) -> Iterator[tuple[sqlite3.Connection, sqlite3.Connection]]:
     """Yield (evidence_conn, runtime_conn) pair."""
     ev = open_evidence(tmp_path / "evidence.db")
     rt = open_runtime(tmp_path / "runtime.db")
@@ -192,7 +193,9 @@ def db_pair(tmp_path: Path):
 
 
 @pytest.fixture()
-def seeded_db_pair(db_pair):
+def seeded_db_pair(
+    db_pair: tuple[sqlite3.Connection, sqlite3.Connection],
+) -> tuple[sqlite3.Connection, sqlite3.Connection]:
     """DB pair with skill row seeded."""
     ev, rt = db_pair
     _seed_skill(ev)
@@ -1522,7 +1525,7 @@ class TestC2ResumeReadsPersistedAdmissibility:
             # Track new API calls — should be 0 (all samples pre-seeded)
             new_calls = [0]
 
-            def _counting_factory(**kwargs):
+            def _counting_factory(**kwargs: Any) -> MagicMock:
                 new_calls[0] += 1
                 return _mock_response("word " * 10)
 
@@ -1729,7 +1732,7 @@ class TestI2BudgetGateZeroSpendResume:
         runner, mock_client = _make_runner(ev, rt, null_floor=2)
         new_calls = [0]
 
-        def _no_call_factory(**kwargs):
+        def _no_call_factory(**kwargs: Any) -> MagicMock:
             new_calls[0] += 1
             return _mock_response("word " * 10)
 

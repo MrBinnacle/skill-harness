@@ -882,9 +882,9 @@ class TestM2ResumeUserMessage:
         ev.close()
         rt.close()
 
-        captured_calls: list[dict] = []
+        captured_calls: list[dict[str, Any]] = []
 
-        def _fake_execute(**kwargs: Any) -> list:
+        def _fake_execute(**kwargs: Any) -> list[Any]:
             captured_calls.append(kwargs)
             return []
 

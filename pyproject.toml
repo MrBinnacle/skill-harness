@@ -123,19 +123,6 @@ disallow_untyped_defs = true
 no_implicit_optional = true
 files = ["src", "tests"]
 
-# Tests are a deliberately relaxed zone (src/ stays fully strict). mypy releases after
-# the June 2026 baseline surface ~123 new strict findings confined to tests/ (MagicMock
-# attr access, enum-literal comparisons, stale ignores). Relaxed here rather than pinning
-# the type-checker; restoring full test strictness is tracked as a repo issue.
-[[tool.mypy.overrides]]
-module = ["tests", "tests.*"]
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-disallow_untyped_calls = false
-disallow_any_generics = false
-warn_unused_ignores = false
-disable_error_code = ["attr-defined", "arg-type", "comparison-overlap", "no-any-return", "misc"]
-
 # statsmodels ships no py.typed marker or stubs; ignore missing imports (C.4 length regression)
 [[tool.mypy.overrides]]
 module = ["statsmodels", "statsmodels.*"]

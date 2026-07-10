@@ -63,7 +63,7 @@ def test_fingerprint_is_stable_and_discriminates() -> None:
 def test_pin_is_frozen() -> None:
     pin = make_pin()
     with pytest.raises(ValidationError):
-        pin.model = "other"  # type: ignore[misc]
+        pin.model = "other"
 
 
 # ---------------------------------------------------------------------------

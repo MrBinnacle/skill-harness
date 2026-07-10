@@ -61,7 +61,7 @@ def test_tier1_metric_is_frozen() -> None:
         tier=OracleTier.TIER1,
     )
     with pytest.raises(Exception):  # ValidationError or AttributeError depending on pydantic
-        m.name = "y"  # type: ignore[misc]
+        m.name = "y"
 
 
 def test_tier1_metric_rejects_nul_in_name() -> None:

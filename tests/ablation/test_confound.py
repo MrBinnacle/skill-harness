@@ -15,6 +15,7 @@ from __future__ import annotations
 from skill_harness.ablation.confound import (
     K_THRESHOLD,
     N_NULL_FLOOR,
+    MetricFn,
     NullAccumulator,
     check_operator_length_tolerance,
     delta_to_observation,
@@ -36,7 +37,7 @@ def _fake_char_count(text: str) -> float:
     return float(len(text))
 
 
-FAKE_SCORERS = {
+FAKE_SCORERS: dict[str, MetricFn] = {
     "word_count": _fake_word_count,
     "char_count": _fake_char_count,
 }

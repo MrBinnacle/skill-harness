@@ -19,12 +19,14 @@ computes both p_o and p_e from scratch. This test verifies that:
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
+
 # ---------------------------------------------------------------------------
 # Import helper
 # ---------------------------------------------------------------------------
 
 
-def _kappa():  # type: ignore[return]
+def _kappa() -> Callable[[Sequence[tuple[str, str]]], tuple[float, float]]:
     from skill_harness.oracles.calibration.command import (
         cohen_kappa_observed_marginals,
     )

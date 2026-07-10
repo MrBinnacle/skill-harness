@@ -26,7 +26,7 @@ def test_cli_object_exists() -> None:
     assert cli.name == "cli"
 
 
-def test_migration_discover_empty_dir(tmp_path) -> None:
+def test_migration_discover_empty_dir(tmp_path: Path) -> None:
     assert discover(tmp_path) == []
 
 

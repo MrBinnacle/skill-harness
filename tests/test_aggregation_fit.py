@@ -14,6 +14,7 @@ Coverage:
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Sequence
 
 import pytest
 from hypothesis import given, settings
@@ -36,7 +37,7 @@ from skill_harness.aggregation.fit import (
 # ---------------------------------------------------------------------------
 
 
-def make_clauses(wn_pairs: list[tuple[float, int]]) -> list[ClauseObservations]:
+def make_clauses(wn_pairs: Sequence[tuple[float, int]]) -> list[ClauseObservations]:
     return [ClauseObservations(clause_id=f"c{i}", w=w, n=n) for i, (w, n) in enumerate(wn_pairs)]
 
 

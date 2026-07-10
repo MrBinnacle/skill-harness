@@ -12,10 +12,13 @@ Tests never need live Anthropic credentials.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
+
+if TYPE_CHECKING:
+    from skill_harness.oracles.tier2.judge import JudgeClient
 
 # ---------------------------------------------------------------------------
 # Network block (A32 — no live calls during unit tests)
@@ -77,7 +80,7 @@ def mock_anthropic_client() -> MagicMock:
 
 
 @pytest.fixture
-def judge_client(mock_anthropic_client: MagicMock) -> Any:
+def judge_client(mock_anthropic_client: MagicMock) -> JudgeClient:
     """Return a JudgeClient with a mocked Anthropic client injected."""
     from skill_harness.oracles.tier2.judge import JudgeClient
 

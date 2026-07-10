@@ -125,7 +125,7 @@ def test_openai_subject_client_5xx_error_is_transient() -> None:
         response=mock_http_resp,
         body={"error": {"message": "Internal Server Error"}},
     )
-    err.status_code = 500  # type: ignore[attr-defined]
+    err.status_code = 500
     mock_openai_client.chat.completions.create.side_effect = err
 
     client = OpenAISubjectClient(client=mock_openai_client, model="gpt-5.5")
@@ -156,7 +156,7 @@ def test_openai_subject_client_4xx_error_is_permanent() -> None:
         response=mock_http_resp,
         body={"error": {"message": "Bad Request"}},
     )
-    err.status_code = 400  # type: ignore[attr-defined]
+    err.status_code = 400
     mock_openai_client.chat.completions.create.side_effect = err
 
     client = OpenAISubjectClient(client=mock_openai_client, model="gpt-5.5")
@@ -514,7 +514,7 @@ def test_openai_client_cost_fallback() -> None:
     # usage.cost field is ABSENT — getattr(usage, "cost", None) must return None.
     # MagicMock auto-creates attributes; explicitly configure to ensure
     # getattr returns None (not a MagicMock).
-    type(mock_resp.usage).cost = property(lambda self: None)  # type: ignore[misc]
+    type(mock_resp.usage).cost = property(lambda self: None)
 
     mock_openai_client = MagicMock()
     mock_openai_client.chat.completions.create.return_value = mock_resp

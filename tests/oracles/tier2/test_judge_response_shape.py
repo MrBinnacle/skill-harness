@@ -13,17 +13,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock
+
+if TYPE_CHECKING:
+    from skill_harness.oracles.tier2.judge import JudgeClient
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _get_create_kwargs(mock_client: MagicMock) -> dict:
+def _get_create_kwargs(mock_client: MagicMock) -> dict[str, Any]:
     """Extract keyword args from the first call to mock_client.messages.create."""
     assert mock_client.messages.create.called, "messages.create was not called"
-    return mock_client.messages.create.call_args[1]
+    return cast("dict[str, Any]", mock_client.messages.create.call_args[1])
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +36,7 @@ def _get_create_kwargs(mock_client: MagicMock) -> dict:
 
 
 def test_judge_uses_tool_choice_forced(
-    judge_client: object, mock_anthropic_client: MagicMock
+    judge_client: JudgeClient, mock_anthropic_client: MagicMock
 ) -> None:
     """tool_choice must force the report_verdict tool."""
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
@@ -40,14 +44,18 @@ def test_judge_uses_tool_choice_forced(
     assert kwargs["tool_choice"] == {"type": "tool", "name": "report_verdict"}
 
 
-def test_judge_uses_max_tokens_80(judge_client: object, mock_anthropic_client: MagicMock) -> None:
+def test_judge_uses_max_tokens_80(
+    judge_client: JudgeClient, mock_anthropic_client: MagicMock
+) -> None:
     """max_tokens must be 80 (A31)."""
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
     kwargs = _get_create_kwargs(mock_anthropic_client)
     assert kwargs["max_tokens"] == 80
 
 
-def test_judge_disables_thinking(judge_client: object, mock_anthropic_client: MagicMock) -> None:
+def test_judge_disables_thinking(
+    judge_client: JudgeClient, mock_anthropic_client: MagicMock
+) -> None:
     """thinking must be disabled (A31)."""
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
     kwargs = _get_create_kwargs(mock_anthropic_client)
@@ -55,7 +63,7 @@ def test_judge_disables_thinking(judge_client: object, mock_anthropic_client: Ma
 
 
 def test_judge_tool_schema_has_strict_true(
-    judge_client: object, mock_anthropic_client: MagicMock
+    judge_client: JudgeClient, mock_anthropic_client: MagicMock
 ) -> None:
     """Tool schema must have strict=True (A31)."""
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
@@ -67,7 +75,7 @@ def test_judge_tool_schema_has_strict_true(
 
 
 def test_judge_tool_schema_has_no_additional_properties(
-    judge_client: object, mock_anthropic_client: MagicMock
+    judge_client: JudgeClient, mock_anthropic_client: MagicMock
 ) -> None:
     """input_schema must have additionalProperties=False (A31)."""
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
@@ -78,7 +86,7 @@ def test_judge_tool_schema_has_no_additional_properties(
 
 
 def test_judge_tool_schema_choice_enum(
-    judge_client: object, mock_anthropic_client: MagicMock
+    judge_client: JudgeClient, mock_anthropic_client: MagicMock
 ) -> None:
     """choice must be an enum of exactly ['A', 'B', 'tie'] (A31)."""
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
@@ -90,7 +98,7 @@ def test_judge_tool_schema_choice_enum(
 
 
 def test_judge_tool_schema_rationale_brief_max_length(
-    judge_client: object, mock_anthropic_client: MagicMock
+    judge_client: JudgeClient, mock_anthropic_client: MagicMock
 ) -> None:
     """rationale_brief must have maxLength=500 (A31)."""
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
@@ -101,7 +109,7 @@ def test_judge_tool_schema_rationale_brief_max_length(
 
 
 def test_judge_tool_name_is_report_verdict(
-    judge_client: object, mock_anthropic_client: MagicMock
+    judge_client: JudgeClient, mock_anthropic_client: MagicMock
 ) -> None:
     """Tool name must be 'report_verdict' (A31)."""
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
@@ -111,7 +119,7 @@ def test_judge_tool_name_is_report_verdict(
 
 
 def test_judge_default_model_is_sonnet_4_6(
-    judge_client: object, mock_anthropic_client: MagicMock
+    judge_client: JudgeClient, mock_anthropic_client: MagicMock
 ) -> None:
     """Default model must be claude-sonnet-4-6 (CLAUDE.md model-pinning)."""
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")

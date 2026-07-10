@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from skill_harness.cli.main import cli
 
@@ -28,7 +28,7 @@ from skill_harness.cli.main import cli
 # ---------------------------------------------------------------------------
 
 
-def _invoke(*args: str, env: dict[str, str] | None = None) -> object:
+def _invoke(*args: str, env: dict[str, str] | None = None) -> Result:
     """Invoke the CLI with given args, optionally overriding env.
 
     Sets COLUMNS=200 so rich tables are rendered with full width (not truncated
@@ -220,7 +220,7 @@ class TestExitCodes:
 class TestUnmeasuredVsFailedRender:
     """UNMEASURED and FAILED must render with distinct visual labels (A48)."""
 
-    def _run_with_results(self, clause_results: list[MagicMock]) -> object:
+    def _run_with_results(self, clause_results: list[MagicMock]) -> Result:
         with patch(
             "skill_harness.cli.main._execute_ablation_run",
             return_value=clause_results,

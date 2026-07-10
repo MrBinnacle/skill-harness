@@ -151,7 +151,7 @@ class TestFrozenStrict:
             imported_at="2026-06-04T00:00:00.000Z",
         )
         with pytest.raises(Exception):
-            obj.name = "changed"  # type: ignore[misc]
+            obj.name = "changed"
 
     def test_skill_write_rejects_extra_fields(self) -> None:
         with pytest.raises(ValidationError):

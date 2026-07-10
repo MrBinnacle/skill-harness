@@ -14,6 +14,7 @@ Covers:
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -70,7 +71,7 @@ def _insert_metric_version(conn: sqlite3.Connection, metric_id: str = "verbosity
 
 
 @pytest.fixture()
-def ev(tmp_path: Path) -> sqlite3.Connection:
+def ev(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     """Fresh evidence DB with all migrations (including 0300) applied."""
     conn = open_evidence(tmp_path / "evidence.db")
     yield conn

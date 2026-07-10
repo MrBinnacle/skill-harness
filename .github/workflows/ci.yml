@@ -51,9 +51,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
       - name: mypy
-        # Scope mirrors local gate per CLAUDE.md ENV RECIPE; tests/ mypy hygiene
-        # is a documented carry-forward (119 errors, pre-existing baseline).
-        run: mypy --strict src/
+        # Full strict scope (src + tests) restored 2026-07-10 — repo issue #2
+        # burn-down; the tests/ override relaxation of 2026-07-09 is removed.
+        run: mypy --strict src/ tests/
 
   test:
     name: Test (${{ matrix.os }} · py${{ matrix.python-version }})

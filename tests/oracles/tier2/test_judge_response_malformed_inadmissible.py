@@ -8,9 +8,13 @@ Also tests: OracleAPIError raised on Anthropic SDK errors (pattern from Track B)
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
+
+if TYPE_CHECKING:
+    from skill_harness.oracles.tier2.judge import JudgeVerdict
 
 
 def _make_malformed_response(stop_reason: str = "end_turn") -> MagicMock:
@@ -24,7 +28,7 @@ def _make_malformed_response(stop_reason: str = "end_turn") -> MagicMock:
     return resp
 
 
-def _run_with_stop_reason(stop_reason: str) -> object:
+def _run_with_stop_reason(stop_reason: str) -> JudgeVerdict:
     """Run evaluate_pair where BOTH calls return the given (malformed) stop_reason."""
     from skill_harness.oracles.tier2.judge import JudgeClient
 

@@ -17,6 +17,8 @@ No live API calls — tested with the rendered request structure only.
 
 from __future__ import annotations
 
+from typing import Any
+
 import tiktoken
 
 # ---------------------------------------------------------------------------
@@ -346,7 +348,7 @@ def test_c1_marker_absent_from_wire_prompt_system_blocks() -> None:
     ablated_key = f"ablated_{target_k}"
 
     # Build the wire texts — what the model actually receives via system_blocks
-    def wire_text(cond: dict) -> str:
+    def wire_text(cond: dict[str, Any]) -> str:
         return "".join(b["text"] for b in cond["system_blocks"])
 
     full_wire = wire_text(result["full"])

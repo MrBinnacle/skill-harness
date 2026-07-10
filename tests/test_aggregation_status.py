@@ -368,12 +368,12 @@ class TestEnumValues:
         assert ClauseStatus.UNMEASURED == "UNMEASURED"
 
     def test_unmeasured_sub_reason_str_values(self) -> None:
-        assert UnmeasuredSubReason.NO_DATA == "no_data"
-        assert UnmeasuredSubReason.INADMISSIBLE == "inadmissible"
-        assert UnmeasuredSubReason.UNDERPOWERED == "underpowered"
-        assert UnmeasuredSubReason.FALSIFYING_CASE_MISSING == "falsifying_case_missing"
-        assert UnmeasuredSubReason.BUDGET_EXHAUSTED == "budget_exhausted"
-        assert UnmeasuredSubReason.FALSIFYING_CASE_STALE == "falsifying_case_stale"
+        assert UnmeasuredSubReason.NO_DATA.value == "no_data"
+        assert UnmeasuredSubReason.INADMISSIBLE.value == "inadmissible"
+        assert UnmeasuredSubReason.UNDERPOWERED.value == "underpowered"
+        assert UnmeasuredSubReason.FALSIFYING_CASE_MISSING.value == "falsifying_case_missing"
+        assert UnmeasuredSubReason.BUDGET_EXHAUSTED.value == "budget_exhausted"
+        assert UnmeasuredSubReason.FALSIFYING_CASE_STALE.value == "falsifying_case_stale"
 
 
 # ---------------------------------------------------------------------------

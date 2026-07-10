@@ -14,12 +14,14 @@ Thresholds (A34 / llm-judge-calibration Discipline 4):
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 # ---------------------------------------------------------------------------
 # Import guard
 # ---------------------------------------------------------------------------
 
 
-def _determine_state():  # type: ignore[return]
+def _determine_state() -> Callable[..., tuple[str, str | None]]:
     from skill_harness.oracles.calibration.command import determine_state
 
     return determine_state
