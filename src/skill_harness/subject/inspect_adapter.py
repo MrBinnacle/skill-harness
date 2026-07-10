@@ -92,6 +92,7 @@ def build_paired_tasks(
     pin: HarnessPin,
     epochs: int = 1,
     compose_dir: Path | None = None,
+    files: dict[str, str] | None = None,
 ) -> dict[Condition, Task]:
     """Return {'full': Task, 'null': Task} differing ONLY by the skill.
 
@@ -111,6 +112,9 @@ def build_paired_tasks(
         epochs; the ingest write path pairs verdicts by epoch).
     :param compose_dir: where the pinned compose file is written (defaults to
         the system temp dir; the file must outlive the eval() call).
+    :param files: sandbox files materialized before the agent runs (Inspect
+        ``Sample.files``: destination path → contents), e.g. a fixture repo
+        the task operates on. The SAME mapping goes to both arms.
     :raises SubjectLayerNotInstalledError: optional extra not installed.
     :raises FileNotFoundError: ``skill_dir`` has no SKILL.md.
     :raises ValueError: pin not digest-pinned or sandbox type unsupported.
@@ -142,6 +146,7 @@ def build_paired_tasks(
                 Sample(
                     input=prompt,
                     target=oracle_target or oracle_arg,
+                    files=dict(files) if files else None,
                     metadata={
                         "condition": condition,
                         "skill": skill_dir.name,
