@@ -112,6 +112,7 @@ def build_paired_tasks(
     epochs: int = 1,
     compose_dir: Path | None = None,
     files: dict[str, str] | None = None,
+    retry_uncaught_errors: int | None = None,
 ) -> dict[Condition, Task]:
     """Return {'full': Task, 'null': Task} differing ONLY by the skill.
 
@@ -137,6 +138,11 @@ def build_paired_tasks(
         Inspect so they are delivered verbatim (see ``files_as_data_uris``
         for the path-resolution footgun this defends against). The SAME
         mapping goes to both arms.
+    :param retry_uncaught_errors: passed through to ``inspect_swe.claude_code``
+        — in-place retries when the agent binary exits 1 with empty stderr
+        (inspect_swe's documented "scaffold bug" class). A resilience knob,
+        not an agent-capability change, so it is NOT part of the pin
+        fingerprint; the same value goes to both arms.
     :raises SubjectLayerNotInstalledError: optional extra not installed.
     :raises FileNotFoundError: ``skill_dir`` has no SKILL.md.
     :raises ValueError: pin not digest-pinned or sandbox type unsupported.
@@ -162,6 +168,7 @@ def build_paired_tasks(
             cwd=pin.cwd,
             env=dict(pin.env) if pin.env else None,
             disallowed_tools=list(pin.disallowed_tools) if pin.disallowed_tools else None,
+            retry_uncaught_errors=retry_uncaught_errors,
         )
         return Task(
             dataset=[
