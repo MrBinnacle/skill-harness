@@ -1,7 +1,7 @@
 <p>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">
-    <img alt="skill-harness — the skill eval that refuses to invent a score" src="assets/banner-light.svg" width="620">
+    <img alt="skill-harness — the skill eval that refuses to invent a score" src="assets/banner-light.svg" width="680">
   </picture>
 </p>
 
