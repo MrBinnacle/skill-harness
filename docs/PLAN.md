@@ -102,9 +102,9 @@ Each track is one git worktree, one branch, one subagent dispatched via `superpo
 `superpowers:using-git-worktrees` sets the worktrees up:
 
 ```powershell
-git worktree add ../youwontdoit-track-a feat/track-a-storage
-git worktree add ../youwontdoit-track-b feat/track-b-extractor
-git worktree add ../youwontdoit-track-c feat/track-c-oracle-library
+git worktree add ../skill-harness-track-a feat/track-a-storage
+git worktree add ../skill-harness-track-b feat/track-b-extractor
+git worktree add ../skill-harness-track-c feat/track-c-oracle-library
 ```
 
 ### TRACK A · Storage layer

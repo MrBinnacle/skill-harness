@@ -52,6 +52,52 @@ repos:
     hooks:
       - id: gitleaks
 
+  # De-personalization gate — fail-closed residue check.
+  #
+  # WHY: this harness is extracted/written alongside a private source tree that
+  # legitimately carries private-project provenance (a codename, ticket ids, private
+  # dir names, a private repo link). That provenance must NOT reach this public repo.
+  # gitleaks above catches secrets; these catch private *identifiers* it ignores.
+  #
+  # It REFUSES the commit and reports file:line + the suggested generic replacement in
+  # the hook NAME. It does NOT auto-rewrite — a silent rewrite would hide the
+  # source<->publish divergence and paper over the root cause. Runs on *.md only, so
+  # this config can never trip its own patterns. The maintainer's name/email are
+  # intentionally NOT listed (a public block-list would itself de-anonymize).
+  #   Full-tree sweep on demand:  pre-commit run --all-files
+  - repo: local
+    hooks:
+      - id: residue-writ
+        name: "residue 'Writ' (private project codename) -> 'a personal production project'"
+        language: pygrep
+        entry: '\bWrit\b'
+        files: '\.md$'
+      - id: residue-sec-id
+        name: "residue 'SEC-<n>' (private security ticket id) -> drop, or 'a security-audit item'"
+        language: pygrep
+        entry: '\bSEC-[0-9]+'
+        files: '\.md$'
+      - id: residue-wi-id
+        name: "residue 'WI-<n>' (private work-item id) -> drop, or 'a work item'"
+        language: pygrep
+        entry: '\bWI-[0-9]+'
+        files: '\.md$'
+      - id: residue-research-dir
+        name: "residue 'skills_research' (private research dir) -> a generic descriptor"
+        language: pygrep
+        entry: 'skills_research'
+        files: '\.md$'
+      - id: residue-private-repo-dir
+        name: "residue 'youwontdoit' (private repo dir) -> a generic descriptor"
+        language: pygrep
+        entry: 'youwontdoit'
+        files: '\.md$'
+      - id: residue-private-repo-link
+        name: "residue 'MrBinnacle/writ' (PRIVATE repo, 404s for readers) -> drop the link"
+        language: pygrep
+        entry: 'MrBinnacle/writ'
+        files: '\.md$'
+
 ci:
   autoupdate_schedule: monthly
   skip: [mypy]  # mypy is heavy; CI runs it once per PR instead of every pre-commit.autoupdate
