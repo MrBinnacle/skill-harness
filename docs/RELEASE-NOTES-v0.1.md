@@ -2,7 +2,13 @@
 
 ## v0.1 Thesis Demonstrated
 
-v0.1 demonstrates the core discipline by producing a directional FAILED verdict
+The short version: this release caught a real skill making a claim it doesn't deliver. The
+author's own skill instructed the agent to cite sources more; measured with the skill present
+vs. removed, citations did not increase. Other tools would have scored the skill's file and
+passed it. That catch — a well-written skill that empirically doesn't do what it says — is
+what v0.1 exists to demonstrate.
+
+In the framework's terms: v0.1 demonstrates the core discipline by producing a directional FAILED verdict
 on a real authored skill clause: **ai-slop-sentinel's citation-discipline clause
 does not increase the `citation_presence_per_flag` axis under ablation**
 (`p_win_gt_threshold=0.005`, `n=30`). The harness's value is partly in surfacing

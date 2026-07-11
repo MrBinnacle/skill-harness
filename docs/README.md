@@ -1,0 +1,36 @@
+# Docs map
+
+Where to go depending on what you want:
+
+**"Convince me this matters."** Read the two case studies:
+
+- [The framework refusing to validate its own author's skill](case-studies/ai-slop-sentinel-under-ablation.md)
+  — three halts before a contaminated result could ship. The deliverable is the chain of
+  refusals, not a number.
+- [The double ceiling](case-studies/double-ceiling-structurally-unmeasured.md) — a frontier
+  agent passed 14/14 runs *without* the skill; on that task class there is nothing for a skill
+  to improve, and honest measurement says so instead of inventing an effect.
+
+**"Why did my run say UNMEASURED?"** → [concepts/why-unmeasured.md](concepts/why-unmeasured.md)
+— it means "couldn't be proven," not "went wrong." Short and worth reading once.
+
+**"Why should I distrust the skill benchmarks I've seen?"** →
+[findings/why-naive-skill-benchmarks-mislead.md](findings/why-naive-skill-benchmarks-mislead.md)
+— the measured failure modes (noise, self-leaking oracles, cost-only test banks), each claim
+carrying an evidence grade.
+
+**"What exactly is v0.2 going to measure?"** →
+[findings/v0.2-preregistration.md](findings/v0.2-preregistration.md) — the measurement plan,
+locked before data collection, plus the registered results of the sizing run. The entry gate
+that forced the redesign: [findings/v0.2-reaim-gate.md](findings/v0.2-reaim-gate.md).
+
+**"I want the full spec / I want to contribute."** → [PRD.md](PRD.md) (evidence model,
+admissibility rules, CLI surface) and [PLAN.md](PLAN.md) (build tracks; internal register),
+plus [../CONTRIBUTING.md](../CONTRIBUTING.md).
+
+**"I want to reproduce a result."** → [../examples/](../examples/) — step-by-step, with the
+paid steps clearly marked.
+
+Also here: [RELEASE-NOTES-v0.1.md](RELEASE-NOTES-v0.1.md) ·
+[concepts/why-pythonutf8-on-windows.md](concepts/why-pythonutf8-on-windows.md) (Windows
+terminal fix) · `adr/` and `supply-chain/` (internal records).

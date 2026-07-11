@@ -16,6 +16,11 @@ Author: TBD
 
 # 1. Executive Summary
 
+In plain terms: this tool measures whether a skill actually changes what an AI agent does. It
+runs the same task with the skill present and with it removed, compares the two, and refuses
+to invent a score when the evidence is too weak to support one. This document is the full
+specification of how that measurement is kept honest.
+
 Skill Harness is a deterministic evaluation framework for testing LLM skills (instruction files, prompt modules, behavioral overlays, and similar artifacts) using falsifiable contracts rather than output inspection.
 
 Traditional software testing assumes:

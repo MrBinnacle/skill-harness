@@ -1,7 +1,10 @@
 # examples/
 
-This directory contains the materials needed to reproduce the v0.1.0 case study on
-your own machine.
+A step-by-step walkthrough of a real measurement, start to finish — the same run described in
+the [case study](../docs/case-studies/ai-slop-sentinel-under-ablation.md), reproducible on
+your own machine. The offline parts are free; the live measurement steps need an API key and
+spend real money (budget caps are enforced, and every command is dry-run unless you pass
+`--execute`).
 
 ## Contents
 
