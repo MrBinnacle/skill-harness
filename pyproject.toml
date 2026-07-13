@@ -130,6 +130,9 @@ ignore_missing_imports = true
 
 # inspect_ai / inspect_swe are the OPTIONAL [inspect] extra (agentic subject layer);
 # not installed in the default dev/CI environment, imports are lazy behind a typed error.
+# follow_imports=skip keeps the modules Any even when the extra IS installed locally,
+# so mypy verdicts (incl. which type:ignore comments are used) match CI deterministically.
 [[tool.mypy.overrides]]
 module = ["inspect_ai", "inspect_ai.*", "inspect_swe", "inspect_swe.*"]
 ignore_missing_imports = true
+follow_imports = "skip"

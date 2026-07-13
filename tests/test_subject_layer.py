@@ -199,6 +199,21 @@ def test_files_as_data_uris_round_trips_contents() -> None:
         assert base64.b64decode(uri[len(prefix) :]).decode("utf-8") == files[dest]
 
 
+def test_files_as_data_uris_round_trips_binary_contents() -> None:
+    # Binary fixtures (e.g. OOXML zip archives) must survive delivery
+    # byte-for-byte; UTF-8 text encoding would corrupt them.
+    import base64
+
+    from skill_harness.subject.inspect_adapter import files_as_data_uris
+
+    payload = bytes(range(256)) + b"PK\x03\x04"
+    encoded = files_as_data_uris({"/root/fixture.docx": payload})
+    (uri,) = encoded.values()
+    prefix = "data:application/octet-stream;base64,"
+    assert uri.startswith(prefix)
+    assert base64.b64decode(uri[len(prefix) :]) == payload
+
+
 def test_files_as_data_uris_empty_string_never_resolves_as_a_path() -> None:
     # Regression: Inspect resolves Sample.files values against the local
     # filesystem first; a raw "" names the cwd and pulls the entire working

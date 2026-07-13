@@ -22,6 +22,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -55,7 +56,7 @@ class SubjectLayerNotInstalledError(RuntimeError):
     """Raised when inspect_ai/inspect_swe are missing (optional extra)."""
 
 
-def files_as_data_uris(files: dict[str, str]) -> dict[str, str]:
+def files_as_data_uris(files: Mapping[str, str | bytes]) -> dict[str, str]:
     """Encode sample-file contents as data URIs for verbatim delivery.
 
     Inspect resolves each ``Sample.files`` VALUE against the local
@@ -65,12 +66,20 @@ def files_as_data_uris(files: dict[str, str]) -> dict[str, str]:
     replaced by that file's bytes, and inline text is only the fallback
     (``inspect_ai._eval.task.sandbox.resolve_sample_files``). Data URIs
     short-circuit that resolution, so contents arrive verbatim by
-    construction. Pure stdlib — testable without the optional extra.
+    construction. ``bytes`` values are delivered as-is (binary fixtures,
+    e.g. OOXML archives); ``str`` values are UTF-8-encoded. Inspect's write
+    path base64-decodes either form back to the same bytes
+    (``read_sandboxenv_file``). Pure stdlib — testable without the extra.
     """
-    return {
-        dest: "data:text/plain;base64," + base64.b64encode(content.encode("utf-8")).decode("ascii")
-        for dest, content in files.items()
-    }
+
+    def _encode(content: str | bytes) -> str:
+        if isinstance(content, bytes):
+            return "data:application/octet-stream;base64," + base64.b64encode(content).decode(
+                "ascii"
+            )
+        return "data:text/plain;base64," + base64.b64encode(content.encode("utf-8")).decode("ascii")
+
+    return {dest: _encode(content) for dest, content in files.items()}
 
 
 def write_pinned_compose(pin: HarnessPin, compose_dir: Path | None = None) -> Path:
@@ -111,7 +120,7 @@ def build_paired_tasks(
     pin: HarnessPin,
     epochs: int = 1,
     compose_dir: Path | None = None,
-    files: dict[str, str] | None = None,
+    files: Mapping[str, str | bytes] | None = None,
     retry_uncaught_errors: int | None = None,
 ) -> dict[Condition, Task]:
     """Return {'full': Task, 'null': Task} differing ONLY by the skill.
