@@ -2,7 +2,7 @@
 
 Where to go depending on what you want:
 
-**"Convince me this matters."** Read the two case studies:
+**"Convince me this matters."** Read the case studies:
 
 - [The framework refusing to validate its own author's skill](case-studies/ai-slop-sentinel-under-ablation.md)
   — three halts before a contaminated result could ship. The deliverable is the chain of
@@ -10,6 +10,11 @@ Where to go depending on what you want:
 - [The double ceiling](case-studies/double-ceiling-structurally-unmeasured.md) — a frontier
   agent passed 14/14 runs *without* the skill; on that task class there is nothing for a skill
   to improve, and honest measurement says so instead of inventing an effect.
+- [Displaced enforcement](case-studies/displaced-enforcement-skill-ablation-blind-spot.md) — a
+  scope boundary of skill-ablation itself: when a discipline's real firing lives in a *hook*,
+  ablating the skill *text* measures the wrong layer, so a null there is not the discipline's
+  verdict. Sibling to the double ceiling — that one is about the task class, this one about the
+  skill class.
 
 **"Why did my run say UNMEASURED?"** → [concepts/why-unmeasured.md](concepts/why-unmeasured.md)
 — it means "couldn't be proven," not "went wrong." Short and worth reading once.
