@@ -157,6 +157,10 @@ missing instrument.
   — a frontier agent passed 14/14 no-skill runs on two deliberately hardened tasks: on that
   task class there is nothing for a skill to improve, and any benchmark claiming otherwise owes
   you its no-skill pass rate first.
+- [`docs/case-studies/displaced-enforcement-skill-ablation-blind-spot.md`](docs/case-studies/displaced-enforcement-skill-ablation-blind-spot.md)
+  — a scope boundary of skill-ablation: when a discipline's real firing lives in a hook, not in
+  the model reading the skill, ablating the text measures the wrong layer — so a null there is
+  not the discipline's verdict, and to measure the discipline you ablate the hook instead.
 - [`docs/PRD.md`](docs/PRD.md) — full specification: evidence model, oracle tiers,
   admissibility rules, CLI surface.
 - Evidence store: `src/skill_harness/storage/migrations_sql/evidence/` (append-only,
