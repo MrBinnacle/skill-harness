@@ -222,8 +222,11 @@ def test_migration_apply_is_atomic(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         open_runtime(tmp_path / "runtime.db")
     # Reopen with a working migrations dir pointing at the same DB file: the
     # ledger should contain only 0001_init (proving 0002_bad was rolled back),
-    # and the `thing` table should not exist.
-    conn = sqlite3.connect(str(tmp_path / "runtime.db"))
+    # and the `thing` table should not exist. Inspection-only: open_db()
+    # (a sanctioned connection helper, not a raw sqlite3 connect call) applies
+    # no migrations itself, so it is safe to use here without re-running the
+    # (still-broken) migrations dir.
+    conn = migrations_module.open_db(tmp_path / "runtime.db")
     try:
         ledger = {
             row[0] for row in conn.execute("SELECT migration_id FROM schema_migrations").fetchall()

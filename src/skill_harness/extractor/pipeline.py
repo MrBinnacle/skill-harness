@@ -10,8 +10,8 @@ Persistence rules (pipeline safety / CLAUDE.md):
 - When ``evidence_conn`` is provided, rows are written inside a single
   ``writer_transaction`` (BEGIN IMMEDIATE).
 - Callers must open the connection via ``open_evidence()`` / ``StorageContext``
-  (never ``sqlite3.connect()`` directly) to preserve FULL synchronous mode
-  and foreign_keys=ON.
+  (never a raw sqlite3 connection) to preserve FULL synchronous mode and
+  foreign_keys=ON.
 
 Comparator mapping at persist time:
     "preserve"              -> "match"  (DB CHECK accepts increase|decrease|match)

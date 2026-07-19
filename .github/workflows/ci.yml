@@ -91,9 +91,24 @@ jobs:
           path: .coverage
           if-no-files-found: ignore
 
+  structural-bans:
+    name: Structural bans (raw sqlite3.connect / oracle_verdicts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - run: python -m pip install pre-commit
+      - name: sqlite3.connect() ban (A23 Sec.3 PRAGMA/FK discipline, PRD.md #17a)
+        run: pre-commit run ban-raw-sqlite-connect --all-files
+      - name: oracle_verdicts raw-access allowlist (A29, PRD.md #17)
+        run: pre-commit run ban-raw-oracle-verdicts --all-files
+
   all-green:
     name: All checks green
-    needs: [lint, typecheck, test]
+    needs: [lint, typecheck, test, structural-bans]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -101,7 +116,8 @@ jobs:
         run: |
           if [[ "${{ needs.lint.result }}" != "success" ]] || \
              [[ "${{ needs.typecheck.result }}" != "success" ]] || \
-             [[ "${{ needs.test.result }}" != "success" ]]; then
+             [[ "${{ needs.test.result }}" != "success" ]] || \
+             [[ "${{ needs.structural-bans.result }}" != "success" ]]; then
             echo "One or more required checks failed."
             exit 1
           fi

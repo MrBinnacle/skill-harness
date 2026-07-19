@@ -199,6 +199,16 @@ class JudgeClient:
         self._client = client if client is not None else anthropic.Anthropic()
         self._model = model
 
+    @property
+    def model(self) -> str:
+        """The model ID this client makes judge calls with.
+
+        Public so callers can derive the expected judge_id (``judge_id(self.model)``)
+        without reaching into the private ``_model`` attribute -- e.g. the
+        `calibrate` CLI command's operator-supplied-judge_id verification (J1w).
+        """
+        return self._model
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

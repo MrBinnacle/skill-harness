@@ -3,8 +3,8 @@
 Pure read-side aggregation library. NO API calls. NO sampling. NO writes.
 
 Callers (Track E.3 CLI) supply already-opened DB connections; this module
-never calls sqlite3.connect() directly. All reads go through the received
-connections to maintain pragma/FK discipline (open_db() invariant).
+never opens a raw sqlite3 connection itself. All reads go through the
+received connections to maintain pragma/FK discipline (open_db() invariant).
 
 Design:
 - Discovers completed ablation runs for skill_id.

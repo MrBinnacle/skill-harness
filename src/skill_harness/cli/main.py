@@ -15,6 +15,7 @@ from typing import Any
 
 import click
 from rich.console import Console
+from rich.markup import escape as _escape_markup
 from rich.table import Table
 
 from skill_harness.aggregation import aggregate_skill
@@ -147,7 +148,7 @@ def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
             str(clause.oracle_tier),
             vacuity_display,
             fc_mark,
-            clause.clause_text[:80],
+            _sanitize_clause_text(clause.clause_text, max_len=80),
         )
 
     _console.print(table)
@@ -489,21 +490,35 @@ def _clause_status(vacuity_flag: str, falsifying_case_schema_sha256: str | None)
     return "TESTABLE"
 
 
-def _sanitize_clause_text(text: str) -> str:
-    """Assert NUL/control-free + escape for display (A51 output-side sanitisation).
+def _sanitize_clause_text(text: str, *, max_len: int | None = 60) -> str:
+    """Assert NUL/control-free + escape Rich markup for display (A51 output-side
+    sanitisation, S2 hostile-review hardening).
+
+    Untrusted clause text and rendered condition text both flow through Rich's
+    markup-enabled Console.print()/Table. Without escaping, a hostile SKILL.md
+    clause body containing Rich markup ('[red on red]', '[/]') is interpreted
+    at print time instead of shown verbatim: the tagged span is silently
+    swallowed from the rendered output (or, with real color support, forges
+    terminal styling) -- terminal output forgery.
 
     Raises AssertionError if text contains NUL or ASCII control characters
-    (except tab/newline which are benign in prose).  Returns the text truncated
-    to 60 chars for table display.
+    (except tab/newline, benign in prose). Escapes Rich markup via
+    ``rich.markup.escape()`` so bracketed text renders literally. Truncation
+    (when ``max_len`` is given) happens BEFORE escaping, not after: escaping
+    can grow the string (inserted backslashes), and truncating an already-
+    escaped string risks slicing a `\\[` escape sequence in half, which would
+    itself misparse as markup. ``max_len=None`` returns the full escaped text
+    (used for system_text, which must stay verbatim, not table-truncated).
     """
     for ch in text:
         cp = ord(ch)
         if cp == 0 or (cp < 0x20 and cp not in (0x09, 0x0A, 0x0D)):
             raise AssertionError(
-                f"clause_text contains control character U+{cp:04X} — "
+                f"text contains control character U+{cp:04X} — "
                 "refusing to display untrusted content"
             )
-    return text[:60]
+    truncated = text[:max_len] if max_len is not None else text
+    return _escape_markup(truncated)
 
 
 def _cmd_dry_run(
@@ -666,7 +681,7 @@ def _cmd_show_rendered(skill_id: str, clause_id: str, evidence_db: Path | None =
     for condition_name, condition_data in sorted(conditions.items()):
         system_text = condition_data.get("system_text", "")
         _console.print(f"\n[bold underline]{condition_name.upper()}[/]")
-        _console.print(system_text)
+        _console.print(_sanitize_clause_text(system_text, max_len=None))
 
 
 def _render_conditions_for_clause(
@@ -2104,6 +2119,17 @@ def _render_diff_report(diff_report: Any) -> None:
     show_default=True,
     help="Path to runtime DB (only used with --execute).",
 )
+@click.option(
+    "--verify-judge-id",
+    is_flag=True,
+    default=False,
+    help=(
+        "Refuse (instead of merely warning) if JUDGE_ID does not match "
+        "JudgeClient.judge_id(model) for the model this run would actually use. "
+        "Off by default for backward compatibility with human-readable operator "
+        "judge_id conventions; a mismatch is always warned about either way (J1w)."
+    ),
+)
 def calibrate_cmd(
     judge_id: str,
     axis: str,
@@ -2113,10 +2139,18 @@ def calibrate_cmd(
     daily_cap: float,
     evidence_db: Path,
     runtime_db: Path,
+    verify_judge_id: bool,
 ) -> None:
     """Calibrate a judge on an axis using a JSONL pair set.
 
     JUDGE_ID is the opaque judge identifier (sha256 of model+prompt+schema).
+    It is operator-supplied, NOT derived automatically -- calibrations recorded
+    under a given JUDGE_ID string are only comparable if the underlying
+    (model, system prompt, tool schema) are unchanged; JudgeClient.judge_id(model)
+    computes the value that would be current for this run's model. A mismatch
+    is always warned about (J1w: a prompt/schema change must not silently
+    coexist with calibrations still filed under the old operator string);
+    pass --verify-judge-id to make a mismatch a hard refusal instead.
     AXIS is the evaluation axis (e.g. citation_support).
     PAIR_SET_PATH is a JSONL file of labeled human-preference pairs.
 
@@ -2159,6 +2193,30 @@ def calibrate_cmd(
         )
 
     judge_client = JudgeClient()
+
+    # J1w: judge_id is operator-supplied and was never cross-checked against
+    # JudgeClient.judge_id(model) -- a system-prompt/tool-schema change (which
+    # changes judge_id()'s output) could silently coexist with calibrations
+    # still filed under the same operator string. Always surface a mismatch;
+    # --verify-judge-id escalates it to a refusal for callers that want the
+    # hard guarantee. Off by default: human-readable judge_id conventions
+    # (e.g. "judge-001") are an established CLI/test convention here and a
+    # default refusal would break them, not just warn about drift.
+    derived_judge_id = judge_client.judge_id(judge_client.model)
+    if judge_id != derived_judge_id:
+        mismatch_msg = (
+            f"judge_id {judge_id!r} does not match JudgeClient.judge_id(model) "
+            f"for model {judge_client.model!r}: derived {derived_judge_id!r}. "
+            "This is expected if judge_id is a human-readable operator label; it is "
+            "NOT expected if you meant to calibrate the model/prompt/schema identity "
+            "this run would actually use -- calibrations recorded under different "
+            "judge_id strings for the same real judge are not comparable, and this "
+            "run's system prompt or tool schema may have changed since judge_id was "
+            "chosen."
+        )
+        if verify_judge_id:
+            raise click.ClickException(mismatch_msg + " Refusing (--verify-judge-id).")
+        _console.print(f"[yellow]WARNING:[/] {mismatch_msg}")
 
     # D2: parse_pair_set (inside calibrate()) raises ValueError on malformed JSONL
     # (invalid JSON or a pydantic ValidationError wrapped as ValueError). Previously

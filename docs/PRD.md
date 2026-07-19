@@ -810,7 +810,17 @@ Per-track migration number ranges:
 
 **Cost re-derivable from evidence:** per-call token + USD cost columns written onto evidence rows inside the evidence transaction. `cost_ledger` becomes a projection; reconciler back-fills runs whose sums disagree (cost written from actual response `usage`, never from projection).
 
-**Aggregation surface:** the canonical read-side for aggregation is the SQL VIEW `admissible_verdicts` (migration `0003_admissible_verdicts_view.sql`), which selects from `oracle_verdicts` where `admissibility_state = 'admissible'` AND no matching row in `confound_events` with `delta_kind = 'confound_flagged'` for the same `(run_id, primary_clause_id)`. Raw `oracle_verdicts` access is restricted to the `audit/` module (CI grep ban on non-audit `SELECT … FROM oracle_verdicts`).
+**Aggregation surface:** the canonical read-side for aggregation is the SQL VIEW `admissible_verdicts` (migration `0003_admissible_verdicts_view.sql`), which selects from `oracle_verdicts` where `admissibility_state = 'admissible'` AND no matching row in `confound_events` with `delta_kind = 'confound_flagged'` for the same `(run_id, primary_clause_id)`. `aggregate_skill()` (`aggregation/engine.py`) reads observation values ONLY from this VIEW — never from raw `oracle_verdicts` — so inadmissible/confounded data structurally cannot enter computed statistics.
+
+Raw `SELECT … FROM oracle_verdicts` is enforced (pre-commit hook `ban-raw-oracle-verdicts` + CI job `structural-bans`, see `.pre-commit-config.yaml` / `.github/workflows/ci.yml`) against a documented allowlist, not a bare "audit/-only" ban — none of the allowed call sites read `observation` from the raw table to feed aggregation; they are single-row/metadata reads the VIEW is not shaped to answer:
+
+* `audit/` — cross-reference/inspection (`audit_all_verdicts()` etc.), the module's designed purpose (A29).
+* `aggregation/engine.py` — admissibility-state counts and confound-membership checks for exclusion-rate reporting (bookkeeping about which rows the VIEW dropped, not the dropped rows' values).
+* `ablation/runner.py` — resume-state rebuild: reloading a SPECIFIC already-persisted verdict by `(run_id, clause_id, sample_index)` to avoid re-recording it.
+* `cli/main.py` — single-verdict operator commands (freeze eligibility check, verdict lookup by id).
+* `storage/repositories/evidence/frozen_cases.py` — single-row provenance copy (`metric_id`/`metric_version`/sample refs) by `verdict_id` at freeze time.
+
+A new production reference outside this list fails the hook; `tests/test_structural_bans.py` mirrors the same allowlist so a violation also surfaces in the ordinary test run.
 
 **Repository surface:** per-table modules under `storage/repositories/evidence/` and `storage/repositories/runtime/`. Functional API only — no classes (closes subclass-override escape hatches; closes per-instance-state hazard). Pydantic write-models with `model_config = ConfigDict(strict=True, extra='forbid', frozen=True)`. Evidence repos export only `insert_*` / `get_*` / `select_*` / `list_*` — no `update_*` / `delete_*` / `set_*` / `patch_*` / `modify_*` / `remove_*`. AST-walker test (`tests/test_evidence_repo_surface.py`) is the falsifying-case enforcement: regex scan rejects matching function names.
 
@@ -824,7 +834,7 @@ Per-track migration number ranges:
 
 **PRAGMA scope.** Connections MUST go through `skill_harness.storage.migrations.open_db()`. Direct `sqlite3.connect()` bypasses connection-scoped pragmas including `foreign_keys = ON`.
 
-**Structural enforcement:** pre-commit + CI grep ban — `ripgrep -n 'sqlite3\.connect\(' src/ tests/ | grep -v 'storage/migrations.py'` MUST return empty. Upgrades the documented PRAGMA-scope discipline from PR-review to mechanism.
+**Structural enforcement:** pre-commit hook `ban-raw-sqlite-connect` (`.pre-commit-config.yaml`, `language: pygrep`) plus CI job `structural-bans` (`.github/workflows/ci.yml`) scan `src/` and `tests/` for `sqlite3\.connect\(`, excluding `storage/migrations.py` (the module that defines `open_db()` and is the only legitimate caller); `tests/test_structural_bans.py` mirrors the same check so a violation also shows up in the ordinary `pytest -m "not live"` run. Upgrades the documented PRAGMA-scope discipline from PR-review to mechanism.
 
 ---
 
