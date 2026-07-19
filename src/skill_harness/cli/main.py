@@ -239,15 +239,80 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
 
 @skill.command("clauses")
 @click.argument("skill_id")
-def skill_clauses(skill_id: str) -> None:
-    """Inspect the extracted clause inventory for a skill."""
-    _ = skill_id
-    _console.print(
-        "[yellow]skill clauses: not yet implemented in v0.1."
-        " Query evidence.db `clauses` table directly. v0.2.[/]"
-    )
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB (read-only; no writes, no API calls).",
+)
+def skill_clauses(skill_id: str, evidence_db: Path) -> None:
+    """Inspect the extracted clause inventory for a skill (read-only).
+
+    D5 (S49 hostile review): 'skill clauses <skill_id>' was advertised by both
+    'skill init' (dry-run hints) and 'run ablation --dry-run' as the way to
+    inspect per-clause detail, but was an unimplemented stub. This queries
+    evidence.db read-only -- the same table 'run ablation --dry-run' already
+    reads for its projection table.
+    """
+    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.migrations import open_evidence_readonly
+
+    if not evidence_db.exists():
+        _console.print(
+            "\n[yellow]skill not imported — run 'skill init <path>' first[/]"
+            f"\n[dim]  (evidence.db not found at {evidence_db})[/]"
+        )
+        return
+
+    db_conn: sqlite3.Connection | None = None
+    rows: list[tuple[Any, ...]] = []
+    try:
+        db_conn = open_evidence_readonly(evidence_db)
+        rows = db_conn.execute(
+            "SELECT clause_index, axis, comparator, oracle_tier, vacuity_flag, "
+            "falsifying_case_schema_sha256, clause_text "
+            "FROM clauses WHERE skill_id = ? ORDER BY clause_index",
+            (skill_id,),
+        ).fetchall()
+    except BootstrapError:
+        _console.print(
+            "\n[yellow]skill not imported — run 'skill init <path>' first[/]"
+            f"\n[dim]  (evidence.db not found or skill_id {skill_id!r} not present)[/]"
+        )
+        return
+    finally:
+        if db_conn is not None:
+            db_conn.close()
+
+    if not rows:
+        _console.print(
+            f"\n[yellow]No clauses found for skill {skill_id!r}. "
+            "Run 'skill init <path>' to import.[/]"
+        )
+        return
+
+    table = Table(title=f"Clause Inventory — {skill_id}", show_lines=True)
+    table.add_column("#", style="dim", width=4)
+    table.add_column("Axis", style="cyan", min_width=14)
+    table.add_column("Cmp", width=8)
+    table.add_column("Tier", width=5)
+    table.add_column("Status", min_width=20)
+    table.add_column("Clause text", min_width=30, max_width=60)
+
+    for clause_index, axis, comparator, oracle_tier, vacuity_flag, fc_sha, clause_text in rows:
+        status = _clause_status(vacuity_flag, fc_sha)
+        table.add_row(
+            str(clause_index),
+            axis,
+            comparator,
+            str(oracle_tier),
+            status,
+            _sanitize_clause_text(clause_text),
+        )
+
+    _console.print(table)
     _console.print(_SKILL_CLAUSES_LEGEND)
-    return
 
 
 @cli.group()
@@ -754,6 +819,20 @@ def _execute_ablation_run(
         if resume_run_id is not None:
             # m2: load user_message from runs.config_json (not empty string)
             user_message = _load_user_message_from_run(ctx.evidence_conn, resume_run_id)
+            # C5: _load_user_message_from_run returns '' both when resume_run_id
+            # doesn't exist in evidence.runs AND when the row exists but
+            # config_json is corrupt/lacks the key. Either way, proceeding would
+            # silently mix an empty-prompt tail onto samples collected under the
+            # real prompt, with the stopping rule aggregating both under one
+            # run_id and no record of the mismatch. Refuse instead.
+            if not user_message:
+                raise click.ClickException(
+                    f"Cannot resume run {resume_run_id!r}: no user_message found in "
+                    "runs.config_json for this run_id (the run does not exist in "
+                    "evidence.db, or its config_json is corrupt/missing the key). "
+                    "Refusing to proceed with an empty prompt -- verify --resume "
+                    "RUN_ID against evidence.runs and re-run."
+                )
             results = runner.resume_ablation(
                 run_id=resume_run_id,
                 clauses=clauses,
@@ -2034,6 +2113,8 @@ def calibrate_cmd(
       --max-usd   per-run cap; refuse if projected cost exceeds it.
       --daily-cap per-day cap; hard ceiling $100 (override via env var).
     """
+    import os
+
     from skill_harness.oracles.calibration.command import calibrate
     from skill_harness.oracles.calibration.cost_projection import validate_daily_cap
     from skill_harness.oracles.tier2.judge import JudgeClient
@@ -2044,36 +2125,58 @@ def calibrate_cmd(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
+    # D1: model-aware API key pre-flight BEFORE any DB/StorageContext creation,
+    # mirroring m3's doctrine for 'run ablation' (_resolve_subject_model_with_fallback).
+    # JudgeClient always constructs anthropic.Anthropic() directly -- unlike the
+    # subject-model factory it has no OpenRouter routing -- so this checks
+    # ANTHROPIC_API_KEY only rather than reusing _resolve_subject_model_with_fallback
+    # verbatim (that would falsely promise an OpenRouter fallback JudgeClient can't
+    # perform). Without this, StorageContext below creates both DB files before the
+    # first judge call fails lazily on the missing key.
+    if execute and not os.environ.get("ANTHROPIC_API_KEY"):
+        raise click.ClickException(
+            "calibrate --execute requires ANTHROPIC_API_KEY. JudgeClient calls the "
+            "Anthropic API directly for judge calibration (no OpenRouter fallback is "
+            "supported here). Set ANTHROPIC_API_KEY to proceed."
+        )
+
     judge_client = JudgeClient()
 
-    if execute:
-        with StorageContext(evidence_db, runtime_db) as ctx:
+    # D2: parse_pair_set (inside calibrate()) raises ValueError on malformed JSONL
+    # (invalid JSON or a pydantic ValidationError wrapped as ValueError). Previously
+    # only validate_daily_cap's ValueError was wrapped here, so a malformed pair-set
+    # file surfaced as a raw traceback instead of a clean CLI error.
+    try:
+        if execute:
+            with StorageContext(evidence_db, runtime_db) as ctx:
+                result = calibrate(
+                    judge_id=judge_id,
+                    axis=axis,
+                    pair_set_path=pair_set_path,
+                    judge_client=judge_client,
+                    evidence_conn=ctx.evidence_conn,
+                    runtime_conn=ctx.runtime_conn,
+                    max_usd=max_usd,
+                    daily_cap=daily_cap,
+                    dry_run=False,
+                )
+        else:
+            # Dry-run: parse, project cost, but do not make any judge calls or DB writes
+            from unittest.mock import MagicMock
+
             result = calibrate(
                 judge_id=judge_id,
                 axis=axis,
                 pair_set_path=pair_set_path,
                 judge_client=judge_client,
-                evidence_conn=ctx.evidence_conn,
-                runtime_conn=ctx.runtime_conn,
+                evidence_conn=MagicMock(),
+                runtime_conn=MagicMock(),
                 max_usd=max_usd,
                 daily_cap=daily_cap,
-                dry_run=False,
+                dry_run=True,
             )
-    else:
-        # Dry-run: parse, project cost, but do not make any judge calls or DB writes
-        from unittest.mock import MagicMock
-
-        result = calibrate(
-            judge_id=judge_id,
-            axis=axis,
-            pair_set_path=pair_set_path,
-            judge_client=judge_client,
-            evidence_conn=MagicMock(),
-            runtime_conn=MagicMock(),
-            max_usd=max_usd,
-            daily_cap=daily_cap,
-            dry_run=True,
-        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     _print_calibrate_result(result, executed=execute, daily_cap=daily_cap)
 

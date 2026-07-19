@@ -205,8 +205,14 @@ def test_extract_skill_preserve_comparator_stored_as_match(mock_call: Any, tmp_p
 
 
 @patch("skill_harness.extractor.pipeline.call_extract_clauses")
-def test_extract_skill_skips_comparator_unspecified_clauses(mock_call: Any, tmp_path: Path) -> None:
-    """Clauses with comparator_unspecified are NOT written to the DB."""
+def test_extract_skill_raises_on_comparator_unspecified_at_persist(
+    mock_call: Any, tmp_path: Path
+) -> None:
+    """C4 regression: persisting a comparator_unspecified clause must raise, not
+    silently drop it. A silent drop would make the DB clause count disagree with
+    the reported extraction count (corrupting Coverage/Contribution metrics) --
+    see extract_skill's own ':raises ValueError' contract.
+    """
     c_unspec = ExtractedClause(
         clause_index=0,
         clause_text="Be helpful.",
@@ -223,18 +229,43 @@ def test_extract_skill_skips_comparator_unspecified_clauses(mock_call: Any, tmp_
     evidence_conn = open_evidence(tmp_path / "evidence.db")
 
     try:
-        result = extract_skill(skill_path, evidence_conn=evidence_conn)
+        with pytest.raises(ValueError, match="comparator_unspecified cannot be stored"):
+            extract_skill(skill_path, evidence_conn=evidence_conn)
 
-        # ExtractionResult still has both clauses.
-        assert len(result.clauses) == 2
+        # Persistence must abort entirely -- no skill row and no clause rows,
+        # not a partial write of only the well-formed clause.
+        skill_rows = evidence_conn.execute("SELECT COUNT(*) FROM skills").fetchone()
+        assert skill_rows[0] == 0
 
-        # DB only has the one with a real comparator.
-        rows = evidence_conn.execute(
-            "SELECT COUNT(*) FROM clauses WHERE skill_id = ?", (result.skill_id,)
-        ).fetchone()
-        assert rows[0] == 1
+        clause_rows = evidence_conn.execute("SELECT COUNT(*) FROM clauses").fetchone()
+        assert clause_rows[0] == 0
     finally:
         evidence_conn.close()
+
+
+@patch("skill_harness.extractor.pipeline.call_extract_clauses")
+def test_extract_skill_dry_run_does_not_raise_on_comparator_unspecified(
+    mock_call: Any, tmp_path: Path
+) -> None:
+    """Dry-run (no evidence_conn) never persists, so it must NOT raise even when
+    a clause is comparator_unspecified -- the raise is a persist-time contract only.
+    """
+    c_unspec = ExtractedClause(
+        clause_index=0,
+        clause_text="Be helpful.",
+        axis="helpfulness",
+        comparator="comparator_unspecified",
+        oracle_tier=2,
+        vacuity_flag="semantic_vacuous_pending_review",
+        falsifying_case=None,
+    )
+    mock_call.return_value = [c_unspec]
+    skill_path = _make_skill_file(tmp_path)
+
+    result = extract_skill(skill_path, evidence_conn=None)
+
+    assert len(result.clauses) == 1
+    assert result.clauses[0].comparator == "comparator_unspecified"
 
 
 # ---------------------------------------------------------------------------

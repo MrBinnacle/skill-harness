@@ -15,7 +15,13 @@ Persistence rules (pipeline safety / CLAUDE.md):
 
 Comparator mapping at persist time:
     "preserve"              -> "match"  (DB CHECK accepts increase|decrease|match)
-    "comparator_unspecified" -> raises ValueError (caller must filter)
+    "comparator_unspecified" -> raises ValueError. extract_skill() lets this
+                                 propagate and aborts the whole persist step (no
+                                 partial write) rather than silently dropping the
+                                 clause -- a silent drop would make the persisted
+                                 clause count disagree with the reported extraction
+                                 count, corrupting Coverage/Contribution metrics
+                                 (mirrors the abort doctrine in extractor/claude.py).
 """
 
 from __future__ import annotations
@@ -126,10 +132,13 @@ def extract_skill(
             imported_at=now,
         )
 
+        # No pre-filter: _build_clause_write -> _to_db_comparator raises ValueError
+        # for comparator_unspecified. Letting it propagate here (before
+        # writer_transaction opens) means persistence aborts entirely -- no skill
+        # row, no clause rows -- rather than silently writing fewer clauses than
+        # were reported (see module docstring).
         clause_writes = [
-            _build_clause_write(result.skill_id, clause, now)
-            for clause in result.clauses
-            if clause.comparator != "comparator_unspecified"
+            _build_clause_write(result.skill_id, clause, now) for clause in result.clauses
         ]
 
         with writer_transaction(evidence_conn):
