@@ -19,7 +19,7 @@ Design:
 - w and n accumulate fractional values due to Tie = 0.5 half-update encoding (A10).
 - scipy.stats.beta.sf (survival function) evaluates P(rate > 0.60) from the posterior.
 
-Per CLAUDE.md pass rule (locked — do not silently retune thresholds):
+Per the pass rule (locked — do not silently retune thresholds; see docs/INVARIANTS.md #1):
   "P(win_rate > 0.60) >= 0.95 under Beta(1,1) -> Beta(1+w, 1+n-w)"
 """
 

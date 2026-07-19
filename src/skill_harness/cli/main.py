@@ -1,7 +1,7 @@
 """CLI entry point. Mirrors PRD §18.
 
 Every `run` subcommand defaults to --dry-run; `--execute` is required to
-perform writes or LLM calls (per CLAUDE.md "Pipeline safety").
+perform writes or LLM calls (see docs/INVARIANTS.md #2 "Pipeline safety").
 """
 
 from __future__ import annotations

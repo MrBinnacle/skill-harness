@@ -8,7 +8,7 @@ Two-level model:
 
 Shrunken posterior per clause: Beta(alpha_hat + w_k, beta_hat + n_k - w_k).
 
-Pass rule (LOCKED per CLAUDE.md): clause PASSES when
+Pass rule (LOCKED — see docs/INVARIANTS.md #1): clause PASSES when
   P(rate > 0.60) >= 0.95 on the shrunken posterior.
 
 K < 10: EB hyperprior estimate is noisy (BDA3 §5) — fall back to UNPOOLED.

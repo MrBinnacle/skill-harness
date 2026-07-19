@@ -46,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] — Released 2026-06-08
 
+> **Release-hygiene note (added 2026-07-19):** the `v0.1.0` tag ships `pyproject.toml`
+> version string `0.1.0a0` (pre-alpha) rather than `0.1.0` — the version bump was
+> missed at tag time. Acknowledged gap; a corrected version string ships with the
+> next actual release rather than being rewritten retroactively into this historical tag.
+
 v0.1 delivers a complete deterministic evaluation framework for clause-level
 ablation testing of LLM skills. Five build tracks (A–E), two-database
 append-only evidence model, Tier-1 mechanical oracle library, Tier-2 pairwise
@@ -105,7 +110,7 @@ Initial scaffold. Pre-alpha — schema realized and trigger-enforced, CLI surfac
 - 8 smoke tests including append-only trigger verification + `runs.completed_at` single-shot mutation
 - Comprehensive architectural decision record in the internal council findings log (not published) (17 adopted decisions, 16 PRD amendments queued for v1.1)
 - Implementation plan at `docs/PLAN.md` (5 build tracks A–E with exit criteria)
-- Supply-chain audit at `.supply-chain-risk-auditor/results.md` — PROCEED-WITH-MITIGATIONS
+- Supply-chain audit run via `supply-chain-risk-auditor` — PROCEED-WITH-MITIGATIONS (output directory `.supply-chain-risk-auditor/` is local-only and gitignored, not a tracked artifact)
 - Standard repo docs: `README.md`, `LICENSE` (MIT), `CONTRIBUTING.md`, `SECURITY.md`
 - CI workflow: ruff + mypy --strict + pytest matrix on Ubuntu + Windows x Python 3.11/3.12/3.13
 - CodeQL security scanning (push, PR, weekly)
@@ -118,5 +123,8 @@ Initial scaffold. Pre-alpha — schema realized and trigger-enforced, CLI surfac
 ### Security
 - `anthropic` pin tightened from `>=0.39` to `>=0.87` to enforce post-patch for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool CVEs, 2026-03-31)
 
-[0.1.0]: https://github.com/MrBinnacle/skill-harness/compare/v0.1.0a0...v0.1.0
-[0.1.0a0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.1.0a0
+[0.1.0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.1.0
+
+Note: `[0.1.0a0]` above intentionally has no link — no `v0.1.0a0` tag exists on the
+remote (`git ls-remote --tags origin`, checked 2026-07-19; only `v0.1.0` is a real
+ref). The pre-alpha scaffold predates this project's tagging discipline.

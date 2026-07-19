@@ -1291,7 +1291,7 @@ class AblationRunner:
 
         BLOCKER-1: any clause failing this gate must NOT be scored on a fallback
         (wrong) axis. It is UNMEASURED — no admissible verdict, never aggregated.
-        Per CLAUDE.md: "Tier-2 inadmissible without a calibrated (judge_id, axis)
+        Per docs/INVARIANTS.md #3: "Tier-2 inadmissible without a calibrated (judge_id, axis)
         record" and "no admissible evidence => UNMEASURED never PASSED".
         """
         return clause_spec.oracle_tier == 1 and clause_spec.axis in self._scorers

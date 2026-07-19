@@ -116,8 +116,9 @@ CREATE TABLE oracle_verdicts (
     comparison              TEXT NOT NULL CHECK (comparison IN ('full_vs_ablated','full_vs_null')),
     sample_a_id             TEXT NOT NULL REFERENCES samples(sample_id),
     sample_b_id             TEXT NOT NULL REFERENCES samples(sample_id),
-    -- {0, 0.5, 1} encoding adopted per STAT-F4 "half-update" reconciliation;
-    -- tie_count column lets aggregator switch to drop-ties at report time without re-sampling.
+    -- {0, 0.5, 1} encoding adopted per STAT-F4 "half-update" reconciliation.
+    -- Ties are derived by filtering this column (observation = 0.5), not stored as
+    -- a separate count; see PRD.md §14.3 for the drop-ties-at-report-time derivation.
     observation             REAL NOT NULL CHECK (observation IN (0.0, 0.5, 1.0)),
     oracle_tier             INTEGER NOT NULL CHECK (oracle_tier IN (1,2,3)),
     metric_id               TEXT,

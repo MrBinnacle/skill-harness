@@ -38,4 +38,5 @@ paid steps clearly marked.
 
 Also here: [RELEASE-NOTES-v0.1.md](RELEASE-NOTES-v0.1.md) ·
 [concepts/why-pythonutf8-on-windows.md](concepts/why-pythonutf8-on-windows.md) (Windows
-terminal fix) · `adr/` and `supply-chain/` (internal records).
+terminal fix) · [`INVARIANTS.md`](INVARIANTS.md) (tracked pass-rule / admissibility
+invariants) · `supply-chain/` (per-dependency audit records).
