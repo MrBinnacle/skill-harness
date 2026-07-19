@@ -125,7 +125,11 @@ repos:
         language: pygrep
         entry: 'sqlite3\.connect\('
         files: '^(src|tests)/.*\.py$'
-        exclude: '^src/skill_harness/storage/migrations\.py$'
+        # migrations.py defines open_db() and is the one legitimate caller;
+        # test_structural_bans.py is the ban's own mirror test — its docstring
+        # and assert message must name the banned call in prose (the pytest
+        # mirror likewise self-excludes via `path == _THIS_FILE`).
+        exclude: '^(src/skill_harness/storage/migrations|tests/test_structural_bans)\.py$'
       - id: ban-raw-oracle-verdicts
         name: "raw 'FROM oracle_verdicts' outside the documented allowlist (PRD.md #17, A29) -> route through the admissible_verdicts VIEW, or add to the allowlist here + tests/test_structural_bans.py + PRD.md #17 with justification"
         language: pygrep
