@@ -931,6 +931,215 @@ class TestQual1SubToleranceClause:
 
 
 # ---------------------------------------------------------------------------
+# A1: a crashing Tier-1 scorer must never become a fabricated score
+# ---------------------------------------------------------------------------
+
+
+class TestA1ScorerCrashNeverBecomesScore:
+    """A1 RED: hedge_index (or any Tier-1 scorer) raising on the Full output only
+    must not silently become a real 0.0 score feeding an admissible Loss verdict.
+    A systematically-crashing scorer must never drive the stopping posterior to a
+    real PASS/FAIL from zero genuine measurements (S49 finding A1).
+    """
+
+    def test_crashing_scorer_marks_comparison_inadmissible_not_a_score(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        ev, rt = seeded_db_pair
+        clause = _make_clause(axis="verbosity")
+        _seed_clause(ev, clause)
+
+        def _crashing_scorer(text: str) -> float:
+            if "CRASHME" in text:
+                raise ValueError("boom -- pathological input")
+            return float(len(text.split()))
+
+        # Full always crashes; Ablated and Null score normally (null floor still
+        # reachable, and the confound path sees the SAME crashing scorer -- both
+        # paths must agree that this axis produced no usable score, A1).
+        def response_factory(idx: int) -> MagicMock:
+            if idx == 0:  # warmup
+                return _mock_response("word " * 10)
+            sample_call = (idx - 1) % 3
+            if sample_call == 0:  # Full
+                return _mock_response("CRASHME " + "word " * 20)
+            elif sample_call == 1:  # Ablated
+                return _mock_response("a")
+            else:  # Null
+                return _mock_response("word " * 10)
+
+        mock_client = MagicMock()
+        call_count = [0]
+
+        def _create_side_effect(**kwargs: Any) -> MagicMock:
+            resp = response_factory(call_count[0])
+            call_count[0] += 1
+            return resp
+
+        mock_client.messages.create.side_effect = _create_side_effect
+        subject = SubjectClient(client=mock_client, model="claude-sonnet-4-6")
+
+        runner = AblationRunner(
+            evidence_conn=ev,
+            runtime_conn=rt,
+            subject_client=subject,
+            scorers={"verbosity": _crashing_scorer},
+            max_retries=0,
+            retry_delay_s=0.0,
+            null_floor=2,
+        )
+
+        results = runner.run_ablation(
+            skill_id=_SKILL_ID,
+            clauses=[clause],
+            user_message=_USER_MSG,
+            max_usd=10.0,
+        )
+        result = results[0]
+
+        # Pre-fix: _score_primary_axis swallows the crash and returns 0.0 for Full
+        # while Ablated scores a real 1.0 -> delta=-1.0 -> observation=0.0 (Loss),
+        # admissible every iteration -> posterior driven to FAILED at N_MIN from
+        # zero genuine measurements. Post-fix: every comparison is inadmissible
+        # (scorer_error), acc.n never advances, loop exhausts N_MAX -> UNDERPOWERED.
+        assert result.stopping_reason == StoppingReason.UNDERPOWERED_NMAX, (
+            "A1: a systematically-crashing primary-axis scorer must never drive a "
+            f"real PASS/FAIL verdict from fabricated scores; got {result.stopping_reason}"
+        )
+        assert result.samples_collected == 0, (
+            "A1: zero comparisons should be admissible (feeding acc.n) when the "
+            f"primary-axis scorer always crashes on Full; got {result.samples_collected}"
+        )
+
+        rows = ev.execute(
+            "SELECT admissibility_state, inadmissibility_reason FROM oracle_verdicts "
+            "WHERE clause_id = ?",
+            (clause.clause_id,),
+        ).fetchall()
+        assert len(rows) > 0, "A1: verdicts must still be written (audit trail), just inadmissible"
+        for admissibility_state, inadmissibility_reason in rows:
+            assert admissibility_state == "inadmissible", (
+                f"A1: scorer crash must write admissibility_state='inadmissible', got "
+                f"{admissibility_state!r}"
+            )
+            assert inadmissibility_reason == "scorer_error", (
+                f"A1: expected inadmissibility_reason='scorer_error', got "
+                f"{inadmissibility_reason!r}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# A4: resume_ablation must handle BudgetAbortedError like run_ablation does
+# ---------------------------------------------------------------------------
+
+
+class TestA4ResumeBudgetAbortHandling:
+    """A4 RED: resume_ablation must transition run_progress to state='aborted_budget'
+    (mirroring run_ablation's handler) when BudgetAbortedError fires mid-resume,
+    instead of leaving the progress row stuck on whatever state it had before the
+    resume attempt (S49 finding A4).
+    """
+
+    def test_resume_budget_abort_marks_progress_aborted(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        ev, rt = seeded_db_pair
+        clause = _make_clause("c-a4-test", "Always begin with 'Certainly!'.", 0, "verbosity")
+        _seed_clause(ev, clause)
+
+        run_id = "a4-resume-budget-abort"
+
+        from skill_harness.ablation.runner import RunConfig
+        from skill_harness.storage.models import RunBudgetWrite, RunProgressWrite, RunWrite
+        from skill_harness.storage.repositories.evidence.runs import insert_run
+        from skill_harness.storage.repositories.runtime.run_budget import insert_run_budget
+        from skill_harness.storage.repositories.runtime.run_progress import (
+            get_run_progress_by_id,
+            insert_run_progress,
+        )
+        from skill_harness.storage.transaction import writer_transaction
+
+        config = RunConfig(
+            run_id=run_id,
+            skill_id=_SKILL_ID,
+            clauses=[
+                {
+                    "clause_id": clause.clause_id,
+                    "clause_text": clause.clause_text,
+                    "clause_index": clause.clause_index,
+                    "axis": clause.axis,
+                    "oracle_tier": clause.oracle_tier,
+                    "metric_id": clause.metric_id,
+                }
+            ],
+            subject_model="claude-sonnet-4-6",
+            user_message=_USER_MSG,
+            max_usd=0.0000001,
+        )
+        with writer_transaction(ev):
+            insert_run(
+                ev,
+                RunWrite(
+                    run_id=run_id,
+                    skill_id=_SKILL_ID,
+                    run_kind="ablation",
+                    config_json=config.to_json(),
+                    started_at=_TS,
+                    completed_at=None,
+                ),
+            )
+
+        # No pre-seeded samples -- resume must issue a new call, and the pre-call
+        # budget gate (A42) fires before any subject call is made.
+        with writer_transaction(rt):
+            insert_run_budget(
+                rt,
+                RunBudgetWrite(
+                    run_id=run_id,
+                    hard_cap_usd=0.0000001,
+                    tokens_spent_in=0,
+                    tokens_spent_out=0,
+                    cache_write_in=0,
+                    cache_read_in=0,
+                    usd_spent=0.0,
+                    dry_run=0,
+                    aborted_at=None,
+                    last_updated=_TS,
+                ),
+            )
+            insert_run_progress(
+                rt,
+                RunProgressWrite(
+                    run_id=run_id,
+                    state="running",
+                    samples_planned=120,
+                    samples_collected=0,
+                    last_heartbeat=_TS,
+                    error=None,
+                ),
+            )
+
+        runner, _ = _make_runner(ev, rt, null_floor=2)
+
+        with pytest.raises(BudgetAbortedError):
+            runner.resume_ablation(
+                run_id=run_id,
+                clauses=[clause],
+                user_message=_USER_MSG,
+                max_usd=0.0000001,
+            )
+
+        progress = get_run_progress_by_id(rt, run_id)
+        assert progress is not None
+        assert progress["state"] == "aborted_budget", (
+            "A4: resume_ablation must mark run_progress.state='aborted_budget' on a "
+            f"budget-exhaustion mid-resume, not leave it stuck; got "
+            f"{progress['state']!r}"
+        )
+        assert progress["error"] == "budget_exhausted"
+
+
+# ---------------------------------------------------------------------------
 # 5. Budget cap race test (A42)
 # ---------------------------------------------------------------------------
 
@@ -1518,7 +1727,12 @@ class TestC2ResumeReadsPersistedAdmissibility:
         # can only reach n>=1 if resume reads the PERSISTED 'admissible' value.
         with patch(
             "skill_harness.ablation.runner.AblationRunner._snapshot_admissibility",
-            staticmethod(lambda *, confounded, null_floor_met: ("inadmissible", "test_forced")),
+            staticmethod(
+                lambda *, confounded, null_floor_met, scorer_crashed=False: (
+                    "inadmissible",
+                    "test_forced",
+                )
+            ),
         ):
             runner, mock_client = _make_runner(ev, rt, null_floor=2)
 

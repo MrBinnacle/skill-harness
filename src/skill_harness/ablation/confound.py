@@ -22,6 +22,7 @@ never a verdict-row state change. The confound_events row drives the VIEW exclus
 
 from __future__ import annotations
 
+import contextlib
 import statistics
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -174,17 +175,19 @@ class NullAccumulator:
             self._axis_values[axis].append(value)
 
     def sigmas(self) -> dict[str, float]:
-        """Compute sigma per axis. Returns only axes with >= null_floor samples."""
+        """Compute sigma per axis. Returns only axes with >= null_floor samples.
+
+        A6: a floor-met, zero-variance axis is returned as sigma=0.0 rather than
+        dropped. Dropping it made "zero variance" and "below floor" both read as
+        "axis absent" to callers, which let confound detection go silently inert
+        for zero-variance axes -- see ``detect_confounds`` for the consuming side.
+        """
         result: dict[str, float] = {}
         for axis, values in self._axis_values.items():
             if len(values) < self._null_floor:
                 continue  # Below floor -- confound detection disabled for this axis
-            try:
-                sigma = statistics.stdev(values)
-                if sigma > 0.0:
-                    result[axis] = sigma
-            except statistics.StatisticsError:
-                pass
+            with contextlib.suppress(statistics.StatisticsError):
+                result[axis] = statistics.stdev(values)  # may be 0.0 (A6)
         return result
 
     def n(self) -> int:
@@ -240,10 +243,15 @@ def detect_confounds(
 
     for axis in sorted(all_axes):  # sorted for determinism
         sigma = null_sigmas.get(axis)
-        if sigma is None or sigma == 0.0:
-            continue  # Below N_null floor or zero variance -- skip (A47)
+        if sigma is None:
+            continue  # Below N_null floor -- genuinely insufficient Null data (A47)
 
         delta = full_scores[axis] - ablated_scores[axis]
+        # A6: when sigma == 0.0 (floor met, zero variance under Null), k * sigma == 0,
+        # so this only screens out an EXACT-zero delta. Any nonzero delta falls
+        # through and is flagged -- a zero-variance Null gives no safe threshold to
+        # hide real movement behind, so confound monitoring must never go silently
+        # inert for a zero-variance axis.
         if abs(delta) <= k * sigma:
             continue  # Within threshold -- not a confound event
 
@@ -289,15 +297,31 @@ def detect_confounds(
 # ---------------------------------------------------------------------------
 
 
-def delta_to_observation(delta: float, tie_tolerance: float = 0.0) -> float:
+def delta_to_observation(
+    delta: float, comparator: str = "increase", tie_tolerance: float = 0.0
+) -> float:
     """Convert a metric delta to a Win/Tie/Loss observation (A10 half-update).
 
     :param delta: Full score - Ablated_k score on the primary axis.
+    :param comparator: The clause's persisted directional claim (schema CHECK:
+        increase|decrease|match). Determines which sign of delta counts as a Win:
+        - 'increase': Win = Full > Ablated (delta > 0). The clause claims the axis
+          rises -- this is the original, pre-A2 behavior and the default.
+        - 'decrease': Win = Full < Ablated (delta < 0). The clause claims the axis
+          falls, so the sign is flipped relative to 'increase' -- an effective
+          decrease-direction clause (e.g. "be concise" on verbosity) must verdict
+          Win, not Loss (A2).
+        - 'match'/anything else: treated as 'increase'. A "preserve" claim is a
+          magnitude-of-change question, not a delta-sign question, and defining that
+          comparison model is out of scope here -- this is a deliberate placeholder,
+          not a considered design decision.
     :param tie_tolerance: Absolute tolerance for tie classification (0.0 = strict equality).
-    :returns: 1.0 (Win = Full beats Ablated_k), 0.5 (Tie), 0.0 (Loss).
+    :returns: 1.0 (Win), 0.5 (Tie), 0.0 (Loss).
     """
     if abs(delta) <= tie_tolerance:
         return 0.5
+    if comparator == "decrease":
+        return 1.0 if delta < 0 else 0.0
     return 1.0 if delta > 0 else 0.0
 
 

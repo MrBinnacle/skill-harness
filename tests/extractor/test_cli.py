@@ -167,6 +167,38 @@ def test_skill_init_missing_file_exits_nonzero(tmp_path: Path) -> None:
     assert result.exit_code != 0
 
 
+@patch("skill_harness.cli.main.StorageContext")
+@patch("skill_harness.cli.main.extract_skill")
+def test_skill_init_comparator_unspecified_exits_cleanly(
+    mock_extract: Any, mock_ctx_cls: Any, tmp_path: Path
+) -> None:
+    """C4b RED: persisting a comparator_unspecified clause via 'skill init --execute'
+    raises a raw ValueError from extract_skill (extractor/pipeline.py
+    _to_db_comparator's documented abort-the-whole-persist doctrine). The CLI's
+    `except ExtractionError` does not catch ValueError, so today it propagates as an
+    uncaught traceback instead of a clean click.ClickException. Data correctness is
+    unaffected (the abort-on-persist behavior is correct and untouched) -- this is
+    CLI UX only.
+    """
+    mock_extract.side_effect = ValueError(
+        "comparator_unspecified cannot be stored: the clause direction is undefined. "
+        "Mark the clause as semantic_vacuous_pending_review instead."
+    )
+    mock_ctx = mock_ctx_cls.return_value.__enter__.return_value
+    mock_ctx.evidence_conn = object()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["skill", "init", "--execute", str(_skill_file(tmp_path))]
+    )
+
+    assert result.exit_code != 0
+    assert not isinstance(result.exception, ValueError), (
+        "C4b: a raw ValueError must be caught and converted to click.ClickException "
+        f"(clean CLI error), not propagate uncaught. Got: {result.exception!r}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # skill init — existing stubs not broken
 # ---------------------------------------------------------------------------

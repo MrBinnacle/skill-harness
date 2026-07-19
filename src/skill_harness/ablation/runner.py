@@ -124,6 +124,10 @@ class ClauseSpec:
     axis: str
     oracle_tier: int
     metric_id: str | None = None
+    comparator: str = "increase"
+    """Persisted directional claim (schema CHECK: increase|decrease|match). Threaded
+    into ``delta_to_observation`` so a 'decrease' clause verdicts correctly (A2).
+    Defaults to 'increase' (the pre-A2 behavior) for callers that don't set it."""
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +236,12 @@ class ClauseResult:
 # ---------------------------------------------------------------------------
 # BudgetAbortedError -- raised internally when budget is exceeded
 # ---------------------------------------------------------------------------
+
+
+class _ScorerCrashError(RuntimeError):
+    """Raised internally when a Tier-1 scorer crashes while scoring the primary axis
+    (A1). Caught in ``_run_clause`` -- never allowed to reach the verdict as a
+    fabricated numeric score."""
 
 
 class BudgetAbortedError(Exception):
@@ -567,29 +577,48 @@ class AblationRunner:
         null_acc = NullAccumulator(scorers=self._scorers, null_floor=self._null_floor)
         clause_results: list[ClauseResult] = []
 
-        for clause_spec in clauses:
-            result = self._run_clause(
-                run_id=run_id,
-                clause_spec=clause_spec,
-                all_clauses=clauses,
-                user_message=user_message,
-                clause_to_axis_map=clause_to_axis_map,
-                null_acc=null_acc,
-                samples_collected_ref=[samples_collected],
-                max_usd=max_usd,
-                existing_samples=existing,
-            )
-            samples_collected = result[0]
-            clause_results.append(result[1])
+        # A4: resume_ablation must abort the same way run_ablation does on a budget
+        # exhaustion mid-loop -- without this handler, BudgetAbortedError propagated
+        # uncaught and left run_progress.state stuck on whatever it was before resume
+        # (never transitioning to 'aborted_budget'), so a resumed-then-budget-killed
+        # run was indistinguishable from a crash.
+        try:
+            for clause_spec in clauses:
+                result = self._run_clause(
+                    run_id=run_id,
+                    clause_spec=clause_spec,
+                    all_clauses=clauses,
+                    user_message=user_message,
+                    clause_to_axis_map=clause_to_axis_map,
+                    null_acc=null_acc,
+                    samples_collected_ref=[samples_collected],
+                    max_usd=max_usd,
+                    existing_samples=existing,
+                )
+                samples_collected = result[0]
+                clause_results.append(result[1])
 
+                with writer_transaction(self._runtime):
+                    update_run_progress(
+                        self._runtime,
+                        run_id,
+                        state="running",
+                        samples_collected=samples_collected,
+                        last_heartbeat=self._now(),
+                    )
+        except BudgetAbortedError:
+            abort_ts = self._now()
             with writer_transaction(self._runtime):
+                update_run_budget_aborted(self._runtime, run_id, abort_ts, abort_ts)
                 update_run_progress(
                     self._runtime,
                     run_id,
-                    state="running",
+                    state="aborted_budget",
                     samples_collected=samples_collected,
-                    last_heartbeat=self._now(),
+                    last_heartbeat=abort_ts,
+                    error="budget_exhausted",
                 )
+            raise
 
         # Stamp completed_at
         completed_ts = self._now()
@@ -846,10 +875,26 @@ class AblationRunner:
 
                 # Score Full vs Ablated_k on the primary axis (Tier-1 directional).
                 # Reached only for Tier-1-measurable clauses (gated at method entry).
-                primary_full_score = self._score_primary_axis(full_output, clause_spec)
-                primary_abl_score = self._score_primary_axis(ablated_output, clause_spec)
-                primary_delta = primary_full_score - primary_abl_score
-                observation = delta_to_observation(primary_delta)
+                # A1: a scorer crash must never become a fabricated 0.0 score inside
+                # the verdict path -- catch it and mark the comparison inadmissible
+                # (below) instead of feeding a real delta/observation off of it.
+                scorer_crashed = False
+                try:
+                    primary_full_score = self._score_primary_axis(full_output, clause_spec)
+                    primary_abl_score = self._score_primary_axis(ablated_output, clause_spec)
+                except _ScorerCrashError:
+                    scorer_crashed = True
+                    primary_full_score = primary_abl_score = 0.0
+
+                if scorer_crashed:
+                    # No genuine delta is knowable -- 0.5 (Tie) is the least-misleading
+                    # placeholder the {0.0, 0.5, 1.0} schema allows; admissibility below
+                    # excludes it from the posterior regardless (A1).
+                    primary_delta = 0.0
+                    observation = 0.5
+                else:
+                    primary_delta = primary_full_score - primary_abl_score
+                    observation = delta_to_observation(primary_delta, clause_spec.comparator)
 
                 # Confound monitoring (A47) across all axes for this comparison
                 null_sigmas = null_acc.sigmas()
@@ -868,8 +913,23 @@ class AblationRunner:
                     f"== ablated_clause_id={clause_id!r}"
                 )
 
+                # A1: confound-path/primary-path scorer consistency. The confound path
+                # (detect_confounds) uses the SAME scorer registry and suppresses
+                # per-axis exceptions by omitting the axis from full/ablated scores --
+                # so a crashing primary-axis scorer must never still surface as a
+                # confound event for its own axis (that would mean the two paths saw
+                # different scorer behavior for the same axis/text, a real bug).
+                if scorer_crashed:
+                    assert not any(ce.axis == clause_spec.axis for ce in confound_events_out), (
+                        "A1 invariant violated: primary-axis scorer crashed but the "
+                        f"confound path still produced an event for axis "
+                        f"{clause_spec.axis!r} -- confound-path/primary-path scorer "
+                        "consistency broken"
+                    )
+
                 # Root-insight: snapshot admissibility at write time from real state.
-                # - confound_flagged for THIS clause  -> inadmissible (reason confounded)
+                # - scorer crash on the primary axis  -> inadmissible (reason scorer_error, A1)
+                # - confound_flagged for THIS clause   -> inadmissible (reason confounded)
                 # - Null accumulator below floor       -> inadmissible (reason underpowered)
                 # - otherwise                          -> admissible
                 this_clause_confounded = any(
@@ -880,6 +940,7 @@ class AblationRunner:
                 admissibility_state, inadmissibility_reason = self._snapshot_admissibility(
                     confounded=this_clause_confounded,
                     null_floor_met=null_floor_met,
+                    scorer_crashed=scorer_crashed,
                 )
 
                 # SCHEMA-3 / BLOCKER-2.2: write a verdict only if one doesn't already exist
@@ -1150,7 +1211,7 @@ class AblationRunner:
 
     @staticmethod
     def _snapshot_admissibility(
-        *, confounded: bool, null_floor_met: bool
+        *, confounded: bool, null_floor_met: bool, scorer_crashed: bool = False
     ) -> tuple[str, str | None]:
         """Compute the write-time admissibility snapshot for a comparison.
 
@@ -1158,12 +1219,19 @@ class AblationRunner:
         comparison's state, NOT a hardcoded constant. Never recomputed at read time
         (CLAUDE.md Evidence model — locked invariant).
 
+        - scorer crashed on the primary axis (A1)               -> ('inadmissible', 'scorer_error')
         - confounded (this clause's own axis confound_flagged) -> ('inadmissible', 'confounded')
         - Null accumulator below floor (N_null < 30, A47)       -> ('inadmissible', 'underpowered')
         - otherwise                                             -> ('admissible', None)
 
+        scorer_crashed is checked first: a crash means the comparison could not be
+        scored at all, which takes priority over (and is orthogonal to) whatever the
+        confound/null-floor state happens to be.
+
         :returns: (admissibility_state, inadmissibility_reason)
         """
+        if scorer_crashed:
+            return "inadmissible", "scorer_error"
         if confounded:
             return "inadmissible", "confounded"
         if not null_floor_met:
@@ -1207,6 +1275,10 @@ class AblationRunner:
         :param text: Subject model output.
         :param clause_spec: Clause specification with axis name.
         :returns: Metric score (float).
+        :raises _ScorerCrashError: If the scorer itself raises (A1). A crash must
+            never be silently converted into a real 0.0 score inside the verdict
+            path -- the caller catches this and marks the comparison inadmissible
+            rather than let a crash masquerade as a genuine Loss.
         """
         scorer = self._scorers.get(clause_spec.axis)
         if scorer is None:
@@ -1217,8 +1289,11 @@ class AblationRunner:
             )
         try:
             return float(scorer(text))
-        except Exception:
-            return 0.0
+        except Exception as exc:
+            raise _ScorerCrashError(
+                f"Tier-1 scorer for axis {clause_spec.axis!r} raised while scoring "
+                f"the primary axis (A1): {exc!r}"
+            ) from exc
 
     # ------------------------------------------------------------------
     # Subject model call with retry (A40 per-call policy)

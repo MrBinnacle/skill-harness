@@ -70,15 +70,19 @@ class TestNullAccumulator:
         assert "word_count" in sigs
         assert sigs["word_count"] > 0.0
 
-    def test_zero_variance_excluded(self) -> None:
-        """Zero-variance axis (all same value) is excluded from sigmas."""
+    def test_zero_variance_included_as_zero_sigma(self) -> None:
+        """A6: zero-variance axis (floor met, all same value) stays in sigmas() as
+        sigma=0.0, rather than being dropped. Dropping it makes it indistinguishable
+        from "below floor" to callers (both read as absent), which is exactly what
+        let confound detection go silently inert for zero-variance axes (A6)."""
         acc = NullAccumulator(scorers=FAKE_SCORERS)
         # All same text -> zero variance
         for _ in range(N_NULL_FLOOR):
             acc.add("exactly five words here now")
         sigs = acc.sigmas()
-        # word_count will be constant (5) -> sigma = 0 -> excluded
-        assert "word_count" not in sigs
+        # word_count is constant (5) -> sigma = 0.0, but floor IS met -> must be present
+        assert "word_count" in sigs
+        assert sigs["word_count"] == 0.0
 
     def test_axis_n(self) -> None:
         """axis_n() returns sample count for specific axis."""
@@ -230,6 +234,93 @@ class TestDetectConfounds:
         assert isinstance(ev.delta, float)
         assert ev.null_sigma == sigma
         assert ev.k_threshold == K_THRESHOLD
+
+    def test_a6_zero_sigma_axis_still_flags_nonzero_delta(self) -> None:
+        """A6 RED: a floor-met, zero-variance (sigma=0.0) Null axis must NOT disable
+        confound detection. k * sigma = 0 gives no safe threshold to hide movement
+        behind, so any nonzero Full/Ablated delta on that axis must still be flagged
+        -- silently skipping it (pre-fix) lets a real confound enter evidence as an
+        undetected, un-audited 'admissible' verdict.
+        """
+        acc = NullAccumulator(scorers=FAKE_SCORERS)
+        for _ in range(N_NULL_FLOOR):
+            acc.add("exactly five words here now")  # word_count constant=5 -> sigma=0
+        null_sigmas = acc.sigmas()
+
+        full_text = " ".join(["word"] * 20)
+        ablated_text = " ".join(["word"] * 5)
+        events = detect_confounds(
+            full_text=full_text,
+            ablated_text=ablated_text,
+            null_sigmas=null_sigmas,
+            primary_clause_id="clause-1",
+            clause_to_axis_map={"clause-1": "char_count", "clause-2": "word_count"},
+            scorers=FAKE_SCORERS,
+        )
+        confound_events = [e for e in events if e.axis == "word_count"]
+        assert len(confound_events) == 1, (
+            "A6: zero-variance (sigma=0.0) Null axis with floor met must still flag "
+            f"a nonzero Full/Ablated delta; got {len(confound_events)} events for "
+            f"word_count (null_sigmas={null_sigmas!r})"
+        )
+        assert confound_events[0].null_sigma == 0.0
+        assert confound_events[0].delta_kind == "confound_flagged"
+
+    def test_a6_zero_sigma_exact_zero_delta_not_flagged(self) -> None:
+        """A6: a zero-sigma axis with an EXACT-zero Full/Ablated delta is genuinely
+        uninformative (nothing moved) and must not be flagged -- only nonzero deltas
+        on a zero-variance axis are inherently unbounded-risk."""
+        acc = NullAccumulator(scorers=FAKE_SCORERS)
+        for _ in range(N_NULL_FLOOR):
+            acc.add("exactly five words here now")
+        null_sigmas = acc.sigmas()
+
+        # Same word count in Full and Ablated -> delta = 0.0 exactly
+        full_text = " ".join(["word"] * 7)
+        ablated_text = " ".join(["item"] * 7)
+        events = detect_confounds(
+            full_text=full_text,
+            ablated_text=ablated_text,
+            null_sigmas=null_sigmas,
+            primary_clause_id="clause-1",
+            clause_to_axis_map={"clause-1": "char_count", "clause-2": "word_count"},
+            scorers=FAKE_SCORERS,
+        )
+        assert [e for e in events if e.axis == "word_count"] == []
+
+
+# ---------------------------------------------------------------------------
+# A2: comparator-directional delta_to_observation (verbatim from S49 finding)
+# ---------------------------------------------------------------------------
+
+
+class TestA2ComparatorDirectionalObservation:
+    def test_decrease_comparator_negative_delta_is_win(self) -> None:
+        """A2 RED: an effective 'decrease' clause (e.g. 'be concise' on verbosity,
+        higher=more tokens) makes Full score LOWER than Ablated -> delta < 0. That is
+        the clause WORKING, so it must verdict Win (1.0) for a 'decrease' comparator
+        -- not Loss, which is what the hardcoded 'Win = Full > Ablated' rule produces.
+        """
+        assert delta_to_observation(-5.0, comparator="decrease") == 1.0
+
+    def test_decrease_comparator_positive_delta_is_loss(self) -> None:
+        """A2: 'decrease' clause with Full > Ablated (axis rose instead of falling)
+        is the clause failing to do its job -> Loss."""
+        assert delta_to_observation(5.0, comparator="decrease") == 0.0
+
+    def test_increase_comparator_unchanged(self) -> None:
+        """A2: 'increase' comparator keeps the original Win=Full>Ablated semantics."""
+        assert delta_to_observation(5.0, comparator="increase") == 1.0
+        assert delta_to_observation(-5.0, comparator="increase") == 0.0
+
+    def test_default_comparator_is_increase(self) -> None:
+        """Backward compatibility: omitting comparator preserves prior behavior."""
+        assert delta_to_observation(5.0) == 1.0
+        assert delta_to_observation(-5.0) == 0.0
+
+    def test_decrease_comparator_tie_tolerance_still_applies(self) -> None:
+        """Tie-tolerance is checked before directionality in both cases."""
+        assert delta_to_observation(-0.3, comparator="decrease", tie_tolerance=0.5) == 0.5
 
 
 # ---------------------------------------------------------------------------

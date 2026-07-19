@@ -111,6 +111,13 @@ def skill_init(path: Path, execute: bool, evidence_db: Path, runtime_db: Path) -
             _print_result(result, persisted=False)
     except ExtractionError as exc:
         raise click.ClickException(str(exc)) from exc
+    except ValueError as exc:
+        # C4b: extract_skill (--execute path) raises a raw ValueError when a clause
+        # persists as comparator_unspecified (extractor/pipeline.py _to_db_comparator's
+        # documented abort-the-whole-persist doctrine). That abort behavior is correct
+        # and untouched -- this only gives it a clean CLI surface instead of a raw
+        # traceback.
+        raise click.ClickException(str(exc)) from exc
 
 
 def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
@@ -862,7 +869,7 @@ def _load_clauses_from_db(
     from skill_harness.ablation.runner import ClauseSpec
 
     query = """
-        SELECT clause_id, clause_text, clause_index, axis, oracle_tier
+        SELECT clause_id, clause_text, clause_index, axis, oracle_tier, comparator
         FROM clauses
         WHERE skill_id = ?
     """
@@ -885,6 +892,9 @@ def _load_clauses_from_db(
             # Tier-1 clauses require metric_id IS NOT NULL (schema CHECK constraint).
             # Use the axis name as metric_id — the axis IS the registered scorer key.
             metric_id=row[3] if row[4] == 1 else None,
+            # A2: persisted directional claim, threaded so delta_to_observation can
+            # sign-flip 'decrease' clauses instead of always assuming 'increase'.
+            comparator=row[5],
         )
         for row in rows
     ]
