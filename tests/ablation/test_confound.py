@@ -497,11 +497,30 @@ class TestT2Qual1SubToleranceForcedBranch:
 
                 from unittest.mock import MagicMock
 
+                from skill_harness.ablation.subject import SubjectResponse
+
                 fake_scorers = {"verbosity": lambda t: float(len(t.split()))}
+                mock_subject = MagicMock()
+                # QUAL-1 (length_confounded) short-circuits before any real
+                # full/ablated/null sampling call, but the warmup call still fires
+                # (it precedes the QUAL-1 check) and its response is now used for
+                # A42 budget accounting (A3 hostile-review fix) -- give it a real
+                # zero-cost SubjectResponse instead of a bare MagicMock, whose
+                # numeric attributes are not bindable SQL parameters.
+                mock_subject.warmup_shared_prefix.return_value = SubjectResponse(
+                    output_text="",
+                    input_tokens=0,
+                    cache_read_input_tokens=0,
+                    cache_creation_input_tokens=0,
+                    output_tokens=0,
+                    usd=0.0,
+                    model="claude-sonnet-4-6",
+                    stop_reason="end_turn",
+                )
                 runner = AblationRunner(
                     evidence_conn=ev,
                     runtime_conn=rt,
-                    subject_client=MagicMock(),
+                    subject_client=mock_subject,
                     scorers=fake_scorers,
                     max_retries=0,
                     retry_delay_s=0.0,

@@ -1237,6 +1237,69 @@ class TestBudgetCapRace:
 
 
 # ---------------------------------------------------------------------------
+# A3: warmup call cost must be counted against the budget cap (A42)
+# ---------------------------------------------------------------------------
+
+
+class TestA3WarmupCostAccounting:
+    """A3: subject.py:411 documents 'caller may discard content, but cost is real'
+    for warmup_shared_prefix(). _warmup_or_serialize() discarded the ENTIRE
+    SubjectResponse (including .usd), so the warmup's real API cost never reached
+    run_budget.usd_spent (A42) or runtime.cost_ledger (A41) -- the budget cap
+    silently allowed spending up to max_usd ON TOP of the warmup's real cost.
+    """
+
+    def test_warmup_cost_counted_against_budget(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        from skill_harness.ablation.reconciler import get_evidence_cost_sum
+        from skill_harness.storage.repositories.runtime.run_budget import get_run_budget_by_id
+
+        ev, rt = seeded_db_pair
+        clause = _make_clause()
+        _seed_clause(ev, clause)
+
+        # Give the warmup call a distinctly large token count so its cost is easy
+        # to isolate from the (much smaller) per-sample costs.
+        def response_factory(idx: int) -> MagicMock:
+            if idx == 0:  # warmup
+                return _mock_response("word " * 10, input_tokens=100_000, output_tokens=50_000)
+            sample_call = (idx - 1) % 3
+            if sample_call == 0:  # Full
+                return _mock_response("word " * 50)
+            elif sample_call == 1:  # Ablated_k
+                return _mock_response("a")
+            else:  # Null
+                return _mock_response("word " * 20)
+
+        runner, _ = _make_runner(ev, rt, response_factory)
+        run_id = "warmup-cost-test-run"
+        runner.run_ablation(
+            skill_id=_SKILL_ID,
+            clauses=[clause],
+            user_message=_USER_MSG,
+            max_usd=1000.0,
+            run_id=run_id,
+        )
+
+        budget = get_run_budget_by_id(rt, run_id)
+        assert budget is not None
+        # The warmup call is deliberately NOT written to evidence.samples (its
+        # output is discarded, not a real sample) -- get_evidence_cost_sum (A41
+        # primary source) therefore never includes it. The runtime budget ledger
+        # (A42 hard-cap enforcement) must still reflect the warmup's real cost, or
+        # the cap silently allows spending max_usd ON TOP of the warmup's cost
+        # every run.
+        evidence_sum = get_evidence_cost_sum(ev, run_id)
+        assert budget["usd_spent"] > evidence_sum, (
+            "A3: run_budget.usd_spent must exceed the evidence-samples-only sum by "
+            f"the warmup call's real cost. Got usd_spent={budget['usd_spent']!r}, "
+            f"evidence_sum={evidence_sum!r} -- warmup cost is not being counted "
+            "against the budget cap (A3 regression)."
+        )
+
+
+# ---------------------------------------------------------------------------
 # 6. Cost reconciler (A41)
 # ---------------------------------------------------------------------------
 

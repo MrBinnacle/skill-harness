@@ -6,11 +6,20 @@ WARN path all use the same two-step runtime→evidence lookup.
 
 Two-DB join discipline (A25): cross-DB lookups are done at the Python
 layer — no ATTACH or cross-DB SQL joins.
+
+B4: skill_id matching uses the runs.skill_id COLUMN, never config_json. The
+column is NOT NULL, FK-enforced (REFERENCES skills), and immutable after
+insert (A20) — it is the single source of truth for a run's skill. Reading
+skill_id back out of config_json (as this module did before B4) creates a
+second, unenforced copy that can silently diverge from the column and is
+also what aggregate_skill()'s own precondition-matching queries against
+(runs.skill_id, engine.py:_fetch_completed_ablation_runs) — any drift between
+the two routes meant an incomplete run could be missed by this module's
+find_incomplete_runs() while still being aggregated over by engine.py.
 """
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from dataclasses import dataclass
 from sqlite3 import Connection
@@ -39,8 +48,10 @@ def find_incomplete_runs(
     Step 1: query runtime.run_progress for non-terminal states
             (NOT IN ('completed', 'failed', 'aborted_budget')).
     Step 2: open evidence read-only (caller passes it in; CLI uses
-            open_evidence_readonly per A51), SELECT run_id, config_json FROM runs
-            WHERE run_id IN (...). Match skill_id via json.loads.
+            open_evidence_readonly per A51), SELECT run_id, skill_id FROM runs
+            WHERE run_id IN (...). Match skill_id via the runs.skill_id COLUMN
+            (B4) — never config_json, which is an unenforced, potentially-stale
+            copy.
 
     Python-side join per A25 (no cross-DB SQL joins). The
     evidence_conn_ro MUST be read-only (caller's responsibility);
@@ -72,22 +83,20 @@ def find_incomplete_runs(
     # Step 2: cross-reference with evidence.runs for skill_id filtering
     # Python-layer join — no ATTACH, no cross-DB SQL.
     # Fail-closed: same discipline as Step 1 — DB error raises, never returns [].
+    # B4: filter on the runs.skill_id COLUMN, not config_json — the column is
+    # authoritative (NOT NULL, FK-enforced, immutable per A20) and is what
+    # engine.py's own precondition/discovery queries match against.
     placeholders = ",".join("?" for _ in run_id_to_runtime)
     try:
         ev_rows = evidence_conn_ro.execute(
-            f"SELECT run_id, config_json FROM runs WHERE run_id IN ({placeholders})",  # noqa: S608
+            f"SELECT run_id, skill_id FROM runs WHERE run_id IN ({placeholders})",  # noqa: S608
             list(run_id_to_runtime.keys()),
         ).fetchall()
     except sqlite3.Error as exc:
         raise PreconditionError("recovery_query_failed", None) from exc
 
     results: list[IncompleteRun] = []
-    for ev_run_id, config_json in ev_rows:
-        try:
-            config = json.loads(config_json)
-        except (json.JSONDecodeError, TypeError):
-            continue
-        row_skill_id = config.get("skill_id")
+    for ev_run_id, row_skill_id in ev_rows:
         if row_skill_id != skill_id:
             continue
         state, last_heartbeat = run_id_to_runtime.get(ev_run_id, ("unknown", ""))

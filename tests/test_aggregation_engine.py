@@ -651,7 +651,8 @@ class TestHealthyAggregation:
             )
             # 1.1.0 bumped in C1 fix-loop per A60 (A55 axes)
             # 1.2.0 bumped in M3 pre-tag fix (coverage_warnings)
-            assert report.report_schema_version == "1.2.0"
+            # 1.3.0 bumped in B5 hostile-review fix (is_prior_only)
+            assert report.report_schema_version == "1.3.0"
         finally:
             ev.close()
             rt.close()
@@ -1429,6 +1430,287 @@ class TestZeroClausesPreconditionError:
                 )
             assert exc_info.value.code == "no_clauses"
             assert exc_info.value.payload is None
+        finally:
+            ev.close()
+            rt.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: B1 — BH-FDR fallback must be consulted, not just computed
+# ---------------------------------------------------------------------------
+
+
+class TestBhFdrFallbackConsumption:
+    """B1: when fit_skill() falls back to BH-FDR, PASSED must require the clause
+    to have survived the FDR-corrected test (bh_fdr_passes), not just the raw
+    uncorrected p_win_gt_threshold>=0.95 crossing.
+    """
+
+    def test_bh_fdr_rejected_clause_not_passed_despite_raw_threshold(
+        self, tmp_path: Path
+    ) -> None:
+        """K=30 bimodal clauses (24 pure-loss + 5 pure-win) force EB-MoM
+        alpha_le_zero convergence failure -> bh_fdr_fallback (a pure {0,1} split
+        always has sample variance == mean*(1-mean), so alpha_hat computes to
+        exactly 0 regardless of split ratio). A 30th 'target' clause (8/8 wins,
+        Beta(9,1)) has raw p_win_gt_threshold ~= 0.9899 - comfortably over the
+        0.95 raw PASS bar, and n=8 clears N_MIN - but its BH-corrected p-value
+        (~0.0101) sorts after the 5 strongly-significant win clauses (whose
+        larger n=10 gives an even smaller p-value) and lands at rank 6 of 30,
+        where the BH cutoff (6/30*q=0.01) is JUST below it. Verified standalone:
+        fit_skill() on these exact (w,n) pairs puts 'target' outside
+        bh_fdr_passes (size 5 = only the win clauses).
+
+        Before B1: engine.py never consults bh_fdr_passes, so target reaches
+        PASSED via the raw threshold alone (with a frozen case present).
+        After B1: target must NOT be PASSED.
+        """
+        ev, rt = open_both(tmp_path)
+        try:
+            insert_skill(ev)
+            insert_metric_version(ev)
+            insert_run(ev, family_size=1)
+            insert_run_progress(rt, state="completed")
+
+            target_id = "clause-target"
+            counter = {"n": 0}
+
+            def _seed_clause(clause_id: str, index: int, w: int, n: int) -> None:
+                insert_clause(ev, clause_id=clause_id, clause_index=index)
+                for i in range(n):
+                    vid = counter["n"]
+                    counter["n"] += 1
+                    sa, sb = f"sa-{vid}", f"sb-{vid}"
+                    insert_sample(
+                        ev, sa, clause_id=clause_id, condition="full", sample_index=i
+                    )
+                    insert_sample(
+                        ev, sb, clause_id=clause_id, condition="ablated", sample_index=i
+                    )
+                    obs = 1.0 if i < w else 0.0
+                    insert_verdict(
+                        ev,
+                        verdict_id=f"v-{vid}",
+                        clause_id=clause_id,
+                        sample_a_id=sa,
+                        sample_b_id=sb,
+                        observation=obs,
+                    )
+
+            for i in range(24):
+                _seed_clause(f"clause-loss-{i}", i, w=0, n=10)
+            for i in range(5):
+                _seed_clause(f"clause-win-{i}", 24 + i, w=10, n=10)
+            _seed_clause(target_id, 29, w=8, n=8)
+            insert_frozen_case(ev, frozen_case_id="fc-target", clause_id=target_id)
+
+            report = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+
+            assert report.aggregation_method == "bh_fdr_fallback", (
+                f"Fixture must trigger BH-FDR fallback, got {report.aggregation_method!r}"
+            )
+            target_clause = next(c for c in report.clauses if c.clause_id == target_id)
+            assert target_clause.p_win_gt_threshold >= 0.95, (
+                "Fixture invariant broken: target's raw p_win_gt_threshold must "
+                f"cross 0.95, got {target_clause.p_win_gt_threshold!r}"
+            )
+            assert target_clause.n_verdicts >= 8, (
+                "Fixture invariant broken: target's n must clear N_MIN=8 so the "
+                "underpowered rule doesn't mask the BH-FDR gating being tested, "
+                f"got n_verdicts={target_clause.n_verdicts!r}"
+            )
+            assert target_clause.status != "PASSED", (
+                "B1: target crosses the raw 0.95 threshold but must NOT survive "
+                "BH-FDR correction (rank 6 of 30; p-value ~0.0101 does not clear "
+                f"its BH cutoff of 0.01) — got status={target_clause.status!r}. "
+                "bh_fdr_passes is not being consulted (B1 regression)."
+            )
+        finally:
+            ev.close()
+            rt.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: B5 — is_prior_only marker on zero-observation clauses
+# ---------------------------------------------------------------------------
+
+
+class TestPriorOnlyMarker:
+    """B5: clauses with zero admissible observations get a fabricated Beta(1,1)
+    prior (posterior_mean=0.5, p_win=0.4, CI=[0.025,0.975]) with no marker
+    distinguishing them from a genuine measurement. is_prior_only must be True
+    for these and False for measured clauses.
+    """
+
+    def test_unmeasured_no_data_clause_is_prior_only(self, tmp_path: Path) -> None:
+        ev, rt = open_both(tmp_path)
+        try:
+            insert_skill(ev)
+            insert_clause(ev)
+            insert_metric_version(ev)
+            insert_run(ev, family_size=1)
+            insert_run_progress(rt, state="completed")
+
+            report = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+            clause = report.clauses[0]
+            assert clause.status == "UNMEASURED"
+            assert clause.sub_reason == "no_data"
+            assert clause.is_prior_only is True, (
+                "B5: a zero-observation clause's posterior_mean=0.5 is a fabricated "
+                "Beta(1,1) prior, not a measurement — is_prior_only must mark it."
+            )
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_measured_clause_is_not_prior_only(self, tmp_path: Path) -> None:
+        ev, rt = open_both(tmp_path)
+        try:
+            _seed_healthy_evidence(ev, rt, n_wins=30, n_losses=2, with_frozen_case=True)
+            report = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+            clause = report.clauses[0]
+            assert clause.status == "PASSED"
+            assert clause.is_prior_only is False, (
+                "B5: a clause with real admissible observations must not be "
+                "flagged is_prior_only."
+            )
+        finally:
+            ev.close()
+            rt.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: B6 — metric_version divergence must resolve to MIXED, not last-write-wins
+# ---------------------------------------------------------------------------
+
+
+class TestMetricVersionMIXED:
+    """B6: pooling verdicts scored under different metric_version values into one
+    clause must surface as 'MIXED' + a data-integrity warning, mirroring the
+    ablation_operator_hash / subject_model MIXED doctrine (I2 / A55) — not
+    silently report only the last-processed run's metric_version.
+    """
+
+    def test_divergent_metric_version_sets_mixed_and_warns(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging
+
+        ev, rt = open_both(tmp_path)
+        try:
+            sk_id = "skill-metric-version-test"
+            cl_id = "clause-metric-version-001"
+            run1 = "run-mv-001"
+            run2 = "run-mv-002"
+
+            insert_skill(ev, skill_id=sk_id)
+            insert_clause(ev, clause_id=cl_id, skill_id=sk_id)
+            insert_metric_version(ev, version="1.0.0")
+            insert_metric_version(ev, version="1.1.0")
+
+            for run_id in (run1, run2):
+                config = json.dumps(
+                    {
+                        "run_id": run_id,
+                        "skill_id": sk_id,
+                        "clauses": [{"clause_id": cl_id, "axis": AXIS}],
+                        "subject_model": "claude-sonnet-4-6",
+                        "user_message": "test",
+                        "family_size": 1,
+                        "stopping_reasons": {},
+                    },
+                    sort_keys=True,
+                )
+                ev.execute(
+                    "INSERT INTO runs"
+                    " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                    " VALUES (?, ?, 'ablation', ?, ?, ?)",
+                    (run_id, sk_id, config, _TS, _TS2),
+                )
+                rt.execute(
+                    "INSERT INTO run_progress"
+                    " (run_id, state, samples_planned, samples_collected, last_heartbeat)"
+                    " VALUES (?, 'completed', 10, 10, ?)",
+                    (run_id, _TS2),
+                )
+
+            # run1 scored under metric_version 1.0.0, run2 under 1.1.0 — same
+            # clause/axis, pooled into one posterior by the engine regardless.
+            for i, (run_id, sa, sb, mv) in enumerate(
+                [(run1, "sa-mv1", "sb-mv1", "1.0.0"), (run2, "sa-mv2", "sb-mv2", "1.1.0")]
+            ):
+                insert_sample(
+                    ev, sa, run_id=run_id, clause_id=cl_id, condition="full", sample_index=i
+                )
+                insert_sample(
+                    ev, sb, run_id=run_id, clause_id=cl_id, condition="ablated", sample_index=i
+                )
+                insert_verdict(
+                    ev,
+                    verdict_id=f"v-mv-{i}",
+                    run_id=run_id,
+                    clause_id=cl_id,
+                    axis=AXIS,
+                    sample_a_id=sa,
+                    sample_b_id=sb,
+                    observation=1.0,
+                    metric_version=mv,
+                )
+
+            with caplog.at_level(logging.WARNING, logger="skill_harness.aggregation.engine"):
+                report = aggregate_skill(
+                    sk_id,
+                    evidence_conn_ro=ev,
+                    runtime_conn=rt,
+                    harness_version=_HARNESS_VER,
+                    generated_at_utc=_GEN_AT,
+                )
+
+            assert len(report.clauses) == 1
+            clause = report.clauses[0]
+            assert clause.metric_version_per_axis.get(AXIS) == "MIXED", (
+                "B6: metric_version diverged (1.0.0 vs 1.1.0) across pooled "
+                f"verdicts but was not flagged MIXED: {clause.metric_version_per_axis!r}"
+            )
+            assert any(
+                "data-integrity" in rec.message and "metric_version" in rec.message
+                for rec in caplog.records
+            ), "Expected data-integrity warning for metric_version divergence"
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_identical_metric_version_not_mixed(self, tmp_path: Path) -> None:
+        ev, rt = open_both(tmp_path)
+        try:
+            _seed_healthy_evidence(ev, rt, n_wins=9, n_losses=1)
+            report = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+            clause = report.clauses[0]
+            assert clause.metric_version_per_axis.get(AXIS) == "1.0.0"
         finally:
             ev.close()
             rt.close()

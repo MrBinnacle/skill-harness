@@ -1945,7 +1945,11 @@ def _render_evaluate_skill_report(report: Any, vacuity_count: int = 0) -> None:
         status = clause.status
         sub_reason = clause.sub_reason or "—"
         ci_lo, ci_hi = clause.credible_interval_95
-        ci_str = f"[{ci_lo:.3f}, {ci_hi:.3f}]"
+        # B5: is_prior_only clauses carry an uninformative Beta(1,1) PRIOR
+        # (posterior_mean=0.5 etc.), not a measurement — render a dim placeholder
+        # instead of the fabricated numbers so a reader never mistakes UNMEASURED
+        # for "measured at 0.5".
+        ci_str = "[dim]— (prior)[/]" if clause.is_prior_only else f"[{ci_lo:.3f}, {ci_hi:.3f}]"
 
         if status == "UNMEASURED":
             status_str = f"[yellow]{status}[/]"
@@ -1958,11 +1962,15 @@ def _render_evaluate_skill_report(report: Any, vacuity_count: int = 0) -> None:
         else:
             status_str = status
 
+        if clause.is_prior_only:
+            posterior_mean_str = "[dim]— (prior)[/]"
+        else:
+            posterior_mean_str = f"{clause.posterior_mean:.3f}"
         clause_table.add_row(
             clause.clause_id,
             status_str,
             sub_reason,
-            f"{clause.posterior_mean:.3f}",
+            posterior_mean_str,
             ci_str,
         )
 

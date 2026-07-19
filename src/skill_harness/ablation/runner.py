@@ -142,7 +142,7 @@ class RunConfig:
     Written to runs.config_json at run start. Used for:
     - Idempotency + resume: set-difference of existing tuples vs this plan (A40).
     - Multiplicity provenance: K x |axes| family size for Track E (A49).
-    - Stopping reason recording (A44).
+    - Stopping reason recording (A44) -- KNOWN GAP, see stopping_reasons below.
     """
 
     run_id: str
@@ -155,12 +155,38 @@ class RunConfig:
     n_min: int = N_MIN
     n_inc: int = N_INC
     n_max: int = N_MAX
+    """n_min/n_inc/n_max (A5, hostile-review): these are recorded as whatever the
+    caller passes RunConfig (today, always the N_MIN/N_INC/N_MAX module constants
+    below, since run_ablation() exposes no override params) -- but the ACTUAL
+    sampling loop (_run_clause / sequential-stop) reads the module constants
+    N_MIN/N_INC/N_MAX directly, never run_config.n_min/n_inc/n_max. There is no
+    live divergence today (no caller can set different values), but a future
+    caller passing a custom RunConfig would get a config_json describing a plan
+    the loop silently ignores. Not fixed here (scope: A3/A4/B*/D* cluster) --
+    wiring the loop to read from config would be a larger, separately-scoped
+    change; flagging so it isn't mistaken for already-correct."""
     max_usd: float = 5.0
     family_size: int = 0
     """K x |axes| — set by runner after building the clause list (A49)."""
 
     stopping_reasons: dict[str, str] = field(default_factory=dict)
-    """Maps clause_id -> stopping_reason (recorded at run-end for A44)."""
+    """Maps clause_id -> stopping_reason.
+
+    KNOWN GAP (A5, hostile-review 2026-07-19): this docstring and the field's own
+    intent (A44) claim stopping_reasons is "recorded at run-end", but it is NOT.
+    runs.config_json is written ONCE, before the clause loop runs (run_ablation
+    inserts the row at the top of the method), and evidence.runs has a
+    column-scoped immutability trigger (runs_immutable_columns, migration 0002)
+    that RAISE(ABORT)s on ANY UPDATE to config_json thereafter -- so there is no
+    way to persist the run-end stopping_reasons dict into this same row without
+    either violating the append-only invariant (never) or a schema change (a new
+    column/table, requires approval per project ASK-FIRST rules; out of scope for
+    this fix pass). The runner still populates a local `stopping_reasons` dict
+    during the loop (see run_ablation) but discards it -- it is never written
+    anywhere. This field is consequently always {} when read back from storage.
+    Left as a flagged, unresolved gap rather than silently "fixed" by writing to
+    a JSON blob that would violate A20.
+    """
 
     def to_json(self) -> str:
         """Serialize to JSON for storage in runs.config_json."""
@@ -438,6 +464,12 @@ class AblationRunner:
         # Track collected samples (shared mutable state for update_run_progress)
         samples_collected: int = 0
         clause_results: list[ClauseResult] = []
+        # A5 (hostile-review, KNOWN GAP): populated below per clause but never
+        # persisted anywhere -- runs.config_json is immutable after the initial
+        # insert above (runs_immutable_columns trigger, A20), so there is no
+        # write path back into RunConfig.stopping_reasons at run-end despite the
+        # field's own docstring claiming otherwise. See RunConfig.stopping_reasons
+        # for the full explanation. Not fixed here (would need a schema change).
         stopping_reasons: dict[str, str] = {}
 
         try:
@@ -449,7 +481,7 @@ class AblationRunner:
                     clause_texts, target_clause_index=0
                 )
                 warmup_blocks = warmup_conditions["full"]["system_blocks"]
-                self._warmup_or_serialize(warmup_blocks, user_message)
+                self._warmup_or_serialize(run_id, warmup_blocks, user_message)
 
             # Process each clause
             for clause_spec in clauses:
@@ -1335,19 +1367,35 @@ class AblationRunner:
 
     def _warmup_or_serialize(
         self,
+        run_id: str,
         system_blocks: list[dict[str, Any]],
         user_message: str,
     ) -> None:
         """Send warmup call to write shared prefix to prompt cache (A43/COST-4).
 
-        This must complete before fan-out across conditions. The response is
-        discarded (cost is real but the output is not used as a sample).
+        This must complete before fan-out across conditions. The warmup's OUTPUT
+        is discarded (not used as a sample) but its cost is real
+        (subject.py:warmup_shared_prefix docstring) and is counted against the
+        A42 budget cap via _update_budget_spend (A3 hostile-review fix) -- before
+        this fix the entire SubjectResponse was discarded, so run_budget.usd_spent
+        silently under-counted true spend by the warmup's cost on every run.
+
+        NOTE (A3 scope): this updates runtime.run_budget.usd_spent only. It does
+        NOT write a runtime.cost_ledger entry or an evidence.samples row. The A41
+        reconciler (reconcile_run_cost) treats evidence.samples.usd as the sole
+        source of truth and back-fills cost_ledger to MATCH that sum -- a
+        cost_ledger-only warmup entry with no evidence.samples counterpart would
+        be reconciled back OUT (net effect zero, not a fix). Representing warmup
+        cost in the evidence-authoritative ledger/reconciler model would require
+        either a schema change or a redefinition of reconcile_run_cost's
+        arithmetic, both out of this fix's scope (flagged, not resolved here).
         """
         import contextlib
 
         with contextlib.suppress(SubjectCallError):
-            self._subject.warmup_shared_prefix(system_blocks, user_message)
+            resp = self._subject.warmup_shared_prefix(system_blocks, user_message)
             # Warmup failure is non-fatal -- cache write discipline is best-effort.
+            self._update_budget_spend(run_id, resp)
 
     # ------------------------------------------------------------------
     # Idempotency helpers (A40)

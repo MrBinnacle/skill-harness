@@ -12,6 +12,8 @@ State derivation rules (A57, ordered by priority):
        - stale frozen case exists → UNMEASURED(falsifying_case_stale)
        - no frozen case at all → UNMEASURED(falsifying_case_missing)
   6. Posterior threshold MET AND ≥1 current frozen case → PASSED
+     (B1: when the skill fit used BH-FDR fallback, PASSED additionally requires
+     bh_fdr_pass=True — the raw threshold alone is not FDR-corrected.)
   7. Posterior threshold MET-BELOW (p <= 0.05) → FAILED
   8. Otherwise (0.05 < p < 0.95) → UNMEASURED(underpowered)
 
@@ -89,6 +91,14 @@ class ClauseStatusInput:
     run_state : str | None
         The run_progress.state for the source run (e.g. 'aborted_budget').
         None if the run_progress row is unavailable (tolerated).
+    bh_fdr_pass : bool | None
+        B1: gates the raw p_win_gt_threshold>=0.95 PASS check when the skill's fit used
+        the BH-FDR fallback method. None means "not applicable" (EB-MoM/unpooled method,
+        or this method's bh_fdr_passes is unavailable) — the raw threshold applies
+        unmodified. True/False means the fit DID run BH-FDR and this clause did/did not
+        survive the FDR-corrected test; False must block PASSED even if the raw
+        (uncorrected) posterior crosses 0.95 — otherwise the raw per-clause threshold
+        produces false PASSes at ~K*q the claimed FDR rate under multiple testing.
     """
 
     def __init__(
@@ -102,6 +112,7 @@ class ClauseStatusInput:
         current_frozen_case_count: int,
         any_stale_frozen_case: bool,
         run_state: str | None = None,
+        bh_fdr_pass: bool | None = None,
     ) -> None:
         self.admissible_verdict_count = admissible_verdict_count
         self.total_verdict_count = total_verdict_count
@@ -111,6 +122,7 @@ class ClauseStatusInput:
         self.current_frozen_case_count = current_frozen_case_count
         self.any_stale_frozen_case = any_stale_frozen_case
         self.run_state = run_state
+        self.bh_fdr_pass = bh_fdr_pass
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +172,11 @@ def derive_clause_status(
         return ClauseStatus.FAILED, None
 
     # Rules 5 + 6: PASSED gate — check frozen case currency
-    if p >= PASS_PROB_THRESHOLD:
+    # B1: bh_fdr_pass is False means this skill's fit fell back to BH-FDR and this
+    # clause did NOT survive the FDR-corrected test. The raw uncorrected
+    # p_win_gt_threshold>=0.95 crossing is then not a valid PASS signal on its own —
+    # fall through to Rule 8 (UNMEASURED/underpowered) instead of PASSED/FAILED-gate.
+    if p >= PASS_PROB_THRESHOLD and inp.bh_fdr_pass is not False:
         if inp.current_frozen_case_count >= 1:
             # Rule 6: threshold met AND current frozen case → PASSED
             return ClauseStatus.PASSED, None

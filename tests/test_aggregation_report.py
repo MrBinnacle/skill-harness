@@ -2,7 +2,8 @@
 
 Coverage:
 - to_json_dict produces all required top-level keys
-- report_schema_version = "1.2.0" (bumped in M3 pre-tag fix; was "1.1.0" in C1 fix-loop per A60)
+- report_schema_version = "1.3.0" (bumped in B5 hostile-review fix for is_prior_only;
+  was "1.2.0" in M3 pre-tag fix, "1.1.0" in C1 fix-loop per A60)
 - to_json_bytes is byte-stable for identical input
 - to_json_bytes is UTF-8 with trailing newline
 - Nested structures serialise correctly (tuples → lists, etc.)
@@ -106,17 +107,18 @@ class TestSchemaVersion:
     def test_report_schema_version_constant(self) -> None:
         # 1.1.0 bumped in C1 fix-loop per A60 (A55 axes)
         # 1.2.0 bumped in M3 pre-tag fix (coverage_warnings)
-        assert REPORT_SCHEMA_VERSION == "1.2.0"
+        # 1.3.0 bumped in B5 hostile-review fix (is_prior_only)
+        assert REPORT_SCHEMA_VERSION == "1.3.0"
 
     def test_schema_version_in_dict(self) -> None:
         report = make_skill_report()
         d = to_json_dict(report)
-        assert d["report_schema_version"] == "1.2.0"
+        assert d["report_schema_version"] == "1.3.0"
 
     def test_schema_version_in_bytes(self) -> None:
         report = make_skill_report()
         data = json.loads(to_json_bytes(report))
-        assert data["report_schema_version"] == "1.2.0"
+        assert data["report_schema_version"] == "1.3.0"
 
 
 # ---------------------------------------------------------------------------
