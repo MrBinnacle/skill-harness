@@ -25,6 +25,18 @@ if TYPE_CHECKING:
     from skill_harness.oracles.calibration.jsonl_parser import CalibrationPair
     from skill_harness.oracles.tier2.judge import JudgeVerdict
 
+# C2 fix: inadmissibility reasons whose choice/raw_observation are hardcoded
+# sentinels — no judge call completed (injection short-circuit, judge.py:270-283)
+# or the response was truncated/malformed (judge.py:301-311, 323-334) — carry no
+# real length-vs-verdict signal and must never enter the OLS fit below.
+# NOT included: "position_disagreement" — that reason marks a REAL completed
+# judge call (both AB and BA calls succeeded; the choice/raw_observation are
+# genuine model output) that merely disagreed under position swap. Excluding it
+# is the deliberate, documented behavior in fit_length_regression's docstring.
+SENTINEL_INADMISSIBILITY_REASONS: frozenset[str] = frozenset(
+    {"suspected_injection", "judge_response_malformed"}
+)
+
 
 def fit_length_regression(
     pairs: list[CalibrationPair],
@@ -51,9 +63,15 @@ def fit_length_regression(
     - Fits: raw_observation = β_0 + β_1 x (length_a - length_b)
     - Uses statsmodels OLS with a constant term added via sm.add_constant.
     - Deterministic: same input always produces the same β_1.
-    - Inadmissible verdicts are NOT excluded — the regression describes the
+    - Position-inconsistent verdicts (inadmissibility_reason ==
+      "position_disagreement") are NOT excluded — the regression describes the
       judge's overall behavior including position-inconsistent calls.
       (Exclusion would bias the β_1 estimate by removing length-extreme pairs.)
+    - Sentinel verdicts ARE excluded (C2 fix): inadmissibility_reason in
+      ``SENTINEL_INADMISSIBILITY_REASONS`` ("suspected_injection",
+      "judge_response_malformed") means no real judge call completed — their
+      choice and raw_observation=0.0 are hardcoded placeholders, not judge
+      signal, and would corrupt the β_1 estimate with fabricated zeros.
     """
     if len(pairs) != len(judge_verdicts):
         raise ValueError(
@@ -61,11 +79,17 @@ def fit_length_regression(
             "the same length"
         )
 
-    if len(judge_verdicts) < 2:
+    admissible = [
+        (p, v)
+        for p, v in zip(pairs, judge_verdicts, strict=True)
+        if v.inadmissibility_reason not in SENTINEL_INADMISSIBILITY_REASONS
+    ]
+
+    if len(admissible) < 2:
         return 0.0
 
-    delta_len = [float(v.length_a - v.length_b) for v in judge_verdicts]
-    outcomes = [v.raw_observation for v in judge_verdicts]
+    delta_len = [float(v.length_a - v.length_b) for _p, v in admissible]
+    outcomes = [v.raw_observation for _p, v in admissible]
 
     # Check for zero variance in Δlen (degenerate case — all pairs same length)
     if max(delta_len) == min(delta_len):

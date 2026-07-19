@@ -4,7 +4,8 @@ Verifies:
 - tool_use strict schema is sent (strict=True, additionalProperties=False)
 - tool_choice={"type":"tool","name":"report_verdict"} is forced
 - thinking={"type":"disabled"} is sent
-- max_tokens=80 is set
+- max_tokens fits the tool schema's own worst-case output (C1 fix; was a
+  hardcoded 80 that could not fit rationale_brief's maxLength=500 contract)
 - model default is claude-sonnet-4-6
 - judge_id() returns sha256(model_id||system_prompt_sha256||tool_schema_sha256)
 """
@@ -44,13 +45,29 @@ def test_judge_uses_tool_choice_forced(
     assert kwargs["tool_choice"] == {"type": "tool", "name": "report_verdict"}
 
 
-def test_judge_uses_max_tokens_80(
+def test_judge_uses_max_tokens_fits_schema_worst_case(
     judge_client: JudgeClient, mock_anthropic_client: MagicMock
 ) -> None:
-    """max_tokens must be 80 (A31)."""
+    """max_tokens must be >= the tool schema's own worst-case output (C1 fix).
+
+    Regression for C1: max_tokens=80 could not fit rationale_brief's own
+    maxLength=500-char contract (worst-case ~1 token/char + JSON envelope
+    overhead), causing legitimate verbose verdicts to truncate and be
+    recorded as inadmissible 'judge_response_malformed'.
+    """
+    from skill_harness.oracles.tier2.judge import _TOOL_SCHEMA
+
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
     kwargs = _get_create_kwargs(mock_anthropic_client)
-    assert kwargs["max_tokens"] == 80
+
+    rationale_max_chars = _TOOL_SCHEMA["input_schema"]["properties"]["rationale_brief"][
+        "maxLength"
+    ]
+    # Conservative worst-case bound: 1 token per char (denser than any realistic
+    # tokenizer output) plus a generous fixed JSON envelope allowance.
+    worst_case_floor = rationale_max_chars + 40
+    assert kwargs["max_tokens"] >= worst_case_floor
+    assert kwargs["max_tokens"] == 560  # pins the exact derived value (500 + 60)
 
 
 def test_judge_disables_thinking(

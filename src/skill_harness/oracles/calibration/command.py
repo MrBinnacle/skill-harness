@@ -33,6 +33,7 @@ from skill_harness.oracles.calibration.jsonl_parser import (
     parse_pair_set,
 )
 from skill_harness.oracles.calibration.length_regression import (
+    SENTINEL_INADMISSIBILITY_REASONS,
     apply_length_correction,
     fit_length_regression,
 )
@@ -243,11 +244,18 @@ class CalibrationResult:
     n_pairs : int
         Number of pairs parsed from the JSONL.
     pairwise_agreement : float
-        Fraction of pairs where judge and human agreed (raw, position-swap).
+        Fraction of ADMISSIBLE verdicts where judge and human agreed (C2 fix:
+        sentinel/inadmissible verdicts — no real judge call completed, or the
+        call was truncated/malformed — are excluded; see n_inadmissible_verdicts).
+        0.0 if there are zero admissible verdicts.
     position_consistency : float
-        Fraction of pairs where judge verdict was consistent across position swap.
+        Fraction of ALL pairs where judge verdict was consistent across position
+        swap (denominator is n_pairs, not n_admissible — this metric intentionally
+        measures the swap-consistency rate across every attempted/short-circuited
+        call, unlike pairwise_agreement/cohen_kappa).
     cohen_kappa : float
-        Chance-corrected agreement coefficient.
+        Chance-corrected agreement coefficient, computed over ADMISSIBLE verdicts
+        only (C2 fix — same admissible subset as pairwise_agreement).
     chance_baseline : float
         p_e from the κ formula (stored for audit re-derivation).
     pair_set_sha256 : str
@@ -259,6 +267,17 @@ class CalibrationResult:
         if pair count < 50 and we reject before projecting).
     length_regression_coefficient : float | None
         β_1 from OLS fit; None in dry-run or if N < 50 (A35 observation-time).
+    n_inadmissible_verdicts : int
+        Count of verdicts excluded from pairwise_agreement/cohen_kappa/judge_n_*
+        because admissibility_state != "admissible" (C2 fix). Never hidden —
+        always reported, even when 0.
+    n_length_regression_excluded : int
+        Count of verdicts excluded from the length-regression OLS fit because
+        inadmissibility_reason is a sentinel reason (suspected_injection or
+        judge_response_malformed — see SENTINEL_INADMISSIBILITY_REASONS). This
+        is a SUBSET of n_inadmissible_verdicts: position_disagreement verdicts
+        are excluded from pairwise_agreement/kappa but deliberately stay IN the
+        OLS fit (documented rationale in length_regression.py).
     """
 
     state: str
@@ -272,6 +291,8 @@ class CalibrationResult:
     calibration_event_id: str | None
     cost_projection: CostProjection | None = None
     length_regression_coefficient: float | None = None
+    n_inadmissible_verdicts: int = 0
+    n_length_regression_excluded: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -408,15 +429,35 @@ def calibrate(
         all_verdicts.append(verdict)
 
     # 7. Aggregate verdicts
+    # C2 fix: sentinel/inadmissible verdicts (choice/raw_observation are
+    # hardcoded placeholders — no real judge call completed, or the call was
+    # truncated/malformed; see judge.py admissibility resolution) must not
+    # enter human-judge agreement, κ marginals, or judge choice counts. This
+    # mirrors the repo-wide admissible_verdicts VIEW convention (A29,
+    # 0003_admissible_verdicts_view.sql / aggregation/engine.py): the
+    # aggregation surface is admissible rows only; inadmissible rows are
+    # counted separately and never silently dropped.
+    #
+    # position_consistent_count intentionally sums over ALL verdicts (not just
+    # admissible) — position_consistency measures the swap-agreement rate
+    # across every attempted/short-circuited call, a different question from
+    # "did the judge's choice agree with the human."
+    admissible_rows: list[tuple[CalibrationPair, object]] = []
     human_judge_pairs: list[tuple[str, str]] = []
     position_consistent_count = 0
     n_judge_choices: dict[str, int] = {"A": 0, "B": 0, "tie": 0}
+    n_inadmissible_verdicts = 0
 
     for pair, verdict in zip(pairs, all_verdicts, strict=True):
+        position_consistent_count += int(getattr(verdict, "position_swap_agreement", 0))
+
+        if getattr(verdict, "admissibility_state", "inadmissible") != "admissible":
+            n_inadmissible_verdicts += 1
+            continue
+
         judge_choice = str(getattr(verdict, "choice", "tie"))
-        swap_agree = int(getattr(verdict, "position_swap_agreement", 0))
+        admissible_rows.append((pair, verdict))
         human_judge_pairs.append((pair.human_preference, judge_choice))
-        position_consistent_count += swap_agree
         n_judge_choices[judge_choice] = n_judge_choices.get(judge_choice, 0) + 1
 
     # 8. Compute metrics
@@ -424,7 +465,10 @@ def calibrate(
     for pair in pairs:
         n_human[pair.human_preference] = n_human.get(pair.human_preference, 0) + 1
 
-    pairwise_agreement = sum(1 for h, j in human_judge_pairs if h == j) / n_pairs
+    n_admissible = len(human_judge_pairs)
+    pairwise_agreement = (
+        sum(1 for h, j in human_judge_pairs if h == j) / n_admissible if n_admissible else 0.0
+    )
     position_consistency = position_consistent_count / n_pairs
 
     kappa, chance_baseline = cohen_kappa_observed_marginals(human_judge_pairs)
@@ -433,20 +477,29 @@ def calibrate(
     from skill_harness.oracles.tier2.judge import JudgeVerdict as _JudgeVerdict
 
     typed_verdicts = [v for v in all_verdicts if isinstance(v, _JudgeVerdict)]
+    n_length_regression_excluded = sum(
+        1
+        for v in typed_verdicts
+        if v.inadmissibility_reason in SENTINEL_INADMISSIBILITY_REASONS
+    )
     beta_1: float | None = None
     if len(typed_verdicts) == len(pairs):
         beta_1 = fit_length_regression(pairs, typed_verdicts)
 
-    # Apply length correction to compute length_controlled_agreement
+    # Apply length correction to compute length_controlled_agreement.
+    # C2 fix: restricted to the same admissible subset as pairwise_agreement —
+    # a sentinel raw_observation=0.0 is not real judge signal and must not be
+    # length-corrected and counted as if it were (this metric feeds
+    # determine_state's threshold gating, same as pairwise_agreement).
     length_controlled_agreement: float | None = None
-    if beta_1 is not None and len(typed_verdicts) == len(pairs):
+    if beta_1 is not None and len(typed_verdicts) == len(pairs) and n_admissible > 0:
         adjusted_observations = [
             apply_length_correction(
-                raw_logit=v.raw_observation,
-                length_delta=v.length_a - v.length_b,
+                raw_logit=v.raw_observation,  # type: ignore[attr-defined]
+                length_delta=v.length_a - v.length_b,  # type: ignore[attr-defined]
                 beta_1=beta_1,
             )
-            for v in typed_verdicts
+            for _pair, v in admissible_rows
         ]
         # Length-controlled agreement: map adjusted logit back to choice, compare to human.
         # Thresholds: obs >= 0.75 → A wins, obs <= 0.25 → B wins, otherwise tie.
@@ -456,7 +509,7 @@ def calibrate(
         lca_agree = sum(
             1 for (h, _), adj in zip(human_judge_pairs, adj_choices, strict=True) if h == adj
         )
-        length_controlled_agreement = lca_agree / n_pairs
+        length_controlled_agreement = lca_agree / n_admissible
 
     # 10. Determine state
     state, reason = determine_state(
@@ -520,4 +573,6 @@ def calibrate(
         calibration_event_id=calibration_event_id,
         cost_projection=projection,
         length_regression_coefficient=beta_1,
+        n_inadmissible_verdicts=n_inadmissible_verdicts,
+        n_length_regression_excluded=n_length_regression_excluded,
     )

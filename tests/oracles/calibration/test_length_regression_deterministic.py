@@ -181,6 +181,97 @@ class TestFitLengthRegressionSignCorrectness:
 # ------------------------------------------------------------------
 
 
+class TestFitLengthRegressionSentinelExclusion:
+    """C2 fix: injection/malformed sentinels excluded from the OLS fit;
+    position-disagreement verdicts remain included per the documented
+    rationale in fit_length_regression's docstring."""
+
+    def _sentinel_verdict(
+        self,
+        reason: str,
+        length_a: int,
+        length_b: int,
+    ) -> JudgeVerdict:
+        from typing import Literal, cast
+
+        return JudgeVerdict(
+            choice=cast(Literal["A", "B", "tie"], "tie"),
+            position_swap_agreement=cast(Literal[0, 1], 0),
+            admissibility_state="inadmissible",
+            inadmissibility_reason=reason,
+            raw_observation=0.0,
+            length_adjusted_observation=None,
+            length_a=length_a,
+            length_b=length_b,
+            rationale_brief="[sentinel]",
+        )
+
+    def test_sentinels_do_not_move_beta_1(self) -> None:
+        """Regression for C2: a pair set with injection-quoting responses must
+        not move the length-regression coefficient."""
+        pairs = [
+            _make_pair("p0", human_preference="A"),
+            _make_pair("p1", human_preference="B"),
+            _make_pair("p2", human_preference="A"),
+            _make_pair("p3", human_preference="tie"),
+        ]
+        verdicts = [
+            _make_verdict("A", length_a=120, length_b=20),
+            _make_verdict("B", length_a=15, length_b=110),
+            _make_verdict("A", length_a=90, length_b=10),
+            _make_verdict("tie", length_a=50, length_b=50),
+        ]
+        beta_baseline = fit_length_regression(pairs, verdicts)
+
+        # Append sentinel rows with extreme delta_len and fabricated
+        # raw_observation=0.0 — if wrongly included these would pull beta_1
+        # away from baseline (huge delta_len paired with a fabricated 0.0
+        # outcome that no judge call ever produced).
+        sentinel_pairs = [
+            _make_pair("s0", human_preference="A"),
+            _make_pair("s1", human_preference="B"),
+        ]
+        sentinel_verdicts = [
+            self._sentinel_verdict("suspected_injection", length_a=5000, length_b=1),
+            self._sentinel_verdict("judge_response_malformed", length_a=4000, length_b=2),
+        ]
+
+        beta_augmented = fit_length_regression(
+            pairs + sentinel_pairs, verdicts + sentinel_verdicts
+        )
+
+        assert beta_augmented == beta_baseline, (
+            f"sentinel rows moved beta_1: baseline={beta_baseline}, augmented={beta_augmented}"
+        )
+
+    def test_position_disagreement_verdicts_remain_included(self) -> None:
+        """Position-disagreement rows are real, completed judge output and
+        must NOT be filtered — only the two sentinel reasons are excluded.
+        Same choice/raw_observation/lengths in both variants; only the
+        admissibility label differs, so beta_1 must be identical.
+        """
+        pairs = [
+            _make_pair("p0", human_preference="A"),
+            _make_pair("p1", human_preference="B"),
+            _make_pair("p2", human_preference="A"),
+        ]
+        admissible_verdicts = [
+            _make_verdict("A", length_a=80, length_b=10, admissible=True),
+            _make_verdict("B", length_a=12, length_b=95, admissible=True),
+            _make_verdict("A", length_a=60, length_b=8, admissible=True),
+        ]
+        position_disagreeing_verdicts = [
+            _make_verdict("A", length_a=80, length_b=10, admissible=False),
+            _make_verdict("B", length_a=12, length_b=95, admissible=False),
+            _make_verdict("A", length_a=60, length_b=8, admissible=False),
+        ]
+
+        beta_admissible = fit_length_regression(pairs, admissible_verdicts)
+        beta_disagreeing = fit_length_regression(pairs, position_disagreeing_verdicts)
+
+        assert beta_admissible == beta_disagreeing
+
+
 class TestApplyLengthCorrection:
     """apply_length_correction(raw_logit, length_delta, beta_1) -> float."""
 
