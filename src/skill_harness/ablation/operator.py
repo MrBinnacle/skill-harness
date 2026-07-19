@@ -33,9 +33,12 @@ not required but is enforced globally by the Tier-1 test suite.
 from __future__ import annotations
 
 import hashlib
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
-import tiktoken
+from skill_harness.oracles.tier1.verbosity import ENCODING_NAME, get_encoding
+
+if TYPE_CHECKING:
+    import tiktoken
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -44,7 +47,12 @@ import tiktoken
 ABLATION_OPERATOR_VERSION: Final[str] = "neutral-filler-v1"
 """Stable version identifier for this operator implementation."""
 
-_ENCODING_NAME: Final[str] = "cl100k_base"
+# F-7 (S55 hostile review): ENCODING_NAME is imported from
+# skill_harness.oracles.tier1.verbosity, the single source of truth for "which
+# tiktoken encoding the harness uses" -- this module previously hand-duplicated
+# its own "cl100k_base" literal (_ENCODING_NAME) and its own
+# tiktoken.get_encoding() call, independent of verbosity.py's copy. A name
+# change to the canonical encoding would have silently not propagated here.
 
 # Semantically null filler phrase. Chosen to be:
 # - Grammatically neutral (imperative-ish but content-free)
@@ -54,14 +62,15 @@ _FILLER_UNIT: Final[str] = "[ABLATED]"
 """Base filler atom. Repeated to match target token count."""
 
 # QUAL-2: pin FILLER_UNIT_TOKENS as a module-level constant so it is assertable by callers
-# and not just private instance state. Computed once at module import time via tiktoken.
+# and not just private instance state. Computed once at module import time via the
+# canonical encoding (F-7: get_encoding(), not a second tiktoken.get_encoding() call).
 # This resolves the dangling docstring reference "verified in ``FILLER_UNIT_TOKENS``" (line 27).
-FILLER_UNIT_TOKENS: Final[int] = len(tiktoken.get_encoding(_ENCODING_NAME).encode(_FILLER_UNIT))
+FILLER_UNIT_TOKENS: Final[int] = len(get_encoding().encode(_FILLER_UNIT))
 """Stable token count of one _FILLER_UNIT atom in cl100k_base.
 
 Pinned as a module constant (QUAL-2) so callers can assert invariants and the
 docstring reference on line 27 ("verified in ``FILLER_UNIT_TOKENS``") resolves.
-Change this constant whenever _FILLER_UNIT or _ENCODING_NAME changes.
+Change this constant whenever _FILLER_UNIT or the canonical encoding changes.
 """
 
 # Tolerance for matched-length: ±10% of clause token count, minimum ±2 tokens.
@@ -72,7 +81,7 @@ TOKEN_LENGTH_TOLERANCE_FRACTION: Final[float] = 0.10
 _IMPL_CONFIG: Final[str] = (
     f"ablation-operator version={ABLATION_OPERATOR_VERSION} "
     f"filler={_FILLER_UNIT!r} "
-    f"encoding={_ENCODING_NAME} "
+    f"encoding={ENCODING_NAME} "
     f"tolerance={TOKEN_LENGTH_TOLERANCE_FRACTION}"
 )
 
@@ -107,8 +116,9 @@ class AblationOperator:
     implementation_hash: str = hashlib.sha256(_IMPL_CONFIG.encode("utf-8")).hexdigest()
 
     def __init__(self) -> None:
-        # Encoding loaded once per instance; tiktoken caches the BPE data globally.
-        self._enc: tiktoken.Encoding = tiktoken.get_encoding(_ENCODING_NAME)
+        # F-7: the canonical encoding (verbosity.get_encoding()), not a second
+        # independent tiktoken.get_encoding() call — see module docstring note.
+        self._enc: tiktoken.Encoding = get_encoding()
         # Token count of one filler atom — pinned by FILLER_UNIT_TOKENS module constant (QUAL-2).
         self._filler_unit_tokens: int = FILLER_UNIT_TOKENS
         assert self._filler_unit_tokens > 0, (

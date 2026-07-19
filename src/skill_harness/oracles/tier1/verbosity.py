@@ -31,6 +31,24 @@ ENCODING_NAME: Final[str] = "cl100k_base"
 _ENC: Final[tiktoken.Encoding] = tiktoken.get_encoding(ENCODING_NAME)
 
 
+def get_encoding() -> tiktoken.Encoding:
+    """Return the canonical cl100k_base tiktoken encoding (F-7, S55 hostile review).
+
+    This is the SINGLE source of truth for "which tiktoken encoding the harness
+    uses" — every other module that needs to tokenize (e.g.
+    ``ablation.operator.AblationOperator``, which needs ``.encode()`` for its
+    matched-length placeholder algorithm, not just a token count) must call this
+    instead of its own ``tiktoken.get_encoding(...)`` call. Before this fix,
+    ``ablation/operator.py`` independently called ``tiktoken.get_encoding()``
+    with its own hand-duplicated ``"cl100k_base"`` literal (twice, in fact —
+    once at module load for ``FILLER_UNIT_TOKENS`` and once per instance in
+    ``__init__``) — a name change here would silently NOT propagate there.
+    Returns the same cached ``Encoding`` object every call (tiktoken's own
+    internal cache plus this module's ``_ENC`` constant).
+    """
+    return _ENC
+
+
 # ---------------------------------------------------------------------------
 # Public metric function
 # ---------------------------------------------------------------------------

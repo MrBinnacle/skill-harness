@@ -110,21 +110,23 @@ def skill_init(path: Path, execute: bool, evidence_db: Path, runtime_db: Path) -
         else:
             result = extract_skill(path, evidence_conn=None)
             _print_result(result, persisted=False)
-    except ExtractionError as exc:
-        raise click.ClickException(str(exc)) from exc
-    except ValueError as exc:
+    except (ExtractionError, ValueError) as exc:
         # C4b: extract_skill (--execute path) raises a raw ValueError when a clause
         # persists as comparator_unspecified (extractor/pipeline.py _to_db_comparator's
         # documented abort-the-whole-persist doctrine). That abort behavior is correct
         # and untouched -- this only gives it a clean CLI surface instead of a raw
-        # traceback.
+        # traceback. Merged with ExtractionError (R-1, S55 hostile review): the two
+        # clauses were byte-identical bodies.
         raise click.ClickException(str(exc)) from exc
 
 
 def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
     """Print a Rich table summarising the extraction result."""
     mode = "[green]PERSISTED[/]" if persisted else "[yellow]DRY-RUN[/]"
-    _console.print(f"\n{mode} — skill [bold]{result.name}[/] ({result.skill_id[:12]}…)")
+    _console.print(
+        f"\n{mode} — skill [bold]{_sanitize_clause_text(result.name, max_len=None)}[/]"
+        f" ({result.skill_id[:12]}…)"
+    )
     _console.print(f"  source: {result.source_path}")
     _console.print(f"  sha256: {result.source_sha256[:16]}…")
     _console.print(f"  clauses extracted: {len(result.clauses)}")
@@ -207,7 +209,7 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
         raise click.ClickException(str(exc)) from exc
 
     _console.print("\n[bold]OFFLINE AUDIT[/] — no API calls, no cost")
-    _console.print(f"  skill:  [bold]{report.name}[/]")
+    _console.print(f"  skill:  [bold]{_sanitize_clause_text(report.name, max_len=None)}[/]")
     _console.print(f"  source: {report.source_path}")
     _console.print(f"  sha256: {report.source_sha256[:16]}…")
     _console.print(
@@ -221,7 +223,15 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
     table.add_column("Finding", min_width=40)
     level_style = {"pass": "[green]PASS[/]", "warn": "[yellow]WARN[/]", "info": "[dim]INFO[/]"}
     for finding in report.findings:
-        table.add_row(level_style[finding.level], finding.code, finding.message)
+        # F-1 (S55 hostile review): finding.message can embed an untrusted frontmatter
+        # value verbatim (e.g. name-charset's `{fm_name!r}`) -- repr() escapes quotes/
+        # control chars but not Rich markup brackets. Escape at this render site, same
+        # helper as every other untrusted-text render path in this module.
+        table.add_row(
+            level_style[finding.level],
+            finding.code,
+            _sanitize_clause_text(finding.message, max_len=None),
+        )
     _console.print(table)
 
     _console.print("[bold]Evaluability preflight[/] — what a paid run could measure today:")
@@ -287,6 +297,17 @@ def skill_clauses(skill_id: str, evidence_db: Path) -> None:
         _console.print(
             "\n[yellow]skill not imported — run 'skill init <path>' first[/]"
             f"\n[dim]  (evidence.db not found or skill_id {skill_id!r} not present)[/]"
+        )
+        return
+    except Exception:
+        # F-5 (S55 hostile review): BootstrapError only covers an ABSENT evidence.db
+        # (already short-circuited above by the .exists() check). A PRESENT but
+        # malformed DB (e.g. missing the clauses table -- sqlite3.OperationalError)
+        # fell through uncaught here and surfaced as a raw traceback instead of the
+        # same clean CLI hint _cmd_dry_run gives for the equivalent zero-state case.
+        _console.print(
+            "\n[yellow]skill not imported — run 'skill init <path>' first[/]"
+            f"\n[dim]  (evidence.db at {evidence_db} is unreadable or malformed)[/]"
         )
         return
     finally:

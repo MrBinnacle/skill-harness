@@ -185,6 +185,74 @@ def test_skill_init_does_not_interpret_markup_in_clause_text(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# F-1 (S55 hostile review): skill name rendered raw at two more sites --
+# _print_result's mode/name header (skill init) and skill_audit's header line
+# + Structure findings table (name-charset finding embeds the raw name via
+# repr()).
+# ---------------------------------------------------------------------------
+
+
+@patch("skill_harness.cli.main.extract_skill")
+def test_skill_init_does_not_interpret_markup_in_skill_name(
+    mock_extract: Any, tmp_path: Path
+) -> None:
+    sha = "a" * 64
+    fc = FalsifyingCaseSchema(
+        input_population_spec="Factual prompts",
+        expected_directional_pair="A beats B",
+        min_reproducibility=0.8,
+    )
+    mock_extract.return_value = ExtractionResult(
+        skill_id=sha,
+        name=_INJECTED,
+        source_path="/tmp/SKILL.md",
+        source_sha256=sha,
+        clauses=[
+            ExtractedClause(
+                clause_index=0,
+                clause_text="Be specific.",
+                axis="specificity",
+                comparator="increase",
+                oracle_tier=1,
+                vacuity_flag="none",
+                falsifying_case=fc,
+            )
+        ],
+        raw_frontmatter={"name": "test-skill"},
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli, ["skill", "init", str(_skill_file(tmp_path))], env={"COLUMNS": "200"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "[bold red]" in result.output, (
+        f"Rich markup was interpreted (tag swallowed) instead of shown literally:\n{result.output}"
+    )
+
+
+def test_skill_audit_does_not_interpret_markup_in_skill_name(tmp_path: Path) -> None:
+    """A name failing the charset check flows both as report.name (header line)
+    and inside the name-charset finding's message (via repr()) into the
+    Structure findings table -- both render paths must escape it.
+    """
+    p = tmp_path / "SKILL.md"
+    p.write_text(
+        f"---\nname: {_INJECTED}\ndescription: use when testing things\n---\n\nBody text.\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["skill", "audit", str(p)], env={"COLUMNS": "200"})
+
+    assert result.exit_code == 0, result.output
+    assert "[bold red]" in result.output, (
+        f"Rich markup was interpreted (tag swallowed) instead of shown literally:\n{result.output}"
+    )
+
+
 def test_show_rendered_does_not_interpret_markup_in_system_text() -> None:
     from skill_harness.ablation.operator import ABLATION_OPERATOR_VERSION
 

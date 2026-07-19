@@ -266,6 +266,35 @@ def test_skill_clauses_not_imported_message(tmp_path: Path) -> None:
     assert "skill init" in result.output.lower()
 
 
+def test_skill_clauses_malformed_db_gives_clean_error(tmp_path: Path) -> None:
+    """F-5 (S55 hostile review): evidence.db PRESENT but malformed (missing the
+    'clauses' table) used to escape the previously-narrow ``except BootstrapError``
+    as a raw sqlite3.OperationalError traceback -- BootstrapError only covers an
+    ABSENT file. A present-but-unreadable DB must get the same clean CLI hint as
+    the absent-DB / not-imported case, not crash.
+    """
+    # A23 Sec.3 / structural ban: use the sanctioned open_db() helper, not a raw
+    # sqlite3 connect call (open_db() applies no migrations itself, so it's safe
+    # here to get an unmigrated file -- same pattern as test_smoke.py's
+    # test_migration_apply_is_atomic).
+    from skill_harness.storage.migrations import open_db
+
+    evidence_db = tmp_path / "evidence.db"
+    # A real sqlite3 file that exists but was never migrated -- no 'clauses' table.
+    conn = open_db(evidence_db)
+    conn.execute("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)")
+    conn.close()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["skill", "clauses", "some-skill-id", "--evidence-db", str(evidence_db)],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert "not imported" in result.output.lower() or "malformed" in result.output.lower()
+
+
 def test_skill_clauses_no_clauses_for_skill_message(tmp_path: Path) -> None:
     """DB exists but has no clauses for the requested skill_id -> clean message,
     not an empty/crashed table."""

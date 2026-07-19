@@ -612,6 +612,41 @@ def _read_family_size(completed_runs: list[dict[str, object]]) -> int:
     return int(family_size)
 
 
+def _resolve_divergent_field(
+    values: set[str],
+    *,
+    empty_default: str | None,
+    warn_message: str | None,
+    warn_args: tuple[object, ...] = (),
+) -> str | None:
+    """Generic diverge -> warn + 'MIXED' resolution (F-10, S55 hostile review).
+
+    Shared control flow behind ``_resolve_op_hash``, ``_resolve_metric_field``,
+    and ``_derive_a55_fields``'s two inline resolutions -- three copies of the
+    same three-way branch (diverges -> log + 'MIXED' / single value -> that
+    value / no data -> caller-supplied default) that differed only in their log
+    message text and empty-set default. Each site's exact warning wording, log
+    fields, and empty-set default are preserved by passing them in rather than
+    hardcoding one generic message here.
+
+    :param values: The distinct values observed for this field across the pool.
+    :param empty_default: Returned when ``values`` is empty (site-specific:
+        ``"unknown"`` for op_hash, ``None`` for the metric/A55 fields).
+    :param warn_message: ``logger.warning``-style %-format string to log when
+        ``len(values) > 1``. ``None`` skips logging entirely (preserves
+        ``user_message_sha256``'s pre-F-10 silent-MIXED behavior — that site
+        never warned on divergence, unlike the other three).
+    :param warn_args: %-format args for ``warn_message``.
+    """
+    if len(values) > 1:
+        if warn_message is not None:
+            logger.warning(warn_message, *warn_args)
+        return "MIXED"
+    if len(values) == 1:
+        return next(iter(values))
+    return empty_default
+
+
 def _resolve_op_hash(
     op_hashes: set[str],
     skill_id: str,
@@ -623,21 +658,19 @@ def _resolve_op_hash(
     If multiple distinct hashes are present, emits a data-integrity warning and
     returns "MIXED". Single hash returns that hash. Empty set returns "unknown".
     """
-    if len(op_hashes) > 1:
-        clause_id, axis = key
-        logger.warning(
+    clause_id, axis = key
+    result = _resolve_divergent_field(
+        op_hashes,
+        empty_default="unknown",
+        warn_message=(
             "[data-integrity] skill %r clause %r axis %r: ablation_operator_hash diverges "
             "across aggregated runs: %r. Setting ablation_operator_hash='MIXED'. "
-            "Metric drift may be present per A55.",
-            skill_id,
-            clause_id,
-            axis,
-            sorted(op_hashes),
-        )
-        return "MIXED"
-    if len(op_hashes) == 1:
-        return next(iter(op_hashes))
-    return "unknown"
+            "Metric drift may be present per A55."
+        ),
+        warn_args=(skill_id, clause_id, axis, sorted(op_hashes)),
+    )
+    assert result is not None  # empty_default="unknown" guarantees a str
+    return result
 
 
 def _resolve_metric_field(
@@ -663,24 +696,18 @@ def _resolve_metric_field(
     through ClauseObservations/fit_skill (fit.py), a materially larger change
     outside this finding's blast radius. Flagged for follow-up.
     """
-    if len(values) > 1:
-        clause_id, axis = key
-        logger.warning(
+    clause_id, axis = key
+    return _resolve_divergent_field(
+        values,
+        empty_default=None,
+        warn_message=(
             "[data-integrity] skill %r clause %r axis %r: %s diverges across "
             "aggregated verdicts: %r. Setting %s='MIXED'. Observations scored under "
             "different metric versions are pooled into one posterior with no "
-            "scale-compatibility guarantee (B6).",
-            skill_id,
-            clause_id,
-            axis,
-            field_label,
-            sorted(values),
-            field_label,
-        )
-        return "MIXED"
-    if len(values) == 1:
-        return next(iter(values))
-    return None
+            "scale-compatibility guarantee (B6)."
+        ),
+        warn_args=(skill_id, clause_id, axis, field_label, sorted(values), field_label),
+    )
 
 
 def _derive_a55_fields(
@@ -695,7 +722,9 @@ def _derive_a55_fields(
 
     For clauses with no run data, falls back to all completed runs for the skill.
     Returns ("MIXED", ...) when subject_model diverges across the pool — this is
-    a data-integrity anomaly per A41 / A55; a warning is logged.
+    a data-integrity anomaly per A41 / A55; a warning is logged. user_message_sha256
+    diverging also resolves to "MIXED" but has never logged a warning (pre-F-10
+    behavior, preserved as-is — not part of this finding's scope).
     """
     # Use clause-specific runs if available; else all skill runs
     run_ids = clause_run_ids if clause_run_ids else all_run_ids_in_skill
@@ -707,25 +736,20 @@ def _derive_a55_fields(
         v for rid in run_ids if (v := run_id_to_user_msg_sha.get(rid)) is not None
     }
 
-    if len(subject_models) > 1:
-        logger.warning(
+    subject_model = _resolve_divergent_field(
+        subject_models,
+        empty_default=None,
+        warn_message=(
             "[data-integrity] skill %r: subject_model diverges across aggregated runs: %r. "
-            "Setting subject_model='MIXED'. Cross-pool comparison is invalid per A55.",
-            skill_id,
-            sorted(subject_models),
-        )
-        subject_model: str | None = "MIXED"
-    elif len(subject_models) == 1:
-        subject_model = next(iter(subject_models))
-    else:
-        subject_model = None
-
-    if len(user_msg_shas) > 1:
-        user_message_sha256: str | None = "MIXED"
-    elif len(user_msg_shas) == 1:
-        user_message_sha256 = next(iter(user_msg_shas))
-    else:
-        user_message_sha256 = None
+            "Setting subject_model='MIXED'. Cross-pool comparison is invalid per A55."
+        ),
+        warn_args=(skill_id, sorted(subject_models)),
+    )
+    user_message_sha256 = _resolve_divergent_field(
+        user_msg_shas,
+        empty_default=None,
+        warn_message=None,
+    )
 
     return subject_model, user_message_sha256
 

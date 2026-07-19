@@ -53,6 +53,14 @@ class UnmeasuredSubReason(StrEnum):
     FALSIFYING_CASE_MISSING = "falsifying_case_missing"
     BUDGET_EXHAUSTED = "budget_exhausted"
     FALSIFYING_CASE_STALE = "falsifying_case_stale"
+    FDR_CORRECTION_FAILED = "fdr_correction_failed"
+    """F-3 (S55 hostile review): the raw (uncorrected) posterior crossed
+    PASS_PROB_THRESHOLD but B1's BH-FDR gate rejected this clause
+    (bh_fdr_pass=False). Distinct from UNDERPOWERED -- N and the raw posterior
+    are both fine; what failed is the multiple-testing correction, not the
+    sample size. Pre-fix this fell through to the generic Rule 8 UNDERPOWERED
+    branch with no way to distinguish "not enough evidence yet" from "enough
+    evidence, but doesn't survive FDR correction"."""
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +192,14 @@ def derive_clause_status(
         if inp.any_stale_frozen_case:
             return ClauseStatus.UNMEASURED, UnmeasuredSubReason.FALSIFYING_CASE_STALE
         return ClauseStatus.UNMEASURED, UnmeasuredSubReason.FALSIFYING_CASE_MISSING
+
+    # F-3 (S55 hostile review): raw posterior crossed PASS_PROB_THRESHOLD but the
+    # skill's BH-FDR fit rejected this clause (bh_fdr_pass=False). Must NOT fall
+    # through to the generic Rule 8 UNDERPOWERED branch below -- N and the raw
+    # posterior are both fine here; it is the FDR correction that failed, a
+    # different (and more informative) reason than "not enough evidence yet".
+    if p >= PASS_PROB_THRESHOLD and inp.bh_fdr_pass is False:
+        return ClauseStatus.UNMEASURED, UnmeasuredSubReason.FDR_CORRECTION_FAILED
 
     # Rule 8: Inconclusive posterior — 0.05 < p < 0.95
     return ClauseStatus.UNMEASURED, UnmeasuredSubReason.UNDERPOWERED

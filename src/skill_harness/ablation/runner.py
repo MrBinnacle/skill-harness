@@ -34,7 +34,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NoReturn
 
 from skill_harness.ablation.confound import (
     N_NULL_FLOOR,
@@ -77,7 +77,7 @@ from skill_harness.storage.models import (
 )
 from skill_harness.storage.repositories.evidence.confound_events import insert_confound_event
 from skill_harness.storage.repositories.evidence.oracle_verdicts import insert_oracle_verdict
-from skill_harness.storage.repositories.evidence.runs import complete_run, insert_run
+from skill_harness.storage.repositories.evidence.runs import complete_run, get_run_by_id, insert_run
 from skill_harness.storage.repositories.evidence.samples import insert_sample
 from skill_harness.storage.repositories.runtime.cost_ledger import insert_cost_ledger_entry
 from skill_harness.storage.repositories.runtime.run_budget import (
@@ -512,18 +512,7 @@ class AblationRunner:
 
         except BudgetAbortedError:
             # Mark run as aborted in runtime
-            abort_ts = self._now()
-            with writer_transaction(self._runtime):
-                update_run_budget_aborted(self._runtime, run_id, abort_ts, abort_ts)
-                update_run_progress(
-                    self._runtime,
-                    run_id,
-                    state="aborted_budget",
-                    samples_collected=samples_collected,
-                    last_heartbeat=abort_ts,
-                    error="budget_exhausted",
-                )
-            raise
+            self._handle_budget_abort(run_id, samples_collected)
 
         # Stamp completed_at exactly ONCE (A20 carve-out, single-shot per REL-1 spec).
         # "Completed" means the clause loop reached its natural stopping condition for each
@@ -584,6 +573,13 @@ class AblationRunner:
         if progress["state"] == "completed":
             raise ValueError(f"Run {run_id!r} is already completed")
 
+        # F-2 (S55 hostile review): derive skill_id from the run's own persisted
+        # evidence.runs row rather than widening this method's public signature.
+        # evidence.runs.skill_id is NOT NULL (schema) and immutable after insert
+        # (A20), so a resumable run (verified to exist above) always has one.
+        run_row = get_run_by_id(self._evidence, run_id)
+        skill_id = run_row["skill_id"] if run_row is not None else None
+
         # MAJOR-2: re-derive samples_collected + usd_spent from EVIDENCE (authoritative),
         # not from runtime progress, so a crash between the evidence commit and the runtime
         # budget update cannot let the A42 hard cap be overspent after resume. Reconcile the
@@ -639,18 +635,7 @@ class AblationRunner:
                         last_heartbeat=self._now(),
                     )
         except BudgetAbortedError:
-            abort_ts = self._now()
-            with writer_transaction(self._runtime):
-                update_run_budget_aborted(self._runtime, run_id, abort_ts, abort_ts)
-                update_run_progress(
-                    self._runtime,
-                    run_id,
-                    state="aborted_budget",
-                    samples_collected=samples_collected,
-                    last_heartbeat=abort_ts,
-                    error="budget_exhausted",
-                )
-            raise
+            self._handle_budget_abort(run_id, samples_collected)
 
         # Stamp completed_at
         completed_ts = self._now()
@@ -671,6 +656,7 @@ class AblationRunner:
             runtime_conn=self._runtime,
             run_id=run_id,
             model_id=subject_model,
+            skill_id=skill_id,
         )
 
         return clause_results
@@ -939,11 +925,15 @@ class AblationRunner:
                     scorers=self._scorers,
                 )
 
-                # A46: write-side assertion
-                assert all(e.primary_clause_id == clause_id for e in confound_events_out), (
-                    "A46 violation: confound event primary_clause_id must "
-                    f"== ablated_clause_id={clause_id!r}"
-                )
+                # A46: write-side assertion. F-4 (S55 hostile review): bare `assert`
+                # is stripped under `python -O`, silently turning this into a no-op
+                # and letting a directionality violation reach the verdict write.
+                # Explicit `if ...: raise` preserves the check regardless of -O.
+                if not all(e.primary_clause_id == clause_id for e in confound_events_out):
+                    raise RuntimeError(
+                        "A46 violation: confound event primary_clause_id must "
+                        f"== ablated_clause_id={clause_id!r}"
+                    )
 
                 # A1: confound-path/primary-path scorer consistency. The confound path
                 # (detect_confounds) uses the SAME scorer registry and suppresses
@@ -951,8 +941,11 @@ class AblationRunner:
                 # so a crashing primary-axis scorer must never still surface as a
                 # confound event for its own axis (that would mean the two paths saw
                 # different scorer behavior for the same axis/text, a real bug).
-                if scorer_crashed:
-                    assert not any(ce.axis == clause_spec.axis for ce in confound_events_out), (
+                # F-4: explicit raise, not a bare assert (same -O rationale as above).
+                if scorer_crashed and any(
+                    ce.axis == clause_spec.axis for ce in confound_events_out
+                ):
+                    raise RuntimeError(
                         "A1 invariant violated: primary-axis scorer crashed but the "
                         f"confound path still produced an event for axis "
                         f"{clause_spec.axis!r} -- confound-path/primary-path scorer "
@@ -1050,6 +1043,28 @@ class AblationRunner:
     # ------------------------------------------------------------------
     # Budget management (A42)
     # ------------------------------------------------------------------
+
+    def _handle_budget_abort(self, run_id: str, samples_collected: int) -> NoReturn:
+        """Mark a run aborted-by-budget in runtime and re-raise (A42, A4).
+
+        F-9 (S55 hostile review): extracted from the verbatim-duplicate
+        ``except BudgetAbortedError`` handlers in ``run_ablation`` and
+        ``resume_ablation`` -- both must transition ``run_progress.state`` to
+        ``'aborted_budget'`` the same way (A4: resume previously skipped this
+        entirely, leaving the progress row stuck).
+        """
+        abort_ts = self._now()
+        with writer_transaction(self._runtime):
+            update_run_budget_aborted(self._runtime, run_id, abort_ts, abort_ts)
+            update_run_progress(
+                self._runtime,
+                run_id,
+                state="aborted_budget",
+                samples_collected=samples_collected,
+                last_heartbeat=abort_ts,
+                error="budget_exhausted",
+            )
+        raise
 
     def _check_budget(self, run_id: str, max_usd: float, projected_cost: float) -> None:
         """Pre-call budget gate (A42).

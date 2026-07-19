@@ -19,8 +19,10 @@ Design constraints (all load-bearing, all POC-established 2026-07-09):
 
 from __future__ import annotations
 
+import atexit
 import base64
 import hashlib
+import shutil
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -54,6 +56,44 @@ services:
 
 class SubjectLayerNotInstalledError(RuntimeError):
     """Raised when inspect_ai/inspect_swe are missing (optional extra)."""
+
+
+# ---------------------------------------------------------------------------
+# F-6 (S55 hostile review): per-call mkdtemp cleanup
+# ---------------------------------------------------------------------------
+#
+# write_pinned_compose()'s default (no compose_dir) path creates a fresh
+# private directory per call via tempfile.mkdtemp() and nothing ever removed
+# it -- every eval() run leaked one directory. The returned path must outlive
+# the call (Inspect reads it later), so deletion-before-return is wrong; the
+# fix is process-lifetime cleanup, not call-time cleanup. Caller-supplied
+# compose_dir is NEVER tracked here -- the caller owns that directory's
+# lifecycle (build_paired_tasks already passes one when it wants the
+# idempotent-same-path behavior; ownership must stay with whoever created it).
+_auto_created_compose_dirs: set[Path] = set()
+_atexit_cleanup_registered = False
+
+
+def _track_auto_created_compose_dir(directory: Path) -> None:
+    """Register a mkdtemp-created compose dir for best-effort atexit cleanup."""
+    global _atexit_cleanup_registered
+    _auto_created_compose_dirs.add(directory)
+    if not _atexit_cleanup_registered:
+        atexit.register(_cleanup_auto_created_compose_dirs)
+        _atexit_cleanup_registered = True
+
+
+def _cleanup_auto_created_compose_dirs() -> None:
+    """Best-effort rmtree of every auto-created compose dir at process exit.
+
+    ``ignore_errors=True``: a cleanup failure (already removed, permissions,
+    a concurrent eval() still reading the file) must never raise during
+    interpreter shutdown -- atexit callbacks that raise print a warning and
+    are otherwise swallowed, so failing loudly here would buy nothing while
+    risking noisy shutdown output.
+    """
+    for directory in _auto_created_compose_dirs:
+        shutil.rmtree(directory, ignore_errors=True)
 
 
 def files_as_data_uris(files: Mapping[str, str | bytes]) -> dict[str, str]:
@@ -134,6 +174,9 @@ def write_pinned_compose(pin: HarnessPin, compose_dir: Path | None = None) -> Pa
         # pre-plant a symlink into ahead of time (unlike the shared system
         # temp dir this used to write into directly).
         directory = Path(tempfile.mkdtemp(prefix="skill-harness-compose-"))
+        # F-6: only auto-created dirs are tracked for cleanup -- an explicit
+        # compose_dir is caller-owned and must never be removed out from under it.
+        _track_auto_created_compose_dir(directory)
 
     content = _PINNED_COMPOSE_YAML.format(image=pin.sandbox_image)
     name_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]

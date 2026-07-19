@@ -262,10 +262,6 @@ PRICE_PER_MTOK: dict[str, dict[str, float]] = {
     },
 }
 
-# Backward-compatible alias — internal call sites in this module keep the
-# original private name; external readers should prefer PRICE_PER_MTOK.
-_PRICE_PER_MTok = PRICE_PER_MTOK
-
 
 def _estimate_usd(
     model: str,
@@ -275,7 +271,7 @@ def _estimate_usd(
     output_tokens: int,
 ) -> float:
     """Estimate USD cost from token counts and model pricing (Anthropic-style)."""
-    rates = _PRICE_PER_MTok.get(model, _PRICE_PER_MTok["_default"])
+    rates = PRICE_PER_MTOK.get(model, PRICE_PER_MTOK["_default"])
     mtok = 1_000_000.0
     # Non-cache input = total input minus cache components
     plain_input = max(0, input_tokens - cache_read_input_tokens - cache_creation_input_tokens)
@@ -313,7 +309,7 @@ def _estimate_usd_openai(
         (usage.prompt_tokens_details.cached_tokens). 0 if not present.
     :returns: Estimated USD cost, rounded to 8 decimal places.
     """
-    rates = _PRICE_PER_MTok.get(model, _PRICE_PER_MTok["_default"])
+    rates = PRICE_PER_MTOK.get(model, PRICE_PER_MTOK["_default"])
     mtok = 1_000_000.0
     # Non-cached input = total input minus cached subset
     non_cached_input = max(0, input_tokens - cache_read_input_tokens)
@@ -721,7 +717,7 @@ def project_call_cost(
     :param cache_hit_fraction: Expected cache hit fraction (0.0 = worst case = no cache).
     :returns: Projected USD cost.
     """
-    rates = _PRICE_PER_MTok.get(model, _PRICE_PER_MTok["_default"])
+    rates = PRICE_PER_MTOK.get(model, PRICE_PER_MTOK["_default"])
     mtok = 1_000_000.0
     # Worst case: assume all input is uncached (cache_hit_fraction=0)
     cached_tokens = int(estimated_input_tokens * cache_hit_fraction)

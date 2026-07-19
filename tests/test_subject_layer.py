@@ -182,6 +182,47 @@ def test_write_pinned_compose_default_dir_is_private_per_call() -> None:
         shutil.rmtree(path2.parent, ignore_errors=True)
 
 
+def test_write_pinned_compose_default_dir_registered_for_cleanup() -> None:
+    """F-6 (S55 hostile review): the default (no compose_dir) path creates a
+    private mkdtemp directory per call and, pre-fix, nothing ever removed it --
+    every eval() run leaked one directory (the sibling test above works around
+    this today with its own manual `shutil.rmtree` in `finally`). The fix
+    registers auto-created dirs for atexit cleanup; this test invokes the
+    cleanup callback directly rather than waiting on real interpreter exit.
+    """
+    import shutil
+
+    from skill_harness.subject import inspect_adapter
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    pin = make_pin()
+    path = write_pinned_compose(pin)
+    try:
+        assert path.parent in inspect_adapter._auto_created_compose_dirs, (
+            "F-6: the auto-created compose dir must be registered for cleanup"
+        )
+        assert path.exists()
+        inspect_adapter._cleanup_auto_created_compose_dirs()
+        assert not path.parent.exists(), "F-6: cleanup must actually remove the directory"
+    finally:
+        shutil.rmtree(path.parent, ignore_errors=True)
+
+
+def test_write_pinned_compose_explicit_compose_dir_not_tracked(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """F-6 regression guard: a caller-supplied compose_dir is caller-owned --
+    the cleanup registry must never track (and therefore never later delete)
+    a directory the caller passed in explicitly.
+    """
+    from skill_harness.subject import inspect_adapter
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    pin = make_pin()
+    write_pinned_compose(pin, compose_dir=tmp_path)
+    assert tmp_path not in inspect_adapter._auto_created_compose_dirs, (
+        "F-6: caller-supplied compose_dir must not be tracked for auto-cleanup"
+    )
+
+
 def test_write_pinned_compose_refuses_existing_symlink(  # type: ignore[no-untyped-def]
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
