@@ -154,8 +154,16 @@ def build_paired_tasks(
         fingerprint; the same value goes to both arms.
     :raises SubjectLayerNotInstalledError: optional extra not installed.
     :raises FileNotFoundError: ``skill_dir`` has no SKILL.md.
-    :raises ValueError: pin not digest-pinned or sandbox type unsupported.
+    :raises ValueError: pin not digest-pinned, sandbox type unsupported, or
+        ``oracle_target`` is empty while ``oracle="file_contains"``.
     """
+    if oracle == "file_contains" and not oracle_target:
+        raise ValueError(
+            "oracle_target is required when oracle='file_contains' "
+            "(an empty string would make the substring check vacuously true — "
+            "every existing file would pass)"
+        )
+
     try:
         from inspect_ai import Task
         from inspect_ai.dataset import Sample
@@ -223,7 +231,15 @@ def _build_scorer(
                 _ = state, target
                 try:
                     content = await sandbox().read_file(path)
-                except Exception as exc:  # missing file = fail, not crash
+                except FileNotFoundError as exc:
+                    # missing file = a genuine wrong answer, not an apparatus
+                    # fault — this is the ONLY exception we score rather than
+                    # raise. Anything else (TimeoutError, PermissionError,
+                    # ConnectionError, OSError, ...) is an infra/sandbox
+                    # failure and must propagate: Inspect's eval() harness
+                    # then marks the run as errored, which the ingest write
+                    # path already refuses to admit rather than silently
+                    # scoring it (see EvalLogNotSuccessError).
                     return Score(value=INCORRECT, explanation=f"read failed: {exc}")
                 ok = oracle_target in content
                 return Score(value=CORRECT if ok else INCORRECT, explanation=content[:200])

@@ -180,6 +180,112 @@ def test_build_paired_tasks_raises_typed_error_without_extra(tmp_path) -> None: 
 
 
 # ---------------------------------------------------------------------------
+# C6 — oracle_target validation + infra-failure/wrong-answer split
+#
+# Regression coverage for a hostile-review finding: ``oracle_target``
+# defaulting to "" made the ``file_contains`` substring check vacuously true
+# (any existing file passes), and a bare ``except Exception`` around
+# ``sandbox().read_file`` mapped ANY sandbox/infra failure (docker hiccup,
+# timeout, OOM) to an admissible ``Score(INCORRECT)`` — an apparatus outage
+# recorded as evidence the skill under test failed. The validation check is
+# pure Python and runs before the lazy ``inspect_ai`` import, so it is
+# testable regardless of whether the optional extra is installed. The
+# scorer-body checks need the real ``inspect_ai`` scorer/sandbox types.
+# ---------------------------------------------------------------------------
+
+
+def test_build_paired_tasks_refuses_empty_oracle_target_for_file_contains(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: some-skill\ndescription: a test skill\n---\nbody\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="oracle_target"):
+        build_paired_tasks(
+            skill_dir=skill,
+            prompt="do a thing",
+            oracle="file_contains",
+            oracle_arg="out.txt",
+            # oracle_target omitted — must not default to a vacuous check
+            pin=make_pin(),
+        )
+
+
+def test_build_paired_tasks_allows_empty_oracle_target_for_command_succeeds(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # command_succeeds never reads oracle_target in the scorer (only exit
+    # code matters) — the validation must be scoped to file_contains, not
+    # a blanket "oracle_target always required".
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: some-skill\ndescription: a test skill\n---\nbody\n", encoding="utf-8"
+    )
+    tasks = build_paired_tasks(
+        skill_dir=skill,
+        prompt="do a thing",
+        oracle="command_succeeds",
+        oracle_arg="pytest -q",
+        pin=make_pin(),
+    )
+    assert set(tasks) == {"full", "null"}
+
+
+@pytest.mark.skipif(not INSPECT_INSTALLED, reason="requires the optional inspect extra")
+def test_file_contains_scorer_missing_file_scores_incorrect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A genuinely missing file is a wrong answer, not an apparatus fault —
+    # this must keep scoring INCORRECT (not crash, not go admissible-void).
+    import asyncio
+
+    import inspect_ai.util as inspect_util
+    from inspect_ai.scorer import INCORRECT
+
+    from skill_harness.subject.inspect_adapter import _build_scorer
+
+    class MissingFileSandbox:
+        async def read_file(self, path: str) -> str:
+            raise FileNotFoundError(f"no such file: {path}")
+
+    monkeypatch.setattr(inspect_util, "sandbox", lambda: MissingFileSandbox())
+
+    score_fn = _build_scorer("file_contains", "out.txt", "ok", "/root")
+    result = asyncio.run(score_fn(None, None))  # type: ignore[arg-type]
+    assert result.value == INCORRECT
+
+
+@pytest.mark.skipif(not INSPECT_INSTALLED, reason="requires the optional inspect extra")
+def test_file_contains_scorer_propagates_infra_failure_instead_of_scoring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # RED regression for the C6 finding: an infra/apparatus failure (docker
+    # stall, timeout, OOM) reading the sandbox file must propagate as an
+    # exception — never be converted into an admissible Score in either
+    # direction. Inspect's own eval() harness then marks the run as errored,
+    # which the ingest write path (write_paired_evidence) already refuses
+    # to admit (EvalLogNotSuccessError) rather than silently scoring it.
+    import asyncio
+
+    import inspect_ai.util as inspect_util
+
+    from skill_harness.subject.inspect_adapter import _build_scorer
+
+    class FlakySandbox:
+        async def read_file(self, path: str) -> str:
+            raise TimeoutError("docker daemon unresponsive")
+
+    monkeypatch.setattr(inspect_util, "sandbox", lambda: FlakySandbox())
+
+    score_fn = _build_scorer("file_contains", "out.txt", "ok", "/root")
+    with pytest.raises(TimeoutError, match="docker daemon unresponsive"):
+        asyncio.run(score_fn(None, None))  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
 # files_as_data_uris (pure stdlib — the sandbox-files delivery guard)
 # ---------------------------------------------------------------------------
 
