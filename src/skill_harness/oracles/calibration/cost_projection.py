@@ -31,29 +31,27 @@ import os
 
 from pydantic import BaseModel, ConfigDict
 
+from skill_harness.ablation.subject import PRICE_PER_MTOK
+
 # ---------------------------------------------------------------------------
-# Pricing dict — only the 3 models we actually use (claude-api verified)
+# Pricing dict — only the 3 judge models we actually use (claude-api verified)
 # ---------------------------------------------------------------------------
+# F3 fix: this used to be a second, hand-maintained copy of the rates in
+# skill_harness.ablation.subject.PRICE_PER_MTOK (one overlapping entry,
+# claude-sonnet-4-6, which happened to agree — but nothing enforced that).
+# Values now come from that single canonical table; only the ALLOW-LIST of
+# judge-supported models lives here, so project_calibration_cost() keeps
+# raising KeyError for any model outside this project's 3 supported judges
+# (the canonical table also carries gpt-* subject-model entries that must
+# stay out of the judge-cost-projection surface).
+_SUPPORTED_JUDGE_MODELS: tuple[str, ...] = (
+    "claude-sonnet-4-6",
+    "claude-opus-4-7",
+    "claude-haiku-4-5",
+)
 
 MODEL_PRICING_USD_PER_M: dict[str, dict[str, float]] = {
-    "claude-sonnet-4-6": {
-        "input": 3.0,
-        "output": 15.0,
-        "cache_read": 0.30,
-        "cache_write": 3.75,  # 1.25x input rate
-    },
-    "claude-opus-4-7": {
-        "input": 5.0,
-        "output": 25.0,
-        "cache_read": 0.50,
-        "cache_write": 6.25,  # 1.25x input rate
-    },
-    "claude-haiku-4-5": {
-        "input": 1.0,
-        "output": 5.0,
-        "cache_read": 0.10,
-        "cache_write": 1.25,  # 1.25x input rate
-    },
+    model: PRICE_PER_MTOK[model] for model in _SUPPORTED_JUDGE_MODELS
 }
 
 # ---------------------------------------------------------------------------

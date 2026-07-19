@@ -387,6 +387,22 @@ class TestQual1OperatorLengthTolerance:
         assert placeholder_toks > 0
         assert tolerance >= 2
 
+    def test_uses_canonical_tokenizer(self) -> None:
+        """F4 regression: token counts must match the canonical cl100k_base
+        counter (tier1/verbosity.count_tokens) exactly — this function used to
+        re-implement tiktoken.get_encoding('cl100k_base') locally, a third
+        copy alongside judge.py's and this module's own
+        get_default_tier1_scorers() import of the same counter."""
+        from skill_harness.oracles.tier1.verbosity import count_tokens
+
+        clause = "Always begin your response with 'Certainly!' before answering."
+        placeholder = "[ABLATED]"
+        _within, clause_toks, placeholder_toks, _tolerance = check_operator_length_tolerance(
+            clause, placeholder
+        )
+        assert clause_toks == count_tokens(clause)
+        assert placeholder_toks == count_tokens(placeholder)
+
 
 # ---------------------------------------------------------------------------
 # delta_to_observation tests

@@ -56,7 +56,7 @@ class UnmeasuredSubReason(StrEnum):
 
 
 # ---------------------------------------------------------------------------
-# Locked thresholds (CLAUDE.md pass rule — do NOT silently retune)
+# Locked thresholds (pass rule — do NOT silently retune; see docs/INVARIANTS.md #1)
 # ---------------------------------------------------------------------------
 
 PASS_PROB_THRESHOLD: float = 0.95

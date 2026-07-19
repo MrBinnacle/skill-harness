@@ -41,7 +41,7 @@ Design:
 - This module builds the request STRUCTURE only — it does NOT call the SDK.
   The runner (D.2) injects the blocks into the SDK call.
 
-Per CLAUDE.md load-bearing invariants:
+Load-bearing invariants for this module:
 - The deterministic Python layer constructs all prompts — no model call here.
 - Directional/comparative only — the renderer is neutral.
 """

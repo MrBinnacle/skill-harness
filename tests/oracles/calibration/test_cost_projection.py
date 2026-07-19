@@ -83,6 +83,23 @@ class TestModelPricingDict:
         assert MODEL_PRICING_USD_PER_M["claude-haiku-4-5"]["cache_read"] == pytest.approx(0.10)
 
 
+class TestModelPricingSingleSourceOfTruth:
+    """F3 regression: MODEL_PRICING_USD_PER_M must be derived from — never a
+    second hand-maintained copy of — skill_harness.ablation.subject.PRICE_PER_MTOK.
+
+    Before F3, the two tables were independent dicts with one overlapping
+    entry (claude-sonnet-4-6) that merely happened to agree; nothing enforced
+    that a price change applied to one would reach the other."""
+
+    def test_every_judge_model_matches_canonical_table(self) -> None:
+        from skill_harness.ablation.subject import PRICE_PER_MTOK
+
+        for model, rates in MODEL_PRICING_USD_PER_M.items():
+            assert rates == PRICE_PER_MTOK[model], (
+                f"{model} pricing drifted from the canonical PRICE_PER_MTOK table"
+            )
+
+
 # ------------------------------------------------------------------
 # CostProjection Pydantic model fields
 # ------------------------------------------------------------------

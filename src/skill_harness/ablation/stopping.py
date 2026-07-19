@@ -44,7 +44,7 @@ N_INC: Final[int] = 4
 N_MAX: Final[int] = 40
 """Hard sample cap per condition pair (A44: no batches past N_MAX)."""
 
-# Pass/fail thresholds (CLAUDE.md pass rule — locked)
+# Pass/fail thresholds (pass rule — locked; see docs/INVARIANTS.md #1)
 WIN_RATE_THRESHOLD: Final[float] = 0.60
 PASS_PROB_THRESHOLD: Final[float] = 0.95
 FAIL_PROB_THRESHOLD: Final[float] = 0.05

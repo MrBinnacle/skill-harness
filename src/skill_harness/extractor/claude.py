@@ -1,8 +1,8 @@
 """Claude API wrapper for clause extraction.
 
 Uses the Anthropic Python SDK with tool-use to extract structured clause
-data from a skill body. Model: ``claude-sonnet-4-6`` (per CLAUDE.md
-model-pinning for Track B execution work).
+data from a skill body. Model: ``claude-sonnet-4-6`` (model-pinning
+convention for Track B execution work).
 
 Tool design:
 - Single tool ``extract_clauses`` with an ``input_schema`` that accepts a

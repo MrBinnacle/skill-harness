@@ -1153,7 +1153,7 @@ def _is_unmeasured(result: Any) -> bool:
     - unmeasured_reason is not None (tier2_uncalibrated, length_confounded)
     - StoppingReason.BUDGET_EXHAUSTED (sampling aborted mid-clause)
 
-    UNMEASURED is NEVER FAILED — this is a core invariant (A48, CLAUDE.md).
+    UNMEASURED is NEVER FAILED — this is a core invariant (A48; see docs/INVARIANTS.md #3).
     """
     from skill_harness.ablation.stopping import StoppingReason
 

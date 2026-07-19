@@ -138,7 +138,7 @@ def test_judge_tool_name_is_report_verdict(
 def test_judge_default_model_is_sonnet_4_6(
     judge_client: JudgeClient, mock_anthropic_client: MagicMock
 ) -> None:
-    """Default model must be claude-sonnet-4-6 (CLAUDE.md model-pinning)."""
+    """Default model must be claude-sonnet-4-6 (model-pinning convention)."""
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
     kwargs = _get_create_kwargs(mock_anthropic_client)
     assert kwargs["model"] == "claude-sonnet-4-6"
@@ -193,3 +193,19 @@ def test_judge_id_changes_with_model() -> None:
     id1 = jc.judge_id("claude-sonnet-4-6")
     id2 = jc.judge_id("claude-opus-4-7")
     assert id1 != id2
+
+
+def test_length_fields_use_canonical_tokenizer(
+    judge_client: JudgeClient, mock_anthropic_client: MagicMock
+) -> None:
+    """F4 regression: JudgeVerdict.length_a/length_b must match the canonical
+    cl100k_base counter (tier1/verbosity.count_tokens) exactly. judge.py used
+    to re-implement tiktoken.get_encoding('cl100k_base') locally in its own
+    _count_tokens(); it now imports the tier1 counter directly."""
+    from skill_harness.oracles.tier1.verbosity import count_tokens
+
+    output_a = "a short output"
+    output_b = "a rather longer output with more words in it"
+    verdict = judge_client.evaluate_pair(output_a, output_b, "clarity", "rate clarity")
+    assert verdict.length_a == count_tokens(output_a)
+    assert verdict.length_b == count_tokens(output_b)

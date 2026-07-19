@@ -24,7 +24,7 @@ Design:
 - No stochastic control flow: this module generates content only; the runner owns
   all orchestration decisions (which samples to issue, which to skip, stop criteria).
 
-Per CLAUDE.md load-bearing invariants:
+Load-bearing invariants for this module:
 - The deterministic Python layer owns orchestration. Subject adapters are content workers.
 - Never raises non-transient errors silently — always propagates so the runner can record.
 """
@@ -192,10 +192,17 @@ class SubjectAdapter(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# Pricing (per-million-token rates for cost estimation, A41)
+# Pricing (per-million-token rates, F3: single source of truth)
 # ---------------------------------------------------------------------------
 # A41: cost written from actual response usage — these rates produce the estimate.
-_PRICE_PER_MTok: dict[str, dict[str, float]] = {
+#
+# F3 fix: this table used to be duplicated (hand-maintained) in
+# skill_harness.oracles.calibration.cost_projection as MODEL_PRICING_USD_PER_M,
+# with one overlapping entry (claude-sonnet-4-6, values agreed) and each table
+# missing the other's models. cost_projection.MODEL_PRICING_USD_PER_M is now
+# derived from THIS table (see the note there) so a price change here can never
+# silently diverge from the pre-call budget-gate projection.
+PRICE_PER_MTOK: dict[str, dict[str, float]] = {
     # Sonnet 4.6: $3/$15 per MTok (in/out). Cache: $3.75 write / $0.30 read.
     # Per https://platform.claude.com/docs/about-claude/pricing (2026-06).
     "claude-sonnet-4-6": {
@@ -203,6 +210,22 @@ _PRICE_PER_MTok: dict[str, dict[str, float]] = {
         "output": 15.00,
         "cache_write": 3.75,
         "cache_read": 0.30,
+    },
+    # Opus 4.7: $5/$25 per MTok (in/out). Cache: $6.25 write / $0.50 read.
+    # Per https://platform.claude.com/docs/about-claude/pricing (2026-06).
+    "claude-opus-4-7": {
+        "input": 5.00,
+        "output": 25.00,
+        "cache_write": 6.25,
+        "cache_read": 0.50,
+    },
+    # Haiku 4.5: $1/$5 per MTok (in/out). Cache: $1.25 write / $0.10 read.
+    # Per https://platform.claude.com/docs/about-claude/pricing (2026-06).
+    "claude-haiku-4-5": {
+        "input": 1.00,
+        "output": 5.00,
+        "cache_write": 1.25,
+        "cache_read": 0.10,
     },
     # GPT-5.5: $5/$30 per MTok (in/out). Cached input: $0.50/MTok.
     # Per https://developers.openai.com/api/docs/pricing (2026-06-08).
@@ -238,6 +261,10 @@ _PRICE_PER_MTok: dict[str, dict[str, float]] = {
         "cache_read": 0.30,
     },
 }
+
+# Backward-compatible alias — internal call sites in this module keep the
+# original private name; external readers should prefer PRICE_PER_MTOK.
+_PRICE_PER_MTok = PRICE_PER_MTOK
 
 
 def _estimate_usd(

@@ -4,7 +4,7 @@ Orchestrates: parse → Claude extract → validate → (optionally) persist.
 
 Entry point: ``extract_skill()``.
 
-Persistence rules (pipeline safety / CLAUDE.md):
+Persistence rules (pipeline safety — see docs/INVARIANTS.md #2):
 - ``extract_skill()`` ALWAYS calls Claude (even in dry-run).
 - When ``evidence_conn`` is None, results are returned but NOT written.
 - When ``evidence_conn`` is provided, rows are written inside a single

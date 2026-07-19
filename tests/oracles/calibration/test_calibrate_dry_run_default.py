@@ -1,4 +1,4 @@
-"""Tests for dry-run default behaviour (CLAUDE.md pipeline safety).
+"""Tests for dry-run default behaviour (pipeline safety — see docs/INVARIANTS.md #2).
 
 The calibrate command MUST default to dry-run; actual DB writes MUST require --execute.
 These tests verify the command interface contract at the click CLI level.

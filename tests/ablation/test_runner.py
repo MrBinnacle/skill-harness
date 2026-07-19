@@ -1605,7 +1605,7 @@ class TestSubjectClient:
 
 class TestC2ResumeReadsPersistedAdmissibility:
     """C2: on resume, the posterior must be rebuilt from PERSISTED admissibility_state,
-    not recomputed from fresh confound/null-floor state (CLAUDE.md Evidence model —
+    not recomputed from fresh confound/null-floor state (see docs/INVARIANTS.md #3 —
     admissibility recorded at write time, never recomputed).
 
     Test strategy:

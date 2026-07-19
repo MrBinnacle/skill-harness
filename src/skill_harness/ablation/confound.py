@@ -349,11 +349,14 @@ def check_operator_length_tolerance(
     :param min_tolerance_tokens: Minimum tolerance in tokens (default 2).
     :returns: (within_tolerance, clause_tokens, placeholder_tokens, tolerance)
     """
-    import tiktoken
+    # F4: delegate to the canonical cl100k_base counter (tier1/verbosity.py)
+    # instead of a third local tiktoken.get_encoding() re-implementation —
+    # this module already imports the same counter inside
+    # get_default_tier1_scorers(); a second copy here was the drift risk.
+    from skill_harness.oracles.tier1.verbosity import count_tokens
 
-    enc = tiktoken.get_encoding("cl100k_base")
-    clause_tokens = len(enc.encode(clause_text))
-    placeholder_tokens = len(enc.encode(placeholder_text))
+    clause_tokens = count_tokens(clause_text)
+    placeholder_tokens = count_tokens(placeholder_text)
     tolerance = max(min_tolerance_tokens, int(clause_tokens * tolerance_fraction))
     within = abs(placeholder_tokens - clause_tokens) <= tolerance
     return within, clause_tokens, placeholder_tokens, tolerance

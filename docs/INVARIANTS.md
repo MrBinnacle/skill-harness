@@ -44,7 +44,16 @@ Spec: `docs/PRD.md` §6 "Admissibility System".
 
 ---
 
-Re-pointed from "per CLAUDE.md" to this file: `aggregation/fit.py:11`,
-`ablation/stopping.py:22`, `cli/main.py:4`, `ablation/runner.py:1294`. A further 26
-"per CLAUDE.md" comments remain elsewhere in `src/` (non-mechanical wording sweep,
-out of scope for this pass).
+Re-pointed from "CLAUDE.md" to this file across `src/` and `tests/` (F5, then the
+F5b mechanical follow-up sweep): `aggregation/fit.py`, `aggregation/status.py`,
+`ablation/stopping.py`, `ablation/runner.py`, `ablation/render.py`,
+`ablation/subject.py`, `ablation/operator.py`, `cli/main.py`, `extractor/pipeline.py`,
+`extractor/claude.py`, `oracles/__init__.py`, `oracles/errors.py`,
+`oracles/tier1/hedge_index.py`, `oracles/tier2/judge.py`,
+`oracles/tier2/injection_guard.py`, `oracles/calibration/command.py`,
+`storage/migrations_sql/evidence/0400_freeze_provenance.sql`, and the corresponding
+test files under `tests/`. One site is deliberately left alone:
+`oracles/tier1/fixtures/hedge_wordlist.json`'s `_meta.description` field carries its
+own "DO NOT EDIT without updating the metric version" invariant, so its "per
+CLAUDE.md" mention is untouched rather than risk drifting the fixture's SHA-256
+implementation_hash out from under that guard.

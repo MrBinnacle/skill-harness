@@ -10,7 +10,7 @@ This is the core runner that:
 7. Writes append-only verdicts to evidence.db via Track A repositories.
 8. Stamps runs.completed_at exactly ONCE after the last verdict commits.
 
-Non-negotiable invariants (CLAUDE.md load-bearing):
+Non-negotiable invariants (load-bearing; see docs/INVARIANTS.md):
 - Deterministic Python owns ALL control flow. SubjectClient is content worker only.
 - Append-only evidence: no UPDATE on evidence rows except runs.completed_at single-shot.
 - Budget cap check + reservation in ONE writer_transaction(runtime) (A42).
@@ -995,8 +995,8 @@ class AblationRunner:
                 # stopping posterior. For comparison indexes that had a persisted verdict
                 # BEFORE this resume iteration started, use the PERSISTED admissibility_state
                 # and observation — never freshly recomputed values — so the posterior
-                # matches the written audit trail (CLAUDE.md: admissibility recorded at
-                # write time, never recomputed at read time).
+                # matches the written audit trail (see docs/INVARIANTS.md #3: admissibility
+                # recorded at write time, never recomputed at read time).
                 # CF-E3-1: also carry the persisted verdict_id so resumed runs populate
                 # ClauseResult.verdict_id (otherwise stays None when all verdicts are
                 # pre-existing and the write-branch is never entered).
@@ -1249,7 +1249,7 @@ class AblationRunner:
 
         Root insight: ``admissibility_state`` is a real write-time snapshot of the
         comparison's state, NOT a hardcoded constant. Never recomputed at read time
-        (CLAUDE.md Evidence model — locked invariant).
+        (see docs/INVARIANTS.md #3 — locked invariant).
 
         - scorer crashed on the primary axis (A1)               -> ('inadmissible', 'scorer_error')
         - confounded (this clause's own axis confound_flagged) -> ('inadmissible', 'confounded')
@@ -1461,7 +1461,7 @@ class AblationRunner:
         C2 fix: on resume, comparison indexes that already have a verdict must have
         their posterior contribution rebuilt from the PERSISTED observation and
         admissibility_state — never recomputed from fresh confound/null-floor state
-        (CLAUDE.md Evidence model: admissibility recorded at write time, never recomputed).
+        (see docs/INVARIANTS.md #3: admissibility recorded at write time, never recomputed).
 
         CF-E3-1: also returns verdict_id so the resume path can populate
         ClauseResult.verdict_id with the last written verdict UUID.

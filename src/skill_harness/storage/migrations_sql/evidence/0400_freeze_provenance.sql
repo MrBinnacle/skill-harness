@@ -22,7 +22,7 @@
 -- columns automatically — no trigger extension required.
 --
 -- charset enforcement: axis and other TEXT columns use Python-layer Pydantic
--- validation (NUL/control reject); no SQL-layer CHECK added per CLAUDE.md pattern.
+-- validation (NUL/control reject); no SQL-layer CHECK added (Python-layer-validation pattern).
 
 ALTER TABLE frozen_cases ADD COLUMN verdict_id TEXT REFERENCES oracle_verdicts(verdict_id);
 ALTER TABLE frozen_cases ADD COLUMN run_id TEXT REFERENCES runs(run_id);

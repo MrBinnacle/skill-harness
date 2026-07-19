@@ -26,7 +26,7 @@ The filler unit is a semantically null, grammatically neutral phrase that:
   - Produces no meaningful semantic signal to the subject model
   - Has a known, stable token count (verified in ``FILLER_UNIT_TOKENS``)
 
-Per CLAUDE.md §10: tiktoken encoding is deterministic; PYTHONHASHSEED=0 is
+Encoding determinism: tiktoken encoding is deterministic; PYTHONHASHSEED=0 is
 not required but is enforced globally by the Tier-1 test suite.
 """
 

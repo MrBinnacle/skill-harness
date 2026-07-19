@@ -153,6 +153,72 @@ def test_write_pinned_compose_refuses_unpinned_or_nondocker(tmp_path) -> None:  
         write_pinned_compose(unpinned, compose_dir=tmp_path)
 
 
+def test_write_pinned_compose_default_dir_is_private_per_call() -> None:
+    """S3: with compose_dir omitted, each call gets its OWN private, unpredictable
+    directory (tempfile.mkdtemp) rather than a shared-namespace filename inside
+    tempfile.gettempdir() — nothing for a co-tenant to pre-plant a symlink into.
+
+    This intentionally changes the DEFAULT path's idempotency (two no-compose_dir
+    calls for the same pin now land in different directories); build_paired_tasks
+    and this test suite's other write_pinned_compose tests all pass an explicit
+    compose_dir, which keeps the tested idempotent-same-path contract for callers
+    who supply their own directory.
+    """
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    pin = make_pin()
+    path1 = write_pinned_compose(pin)
+    path2 = write_pinned_compose(pin)
+    try:
+        assert path1.parent != path2.parent, "each default call must get a private directory"
+        assert path1.parent != Path(tempfile.gettempdir())
+        assert path1.read_text(encoding="utf-8") == path2.read_text(encoding="utf-8")
+    finally:
+        shutil.rmtree(path1.parent, ignore_errors=True)
+        shutil.rmtree(path2.parent, ignore_errors=True)
+
+
+def test_write_pinned_compose_refuses_existing_symlink(  # type: ignore[no-untyped-def]
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S3: refuses to write through a pre-existing symlink at the target path
+    rather than following it (write_text() would otherwise overwrite whatever
+    the symlink points at). Simulated via monkeypatch rather than a real
+    os.symlink() call — symlink creation needs elevated privilege on Windows
+    CI runners, but the guard's is_symlink() check behaves identically either
+    way."""
+    from pathlib import Path
+
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    pin = make_pin()  # built BEFORE patching — capture() itself reads files via Path
+    monkeypatch.setattr(Path, "is_symlink", lambda self: True)
+    with pytest.raises(RuntimeError, match="symlink"):
+        write_pinned_compose(pin, compose_dir=tmp_path)
+
+
+def test_write_pinned_compose_refuses_content_mismatch_after_write(  # type: ignore[no-untyped-def]
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S3: if the file on disk doesn't match what was just written when read
+    back, refuse rather than return a path whose content may belong to a
+    racing writer. Simulated by forcing read_text() to return different bytes
+    than write_text() just wrote (stands in for a same-UID writer racing this
+    call between the write and the read-back)."""
+    from pathlib import Path
+
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    pin = make_pin()  # built BEFORE patching — capture() itself reads files via Path
+    monkeypatch.setattr(Path, "read_text", lambda self, encoding=None: "tampered content")
+    with pytest.raises(RuntimeError, match="mismatch"):
+        write_pinned_compose(pin, compose_dir=tmp_path)
+
+
 # ---------------------------------------------------------------------------
 # Adapter surface without the optional extra
 # ---------------------------------------------------------------------------
@@ -209,6 +275,47 @@ def test_build_paired_tasks_refuses_empty_oracle_target_for_file_contains(tmp_pa
             oracle="file_contains",
             oracle_arg="out.txt",
             # oracle_target omitted — must not default to a vacuous check
+            pin=make_pin(),
+        )
+
+
+def test_build_paired_tasks_refuses_nul_byte_in_oracle_arg(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """S6 defense-in-depth: oracle_arg reaches a shell string / f-string
+    sandbox path with no escaping (see the TRUST BOUNDARY docstring note on
+    build_paired_tasks). A NUL byte is never valid in either, so rejecting it
+    costs nothing for legitimate operator-authored oracle_arg values."""
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: some-skill\ndescription: a test skill\n---\nbody\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="NUL byte"):
+        build_paired_tasks(
+            skill_dir=skill,
+            prompt="do a thing",
+            oracle="command_succeeds",
+            oracle_arg="pytest -q\x00; rm -rf /",
+            pin=make_pin(),
+        )
+
+
+def test_build_paired_tasks_refuses_nul_byte_in_oracle_target(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: some-skill\ndescription: a test skill\n---\nbody\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="NUL byte"):
+        build_paired_tasks(
+            skill_dir=skill,
+            prompt="do a thing",
+            oracle="file_contains",
+            oracle_arg="out.txt",
+            oracle_target="expected\x00value",
             pin=make_pin(),
         )
 

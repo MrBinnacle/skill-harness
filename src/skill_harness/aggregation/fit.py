@@ -34,7 +34,7 @@ from skill_harness.aggregation.errors import ConvergenceFailure
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Locked constants (CLAUDE.md pass rule)
+# Locked constants (pass rule — see docs/INVARIANTS.md #1)
 # ---------------------------------------------------------------------------
 
 WIN_RATE_THRESHOLD: float = 0.60

@@ -359,7 +359,7 @@ def calibrate(
     # 2. Compute cost projection up front (A36)
     projection = project_calibration_cost(
         n_pairs=n_pairs,
-        model_id="claude-sonnet-4-6",  # default judge model per CLAUDE.md model-pinning
+        model_id="claude-sonnet-4-6",  # default judge model (model-pinning convention)
         system_prompt_tokens=_ESTIMATE_SYSTEM_PROMPT_TOKENS,
         tool_schema_tokens=_ESTIMATE_TOOL_SCHEMA_TOKENS,
         candidate_output_avg_tokens=_ESTIMATE_CANDIDATE_OUTPUT_TOKENS,

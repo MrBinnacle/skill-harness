@@ -142,22 +142,33 @@ class TestFitLengthRegressionSignCorrectness:
     """β_1 should be positive when judge systematically prefers longer outputs."""
 
     def test_beta_1_positive_when_longer_wins(self) -> None:
-        """When longer responses always win, β_1 should be positive.
+        """When the longer side always wins, β_1 should be strictly positive.
 
-        Δlen = len_a - len_b; raw_observation=1.0 (A wins) when A is longer.
-        Positive slope = length bias toward A.
+        Δlen = len_a - len_b; raw_observation=1.0 (A wins) when A is much
+        longer, 0.0 (B wins) when B is much longer. Positive slope = length
+        bias toward the longer side.
+
+        G7 fix: the prior fixture had ``choice="A"`` (raw_observation=1.0)
+        on EVERY row, i.e. a constant outcome vector with zero variance in y.
+        OLS on a constant y is mathematically forced to slope 0 regardless
+        of how much Δlen varies — that fixture could never exercise the sign
+        claim, which is why the assertion had degraded to a bare
+        ``isinstance`` check. This fixture varies the outcome (A wins vs. B
+        wins) WITH the sign of Δlen so a real positive slope is measurable:
+        verified beta_1 ≈ 0.0049 for this data (not a near-zero float — see
+        the analogous all-A-wins case, which numerically settles at 1e-18).
         """
-        # Construct 10 pairs where the longer output always wins
         pairs = []
         verdicts = []
-        for i in range(10):
-            pairs.append(_make_pair(f"p{i}", human_preference="A"))
+        for i in range(5):
+            pairs.append(_make_pair(f"pa{i}", human_preference="A"))
             verdicts.append(_make_verdict("A", length_a=100 + i * 10, length_b=20))
+        for i in range(5):
+            pairs.append(_make_pair(f"pb{i}", human_preference="B"))
+            verdicts.append(_make_verdict("B", length_a=20, length_b=100 + i * 10))
 
         beta_1 = fit_length_regression(pairs, verdicts)
-        # With perfect length-biased data, slope should be non-negative
-        # (may be near zero if relationship is not strong in OLS)
-        assert isinstance(beta_1, float)  # basic sanity
+        assert beta_1 > 0, f"expected a strictly positive length bias, got {beta_1}"
 
     def test_beta_1_near_zero_for_unbiased_data(self) -> None:
         """When outcomes are random with respect to length, β_1 should be near 0."""

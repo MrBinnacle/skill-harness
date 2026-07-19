@@ -4,7 +4,7 @@ Validates:
 - mechanical_validity: metric_fn(case) == metric_fn(case) (bit-equality) for 5 corpus inputs
 - known_value assertions on fixed corpus
 - wordlist loaded from committed JSON fixture (not hardcoded)
-- wordlist SHA-256 is stable (implementation_hash discipline per CLAUDE.md metric-provenance)
+- wordlist SHA-256 is stable (implementation_hash discipline; see hedge_index.py docstring)
 """
 
 from __future__ import annotations
