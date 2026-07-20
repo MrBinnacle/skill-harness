@@ -142,17 +142,29 @@ def test_citation_presence_per_flag_fenced_code_excluded() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_citation_presence_per_flag_markdown_link_url_excluded() -> None:
-    """The URL inside a [text](url) link target is not treated as a citation (A14).
+def test_citation_presence_per_flag_markdown_hyperlink_is_citation() -> None:
+    """A [text](http(s)://url) markdown link IS a citation (S49 C3 fix).
 
-    Only the link text is kept; the URL in parentheses is stripped.
-    The flag here has only a markdown link with no separate citation
-    marker — score should be 0.0 after the link URL is stripped.
+    A hyperlink to an external reference is a citation. Previously the
+    URL was stripped with the link markup, so a hyperlinked source scored
+    UNCITED while an identical *bare* URL scored CITED — an arm-differential
+    deflation of the citation axis (the more-structured arm, which formats
+    references as markdown links, was penalised). The http(s) target is now
+    preserved for citation detection.
     """
-    # No standalone citation — only a markdown link whose URL is stripped
     text = "- **IMPORTANT**: Use [the docs](https://docs.python.org/) here.\n"
     result = compute_citation_presence_per_flag(text)
-    # After stripping the markdown link URL, no citation marker remains
+    assert result == pytest.approx(1.0)
+
+
+def test_citation_presence_per_flag_non_http_markdown_link_not_citation() -> None:
+    """A [text](relative/path) link with no http(s) target is not a citation.
+
+    The exclusion still holds for link targets that are not external
+    references (relative paths, anchors) — only http(s) targets count.
+    """
+    text = "- **IMPORTANT**: See [section two](#s2) for details.\n"
+    result = compute_citation_presence_per_flag(text)
     assert result == pytest.approx(0.0)
 
 
@@ -161,3 +173,43 @@ def test_citation_presence_per_flag_standalone_url_not_link() -> None:
     text = "- **CRITICAL**: Hallucinated API. See https://docs.python.org/ for correct usage.\n"
     result = compute_citation_presence_per_flag(text)
     assert result == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# S49 C3 — arm-differential deflation regressions (verdict-affecting)
+# ---------------------------------------------------------------------------
+
+
+def test_c3_lowercase_prose_bullets_are_not_flags() -> None:
+    """Lowercase prose containing severity words must NOT count as flags (C3).
+
+    The severity/FLAG markers are recognised case-sensitively: only the
+    uppercase labels a sentinel actually emits (``**CRITICAL**``, ``## FLAG 1``)
+    are flags. Everyday lowercase prose ("minor style nits", "critical path")
+    is not. Previously ``re.IGNORECASE`` counted every such bullet as an
+    uncited flag, inflating the denominator and deflating the score — worse
+    for the arm that writes more prose. Failure scenario from the S49
+    manifest: 3 cited flags + 5 prose bullets scored 3/8=0.375 instead of 1.0.
+    """
+    text = (
+        "- **CRITICAL**: Hallucinated API. See https://docs.python.org/\n"
+        "- **IMPORTANT**: Missing tests [1]\n"
+        "- **MINOR**: Em-dash overuse (Smith 2023)\n"
+        "- minor style nits below\n"
+        "- important to note the naming here\n"
+        "- the critical path is untested\n"
+        "- flag any TODOs you find\n"
+        "- consider a minor cleanup pass\n"
+    )
+    # Only the 3 uppercase-labelled flags count, and all 3 are cited.
+    assert compute_citation_presence_per_flag(text) == pytest.approx(1.0)
+
+
+def test_c3_no_flags_from_pure_lowercase_prose() -> None:
+    """Pure lowercase prose with severity words yields zero flags → 0.0 (C3)."""
+    text = (
+        "- minor style nits below\n"
+        "- important to note the naming here\n"
+        "- the critical path is untested\n"
+    )
+    assert compute_citation_presence_per_flag(text) == pytest.approx(0.0)

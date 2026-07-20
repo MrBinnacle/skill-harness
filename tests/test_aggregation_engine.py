@@ -353,6 +353,48 @@ class TestFetchCompletedAblationRunsSingleShot:
         )
         assert result == []
 
+    def test_where_predicates_filter_runs(self, tmp_path: Path) -> None:
+        """S49 G4: exercise the real WHERE predicates against a live DB.
+
+        The single-shot test above mocks ``execute`` and asserts ``result == []``,
+        which merely echoes the mock's return — the SQL could drop the
+        ``completed_at IS NOT NULL`` filter, the ``skill_id`` predicate, or the
+        ``run_kind='ablation'`` predicate and still stay green. This seeds four
+        runs so each predicate is load-bearing: exactly one row must survive.
+        """
+        from skill_harness.aggregation.engine import _fetch_completed_ablation_runs
+
+        ev, rt = open_both(tmp_path)
+        try:
+            insert_skill(ev, SKILL_ID)
+            insert_skill(ev, "skill-other-001")
+
+            # (1) completed ablation for our skill → MUST be returned
+            insert_run(ev, run_id="run-keep", skill_id=SKILL_ID, completed=True)
+            # (2) incomplete ablation for our skill (completed_at NULL) → excluded
+            #     (the dual-write-partial state where the filter is load-bearing;
+            #     dropping it admits partial-run verdicts → biased posterior)
+            insert_run(ev, run_id="run-incomplete", skill_id=SKILL_ID, completed=False)
+            # (3) completed ablation for a DIFFERENT skill → excluded (skill_id)
+            insert_run(ev, run_id="run-other-skill", skill_id="skill-other-001", completed=True)
+            # (4) completed NON-ablation run for our skill → excluded (run_kind)
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES ('run-eval', ?, 'evaluate_skill', '{}', ?, ?)",
+                (SKILL_ID, _TS, _TS2),
+            )
+
+            rows = _fetch_completed_ablation_runs(ev, SKILL_ID)
+
+            assert [r["run_id"] for r in rows] == ["run-keep"], (
+                "exactly the completed ablation run for the queried skill must "
+                f"survive all three WHERE predicates; got {[r['run_id'] for r in rows]}"
+            )
+        finally:
+            ev.close()
+            rt.close()
+
 
 # ---------------------------------------------------------------------------
 # Tests: MalformedRunConfig
@@ -692,8 +734,47 @@ class TestHealthyAggregation:
             ev.close()
             rt.close()
 
-    def test_vector_unmeasured_without_frozen_case(self, tmp_path: Path) -> None:
-        """9 wins out of 10 → high p, but no frozen case → UNMEASURED(falsifying_case_missing)."""
+    def test_passing_posterior_without_frozen_case_is_falsifying_case_missing(
+        self, tmp_path: Path
+    ) -> None:
+        """S49 G1: strong posterior but NO frozen case → UNMEASURED(falsifying_case_missing).
+
+        Doctrine (status.py Rule 5/6): a clause with no constructible falsifying
+        case can NEVER PASS, even when the posterior decisively crosses the pass
+        threshold. Uses the *same* strong evidence as the PASSED test (30 wins / 2
+        losses → p ≈ 1.0 ≥ 0.95) so the ONLY thing separating this from PASSED is
+        the missing frozen case — making the assertion a real regression guard.
+
+        The prior assertion accepted ``status in ("UNMEASURED", "PASSED")`` — i.e.
+        it accepted the exact forbidden outcome, so a wiring regression feeding a
+        positive frozen-case count into the classifier would have stayed green.
+        This pins the status AND the sub_reason via the full aggregate path (the
+        sub_reason='falsifying_case_missing' branch was previously unasserted end
+        to end).
+        """
+        ev, rt = open_both(tmp_path)
+        try:
+            _seed_healthy_evidence(ev, rt, n_wins=30, n_losses=2, with_frozen_case=False)
+            report = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+            clause = report.clauses[0]
+            assert clause.status == "UNMEASURED", (
+                f"no frozen case must forbid PASSED even with a passing posterior; "
+                f"got status={clause.status!r} sub_reason={clause.sub_reason!r}"
+            )
+            assert clause.sub_reason == "falsifying_case_missing"
+            assert clause.frozen_case_count_at_current_metric_version == 0
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_no_frozen_case_never_passes_under_weak_evidence(self, tmp_path: Path) -> None:
+        """S49 G1 (companion): weaker evidence + no frozen case is still never PASSED."""
         ev, rt = open_both(tmp_path)
         try:
             _seed_healthy_evidence(ev, rt, n_wins=9, n_losses=1, with_frozen_case=False)
@@ -705,9 +786,7 @@ class TestHealthyAggregation:
                 generated_at_utc=_GEN_AT,
             )
             clause = report.clauses[0]
-            # Without frozen case: UNMEASURED(falsifying_case_missing) if p >= 0.95
-            # or UNMEASURED(underpowered) if p < 0.95 (10 samples may not reach 0.95)
-            assert clause.status in ("UNMEASURED", "PASSED")
+            assert clause.status != "PASSED"
         finally:
             ev.close()
             rt.close()

@@ -28,9 +28,13 @@ contains at least one citation marker.
 False-positive exclusions (A14):
   - Content inside ```...``` fenced code blocks is excluded (citations
     inside code would be false matches).
-  - Content inside [text](url) markdown links is excluded from URL matching
-    because the URL is not a citation marker in context — it IS the inline
-    link target, not a reference.
+  - Markdown links [text](url) are format-normalised, not blanket-excluded
+    (S49 C3): a link with an external http(s) target IS a reference, so its
+    URL is kept for citation matching; a link with a non-http target
+    (relative path, anchor) is not a reference, so only its text is kept.
+    Blanket-stripping the URL previously scored a hyperlinked source as
+    UNCITED while an identical bare URL scored CITED — an arm-differential
+    deflation of the citation axis.
 
 Design decisions:
   - Pure Python, no network calls.
@@ -56,9 +60,15 @@ from typing import Final
 # Fenced code block: ```...``` (non-greedy, dotall)
 _FENCED_CODE_BLOCK: Final[re.Pattern[str]] = re.compile(r"```.*?```", re.DOTALL)
 
-# Markdown inline link: [text](url) — exclude the url part from citation matching
-# We remove the whole [text](url) construct; keep "text" but drop "(url)"
-_MARKDOWN_LINK: Final[re.Pattern[str]] = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+# Markdown inline link: [text](url).
+# Group 1 = link text, group 2 = link target. A link whose target is an
+# external http(s) reference IS a citation, so its URL is preserved for
+# citation detection (S49 C3); non-http targets (relative paths, anchors)
+# are not references, so only the link text is kept.
+_MARKDOWN_LINK: Final[re.Pattern[str]] = re.compile(r"\[([^\]]*)\]\(([^)]*)\)")
+
+# A markdown link target that is an external reference (http/https).
+_HTTP_URL: Final[re.Pattern[str]] = re.compile(r"^\s*https?://", re.IGNORECASE)
 
 # Flag marker: a line that identifies a specific flag entry in a sentinel review.
 # The severity word must appear at a recognizable flag-entry position:
@@ -81,7 +91,11 @@ _FLAG_LINE: Final[re.Pattern[str]] = re.compile(
     r"|#{1,6}\s.*?\b(?:CRITICAL|IMPORTANT|MINOR)\b"  # ATX heading + severity
     r"|\*{1,2}(?:CRITICAL|IMPORTANT|MINOR|FLAG)\*{0,2}"  # bold severity label
     r")",
-    re.IGNORECASE | re.MULTILINE,
+    # Case-SENSITIVE (S49 C3): only the uppercase labels a sentinel actually
+    # emits are flags. re.IGNORECASE let everyday lowercase prose ("minor
+    # style nits", "critical path") count as uncited flags, inflating the
+    # denominator and deflating the score arm-differentially.
+    re.MULTILINE,
 )
 
 # Citation markers (after fenced-code and markdown-link stripping):
@@ -106,11 +120,16 @@ _PARA_SEP: Final[re.Pattern[str]] = re.compile(r"\n\n+")
 
 
 def _strip_markup(text: str) -> str:
-    """Remove fenced code blocks and markdown link URLs from text.
+    """Remove fenced code blocks and non-reference markdown link URLs.
 
     Fenced code content is replaced with spaces of equal length so that
     line-position offsets remain valid for flag-line detection.
-    Markdown link URLs are stripped but the link text is kept.
+
+    Markdown links are normalised so citation detection is not
+    format-sensitive (S49 C3): a link with an external http(s) target is a
+    reference, so its URL is preserved (kept alongside the link text);
+    a link with a non-http target (relative path, anchor) is not a
+    reference, so only the link text is kept.
     """
 
     # Replace fenced code blocks with whitespace of equal span
@@ -118,8 +137,16 @@ def _strip_markup(text: str) -> str:
         return " " * len(m.group(0))
 
     cleaned = _FENCED_CODE_BLOCK.sub(_blank_code, text)
-    # Remove markdown link URL targets; keep link text
-    cleaned = _MARKDOWN_LINK.sub(r"\1", cleaned)
+
+    # Normalise markdown links: keep http(s) targets (they are citations),
+    # drop non-http targets (keep only the link text).
+    def _normalise_link(m: re.Match[str]) -> str:
+        link_text, target = m.group(1), m.group(2)
+        if _HTTP_URL.search(target):
+            return f"{link_text} {target}"
+        return link_text
+
+    cleaned = _MARKDOWN_LINK.sub(_normalise_link, cleaned)
     return cleaned
 
 
