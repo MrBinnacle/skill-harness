@@ -4,7 +4,8 @@ Verifies:
 - tool_use strict schema is sent (strict=True, additionalProperties=False)
 - tool_choice={"type":"tool","name":"report_verdict"} is forced
 - thinking={"type":"disabled"} is sent
-- max_tokens=80 is set
+- max_tokens fits the tool schema's own worst-case output (C1 fix; was a
+  hardcoded 80 that could not fit rationale_brief's maxLength=500 contract)
 - model default is claude-sonnet-4-6
 - judge_id() returns sha256(model_id||system_prompt_sha256||tool_schema_sha256)
 """
@@ -44,13 +45,27 @@ def test_judge_uses_tool_choice_forced(
     assert kwargs["tool_choice"] == {"type": "tool", "name": "report_verdict"}
 
 
-def test_judge_uses_max_tokens_80(
+def test_judge_uses_max_tokens_fits_schema_worst_case(
     judge_client: JudgeClient, mock_anthropic_client: MagicMock
 ) -> None:
-    """max_tokens must be 80 (A31)."""
+    """max_tokens must be >= the tool schema's own worst-case output (C1 fix).
+
+    Regression for C1: max_tokens=80 could not fit rationale_brief's own
+    maxLength=500-char contract (worst-case ~1 token/char + JSON envelope
+    overhead), causing legitimate verbose verdicts to truncate and be
+    recorded as inadmissible 'judge_response_malformed'.
+    """
+    from skill_harness.oracles.tier2.judge import _TOOL_SCHEMA
+
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
     kwargs = _get_create_kwargs(mock_anthropic_client)
-    assert kwargs["max_tokens"] == 80
+
+    rationale_max_chars = _TOOL_SCHEMA["input_schema"]["properties"]["rationale_brief"]["maxLength"]
+    # Conservative worst-case bound: 1 token per char (denser than any realistic
+    # tokenizer output) plus a generous fixed JSON envelope allowance.
+    worst_case_floor = rationale_max_chars + 40
+    assert kwargs["max_tokens"] >= worst_case_floor
+    assert kwargs["max_tokens"] == 560  # pins the exact derived value (500 + 60)
 
 
 def test_judge_disables_thinking(
@@ -121,7 +136,7 @@ def test_judge_tool_name_is_report_verdict(
 def test_judge_default_model_is_sonnet_4_6(
     judge_client: JudgeClient, mock_anthropic_client: MagicMock
 ) -> None:
-    """Default model must be claude-sonnet-4-6 (CLAUDE.md model-pinning)."""
+    """Default model must be claude-sonnet-4-6 (model-pinning convention)."""
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
     kwargs = _get_create_kwargs(mock_anthropic_client)
     assert kwargs["model"] == "claude-sonnet-4-6"
@@ -176,3 +191,19 @@ def test_judge_id_changes_with_model() -> None:
     id1 = jc.judge_id("claude-sonnet-4-6")
     id2 = jc.judge_id("claude-opus-4-7")
     assert id1 != id2
+
+
+def test_length_fields_use_canonical_tokenizer(
+    judge_client: JudgeClient, mock_anthropic_client: MagicMock
+) -> None:
+    """F4 regression: JudgeVerdict.length_a/length_b must match the canonical
+    cl100k_base counter (tier1/verbosity.count_tokens) exactly. judge.py used
+    to re-implement tiktoken.get_encoding('cl100k_base') locally in its own
+    _count_tokens(); it now imports the tier1 counter directly."""
+    from skill_harness.oracles.tier1.verbosity import count_tokens
+
+    output_a = "a short output"
+    output_b = "a rather longer output with more words in it"
+    verdict = judge_client.evaluate_pair(output_a, output_b, "clarity", "rate clarity")
+    assert verdict.length_a == count_tokens(output_a)
+    assert verdict.length_b == count_tokens(output_b)

@@ -22,11 +22,12 @@ Skill Harness is currently in pre-alpha (`0.1.0a0`). Until a stable release is t
 
 This project takes dependency provenance seriously. The discipline:
 
-- **All production dependencies pinned above their last CVE-patched version.** The current `anthropic` pin (`>=0.87`) reflects the patches for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool, 2026-03-31). See [`docs/supply-chain/`](docs/supply-chain/) for published dependency audit records.
-- **Supply-chain audit re-run quarterly** and at every major version bump of `anthropic`, `pydantic`, or `pytest`. The audit lives at `.supply-chain-risk-auditor/results.md`.
+- **All production dependencies pinned above their last CVE-patched version.** The current `anthropic` pin (`>=0.87`) reflects the patches for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool, 2026-03-31). See [`docs/supply-chain/`](docs/supply-chain/) for the per-dependency audit records that ARE tracked (e.g. `inspect-audit-2026-07-09.md`, `openai-audit-2026-06-08.md`).
+- **Supply-chain audit re-run quarterly** and at every major version bump of `anthropic`, `pydantic`, or `pytest`. The `anthropic`-pin audit (see `CHANGELOG.md`'s `0.1.0a0` Security entry) was run with the `supply-chain-risk-auditor` tool at scaffold time (2026-06-03); its output directory (`.supply-chain-risk-auditor/`) is local-only and gitignored — not a tracked artifact, so the full results are not published in this repo.
 - **Dependabot enabled** for `pip`, `github-actions`, and `pre-commit` ecosystems. See `.github/dependabot.yml`.
-- **CodeQL** runs on every PR and weekly on `main`. See `.github/workflows/codeql.yml`.
+- **CodeQL** runs via GitHub's default code-scanning setup (Python + GitHub Actions queries, weekly) — not a tracked workflow file. An advanced-configuration `codeql.yml` was removed (`a917765`) because its SARIF uploads are rejected while default setup is enabled on this repo; one scanner, the working one. Scan status is visible on the repo's Security tab.
 - **No deps with active high/critical CVEs.** Any introduction of such a dep requires PR-level justification + mitigation.
+- **CI reproducibility (S4): `requirements-ci.txt`.** `pyproject.toml`'s runtime deps stay open-ended (`>=`) by design — this is a library, and downstream installers need to resolve compatible versions in their own environment, not inherit our exact pins. That openness has a supply-chain cost on its own: an audit like `openai-audit-2026-06-08.md` anchors a known-good floor version, but an unbounded `>=` lets the resolver drift arbitrarily far past it, including into an unaudited next major — which is why `openai` is now capped `<3` (audited-version-drift rule: a dependency's version range must never extend past the highest major actually reviewed in its audit doc; raising the cap requires a new audit entry, not just a version bump). CI's OWN installs are additionally pinned via `requirements-ci.txt` + `pip install -c requirements-ci.txt`, so a fresh CI run resolves the same transitive versions every time instead of "latest at run time" — this file constrains CI only and does not change what a downstream `pip install skill-harness` resolves.
 
 ## Surfaces explicitly NOT used
 
@@ -46,6 +47,22 @@ The primary threats:
 2. **Calibration drift hidden as admissible** — addressed by `expires_at` on calibration events + write-time snapshot. The `current_calibration` runtime pointer can be rewritten by a filesystem-adjacent attacker, but this affects only FUTURE verdicts; past verdicts have already snapshotted their `admissibility_state` at write time and the append-only triggers on `oracle_verdicts` prevent rewriting them.
 3. **API key exfiltration** — read from environment, never logged, never persisted.
 4. **Cost overrun via prompt injection in judged outputs** — bounded by per-run hard cap (`--max-usd`) and per-day rolling cap.
+
+### Subject-layer oracle trust boundary (`command_succeeds` / `file_contains`)
+
+`src/skill_harness/subject/inspect_adapter.py`'s outcome oracles interpolate
+`oracle_arg` directly into a shell command (`bash -lc <oracle_arg>`) and, for
+`file_contains`, into an f-string sandbox path — neither escapes nor validates
+the value. This is safe under the v0.1 threat model above because `oracle_arg`
+is operator-authored harness configuration (part of the same task definition as
+`prompt` and `skill_dir`), not content derived from a skill, an agent
+transcript, or any other ingested/untrusted source. `network_mode: none` on the
+sandbox bounds the blast radius of a compromised value but does not make
+deriving `oracle_arg` from untrusted material safe — a future caller that does
+so would need argv-based execution (no shell string) and path
+normalization/validation added first. This is the same "local-trust, single
+operator" boundary as the rest of this document; it does not extend to a
+future design where task/skill content flows into oracle configuration.
 
 ### Trust partition between `evidence.db` and `runtime.db`
 

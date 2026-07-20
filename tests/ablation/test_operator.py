@@ -166,3 +166,38 @@ def test_operator_render_does_not_make_network_calls() -> None:
     finally:
         if env_backup is not None:
             os.environ["ANTHROPIC_API_KEY"] = env_backup
+
+
+# ---------------------------------------------------------------------------
+# F-7 (S55 hostile review): single-source encoding, anti-drift agreement test
+# (mirrors the F3 MODEL_PRICING_USD_PER_M <-> PRICE_PER_MTOK pattern in
+# tests/oracles/calibration/test_cost_projection.py).
+# ---------------------------------------------------------------------------
+
+
+class TestOperatorEncodingSingleSourceOfTruth:
+    """AblationOperator must tokenize with the SAME encoding object as
+    skill_harness.oracles.tier1.verbosity's canonical get_encoding() -- never an
+    independent tiktoken.get_encoding() call of its own. Before F-7, operator.py
+    hand-duplicated its own "cl100k_base" literal and its own tiktoken.get_encoding()
+    call (twice: once for FILLER_UNIT_TOKENS, once per instance in __init__); nothing
+    enforced that a canonical-encoding change would reach this module too.
+    """
+
+    def test_operator_instance_encoding_is_canonical_encoding_object(self) -> None:
+        from skill_harness.ablation.operator import AblationOperator
+        from skill_harness.oracles.tier1.verbosity import get_encoding
+
+        op = AblationOperator()
+        assert op._enc is get_encoding(), (
+            "F-7: AblationOperator must reuse the canonical encoding object, "
+            "not construct its own independent tiktoken.get_encoding() instance"
+        )
+
+    def test_filler_unit_tokens_computed_from_canonical_encoding(self) -> None:
+        from skill_harness.ablation.operator import _FILLER_UNIT, FILLER_UNIT_TOKENS
+        from skill_harness.oracles.tier1.verbosity import get_encoding
+
+        assert len(get_encoding().encode(_FILLER_UNIT)) == FILLER_UNIT_TOKENS, (
+            "F-7: FILLER_UNIT_TOKENS must be derived from the canonical encoding"
+        )

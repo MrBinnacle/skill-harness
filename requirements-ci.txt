@@ -1,0 +1,80 @@
+# CI-only pip constraints (S4 fix).
+#
+# This is NOT a lockfile for the published package — skill-harness is a
+# LIBRARY (see pyproject.toml's open-ended ">=" runtime pins, which stay
+# open so downstream installers can resolve compatible versions in their own
+# environment). Loosely-pinned library deps + no lockfile meant CI resolved
+# "latest at run time" on every run: digest-pinned sandbox images and
+# bit-equality determinism claims coexisted with an unpinned Python dep
+# surface, so a fresh CI install could silently resolve different transitive
+# versions than any published result was measured against.
+#
+# This file is consumed ONLY via `pip install -c requirements-ci.txt ...` in
+# .github/workflows/ci.yml — it constrains CI's OWN installs to a known-good,
+# actually-resolved snapshot (captured via `pip install -e ".[dev]"` into a
+# clean venv, then `pip freeze`) without changing install semantics for a
+# downstream consumer of the published package, who never sees this file.
+#
+# Regenerate after any pyproject.toml dependency change:
+#   python -m venv /tmp/ci-clean-venv && /tmp/ci-clean-venv/bin/pip install -e ".[dev]" \
+#     && /tmp/ci-clean-venv/bin/pip freeze | grep -v '^-e ' | sort > requirements-ci.txt
+# (then restore this header — freeze doesn't preserve comments).
+#
+# Captured 2026-07-19 from a clean venv running `pip install -e ".[dev]"`.
+Pygments==2.20.0
+annotated-types==0.7.0
+anthropic==0.117.0
+anyio==4.14.2
+ast_serialize==0.6.0
+certifi==2026.6.17
+charset-normalizer==3.4.9
+click==8.4.2
+colorama==0.4.6
+coverage==7.15.2
+distro==1.9.0
+docstring_parser==0.18.0
+execnet==2.1.2
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+hypothesis==6.157.0
+idna==3.18
+iniconfig==2.3.0
+jiter==0.16.0
+librt==0.13.0
+markdown-it-py==4.2.0
+mdurl==0.1.2
+mypy==2.3.0
+mypy_extensions==1.1.0
+numpy==2.5.1
+# openai audited at 2.41.0 (docs/supply-chain/openai-audit-2026-06-08.md); the
+# pyproject.toml pin now caps at <3 so this constraint can never drift past
+# the audited major without a new audit (S4).
+openai==2.46.0
+packaging==26.2
+pandas==3.0.3
+pathspec==1.1.1
+patsy==1.0.2
+pluggy==1.6.0
+pydantic==2.13.4
+pydantic_core==2.46.4
+pytest-cov==7.1.0
+pytest-socket==0.8.0
+pytest-xdist==3.8.0
+pytest==9.1.1
+python-dateutil==2.9.0.post0
+regex==2026.7.19
+requests==2.34.2
+rich==15.0.0
+ruff==0.15.22
+scipy==1.18.0
+six==1.17.0
+sniffio==1.3.1
+sortedcontainers==2.4.0
+statsmodels==0.14.6
+tiktoken==0.13.0
+tqdm==4.69.0
+typing-inspection==0.4.2
+typing_extensions==4.16.0
+tzdata==2026.3
+urllib3==2.7.0

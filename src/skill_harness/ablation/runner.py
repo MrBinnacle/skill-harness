@@ -10,7 +10,7 @@ This is the core runner that:
 7. Writes append-only verdicts to evidence.db via Track A repositories.
 8. Stamps runs.completed_at exactly ONCE after the last verdict commits.
 
-Non-negotiable invariants (CLAUDE.md load-bearing):
+Non-negotiable invariants (load-bearing; see docs/INVARIANTS.md):
 - Deterministic Python owns ALL control flow. SubjectClient is content worker only.
 - Append-only evidence: no UPDATE on evidence rows except runs.completed_at single-shot.
 - Budget cap check + reservation in ONE writer_transaction(runtime) (A42).
@@ -34,7 +34,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NoReturn
 
 from skill_harness.ablation.confound import (
     N_NULL_FLOOR,
@@ -77,7 +77,7 @@ from skill_harness.storage.models import (
 )
 from skill_harness.storage.repositories.evidence.confound_events import insert_confound_event
 from skill_harness.storage.repositories.evidence.oracle_verdicts import insert_oracle_verdict
-from skill_harness.storage.repositories.evidence.runs import complete_run, insert_run
+from skill_harness.storage.repositories.evidence.runs import complete_run, get_run_by_id, insert_run
 from skill_harness.storage.repositories.evidence.samples import insert_sample
 from skill_harness.storage.repositories.runtime.cost_ledger import insert_cost_ledger_entry
 from skill_harness.storage.repositories.runtime.run_budget import (
@@ -124,6 +124,10 @@ class ClauseSpec:
     axis: str
     oracle_tier: int
     metric_id: str | None = None
+    comparator: str = "increase"
+    """Persisted directional claim (schema CHECK: increase|decrease|match). Threaded
+    into ``delta_to_observation`` so a 'decrease' clause verdicts correctly (A2).
+    Defaults to 'increase' (the pre-A2 behavior) for callers that don't set it."""
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +142,7 @@ class RunConfig:
     Written to runs.config_json at run start. Used for:
     - Idempotency + resume: set-difference of existing tuples vs this plan (A40).
     - Multiplicity provenance: K x |axes| family size for Track E (A49).
-    - Stopping reason recording (A44).
+    - Stopping reason recording (A44) -- KNOWN GAP, see stopping_reasons below.
     """
 
     run_id: str
@@ -151,12 +155,38 @@ class RunConfig:
     n_min: int = N_MIN
     n_inc: int = N_INC
     n_max: int = N_MAX
+    """n_min/n_inc/n_max (A5, hostile-review): these are recorded as whatever the
+    caller passes RunConfig (today, always the N_MIN/N_INC/N_MAX module constants
+    below, since run_ablation() exposes no override params) -- but the ACTUAL
+    sampling loop (_run_clause / sequential-stop) reads the module constants
+    N_MIN/N_INC/N_MAX directly, never run_config.n_min/n_inc/n_max. There is no
+    live divergence today (no caller can set different values), but a future
+    caller passing a custom RunConfig would get a config_json describing a plan
+    the loop silently ignores. Not fixed here (scope: A3/A4/B*/D* cluster) --
+    wiring the loop to read from config would be a larger, separately-scoped
+    change; flagging so it isn't mistaken for already-correct."""
     max_usd: float = 5.0
     family_size: int = 0
     """K x |axes| — set by runner after building the clause list (A49)."""
 
     stopping_reasons: dict[str, str] = field(default_factory=dict)
-    """Maps clause_id -> stopping_reason (recorded at run-end for A44)."""
+    """Maps clause_id -> stopping_reason.
+
+    KNOWN GAP (A5, hostile-review 2026-07-19): this docstring and the field's own
+    intent (A44) claim stopping_reasons is "recorded at run-end", but it is NOT.
+    runs.config_json is written ONCE, before the clause loop runs (run_ablation
+    inserts the row at the top of the method), and evidence.runs has a
+    column-scoped immutability trigger (runs_immutable_columns, migration 0002)
+    that RAISE(ABORT)s on ANY UPDATE to config_json thereafter -- so there is no
+    way to persist the run-end stopping_reasons dict into this same row without
+    either violating the append-only invariant (never) or a schema change (a new
+    column/table, requires approval per project ASK-FIRST rules; out of scope for
+    this fix pass). The runner still populates a local `stopping_reasons` dict
+    during the loop (see run_ablation) but discards it -- it is never written
+    anywhere. This field is consequently always {} when read back from storage.
+    Left as a flagged, unresolved gap rather than silently "fixed" by writing to
+    a JSON blob that would violate A20.
+    """
 
     def to_json(self) -> str:
         """Serialize to JSON for storage in runs.config_json."""
@@ -232,6 +262,12 @@ class ClauseResult:
 # ---------------------------------------------------------------------------
 # BudgetAbortedError -- raised internally when budget is exceeded
 # ---------------------------------------------------------------------------
+
+
+class _ScorerCrashError(RuntimeError):
+    """Raised internally when a Tier-1 scorer crashes while scoring the primary axis
+    (A1). Caught in ``_run_clause`` -- never allowed to reach the verdict as a
+    fabricated numeric score."""
 
 
 class BudgetAbortedError(Exception):
@@ -428,6 +464,12 @@ class AblationRunner:
         # Track collected samples (shared mutable state for update_run_progress)
         samples_collected: int = 0
         clause_results: list[ClauseResult] = []
+        # A5 (hostile-review, KNOWN GAP): populated below per clause but never
+        # persisted anywhere -- runs.config_json is immutable after the initial
+        # insert above (runs_immutable_columns trigger, A20), so there is no
+        # write path back into RunConfig.stopping_reasons at run-end despite the
+        # field's own docstring claiming otherwise. See RunConfig.stopping_reasons
+        # for the full explanation. Not fixed here (would need a schema change).
         stopping_reasons: dict[str, str] = {}
 
         try:
@@ -439,7 +481,7 @@ class AblationRunner:
                     clause_texts, target_clause_index=0
                 )
                 warmup_blocks = warmup_conditions["full"]["system_blocks"]
-                self._warmup_or_serialize(warmup_blocks, user_message)
+                self._warmup_or_serialize(run_id, warmup_blocks, user_message)
 
             # Process each clause
             for clause_spec in clauses:
@@ -470,18 +512,7 @@ class AblationRunner:
 
         except BudgetAbortedError:
             # Mark run as aborted in runtime
-            abort_ts = self._now()
-            with writer_transaction(self._runtime):
-                update_run_budget_aborted(self._runtime, run_id, abort_ts, abort_ts)
-                update_run_progress(
-                    self._runtime,
-                    run_id,
-                    state="aborted_budget",
-                    samples_collected=samples_collected,
-                    last_heartbeat=abort_ts,
-                    error="budget_exhausted",
-                )
-            raise
+            self._handle_budget_abort(run_id, samples_collected)
 
         # Stamp completed_at exactly ONCE (A20 carve-out, single-shot per REL-1 spec).
         # "Completed" means the clause loop reached its natural stopping condition for each
@@ -542,6 +573,13 @@ class AblationRunner:
         if progress["state"] == "completed":
             raise ValueError(f"Run {run_id!r} is already completed")
 
+        # F-2 (S55 hostile review): derive skill_id from the run's own persisted
+        # evidence.runs row rather than widening this method's public signature.
+        # evidence.runs.skill_id is NOT NULL (schema) and immutable after insert
+        # (A20), so a resumable run (verified to exist above) always has one.
+        run_row = get_run_by_id(self._evidence, run_id)
+        skill_id = run_row["skill_id"] if run_row is not None else None
+
         # MAJOR-2: re-derive samples_collected + usd_spent from EVIDENCE (authoritative),
         # not from runtime progress, so a crash between the evidence commit and the runtime
         # budget update cannot let the A42 hard cap be overspent after resume. Reconcile the
@@ -567,29 +605,37 @@ class AblationRunner:
         null_acc = NullAccumulator(scorers=self._scorers, null_floor=self._null_floor)
         clause_results: list[ClauseResult] = []
 
-        for clause_spec in clauses:
-            result = self._run_clause(
-                run_id=run_id,
-                clause_spec=clause_spec,
-                all_clauses=clauses,
-                user_message=user_message,
-                clause_to_axis_map=clause_to_axis_map,
-                null_acc=null_acc,
-                samples_collected_ref=[samples_collected],
-                max_usd=max_usd,
-                existing_samples=existing,
-            )
-            samples_collected = result[0]
-            clause_results.append(result[1])
-
-            with writer_transaction(self._runtime):
-                update_run_progress(
-                    self._runtime,
-                    run_id,
-                    state="running",
-                    samples_collected=samples_collected,
-                    last_heartbeat=self._now(),
+        # A4: resume_ablation must abort the same way run_ablation does on a budget
+        # exhaustion mid-loop -- without this handler, BudgetAbortedError propagated
+        # uncaught and left run_progress.state stuck on whatever it was before resume
+        # (never transitioning to 'aborted_budget'), so a resumed-then-budget-killed
+        # run was indistinguishable from a crash.
+        try:
+            for clause_spec in clauses:
+                result = self._run_clause(
+                    run_id=run_id,
+                    clause_spec=clause_spec,
+                    all_clauses=clauses,
+                    user_message=user_message,
+                    clause_to_axis_map=clause_to_axis_map,
+                    null_acc=null_acc,
+                    samples_collected_ref=[samples_collected],
+                    max_usd=max_usd,
+                    existing_samples=existing,
                 )
+                samples_collected = result[0]
+                clause_results.append(result[1])
+
+                with writer_transaction(self._runtime):
+                    update_run_progress(
+                        self._runtime,
+                        run_id,
+                        state="running",
+                        samples_collected=samples_collected,
+                        last_heartbeat=self._now(),
+                    )
+        except BudgetAbortedError:
+            self._handle_budget_abort(run_id, samples_collected)
 
         # Stamp completed_at
         completed_ts = self._now()
@@ -610,6 +656,7 @@ class AblationRunner:
             runtime_conn=self._runtime,
             run_id=run_id,
             model_id=subject_model,
+            skill_id=skill_id,
         )
 
         return clause_results
@@ -846,10 +893,26 @@ class AblationRunner:
 
                 # Score Full vs Ablated_k on the primary axis (Tier-1 directional).
                 # Reached only for Tier-1-measurable clauses (gated at method entry).
-                primary_full_score = self._score_primary_axis(full_output, clause_spec)
-                primary_abl_score = self._score_primary_axis(ablated_output, clause_spec)
-                primary_delta = primary_full_score - primary_abl_score
-                observation = delta_to_observation(primary_delta)
+                # A1: a scorer crash must never become a fabricated 0.0 score inside
+                # the verdict path -- catch it and mark the comparison inadmissible
+                # (below) instead of feeding a real delta/observation off of it.
+                scorer_crashed = False
+                try:
+                    primary_full_score = self._score_primary_axis(full_output, clause_spec)
+                    primary_abl_score = self._score_primary_axis(ablated_output, clause_spec)
+                except _ScorerCrashError:
+                    scorer_crashed = True
+                    primary_full_score = primary_abl_score = 0.0
+
+                if scorer_crashed:
+                    # No genuine delta is knowable -- 0.5 (Tie) is the least-misleading
+                    # placeholder the {0.0, 0.5, 1.0} schema allows; admissibility below
+                    # excludes it from the posterior regardless (A1).
+                    primary_delta = 0.0
+                    observation = 0.5
+                else:
+                    primary_delta = primary_full_score - primary_abl_score
+                    observation = delta_to_observation(primary_delta, clause_spec.comparator)
 
                 # Confound monitoring (A47) across all axes for this comparison
                 null_sigmas = null_acc.sigmas()
@@ -862,14 +925,36 @@ class AblationRunner:
                     scorers=self._scorers,
                 )
 
-                # A46: write-side assertion
-                assert all(e.primary_clause_id == clause_id for e in confound_events_out), (
-                    "A46 violation: confound event primary_clause_id must "
-                    f"== ablated_clause_id={clause_id!r}"
-                )
+                # A46: write-side assertion. F-4 (S55 hostile review): bare `assert`
+                # is stripped under `python -O`, silently turning this into a no-op
+                # and letting a directionality violation reach the verdict write.
+                # Explicit `if ...: raise` preserves the check regardless of -O.
+                if not all(e.primary_clause_id == clause_id for e in confound_events_out):
+                    raise RuntimeError(
+                        "A46 violation: confound event primary_clause_id must "
+                        f"== ablated_clause_id={clause_id!r}"
+                    )
+
+                # A1: confound-path/primary-path scorer consistency. The confound path
+                # (detect_confounds) uses the SAME scorer registry and suppresses
+                # per-axis exceptions by omitting the axis from full/ablated scores --
+                # so a crashing primary-axis scorer must never still surface as a
+                # confound event for its own axis (that would mean the two paths saw
+                # different scorer behavior for the same axis/text, a real bug).
+                # F-4: explicit raise, not a bare assert (same -O rationale as above).
+                if scorer_crashed and any(
+                    ce.axis == clause_spec.axis for ce in confound_events_out
+                ):
+                    raise RuntimeError(
+                        "A1 invariant violated: primary-axis scorer crashed but the "
+                        f"confound path still produced an event for axis "
+                        f"{clause_spec.axis!r} -- confound-path/primary-path scorer "
+                        "consistency broken"
+                    )
 
                 # Root-insight: snapshot admissibility at write time from real state.
-                # - confound_flagged for THIS clause  -> inadmissible (reason confounded)
+                # - scorer crash on the primary axis  -> inadmissible (reason scorer_error, A1)
+                # - confound_flagged for THIS clause   -> inadmissible (reason confounded)
                 # - Null accumulator below floor       -> inadmissible (reason underpowered)
                 # - otherwise                          -> admissible
                 this_clause_confounded = any(
@@ -880,6 +965,7 @@ class AblationRunner:
                 admissibility_state, inadmissibility_reason = self._snapshot_admissibility(
                     confounded=this_clause_confounded,
                     null_floor_met=null_floor_met,
+                    scorer_crashed=scorer_crashed,
                 )
 
                 # SCHEMA-3 / BLOCKER-2.2: write a verdict only if one doesn't already exist
@@ -902,8 +988,8 @@ class AblationRunner:
                 # stopping posterior. For comparison indexes that had a persisted verdict
                 # BEFORE this resume iteration started, use the PERSISTED admissibility_state
                 # and observation — never freshly recomputed values — so the posterior
-                # matches the written audit trail (CLAUDE.md: admissibility recorded at
-                # write time, never recomputed at read time).
+                # matches the written audit trail (see docs/INVARIANTS.md #3: admissibility
+                # recorded at write time, never recomputed at read time).
                 # CF-E3-1: also carry the persisted verdict_id so resumed runs populate
                 # ClauseResult.verdict_id (otherwise stays None when all verdicts are
                 # pre-existing and the write-branch is never entered).
@@ -957,6 +1043,28 @@ class AblationRunner:
     # ------------------------------------------------------------------
     # Budget management (A42)
     # ------------------------------------------------------------------
+
+    def _handle_budget_abort(self, run_id: str, samples_collected: int) -> NoReturn:
+        """Mark a run aborted-by-budget in runtime and re-raise (A42, A4).
+
+        F-9 (S55 hostile review): extracted from the verbatim-duplicate
+        ``except BudgetAbortedError`` handlers in ``run_ablation`` and
+        ``resume_ablation`` -- both must transition ``run_progress.state`` to
+        ``'aborted_budget'`` the same way (A4: resume previously skipped this
+        entirely, leaving the progress row stuck).
+        """
+        abort_ts = self._now()
+        with writer_transaction(self._runtime):
+            update_run_budget_aborted(self._runtime, run_id, abort_ts, abort_ts)
+            update_run_progress(
+                self._runtime,
+                run_id,
+                state="aborted_budget",
+                samples_collected=samples_collected,
+                last_heartbeat=abort_ts,
+                error="budget_exhausted",
+            )
+        raise
 
     def _check_budget(self, run_id: str, max_usd: float, projected_cost: float) -> None:
         """Pre-call budget gate (A42).
@@ -1150,20 +1258,27 @@ class AblationRunner:
 
     @staticmethod
     def _snapshot_admissibility(
-        *, confounded: bool, null_floor_met: bool
+        *, confounded: bool, null_floor_met: bool, scorer_crashed: bool = False
     ) -> tuple[str, str | None]:
         """Compute the write-time admissibility snapshot for a comparison.
 
         Root insight: ``admissibility_state`` is a real write-time snapshot of the
         comparison's state, NOT a hardcoded constant. Never recomputed at read time
-        (CLAUDE.md Evidence model — locked invariant).
+        (see docs/INVARIANTS.md #3 — locked invariant).
 
+        - scorer crashed on the primary axis (A1)               -> ('inadmissible', 'scorer_error')
         - confounded (this clause's own axis confound_flagged) -> ('inadmissible', 'confounded')
         - Null accumulator below floor (N_null < 30, A47)       -> ('inadmissible', 'underpowered')
         - otherwise                                             -> ('admissible', None)
 
+        scorer_crashed is checked first: a crash means the comparison could not be
+        scored at all, which takes priority over (and is orthogonal to) whatever the
+        confound/null-floor state happens to be.
+
         :returns: (admissibility_state, inadmissibility_reason)
         """
+        if scorer_crashed:
+            return "inadmissible", "scorer_error"
         if confounded:
             return "inadmissible", "confounded"
         if not null_floor_met:
@@ -1191,7 +1306,7 @@ class AblationRunner:
 
         BLOCKER-1: any clause failing this gate must NOT be scored on a fallback
         (wrong) axis. It is UNMEASURED — no admissible verdict, never aggregated.
-        Per CLAUDE.md: "Tier-2 inadmissible without a calibrated (judge_id, axis)
+        Per docs/INVARIANTS.md #3: "Tier-2 inadmissible without a calibrated (judge_id, axis)
         record" and "no admissible evidence => UNMEASURED never PASSED".
         """
         return clause_spec.oracle_tier == 1 and clause_spec.axis in self._scorers
@@ -1207,6 +1322,10 @@ class AblationRunner:
         :param text: Subject model output.
         :param clause_spec: Clause specification with axis name.
         :returns: Metric score (float).
+        :raises _ScorerCrashError: If the scorer itself raises (A1). A crash must
+            never be silently converted into a real 0.0 score inside the verdict
+            path -- the caller catches this and marks the comparison inadmissible
+            rather than let a crash masquerade as a genuine Loss.
         """
         scorer = self._scorers.get(clause_spec.axis)
         if scorer is None:
@@ -1217,8 +1336,11 @@ class AblationRunner:
             )
         try:
             return float(scorer(text))
-        except Exception:
-            return 0.0
+        except Exception as exc:
+            raise _ScorerCrashError(
+                f"Tier-1 scorer for axis {clause_spec.axis!r} raised while scoring "
+                f"the primary axis (A1): {exc!r}"
+            ) from exc
 
     # ------------------------------------------------------------------
     # Subject model call with retry (A40 per-call policy)
@@ -1260,19 +1382,35 @@ class AblationRunner:
 
     def _warmup_or_serialize(
         self,
+        run_id: str,
         system_blocks: list[dict[str, Any]],
         user_message: str,
     ) -> None:
         """Send warmup call to write shared prefix to prompt cache (A43/COST-4).
 
-        This must complete before fan-out across conditions. The response is
-        discarded (cost is real but the output is not used as a sample).
+        This must complete before fan-out across conditions. The warmup's OUTPUT
+        is discarded (not used as a sample) but its cost is real
+        (subject.py:warmup_shared_prefix docstring) and is counted against the
+        A42 budget cap via _update_budget_spend (A3 hostile-review fix) -- before
+        this fix the entire SubjectResponse was discarded, so run_budget.usd_spent
+        silently under-counted true spend by the warmup's cost on every run.
+
+        NOTE (A3 scope): this updates runtime.run_budget.usd_spent only. It does
+        NOT write a runtime.cost_ledger entry or an evidence.samples row. The A41
+        reconciler (reconcile_run_cost) treats evidence.samples.usd as the sole
+        source of truth and back-fills cost_ledger to MATCH that sum -- a
+        cost_ledger-only warmup entry with no evidence.samples counterpart would
+        be reconciled back OUT (net effect zero, not a fix). Representing warmup
+        cost in the evidence-authoritative ledger/reconciler model would require
+        either a schema change or a redefinition of reconcile_run_cost's
+        arithmetic, both out of this fix's scope (flagged, not resolved here).
         """
         import contextlib
 
         with contextlib.suppress(SubjectCallError):
-            self._subject.warmup_shared_prefix(system_blocks, user_message)
+            resp = self._subject.warmup_shared_prefix(system_blocks, user_message)
             # Warmup failure is non-fatal -- cache write discipline is best-effort.
+            self._update_budget_spend(run_id, resp)
 
     # ------------------------------------------------------------------
     # Idempotency helpers (A40)
@@ -1338,7 +1476,7 @@ class AblationRunner:
         C2 fix: on resume, comparison indexes that already have a verdict must have
         their posterior contribution rebuilt from the PERSISTED observation and
         admissibility_state — never recomputed from fresh confound/null-floor state
-        (CLAUDE.md Evidence model: admissibility recorded at write time, never recomputed).
+        (see docs/INVARIANTS.md #3: admissibility recorded at write time, never recomputed).
 
         CF-E3-1: also returns verdict_id so the resume path can populate
         ClauseResult.verdict_id with the last written verdict UUID.

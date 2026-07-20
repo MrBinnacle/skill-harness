@@ -24,11 +24,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          python-version: "3.x"
-      - run: python -m pip install pre-commit
+          python-version: "3.13"
+      # S5: pinned (was a floating install — any future pre-commit release
+      # would execute in this job on the next run, and this job IS the
+      # residue-gate security control; a compromised release could silently
+      # neuter it). NOTE: this inline `pip install` is NOT covered by
+      # Dependabot's pip ecosystem (it only parses manifest files, not
+      # workflow run: steps) — bumping this pin is a manual PR, same as any
+      # other CI-only tool version. (pre-commit's OWN transitive deps —
+      # cfgv/identify/nodeenv/pyyaml/virtualenv — are still unpinned here;
+      # this closes the top-level "any new release runs immediately" gap,
+      # not the full transitive supply chain.)
+      - run: python -m pip install pre-commit==4.6.0
       - name: Residue sweep (private-provenance identifiers in *.md)
         run: |
           rc=0

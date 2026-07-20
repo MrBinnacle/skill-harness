@@ -3,8 +3,8 @@
 Pure read-side aggregation library. NO API calls. NO sampling. NO writes.
 
 Callers (Track E.3 CLI) supply already-opened DB connections; this module
-never calls sqlite3.connect() directly. All reads go through the received
-connections to maintain pragma/FK discipline (open_db() invariant).
+never opens a raw sqlite3 connection itself. All reads go through the
+received connections to maintain pragma/FK discipline (open_db() invariant).
 
 Design:
 - Discovers completed ablation runs for skill_id.
@@ -108,8 +108,11 @@ def aggregate_skill(
     # ------------------------------------------------------------------
     clause_axis_observations: dict[tuple[str, str], list[float]] = defaultdict(list)
     clause_axis_run_ids: dict[tuple[str, str], set[str]] = defaultdict(set)
-    clause_axis_metric_id: dict[tuple[str, str], str | None] = {}
-    clause_axis_metric_version: dict[tuple[str, str], str | None] = {}
+    # B6: collect ALL metric_id / metric_version values per key — detect divergence
+    # at resolution time (mirrors op_hash/subject_model MIXED pattern), instead of
+    # last-write-wins which silently drops earlier-scored metric provenance.
+    clause_axis_metric_ids: dict[tuple[str, str], set[str]] = defaultdict(set)
+    clause_axis_metric_versions: dict[tuple[str, str], set[str]] = defaultdict(set)
     # I2: collect ALL op_hashes per (clause_id, axis) — detect divergence at resolution time
     clause_axis_op_hashes: dict[tuple[str, str], set[str]] = defaultdict(set)
 
@@ -151,9 +154,12 @@ def aggregate_skill(
             key = (clause_id, axis)
             clause_axis_observations[key].append(float(obs))
             clause_axis_run_ids[key].add(run_id)
-            # Record metric provenance (last-write-wins; should be consistent)
-            clause_axis_metric_id[key] = metric_id
-            clause_axis_metric_version[key] = metric_version
+            # B6: record ALL distinct metric provenance values seen; resolved
+            # (single value vs MIXED) below once all rows have been scanned.
+            if metric_id is not None:
+                clause_axis_metric_ids[key].add(metric_id)
+            if metric_version is not None:
+                clause_axis_metric_versions[key].add(metric_version)
 
             if comparison == "full_vs_null":
                 full_vs_null_observations.append(float(obs))
@@ -310,14 +316,20 @@ def aggregate_skill(
             post_mean = posterior.posterior_mean
             ci_lo = posterior.credible_interval_lo
             ci_hi = posterior.credible_interval_hi
+            is_prior_only = False
         else:
-            # No admissible data — compute uninformative posterior
+            # B5: no admissible data — this is an uninformative Beta(1,1) PRIOR, not a
+            # measurement. Values are shape-identical to a genuine near-0.5 measured
+            # result (posterior_mean=0.5, p_win=0.4, CI=[0.025,0.975]); is_prior_only
+            # marks them so a numeric-field consumer (dashboard/diff/reviewer) does not
+            # mistake "UNMEASURED" for "measured at 0.5" (report.py ClauseReport).
             from scipy.stats import beta as beta_dist  # type: ignore[import-untyped]
 
             p_win = float(beta_dist.sf(0.60, 1.0, 1.0))
             post_mean = 0.5
             ci_lo = float(beta_dist.ppf(0.025, 1.0, 1.0))
             ci_hi = float(beta_dist.ppf(0.975, 1.0, 1.0))
+            is_prior_only = True
 
         # Determine run state for this clause's runs
         # Use aborted_budget if any run for this clause was aborted
@@ -350,6 +362,16 @@ def aggregate_skill(
             and confounded > 0
         )
 
+        # B1: resolve BH-FDR gate for this clause when the skill fit fell back to
+        # BH-FDR. None (not that method) leaves the raw threshold ungated.
+        bh_fdr_pass: bool | None = None
+        if (
+            fit_result is not None
+            and fit_result.aggregation_method == "bh_fdr_fallback"
+            and fit_result.bh_fdr_passes is not None
+        ):
+            bh_fdr_pass = clause_id in fit_result.bh_fdr_passes
+
         # Build state machine input
         inp = ClauseStatusInput(
             admissible_verdict_count=admissible_count,
@@ -360,6 +382,7 @@ def aggregate_skill(
             current_frozen_case_count=frozen_current_counts.get(key, 0),
             any_stale_frozen_case=frozen_stale_any.get(key, False),
             run_state=run_state,
+            bh_fdr_pass=bh_fdr_pass,
         )
 
         # Override for pure CONFOUNDED case
@@ -373,9 +396,15 @@ def aggregate_skill(
         if status == ClauseStatus.UNMEASURED and sub_reason is not None:
             unmeasured_breakdown[sub_reason.value] += 1
 
-        # Metric provenance for this (clause_id, axis)
-        metric_id_val = clause_axis_metric_id.get(key)
-        metric_ver_val = clause_axis_metric_version.get(key)
+        # Metric provenance for this (clause_id, axis) — B6: resolve divergence to
+        # a MIXED sentinel (mirrors _resolve_op_hash / _derive_a55_fields) instead
+        # of the prior last-write-wins behaviour.
+        metric_id_val = _resolve_metric_field(
+            clause_axis_metric_ids.get(key, set()), skill_id, key, "metric_id"
+        )
+        metric_ver_val = _resolve_metric_field(
+            clause_axis_metric_versions.get(key, set()), skill_id, key, "metric_version"
+        )
 
         # A55 comparability: derive subject_model + user_message_sha256 for this clause
         clause_run_ids_for_key = clause_axis_run_ids.get(key, set())
@@ -406,6 +435,7 @@ def aggregate_skill(
                 w_observation_sum=w,
                 subject_model=subject_model_val,
                 user_message_sha256=user_msg_sha256_val,
+                is_prior_only=is_prior_only,
             )
         )
 
@@ -582,6 +612,41 @@ def _read_family_size(completed_runs: list[dict[str, object]]) -> int:
     return int(family_size)
 
 
+def _resolve_divergent_field(
+    values: set[str],
+    *,
+    empty_default: str | None,
+    warn_message: str | None,
+    warn_args: tuple[object, ...] = (),
+) -> str | None:
+    """Generic diverge -> warn + 'MIXED' resolution (F-10, S55 hostile review).
+
+    Shared control flow behind ``_resolve_op_hash``, ``_resolve_metric_field``,
+    and ``_derive_a55_fields``'s two inline resolutions -- three copies of the
+    same three-way branch (diverges -> log + 'MIXED' / single value -> that
+    value / no data -> caller-supplied default) that differed only in their log
+    message text and empty-set default. Each site's exact warning wording, log
+    fields, and empty-set default are preserved by passing them in rather than
+    hardcoding one generic message here.
+
+    :param values: The distinct values observed for this field across the pool.
+    :param empty_default: Returned when ``values`` is empty (site-specific:
+        ``"unknown"`` for op_hash, ``None`` for the metric/A55 fields).
+    :param warn_message: ``logger.warning``-style %-format string to log when
+        ``len(values) > 1``. ``None`` skips logging entirely (preserves
+        ``user_message_sha256``'s pre-F-10 silent-MIXED behavior — that site
+        never warned on divergence, unlike the other three).
+    :param warn_args: %-format args for ``warn_message``.
+    """
+    if len(values) > 1:
+        if warn_message is not None:
+            logger.warning(warn_message, *warn_args)
+        return "MIXED"
+    if len(values) == 1:
+        return next(iter(values))
+    return empty_default
+
+
 def _resolve_op_hash(
     op_hashes: set[str],
     skill_id: str,
@@ -593,21 +658,56 @@ def _resolve_op_hash(
     If multiple distinct hashes are present, emits a data-integrity warning and
     returns "MIXED". Single hash returns that hash. Empty set returns "unknown".
     """
-    if len(op_hashes) > 1:
-        clause_id, axis = key
-        logger.warning(
+    clause_id, axis = key
+    result = _resolve_divergent_field(
+        op_hashes,
+        empty_default="unknown",
+        warn_message=(
             "[data-integrity] skill %r clause %r axis %r: ablation_operator_hash diverges "
             "across aggregated runs: %r. Setting ablation_operator_hash='MIXED'. "
-            "Metric drift may be present per A55.",
-            skill_id,
-            clause_id,
-            axis,
-            sorted(op_hashes),
-        )
-        return "MIXED"
-    if len(op_hashes) == 1:
-        return next(iter(op_hashes))
-    return "unknown"
+            "Metric drift may be present per A55."
+        ),
+        warn_args=(skill_id, clause_id, axis, sorted(op_hashes)),
+    )
+    assert result is not None  # empty_default="unknown" guarantees a str
+    return result
+
+
+def _resolve_metric_field(
+    values: set[str],
+    skill_id: str,
+    key: tuple[str, str],
+    field_label: str,
+) -> str | None:
+    """Resolve metric_id/metric_version for a (clause_id, axis) key (B6).
+
+    Mirrors the ablation_operator_hash MIXED pattern (_resolve_op_hash / I2):
+    when the pooled admissible verdicts for this key were scored under more than
+    one distinct value (e.g. metric re-registered mid-skill with changed
+    normalization), report 'MIXED' + emit a data-integrity warning instead of the
+    prior last-write-wins behaviour, which silently reported only the most
+    recently processed run's value while pooling ALL runs' observations into one
+    posterior regardless.
+
+    NOTE (B6 scope): this fixes reporting/provenance-integrity parity with the
+    op_hash/subject_model doctrine (surface divergence, do not silently hide it).
+    It does NOT exclude cross-metric-version observations from the pooled w/n fed
+    to the Beta posterior — doing so would require threading metric_version
+    through ClauseObservations/fit_skill (fit.py), a materially larger change
+    outside this finding's blast radius. Flagged for follow-up.
+    """
+    clause_id, axis = key
+    return _resolve_divergent_field(
+        values,
+        empty_default=None,
+        warn_message=(
+            "[data-integrity] skill %r clause %r axis %r: %s diverges across "
+            "aggregated verdicts: %r. Setting %s='MIXED'. Observations scored under "
+            "different metric versions are pooled into one posterior with no "
+            "scale-compatibility guarantee (B6)."
+        ),
+        warn_args=(skill_id, clause_id, axis, field_label, sorted(values), field_label),
+    )
 
 
 def _derive_a55_fields(
@@ -622,7 +722,9 @@ def _derive_a55_fields(
 
     For clauses with no run data, falls back to all completed runs for the skill.
     Returns ("MIXED", ...) when subject_model diverges across the pool — this is
-    a data-integrity anomaly per A41 / A55; a warning is logged.
+    a data-integrity anomaly per A41 / A55; a warning is logged. user_message_sha256
+    diverging also resolves to "MIXED" but has never logged a warning (pre-F-10
+    behavior, preserved as-is — not part of this finding's scope).
     """
     # Use clause-specific runs if available; else all skill runs
     run_ids = clause_run_ids if clause_run_ids else all_run_ids_in_skill
@@ -634,25 +736,20 @@ def _derive_a55_fields(
         v for rid in run_ids if (v := run_id_to_user_msg_sha.get(rid)) is not None
     }
 
-    if len(subject_models) > 1:
-        logger.warning(
+    subject_model = _resolve_divergent_field(
+        subject_models,
+        empty_default=None,
+        warn_message=(
             "[data-integrity] skill %r: subject_model diverges across aggregated runs: %r. "
-            "Setting subject_model='MIXED'. Cross-pool comparison is invalid per A55.",
-            skill_id,
-            sorted(subject_models),
-        )
-        subject_model: str | None = "MIXED"
-    elif len(subject_models) == 1:
-        subject_model = next(iter(subject_models))
-    else:
-        subject_model = None
-
-    if len(user_msg_shas) > 1:
-        user_message_sha256: str | None = "MIXED"
-    elif len(user_msg_shas) == 1:
-        user_message_sha256 = next(iter(user_msg_shas))
-    else:
-        user_message_sha256 = None
+            "Setting subject_model='MIXED'. Cross-pool comparison is invalid per A55."
+        ),
+        warn_args=(skill_id, sorted(subject_models)),
+    )
+    user_message_sha256 = _resolve_divergent_field(
+        user_msg_shas,
+        empty_default=None,
+        warn_message=None,
+    )
 
     return subject_model, user_message_sha256
 

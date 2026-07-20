@@ -7,13 +7,19 @@ Each metric in this package is:
   or implementation constants) so frozen regression cases can be re-audited
   when the metric changes.
 
-Registry:
-  register_metric()  — registers a Tier1Metric; auto-downgrades to TIER2 if
-                       mechanical_validity_test_passed=False.
-  get_metric()       — look up by name.
-  list_metrics()     — enumerate all registered metrics.
+Provenance/versioning is recorded in the ``metric_versions`` evidence-DB table
+(``storage/repositories/evidence/metric_versions.py``), written at ingest time
+by ``subject/ingest.py`` — NOT by an in-process registry. (F1, S49 hostile
+review: a module-level ``registry.py`` offering ``register_metric()`` /
+``get_metric()`` / ``list_metrics()`` previously lived here, tested but with
+zero production callers — none of the five metric modules below ever called
+``register_metric()``, so the claimed "registered on import" auto-downgrade
+behavior never ran. Deleted rather than wired: the provenance/tiering job it
+was meant to do is already done, for real, by the DB-backed metric_versions
+table, so wiring it would have been parallel machinery duplicating an
+existing mechanism, not closing a gap.)
 
-Available metrics (registered on import of their respective modules):
+Available metrics:
   hedge_index.py     — Hedge Index (frozen wordlist SHA-256 pinned).
   verbosity.py       — Token count via tiktoken cl100k_base (offline).
   structure_score.py — Heading + paragraph-break density.

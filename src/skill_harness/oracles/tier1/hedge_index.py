@@ -19,7 +19,7 @@ Design decisions:
 - Word count uses simple whitespace splitting (consistent with other metrics).
 - Pure Python, no network calls.
 
-Per CLAUDE.md metric-provenance invariant: wordlist SHA-256 is stored as
+Metric-provenance invariant: wordlist SHA-256 is stored as
 implementation_hash.  DO NOT inline the wordlist here — it must remain in
 the committed JSON fixture so the hash is stable.
 """

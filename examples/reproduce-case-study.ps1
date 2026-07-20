@@ -3,10 +3,11 @@
 #
 # Prerequisites:
 #   - Python 3.11+ with venv at .venv (run: python -m venv .venv && .venv\Scripts\pip install -e ".[dev]")
-#   - ANTHROPIC_API_KEY set in the environment (the extractor on `skill init` is
-#     currently Anthropic-direct; no OpenRouter fallback yet — v0.2 backlog).
-#     `run ablation --execute` accepts OPENROUTER_API_KEY too (auto-routes via OpenRouter
-#     with a stderr warning); -SubjectModel selects the model id.
+#   - ANTHROPIC_API_KEY (Anthropic direct) OR OPENROUTER_API_KEY (auto-routed via
+#     OpenRouter's Anthropic-compatible endpoint, with a stderr warning) set in the
+#     environment. Both `skill init` and `run ablation --execute` accept either key
+#     (extractor fallback landed on main 2026-06-09, b5b9fe6 — not in the v0.1.0 tag).
+#     -SubjectModel selects the model id for `run ablation --execute`.
 #   - The ai-slop-sentinel SKILL.md (see examples/skills/ai-slop-sentinel-pointer.md)
 #
 # Usage:
@@ -50,21 +51,17 @@ if (-not (Test-Path $SkillPath)) {
     exit 1
 }
 
-if (-not $env:ANTHROPIC_API_KEY) {
+if (-not $env:ANTHROPIC_API_KEY -and -not $env:OPENROUTER_API_KEY) {
     Write-Error @"
-ANTHROPIC_API_KEY is not set, and `skill init` requires it (the extractor calls
-the Claude API directly; OpenRouter fallback for the extractor is a v0.2 backlog
-candidate, not in the current build).
+Neither ANTHROPIC_API_KEY nor OPENROUTER_API_KEY is set, and `skill init` requires
+one of the two. The extractor auto-detects which key is present and routes via
+OpenRouter (with a stderr warning) when only OPENROUTER_API_KEY is set — see
+extractor/claude.py::_make_extractor_client().
 
-If you are on Claude Code subscription auth without a direct Anthropic key, the
-`skill init` step is currently a hard wall — same asymmetry the case study's own
-author hit and documented as HALT 2. The W2 work (commits a9bdacc + f6201a8) fixed
-the analogous gap for `run ablation --execute`, which now accepts OPENROUTER_API_KEY
-as a fallback. The extractor side remains.
-
-Workarounds: (a) obtain a temporary Anthropic API key, (b) skip `skill init` and
-seed evidence.db by hand (advanced), or (c) wait for v0.2 extractor OpenRouter
-fallback. See README.md "API-key requirements" for the full asymmetry.
+Set ANTHROPIC_API_KEY for direct Anthropic billing, or OPENROUTER_API_KEY if you
+only hold OpenRouter credentials. See examples/README.md "API-key requirements
+(honest)" for the full matrix — the rest of this script (`run ablation --execute`)
+accepts either key the same way.
 "@
     exit 1
 }

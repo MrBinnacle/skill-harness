@@ -20,7 +20,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -931,6 +931,380 @@ class TestQual1SubToleranceClause:
 
 
 # ---------------------------------------------------------------------------
+# A1: a crashing Tier-1 scorer must never become a fabricated score
+# ---------------------------------------------------------------------------
+
+
+class TestA1ScorerCrashNeverBecomesScore:
+    """A1 RED: hedge_index (or any Tier-1 scorer) raising on the Full output only
+    must not silently become a real 0.0 score feeding an admissible Loss verdict.
+    A systematically-crashing scorer must never drive the stopping posterior to a
+    real PASS/FAIL from zero genuine measurements (S49 finding A1).
+    """
+
+    def test_crashing_scorer_marks_comparison_inadmissible_not_a_score(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        ev, rt = seeded_db_pair
+        clause = _make_clause(axis="verbosity")
+        _seed_clause(ev, clause)
+
+        def _crashing_scorer(text: str) -> float:
+            if "CRASHME" in text:
+                raise ValueError("boom -- pathological input")
+            return float(len(text.split()))
+
+        # Full always crashes; Ablated and Null score normally (null floor still
+        # reachable, and the confound path sees the SAME crashing scorer -- both
+        # paths must agree that this axis produced no usable score, A1).
+        def response_factory(idx: int) -> MagicMock:
+            if idx == 0:  # warmup
+                return _mock_response("word " * 10)
+            sample_call = (idx - 1) % 3
+            if sample_call == 0:  # Full
+                return _mock_response("CRASHME " + "word " * 20)
+            elif sample_call == 1:  # Ablated
+                return _mock_response("a")
+            else:  # Null
+                return _mock_response("word " * 10)
+
+        mock_client = MagicMock()
+        call_count = [0]
+
+        def _create_side_effect(**kwargs: Any) -> MagicMock:
+            resp = response_factory(call_count[0])
+            call_count[0] += 1
+            return resp
+
+        mock_client.messages.create.side_effect = _create_side_effect
+        subject = SubjectClient(client=mock_client, model="claude-sonnet-4-6")
+
+        runner = AblationRunner(
+            evidence_conn=ev,
+            runtime_conn=rt,
+            subject_client=subject,
+            scorers={"verbosity": _crashing_scorer},
+            max_retries=0,
+            retry_delay_s=0.0,
+            null_floor=2,
+        )
+
+        results = runner.run_ablation(
+            skill_id=_SKILL_ID,
+            clauses=[clause],
+            user_message=_USER_MSG,
+            max_usd=10.0,
+        )
+        result = results[0]
+
+        # Pre-fix: _score_primary_axis swallows the crash and returns 0.0 for Full
+        # while Ablated scores a real 1.0 -> delta=-1.0 -> observation=0.0 (Loss),
+        # admissible every iteration -> posterior driven to FAILED at N_MIN from
+        # zero genuine measurements. Post-fix: every comparison is inadmissible
+        # (scorer_error), acc.n never advances, loop exhausts N_MAX -> UNDERPOWERED.
+        assert result.stopping_reason == StoppingReason.UNDERPOWERED_NMAX, (
+            "A1: a systematically-crashing primary-axis scorer must never drive a "
+            f"real PASS/FAIL verdict from fabricated scores; got {result.stopping_reason}"
+        )
+        assert result.samples_collected == 0, (
+            "A1: zero comparisons should be admissible (feeding acc.n) when the "
+            f"primary-axis scorer always crashes on Full; got {result.samples_collected}"
+        )
+
+        rows = ev.execute(
+            "SELECT admissibility_state, inadmissibility_reason FROM oracle_verdicts "
+            "WHERE clause_id = ?",
+            (clause.clause_id,),
+        ).fetchall()
+        assert len(rows) > 0, "A1: verdicts must still be written (audit trail), just inadmissible"
+        for admissibility_state, inadmissibility_reason in rows:
+            assert admissibility_state == "inadmissible", (
+                f"A1: scorer crash must write admissibility_state='inadmissible', got "
+                f"{admissibility_state!r}"
+            )
+            assert inadmissibility_reason == "scorer_error", (
+                f"A1: expected inadmissibility_reason='scorer_error', got "
+                f"{inadmissibility_reason!r}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# F-4 (S55 hostile review): bare `assert` on the A46 / A1 write-side invariants
+# is stripped under `python -O`. Convert to explicit `if ...: raise` and prove
+# the check still fires on a constructed divergence (monkeypatching
+# detect_confounds to violate the invariant it's supposed to guarantee).
+# ---------------------------------------------------------------------------
+
+
+class TestF4ExplicitRaiseNotBareAssert:
+    def test_a46_divergent_primary_clause_id_raises(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        """detect_confounds returning an event whose primary_clause_id diverges from
+        the clause under evaluation must raise RuntimeError -- a real, un-strippable
+        check, not a bare assert that vanishes under -O.
+        """
+        from skill_harness.ablation.confound import ConfoundEvent
+
+        ev, rt = seeded_db_pair
+        clause = _make_clause()
+        _seed_clause(ev, clause)
+
+        runner, _mock_client = _make_runner(ev, rt, null_floor=1)
+
+        bogus_event = ConfoundEvent(
+            primary_clause_id="not-the-real-clause-id",
+            affected_clause_id=None,
+            axis="verbosity",
+            delta=5.0,
+            null_sigma=1.0,
+            k_threshold=2.0,
+            delta_kind="confound_flagged",
+        )
+        with (
+            patch(
+                "skill_harness.ablation.runner.detect_confounds",
+                return_value=[bogus_event],
+            ),
+            pytest.raises(RuntimeError, match="A46 violation"),
+        ):
+            runner.run_ablation(
+                skill_id=_SKILL_ID,
+                clauses=[clause],
+                user_message=_USER_MSG,
+                max_usd=10.0,
+            )
+
+    def test_a1_confound_path_event_on_crashed_axis_raises(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        """When the primary-axis scorer crashes, detect_confounds is contractually
+        supposed to omit that axis from its events. If it ever returns an event
+        for the crashed axis anyway (a real bug -- the two paths disagreeing on
+        whether the axis was scoreable), that must raise RuntimeError, not pass
+        silently through a bare assert stripped under -O.
+        """
+        from skill_harness.ablation.confound import ConfoundEvent
+
+        ev, rt = seeded_db_pair
+        clause = _make_clause(axis="verbosity")
+        _seed_clause(ev, clause)
+
+        def _crashing_scorer(text: str) -> float:
+            if "CRASHME" in text:
+                raise ValueError("boom -- pathological input")
+            return float(len(text.split()))
+
+        def response_factory(idx: int) -> MagicMock:
+            if idx == 0:  # warmup
+                return _mock_response("word " * 10)
+            sample_call = (idx - 1) % 3
+            if sample_call == 0:  # Full -- always crashes the scorer
+                return _mock_response("CRASHME " + "word " * 20)
+            elif sample_call == 1:  # Ablated
+                return _mock_response("a")
+            else:  # Null
+                return _mock_response("word " * 10)
+
+        mock_client = MagicMock()
+        call_count = [0]
+
+        def _create_side_effect(**kwargs: Any) -> MagicMock:
+            resp = response_factory(call_count[0])
+            call_count[0] += 1
+            return resp
+
+        mock_client.messages.create.side_effect = _create_side_effect
+        subject = SubjectClient(client=mock_client, model="claude-sonnet-4-6")
+
+        runner = AblationRunner(
+            evidence_conn=ev,
+            runtime_conn=rt,
+            subject_client=subject,
+            scorers={"verbosity": _crashing_scorer},
+            max_retries=0,
+            retry_delay_s=0.0,
+            null_floor=1,
+        )
+
+        # Violates the contract on purpose: an event for the SAME axis the primary
+        # scorer just crashed on, which detect_confounds should never produce.
+        bogus_event = ConfoundEvent(
+            primary_clause_id=clause.clause_id,
+            affected_clause_id=None,
+            axis="verbosity",
+            delta=5.0,
+            null_sigma=1.0,
+            k_threshold=2.0,
+            delta_kind="confound_flagged",
+        )
+        with (
+            patch(
+                "skill_harness.ablation.runner.detect_confounds",
+                return_value=[bogus_event],
+            ),
+            pytest.raises(RuntimeError, match="A1 invariant violated"),
+        ):
+            runner.run_ablation(
+                skill_id=_SKILL_ID,
+                clauses=[clause],
+                user_message=_USER_MSG,
+                max_usd=10.0,
+            )
+
+
+# ---------------------------------------------------------------------------
+# A4: resume_ablation must handle BudgetAbortedError like run_ablation does
+# ---------------------------------------------------------------------------
+
+
+class TestA4ResumeBudgetAbortHandling:
+    """A4 RED: resume_ablation must transition run_progress to state='aborted_budget'
+    (mirroring run_ablation's handler) when BudgetAbortedError fires mid-resume,
+    instead of leaving the progress row stuck on whatever state it had before the
+    resume attempt (S49 finding A4).
+    """
+
+    def test_resume_budget_abort_marks_progress_aborted(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        ev, rt = seeded_db_pair
+        clause = _make_clause("c-a4-test", "Always begin with 'Certainly!'.", 0, "verbosity")
+        _seed_clause(ev, clause)
+
+        run_id = "a4-resume-budget-abort"
+
+        from skill_harness.ablation.runner import RunConfig
+        from skill_harness.storage.models import RunBudgetWrite, RunProgressWrite, RunWrite
+        from skill_harness.storage.repositories.evidence.runs import insert_run
+        from skill_harness.storage.repositories.runtime.run_budget import insert_run_budget
+        from skill_harness.storage.repositories.runtime.run_progress import (
+            get_run_progress_by_id,
+            insert_run_progress,
+        )
+        from skill_harness.storage.transaction import writer_transaction
+
+        config = RunConfig(
+            run_id=run_id,
+            skill_id=_SKILL_ID,
+            clauses=[
+                {
+                    "clause_id": clause.clause_id,
+                    "clause_text": clause.clause_text,
+                    "clause_index": clause.clause_index,
+                    "axis": clause.axis,
+                    "oracle_tier": clause.oracle_tier,
+                    "metric_id": clause.metric_id,
+                }
+            ],
+            subject_model="claude-sonnet-4-6",
+            user_message=_USER_MSG,
+            max_usd=0.0000001,
+        )
+        with writer_transaction(ev):
+            insert_run(
+                ev,
+                RunWrite(
+                    run_id=run_id,
+                    skill_id=_SKILL_ID,
+                    run_kind="ablation",
+                    config_json=config.to_json(),
+                    started_at=_TS,
+                    completed_at=None,
+                ),
+            )
+
+        # No pre-seeded samples -- resume must issue a new call, and the pre-call
+        # budget gate (A42) fires before any subject call is made.
+        with writer_transaction(rt):
+            insert_run_budget(
+                rt,
+                RunBudgetWrite(
+                    run_id=run_id,
+                    hard_cap_usd=0.0000001,
+                    tokens_spent_in=0,
+                    tokens_spent_out=0,
+                    cache_write_in=0,
+                    cache_read_in=0,
+                    usd_spent=0.0,
+                    dry_run=0,
+                    aborted_at=None,
+                    last_updated=_TS,
+                ),
+            )
+            insert_run_progress(
+                rt,
+                RunProgressWrite(
+                    run_id=run_id,
+                    state="running",
+                    samples_planned=120,
+                    samples_collected=0,
+                    last_heartbeat=_TS,
+                    error=None,
+                ),
+            )
+
+        runner, _ = _make_runner(ev, rt, null_floor=2)
+
+        with pytest.raises(BudgetAbortedError):
+            runner.resume_ablation(
+                run_id=run_id,
+                clauses=[clause],
+                user_message=_USER_MSG,
+                max_usd=0.0000001,
+            )
+
+        progress = get_run_progress_by_id(rt, run_id)
+        assert progress is not None
+        assert progress["state"] == "aborted_budget", (
+            "A4: resume_ablation must mark run_progress.state='aborted_budget' on a "
+            f"budget-exhaustion mid-resume, not leave it stuck; got "
+            f"{progress['state']!r}"
+        )
+        assert progress["error"] == "budget_exhausted"
+
+
+class TestF9RunAblationBudgetAbortSharedHandler:
+    """F-9 (S55 hostile review): run_ablation's own BudgetAbortedError handler now
+    shares _handle_budget_abort() with resume_ablation's (previously verbatim-
+    duplicated code). Direct coverage for run_ablation's side of the shared path --
+    TestA4ResumeBudgetAbortHandling above covers resume_ablation's side, but nothing
+    previously asserted run_ablation's own state transition this directly.
+    """
+
+    def test_run_ablation_budget_abort_marks_progress_aborted(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        from skill_harness.storage.repositories.runtime.run_progress import (
+            get_run_progress_by_id,
+        )
+
+        ev, rt = seeded_db_pair
+        clause = _make_clause("c-f9-test", "Always begin with 'Certainly!'.", 0, "verbosity")
+        _seed_clause(ev, clause)
+
+        run_id = "f9-run-ablation-budget-abort"
+        runner, _ = _make_runner(ev, rt, null_floor=2)
+
+        with pytest.raises(BudgetAbortedError):
+            runner.run_ablation(
+                skill_id=_SKILL_ID,
+                clauses=[clause],
+                user_message=_USER_MSG,
+                max_usd=0.0000001,
+                run_id=run_id,
+            )
+
+        progress = get_run_progress_by_id(rt, run_id)
+        assert progress is not None
+        assert progress["state"] == "aborted_budget", (
+            "F-9: run_ablation must mark run_progress.state='aborted_budget' via the "
+            f"shared _handle_budget_abort helper; got {progress['state']!r}"
+        )
+        assert progress["error"] == "budget_exhausted"
+
+
+# ---------------------------------------------------------------------------
 # 5. Budget cap race test (A42)
 # ---------------------------------------------------------------------------
 
@@ -1025,6 +1399,69 @@ class TestBudgetCapRace:
         finally:
             ev.close()
             rt.close()
+
+
+# ---------------------------------------------------------------------------
+# A3: warmup call cost must be counted against the budget cap (A42)
+# ---------------------------------------------------------------------------
+
+
+class TestA3WarmupCostAccounting:
+    """A3: subject.py:411 documents 'caller may discard content, but cost is real'
+    for warmup_shared_prefix(). _warmup_or_serialize() discarded the ENTIRE
+    SubjectResponse (including .usd), so the warmup's real API cost never reached
+    run_budget.usd_spent (A42) or runtime.cost_ledger (A41) -- the budget cap
+    silently allowed spending up to max_usd ON TOP of the warmup's real cost.
+    """
+
+    def test_warmup_cost_counted_against_budget(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        from skill_harness.ablation.reconciler import get_evidence_cost_sum
+        from skill_harness.storage.repositories.runtime.run_budget import get_run_budget_by_id
+
+        ev, rt = seeded_db_pair
+        clause = _make_clause()
+        _seed_clause(ev, clause)
+
+        # Give the warmup call a distinctly large token count so its cost is easy
+        # to isolate from the (much smaller) per-sample costs.
+        def response_factory(idx: int) -> MagicMock:
+            if idx == 0:  # warmup
+                return _mock_response("word " * 10, input_tokens=100_000, output_tokens=50_000)
+            sample_call = (idx - 1) % 3
+            if sample_call == 0:  # Full
+                return _mock_response("word " * 50)
+            elif sample_call == 1:  # Ablated_k
+                return _mock_response("a")
+            else:  # Null
+                return _mock_response("word " * 20)
+
+        runner, _ = _make_runner(ev, rt, response_factory)
+        run_id = "warmup-cost-test-run"
+        runner.run_ablation(
+            skill_id=_SKILL_ID,
+            clauses=[clause],
+            user_message=_USER_MSG,
+            max_usd=1000.0,
+            run_id=run_id,
+        )
+
+        budget = get_run_budget_by_id(rt, run_id)
+        assert budget is not None
+        # The warmup call is deliberately NOT written to evidence.samples (its
+        # output is discarded, not a real sample) -- get_evidence_cost_sum (A41
+        # primary source) therefore never includes it. The runtime budget ledger
+        # (A42 hard-cap enforcement) must still reflect the warmup's real cost, or
+        # the cap silently allows spending max_usd ON TOP of the warmup's cost
+        # every run.
+        evidence_sum = get_evidence_cost_sum(ev, run_id)
+        assert budget["usd_spent"] > evidence_sum, (
+            "A3: run_budget.usd_spent must exceed the evidence-samples-only sum by "
+            f"the warmup call's real cost. Got usd_spent={budget['usd_spent']!r}, "
+            f"evidence_sum={evidence_sum!r} -- warmup cost is not being counted "
+            "against the budget cap (A3 regression)."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1169,6 +1606,159 @@ class TestCostReconciler:
         finally:
             ev.close()
             rt.close()
+
+
+# ---------------------------------------------------------------------------
+# F-2 (S55 hostile review): resume_ablation's reconcile_run_cost back-fill
+# must carry the run's real skill_id, not None.
+# ---------------------------------------------------------------------------
+
+
+class TestResumeReconcileSkillId:
+    def test_resume_backfill_carries_real_skill_id(
+        self,
+        seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection],
+    ) -> None:
+        """A resumed run's post-completion reconcile_run_cost() back-fill row in
+        runtime.cost_ledger must carry the run's real skill_id (from evidence.runs),
+        not None. Pre-fix, resume_ablation called reconcile_run_cost without a
+        skill_id argument at all, so the back-fill always wrote skill_id=None even
+        though the run has a real, immutable skill_id on its evidence.runs row.
+        """
+        from skill_harness.storage.models import (
+            OracleVerdictWrite,
+            RunBudgetWrite,
+            RunProgressWrite,
+            RunWrite,
+            SampleWrite,
+        )
+        from skill_harness.storage.repositories.evidence.oracle_verdicts import (
+            insert_oracle_verdict,
+        )
+        from skill_harness.storage.repositories.evidence.runs import insert_run
+        from skill_harness.storage.repositories.evidence.samples import insert_sample
+        from skill_harness.storage.repositories.runtime.run_budget import insert_run_budget
+        from skill_harness.storage.repositories.runtime.run_progress import insert_run_progress
+        from skill_harness.storage.transaction import writer_transaction
+
+        ev, rt = seeded_db_pair
+        clause = _make_clause()
+        _seed_clause(ev, clause)
+
+        run_id = "resume-skillid-run"
+
+        with writer_transaction(ev):
+            insert_run(
+                ev,
+                RunWrite(
+                    run_id=run_id,
+                    skill_id=_SKILL_ID,
+                    run_kind="ablation",
+                    config_json="{}",
+                    started_at=_TS,
+                    completed_at=None,
+                ),
+            )
+
+        # Pre-seed one full comparison unit (Full/Ablated/Null, index 0) with real
+        # usd so reconcile_run_cost has a nonzero evidence sum to back-fill from,
+        # plus its admissible verdict so the resume loop needs no new API calls.
+        sample_ids: dict[str, str] = {}
+        with writer_transaction(ev):
+            for cond, text in (("full", "word " * 20), ("ablated", "a"), ("null", "word")):
+                sid = f"resume-skillid-{cond}-0"
+                sample_ids[cond] = sid
+                insert_sample(
+                    ev,
+                    SampleWrite(
+                        sample_id=sid,
+                        run_id=run_id,
+                        clause_id=clause.clause_id,
+                        condition=cond,
+                        subject_model="claude-sonnet-4-6",
+                        subject_seed=None,
+                        output_text=text,
+                        output_sha256="a" * 64,
+                        sampled_at=_TS,
+                        sample_index=0,
+                        input_tokens=100,
+                        cache_read_input_tokens=0,
+                        cache_creation_input_tokens=0,
+                        output_tokens=20,
+                        usd=0.001,
+                    ),
+                )
+        with writer_transaction(ev):
+            insert_oracle_verdict(
+                ev,
+                OracleVerdictWrite(
+                    verdict_id="resume-skillid-verdict-0",
+                    run_id=run_id,
+                    clause_id=clause.clause_id,
+                    axis=clause.axis,
+                    comparison="full_vs_ablated",
+                    sample_a_id=sample_ids["full"],
+                    sample_b_id=sample_ids["ablated"],
+                    observation=1.0,
+                    oracle_tier=clause.oracle_tier,
+                    metric_id=clause.metric_id,
+                    metric_version=None,
+                    judge_id=None,
+                    calibration_event_id=None,
+                    position_swap_agreement=None,
+                    admissibility_state="admissible",
+                    inadmissibility_reason=None,
+                    written_at=_TS,
+                ),
+            )
+
+        with writer_transaction(rt):
+            insert_run_budget(
+                rt,
+                RunBudgetWrite(
+                    run_id=run_id,
+                    hard_cap_usd=10.0,
+                    tokens_spent_in=0,
+                    tokens_spent_out=0,
+                    cache_write_in=0,
+                    cache_read_in=0,
+                    usd_spent=0.0,
+                    dry_run=0,
+                    aborted_at=None,
+                    last_updated=_TS,
+                ),
+            )
+            insert_run_progress(
+                rt,
+                RunProgressWrite(
+                    run_id=run_id,
+                    state="running",
+                    samples_planned=3,
+                    samples_collected=3,
+                    last_heartbeat=_TS,
+                    error=None,
+                ),
+            )
+
+        # cost_ledger has NO entry yet -> evidence ($0.003) vs ledger ($0) gap
+        # forces reconcile_run_cost's back-fill branch to actually fire.
+        runner, _ = _make_runner(ev, rt, null_floor=1)
+        runner.resume_ablation(
+            run_id=run_id,
+            clauses=[clause],
+            user_message=_USER_MSG,
+            max_usd=10.0,
+        )
+
+        row = rt.execute(
+            "SELECT skill_id FROM cost_ledger WHERE run_id = ? ORDER BY ledger_id DESC LIMIT 1",
+            (run_id,),
+        ).fetchone()
+        assert row is not None, "reconcile_run_cost should have back-filled a cost_ledger row"
+        assert row[0] == _SKILL_ID, (
+            f"F-2: back-filled cost_ledger.skill_id must be the run's real skill_id "
+            f"{_SKILL_ID!r}, got {row[0]!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1333,7 +1923,7 @@ class TestSubjectClient:
 
 class TestC2ResumeReadsPersistedAdmissibility:
     """C2: on resume, the posterior must be rebuilt from PERSISTED admissibility_state,
-    not recomputed from fresh confound/null-floor state (CLAUDE.md Evidence model —
+    not recomputed from fresh confound/null-floor state (see docs/INVARIANTS.md #3 —
     admissibility recorded at write time, never recomputed).
 
     Test strategy:
@@ -1518,7 +2108,12 @@ class TestC2ResumeReadsPersistedAdmissibility:
         # can only reach n>=1 if resume reads the PERSISTED 'admissible' value.
         with patch(
             "skill_harness.ablation.runner.AblationRunner._snapshot_admissibility",
-            staticmethod(lambda *, confounded, null_floor_met: ("inadmissible", "test_forced")),
+            staticmethod(
+                lambda *, confounded, null_floor_met, scorer_crashed=False: (
+                    "inadmissible",
+                    "test_forced",
+                )
+            ),
         ):
             runner, mock_client = _make_runner(ev, rt, null_floor=2)
 

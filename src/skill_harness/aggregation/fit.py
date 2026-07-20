@@ -8,7 +8,7 @@ Two-level model:
 
 Shrunken posterior per clause: Beta(alpha_hat + w_k, beta_hat + n_k - w_k).
 
-Pass rule (LOCKED per CLAUDE.md): clause PASSES when
+Pass rule (LOCKED — see docs/INVARIANTS.md #1): clause PASSES when
   P(rate > 0.60) >= 0.95 on the shrunken posterior.
 
 K < 10: EB hyperprior estimate is noisy (BDA3 §5) — fall back to UNPOOLED.
@@ -34,7 +34,7 @@ from skill_harness.aggregation.errors import ConvergenceFailure
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Locked constants (CLAUDE.md pass rule)
+# Locked constants (pass rule — see docs/INVARIANTS.md #1)
 # ---------------------------------------------------------------------------
 
 WIN_RATE_THRESHOLD: float = 0.60

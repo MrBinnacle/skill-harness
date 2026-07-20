@@ -19,7 +19,7 @@ Design:
 - w and n accumulate fractional values due to Tie = 0.5 half-update encoding (A10).
 - scipy.stats.beta.sf (survival function) evaluates P(rate > 0.60) from the posterior.
 
-Per CLAUDE.md pass rule (locked — do not silently retune thresholds):
+Per the pass rule (locked — do not silently retune thresholds; see docs/INVARIANTS.md #1):
   "P(win_rate > 0.60) >= 0.95 under Beta(1,1) -> Beta(1+w, 1+n-w)"
 """
 
@@ -44,7 +44,7 @@ N_INC: Final[int] = 4
 N_MAX: Final[int] = 40
 """Hard sample cap per condition pair (A44: no batches past N_MAX)."""
 
-# Pass/fail thresholds (CLAUDE.md pass rule — locked)
+# Pass/fail thresholds (pass rule — locked; see docs/INVARIANTS.md #1)
 WIN_RATE_THRESHOLD: Final[float] = 0.60
 PASS_PROB_THRESHOLD: Final[float] = 0.95
 FAIL_PROB_THRESHOLD: Final[float] = 0.05

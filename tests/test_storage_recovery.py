@@ -429,3 +429,86 @@ class TestFindIncompleteRunsFailClosed:
         finally:
             ev.close()
             rt.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: B4 — skill_id matching must use the runs.skill_id COLUMN, not config_json
+# ---------------------------------------------------------------------------
+
+
+class TestFindIncompleteRunsColumnAuthoritative:
+    """B4: the runs.skill_id COLUMN is NOT NULL, FK-enforced, and immutable (A20) —
+    it is what aggregate_skill()'s own discovery query matches on
+    (engine.py:_fetch_completed_ablation_runs). config_json's copy of skill_id is
+    unenforced and can diverge; matching against it (as this module did before B4)
+    lets an incomplete run silently evade the incomplete_runs precondition.
+    """
+
+    def test_matches_on_column_when_config_json_skill_id_differs(self, tmp_path: Path) -> None:
+        """runs.skill_id='sk1' (column) but config_json says 'sk-STALE' (drift) —
+        the column must win; the run must still be found as incomplete for sk1.
+        """
+        ev = open_evidence(tmp_path / "evidence.db")
+        rt = open_runtime(tmp_path / "runtime.db")
+        try:
+            _insert_skill(ev, "sk1")
+            config = json.dumps({"skill_id": "sk-STALE"})
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES (?, ?, 'ablation', ?, ?, NULL)",
+                ("run1", "sk1", config, _TS),
+            )
+            _insert_run_progress(rt, "run1", state="running")
+
+            results = find_incomplete_runs("sk1", evidence_conn_ro=ev, runtime_conn=rt)
+            assert len(results) == 1, (
+                "B4: runs.skill_id column is 'sk1' but config_json's stale copy "
+                "says 'sk-STALE' — the column is authoritative and must be used "
+                f"for matching. Got {results!r}."
+            )
+            assert results[0].run_id == "run1"
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_matches_on_column_when_config_json_missing_skill_id(self, tmp_path: Path) -> None:
+        """config_json has no 'skill_id' key at all — must not silently drop the run."""
+        ev = open_evidence(tmp_path / "evidence.db")
+        rt = open_runtime(tmp_path / "runtime.db")
+        try:
+            _insert_skill(ev, "sk1")
+            config = json.dumps({})
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES (?, ?, 'ablation', ?, ?, NULL)",
+                ("run1", "sk1", config, _TS),
+            )
+            _insert_run_progress(rt, "run1", state="running")
+
+            results = find_incomplete_runs("sk1", evidence_conn_ro=ev, runtime_conn=rt)
+            assert len(results) == 1
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_matches_on_column_when_config_json_malformed(self, tmp_path: Path) -> None:
+        """config_json is not valid JSON at all — must not silently drop the run."""
+        ev = open_evidence(tmp_path / "evidence.db")
+        rt = open_runtime(tmp_path / "runtime.db")
+        try:
+            _insert_skill(ev, "sk1")
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES (?, ?, 'ablation', ?, ?, NULL)",
+                ("run1", "sk1", "{not valid json", _TS),
+            )
+            _insert_run_progress(rt, "run1", state="running")
+
+            results = find_incomplete_runs("sk1", evidence_conn_ro=ev, runtime_conn=rt)
+            assert len(results) == 1
+        finally:
+            ev.close()
+            rt.close()

@@ -6,7 +6,8 @@ assert the verdict's admissibility_state remains unchanged.
 
 This proves the A3 invariant: admissibility is recorded at write time and never
 recomputed from the current calibration pointer. A failure here means a code path
-is reading current_calibration at read time, which violates CLAUDE.md Evidence model.
+is reading current_calibration at read time, which violates the evidence
+admissibility model (see docs/INVARIANTS.md #3).
 """
 
 from __future__ import annotations

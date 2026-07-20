@@ -1,7 +1,7 @@
 """CLI entry point. Mirrors PRD §18.
 
 Every `run` subcommand defaults to --dry-run; `--execute` is required to
-perform writes or LLM calls (per CLAUDE.md "Pipeline safety").
+perform writes or LLM calls (see docs/INVARIANTS.md #2 "Pipeline safety").
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from typing import Any
 
 import click
 from rich.console import Console
+from rich.markup import escape as _escape_markup
 from rich.table import Table
 
 from skill_harness.aggregation import aggregate_skill
@@ -109,14 +110,23 @@ def skill_init(path: Path, execute: bool, evidence_db: Path, runtime_db: Path) -
         else:
             result = extract_skill(path, evidence_conn=None)
             _print_result(result, persisted=False)
-    except ExtractionError as exc:
+    except (ExtractionError, ValueError) as exc:
+        # C4b: extract_skill (--execute path) raises a raw ValueError when a clause
+        # persists as comparator_unspecified (extractor/pipeline.py _to_db_comparator's
+        # documented abort-the-whole-persist doctrine). That abort behavior is correct
+        # and untouched -- this only gives it a clean CLI surface instead of a raw
+        # traceback. Merged with ExtractionError (R-1, S55 hostile review): the two
+        # clauses were byte-identical bodies.
         raise click.ClickException(str(exc)) from exc
 
 
 def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
     """Print a Rich table summarising the extraction result."""
     mode = "[green]PERSISTED[/]" if persisted else "[yellow]DRY-RUN[/]"
-    _console.print(f"\n{mode} — skill [bold]{result.name}[/] ({result.skill_id[:12]}…)")
+    _console.print(
+        f"\n{mode} — skill [bold]{_sanitize_clause_text(result.name, max_len=None)}[/]"
+        f" ({result.skill_id[:12]}…)"
+    )
     _console.print(f"  source: {result.source_path}")
     _console.print(f"  sha256: {result.source_sha256[:16]}…")
     _console.print(f"  clauses extracted: {len(result.clauses)}")
@@ -140,7 +150,7 @@ def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
             str(clause.oracle_tier),
             vacuity_display,
             fc_mark,
-            clause.clause_text[:80],
+            _sanitize_clause_text(clause.clause_text, max_len=80),
         )
 
     _console.print(table)
@@ -199,7 +209,7 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
         raise click.ClickException(str(exc)) from exc
 
     _console.print("\n[bold]OFFLINE AUDIT[/] — no API calls, no cost")
-    _console.print(f"  skill:  [bold]{report.name}[/]")
+    _console.print(f"  skill:  [bold]{_sanitize_clause_text(report.name, max_len=None)}[/]")
     _console.print(f"  source: {report.source_path}")
     _console.print(f"  sha256: {report.source_sha256[:16]}…")
     _console.print(
@@ -213,7 +223,15 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
     table.add_column("Finding", min_width=40)
     level_style = {"pass": "[green]PASS[/]", "warn": "[yellow]WARN[/]", "info": "[dim]INFO[/]"}
     for finding in report.findings:
-        table.add_row(level_style[finding.level], finding.code, finding.message)
+        # F-1 (S55 hostile review): finding.message can embed an untrusted frontmatter
+        # value verbatim (e.g. name-charset's `{fm_name!r}`) -- repr() escapes quotes/
+        # control chars but not Rich markup brackets. Escape at this render site, same
+        # helper as every other untrusted-text render path in this module.
+        table.add_row(
+            level_style[finding.level],
+            finding.code,
+            _sanitize_clause_text(finding.message, max_len=None),
+        )
     _console.print(table)
 
     _console.print("[bold]Evaluability preflight[/] — what a paid run could measure today:")
@@ -239,15 +257,91 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
 
 @skill.command("clauses")
 @click.argument("skill_id")
-def skill_clauses(skill_id: str) -> None:
-    """Inspect the extracted clause inventory for a skill."""
-    _ = skill_id
-    _console.print(
-        "[yellow]skill clauses: not yet implemented in v0.1."
-        " Query evidence.db `clauses` table directly. v0.2.[/]"
-    )
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB (read-only; no writes, no API calls).",
+)
+def skill_clauses(skill_id: str, evidence_db: Path) -> None:
+    """Inspect the extracted clause inventory for a skill (read-only).
+
+    D5 (S49 hostile review): 'skill clauses <skill_id>' was advertised by both
+    'skill init' (dry-run hints) and 'run ablation --dry-run' as the way to
+    inspect per-clause detail, but was an unimplemented stub. This queries
+    evidence.db read-only -- the same table 'run ablation --dry-run' already
+    reads for its projection table.
+    """
+    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.migrations import open_evidence_readonly
+
+    if not evidence_db.exists():
+        _console.print(
+            "\n[yellow]skill not imported — run 'skill init <path>' first[/]"
+            f"\n[dim]  (evidence.db not found at {evidence_db})[/]"
+        )
+        return
+
+    db_conn: sqlite3.Connection | None = None
+    rows: list[tuple[Any, ...]] = []
+    try:
+        db_conn = open_evidence_readonly(evidence_db)
+        rows = db_conn.execute(
+            "SELECT clause_index, axis, comparator, oracle_tier, vacuity_flag, "
+            "falsifying_case_schema_sha256, clause_text "
+            "FROM clauses WHERE skill_id = ? ORDER BY clause_index",
+            (skill_id,),
+        ).fetchall()
+    except BootstrapError:
+        _console.print(
+            "\n[yellow]skill not imported — run 'skill init <path>' first[/]"
+            f"\n[dim]  (evidence.db not found or skill_id {skill_id!r} not present)[/]"
+        )
+        return
+    except Exception:
+        # F-5 (S55 hostile review): BootstrapError only covers an ABSENT evidence.db
+        # (already short-circuited above by the .exists() check). A PRESENT but
+        # malformed DB (e.g. missing the clauses table -- sqlite3.OperationalError)
+        # fell through uncaught here and surfaced as a raw traceback instead of the
+        # same clean CLI hint _cmd_dry_run gives for the equivalent zero-state case.
+        _console.print(
+            "\n[yellow]skill not imported — run 'skill init <path>' first[/]"
+            f"\n[dim]  (evidence.db at {evidence_db} is unreadable or malformed)[/]"
+        )
+        return
+    finally:
+        if db_conn is not None:
+            db_conn.close()
+
+    if not rows:
+        _console.print(
+            f"\n[yellow]No clauses found for skill {skill_id!r}. "
+            "Run 'skill init <path>' to import.[/]"
+        )
+        return
+
+    table = Table(title=f"Clause Inventory — {skill_id}", show_lines=True)
+    table.add_column("#", style="dim", width=4)
+    table.add_column("Axis", style="cyan", min_width=14)
+    table.add_column("Cmp", width=8)
+    table.add_column("Tier", width=5)
+    table.add_column("Status", min_width=20)
+    table.add_column("Clause text", min_width=30, max_width=60)
+
+    for clause_index, axis, comparator, oracle_tier, vacuity_flag, fc_sha, clause_text in rows:
+        status = _clause_status(vacuity_flag, fc_sha)
+        table.add_row(
+            str(clause_index),
+            axis,
+            comparator,
+            str(oracle_tier),
+            status,
+            _sanitize_clause_text(clause_text),
+        )
+
+    _console.print(table)
     _console.print(_SKILL_CLAUSES_LEGEND)
-    return
 
 
 @cli.group()
@@ -417,21 +511,35 @@ def _clause_status(vacuity_flag: str, falsifying_case_schema_sha256: str | None)
     return "TESTABLE"
 
 
-def _sanitize_clause_text(text: str) -> str:
-    """Assert NUL/control-free + escape for display (A51 output-side sanitisation).
+def _sanitize_clause_text(text: str, *, max_len: int | None = 60) -> str:
+    """Assert NUL/control-free + escape Rich markup for display (A51 output-side
+    sanitisation, S2 hostile-review hardening).
+
+    Untrusted clause text and rendered condition text both flow through Rich's
+    markup-enabled Console.print()/Table. Without escaping, a hostile SKILL.md
+    clause body containing Rich markup ('[red on red]', '[/]') is interpreted
+    at print time instead of shown verbatim: the tagged span is silently
+    swallowed from the rendered output (or, with real color support, forges
+    terminal styling) -- terminal output forgery.
 
     Raises AssertionError if text contains NUL or ASCII control characters
-    (except tab/newline which are benign in prose).  Returns the text truncated
-    to 60 chars for table display.
+    (except tab/newline, benign in prose). Escapes Rich markup via
+    ``rich.markup.escape()`` so bracketed text renders literally. Truncation
+    (when ``max_len`` is given) happens BEFORE escaping, not after: escaping
+    can grow the string (inserted backslashes), and truncating an already-
+    escaped string risks slicing a `\\[` escape sequence in half, which would
+    itself misparse as markup. ``max_len=None`` returns the full escaped text
+    (used for system_text, which must stay verbatim, not table-truncated).
     """
     for ch in text:
         cp = ord(ch)
         if cp == 0 or (cp < 0x20 and cp not in (0x09, 0x0A, 0x0D)):
             raise AssertionError(
-                f"clause_text contains control character U+{cp:04X} — "
+                f"text contains control character U+{cp:04X} — "
                 "refusing to display untrusted content"
             )
-    return text[:60]
+    truncated = text[:max_len] if max_len is not None else text
+    return _escape_markup(truncated)
 
 
 def _cmd_dry_run(
@@ -594,7 +702,7 @@ def _cmd_show_rendered(skill_id: str, clause_id: str, evidence_db: Path | None =
     for condition_name, condition_data in sorted(conditions.items()):
         system_text = condition_data.get("system_text", "")
         _console.print(f"\n[bold underline]{condition_name.upper()}[/]")
-        _console.print(system_text)
+        _console.print(_sanitize_clause_text(system_text, max_len=None))
 
 
 def _render_conditions_for_clause(
@@ -754,6 +862,20 @@ def _execute_ablation_run(
         if resume_run_id is not None:
             # m2: load user_message from runs.config_json (not empty string)
             user_message = _load_user_message_from_run(ctx.evidence_conn, resume_run_id)
+            # C5: _load_user_message_from_run returns '' both when resume_run_id
+            # doesn't exist in evidence.runs AND when the row exists but
+            # config_json is corrupt/lacks the key. Either way, proceeding would
+            # silently mix an empty-prompt tail onto samples collected under the
+            # real prompt, with the stopping rule aggregating both under one
+            # run_id and no record of the mismatch. Refuse instead.
+            if not user_message:
+                raise click.ClickException(
+                    f"Cannot resume run {resume_run_id!r}: no user_message found in "
+                    "runs.config_json for this run_id (the run does not exist in "
+                    "evidence.db, or its config_json is corrupt/missing the key). "
+                    "Refusing to proceed with an empty prompt -- verify --resume "
+                    "RUN_ID against evidence.runs and re-run."
+                )
             results = runner.resume_ablation(
                 run_id=resume_run_id,
                 clauses=clauses,
@@ -783,7 +905,7 @@ def _load_clauses_from_db(
     from skill_harness.ablation.runner import ClauseSpec
 
     query = """
-        SELECT clause_id, clause_text, clause_index, axis, oracle_tier
+        SELECT clause_id, clause_text, clause_index, axis, oracle_tier, comparator
         FROM clauses
         WHERE skill_id = ?
     """
@@ -806,6 +928,9 @@ def _load_clauses_from_db(
             # Tier-1 clauses require metric_id IS NOT NULL (schema CHECK constraint).
             # Use the axis name as metric_id — the axis IS the registered scorer key.
             metric_id=row[3] if row[4] == 1 else None,
+            # A2: persisted directional claim, threaded so delta_to_observation can
+            # sign-flip 'decrease' clauses instead of always assuming 'increase'.
+            comparator=row[5],
         )
         for row in rows
     ]
@@ -1049,7 +1174,7 @@ def _is_unmeasured(result: Any) -> bool:
     - unmeasured_reason is not None (tier2_uncalibrated, length_confounded)
     - StoppingReason.BUDGET_EXHAUSTED (sampling aborted mid-clause)
 
-    UNMEASURED is NEVER FAILED — this is a core invariant (A48, CLAUDE.md).
+    UNMEASURED is NEVER FAILED — this is a core invariant (A48; see docs/INVARIANTS.md #3).
     """
     from skill_harness.ablation.stopping import StoppingReason
 
@@ -1856,7 +1981,11 @@ def _render_evaluate_skill_report(report: Any, vacuity_count: int = 0) -> None:
         status = clause.status
         sub_reason = clause.sub_reason or "—"
         ci_lo, ci_hi = clause.credible_interval_95
-        ci_str = f"[{ci_lo:.3f}, {ci_hi:.3f}]"
+        # B5: is_prior_only clauses carry an uninformative Beta(1,1) PRIOR
+        # (posterior_mean=0.5 etc.), not a measurement — render a dim placeholder
+        # instead of the fabricated numbers so a reader never mistakes UNMEASURED
+        # for "measured at 0.5".
+        ci_str = "[dim]— (prior)[/]" if clause.is_prior_only else f"[{ci_lo:.3f}, {ci_hi:.3f}]"
 
         if status == "UNMEASURED":
             status_str = f"[yellow]{status}[/]"
@@ -1869,11 +1998,15 @@ def _render_evaluate_skill_report(report: Any, vacuity_count: int = 0) -> None:
         else:
             status_str = status
 
+        if clause.is_prior_only:
+            posterior_mean_str = "[dim]— (prior)[/]"
+        else:
+            posterior_mean_str = f"{clause.posterior_mean:.3f}"
         clause_table.add_row(
             clause.clause_id,
             status_str,
             sub_reason,
-            f"{clause.posterior_mean:.3f}",
+            posterior_mean_str,
             ci_str,
         )
 
@@ -2007,6 +2140,17 @@ def _render_diff_report(diff_report: Any) -> None:
     show_default=True,
     help="Path to runtime DB (only used with --execute).",
 )
+@click.option(
+    "--verify-judge-id",
+    is_flag=True,
+    default=False,
+    help=(
+        "Refuse (instead of merely warning) if JUDGE_ID does not match "
+        "JudgeClient.judge_id(model) for the model this run would actually use. "
+        "Off by default for backward compatibility with human-readable operator "
+        "judge_id conventions; a mismatch is always warned about either way (J1w)."
+    ),
+)
 def calibrate_cmd(
     judge_id: str,
     axis: str,
@@ -2016,10 +2160,18 @@ def calibrate_cmd(
     daily_cap: float,
     evidence_db: Path,
     runtime_db: Path,
+    verify_judge_id: bool,
 ) -> None:
     """Calibrate a judge on an axis using a JSONL pair set.
 
     JUDGE_ID is the opaque judge identifier (sha256 of model+prompt+schema).
+    It is operator-supplied, NOT derived automatically -- calibrations recorded
+    under a given JUDGE_ID string are only comparable if the underlying
+    (model, system prompt, tool schema) are unchanged; JudgeClient.judge_id(model)
+    computes the value that would be current for this run's model. A mismatch
+    is always warned about (J1w: a prompt/schema change must not silently
+    coexist with calibrations still filed under the old operator string);
+    pass --verify-judge-id to make a mismatch a hard refusal instead.
     AXIS is the evaluation axis (e.g. citation_support).
     PAIR_SET_PATH is a JSONL file of labeled human-preference pairs.
 
@@ -2034,6 +2186,8 @@ def calibrate_cmd(
       --max-usd   per-run cap; refuse if projected cost exceeds it.
       --daily-cap per-day cap; hard ceiling $100 (override via env var).
     """
+    import os
+
     from skill_harness.oracles.calibration.command import calibrate
     from skill_harness.oracles.calibration.cost_projection import validate_daily_cap
     from skill_harness.oracles.tier2.judge import JudgeClient
@@ -2044,36 +2198,82 @@ def calibrate_cmd(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
+    # D1: model-aware API key pre-flight BEFORE any DB/StorageContext creation,
+    # mirroring m3's doctrine for 'run ablation' (_resolve_subject_model_with_fallback).
+    # JudgeClient always constructs anthropic.Anthropic() directly -- unlike the
+    # subject-model factory it has no OpenRouter routing -- so this checks
+    # ANTHROPIC_API_KEY only rather than reusing _resolve_subject_model_with_fallback
+    # verbatim (that would falsely promise an OpenRouter fallback JudgeClient can't
+    # perform). Without this, StorageContext below creates both DB files before the
+    # first judge call fails lazily on the missing key.
+    if execute and not os.environ.get("ANTHROPIC_API_KEY"):
+        raise click.ClickException(
+            "calibrate --execute requires ANTHROPIC_API_KEY. JudgeClient calls the "
+            "Anthropic API directly for judge calibration (no OpenRouter fallback is "
+            "supported here). Set ANTHROPIC_API_KEY to proceed."
+        )
+
     judge_client = JudgeClient()
 
-    if execute:
-        with StorageContext(evidence_db, runtime_db) as ctx:
+    # J1w: judge_id is operator-supplied and was never cross-checked against
+    # JudgeClient.judge_id(model) -- a system-prompt/tool-schema change (which
+    # changes judge_id()'s output) could silently coexist with calibrations
+    # still filed under the same operator string. Always surface a mismatch;
+    # --verify-judge-id escalates it to a refusal for callers that want the
+    # hard guarantee. Off by default: human-readable judge_id conventions
+    # (e.g. "judge-001") are an established CLI/test convention here and a
+    # default refusal would break them, not just warn about drift.
+    derived_judge_id = judge_client.judge_id(judge_client.model)
+    if judge_id != derived_judge_id:
+        mismatch_msg = (
+            f"judge_id {judge_id!r} does not match JudgeClient.judge_id(model) "
+            f"for model {judge_client.model!r}: derived {derived_judge_id!r}. "
+            "This is expected if judge_id is a human-readable operator label; it is "
+            "NOT expected if you meant to calibrate the model/prompt/schema identity "
+            "this run would actually use -- calibrations recorded under different "
+            "judge_id strings for the same real judge are not comparable, and this "
+            "run's system prompt or tool schema may have changed since judge_id was "
+            "chosen."
+        )
+        if verify_judge_id:
+            raise click.ClickException(mismatch_msg + " Refusing (--verify-judge-id).")
+        _console.print(f"[yellow]WARNING:[/] {mismatch_msg}")
+
+    # D2: parse_pair_set (inside calibrate()) raises ValueError on malformed JSONL
+    # (invalid JSON or a pydantic ValidationError wrapped as ValueError). Previously
+    # only validate_daily_cap's ValueError was wrapped here, so a malformed pair-set
+    # file surfaced as a raw traceback instead of a clean CLI error.
+    try:
+        if execute:
+            with StorageContext(evidence_db, runtime_db) as ctx:
+                result = calibrate(
+                    judge_id=judge_id,
+                    axis=axis,
+                    pair_set_path=pair_set_path,
+                    judge_client=judge_client,
+                    evidence_conn=ctx.evidence_conn,
+                    runtime_conn=ctx.runtime_conn,
+                    max_usd=max_usd,
+                    daily_cap=daily_cap,
+                    dry_run=False,
+                )
+        else:
+            # Dry-run: parse, project cost, but do not make any judge calls or DB writes
+            from unittest.mock import MagicMock
+
             result = calibrate(
                 judge_id=judge_id,
                 axis=axis,
                 pair_set_path=pair_set_path,
                 judge_client=judge_client,
-                evidence_conn=ctx.evidence_conn,
-                runtime_conn=ctx.runtime_conn,
+                evidence_conn=MagicMock(),
+                runtime_conn=MagicMock(),
                 max_usd=max_usd,
                 daily_cap=daily_cap,
-                dry_run=False,
+                dry_run=True,
             )
-    else:
-        # Dry-run: parse, project cost, but do not make any judge calls or DB writes
-        from unittest.mock import MagicMock
-
-        result = calibrate(
-            judge_id=judge_id,
-            axis=axis,
-            pair_set_path=pair_set_path,
-            judge_client=judge_client,
-            evidence_conn=MagicMock(),
-            runtime_conn=MagicMock(),
-            max_usd=max_usd,
-            daily_cap=daily_cap,
-            dry_run=True,
-        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     _print_calibrate_result(result, executed=execute, daily_cap=daily_cap)
 

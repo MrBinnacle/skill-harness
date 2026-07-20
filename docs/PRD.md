@@ -233,7 +233,7 @@ Requirements:
 * mandatory position swap — every verdict requires both `(A, B)` and `(B, A)` orderings; disagreement on swap → `position_swap_agreement = 0` → `admissibility_state = 'inadmissible'` (reason `position_disagreement`)
 * length-controlled scoring — AlpacaEval-2 length-regression protocol (Dubois et al. arXiv:2404.04475) applied both at prompt-time (max_tokens=80 with "length should not influence" instruction) and observation-time; `length_regression_coefficient` stored separately from `length_controlled_agreement`; both raw and length-adjusted observations persisted at write time
 * judge identity is bound to `judge_id = sha256(model_id || system_prompt_sha256 || tool_schema_sha256)`; the tool schema is part of the calibration scope, NOT swappable post-calibration
-* judge invoked via tool_use with `strict: true`, `tool_choice` forced, schema `report_verdict({choice: enum[A,B,tie], rationale_brief})`; rationale field is audit-only, displayed in UI with `[untrusted model output]` prefix; defense layers (tool_use schema + 8KB output truncation + XML-delimited sandboxing + meta-token regex short-circuit + position-swap + null-baseline distributional check + rationale UI prefix) all required before a verdict can be written
+* judge invoked via tool_use with `strict: true`, `tool_choice` forced, schema `report_verdict({choice: enum[A,B,tie], rationale_brief})`. As-built defense layers, all required before a verdict can be written: (1) forced tool_use schema, (2) 8KB UTF-8 output truncation, (3) XML-delimited sandboxing of candidate outputs in the system prompt, (4) meta-token/injection regex short-circuit (cost-zero, before any API call), (5) mandatory position-swap (AB + BA calls, `oracles/tier2/judge.py`). Two v0.1 gaps, tracked for v0.2, not shipped: a null-baseline distributional check, and the `[untrusted model output]` UI prefix on `rationale_brief` — the field is persisted as audit-only data but is not currently rendered anywhere in the CLI/UI.
 
 The judge is an instrument.
 It is never the source of truth.
@@ -270,7 +270,7 @@ Tier-2 verdicts are inadmissible unless ALL of the following hold for the `(judg
 
 * a calibrated record exists with `pairwise_agreement ≥ 0.7`
 * `position_consistency ≥ 0.8`
-* `length_controlled_agreement` recorded; Cohen's κ stored as secondary chance-corrected reporting
+* `length_controlled_agreement` recorded; Cohen's κ `≥ 0.40` (observed-marginal, chance-corrected) — hard-gates admissibility at pair-set size N ≥ 100 (see §13)
 * calibration set size `≥ 50` pairs
 * re-calibration cadence ≤ 90 days OR no model-version bump since
 
@@ -296,7 +296,11 @@ v0.1: no starter set ships; user-provided JSONL only. Operator-self-label admiss
 
 ## §6.2 Length-control storage
 
-Length-control storage: `oracle_verdicts` persists both `raw_observation` and `length_adjusted_observation`; the regression coefficient is stored at calibration time in `calibration_events.length_regression_coefficient`. Correction is applied at verdict-write time, never at read time.
+Length control in v0.1 is calibration-time only, not verdict-write-time. `oracle_verdicts` stores a single `observation` column (`{0.0, 0.5, 1.0}`) — there are no `raw_observation` or `length_adjusted_observation` columns in the schema, and no per-verdict length correction is applied or stored (`JudgeVerdict.length_adjusted_observation` is hard-coded `None` on every path through `oracles/tier2/judge.py`).
+
+What ships in v0.1: (a) a prompt-side instruction to the judge that response length should not influence its choice (`oracles/tier2/judge.py::_build_prompt`); (b) a calibration-time length-controlled agreement check — `calibrate()` fits an OLS length-regression coefficient (`β₁`, `oracles/calibration/length_regression.py`) over the calibration pair set, derives `length_controlled_agreement`, and gates the `(judge_id, axis)` calibration state on it whenever a value is computed (`_THRESHOLD_LENGTH_CONTROLLED = 0.65` in `oracles/calibration/command.py::determine_state`). This is a judge-level admissibility gate, not a per-verdict correction.
+
+Per-verdict, write-time length adjustment (the schema in the previous revision of this section) is not implemented; tracked for v0.2.
 
 ---
 
@@ -536,7 +540,7 @@ Human-labeled frozen pair set.
 
 * pairwise-preference agreement `≥ 0.7`
 * position-consistency `≥ 0.8`
-* Cohen's κ stored as secondary chance-corrected reporting (no fixed threshold; observed-marginal calculation)
+* Cohen's κ `≥ 0.40` (observed-marginal calculation, not 1/3-uniform) — as-built this IS a fixed hard-gate threshold, enforced only at pair-set size N ≥ 100: `oracles/calibration/command.py::determine_state()` returns `rejected` (`cohen_kappa_below_threshold`) when κ falls below it, alongside the pairwise-agreement, position-consistency, and length-controlled-agreement checks. Below N = 100 (`conditional` tier), κ is computed and stored but not gated.
 * minimum calibration set size = 50 pairs per `(judge_id, axis)`
 
 **Re-calibration cadence:** every 90 days OR at the next model version bump (whichever first).
@@ -613,7 +617,7 @@ For K clauses per skill, posterior estimates are pooled via hyperprior `Beta(α_
 
 ## §14.3 Tie encoding (provisional)
 
-Tie encoding is provisionally **half-update**: each observation with `observation = 0.5` is treated as two updates (half-win + half-loss). Same posterior mean as 0.5 encoding, slightly different variance, Bayesian semantics honest (pseudo-Bernoulli). Tie count stored separately so the operator can switch to drop-ties at report time without re-sampling.
+Tie encoding is provisionally **half-update**: each observation with `observation = 0.5` is treated as two updates (half-win + half-loss). Same posterior mean as 0.5 encoding, slightly different variance, Bayesian semantics honest (pseudo-Bernoulli). Tie count is derived by filtering `oracle_verdicts.observation = 0.5` — there is no separate stored `tie_count` column (`0001_initial.sql`). The operator can still switch to drop-ties at report time without re-sampling, by re-deriving that filter over already-persisted `observation` values.
 
 **Open (C1):** flip to drop-ties preserves Beta-Binomial conjugacy exactly. Data-blocked until first `(judge_id, axis)` calibration event lands.
 
@@ -810,7 +814,17 @@ Per-track migration number ranges:
 
 **Cost re-derivable from evidence:** per-call token + USD cost columns written onto evidence rows inside the evidence transaction. `cost_ledger` becomes a projection; reconciler back-fills runs whose sums disagree (cost written from actual response `usage`, never from projection).
 
-**Aggregation surface:** the canonical read-side for aggregation is the SQL VIEW `admissible_verdicts` (migration `0003_admissible_verdicts_view.sql`), which selects from `oracle_verdicts` where `admissibility_state = 'admissible'` AND no matching row in `confound_events` with `delta_kind = 'confound_flagged'` for the same `(run_id, primary_clause_id)`. Raw `oracle_verdicts` access is restricted to the `audit/` module (CI grep ban on non-audit `SELECT … FROM oracle_verdicts`).
+**Aggregation surface:** the canonical read-side for aggregation is the SQL VIEW `admissible_verdicts` (migration `0003_admissible_verdicts_view.sql`), which selects from `oracle_verdicts` where `admissibility_state = 'admissible'` AND no matching row in `confound_events` with `delta_kind = 'confound_flagged'` for the same `(run_id, primary_clause_id)`. `aggregate_skill()` (`aggregation/engine.py`) reads observation values ONLY from this VIEW — never from raw `oracle_verdicts` — so inadmissible/confounded data structurally cannot enter computed statistics.
+
+Raw `SELECT … FROM oracle_verdicts` is enforced (pre-commit hook `ban-raw-oracle-verdicts` + CI job `structural-bans`, see `.pre-commit-config.yaml` / `.github/workflows/ci.yml`) against a documented allowlist, not a bare "audit/-only" ban — none of the allowed call sites read `observation` from the raw table to feed aggregation; they are single-row/metadata reads the VIEW is not shaped to answer:
+
+* `audit/` — cross-reference/inspection (`audit_all_verdicts()` etc.), the module's designed purpose (A29).
+* `aggregation/engine.py` — admissibility-state counts and confound-membership checks for exclusion-rate reporting (bookkeeping about which rows the VIEW dropped, not the dropped rows' values).
+* `ablation/runner.py` — resume-state rebuild: reloading a SPECIFIC already-persisted verdict by `(run_id, clause_id, sample_index)` to avoid re-recording it.
+* `cli/main.py` — single-verdict operator commands (freeze eligibility check, verdict lookup by id).
+* `storage/repositories/evidence/frozen_cases.py` — single-row provenance copy (`metric_id`/`metric_version`/sample refs) by `verdict_id` at freeze time.
+
+A new production reference outside this list fails the hook; `tests/test_structural_bans.py` mirrors the same allowlist so a violation also surfaces in the ordinary test run.
 
 **Repository surface:** per-table modules under `storage/repositories/evidence/` and `storage/repositories/runtime/`. Functional API only — no classes (closes subclass-override escape hatches; closes per-instance-state hazard). Pydantic write-models with `model_config = ConfigDict(strict=True, extra='forbid', frozen=True)`. Evidence repos export only `insert_*` / `get_*` / `select_*` / `list_*` — no `update_*` / `delete_*` / `set_*` / `patch_*` / `modify_*` / `remove_*`. AST-walker test (`tests/test_evidence_repo_surface.py`) is the falsifying-case enforcement: regex scan rejects matching function names.
 
@@ -824,7 +838,7 @@ Per-track migration number ranges:
 
 **PRAGMA scope.** Connections MUST go through `skill_harness.storage.migrations.open_db()`. Direct `sqlite3.connect()` bypasses connection-scoped pragmas including `foreign_keys = ON`.
 
-**Structural enforcement:** pre-commit + CI grep ban — `ripgrep -n 'sqlite3\.connect\(' src/ tests/ | grep -v 'storage/migrations.py'` MUST return empty. Upgrades the documented PRAGMA-scope discipline from PR-review to mechanism.
+**Structural enforcement:** pre-commit hook `ban-raw-sqlite-connect` (`.pre-commit-config.yaml`, `language: pygrep`) plus CI job `structural-bans` (`.github/workflows/ci.yml`) scan `src/` and `tests/` for `sqlite3\.connect\(`, excluding `storage/migrations.py` (the module that defines `open_db()` and is the only legitimate caller); `tests/test_structural_bans.py` mirrors the same check so a violation also shows up in the ordinary `pytest -m "not live"` run. Upgrades the documented PRAGMA-scope discipline from PR-review to mechanism.
 
 ---
 

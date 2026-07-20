@@ -19,8 +19,10 @@ Design constraints (all load-bearing, all POC-established 2026-07-09):
 
 from __future__ import annotations
 
+import atexit
 import base64
 import hashlib
+import shutil
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -56,6 +58,44 @@ class SubjectLayerNotInstalledError(RuntimeError):
     """Raised when inspect_ai/inspect_swe are missing (optional extra)."""
 
 
+# ---------------------------------------------------------------------------
+# F-6 (S55 hostile review): per-call mkdtemp cleanup
+# ---------------------------------------------------------------------------
+#
+# write_pinned_compose()'s default (no compose_dir) path creates a fresh
+# private directory per call via tempfile.mkdtemp() and nothing ever removed
+# it -- every eval() run leaked one directory. The returned path must outlive
+# the call (Inspect reads it later), so deletion-before-return is wrong; the
+# fix is process-lifetime cleanup, not call-time cleanup. Caller-supplied
+# compose_dir is NEVER tracked here -- the caller owns that directory's
+# lifecycle (build_paired_tasks already passes one when it wants the
+# idempotent-same-path behavior; ownership must stay with whoever created it).
+_auto_created_compose_dirs: set[Path] = set()
+_atexit_cleanup_registered = False
+
+
+def _track_auto_created_compose_dir(directory: Path) -> None:
+    """Register a mkdtemp-created compose dir for best-effort atexit cleanup."""
+    global _atexit_cleanup_registered
+    _auto_created_compose_dirs.add(directory)
+    if not _atexit_cleanup_registered:
+        atexit.register(_cleanup_auto_created_compose_dirs)
+        _atexit_cleanup_registered = True
+
+
+def _cleanup_auto_created_compose_dirs() -> None:
+    """Best-effort rmtree of every auto-created compose dir at process exit.
+
+    ``ignore_errors=True``: a cleanup failure (already removed, permissions,
+    a concurrent eval() still reading the file) must never raise during
+    interpreter shutdown -- atexit callbacks that raise print a warning and
+    are otherwise swallowed, so failing loudly here would buy nothing while
+    risking noisy shutdown output.
+    """
+    for directory in _auto_created_compose_dirs:
+        shutil.rmtree(directory, ignore_errors=True)
+
+
 def files_as_data_uris(files: Mapping[str, str | bytes]) -> dict[str, str]:
     """Encode sample-file contents as data URIs for verbatim delivery.
 
@@ -86,12 +126,36 @@ def write_pinned_compose(pin: HarnessPin, compose_dir: Path | None = None) -> Pa
     """Write the digest-pinned compose file for ``pin`` and return its path.
 
     Content is a pure function of the pin's ``sandbox_image``, so the file
-    name carries a content hash and rewrites are idempotent. Pure stdlib —
-    testable without the optional extra.
+    name carries a content hash and rewrites to the SAME ``compose_dir`` are
+    idempotent (same path, same bytes). Pure stdlib — testable without the
+    optional extra.
+
+    S3 hardening: when ``compose_dir`` is omitted, this used to write to
+    ``tempfile.gettempdir()`` under a filename derived purely from
+    ``pin.sandbox_image`` — predictable and, on a shared host, guessable
+    ahead of time by any other tenant of that directory (a symlink pre-plant
+    at that exact path would make ``write_text`` follow the symlink and
+    overwrite whatever it points at). With no ``compose_dir``, each call now
+    gets its own private ``tempfile.mkdtemp()`` directory instead — no shared
+    namespace, nothing to pre-plant into. This changes the DEFAULT path's
+    idempotency: repeated no-``compose_dir`` calls for the same pin no longer
+    return the same path (each gets a fresh private directory); callers that
+    want the idempotent-same-path behavior should pass an explicit
+    ``compose_dir`` they control, as ``build_paired_tasks`` already does when
+    given one, and as the test suite does throughout.
+
+    Independent of which directory is used, the write is followed by a
+    read-back content check (closes the window where a second writer races
+    this call between the write and Inspect's later read of the same path),
+    and a pre-write check refuses to write through an existing symlink or
+    other non-regular-file entry at the target path.
 
     :raises ValueError: ``pin.sandbox`` is not "docker" (compose injection is
         a docker mechanism; other sandbox types have no pinned path yet) or
         ``pin.sandbox_image`` is not a digest reference.
+    :raises RuntimeError: the target path exists and is not a regular file
+        (possible symlink pre-plant), or the file's content did not match
+        what was just written when read back (possible TOCTOU race).
     """
     if pin.sandbox != "docker":
         raise ValueError(
@@ -102,11 +166,43 @@ def write_pinned_compose(pin: HarnessPin, compose_dir: Path | None = None) -> Pa
             f"sandbox_image {pin.sandbox_image!r} is not digest-pinned; "
             "capture the pin via HarnessPin.capture()"
         )
-    directory = compose_dir if compose_dir is not None else Path(tempfile.gettempdir())
+
+    if compose_dir is not None:
+        directory = compose_dir
+    else:
+        # S3: a private, unpredictable-named directory per call — nothing to
+        # pre-plant a symlink into ahead of time (unlike the shared system
+        # temp dir this used to write into directly).
+        directory = Path(tempfile.mkdtemp(prefix="skill-harness-compose-"))
+        # F-6: only auto-created dirs are tracked for cleanup -- an explicit
+        # compose_dir is caller-owned and must never be removed out from under it.
+        _track_auto_created_compose_dir(directory)
+
     content = _PINNED_COMPOSE_YAML.format(image=pin.sandbox_image)
     name_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
     path = directory / f"skill-harness-compose-{name_hash}.yaml"
+
+    # S3: refuse to write through a pre-existing symlink or other non-regular
+    # entry — write_text() would otherwise follow a symlink and overwrite
+    # whatever it points at with our content (a confused-deputy overwrite of
+    # an attacker-chosen target, even though the content itself is ours).
+    if path.exists() and not path.is_file():
+        raise RuntimeError(
+            f"refusing to write compose file: {path} exists and is not a regular "
+            "file (possible symlink pre-plant)"
+        )
+    if path.is_symlink():
+        raise RuntimeError(f"refusing to write compose file: {path} is a symlink")
+
     path.write_text(content, encoding="utf-8")
+
+    # S3: read back and verify — catches a second writer racing this call
+    # between the write above and Inspect's later read of the same path.
+    if path.read_text(encoding="utf-8") != content:
+        raise RuntimeError(
+            f"compose file content mismatch after write: {path} (possible TOCTOU race)"
+        )
+
     return path
 
 
@@ -132,6 +228,19 @@ def build_paired_tasks(
         cwd) from the sandbox and pass iff ``oracle_target`` is a substring.
         ``command_succeeds`` — run ``oracle_arg`` in the sandbox at the agent
         cwd and pass iff exit code 0 (the tests-pass oracle shape).
+
+        TRUST BOUNDARY (S6): ``oracle_arg`` is interpolated into a shell
+        string (``bash -lc <oracle_arg>`` for ``command_succeeds``; an
+        f-string sandbox path for ``file_contains``) with no shell-escaping
+        or path normalization. This is safe ONLY because ``oracle_arg`` is an
+        operator-authored harness-config value (a task-definition parameter
+        the eval author writes, like ``prompt`` and ``skill_dir``), never
+        content extracted from a skill, an agent transcript, or any other
+        untrusted/ingested source. ``network_mode: none`` on the sandbox
+        (module docstring) bounds the blast radius if that assumption is
+        ever violated, but it is not a substitute for it: a future caller
+        that derives ``oracle_arg`` from task or skill material would need
+        argv-based execution and path validation first.
     :param pin: harness pin; ``pin.cwd`` is passed to the agent so oracle
         paths and agent paths agree, ``pin.sandbox_image`` is injected into
         both arms via a generated compose file, and ``pin.env`` /
@@ -154,8 +263,26 @@ def build_paired_tasks(
         fingerprint; the same value goes to both arms.
     :raises SubjectLayerNotInstalledError: optional extra not installed.
     :raises FileNotFoundError: ``skill_dir`` has no SKILL.md.
-    :raises ValueError: pin not digest-pinned or sandbox type unsupported.
+    :raises ValueError: pin not digest-pinned, sandbox type unsupported,
+        ``oracle_target`` is empty while ``oracle="file_contains"``, or
+        ``oracle_arg``/``oracle_target`` contains a NUL byte.
     """
+    # S6 defense-in-depth: reject NUL bytes before oracle_arg reaches the shell
+    # string / f-string path below. Never valid in a shell command or a POSIX
+    # path, so this rejects nothing a legitimate operator-authored value would
+    # ever contain — it only closes off string-truncation-style confusion if
+    # this call site is ever reached with less-trusted input than today's
+    # operator-authored harness config (see the TRUST BOUNDARY note above).
+    if "\x00" in oracle_arg or "\x00" in oracle_target:
+        raise ValueError("oracle_arg/oracle_target must not contain a NUL byte")
+
+    if oracle == "file_contains" and not oracle_target:
+        raise ValueError(
+            "oracle_target is required when oracle='file_contains' "
+            "(an empty string would make the substring check vacuously true — "
+            "every existing file would pass)"
+        )
+
     try:
         from inspect_ai import Task
         from inspect_ai.dataset import Sample
@@ -223,7 +350,15 @@ def _build_scorer(
                 _ = state, target
                 try:
                     content = await sandbox().read_file(path)
-                except Exception as exc:  # missing file = fail, not crash
+                except FileNotFoundError as exc:
+                    # missing file = a genuine wrong answer, not an apparatus
+                    # fault — this is the ONLY exception we score rather than
+                    # raise. Anything else (TimeoutError, PermissionError,
+                    # ConnectionError, OSError, ...) is an infra/sandbox
+                    # failure and must propagate: Inspect's eval() harness
+                    # then marks the run as errored, which the ingest write
+                    # path already refuses to admit rather than silently
+                    # scoring it (see EvalLogNotSuccessError).
                     return Score(value=INCORRECT, explanation=f"read failed: {exc}")
                 ok = oracle_target in content
                 return Score(value=CORRECT if ok else INCORRECT, explanation=content[:200])

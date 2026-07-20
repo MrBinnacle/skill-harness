@@ -1,8 +1,14 @@
 """SkillReport dataclass + JSON serialisation (A60).
 
-Schema version: "1.2.0" (semver). v0.1 lifetime is 1.x additive-only.
+Schema version: "1.3.0" (semver). v0.1 lifetime is 1.x additive-only.
   1.1.0 — A55 comparability axes (subject_model, user_message_sha256).
   1.2.0 — coverage_warnings field on VectorSummary (M3 pre-tag fix).
+  1.3.0 — is_prior_only field on ClauseReport (B5 hostile-review fix): True when a
+          clause has zero admissible observations, so posterior_mean/CI/p_win_gt_threshold
+          are an uninformative Beta(1,1) PRIOR (posterior_mean=0.5 etc.), not a
+          measurement. The numeric fields keep their existing type/semantics
+          (additive-only) — is_prior_only is the required guard a consumer must check
+          before treating them as measured data.
 Any breaking change (field removal, type change, rename) requires:
   1. Major version bump.
   2. A ``diff skill`` consumer compatibility check (E.3 territory).
@@ -26,7 +32,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-REPORT_SCHEMA_VERSION = "1.2.0"
+REPORT_SCHEMA_VERSION = "1.3.0"
 
 
 @dataclass(frozen=True)
@@ -79,6 +85,11 @@ class ClauseReport:
     # A55 comparability axes added in schema 1.1.0 (A60 additive bump)
     subject_model: str | None  # model used for all runs; "MIXED" if divergent across runs
     user_message_sha256: str | None  # sha256 of user_message from config_json; "MIXED" if divergent
+    # B5 (schema 1.3.0): True when this clause has zero admissible observations —
+    # posterior_mean/credible_interval_95/p_win_gt_threshold are an uninformative
+    # Beta(1,1) PRIOR, not a measurement. Consumers MUST check this before treating
+    # the numeric fields as measured data.
+    is_prior_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -125,6 +136,7 @@ def _clause_to_dict(clause: ClauseReport) -> dict[str, object]:
         "w_observation_sum": clause.w_observation_sum,
         "subject_model": clause.subject_model,
         "user_message_sha256": clause.user_message_sha256,
+        "is_prior_only": clause.is_prior_only,
     }
 
 
@@ -219,6 +231,7 @@ def skill_report_from_dict(d: dict[str, Any]) -> SkillReport:
             w_observation_sum=float(c["w_observation_sum"]),
             subject_model=c.get("subject_model"),
             user_message_sha256=c.get("user_message_sha256"),
+            is_prior_only=bool(c.get("is_prior_only", False)),
         )
         for c in d["clauses"]
     )

@@ -16,16 +16,20 @@ from pathlib import Path
 
 import pytest
 
-from skill_harness.storage.migrations import open_evidence
+from skill_harness.storage.migrations import open_db, open_evidence
 from skill_harness.storage.transaction import writer_transaction
 
 
 @pytest.fixture()
 def plain_conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
-    """Raw autocommit SQLite connection (no migrations) for transaction unit tests."""
-    conn = sqlite3.connect(str(tmp_path / "test.db"), isolation_level=None)
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 5000")
+    """Autocommit SQLite connection with no migrations applied, for transaction
+    unit tests that exercise writer_transaction() generically against a
+    synthetic table rather than the application schema. Opened via the
+    sanctioned open_db() helper (not a raw connect call) per A23 Sec.3 --
+    pragmas are cheap and this keeps the test's connection setup identical to
+    production's.
+    """
+    conn = open_db(tmp_path / "test.db")
     conn.execute("CREATE TABLE t (val TEXT)")
     try:
         yield conn

@@ -153,6 +153,113 @@ def test_write_pinned_compose_refuses_unpinned_or_nondocker(tmp_path) -> None:  
         write_pinned_compose(unpinned, compose_dir=tmp_path)
 
 
+def test_write_pinned_compose_default_dir_is_private_per_call() -> None:
+    """S3: with compose_dir omitted, each call gets its OWN private, unpredictable
+    directory (tempfile.mkdtemp) rather than a shared-namespace filename inside
+    tempfile.gettempdir() — nothing for a co-tenant to pre-plant a symlink into.
+
+    This intentionally changes the DEFAULT path's idempotency (two no-compose_dir
+    calls for the same pin now land in different directories); build_paired_tasks
+    and this test suite's other write_pinned_compose tests all pass an explicit
+    compose_dir, which keeps the tested idempotent-same-path contract for callers
+    who supply their own directory.
+    """
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    pin = make_pin()
+    path1 = write_pinned_compose(pin)
+    path2 = write_pinned_compose(pin)
+    try:
+        assert path1.parent != path2.parent, "each default call must get a private directory"
+        assert path1.parent != Path(tempfile.gettempdir())
+        assert path1.read_text(encoding="utf-8") == path2.read_text(encoding="utf-8")
+    finally:
+        shutil.rmtree(path1.parent, ignore_errors=True)
+        shutil.rmtree(path2.parent, ignore_errors=True)
+
+
+def test_write_pinned_compose_default_dir_registered_for_cleanup() -> None:
+    """F-6 (S55 hostile review): the default (no compose_dir) path creates a
+    private mkdtemp directory per call and, pre-fix, nothing ever removed it --
+    every eval() run leaked one directory (the sibling test above works around
+    this today with its own manual `shutil.rmtree` in `finally`). The fix
+    registers auto-created dirs for atexit cleanup; this test invokes the
+    cleanup callback directly rather than waiting on real interpreter exit.
+    """
+    import shutil
+
+    from skill_harness.subject import inspect_adapter
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    pin = make_pin()
+    path = write_pinned_compose(pin)
+    try:
+        assert path.parent in inspect_adapter._auto_created_compose_dirs, (
+            "F-6: the auto-created compose dir must be registered for cleanup"
+        )
+        assert path.exists()
+        inspect_adapter._cleanup_auto_created_compose_dirs()
+        assert not path.parent.exists(), "F-6: cleanup must actually remove the directory"
+    finally:
+        shutil.rmtree(path.parent, ignore_errors=True)
+
+
+def test_write_pinned_compose_explicit_compose_dir_not_tracked(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """F-6 regression guard: a caller-supplied compose_dir is caller-owned --
+    the cleanup registry must never track (and therefore never later delete)
+    a directory the caller passed in explicitly.
+    """
+    from skill_harness.subject import inspect_adapter
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    pin = make_pin()
+    write_pinned_compose(pin, compose_dir=tmp_path)
+    assert tmp_path not in inspect_adapter._auto_created_compose_dirs, (
+        "F-6: caller-supplied compose_dir must not be tracked for auto-cleanup"
+    )
+
+
+def test_write_pinned_compose_refuses_existing_symlink(  # type: ignore[no-untyped-def]
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S3: refuses to write through a pre-existing symlink at the target path
+    rather than following it (write_text() would otherwise overwrite whatever
+    the symlink points at). Simulated via monkeypatch rather than a real
+    os.symlink() call — symlink creation needs elevated privilege on Windows
+    CI runners, but the guard's is_symlink() check behaves identically either
+    way."""
+    from pathlib import Path
+
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    pin = make_pin()  # built BEFORE patching — capture() itself reads files via Path
+    monkeypatch.setattr(Path, "is_symlink", lambda self: True)
+    with pytest.raises(RuntimeError, match="symlink"):
+        write_pinned_compose(pin, compose_dir=tmp_path)
+
+
+def test_write_pinned_compose_refuses_content_mismatch_after_write(  # type: ignore[no-untyped-def]
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S3: if the file on disk doesn't match what was just written when read
+    back, refuse rather than return a path whose content may belong to a
+    racing writer. Simulated by forcing read_text() to return different bytes
+    than write_text() just wrote (stands in for a same-UID writer racing this
+    call between the write and the read-back)."""
+    from pathlib import Path
+
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    pin = make_pin()  # built BEFORE patching — capture() itself reads files via Path
+    monkeypatch.setattr(Path, "read_text", lambda self, encoding=None: "tampered content")
+    with pytest.raises(RuntimeError, match="mismatch"):
+        write_pinned_compose(pin, compose_dir=tmp_path)
+
+
 # ---------------------------------------------------------------------------
 # Adapter surface without the optional extra
 # ---------------------------------------------------------------------------
@@ -177,6 +284,154 @@ def test_build_paired_tasks_raises_typed_error_without_extra(tmp_path) -> None: 
             oracle_target="ok",
             pin=make_pin(),
         )
+
+
+# ---------------------------------------------------------------------------
+# C6 — oracle_target validation + infra-failure/wrong-answer split
+#
+# Regression coverage for a hostile-review finding: ``oracle_target``
+# defaulting to "" made the ``file_contains`` substring check vacuously true
+# (any existing file passes), and a bare ``except Exception`` around
+# ``sandbox().read_file`` mapped ANY sandbox/infra failure (docker hiccup,
+# timeout, OOM) to an admissible ``Score(INCORRECT)`` — an apparatus outage
+# recorded as evidence the skill under test failed. The validation check is
+# pure Python and runs before the lazy ``inspect_ai`` import, so it is
+# testable regardless of whether the optional extra is installed. The
+# scorer-body checks need the real ``inspect_ai`` scorer/sandbox types.
+# ---------------------------------------------------------------------------
+
+
+def test_build_paired_tasks_refuses_empty_oracle_target_for_file_contains(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: some-skill\ndescription: a test skill\n---\nbody\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="oracle_target"):
+        build_paired_tasks(
+            skill_dir=skill,
+            prompt="do a thing",
+            oracle="file_contains",
+            oracle_arg="out.txt",
+            # oracle_target omitted — must not default to a vacuous check
+            pin=make_pin(),
+        )
+
+
+def test_build_paired_tasks_refuses_nul_byte_in_oracle_arg(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """S6 defense-in-depth: oracle_arg reaches a shell string / f-string
+    sandbox path with no escaping (see the TRUST BOUNDARY docstring note on
+    build_paired_tasks). A NUL byte is never valid in either, so rejecting it
+    costs nothing for legitimate operator-authored oracle_arg values."""
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: some-skill\ndescription: a test skill\n---\nbody\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="NUL byte"):
+        build_paired_tasks(
+            skill_dir=skill,
+            prompt="do a thing",
+            oracle="command_succeeds",
+            oracle_arg="pytest -q\x00; rm -rf /",
+            pin=make_pin(),
+        )
+
+
+def test_build_paired_tasks_refuses_nul_byte_in_oracle_target(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: some-skill\ndescription: a test skill\n---\nbody\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="NUL byte"):
+        build_paired_tasks(
+            skill_dir=skill,
+            prompt="do a thing",
+            oracle="file_contains",
+            oracle_arg="out.txt",
+            oracle_target="expected\x00value",
+            pin=make_pin(),
+        )
+
+
+@pytest.mark.skipif(not INSPECT_INSTALLED, reason="requires the optional inspect extra")
+def test_build_paired_tasks_allows_empty_oracle_target_for_command_succeeds(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # command_succeeds never reads oracle_target in the scorer (only exit
+    # code matters) — the validation must be scoped to file_contains, not
+    # a blanket "oracle_target always required".
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: some-skill\ndescription: a test skill\n---\nbody\n", encoding="utf-8"
+    )
+    tasks = build_paired_tasks(
+        skill_dir=skill,
+        prompt="do a thing",
+        oracle="command_succeeds",
+        oracle_arg="pytest -q",
+        pin=make_pin(),
+    )
+    assert set(tasks) == {"full", "null"}
+
+
+@pytest.mark.skipif(not INSPECT_INSTALLED, reason="requires the optional inspect extra")
+def test_file_contains_scorer_missing_file_scores_incorrect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A genuinely missing file is a wrong answer, not an apparatus fault —
+    # this must keep scoring INCORRECT (not crash, not go admissible-void).
+    import asyncio
+
+    import inspect_ai.util as inspect_util
+    from inspect_ai.scorer import INCORRECT
+
+    from skill_harness.subject.inspect_adapter import _build_scorer
+
+    class MissingFileSandbox:
+        async def read_file(self, path: str) -> str:
+            raise FileNotFoundError(f"no such file: {path}")
+
+    monkeypatch.setattr(inspect_util, "sandbox", lambda: MissingFileSandbox())
+
+    score_fn = _build_scorer("file_contains", "out.txt", "ok", "/root")
+    result = asyncio.run(score_fn(None, None))
+    assert result.value == INCORRECT
+
+
+@pytest.mark.skipif(not INSPECT_INSTALLED, reason="requires the optional inspect extra")
+def test_file_contains_scorer_propagates_infra_failure_instead_of_scoring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # RED regression for the C6 finding: an infra/apparatus failure (docker
+    # stall, timeout, OOM) reading the sandbox file must propagate as an
+    # exception — never be converted into an admissible Score in either
+    # direction. Inspect's own eval() harness then marks the run as errored,
+    # which the ingest write path (write_paired_evidence) already refuses
+    # to admit (EvalLogNotSuccessError) rather than silently scoring it.
+    import asyncio
+
+    import inspect_ai.util as inspect_util
+
+    from skill_harness.subject.inspect_adapter import _build_scorer
+
+    class FlakySandbox:
+        async def read_file(self, path: str) -> str:
+            raise TimeoutError("docker daemon unresponsive")
+
+    monkeypatch.setattr(inspect_util, "sandbox", lambda: FlakySandbox())
+
+    score_fn = _build_scorer("file_contains", "out.txt", "ok", "/root")
+    with pytest.raises(TimeoutError, match="docker daemon unresponsive"):
+        asyncio.run(score_fn(None, None))
 
 
 # ---------------------------------------------------------------------------

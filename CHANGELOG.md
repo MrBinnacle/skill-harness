@@ -34,6 +34,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repaired all references left dangling by the 2026-07-08 privacy scrub
   (COUNCIL_FINDINGS.md, root CLAUDE.md) across CONTRIBUTING, CODEOWNERS, PR/issue
   templates, CHANGELOG, PRD, PLAN, release notes, and the case study.
+- **Hostile-review hardening pass** on the unreleased v0.2 subject, aggregation,
+  and Tier-1 oracle layers: 39 confirmed findings fixed across the
+  ablation / aggregation / calibration / extractor / CLI / storage paths —
+  direction-aware ablation wins, BH-FDR gate consumption, scorer-crash
+  inadmissibility, resume cost attribution, sentinel-verdict exclusion from
+  statistics, and single-source pricing/tokenizer. The four remaining
+  test-quality findings are tracked, not silently dropped.
+- Citation oracle no longer arm-differentially deflates hyperlink references:
+  lowercase prose is no longer miscounted as a flag emission (flag matching is
+  now case-sensitive), and an external `http(s)` markdown-link target is
+  preserved as a citation rather than stripped away with its link text.
 
 ### Changed
 - README rewritten for its actual audience (Claude Code users with a skills folder):
@@ -44,7 +55,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   adds "Harness pin" and "Differentiation vs field" pre-registration fields and a
   correction block recording that the original lock predated the sweep.
 
+### Security
+- Untrusted skill names and model output are escaped with `rich.markup.escape`
+  and asserted NUL/control-free before terminal rendering, so bracketed text
+  cannot inject Rich markup into CLI output.
+- CI workflow actions are pinned by commit SHA, and structural enforcement bans
+  (e.g. raw `sqlite3.connect`) are wired as tests rather than left as convention.
+
 ## [0.1.0] — Released 2026-06-08
+
+> **Release-hygiene note (added 2026-07-19):** the `v0.1.0` tag ships `pyproject.toml`
+> version string `0.1.0a0` (pre-alpha) rather than `0.1.0` — the version bump was
+> missed at tag time. Acknowledged gap; a corrected version string ships with the
+> next actual release rather than being rewritten retroactively into this historical tag.
 
 v0.1 delivers a complete deterministic evaluation framework for clause-level
 ablation testing of LLM skills. Five build tracks (A–E), two-database
@@ -105,7 +128,7 @@ Initial scaffold. Pre-alpha — schema realized and trigger-enforced, CLI surfac
 - 8 smoke tests including append-only trigger verification + `runs.completed_at` single-shot mutation
 - Comprehensive architectural decision record in the internal council findings log (not published) (17 adopted decisions, 16 PRD amendments queued for v1.1)
 - Implementation plan at `docs/PLAN.md` (5 build tracks A–E with exit criteria)
-- Supply-chain audit at `.supply-chain-risk-auditor/results.md` — PROCEED-WITH-MITIGATIONS
+- Supply-chain audit run via `supply-chain-risk-auditor` — PROCEED-WITH-MITIGATIONS (output directory `.supply-chain-risk-auditor/` is local-only and gitignored, not a tracked artifact)
 - Standard repo docs: `README.md`, `LICENSE` (MIT), `CONTRIBUTING.md`, `SECURITY.md`
 - CI workflow: ruff + mypy --strict + pytest matrix on Ubuntu + Windows x Python 3.11/3.12/3.13
 - CodeQL security scanning (push, PR, weekly)
@@ -118,5 +141,8 @@ Initial scaffold. Pre-alpha — schema realized and trigger-enforced, CLI surfac
 ### Security
 - `anthropic` pin tightened from `>=0.39` to `>=0.87` to enforce post-patch for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool CVEs, 2026-03-31)
 
-[0.1.0]: https://github.com/MrBinnacle/skill-harness/compare/v0.1.0a0...v0.1.0
-[0.1.0a0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.1.0a0
+[0.1.0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.1.0
+
+Note: `[0.1.0a0]` above intentionally has no link — no `v0.1.0a0` tag exists on the
+remote (`git ls-remote --tags origin`, checked 2026-07-19; only `v0.1.0` is a real
+ref). The pre-alpha scaffold predates this project's tagging discipline.

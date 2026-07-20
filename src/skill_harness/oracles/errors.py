@@ -3,8 +3,8 @@
 All oracle exceptions derive from OracleError so callers can catch
 at any granularity they need.
 
-Design mirrors extractor/errors.py (Track B) per CLAUDE.md Track-C carryover
-pattern: "OracleError base + OracleAPIError(OracleError) wrapping SDK errors."
+Design mirrors extractor/errors.py (Track B); the Track-C carryover pattern:
+"OracleError base + OracleAPIError(OracleError) wrapping SDK errors."
 """
 
 from __future__ import annotations

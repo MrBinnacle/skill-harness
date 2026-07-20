@@ -40,6 +40,7 @@ def make_input(
     current_frozen_case_count: int = 0,
     any_stale_frozen_case: bool = False,
     run_state: str | None = None,
+    bh_fdr_pass: bool | None = None,
 ) -> ClauseStatusInput:
     return ClauseStatusInput(
         admissible_verdict_count=admissible_verdict_count,
@@ -50,6 +51,7 @@ def make_input(
         current_frozen_case_count=current_frozen_case_count,
         any_stale_frozen_case=any_stale_frozen_case,
         run_state=run_state,
+        bh_fdr_pass=bh_fdr_pass,
     )
 
 
@@ -353,6 +355,54 @@ class TestBudgetExhausted:
         status, _sub = derive_clause_status(inp)
         # Not budget_exhausted — N is sufficient. Falls to FAILED.
         assert status == ClauseStatus.FAILED
+
+
+# ---------------------------------------------------------------------------
+# F-3 (S55 hostile review): BH-FDR-failed must not fall through to the generic
+# Rule 8 UNDERPOWERED/inconclusive branch.
+# ---------------------------------------------------------------------------
+
+
+class TestFdrCorrectionFailed:
+    def test_bh_fdr_fail_at_high_n_and_p_gives_dedicated_subreason(self) -> None:
+        """N=40 (well-powered), p=0.97 (raw threshold crossed), bh_fdr_pass=False.
+
+        Pre-fix: the pass-gate `if p >= PASS_PROB_THRESHOLD and bh_fdr_pass is not
+        False` is False (since bh_fdr_pass IS False), so control fell straight
+        through to Rule 8's generic UNMEASURED(underpowered) -- indistinguishable
+        from "not enough samples yet" even though N and the raw posterior are both
+        fine. Must return the dedicated FDR_CORRECTION_FAILED sub-reason instead.
+        """
+        inp = make_input(
+            admissible_verdict_count=40,
+            total_verdict_count=40,
+            n_verdicts=40,
+            p_win_gt_threshold=0.97,
+            current_frozen_case_count=1,
+            bh_fdr_pass=False,
+        )
+        status, sub = derive_clause_status(inp)
+        assert status == ClauseStatus.UNMEASURED
+        assert sub == UnmeasuredSubReason.FDR_CORRECTION_FAILED, (
+            f"F-3: expected FDR_CORRECTION_FAILED, got {sub!r} "
+            "(must not be mislabeled as generic underpowered)"
+        )
+
+    def test_bh_fdr_pass_true_still_passes(self) -> None:
+        """bh_fdr_pass=True at threshold with a current frozen case -> still PASSED
+        (regression guard: the new branch must not shadow the existing PASS path).
+        """
+        inp = make_input(
+            admissible_verdict_count=40,
+            total_verdict_count=40,
+            n_verdicts=40,
+            p_win_gt_threshold=0.97,
+            current_frozen_case_count=1,
+            bh_fdr_pass=True,
+        )
+        status, sub = derive_clause_status(inp)
+        assert status == ClauseStatus.PASSED
+        assert sub is None
 
 
 # ---------------------------------------------------------------------------

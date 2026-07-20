@@ -61,9 +61,17 @@ repos:
   #
   # It REFUSES the commit and reports file:line + the suggested generic replacement in
   # the hook NAME. It does NOT auto-rewrite — a silent rewrite would hide the
-  # source<->publish divergence and paper over the root cause. Runs on *.md only, so
-  # this config can never trip its own patterns. The maintainer's name/email are
-  # intentionally NOT listed (a public block-list would itself de-anonymize).
+  # source<->publish divergence and paper over the root cause.
+  #
+  # SCOPE (H6): covers *.md, *.py, *.yml/*.yaml, *.sql, *.toml, *.cfg, *.json, *.txt —
+  # residue in a code comment or a workflow file is exactly as public as residue in a
+  # doc. This config (.pre-commit-config.yaml) is itself *.yaml and necessarily quotes
+  # every pattern verbatim in its own `name:`/`entry:` fields, so it is explicitly
+  # excluded rather than relying on scope to dodge self-matching (the prior *.md-only
+  # scope avoided this by construction; widening scope removed that side effect, so the
+  # exclude is now load-bearing — do not drop it without re-narrowing scope back down).
+  # The maintainer's name/email are intentionally NOT listed (a public block-list would
+  # itself de-anonymize).
   #   Full-tree sweep on demand:  pre-commit run --all-files
   - repo: local
     hooks:
@@ -71,32 +79,63 @@ repos:
         name: "residue 'Writ' (private project codename) -> 'a personal production project'"
         language: pygrep
         entry: '\bWrit\b'
-        files: '\.md$'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
       - id: residue-sec-id
         name: "residue 'SEC-<n>' (private security ticket id) -> drop, or 'a security-audit item'"
         language: pygrep
         entry: '\bSEC-[0-9]+'
-        files: '\.md$'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
       - id: residue-wi-id
         name: "residue 'WI-<n>' (private work-item id) -> drop, or 'a work item'"
         language: pygrep
         entry: '\bWI-[0-9]+'
-        files: '\.md$'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
       - id: residue-research-dir
         name: "residue 'skills_research' (private research dir) -> a generic descriptor"
         language: pygrep
         entry: 'skills_research'
-        files: '\.md$'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
       - id: residue-private-repo-dir
         name: "residue 'youwontdoit' (private repo dir) -> a generic descriptor"
         language: pygrep
         entry: 'youwontdoit'
-        files: '\.md$'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
       - id: residue-private-repo-link
         name: "residue 'MrBinnacle/writ' (PRIVATE repo, 404s for readers) -> drop the link"
         language: pygrep
         entry: 'MrBinnacle/writ'
-        files: '\.md$'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
+
+  # Structural bans — PRD.md #17/#17a (A23 Sec.3, A29). Mirrored in
+  # tests/test_structural_bans.py (pytest-visible, runs in the ordinary
+  # `not live` loop) and re-run standalone in CI's `structural-bans` job
+  # (.github/workflows/ci.yml) so a fresh clone without `pre-commit install`
+  # is still covered — same belt-and-suspenders shape as the
+  # de-personalization gate above.
+  - repo: local
+    hooks:
+      - id: ban-raw-sqlite-connect
+        name: "raw sqlite3 connect() call (bypasses PRAGMA/FK discipline, A23 Sec.3) -> use storage.migrations.open_db()/open_evidence()/open_runtime()"
+        language: pygrep
+        entry: 'sqlite3\.connect\('
+        files: '^(src|tests)/.*\.py$'
+        # migrations.py defines open_db() and is the one legitimate caller;
+        # test_structural_bans.py is the ban's own mirror test — its docstring
+        # and assert message must name the banned call in prose (the pytest
+        # mirror likewise self-excludes via `path == _THIS_FILE`).
+        exclude: '^(src/skill_harness/storage/migrations|tests/test_structural_bans)\.py$'
+      - id: ban-raw-oracle-verdicts
+        name: "raw 'FROM oracle_verdicts' outside the documented allowlist (PRD.md #17, A29) -> route through the admissible_verdicts VIEW, or add to the allowlist here + tests/test_structural_bans.py + PRD.md #17 with justification"
+        language: pygrep
+        entry: '(?i)from\s+oracle_verdicts'
+        files: '^src/.*\.py$'
+        exclude: '^src/skill_harness/(audit/__init__|aggregation/engine|ablation/runner|cli/main|storage/repositories/evidence/frozen_cases)\.py$'
 
 ci:
   autoupdate_schedule: monthly

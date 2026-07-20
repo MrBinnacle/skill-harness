@@ -6,7 +6,7 @@ contains patterns commonly used for prompt-injection attacks.
 
 Matched verdicts are stored as inadmissible with reason ``'suspected_injection'``.
 They are NOT silently dropped — every evidence row is preserved for audit per
-the append-only evidence invariant (CLAUDE.md Evidence model).
+the append-only evidence invariant (see docs/INVARIANTS.md #3).
 
 The guard is cost-zero: no extra Claude calls are made.  It fires before the
 judge is invoked so no API credits are spent on suspected injections.

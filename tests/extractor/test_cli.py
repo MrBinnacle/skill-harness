@@ -167,28 +167,183 @@ def test_skill_init_missing_file_exits_nonzero(tmp_path: Path) -> None:
     assert result.exit_code != 0
 
 
+@patch("skill_harness.cli.main.StorageContext")
+@patch("skill_harness.cli.main.extract_skill")
+def test_skill_init_comparator_unspecified_exits_cleanly(
+    mock_extract: Any, mock_ctx_cls: Any, tmp_path: Path
+) -> None:
+    """C4b RED: persisting a comparator_unspecified clause via 'skill init --execute'
+    raises a raw ValueError from extract_skill (extractor/pipeline.py
+    _to_db_comparator's documented abort-the-whole-persist doctrine). The CLI's
+    `except ExtractionError` does not catch ValueError, so today it propagates as an
+    uncaught traceback instead of a clean click.ClickException. Data correctness is
+    unaffected (the abort-on-persist behavior is correct and untouched) -- this is
+    CLI UX only.
+    """
+    mock_extract.side_effect = ValueError(
+        "comparator_unspecified cannot be stored: the clause direction is undefined. "
+        "Mark the clause as semantic_vacuous_pending_review instead."
+    )
+    mock_ctx = mock_ctx_cls.return_value.__enter__.return_value
+    mock_ctx.evidence_conn = object()
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["skill", "init", "--execute", str(_skill_file(tmp_path))])
+
+    assert result.exit_code != 0
+    assert not isinstance(result.exception, ValueError), (
+        "C4b: a raw ValueError must be caught and converted to click.ClickException "
+        f"(clean CLI error), not propagate uncaught. Got: {result.exception!r}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # skill init — existing stubs not broken
 # ---------------------------------------------------------------------------
 
 
-def test_skill_clauses_placeholder_message() -> None:
-    """MN3: skill clauses emits a v0.2 placeholder message with exit 0 (not a crash)."""
+def _seed_skill_with_clause(evidence_db: Path, skill_id: str, clause_text: str) -> None:
+    from skill_harness.storage.migrations import open_evidence
+    from skill_harness.storage.models import ClauseWrite, SkillWrite
+    from skill_harness.storage.repositories.evidence.clauses import insert_clause
+    from skill_harness.storage.repositories.evidence.skills import insert_skill
+    from skill_harness.storage.transaction import writer_transaction
+
+    ev = open_evidence(evidence_db)
+    try:
+        with writer_transaction(ev):
+            insert_skill(
+                ev,
+                SkillWrite(
+                    skill_id=skill_id,
+                    name="clauses-test-skill",
+                    source_path="/tmp/SKILL.md",
+                    source_sha256="c" * 64,
+                    imported_at="2026-06-06T00:00:00.000000+00:00",
+                ),
+            )
+            insert_clause(
+                ev,
+                ClauseWrite(
+                    clause_id="clause-cli-001",
+                    skill_id=skill_id,
+                    clause_index=0,
+                    rendering_index=0,
+                    clause_text=clause_text,
+                    axis="specificity",
+                    comparator="increase",
+                    oracle_tier=1,
+                    vacuity_flag="none",
+                    falsifying_case_schema_sha256="abc123",
+                    created_at="2026-06-06T00:00:00.000000+00:00",
+                ),
+            )
+    finally:
+        ev.close()
+
+
+def test_skill_clauses_not_imported_message(tmp_path: Path) -> None:
+    """D5 (S49 hostile review): skill clauses is now a real read-only query, not
+    the v0.2 stub. With no evidence.db, it must print a clean 'not imported'
+    message and exit 0 (not a crash), matching the 'skill init'/'run ablation
+    --dry-run' zero-state convention.
+    """
     runner = CliRunner()
-    result = runner.invoke(cli, ["skill", "clauses", "some-skill-id"])
+    result = runner.invoke(
+        cli,
+        [
+            "skill",
+            "clauses",
+            "some-skill-id",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        ],
+    )
     assert result.exit_code == 0
-    assert "not yet implemented" in result.output.lower()
-    assert "v0.2" in result.output
+    assert "not imported" in result.output.lower()
+    assert "skill init" in result.output.lower()
 
 
-def test_skill_clauses_legend_in_output() -> None:
+def test_skill_clauses_malformed_db_gives_clean_error(tmp_path: Path) -> None:
+    """F-5 (S55 hostile review): evidence.db PRESENT but malformed (missing the
+    'clauses' table) used to escape the previously-narrow ``except BootstrapError``
+    as a raw sqlite3.OperationalError traceback -- BootstrapError only covers an
+    ABSENT file. A present-but-unreadable DB must get the same clean CLI hint as
+    the absent-DB / not-imported case, not crash.
+    """
+    # A23 Sec.3 / structural ban: use the sanctioned open_db() helper, not a raw
+    # sqlite3 connect call (open_db() applies no migrations itself, so it's safe
+    # here to get an unmigrated file -- same pattern as test_smoke.py's
+    # test_migration_apply_is_atomic).
+    from skill_harness.storage.migrations import open_db
+
+    evidence_db = tmp_path / "evidence.db"
+    # A real sqlite3 file that exists but was never migrated -- no 'clauses' table.
+    conn = open_db(evidence_db)
+    conn.execute("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)")
+    conn.close()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["skill", "clauses", "some-skill-id", "--evidence-db", str(evidence_db)],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert "not imported" in result.output.lower() or "malformed" in result.output.lower()
+
+
+def test_skill_clauses_no_clauses_for_skill_message(tmp_path: Path) -> None:
+    """DB exists but has no clauses for the requested skill_id -> clean message,
+    not an empty/crashed table."""
+    evidence_db = tmp_path / "evidence.db"
+    _seed_skill_with_clause(evidence_db, "other-skill-id", "Some clause.")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["skill", "clauses", "some-skill-id", "--evidence-db", str(evidence_db)],
+    )
+    assert result.exit_code == 0
+    assert "no clauses found" in result.output.lower()
+
+
+def test_skill_clauses_prints_real_clause_table(tmp_path: Path) -> None:
+    """D5: with a real evidence.db, skill clauses must print the actual clause
+    inventory (verbatim clause text), not a placeholder."""
+    evidence_db = tmp_path / "evidence.db"
+    skill_id = "skill-with-clauses"
+    real_text = "Always cite the source document when making a factual claim."
+    _seed_skill_with_clause(evidence_db, skill_id, real_text)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["skill", "clauses", skill_id, "--evidence-db", str(evidence_db)],
+        env={"COLUMNS": "200"},  # wide terminal so Rich doesn't wrap the clause text
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert real_text[:30] in result.output
+    assert "specificity" in result.output
+    assert "not yet implemented" not in result.output.lower()
+
+
+def test_skill_clauses_legend_in_output(tmp_path: Path) -> None:
     """Item 5: skill clauses output must include a legend explaining the three load-bearing columns.
 
     axis, oracle_tier, and vacuity_flag must be explained in the footer so a
     first-time reader is not left with opaque column names.
     """
+    evidence_db = tmp_path / "evidence.db"
+    skill_id = "skill-legend-test"
+    _seed_skill_with_clause(evidence_db, skill_id, "Be concise.")
+
     runner = CliRunner()
-    result = runner.invoke(cli, ["skill", "clauses", "some-skill-id"])
+    result = runner.invoke(
+        cli,
+        ["skill", "clauses", skill_id, "--evidence-db", str(evidence_db)],
+    )
     assert result.exit_code == 0
     output = result.output.lower()
     # Each of the three load-bearing columns must be explained in the legend footer
