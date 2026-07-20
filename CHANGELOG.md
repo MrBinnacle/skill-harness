@@ -34,6 +34,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repaired all references left dangling by the 2026-07-08 privacy scrub
   (COUNCIL_FINDINGS.md, root CLAUDE.md) across CONTRIBUTING, CODEOWNERS, PR/issue
   templates, CHANGELOG, PRD, PLAN, release notes, and the case study.
+- **Hostile-review hardening pass** on the unreleased v0.2 subject, aggregation,
+  and Tier-1 oracle layers: 39 confirmed findings fixed across the
+  ablation / aggregation / calibration / extractor / CLI / storage paths —
+  direction-aware ablation wins, BH-FDR gate consumption, scorer-crash
+  inadmissibility, resume cost attribution, sentinel-verdict exclusion from
+  statistics, and single-source pricing/tokenizer. The four remaining
+  test-quality findings are tracked, not silently dropped.
+- Citation oracle no longer arm-differentially deflates hyperlink references:
+  lowercase prose is no longer miscounted as a flag emission (flag matching is
+  now case-sensitive), and an external `http(s)` markdown-link target is
+  preserved as a citation rather than stripped away with its link text.
 
 ### Changed
 - README rewritten for its actual audience (Claude Code users with a skills folder):
@@ -43,6 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/findings/v0.2-reaim-gate.md` amended after the 2026-07-09 competitive sweep:
   adds "Harness pin" and "Differentiation vs field" pre-registration fields and a
   correction block recording that the original lock predated the sweep.
+
+### Security
+- Untrusted skill names and model output are escaped with `rich.markup.escape`
+  and asserted NUL/control-free before terminal rendering, so bracketed text
+  cannot inject Rich markup into CLI output.
+- CI workflow actions are pinned by commit SHA, and structural enforcement bans
+  (e.g. raw `sqlite3.connect`) are wired as tests rather than left as convention.
 
 ## [0.1.0] — Released 2026-06-08
 
