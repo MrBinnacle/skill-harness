@@ -361,6 +361,7 @@ def test_build_paired_tasks_refuses_nul_byte_in_oracle_target(tmp_path) -> None:
         )
 
 
+@pytest.mark.skipif(not INSPECT_INSTALLED, reason="requires the optional inspect extra")
 def test_build_paired_tasks_allows_empty_oracle_target_for_command_succeeds(tmp_path) -> None:  # type: ignore[no-untyped-def]
     # command_succeeds never reads oracle_target in the scorer (only exit
     # code matters) — the validation must be scoped to file_contains, not
