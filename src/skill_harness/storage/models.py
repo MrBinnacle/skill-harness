@@ -630,3 +630,80 @@ class CostLedgerWrite(BaseModel):
         if isinstance(v, str):
             return _check_text(v, info.field_name or "field")
         return v
+
+
+# ---------------------------------------------------------------------------
+# Screen store (migration 0501) — Stage-0 Null-only screens, firewalled from
+# the paired evidence model (pre-reg: "screen data never enters verdicts").
+# Keyed by skill_name; no FK into skills/runs. p0 is derived from admissible
+# trials, never stored.
+# ---------------------------------------------------------------------------
+
+
+class ScreenRunWrite(BaseModel):
+    """Insert shape for evidence.screen_runs (migration 0501)."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    screen_run_id: str
+    skill_name: str
+    subject_model: str
+    harness_pin_fingerprint: str | None
+    source_eval_task_id: str
+    source_eval_sha256: str
+    admissibility_state: str
+    inadmissibility_reason: str | None
+    created_at: str
+    ingested_at: str
+
+    @field_validator(
+        "screen_run_id",
+        "skill_name",
+        "subject_model",
+        "source_eval_task_id",
+        "source_eval_sha256",
+        "admissibility_state",
+        "created_at",
+        "ingested_at",
+    )
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("harness_pin_fingerprint", "inadmissibility_reason", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object, info: ValidationInfo) -> object:
+        if isinstance(v, str):
+            return _check_text(v, info.field_name or "field")
+        return v
+
+
+class ScreenTrialWrite(BaseModel):
+    """Insert shape for evidence.screen_trials (migration 0501)."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    screen_trial_id: str
+    screen_run_id: str
+    epoch: int
+    passed: int  # 1 = null arm passed the task, 0 = failed
+    scorer_name: str
+    scorer_explanation: str | None
+    output_sha256: str
+    sampled_at: str
+
+    @field_validator(
+        "screen_trial_id", "screen_run_id", "scorer_name", "output_sha256", "sampled_at"
+    )
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("scorer_explanation", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object, info: ValidationInfo) -> object:
+        if isinstance(v, str):
+            return _check_text(v, info.field_name or "field")
+        return v

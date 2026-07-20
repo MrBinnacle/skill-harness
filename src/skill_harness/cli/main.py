@@ -2348,5 +2348,152 @@ def _print_calibrate_result(
         _console.print(f"  calibration_event_id: {cal_id}")
 
 
+@cli.group()
+def screen() -> None:
+    """Stage-0 Null-only screen store (migration 0501) — keep/cut verdicts."""
+
+
+@screen.command("verdict")
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB (read-only; no writes, no API calls).",
+)
+def screen_verdict_cmd(evidence_db: Path) -> None:
+    """Derive p0 per skill from the screen store and print the keep/cut verdict.
+
+    Read-only. p0 is DERIVED from admissible screen trials (never stored); each
+    skill's Null-arm pass rate maps to KEEP / CUT / CAN'T-TELL-YET via the locked
+    transformative bar. To date every screened skill ceilings (p0=1) → CUT.
+    """
+    from skill_harness.aggregation.verdict import screen_verdict
+    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.migrations import open_evidence_readonly
+    from skill_harness.storage.repositories.evidence.screens import derive_p0_by_skill
+
+    if not evidence_db.exists():
+        _console.print(
+            "\n[yellow]no screen store — run 'screen backfill --execute' or a screen run first[/]"
+            f"\n[dim]  (evidence.db not found at {evidence_db})[/]"
+        )
+        return
+
+    db_conn: sqlite3.Connection | None = None
+    try:
+        db_conn = open_evidence_readonly(evidence_db)
+        rows = derive_p0_by_skill(db_conn)
+    except BootstrapError:
+        _console.print(f"\n[yellow]evidence.db not found at {evidence_db}.[/]")
+        return
+    finally:
+        if db_conn is not None:
+            db_conn.close()
+
+    if not rows:
+        _console.print(
+            "\n[yellow]No admissible screens in the store.[/]"
+            "\n[dim]  Backfill batch-1 with 'screen backfill --execute', or run a screen.[/]"
+        )
+        return
+
+    table = Table(title="Screen verdicts (p0 derived from admissible trials)", show_lines=True)
+    table.add_column("skill", style="cyan", min_width=24)
+    table.add_column("p0", width=6, justify="right")
+    table.add_column("epochs", width=8, justify="right")
+    table.add_column("verdict", min_width=14)
+    table.add_column("rationale", min_width=40, max_width=70)
+
+    for row in rows:
+        v = screen_verdict(row.p0)
+        sub = f"({v.cut_sub_reason.value})" if v.cut_sub_reason else ""
+        verdict_color = {"KEEP": "green", "CUT": "red", "CANT_TELL_YET": "yellow"}[v.verdict.value]
+        table.add_row(
+            _sanitize_clause_text(row.skill_name, max_len=None),
+            f"{row.p0:.2f}",
+            f"{row.n_pass}/{row.n_trials}",
+            f"[{verdict_color}]{v.verdict.value}{sub}[/]",
+            _sanitize_clause_text(v.rationale, max_len=None),
+        )
+    _console.print(table)
+    _console.print(
+        "\n[dim]p0 is derived from ADMISSIBLE screen trials only; inadmissible (voided)"
+        " screens are kept in the store but excluded. A verdict is a hardness screen,"
+        " not a paired measurement.[/]"
+    )
+
+
+@screen.command("backfill")
+@click.option(
+    "--screens-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path(".private/microrun"),
+    show_default=True,
+    help="Root of the local Inspect .eval log tree (gitignored microrun data).",
+)
+@click.option(
+    "--execute",
+    is_flag=True,
+    default=False,
+    help="Persist the batch-1 manifest to the screen store (default: dry-run, no writes).",
+)
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB (only used with --execute).",
+)
+@click.option(
+    "--runtime-db",
+    type=click.Path(path_type=Path),
+    default=Path("./runtime.db"),
+    show_default=True,
+    help="Path to runtime DB (only used with --execute).",
+)
+def screen_backfill_cmd(
+    screens_root: Path, execute: bool, evidence_db: Path, runtime_db: Path
+) -> None:
+    """Backfill the curated batch-1 screen manifest into the screen store.
+
+    Ingests the batch-1 Stage-0 ``.eval`` logs (parsing needs the ``[inspect]``
+    extra). Voided logs are stored INADMISSIBLE per the manifest's cited rulings;
+    p0 excludes them. Without --execute, prints the manifest (the curated
+    admissibility decisions) without touching any DB.
+    """
+    from skill_harness.subject.screen_backfill import BATCH1_MANIFEST, apply_manifest
+
+    if not execute:
+        _console.print("\n[bold yellow]DRY-RUN[/] — batch-1 screen manifest (no writes):")
+        for entry in BATCH1_MANIFEST:
+            mark = (
+                "[green]admissible[/]"
+                if entry.admissibility_state == "admissible"
+                else (f"[red]inadmissible[/] ({entry.inadmissibility_reason})")
+            )
+            _console.print(f"  {entry.expected_skill}: {mark}")
+            _console.print(f"    [dim]{entry.rel_path}[/]")
+        _console.print("\n[yellow]Dry-run: no data written. Use --execute to persist.[/]")
+        return
+
+    with StorageContext(evidence_db, runtime_db) as ctx:
+        report = apply_manifest(screens_root, ctx.evidence_conn)
+
+    _console.print(f"\n[green]Backfilled[/] {len(report.ingested)} screens into {evidence_db}")
+    for result in report.ingested:
+        state = result.admissibility_state
+        color = "green" if state == "admissible" else "red"
+        _console.print(
+            f"  {result.skill_name}: [{color}]{state}[/] ({result.n_pass}/{result.n_trials} passed)"
+        )
+    if report.mismatches:
+        _console.print("\n[bold red]AUDIT MISMATCHES[/] (manifest disagrees with stored evidence):")
+        for m in report.mismatches:
+            _console.print(f"  [red]{_sanitize_clause_text(m, max_len=None)}[/]")
+        raise click.ClickException("backfill audit failed — see mismatches above")
+    _console.print("\n[dim]Run 'screen verdict' to see the derived keep/cut verdicts.[/]")
+
+
 if __name__ == "__main__":  # pragma: no cover
     cli()
