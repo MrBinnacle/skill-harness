@@ -60,9 +60,7 @@ def test_judge_uses_max_tokens_fits_schema_worst_case(
     judge_client.evaluate_pair("output A", "output B", "clarity", "rate clarity")
     kwargs = _get_create_kwargs(mock_anthropic_client)
 
-    rationale_max_chars = _TOOL_SCHEMA["input_schema"]["properties"]["rationale_brief"][
-        "maxLength"
-    ]
+    rationale_max_chars = _TOOL_SCHEMA["input_schema"]["properties"]["rationale_brief"]["maxLength"]
     # Conservative worst-case bound: 1 token per char (denser than any realistic
     # tokenizer output) plus a generous fixed JSON envelope allowance.
     worst_case_floor = rationale_max_chars + 40

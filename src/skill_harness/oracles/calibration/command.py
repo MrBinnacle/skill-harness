@@ -478,9 +478,7 @@ def calibrate(
 
     typed_verdicts = [v for v in all_verdicts if isinstance(v, _JudgeVerdict)]
     n_length_regression_excluded = sum(
-        1
-        for v in typed_verdicts
-        if v.inadmissibility_reason in SENTINEL_INADMISSIBILITY_REASONS
+        1 for v in typed_verdicts if v.inadmissibility_reason in SENTINEL_INADMISSIBILITY_REASONS
     )
     beta_1: float | None = None
     if len(typed_verdicts) == len(pairs):

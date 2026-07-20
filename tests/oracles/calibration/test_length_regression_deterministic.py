@@ -203,11 +203,9 @@ class TestFitLengthRegressionSentinelExclusion:
         length_a: int,
         length_b: int,
     ) -> JudgeVerdict:
-        from typing import Literal, cast
-
         return JudgeVerdict(
-            choice=cast(Literal["A", "B", "tie"], "tie"),
-            position_swap_agreement=cast(Literal[0, 1], 0),
+            choice="tie",
+            position_swap_agreement=0,
             admissibility_state="inadmissible",
             inadmissibility_reason=reason,
             raw_observation=0.0,
@@ -247,9 +245,7 @@ class TestFitLengthRegressionSentinelExclusion:
             self._sentinel_verdict("judge_response_malformed", length_a=4000, length_b=2),
         ]
 
-        beta_augmented = fit_length_regression(
-            pairs + sentinel_pairs, verdicts + sentinel_verdicts
-        )
+        beta_augmented = fit_length_regression(pairs + sentinel_pairs, verdicts + sentinel_verdicts)
 
         assert beta_augmented == beta_baseline, (
             f"sentinel rows moved beta_1: baseline={beta_baseline}, augmented={beta_augmented}"

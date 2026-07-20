@@ -1525,9 +1525,7 @@ class TestBhFdrFallbackConsumption:
     uncorrected p_win_gt_threshold>=0.95 crossing.
     """
 
-    def test_bh_fdr_rejected_clause_not_passed_despite_raw_threshold(
-        self, tmp_path: Path
-    ) -> None:
+    def test_bh_fdr_rejected_clause_not_passed_despite_raw_threshold(self, tmp_path: Path) -> None:
         """K=30 bimodal clauses (24 pure-loss + 5 pure-win) force EB-MoM
         alpha_le_zero convergence failure -> bh_fdr_fallback (a pure {0,1} split
         always has sample variance == mean*(1-mean), so alpha_hat computes to
@@ -1560,12 +1558,8 @@ class TestBhFdrFallbackConsumption:
                     vid = counter["n"]
                     counter["n"] += 1
                     sa, sb = f"sa-{vid}", f"sb-{vid}"
-                    insert_sample(
-                        ev, sa, clause_id=clause_id, condition="full", sample_index=i
-                    )
-                    insert_sample(
-                        ev, sb, clause_id=clause_id, condition="ablated", sample_index=i
-                    )
+                    insert_sample(ev, sa, clause_id=clause_id, condition="full", sample_index=i)
+                    insert_sample(ev, sb, clause_id=clause_id, condition="ablated", sample_index=i)
                     obs = 1.0 if i < w else 0.0
                     insert_verdict(
                         ev,
@@ -1668,8 +1662,7 @@ class TestPriorOnlyMarker:
             clause = report.clauses[0]
             assert clause.status == "PASSED"
             assert clause.is_prior_only is False, (
-                "B5: a clause with real admissible observations must not be "
-                "flagged is_prior_only."
+                "B5: a clause with real admissible observations must not be flagged is_prior_only."
             )
         finally:
             ev.close()

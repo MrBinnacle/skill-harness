@@ -402,7 +402,7 @@ def test_file_contains_scorer_missing_file_scores_incorrect(
     monkeypatch.setattr(inspect_util, "sandbox", lambda: MissingFileSandbox())
 
     score_fn = _build_scorer("file_contains", "out.txt", "ok", "/root")
-    result = asyncio.run(score_fn(None, None))  # type: ignore[arg-type]
+    result = asyncio.run(score_fn(None, None))
     assert result.value == INCORRECT
 
 
@@ -430,7 +430,7 @@ def test_file_contains_scorer_propagates_infra_failure_instead_of_scoring(
 
     score_fn = _build_scorer("file_contains", "out.txt", "ok", "/root")
     with pytest.raises(TimeoutError, match="docker daemon unresponsive"):
-        asyncio.run(score_fn(None, None))  # type: ignore[arg-type]
+        asyncio.run(score_fn(None, None))
 
 
 # ---------------------------------------------------------------------------

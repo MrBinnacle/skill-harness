@@ -444,9 +444,7 @@ class TestFindIncompleteRunsColumnAuthoritative:
     lets an incomplete run silently evade the incomplete_runs precondition.
     """
 
-    def test_matches_on_column_when_config_json_skill_id_differs(
-        self, tmp_path: Path
-    ) -> None:
+    def test_matches_on_column_when_config_json_skill_id_differs(self, tmp_path: Path) -> None:
         """runs.skill_id='sk1' (column) but config_json says 'sk-STALE' (drift) —
         the column must win; the run must still be found as incomplete for sk1.
         """
@@ -474,9 +472,7 @@ class TestFindIncompleteRunsColumnAuthoritative:
             ev.close()
             rt.close()
 
-    def test_matches_on_column_when_config_json_missing_skill_id(
-        self, tmp_path: Path
-    ) -> None:
+    def test_matches_on_column_when_config_json_missing_skill_id(self, tmp_path: Path) -> None:
         """config_json has no 'skill_id' key at all — must not silently drop the run."""
         ev = open_evidence(tmp_path / "evidence.db")
         rt = open_runtime(tmp_path / "runtime.db")
