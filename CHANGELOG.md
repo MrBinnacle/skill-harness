@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0a0] — 2026-07-20
+
 ### Added
 - v0.2 subject layer (`skill_harness.subject`, optional `[inspect]` extra):
   `HarnessPin.capture()` — the subject-harness configuration captured from the live
@@ -141,6 +143,8 @@ Initial scaffold. Pre-alpha — schema realized and trigger-enforced, CLI surfac
 ### Security
 - `anthropic` pin tightened from `>=0.39` to `>=0.87` to enforce post-patch for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool CVEs, 2026-03-31)
 
+[Unreleased]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.0a0...HEAD
+[0.2.0a0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.2.0a0
 [0.1.0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.1.0
 
 Note: `[0.1.0a0]` above intentionally has no link — no `v0.1.0a0` tag exists on the
