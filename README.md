@@ -11,6 +11,9 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
+*An evaluation harness for reusable AI agent skills — a **skill disposition engine**. First-class
+Claude Code support, built to extend to other agent ecosystems.*
+
 **You installed a skill that's supposed to make your AI assistant better. Is it actually doing
 anything?**
 
