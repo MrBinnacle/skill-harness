@@ -10,7 +10,7 @@ For sensitive disclosures that should not transit GitHub, contact the maintainer
 
 ## Supported versions
 
-Skill Harness is currently in pre-alpha (`0.1.0a0`). Until a stable release is tagged, only the `main` branch receives security fixes. After `1.0.0`:
+Skill Harness is at `0.2.0` (pre-1.0). Until a `1.0.0` release is tagged, only the `main` branch receives security fixes. After `1.0.0`:
 
 | Version | Supported |
 |---------|-----------|

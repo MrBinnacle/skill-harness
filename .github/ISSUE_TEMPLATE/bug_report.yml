@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to file a bug report. Skill Harness is pre-alpha; many things may be incomplete or rough. Please confirm this is a defect (something behaves contrary to the PRD or its tests) and not a missing feature before filing.
+        Thanks for taking the time to file a bug report. Skill Harness is pre-1.0 and moving fast, so some parts are still rough. Please confirm this is a defect (something behaves contrary to the PRD or its tests) and not a missing feature before filing.
 
   - type: textarea
     id: summary
@@ -50,7 +50,7 @@ body:
     id: version
     attributes:
       label: skill-harness version
-      placeholder: "0.1.0a0 (or commit SHA)"
+      placeholder: "0.2.0 (or commit SHA)"
     validations:
       required: true
 

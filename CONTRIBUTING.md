@@ -1,6 +1,6 @@
 # Contributing to Skill Harness
 
-Thanks for your interest. This project is pre-alpha and changing fast, but contributions that respect the architectural discipline are welcome.
+Thanks for your interest. This project is pre-1.0 and changing fast, but contributions that respect the architectural discipline are welcome.
 
 ## Before you start
 
@@ -67,7 +67,7 @@ Tier-2 judges output `{A, B, tie}` for one named axis. Scalar grading and Likert
 - **Description**: state what changes and why. Link the council finding ID or PRD section if applicable.
 - **Tests**: every PR runs `ruff check`, `mypy --strict`, `pytest -q` in CI. All three must pass.
 - **Scope**: small PRs preferred. If you're touching more than 3 files, consider whether the change should be split.
-- **Breaking changes**: tag with `BREAKING CHANGE:` in the PR body. Acceptable in pre-alpha; documented in `CHANGELOG.md`.
+- **Breaking changes**: tag with `BREAKING CHANGE:` in the PR body. Acceptable while pre-1.0; documented in `CHANGELOG.md`.
 
 ## Issue conventions
 

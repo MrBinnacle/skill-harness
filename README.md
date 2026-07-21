@@ -22,7 +22,7 @@ back labeled `UNMEASURED` instead of a made-up score.
 
 Most benchmarks hand you a number no matter what. This tool refuses. That refusal is the product.
 
-> **Status: v0.2 pre-alpha — the keep/cut verdict layer is live; zero measured KEEPs to date.**
+> **Status: v0.2.0 — the keep/cut verdict layer is live; zero measured KEEPs to date.**
 > The tool now answers the slot question with one of three verdicts: **KEEP** (measurably earns
 > its slot), **CUT** — either *subsumed* (the model already does the task without the skill) or
 > *no-lift* (measured on a task the model needed help with, and it didn't deliver) — or
@@ -132,7 +132,7 @@ position-swapped, length-controlled, injection-defended, with human agreement me
 single judged verdict is admitted
 ([`docs/concepts/why-unmeasured.md`](docs/concepts/why-unmeasured.md)).
 
-The v0.2 re-aim ([gate doc](docs/findings/v0.2-reaim-gate.md)) has now largely landed: the
+The v0.2 re-aim ([gate doc](docs/findings/v0.2-reaim-gate.md)) landed in v0.2.0: the
 whole-skill Stage-0 screen (does the model pass *without* the skill?) is the primary, dominant
 contrast, run against an agentic multi-turn subject with deterministic outcome oracles
 (`file_contains`, `command_succeeds`), and the harness configuration is captured as an
@@ -150,7 +150,7 @@ screen returns a sub-1 pass rate, and none has yet.
 | Unit | claim (v0.1) → whole skill (v0.2) | whole skill, paired with/without + component ablations | prompt/config matrix | task/eval |
 | When evidence is weak | **refuses**: `UNMEASURED` verdict; inadmissible rows are stored but never aggregate | flags: oracle tiers, critical-severity veto, audit warnings | — | — |
 | LLM judges | admissible only from a calibrated (judge, axis) pair | user-supplied judge command, uncalibrated by design | judge/rubric assertions | model-graded scorers |
-| Maturity | pre-alpha (v0.2; keep/cut layer live, 0 measured KEEPs) | active v0.5.x | mature, 23k+ stars | mature, institutional |
+| Maturity | v0.2.0, 0.x (keep/cut layer live, 0 measured KEEPs) | active v0.5.x | mature, 23k+ stars | mature, institutional |
 
 Honest guidance: if you want the most *featureful* skill benchmarking today, use adewale's
 skill-eval-harness. Use this harness when what you care about is whether the number deserves to

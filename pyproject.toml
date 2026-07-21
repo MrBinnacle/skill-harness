@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "skill-harness"
 version = "0.2.0"
-description = "Clause-Ablation Differential Testing for LLM Skills"
+description = "Measures whether an AI agent skill earns its slot — same task with and without it, with an honest UNMEASURED verdict instead of an invented score"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "MrBinnacle" }]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3.12",
