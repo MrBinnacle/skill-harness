@@ -5,8 +5,19 @@ build-backend = "hatchling.build"
 [project]
 name = "skill-harness"
 version = "0.2.0"
-description = "Measures whether an AI agent skill earns its slot — same task with and without it, with an honest UNMEASURED verdict instead of an invented score"
+description = "Evaluation harness for reusable AI agent skills — does a skill earn its slot? Returns KEEP / CUT / UNMEASURED, never a manufactured score. First-class Claude Code support."
 readme = "README.md"
+keywords = [
+  "claude-code",
+  "agent-skills",
+  "skill-evaluation",
+  "llm-evaluation",
+  "eval-harness",
+  "ai-agents",
+  "prompt-evaluation",
+  "evals",
+  "ab-testing",
+]
 requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "MrBinnacle" }]
@@ -68,6 +79,11 @@ dev = [
 
 [project.scripts]
 skill-harness = "skill_harness.cli.main:cli"
+
+[project.urls]
+Homepage = "https://github.com/MrBinnacle/skill-harness"
+Repository = "https://github.com/MrBinnacle/skill-harness"
+Issues = "https://github.com/MrBinnacle/skill-harness/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/skill_harness"]
