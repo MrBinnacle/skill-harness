@@ -102,10 +102,14 @@ class TestEvidenceRepoSurface:
         )
 
     def test_expected_module_count(self) -> None:
-        """Exactly 10 table modules (plus optionally __init__.py) must exist."""
+        """Exactly 11 table modules (plus optionally __init__.py) must exist.
+
+        10 original A24 table modules + screens.py (migration 0501: the Stage-0
+        Null-only screen store, screen_runs/screen_trials).
+        """
         assert EVIDENCE_REPO_DIR.exists(), f"directory missing: {EVIDENCE_REPO_DIR}"
         module_files = [f for f in EVIDENCE_REPO_DIR.glob("*.py") if f.name != "__init__.py"]
-        assert len(module_files) == 10, (
-            f"Expected 10 evidence table modules, found {len(module_files)}: "
+        assert len(module_files) == 11, (
+            f"Expected 11 evidence table modules, found {len(module_files)}: "
             + str([f.name for f in module_files])
         )

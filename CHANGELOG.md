@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Operator-facing keep/cut verdict layer** (`skill_harness.aggregation.verdict`):
+  maps a measured outcome to the decision an operator actually has — KEEP / CUT /
+  CAN'T-TELL-YET — under the pre-registration's locked transformative bar
+  (Null ≤ ~0.3 & Full ≥ ~0.8). `screen_verdict(p0)` (Stage-0 screen path, the
+  dominant path) and `paired_verdict(ClauseStatus)` (paired path, prospective);
+  `CUT(harmful)` defined but deferred (needs a signed-delta CI).
+- **Stage-0 Null-only screen store** (migration `0501`, `screen_runs` /
+  `screen_trials`): an additive, append-only store firewalled from the paired
+  evidence model (pre-reg: "screen data never enters verdicts"), keyed by skill
+  name. `p0` (the bare-arm pass rate) is DERIVED from admissible trials, never
+  stored. Voided screens are ingested but marked inadmissible (with a cited
+  reason) and excluded from `p0`. `skill_harness.subject.screen_ingest` writes it;
+  `screen-harness screen verdict` / `screen backfill` surface it.
+- **Batch-1 screen backfill** (`skill_harness.subject.screen_backfill`): a curated,
+  cited manifest that makes the batch-1 Stage-0 screens store-auditable — deriving
+  each keep/cut verdict from append-only evidence instead of prose. All backfilled
+  screens ceiling (p0=1) → CUT(subsumed); `llm-judge-calibration` is deferred
+  (its canonical 3/3 needs per-trial cross-log assembly over a credit-exhaustion
+  incident).
+
 ## [0.2.0a0] — 2026-07-20
 
 ### Added
