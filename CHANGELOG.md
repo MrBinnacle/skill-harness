@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-07-21
+
 ### Added
 - **Operator-facing keep/cut verdict layer** (`skill_harness.aggregation.verdict`):
   maps a measured outcome to the decision an operator actually has — KEEP / CUT /
@@ -179,7 +181,8 @@ Initial scaffold. Pre-alpha — schema realized and trigger-enforced, CLI surfac
 ### Security
 - `anthropic` pin tightened from `>=0.39` to `>=0.87` to enforce post-patch for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool CVEs, 2026-03-31)
 
-[Unreleased]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.0a0...HEAD
+[Unreleased]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.0a0...v0.2.0
 [0.2.0a0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.2.0a0
 [0.1.0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.1.0
 
