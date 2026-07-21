@@ -2,6 +2,9 @@
 
 Where to go depending on what you want:
 
+**"I just have questions."** → [FAQ.md](FAQ.md) — the common ones: UNMEASURED, zero
+measured KEEPs, KEEP vs CUT, why with-vs-without, running it in CI.
+
 **"Convince me this matters."** Read the case studies:
 
 - [The framework refusing to validate its own author's skill](case-studies/ai-slop-sentinel-under-ablation.md)
@@ -24,7 +27,7 @@ Where to go depending on what you want:
 — the measured failure modes (noise, self-leaking oracles, cost-only test banks), each claim
 carrying an evidence grade.
 
-**"What exactly is v0.2 going to measure?"** →
+**"What exactly does the v0.2 screen measure?"** →
 [findings/v0.2-preregistration.md](findings/v0.2-preregistration.md) — the measurement plan,
 locked before data collection, plus the registered results of the sizing run. The entry gate
 that forced the redesign: [findings/v0.2-reaim-gate.md](findings/v0.2-reaim-gate.md).
