@@ -32,6 +32,27 @@ _console = Console()
 
 # Calibrate command is imported inline to avoid heavy imports at module level
 
+
+def _resolve_harness_version() -> str:
+    """Resolve the harness version used to stamp reports (A54 spec).
+
+    Prefers installed package metadata. On an uninstalled source tree the lookup
+    raises ``PackageNotFoundError``; the fallback then reads the package's own
+    ``__version__`` rather than a per-site hardcoded literal (which was two minors
+    stale at v0.2.0). ``__version__`` still hand-syncs with pyproject, but this
+    collapses two drift-prone sites to that one source. See
+    tests/test_harness_version_fallback.py.
+    """
+    import importlib.metadata
+
+    try:
+        return importlib.metadata.version("skill-harness")
+    except importlib.metadata.PackageNotFoundError:
+        from skill_harness import __version__
+
+        return __version__
+
+
 # ---------------------------------------------------------------------------
 # Sentinel exceptions for run ablation error paths (D.3)
 # ---------------------------------------------------------------------------
@@ -1330,21 +1351,13 @@ def run_evaluate_skill(
       2  — >=1 UNMEASURED clause
       1  — hard error (incomplete runs, precondition fail, aggregation bug)
     """
-    import importlib.metadata
-
     from skill_harness.aggregation.errors import PreconditionError
     from skill_harness.aggregation.report import to_json_bytes
     from skill_harness.storage.errors import BootstrapError
     from skill_harness.storage.migrations import open_evidence_readonly, open_runtime
     from skill_harness.storage.recovery import find_incomplete_runs
 
-    # ------------------------------------------------------------------
-    # Read harness_version from installed metadata (A54 spec)
-    # ------------------------------------------------------------------
-    try:
-        harness_version = importlib.metadata.version("skill-harness")
-    except importlib.metadata.PackageNotFoundError:
-        harness_version = "0.1.0a0"  # fallback to pyproject.toml version
+    harness_version = _resolve_harness_version()
 
     # ------------------------------------------------------------------
     # Open DB connections
@@ -1526,7 +1539,6 @@ def diff_skill(
       1  — hard error (precondition fail for either skill)
     """
     import hashlib
-    import importlib.metadata
 
     from skill_harness.aggregation import aggregate_skill
     from skill_harness.aggregation.errors import PreconditionError
@@ -1541,10 +1553,7 @@ def diff_skill(
     from skill_harness.storage.migrations import open_evidence_readonly, open_runtime
     from skill_harness.storage.recovery import find_incomplete_runs
 
-    try:
-        harness_version = importlib.metadata.version("skill-harness")
-    except importlib.metadata.PackageNotFoundError:
-        harness_version = "0.1.0a0"
+    harness_version = _resolve_harness_version()
 
     # ------------------------------------------------------------------
     # Open connections
