@@ -217,6 +217,7 @@ def build_paired_tasks(
     epochs: int = 1,
     compose_dir: Path | None = None,
     files: Mapping[str, str | bytes] | None = None,
+    setup: str | None = None,
     retry_uncaught_errors: int | None = None,
 ) -> dict[Condition, Task]:
     """Return {'full': Task, 'null': Task} differing ONLY by the skill.
@@ -256,6 +257,16 @@ def build_paired_tasks(
         Inspect so they are delivered verbatim (see ``files_as_data_uris``
         for the path-resolution footgun this defends against). The SAME
         mapping goes to both arms.
+    :param setup: bash script CONTENTS run in the sandbox before the agent
+        starts (Inspect ``Sample.setup``) — the delivery mechanism for
+        anything the bytes-only ``files`` path cannot express, e.g. the +x
+        bit on a planted stub CLI. The SAME script goes to both arms, so
+        cross-arm environment equality is preserved by construction, and it
+        is serialized into the ``.eval`` log so ingest provenance
+        (``source_eval_sha256``) covers it. Must be script CONTENTS, never a
+        path: Inspect resolves a value naming an existing local file into
+        that file's contents (the same footgun ``files_as_data_uris``
+        defends against), so path-shaped values are refused outright.
     :param retry_uncaught_errors: passed through to ``inspect_swe.claude_code``
         — in-place retries when the agent binary exits 1 with empty stderr
         (inspect_swe's documented "scaffold bug" class). A resilience knob,
@@ -275,6 +286,19 @@ def build_paired_tasks(
     # operator-authored harness config (see the TRUST BOUNDARY note above).
     if "\x00" in oracle_arg or "\x00" in oracle_target:
         raise ValueError("oracle_arg/oracle_target must not contain a NUL byte")
+
+    if setup is not None:
+        if "\x00" in setup:
+            raise ValueError("setup must not contain a NUL byte")
+        # Inspect resolves a setup value naming an existing file into that
+        # file's contents — demand contents so delivery is verbatim by
+        # construction (multi-line scripts can never collide with a path).
+        if "\n" not in setup and Path(setup).exists():
+            raise ValueError(
+                "setup must be script CONTENTS, not a path to a script file "
+                f"(got an existing path: {setup!r}) — read the file yourself "
+                "and pass its text"
+            )
 
     if oracle == "file_contains" and not oracle_target:
         raise ValueError(
@@ -312,6 +336,7 @@ def build_paired_tasks(
                     input=prompt,
                     target=oracle_target or oracle_arg,
                     files=files_as_data_uris(files) if files else None,
+                    setup=setup,
                     metadata={
                         "condition": condition,
                         "skill": skill_dir.name,

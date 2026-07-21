@@ -384,6 +384,78 @@ def test_build_paired_tasks_allows_empty_oracle_target_for_command_succeeds(tmp_
 
 
 @pytest.mark.skipif(not INSPECT_INSTALLED, reason="requires the optional inspect extra")
+def test_build_paired_tasks_passes_setup_to_both_arms(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # A fixture that needs an executable helper (e.g. a stub CLI planted via
+    # files=) cannot get its +x bit through the bytes-only files path — the
+    # per-sample setup script is the delivery mechanism. The SAME script must
+    # reach both arms: cross-arm environment equality is the paired contract.
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: some-skill\ndescription: a test skill\n---\nbody\n", encoding="utf-8"
+    )
+    setup = "#!/usr/bin/env bash\nchmod +x /root/bin/gh\n"
+    tasks = build_paired_tasks(
+        skill_dir=skill,
+        prompt="do a thing",
+        oracle="command_succeeds",
+        oracle_arg="true",
+        pin=make_pin(),
+        setup=setup,
+    )
+    assert tasks["full"].dataset[0].setup == setup
+    assert tasks["null"].dataset[0].setup == setup
+
+
+def test_build_paired_tasks_refuses_setup_naming_existing_path(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # Inspect resolves a setup value that names an existing file into that
+    # file's contents (the same path-resolution footgun files_as_data_uris
+    # defends against on the files= path). A caller passing a path instead of
+    # contents is ambiguous — refuse it before anything reaches Inspect.
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: some-skill\ndescription: a test skill\n---\nbody\n", encoding="utf-8"
+    )
+    script = tmp_path / "setup.sh"
+    script.write_text("echo hi\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="setup"):
+        build_paired_tasks(
+            skill_dir=skill,
+            prompt="do a thing",
+            oracle="command_succeeds",
+            oracle_arg="true",
+            pin=make_pin(),
+            setup=str(script),
+        )
+
+
+def test_build_paired_tasks_refuses_nul_byte_in_setup(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # Mirror of the S6 oracle_arg/oracle_target NUL guard: never valid in a
+    # shell script, only enables truncation-style confusion downstream.
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: some-skill\ndescription: a test skill\n---\nbody\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="NUL"):
+        build_paired_tasks(
+            skill_dir=skill,
+            prompt="do a thing",
+            oracle="command_succeeds",
+            oracle_arg="true",
+            pin=make_pin(),
+            setup="echo hi\x00",
+        )
+
+
+@pytest.mark.skipif(not INSPECT_INSTALLED, reason="requires the optional inspect extra")
 def test_file_contains_scorer_missing_file_scores_incorrect(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
