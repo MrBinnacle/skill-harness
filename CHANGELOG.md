@@ -28,6 +28,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (its canonical 3/3 needs per-trial cross-log assembly over a credit-exhaustion
   incident).
 
+### Changed
+- **README moved onto the keep/cut vocabulary.** The status/maturity block now leads
+  with the three operator verdicts (KEEP / CUT · subsumed | no-lift / CAN'T-TELL-YET),
+  shows the two live end-to-end receipts (`append-only-evidence-design` and a hardened
+  `git-pull-rebase-trap`, both **CUT (subsumed)** at a bare-arm pass rate of 1.00), and
+  states the honest maturity plainly: **zero measured KEEPs in the program to date**, and
+  store-backed coverage is partial (a handful of the ~26 screen verdicts, the rest
+  prose-backed pending backfill). Replaces the earlier "v0.1 measures style-level effects"
+  framing.
+- **Paired KEEP path annotated as coded-but-never-fired, with a named firing trigger.**
+  `aggregation.verdict` (Path B docstring) now records that the paired Full-vs-Null mapping
+  launches only on the first task whose Null screen returns a pass rate below 1, and that
+  no such task has appeared yet (every screened skill ceilings at 1). The mapping is coded
+  and $0-validated (7/7 oracle-discrimination cases) but unexercised on live paired data.
+
 ## [0.2.0a0] — 2026-07-20
 
 ### Added

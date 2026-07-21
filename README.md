@@ -22,12 +22,29 @@ back labeled `UNMEASURED` instead of a made-up score.
 
 Most benchmarks hand you a number no matter what. This tool refuses. That refusal is the product.
 
-> **Status: pre-alpha, honestly.** v0.1 measures style-level effects with a single-turn subject.
-> Our own published findings say that aim is too narrow for the question most people actually
-> have ("does this skill earn its slot?") — the correction is pre-registered in
-> [`docs/findings/v0.2-reaim-gate.md`](docs/findings/v0.2-reaim-gate.md). This repo practices
-> what it measures: the findings that invalidated our own v0.1 design are published, not
-> papered over.
+> **Status: v0.2 pre-alpha — the keep/cut verdict layer is live; zero measured KEEPs to date.**
+> The tool now answers the slot question with one of three verdicts: **KEEP** (measurably earns
+> its slot), **CUT** — either *subsumed* (the model already does the task without the skill) or
+> *no-lift* (measured on a task the model needed help with, and it didn't deliver) — or
+> **CAN'T-TELL-YET** (the evidence doesn't support a verdict). A made-up score is never emitted in
+> place of CAN'T-TELL-YET.
+>
+> **Run live, end-to-end** (Inspect + Docker + deterministic oracle, direct Anthropic frontier
+> model, 3 epochs each, store-backed): two real skills —
+> [`append-only-evidence-design`](https://github.com/MrBinnacle/skills) and a hardened
+> `git-pull-rebase-trap` — both returned **CUT (subsumed)** at a bare-arm pass rate of
+> 1.00: the model passed every no-skill epoch, so there was nothing for the skill to add. That is
+> the tool doing its job, not a failure.
+>
+> **Honest maturity.** **Zero measured KEEPs exist in the program to date.** The paired
+> Full-vs-Null path that would produce one is coded and cost-free-validated but has *never fired* —
+> it launches only on the first task whose no-skill screen returns a pass rate below 1, and so far
+> every screened skill ceilings at 1. Store-backed coverage is partial: only a handful of the ~26
+> screen verdicts derive from an append-only evidence store (the two live runs plus a curated
+> batch-1 backfill); the rest are prose-backed pending backfill. A tool that has never said KEEP,
+> and says so plainly, is more trustworthy than one that manufactures a KEEP to look useful. The
+> v0.1→v0.2 re-aim that got us here is pre-registered and published, not papered over:
+> [`docs/findings/v0.2-reaim-gate.md`](docs/findings/v0.2-reaim-gate.md).
 
 ## The question other skill evals don't answer
 
@@ -115,12 +132,15 @@ position-swapped, length-controlled, injection-defended, with human agreement me
 single judged verdict is admitted
 ([`docs/concepts/why-unmeasured.md`](docs/concepts/why-unmeasured.md)).
 
-The pre-registered v0.2 re-aim ([gate doc](docs/findings/v0.2-reaim-gate.md)): whole-skill
-with-vs-without becomes the primary contrast, an agentic multi-turn subject joins the
-single-turn adapter, outcome oracles (tests-pass, lint delta, diff size, turns, cost) join the
-mechanical set — and the harness configuration itself becomes an admissibility condition,
-because published agentic-benchmark experience puts harness-induced variance at 10–20 points on
-identical model weights, larger than most skill effects.
+The v0.2 re-aim ([gate doc](docs/findings/v0.2-reaim-gate.md)) has now largely landed: the
+whole-skill Stage-0 screen (does the model pass *without* the skill?) is the primary, dominant
+contrast, run against an agentic multi-turn subject with deterministic outcome oracles
+(`file_contains`, `command_succeeds`), and the harness configuration is captured as an
+admissibility field — because published agentic-benchmark experience puts harness-induced
+variance at 10–20 points on identical model weights, larger than most skill effects. The
+claim-level style path above still exists as the offline/audit surface. What has *not* yet
+fired is the paired Full-vs-Null run — see the status note at the top: it launches only when a
+screen returns a sub-1 pass rate, and none has yet.
 
 ## How it compares
 
@@ -130,7 +150,7 @@ identical model weights, larger than most skill effects.
 | Unit | claim (v0.1) → whole skill (v0.2) | whole skill, paired with/without + component ablations | prompt/config matrix | task/eval |
 | When evidence is weak | **refuses**: `UNMEASURED` verdict; inadmissible rows are stored but never aggregate | flags: oracle tiers, critical-severity veto, audit warnings | — | — |
 | LLM judges | admissible only from a calibrated (judge, axis) pair | user-supplied judge command, uncalibrated by design | judge/rubric assertions | model-graded scorers |
-| Maturity | pre-alpha | active v0.5.x | mature, 23k+ stars | mature, institutional |
+| Maturity | pre-alpha (v0.2; keep/cut layer live, 0 measured KEEPs) | active v0.5.x | mature, 23k+ stars | mature, institutional |
 
 Honest guidance: if you want the most *featureful* skill benchmarking today, use adewale's
 skill-eval-harness. Use this harness when what you care about is whether the number deserves to

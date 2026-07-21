@@ -17,8 +17,14 @@ Two data paths feed a verdict (per the v0.2 pre-registration):
     tasks) is a screen outcome. `screen_verdict()` maps it.
 
   Path B — paired Full-vs-Null (`ClauseStatus`). Launches only when the screen
-    shows the skill has room to matter. Has NEVER fired to date. `paired_verdict()`
-    maps it.
+    shows the skill has room to matter. FIRING TRIGGER: the first task whose Null
+    screen returns p0 < 1 (real-workload or engineered) — that is the first skill
+    with epochs the skill could actually improve. Has NEVER fired to date: every
+    screen run so far ceilings at p0 = 1.00 (append-only-evidence-design, S71, and
+    git-pull-rebase-trap, S73, both CUT(subsumed)), so no paired run has been
+    warranted. The mapping is coded and $0-validated (7/7 oracle-discrimination
+    cases on the git-pull fixture) but unexercised on live paired data.
+    `paired_verdict()` maps it.
 
 Threshold provenance (do NOT silently retune — operator-accepted values decision):
   The instrument detects TRANSFORMATIVE skills only. Under arm-independence the
