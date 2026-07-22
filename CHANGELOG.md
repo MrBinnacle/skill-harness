@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Non-deterministic ordering in `calibration_events` audit queries.**
+  `list_calibration_events_for_judge_axis` (and its sibling
+  `select_calibration_events_by_state`) ordered by `validated_at DESC` with no
+  secondary key. On an append-only audit table, same-`validated_at` events then
+  tie-break on SQLite's hidden rowid (physical insertion order) — not stable
+  across a DB restore/repack, so the "newest calibration" could silently flip
+  between runs, breaking audit reproducibility. Both queries now carry a
+  deterministic `, calibration_event_id DESC` tie-break, covered by a non-placebo
+  RED regression (inserts in descending-id order so the reverse-rowid scan
+  genuinely fails without the fix; per `sqlite-tie-break-red-test-trap`).
+
 ### Added
 - **Per-sample `setup` hook on `build_paired_tasks`** (`skill_harness.subject.inspect_adapter`):
   an optional `setup: str | None` carrying bash-script *contents* run in the sandbox before the
