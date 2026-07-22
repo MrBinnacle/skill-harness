@@ -125,7 +125,8 @@ def select_calibration_events_by_state(
 ) -> list[dict[str, Any]]:
     """Return calibration events matching a given state."""
     cur = conn.execute(
-        _SELECT_ALL_COLS + "FROM calibration_events WHERE state = ? ORDER BY validated_at DESC",
+        _SELECT_ALL_COLS + "FROM calibration_events WHERE state = ? "
+        "ORDER BY validated_at DESC, calibration_event_id DESC",
         (state,),
     )
     cols = [d[0] for d in cur.description]

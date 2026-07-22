@@ -23,13 +23,13 @@ from __future__ import annotations
 
 import sqlite3
 
+from skill_harness.storage.models import CalibrationEventWrite, JudgeWrite
 from skill_harness.storage.repositories.evidence import (
     calibration_events as calib_repo,
 )
 from skill_harness.storage.repositories.evidence import (
     judges as judges_repo,
 )
-from skill_harness.storage.models import CalibrationEventWrite, JudgeWrite
 
 _TS = "2026-06-04T12:00:00.000Z"
 _SHA = "a" * 64
@@ -93,13 +93,9 @@ def test_list_for_judge_axis_tiebreaks_on_id_desc_for_same_validated_at(
     # Insert in DESCENDING id order (see RED-TEST DESIGN NOTE): insertion-rowid
     # order therefore == id ASCENDING. This is the crux that makes the RED fire.
     for event_id in reversed(_IDS):
-        calib_repo.insert_calibration_event(
-            evidence_db, _make_event(event_id, judge_id, axis)
-        )
+        calib_repo.insert_calibration_event(evidence_db, _make_event(event_id, judge_id, axis))
 
-    rows = calib_repo.list_calibration_events_for_judge_axis(
-        evidence_db, judge_id, axis
-    )
+    rows = calib_repo.list_calibration_events_for_judge_axis(evidence_db, judge_id, axis)
 
     assert len(rows) == 3
     # With a deterministic `, calibration_event_id DESC` tie-break, the largest id
@@ -111,4 +107,27 @@ def test_list_for_judge_axis_tiebreaks_on_id_desc_for_same_validated_at(
     )
     assert rows[0]["calibration_event_id"] == _IDS[2], (
         "id DESC tie-break — highest calibration_event_id first"
+    )
+
+
+def test_select_by_state_tiebreaks_on_id_desc_for_same_validated_at(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    """The sibling audit query select_calibration_events_by_state carries the
+    identical `ORDER BY validated_at DESC` and must share the deterministic
+    `, calibration_event_id DESC` tie-break — same non-placebo RED design
+    (insert DESCENDING id order so insertion-rowid order == id ASCENDING)."""
+    judge_id = "judge-tb-state"
+    axis = "citation_support"
+    state = "calibrated"
+    judges_repo.insert_judge(evidence_db, _make_judge(judge_id))
+
+    for event_id in reversed(_IDS):
+        calib_repo.insert_calibration_event(evidence_db, _make_event(event_id, judge_id, axis))
+
+    rows = calib_repo.select_calibration_events_by_state(evidence_db, state)
+
+    assert [r["calibration_event_id"] for r in rows] == list(reversed(_IDS)), (
+        "same-validated_at events must be ordered by calibration_event_id DESC "
+        "(deterministic audit order); got insertion-rowid order instead"
     )
