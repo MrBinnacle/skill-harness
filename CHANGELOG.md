@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   name. `p0` (the bare-arm pass rate) is DERIVED from admissible trials, never
   stored. Voided screens are ingested but marked inadmissible (with a cited
   reason) and excluded from `p0`. `skill_harness.subject.screen_ingest` writes it;
-  `screen-harness screen verdict` / `screen backfill` surface it.
+  `skill-harness screen verdict` / `screen backfill` surface it.
 - **Batch-1 screen backfill** (`skill_harness.subject.screen_backfill`): a curated,
   cited manifest that makes the batch-1 Stage-0 screens store-auditable — deriving
   each keep/cut verdict from append-only evidence instead of prose. All backfilled
