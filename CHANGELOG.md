@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Per-sample `setup` hook on `build_paired_tasks`** (`skill_harness.subject.inspect_adapter`):
+  an optional `setup: str | None` carrying bash-script *contents* run in the sandbox before the
+  agent starts (Inspect `Sample.setup`) — the delivery mechanism for anything the bytes-only
+  `files` path cannot express (e.g. the +x bit on a planted stub CLI). The SAME script goes to
+  both arms, so cross-arm environment equality is preserved by construction, and it is serialized
+  into the `.eval` log so ingest provenance (`source_eval_sha256`) covers it. Guarded like the
+  existing `files_as_data_uris` footgun: NUL bytes rejected, and a path-shaped value (naming an
+  existing file) is refused outright — contents only, never a path.
+
 ## [0.2.0] — 2026-07-21
 
 ### Added
