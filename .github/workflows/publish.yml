@@ -32,4 +32,4 @@ jobs:
           path: dist/
       # SHA-pinned pypi-publish v1.14.1 — paste the full SHA from the
       # Marketplace snippet's `uses:` line (starts ba38b8e...)
-      - uses: pypa/gh-action-pypi-publish@<FULL-SHA-FROM-MARKETPLACE>
+      - uses: pypa/gh-action-pypi-publish@release/v1
