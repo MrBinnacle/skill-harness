@@ -7,7 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-07-26
+
+Surface-consistency fix release, cut same-day as 0.2.1. The 0.2.1 wheel and
+its frozen PyPI description shipped with internally inconsistent surfaces
+(details under Fixed); the PyPI description cannot be corrected without a new
+upload, so this release exists to make every public surface tell one current
+story — and to install the release gate that blocks this class of drift from
+recurring. No functional changes to measurement, storage, or verdicts, and no
+change to the measured record: still zero measured KEEPs, paired path still
+unfired.
+
 ### Added
+- **Release gate (`scripts/release_gate.py`)** — enforced surface-lockstep
+  check run on every CI push/PR AND as the first job of `publish.yml` (the
+  build and PyPI-upload jobs depend on it, so a stale tag is blocked before
+  an artifact exists — blocked by default, not impossible). Checks: pyproject
+  version == `__version__` (G1), CHANGELOG rolled for the current version
+  (G2), README status banner current (G3), README PyPI-render-safe — no
+  relative link/image targets (G4), every workflow action SHA-pinned (G5),
+  tag name matches the version (G6). v0.2.1 was tagged with G1–G4 all stale;
+  the gate is the process fix, this release's other entries are the instance
+  fixes. The v0.2.2 cut itself is the gate's first live exercise.
+
+### Fixed
+- **Shipped `__version__` drift (G1's motivating instance).** The 0.2.1 wheel
+  carried `skill_harness.__version__ == "0.2.0"` while
+  `skill-harness --version` (importlib.metadata) correctly said 0.2.1 — the
+  installed library disagreed with its own CLI. `__init__.py` also still
+  carried the retired v0.1 "clause-ablation differential testing" one-liner;
+  docstring now matches the shipped keep/cut positioning.
+- **README stale on PyPI's frozen description and GitHub.** Status banner
+  said v0.2.0; the 60-second start led with pip-from-git although
+  `pip install skill-harness` now exists; the banner image and every
+  docs/examples/LICENSE/CONTRIBUTING link were relative paths, which 404 or
+  vanish when PyPI renders the README as the project description. Install
+  path now leads with PyPI, all link/image targets are absolute, and the
+  comparison table's maturity cell no longer hardcodes a version.
+- **SECURITY.md pinned itself to `0.2.0`.** The supported-versions statement
+  now says pre-1.0 / `main`-only without naming a literal version — removing
+  a drift surface instead of gating it.
+- **`publish.yml` actions were tag-pinned against repo convention.** Every
+  other workflow SHA-pins actions; the publish pipeline — the one with PyPI
+  OIDC credentials — rode mutable refs (`@v4`, `@release/v1`) and carried a
+  stale comment claiming a SHA pin was intended. All five actions now pinned
+  to full commit SHAs (gate G5 blocks regressions repo-wide), workflow-level
+  `permissions: contents: read` added, and the gate job fronts the pipeline.
+
+## [0.2.1] — 2026-07-26
+
+First release distributed on PyPI (`pip install skill-harness`, trusted
+publishing via OIDC). No change to the measured record: still zero measured
+KEEPs; the paired Full-vs-Null path remains coded but unfired.
+
+### Added
+- **PyPI trusted publishing** — OIDC release workflow (`publish.yml`);
+  installs no longer require pip-from-GitHub.
 - **Per-sample `setup` hook on `build_paired_tasks`** (`skill_harness.subject.inspect_adapter`):
   an optional `setup: str | None` carrying bash-script *contents* run in the sandbox before the
   agent starts (Inspect `Sample.setup`) — the delivery mechanism for anything the bytes-only
@@ -262,7 +317,9 @@ Initial scaffold. Pre-alpha — schema realized and trigger-enforced, CLI surfac
 ### Security
 - `anthropic` pin tightened from `>=0.39` to `>=0.87` to enforce post-patch for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool CVEs, 2026-03-31)
 
-[Unreleased]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.0a0...v0.2.0
 [0.2.0a0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.2.0a0
 [0.1.0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.1.0

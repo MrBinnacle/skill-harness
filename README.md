@@ -1,7 +1,7 @@
 <p>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">
-    <img alt="skill-harness — the skill eval that refuses to invent a score" src="assets/banner-light.svg" width="680">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/MrBinnacle/skill-harness/main/assets/banner-dark.svg">
+    <img alt="skill-harness — the skill eval that refuses to invent a score" src="https://raw.githubusercontent.com/MrBinnacle/skill-harness/main/assets/banner-light.svg" width="680">
   </picture>
 </p>
 
@@ -9,7 +9,8 @@
 
 [![CI](https://github.com/MrBinnacle/skill-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/MrBinnacle/skill-harness/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/MrBinnacle/skill-harness/blob/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/skill-harness.svg)](https://pypi.org/project/skill-harness/)
 
 *An evaluation harness for reusable AI agent skills — a **skill disposition engine**. First-class
 Claude Code support, built to extend to other agent ecosystems.*
@@ -25,7 +26,7 @@ back labeled `UNMEASURED` instead of a made-up score.
 
 Most benchmarks hand you a number no matter what. This tool refuses. That refusal is the product.
 
-> **Status: v0.2.0 — the keep/cut verdict layer is live; zero measured KEEPs to date.**
+> **Status: v0.2.2 — on PyPI; the keep/cut verdict layer is live; zero measured KEEPs to date.**
 > The tool now answers the slot question with one of three verdicts: **KEEP** (measurably earns
 > its slot), **CUT** — either *subsumed* (the model already does the task without the skill) or
 > *no-lift* (measured on a task the model needed help with, and it didn't deliver) — or
@@ -43,7 +44,7 @@ Most benchmarks hand you a number no matter what. This tool refuses. That refusa
 > Full-vs-Null path that would produce one is coded and shaken down end-to-end — one paired k=8
 > run (2026-07-09, ≈$6.17) executed as a pre-registered apparatus shakedown and returned a
 > NO-GO datum, not a benefit measurement ([the double-ceiling case
-> study](docs/case-studies/double-ceiling-structurally-unmeasured.md)). A sized benefit run
+> study](https://github.com/MrBinnacle/skill-harness/blob/main/docs/case-studies/double-ceiling-structurally-unmeasured.md)). A sized benefit run
 > launches only on the first task whose no-skill screen returns a pass rate below 1, and so far
 > every screened skill ceilings at 1. Store-backed coverage is partial: only a handful of the
 > program's screen verdicts (a record resting on 26/26 Null epochs across 6 screened tasks)
@@ -51,7 +52,7 @@ Most benchmarks hand you a number no matter what. This tool refuses. That refusa
 > backfill); the rest are prose-backed pending backfill. A tool that has never said KEEP,
 > and says so plainly, is more trustworthy than one that manufactures a KEEP to look useful. The
 > v0.1→v0.2 re-aim that got us here is pre-registered and published, not papered over:
-> [`docs/findings/v0.2-reaim-gate.md`](docs/findings/v0.2-reaim-gate.md).
+> [`docs/findings/v0.2-reaim-gate.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/v0.2-reaim-gate.md).
 
 ## The question other skill evals don't answer
 
@@ -81,7 +82,7 @@ needing them.
 ## 60-second start — no API key, no cost
 
 ```bash
-pip install git+https://github.com/MrBinnacle/skill-harness
+pip install skill-harness
 skill-harness skill audit path/to/your/SKILL.md
 ```
 
@@ -129,7 +130,7 @@ skill-harness run evaluate-skill <skill_id>            # aggregate verdicts
 Both `skill init` and `run ablation` accept **either** `ANTHROPIC_API_KEY` (direct) or
 `OPENROUTER_API_KEY` (auto-routed). Every command that can spend money is dry-run by default;
 `--execute` is required to spend, and per-run/daily budget caps are enforced. Reproduction script and
-details: [`examples/`](examples/).
+details: [`examples/`](https://github.com/MrBinnacle/skill-harness/tree/main/examples).
 
 ## What it measures today — and what it refuses to
 
@@ -139,9 +140,9 @@ correctness, tool use, outcomes — have no mechanical instrument in v0.1 and re
 `UNMEASURED`. LLM-judge verdicts count **only** from a calibrated (judge, axis) pair:
 position-swapped, length-controlled, injection-defended, with human agreement measured before a
 single judged verdict is admitted
-([`docs/concepts/why-unmeasured.md`](docs/concepts/why-unmeasured.md)).
+([`docs/concepts/why-unmeasured.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/concepts/why-unmeasured.md)).
 
-The v0.2 re-aim ([gate doc](docs/findings/v0.2-reaim-gate.md)) landed in v0.2.0: the
+The v0.2 re-aim ([gate doc](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/v0.2-reaim-gate.md)) landed in v0.2.0: the
 whole-skill Stage-0 screen (does the model pass *without* the skill?) is the primary, dominant
 contrast, run against an agentic multi-turn subject with deterministic outcome oracles
 (`file_contains`, `command_succeeds`), and the harness configuration is captured as an
@@ -160,7 +161,7 @@ sized benefit run launches only when a screen returns a sub-1 pass rate, and non
 | Unit | claim (v0.1) → whole skill (v0.2) | whole skill, paired with/without + component ablations | prompt/config matrix | task/eval |
 | When evidence is weak | **refuses**: `UNMEASURED` verdict; inadmissible rows are stored but never aggregate | flags: oracle tiers, critical-severity veto, audit warnings | — | — |
 | LLM judges | admissible only from a calibrated (judge, axis) pair | user-supplied judge command, uncalibrated by design | judge/rubric assertions | model-graded scorers |
-| Maturity | v0.2.0, 0.x (keep/cut layer live, 0 measured KEEPs) | active v0.5.x | mature, 23k+ stars | mature, institutional |
+| Maturity | 0.x on PyPI (keep/cut layer live, 0 measured KEEPs) | active v0.5.x | mature, 23k+ stars | mature, institutional |
 
 Honest guidance: if you want the most *featureful* skill benchmarking today, use adewale's
 skill-eval-harness. Use this harness when what you care about is whether the number deserves to
@@ -173,27 +174,28 @@ trap-laden: run-to-run noise (we measured ±17.6% on agentic tasks) swallows all
 effects; hand-matched tasks quietly bias the result; pass/fail test banks price a skill's
 *cost* while structurally missing its *benefit*; and synthetic test oracles leak their own
 answers through docstrings. The measured findings, with evidence grades:
-[`docs/findings/why-naive-skill-benchmarks-mislead.md`](docs/findings/why-naive-skill-benchmarks-mislead.md).
+[`docs/findings/why-naive-skill-benchmarks-mislead.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/why-naive-skill-benchmarks-mislead.md).
 The independent literature agrees on the stakes: low-quality skills don't just fail to help —
 they actively degrade performance. A tool that can honestly say "no measurable effect" is the
 missing instrument.
 
 ## Dig deeper
 
-- [`docs/case-studies/ai-slop-sentinel-under-ablation.md`](docs/case-studies/ai-slop-sentinel-under-ablation.md)
+- [`docs/case-studies/ai-slop-sentinel-under-ablation.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/case-studies/ai-slop-sentinel-under-ablation.md)
   — the discipline catching its own author three times before a contaminated result could
   ship. The deliverable is the chain of refusals, not a number.
-- [`docs/case-studies/double-ceiling-structurally-unmeasured.md`](docs/case-studies/double-ceiling-structurally-unmeasured.md)
+- [`docs/case-studies/double-ceiling-structurally-unmeasured.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/case-studies/double-ceiling-structurally-unmeasured.md)
   — a frontier agent passed 14/14 no-skill runs on two deliberately hardened tasks: on that
   task class there is nothing for a skill to improve, and any benchmark claiming otherwise owes
   you its no-skill pass rate first.
-- [`docs/case-studies/displaced-enforcement-skill-ablation-blind-spot.md`](docs/case-studies/displaced-enforcement-skill-ablation-blind-spot.md)
+- [`docs/case-studies/displaced-enforcement-skill-ablation-blind-spot.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/case-studies/displaced-enforcement-skill-ablation-blind-spot.md)
   — a scope boundary of skill-ablation: when a discipline's real firing lives in a hook, not in
   the model reading the skill, ablating the text measures the wrong layer — so a null there is
   not the discipline's verdict, and to measure the discipline you ablate the hook instead.
-- [`docs/PRD.md`](docs/PRD.md) — full specification: evidence model, oracle tiers,
+- [`docs/PRD.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/PRD.md) — full specification: evidence model, oracle tiers,
   admissibility rules, CLI surface.
 - Evidence store: `src/skill_harness/storage/migrations_sql/evidence/` (append-only,
   trigger-enforced) + `migrations_sql/runtime/` (mutable operational state).
 
-MIT licensed. Issues and PRs welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+MIT licensed. Issues and PRs welcome — see
+[`CONTRIBUTING.md`](https://github.com/MrBinnacle/skill-harness/blob/main/CONTRIBUTING.md).
