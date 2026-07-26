@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "skill-harness"
 version = "0.2.0"
-description = "Evaluation harness for reusable AI agent skills — does a skill earn its slot? Returns KEEP / CUT / UNMEASURED, never a manufactured score. First-class Claude Code support."
+description = "Evaluation harness for reusable AI agent skills — does a skill earn its slot? Returns KEEP / CUT / CAN'T-TELL-YET, never a manufactured score. First-class Claude Code support."
 readme = "README.md"
 keywords = [
   "claude-code",
@@ -75,6 +75,9 @@ dev = [
   # C.1 — Tier-1 mechanical-validity gate (A33)
   # pytest-socket blocks network calls in offline Tier-1 tests; module-level autouse fixture.
   "pytest-socket>=0.7",
+  # CONTRIBUTING.md's setup says `pre-commit install` right after `pip install -e ".[dev]"`;
+  # ship the tool that command needs.
+  "pre-commit>=4",
 ]
 
 [project.scripts]
@@ -84,6 +87,8 @@ skill-harness = "skill_harness.cli.main:cli"
 Homepage = "https://github.com/MrBinnacle/skill-harness"
 Repository = "https://github.com/MrBinnacle/skill-harness"
 Issues = "https://github.com/MrBinnacle/skill-harness/issues"
+Changelog = "https://github.com/MrBinnacle/skill-harness/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/MrBinnacle/skill-harness/tree/main/docs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/skill_harness"]
@@ -98,7 +103,7 @@ addopts = [
 ]
 markers = [
   "slow: long-running tests (deselect with -m 'not slow')",
-  "live: hits the live Anthropic API (deselect by default)",
+  "live: hits the live Anthropic API (deselect with -m 'not live', as CI does)",
   # C.1 A33 — no_network: Tier-1 mechanical tests run offline (pytest-socket enforced).
   # Autouse fixture in tests/oracles/tier1/conftest.py covers ALL tests in that package.
   # PYTHONHASHSEED=0 REQUIRED for Tier-1 bit-equality discipline (A33).
