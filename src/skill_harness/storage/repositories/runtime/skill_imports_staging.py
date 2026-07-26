@@ -46,10 +46,11 @@ def get_skill_import_staging_by_id(
 
 
 def list_skill_import_stagings(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Return all staging rows ordered by updated_at."""
+    """Return all staging rows ordered by updated_at (deterministic tie-break
+    on staging_id)."""
     cur = conn.execute(
         "SELECT staging_id, source_path, state, notes, updated_at"
-        " FROM skill_imports_staging ORDER BY updated_at"
+        " FROM skill_imports_staging ORDER BY updated_at, staging_id"
     )
     cols = [d[0] for d in cur.description]
     return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]

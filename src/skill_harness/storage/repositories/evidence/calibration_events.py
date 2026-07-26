@@ -106,7 +106,10 @@ def get_calibration_event_by_id(
 def list_calibration_events_for_judge_axis(
     conn: sqlite3.Connection, judge_id: str, axis: str
 ) -> list[dict[str, Any]]:
-    """Return calibration events for a (judge_id, axis) pair, newest first."""
+    """Return calibration events for a (judge_id, axis) pair, newest first
+    by validated_at. Same-validated_at ties are broken by calibration_event_id
+    DESC — deterministic across restores, but NOT chronological (production
+    ids are random UUIDv4): among exact ties, [0] is not "the latest"."""
     cur = conn.execute(
         _SELECT_ALL_COLS
         + """
@@ -123,7 +126,9 @@ def list_calibration_events_for_judge_axis(
 def select_calibration_events_by_state(
     conn: sqlite3.Connection, state: str
 ) -> list[dict[str, Any]]:
-    """Return calibration events matching a given state."""
+    """Return calibration events matching a given state, newest first by
+    validated_at with the same deterministic (non-chronological)
+    calibration_event_id DESC tie-break as the judge/axis listing."""
     cur = conn.execute(
         _SELECT_ALL_COLS + "FROM calibration_events WHERE state = ? "
         "ORDER BY validated_at DESC, calibration_event_id DESC",

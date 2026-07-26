@@ -45,10 +45,11 @@ def get_judge_by_id(conn: sqlite3.Connection, judge_id: str) -> dict[str, Any] |
 
 
 def list_judges(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Return all judge rows ordered by created_at."""
+    """Return all judge rows ordered by created_at (deterministic tie-break
+    on judge_id)."""
     cur = conn.execute(
         "SELECT judge_id, model_id, system_prompt_sha256, created_at"
-        " FROM judges ORDER BY created_at"
+        " FROM judges ORDER BY created_at, judge_id"
     )
     return [
         {

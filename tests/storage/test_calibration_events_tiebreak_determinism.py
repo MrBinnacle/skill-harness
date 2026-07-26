@@ -10,13 +10,19 @@ same-timestamp events in a different order, breaking audit reproducibility.
 The fix adds a deterministic secondary key: `validated_at DESC, calibration_event_id DESC`.
 
 RED-TEST DESIGN NOTE (sqlite-tie-break-red-test-trap):
-Rows are inserted in DESCENDING calibration_event_id order so that
-insertion-rowid-order == calibration_event_id ASCENDING. At HEAD (no secondary
-key) SQLite's reverse-index scan over `validated_at DESC` returns tied rows in
-rowid order == id ASCENDING, i.e. the OPPOSITE of the asserted id-DESC order.
-That makes the RED fire (actual = smallest id, expected = largest id). Inserting
-in ascending order would collude with the scan direction and produce a placebo
-that passes at HEAD.
+The pre-fix tie order depends on the QUERY PLAN, so the two tests need
+OPPOSITE insertion orders to be genuine REDs:
+
+- list_calibration_events_for_judge_axis is served by a REVERSE scan of
+  idx_calib_judge_axis_validated (`validated_at DESC`); tied rows come out in
+  reverse-insertion (rowid DESC) order. That test inserts in DESCENDING id
+  order, making rowid ASC == id DESC, so the pre-fix output is id ASCENDING —
+  the opposite of the asserted id-DESC order (genuine RED).
+- select_calibration_events_by_state has no index on `state`; its plan is a
+  full SCAN feeding a temp B-tree sort, which emits tied rows in scan
+  (rowid ASC) order. A descending insert there would be a PLACEBO (rowid ASC
+  == id DESC == the asserted order), so that test inserts in ASCENDING id
+  order, making the pre-fix output id ASC — again the opposite (genuine RED).
 """
 
 from __future__ import annotations
@@ -90,8 +96,8 @@ def test_list_for_judge_axis_tiebreaks_on_id_desc_for_same_validated_at(
     axis = "citation_support"
     judges_repo.insert_judge(evidence_db, _make_judge(judge_id))
 
-    # Insert in DESCENDING id order (see RED-TEST DESIGN NOTE): insertion-rowid
-    # order therefore == id ASCENDING. This is the crux that makes the RED fire.
+    # Insert in DESCENDING id order (see RED-TEST DESIGN NOTE): the reverse
+    # index scan then yields tied rows in id-ASCENDING order pre-fix (RED).
     for event_id in reversed(_IDS):
         calib_repo.insert_calibration_event(evidence_db, _make_event(event_id, judge_id, axis))
 
@@ -105,9 +111,6 @@ def test_list_for_judge_axis_tiebreaks_on_id_desc_for_same_validated_at(
         "same-validated_at events must be ordered by calibration_event_id DESC "
         "(deterministic audit order); got insertion-rowid order instead"
     )
-    assert rows[0]["calibration_event_id"] == _IDS[2], (
-        "id DESC tie-break — highest calibration_event_id first"
-    )
 
 
 def test_select_by_state_tiebreaks_on_id_desc_for_same_validated_at(
@@ -115,14 +118,16 @@ def test_select_by_state_tiebreaks_on_id_desc_for_same_validated_at(
 ) -> None:
     """The sibling audit query select_calibration_events_by_state carries the
     identical `ORDER BY validated_at DESC` and must share the deterministic
-    `, calibration_event_id DESC` tie-break — same non-placebo RED design
-    (insert DESCENDING id order so insertion-rowid order == id ASCENDING)."""
+    `, calibration_event_id DESC` tie-break. This query is UNINDEXED (no index
+    on `state`), so it needs the OPPOSITE insertion order from test 1 to be a
+    genuine RED: insert ASCENDING id order so the temp-B-tree sort's scan-order
+    ties come out id ASC pre-fix (see RED-TEST DESIGN NOTE)."""
     judge_id = "judge-tb-state"
     axis = "citation_support"
     state = "calibrated"
     judges_repo.insert_judge(evidence_db, _make_judge(judge_id))
 
-    for event_id in reversed(_IDS):
+    for event_id in _IDS:
         calib_repo.insert_calibration_event(evidence_db, _make_event(event_id, judge_id, axis))
 
     rows = calib_repo.select_calibration_events_by_state(evidence_db, state)

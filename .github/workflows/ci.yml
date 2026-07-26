@@ -98,7 +98,7 @@ jobs:
           if-no-files-found: ignore
 
   structural-bans:
-    name: Structural bans (raw sqlite3.connect / oracle_verdicts)
+    name: Structural bans (raw sqlite3.connect / oracle_verdicts / timestamp ORDER BY)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -113,6 +113,8 @@ jobs:
         run: pre-commit run ban-raw-sqlite-connect --all-files
       - name: oracle_verdicts raw-access allowlist (A29, PRD.md #17)
         run: pre-commit run ban-raw-oracle-verdicts --all-files
+      - name: timestamp-final ORDER BY ban (deterministic tie-break on append-only tables)
+        run: pre-commit run ban-timestamp-final-order-by --all-files
 
   all-green:
     name: All checks green

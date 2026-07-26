@@ -60,12 +60,13 @@ def get_metric_version(
 
 
 def list_metric_versions(conn: sqlite3.Connection, metric_id: str) -> list[dict[str, Any]]:
-    """Return all versions of a metric, ordered by registered_at."""
+    """Return all versions of a metric, ordered by registered_at (deterministic
+    tie-break on version — (metric_id, version) is the PK)."""
     cur = conn.execute(
         """
         SELECT metric_id, version, implementation_hash, tier,
                audited, mechanical_validity_test_passed, registered_at
-        FROM metric_versions WHERE metric_id = ? ORDER BY registered_at
+        FROM metric_versions WHERE metric_id = ? ORDER BY registered_at, version
         """,
         (metric_id,),
     )
@@ -79,7 +80,7 @@ def select_metric_versions_by_tier(conn: sqlite3.Connection, tier: int) -> list[
         """
         SELECT metric_id, version, implementation_hash, tier,
                audited, mechanical_validity_test_passed, registered_at
-        FROM metric_versions WHERE tier = ? ORDER BY metric_id, registered_at
+        FROM metric_versions WHERE tier = ? ORDER BY metric_id, registered_at, version
         """,
         (tier,),
     )

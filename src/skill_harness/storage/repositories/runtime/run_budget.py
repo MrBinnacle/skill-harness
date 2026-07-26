@@ -63,12 +63,13 @@ def get_run_budget_by_id(conn: sqlite3.Connection, run_id: str) -> dict[str, Any
 
 
 def list_run_budgets(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Return all run_budget rows ordered by last_updated."""
+    """Return all run_budget rows ordered by last_updated (deterministic
+    tie-break on run_id)."""
     cur = conn.execute(
         """
         SELECT run_id, hard_cap_usd, tokens_spent_in, tokens_spent_out,
                cache_write_in, cache_read_in, usd_spent, dry_run, aborted_at, last_updated
-        FROM run_budget ORDER BY last_updated
+        FROM run_budget ORDER BY last_updated, run_id
         """
     )
     cols = [d[0] for d in cur.description]
@@ -81,7 +82,7 @@ def select_run_budgets_over_cap(conn: sqlite3.Connection) -> list[dict[str, Any]
         """
         SELECT run_id, hard_cap_usd, tokens_spent_in, tokens_spent_out,
                cache_write_in, cache_read_in, usd_spent, dry_run, aborted_at, last_updated
-        FROM run_budget WHERE usd_spent >= hard_cap_usd ORDER BY last_updated
+        FROM run_budget WHERE usd_spent >= hard_cap_usd ORDER BY last_updated, run_id
         """
     )
     cols = [d[0] for d in cur.description]

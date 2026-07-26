@@ -175,7 +175,7 @@ def test_happy_path_writes_run_samples_and_admissible_verdicts(
         """
         SELECT observation, oracle_tier, metric_id, metric_version,
                admissibility_state, comparison, axis
-        FROM oracle_verdicts WHERE run_id = ? ORDER BY written_at
+        FROM oracle_verdicts WHERE run_id = ? ORDER BY written_at, verdict_id
         """,
         (result.run_id,),
     ).fetchall()

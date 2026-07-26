@@ -150,6 +150,17 @@ repos:
         entry: '(?i)from\s+oracle_verdicts'
         files: '^src/.*\.py$'
         exclude: '^src/skill_harness/(audit/__init__|aggregation/engine|ablation/runner|cli/main|storage/repositories/evidence/frozen_cases)\.py$'
+      - id: ban-timestamp-final-order-by
+        name: "ORDER BY ending on a timestamp column (*_at / ts / last_updated) -> append a unique tie-break key matching the timestamp's direction, e.g. 'ORDER BY started_at, run_id' (rowid tie order is not stable across dump/restore/VACUUM on append-only tables)"
+        language: pygrep
+        entry: '(?i)ORDER\s+BY\s+[\w.,\s]*\b(\w+_at|ts|last_updated)\b(\s+(ASC|DESC))?\s*["'']?,?\s*$'
+        files: '^src/.*\.py$'
+        # '^$' = match-nothing placeholder (pre-commit's documented default);
+        # no file is exempt. Kept explicit so the F-8 cross-check
+        # (tests/test_structural_bans.py
+        # test_timestamp_order_by_exclude_matches_pre_commit_config) can
+        # extract and verify it against the (empty) Python-side exempt set.
+        exclude: '^$'
 
 ci:
   autoupdate_schedule: monthly
