@@ -61,11 +61,12 @@ def get_run_by_id(conn: sqlite3.Connection, run_id: str) -> dict[str, Any] | Non
 
 
 def list_runs_for_skill(conn: sqlite3.Connection, skill_id: str) -> list[dict[str, Any]]:
-    """Return all runs for a skill, ordered by started_at."""
+    """Return all runs for a skill, ordered by started_at (deterministic
+    tie-break on run_id)."""
     cur = conn.execute(
         """
         SELECT run_id, skill_id, run_kind, config_json, started_at, completed_at
-        FROM runs WHERE skill_id = ? ORDER BY started_at
+        FROM runs WHERE skill_id = ? ORDER BY started_at, run_id
         """,
         (skill_id,),
     )
@@ -74,11 +75,12 @@ def list_runs_for_skill(conn: sqlite3.Connection, skill_id: str) -> list[dict[st
 
 
 def select_runs_by_kind(conn: sqlite3.Connection, run_kind: str) -> list[dict[str, Any]]:
-    """Return all runs with a given run_kind, ordered by started_at."""
+    """Return all runs with a given run_kind, ordered by started_at
+    (deterministic tie-break on run_id)."""
     cur = conn.execute(
         """
         SELECT run_id, skill_id, run_kind, config_json, started_at, completed_at
-        FROM runs WHERE run_kind = ? ORDER BY started_at
+        FROM runs WHERE run_kind = ? ORDER BY started_at, run_id
         """,
         (run_kind,),
     )

@@ -12,6 +12,7 @@ dist/
 
 # Virtual envs
 .venv/
+uv.lock
 venv/
 env/
 ENV/

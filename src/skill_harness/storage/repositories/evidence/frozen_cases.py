@@ -199,14 +199,15 @@ def get_frozen_case_by_id(conn: sqlite3.Connection, frozen_case_id: str) -> dict
 
 
 def list_frozen_cases_for_clause(conn: sqlite3.Connection, clause_id: str) -> list[dict[str, Any]]:
-    """Return all frozen cases for a clause, ordered by frozen_at."""
+    """Return all frozen cases for a clause, ordered by frozen_at
+    (deterministic tie-break on frozen_case_id)."""
     cur = conn.execute(
         """
         SELECT frozen_case_id, clause_id, failing_input_text, failing_input_sha256,
                oracle_source, labeled_by, labeled_at,
                metric_id, metric_version, implementation_hash, frozen_at,
                verdict_id, run_id, axis
-        FROM frozen_cases WHERE clause_id = ? ORDER BY frozen_at
+        FROM frozen_cases WHERE clause_id = ? ORDER BY frozen_at, frozen_case_id
         """,
         (clause_id,),
     )
@@ -224,7 +225,7 @@ def select_frozen_cases_by_oracle_source(
                oracle_source, labeled_by, labeled_at,
                metric_id, metric_version, implementation_hash, frozen_at,
                verdict_id, run_id, axis
-        FROM frozen_cases WHERE oracle_source = ? ORDER BY frozen_at
+        FROM frozen_cases WHERE oracle_source = ? ORDER BY frozen_at, frozen_case_id
         """,
         (oracle_source,),
     )

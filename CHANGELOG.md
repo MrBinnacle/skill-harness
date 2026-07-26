@@ -7,18 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- **Non-deterministic ordering in `calibration_events` audit queries.**
-  `list_calibration_events_for_judge_axis` (and its sibling
-  `select_calibration_events_by_state`) ordered by `validated_at DESC` with no
-  secondary key. On an append-only audit table, same-`validated_at` events then
-  tie-break on SQLite's hidden rowid (physical insertion order) — not stable
-  across a DB restore/repack, so the "newest calibration" could silently flip
-  between runs, breaking audit reproducibility. Both queries now carry a
-  deterministic `, calibration_event_id DESC` tie-break, covered by a non-placebo
-  RED regression (inserts in descending-id order so the reverse-rowid scan
-  genuinely fails without the fix; per `sqlite-tie-break-red-test-trap`).
-
 ### Added
 - **Per-sample `setup` hook on `build_paired_tasks`** (`skill_harness.subject.inspect_adapter`):
   an optional `setup: str | None` carrying bash-script *contents* run in the sandbox before the
@@ -29,7 +17,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   existing `files_as_data_uris` footgun: NUL bytes rejected, and a path-shaped value (naming an
   existing file) is refused outright — contents only, never a path.
 
-## [0.2.0] — 2026-07-21
+### Fixed
+- **Non-deterministic ordering in `calibration_events` audit queries.**
+  `list_calibration_events_for_judge_axis` (and its sibling
+  `select_calibration_events_by_state`) ordered by `validated_at DESC` with no
+  secondary key. On an append-only audit table, same-`validated_at` events then
+  tie-break on SQLite's hidden rowid (physical insertion order) — not stable
+  across a DB restore/repack, so the "newest calibration" could silently flip
+  between runs, breaking audit reproducibility. Both queries now carry a
+  deterministic `, calibration_event_id DESC` tie-break. NOTE: the tie-break is
+  deterministic but not chronological — production ids are random UUIDv4 — and
+  the repository docstrings now say so.
+- **Placebo regression test on the by-state tie-break query.** The originally
+  shipped RED test for `select_calibration_events_by_state` passed even
+  WITHOUT the fix: that query is unindexed (full scan + temp-B-tree sort, tied
+  rows emitted in insertion order), so the descending-id insert that makes the
+  indexed judge/axis test a genuine RED made the by-state test collude with
+  the pre-fix order. The test now inserts in ascending-id order (per query
+  plan), and the RED-TEST DESIGN NOTE's inverted rowid explanation — which
+  caused the placebo — is corrected. Verified empirically: both tests now fail
+  without the tie-break and pass with it.
+- **Same rowid-tie-break defect fixed across every timestamp-ordered query.**
+  The `calibration_events` fix covered 2 of ~27 structurally identical
+  timestamp-only `ORDER BY`s on append-only/audit tables (`oracle_verdicts`
+  in `audit/`, `runs`, `samples`, `frozen_cases`, `confound_events`,
+  `metric_versions`, `judges`, `skills`, plus runtime `cost_ledger`,
+  `run_budget`, `skill_imports_staging`). All now carry a deterministic
+  unique-key tie-break matching the timestamp's sort direction, and a new
+  structural ban (E3: pytest mirror + `ban-timestamp-final-order-by`
+  pre-commit hook, wired into the F-8 drift cross-check and the CI
+  structural-bans job) blocks reintroducing a timestamp-final `ORDER BY`
+  in `src/`.
 
 ### Added
 - **Operator-facing keep/cut verdict layer** (`skill_harness.aggregation.verdict`):

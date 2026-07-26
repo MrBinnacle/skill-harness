@@ -1,10 +1,11 @@
-"""Pytest-visible mirrors of the pre-commit/CI structural grep bans (E1/E2).
+"""Pytest-visible mirrors of the pre-commit/CI structural grep bans (E1/E2/E3).
 
 These do not read `.pre-commit-config.yaml` for the BAN patterns themselves —
 pygrep's matching and Python's `re` differ slightly, and the point is an
 independent second check, not a parser for the hook config. Keep the patterns
 and exemption/allowlist sets here in sync with `.pre-commit-config.yaml`'s
-`ban-raw-sqlite-connect` and `ban-raw-oracle-verdicts` hooks by hand; the CI
+`ban-raw-sqlite-connect`, `ban-raw-oracle-verdicts`, and
+`ban-timestamp-final-order-by` hooks by hand; the CI
 job that actually runs those hooks (`.github/workflows/ci.yml`
 `structural-bans`) is the enforcement of record — this file exists so a
 violation shows up in the ordinary `pytest -m "not live"` loop too, without
@@ -51,6 +52,17 @@ _ORACLE_VERDICTS_ALLOWLIST = {
     / "frozen_cases.py",
 }
 
+# E3: an ORDER BY whose FINAL sort key is timestamp-shaped (*_at, ts,
+# last_updated) leaves tie order to the implicit rowid, which is NOT stable
+# across dump/restore/VACUUM on append-only tables. Every such clause must
+# carry a trailing unique key (the table's PRIMARY KEY or a unique-in-scope
+# column). Matched per line, mirroring pygrep's default line semantics.
+_TS_FINAL_ORDER_BY_RE = re.compile(
+    r"(?i)ORDER\s+BY\s+[\w.,\s]*\b(\w+_at|ts|last_updated)\b(\s+(ASC|DESC))?\s*[\"']?,?\s*$"
+)
+# No exemptions today; mirrors ban-timestamp-final-order-by's `exclude: '^$'`.
+_TS_FINAL_ORDER_BY_EXEMPT: set[Path] = set()
+
 _THIS_FILE = Path(__file__).resolve()
 
 
@@ -94,6 +106,26 @@ def test_oracle_verdicts_raw_access_matches_documented_allowlist() -> None:
         if _ORACLE_VERDICTS_RE.search(text):
             unexpected.append(str(path.relative_to(REPO_ROOT)))
     assert unexpected == [], f"raw oracle_verdicts access outside allowlist: {unexpected}"
+
+
+def test_no_timestamp_final_order_by_without_tiebreak() -> None:
+    """E3: timestamp-only ORDER BY on append-only tables is non-deterministic
+    among ties -- SQLite's implicit rowid tie-break does not survive
+    dump/restore/VACUUM. A clause whose final sort key ends with `_at`, or is
+    `ts`/`last_updated`, must append a unique tie-break key matching the
+    timestamp key's direction (e.g. `ORDER BY started_at, run_id`).
+    """
+    violations = []
+    for path in _iter_py_files("src"):
+        if path in _TS_FINAL_ORDER_BY_EXEMPT:
+            continue
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for lineno, line in enumerate(lines, start=1):
+            if _TS_FINAL_ORDER_BY_RE.search(line):
+                violations.append(f"{path.relative_to(REPO_ROOT)}:{lineno}")
+    assert violations == [], (
+        f"ORDER BY with timestamp-shaped final key and no unique tie-break: {violations}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -175,4 +207,15 @@ def test_oracle_verdicts_exclude_matches_pre_commit_config() -> None:
         hook_id="ban-raw-oracle-verdicts",
         scan_roots=("src",),
         python_side_excluded=_ORACLE_VERDICTS_ALLOWLIST,
+    )
+
+
+def test_timestamp_order_by_exclude_matches_pre_commit_config() -> None:
+    """F-8: ban-timestamp-final-order-by's YAML exclude (src/ only, '^$' =
+    match-nothing placeholder) must cover exactly _TS_FINAL_ORDER_BY_EXEMPT
+    (currently empty -- no file is exempt from E3)."""
+    _assert_exclusion_sets_match(
+        hook_id="ban-timestamp-final-order-by",
+        scan_roots=("src",),
+        python_side_excluded=_TS_FINAL_ORDER_BY_EXEMPT,
     )

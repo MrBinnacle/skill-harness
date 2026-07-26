@@ -43,7 +43,7 @@ def audit_all_verdicts(conn: sqlite3.Connection, run_id: str) -> list[dict[str, 
                sample_a_id, sample_b_id, observation, oracle_tier,
                metric_id, metric_version, judge_id, calibration_event_id,
                position_swap_agreement, admissibility_state, inadmissibility_reason, written_at
-        FROM oracle_verdicts WHERE run_id = ? ORDER BY written_at
+        FROM oracle_verdicts WHERE run_id = ? ORDER BY written_at, verdict_id
         """,
         (run_id,),
     )
@@ -75,7 +75,8 @@ def get_verdict_by_id(conn: sqlite3.Connection, verdict_id: str) -> dict[str, An
 
 
 def list_verdicts_for_clause(conn: sqlite3.Connection, clause_id: str) -> list[dict[str, Any]]:
-    """Return all verdicts for a clause, ordered by written_at.
+    """Return all verdicts for a clause, ordered by written_at (deterministic
+    tie-break on verdict_id).
 
     Moved from oracle_verdicts.py (A.4 audit-module finalization per A29).
     SELECTs from raw oracle_verdicts — belongs in audit/ per the CI grep ban.
@@ -86,7 +87,7 @@ def list_verdicts_for_clause(conn: sqlite3.Connection, clause_id: str) -> list[d
                sample_a_id, sample_b_id, observation, oracle_tier,
                metric_id, metric_version, judge_id, calibration_event_id,
                position_swap_agreement, admissibility_state, inadmissibility_reason, written_at
-        FROM oracle_verdicts WHERE clause_id = ? ORDER BY written_at
+        FROM oracle_verdicts WHERE clause_id = ? ORDER BY written_at, verdict_id
         """,
         (clause_id,),
     )
@@ -108,7 +109,7 @@ def select_verdicts_by_admissibility(
                sample_a_id, sample_b_id, observation, oracle_tier,
                metric_id, metric_version, judge_id, calibration_event_id,
                position_swap_agreement, admissibility_state, inadmissibility_reason, written_at
-        FROM oracle_verdicts WHERE admissibility_state = ? ORDER BY written_at
+        FROM oracle_verdicts WHERE admissibility_state = ? ORDER BY written_at, verdict_id
         """,
         (admissibility_state,),
     )

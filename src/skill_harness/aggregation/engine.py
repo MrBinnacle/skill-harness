@@ -544,7 +544,7 @@ def _fetch_completed_ablation_runs(conn: Connection, skill_id: str) -> list[dict
         WHERE skill_id = ?
           AND run_kind = 'ablation'
           AND completed_at IS NOT NULL
-        ORDER BY started_at
+        ORDER BY started_at, run_id
         """,
         (skill_id,),
     )

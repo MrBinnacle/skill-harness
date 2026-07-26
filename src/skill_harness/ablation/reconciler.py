@@ -130,7 +130,7 @@ def get_run_samples_with_cost(
                output_tokens, usd
         FROM samples
         WHERE run_id = ? AND usd IS NOT NULL
-        ORDER BY sampled_at
+        ORDER BY sampled_at, sample_id
         """,
         (run_id,),
     )
