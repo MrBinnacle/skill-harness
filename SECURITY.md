@@ -6,7 +6,7 @@
 
 Report security issues privately via GitHub's [Security Advisory](https://github.com/MrBinnacle/skill-harness/security/advisories/new) feature. We aim to acknowledge reports within 72 hours and provide a remediation timeline within 7 days.
 
-For sensitive disclosures that should not transit GitHub, contact the maintainer through the email listed on their GitHub profile.
+For sensitive disclosures that should not transit GitHub in full, open a private advisory with minimal detail and request an alternate channel there — the maintainer will provide one in the advisory thread.
 
 ## Supported versions
 
@@ -24,7 +24,7 @@ This project takes dependency provenance seriously. The discipline:
 
 - **All production dependencies pinned above their last CVE-patched version.** The current `anthropic` pin (`>=0.87`) reflects the patches for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool, 2026-03-31). See [`docs/supply-chain/`](docs/supply-chain/) for the per-dependency audit records that ARE tracked (e.g. `inspect-audit-2026-07-09.md`, `openai-audit-2026-06-08.md`).
 - **Supply-chain audit re-run quarterly** and at every major version bump of `anthropic`, `pydantic`, or `pytest`. The `anthropic`-pin audit (see `CHANGELOG.md`'s `0.1.0a0` Security entry) was run with the `supply-chain-risk-auditor` tool at scaffold time (2026-06-03); its output directory (`.supply-chain-risk-auditor/`) is local-only and gitignored — not a tracked artifact, so the full results are not published in this repo.
-- **Dependabot enabled** for `pip`, `github-actions`, and `pre-commit` ecosystems. See `.github/dependabot.yml`.
+- **Dependabot enabled** for the `pip` and `github-actions` ecosystems (see `.github/dependabot.yml`); pre-commit hook versions are bumped monthly by pre-commit.ci autoupdate (`ci:` block in `.pre-commit-config.yaml`).
 - **CodeQL** runs via GitHub's default code-scanning setup (Python + GitHub Actions queries, weekly) — not a tracked workflow file. An advanced-configuration `codeql.yml` was removed (`a917765`) because its SARIF uploads are rejected while default setup is enabled on this repo; one scanner, the working one. Scan status is visible on the repo's Security tab.
 - **No deps with active high/critical CVEs.** Any introduction of such a dep requires PR-level justification + mitigation.
 - **CI reproducibility (S4): `requirements-ci.txt`.** `pyproject.toml`'s runtime deps stay open-ended (`>=`) by design — this is a library, and downstream installers need to resolve compatible versions in their own environment, not inherit our exact pins. That openness has a supply-chain cost on its own: an audit like `openai-audit-2026-06-08.md` anchors a known-good floor version, but an unbounded `>=` lets the resolver drift arbitrarily far past it, including into an unaudited next major — which is why `openai` is now capped `<3` (audited-version-drift rule: a dependency's version range must never extend past the highest major actually reviewed in its audit doc; raising the cap requires a new audit entry, not just a version bump). CI's OWN installs are additionally pinned via `requirements-ci.txt` + `pip install -c requirements-ci.txt`, so a fresh CI run resolves the same transitive versions every time instead of "latest at run time" — this file constrains CI only and does not change what a downstream `pip install skill-harness` resolves.

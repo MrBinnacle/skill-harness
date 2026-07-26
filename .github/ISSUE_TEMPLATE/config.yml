@@ -6,4 +6,4 @@ contact_links:
     about: Report a vulnerability privately. Do NOT open a public issue for security defects.
   - name: Architecture discussion
     url: https://github.com/MrBinnacle/skill-harness/discussions
-    about: For architectural questions, alternative designs, or anything that touches the load-bearing invariants in CLAUDE.md, open a discussion before an issue.
+    about: For architectural questions, alternative designs, or anything that touches the load-bearing invariants in docs/INVARIANTS.md, open a discussion before an issue.

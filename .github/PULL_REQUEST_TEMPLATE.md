@@ -3,7 +3,7 @@ Thanks for the PR.
 
 Before you submit, please confirm:
 
-- [ ] You read `CONTRIBUTING.md` and `CLAUDE.md`
+- [ ] You read `CONTRIBUTING.md` and `docs/INVARIANTS.md`
 - [ ] `ruff check src tests` is clean
 - [ ] `ruff format --check src tests` is clean
 - [ ] `mypy src tests` is clean

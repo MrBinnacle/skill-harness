@@ -4,7 +4,11 @@ Verbosity = number of tokens in ``text`` using the cl100k_base encoding.
 
 Design decisions (A35 verbatim):
 - Uses tiktoken ``cl100k_base`` encoding (Claude/GPT-4 base tokenizer).
-- Fully offline — tiktoken uses a local BPE vocabulary file.
+- Offline after first use — tiktoken caches the BPE vocabulary locally, but
+  fetches it over the network on a cold cache (pre-seed ``TIKTOKEN_CACHE_DIR``
+  for air-gapped machines). The encoding loads lazily on first tokenization so
+  merely importing this module (e.g. via ``skill audit``) never touches the
+  network.
 - Version-pinned in pyproject.toml: ``tiktoken>=0.7,<1.0``.
 - DO NOT replace with ``client.messages.count_tokens()`` — that is a
   network call and violates the Tier-1 offline invariant (A33).
@@ -27,8 +31,13 @@ import tiktoken
 
 ENCODING_NAME: Final[str] = "cl100k_base"
 
-# Loaded once at module import — tiktoken caches the BPE data on first load.
-_ENC: Final[tiktoken.Encoding] = tiktoken.get_encoding(ENCODING_NAME)
+# Loaded lazily on first tokenization, then cached for the process lifetime.
+# NOT at module import: tiktoken fetches the BPE file over the network on a
+# cold cache, and this module is imported by get_default_tier1_scorers(),
+# which the fully-offline `skill audit` path calls just to enumerate axis
+# names — an eager load here made `skill audit` crash on air-gapped machines
+# without ever needing to tokenize anything.
+_enc: tiktoken.Encoding | None = None
 
 
 def get_encoding() -> tiktoken.Encoding:
@@ -44,9 +53,12 @@ def get_encoding() -> tiktoken.Encoding:
     once at module load for ``FILLER_UNIT_TOKENS`` and once per instance in
     ``__init__``) — a name change here would silently NOT propagate there.
     Returns the same cached ``Encoding`` object every call (tiktoken's own
-    internal cache plus this module's ``_ENC`` constant).
+    internal cache plus this module's ``_enc`` memo).
     """
-    return _ENC
+    global _enc
+    if _enc is None:
+        _enc = tiktoken.get_encoding(ENCODING_NAME)
+    return _enc
 
 
 # ---------------------------------------------------------------------------
@@ -70,4 +82,4 @@ def count_tokens(text: str) -> int:
     """
     if not text:
         return 0
-    return len(_ENC.encode(text))
+    return len(get_encoding().encode(text))

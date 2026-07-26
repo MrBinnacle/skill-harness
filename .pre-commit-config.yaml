@@ -27,24 +27,38 @@ repos:
         exclude: \.(ps1|cmd|bat)$
       - id: detect-private-key
 
+  # rev tracks the ruff pin in requirements-ci.txt — keep them in lockstep.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.15
+    rev: v0.15.22
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
+  # rev tracks the mypy pin in requirements-ci.txt — keep them in lockstep, or
+  # local hook verdicts (incl. which `type: ignore` comments are needed) diverge
+  # from CI's. additional_dependencies mirrors the runtime deps so strict mode
+  # sees the same imports CI sees.
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v2.3.0
     hooks:
       - id: mypy
         files: ^(src|tests)/
+        # Override the mirror's default args: its --ignore-missing-imports would
+        # silence import-untyped and flip CI-required `type: ignore` comments to
+        # "unused" — pyproject's per-module overrides are the source of truth.
+        args: [--scripts-are-modules]
         additional_dependencies:
           - anthropic>=0.87
           - click>=8.1
+          - openai>=2.41,<3
           - pydantic>=2.6
           - rich>=13.7
+          - scipy>=1.11
+          - statsmodels>=0.14
+          - tiktoken>=0.7,<1.0
           - pytest>=7.4
+          - pytest-socket>=0.7
           - hypothesis>=6.100
 
   - repo: https://github.com/gitleaks/gitleaks

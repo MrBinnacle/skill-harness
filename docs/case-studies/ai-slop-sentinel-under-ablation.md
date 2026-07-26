@@ -256,11 +256,12 @@ is on `main`. The two engineering gaps surfaced by HALT 2 (`--subject-
 model` CLI flag, ANTHROPIC fallback path for `run ablation`) landed in
 commits `a9bdacc` and `f6201a8` on 2026-06-09 — the audit trail of the
 fixes is itself part of the discipline-catching-itself arc this case
-study describes. One adjacent gap remains: the extractor on `skill init`
-is still Anthropic-direct, with no OpenRouter fallback. Operators on
-Claude Code subscription auth without a direct Anthropic key cannot run
-`skill init` end-to-end against the current `main`. That gap is on the
-v0.2 backlog as the symmetric follow-on to the W2 work.
+study describes. One adjacent gap remained at the time of writing: the
+extractor on `skill init` was still Anthropic-direct, with no OpenRouter
+fallback, so operators on Claude Code subscription auth without a direct
+Anthropic key could not run `skill init` end-to-end. That gap closed on
+`main` on 2026-06-09 (`b5b9fe6`) as the symmetric follow-on to the W2
+work — `skill init` now accepts either key.
 
 ## What this case study does not claim
 
@@ -315,13 +316,17 @@ that path is the artifact.
 
 *Reproducible artifact: Skill Harness on `main` at HEAD `f3a1fd1`. Tag
 `v0.1.0` (commit `fd782b1`). Audit-trail commits cited inline above; HALT
-findings at `docs/dispatch/t3-findings.md`; pre-registrations at
-`docs/dispatch/t3-pre-registration.md`; SOP amendment in
-`.claude/skills/dev-team-council/SKILL.md` at `62391eb`.
-PRD specification at `docs/PRD.md` v1.1. Council-adopted invariants at
-the internal council findings log A1-A62 (not published). The dogfooding result that triggered
-this story is at `docs/dogfooding-ai-slop-sentinel-2026-06-07.md`
-(baseline-state, pre-registry-expansion).*
+findings at `docs/dispatch/t3-findings.md` and pre-registrations at
+`docs/dispatch/t3-pre-registration.md` (internal process records,
+maintained privately and not published in this repository — see the
+provenance note in `docs/PLAN.md`); SOP amendment in
+`.claude/skills/dev-team-council/SKILL.md` at `62391eb` (local, not
+published). PRD specification at `docs/PRD.md` v1.1. Council-adopted
+invariants at the internal council findings log A1-A62 (not published).
+The dogfooding result that triggered this story is at
+`docs/dogfooding-ai-slop-sentinel-2026-06-07.md` (baseline-state,
+pre-registry-expansion; not published). Citations are retained as
+provenance markers.*
 
 *The discipline this case study describes is falsifiable by construction.
 The audit trail is the test.*

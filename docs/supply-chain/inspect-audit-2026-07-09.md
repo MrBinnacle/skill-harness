@@ -17,8 +17,9 @@ Docker API and bridges model calls.
 - `inspect-ai` — UK AI Security Institute (`UKGovernmentBEIS/inspect_ai`):
   institutional maintainer, ~2.3k stars, 6k+ commits, 200+ releases, active weekly.
   Reviewed version: 0.3.245.
-- `inspect-swe` — same maintainer org (`meridianlabs-ai/inspect_swe` per PyPI
-  metadata; the Inspect ecosystem's agent-adapter package), releasing in lockstep
+- `inspect-swe` — a distinct maintainer org from inspect-ai's
+  (`meridianlabs-ai/inspect_swe` per PyPI metadata; the Inspect ecosystem's
+  agent-adapter package), releasing in lockstep
   with inspect-ai. Reviewed version: 0.2.65. Pace is fast (60+ releases in months) —
   pin exact versions in the HarnessPin per trial; a version bump between arms is
   inadmissible anyway.

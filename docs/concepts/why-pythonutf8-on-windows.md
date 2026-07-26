@@ -13,8 +13,9 @@ character maps to <undefined>
 ```
 
 Setting `PYTHONUTF8=1` switches Python to UTF-8 mode for all I/O, which resolves
-this. This was observed during the dogfooding run on 2026-06-07 (see
-`docs/dogfooding-ai-slop-sentinel-2026-06-07.md`, gotcha 1).
+this. This was observed during the dogfooding run on 2026-06-07
+(`docs/dogfooding-ai-slop-sentinel-2026-06-07.md`, gotcha 1 — internal
+record, not published; citation retained as a provenance marker).
 
 ```powershell
 $env:PYTHONUTF8 = "1"

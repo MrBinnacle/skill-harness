@@ -1,7 +1,8 @@
-# migrations/
+# migrations_sql/
 
-This directory contains SQL migration files for the Skill Harness storage
-layer.  There are two sub-directories:
+This directory (`src/skill_harness/storage/migrations_sql/`, shipped as package
+data) contains SQL migration files for the Skill Harness storage layer.  There
+are two sub-directories:
 
 - **`evidence/`** — append-only evidence DB schema (triggers, indexes, VIEWs).
 - **`runtime/`** — mutable runtime DB schema (in-flight state, cost ledger,
@@ -19,6 +20,7 @@ development without collision.  Each track owns an exclusive range:
 | C     | 0200–0299  | Oracle / calibration           |
 | D     | 0300–0399  | Ablation runner                |
 | E     | 0400–0499  | Aggregation / status reporting |
+| v0.2  | 0500–0599  | Subject layer (harness pin, screen store) — per the A30 ledger note in `0500` |
 
 **Why this matters:**
 
@@ -50,6 +52,6 @@ NNNN_<snake_case_description>.sql
 
 ## CODEOWNERS gate
 
-Any pull request that modifies files under `migrations/` requires sign-off
+Any pull request that modifies files under `migrations_sql/` requires sign-off
 from the SCHEMA + SECURITY review seats per A30 (`.github/CODEOWNERS`).  This
 enforces the pre-merge council fire requirement from the project plan.
