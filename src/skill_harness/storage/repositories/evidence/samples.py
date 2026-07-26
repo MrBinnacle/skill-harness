@@ -80,12 +80,13 @@ def get_sample_by_id(conn: sqlite3.Connection, sample_id: str) -> dict[str, Any]
 
 
 def list_samples_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict[str, Any]]:
-    """Return all samples for a run, ordered by sampled_at."""
+    """Return all samples for a run, ordered by sampled_at (deterministic
+    tie-break on sample_id)."""
     cur = conn.execute(
         """
         SELECT sample_id, run_id, clause_id, condition,
                subject_model, subject_seed, output_text, output_sha256, sampled_at
-        FROM samples WHERE run_id = ? ORDER BY sampled_at
+        FROM samples WHERE run_id = ? ORDER BY sampled_at, sample_id
         """,
         (run_id,),
     )
@@ -101,7 +102,7 @@ def select_samples_by_condition(
         """
         SELECT sample_id, run_id, clause_id, condition,
                subject_model, subject_seed, output_text, output_sha256, sampled_at
-        FROM samples WHERE run_id = ? AND condition = ? ORDER BY sampled_at
+        FROM samples WHERE run_id = ? AND condition = ? ORDER BY sampled_at, sample_id
         """,
         (run_id, condition),
     )

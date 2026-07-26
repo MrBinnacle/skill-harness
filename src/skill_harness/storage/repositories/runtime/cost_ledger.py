@@ -65,12 +65,13 @@ def get_cost_ledger_entry_by_id(conn: sqlite3.Connection, ledger_id: int) -> dic
 
 
 def list_cost_ledger_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict[str, Any]]:
-    """Return all cost_ledger rows for a run, ordered by ts."""
+    """Return all cost_ledger rows for a run, ordered by ts (deterministic
+    tie-break on ledger_id)."""
     cur = conn.execute(
         """
         SELECT ledger_id, ts, run_id, skill_id, model_id, call_kind,
                input_tok, cache_write_tok, cache_read_tok, output_tok, usd
-        FROM cost_ledger WHERE run_id = ? ORDER BY ts
+        FROM cost_ledger WHERE run_id = ? ORDER BY ts, ledger_id
         """,
         (run_id,),
     )
@@ -84,7 +85,7 @@ def select_cost_ledger_since(conn: sqlite3.Connection, since_ts: str) -> list[di
         """
         SELECT ledger_id, ts, run_id, skill_id, model_id, call_kind,
                input_tok, cache_write_tok, cache_read_tok, output_tok, usd
-        FROM cost_ledger WHERE ts >= ? ORDER BY ts
+        FROM cost_ledger WHERE ts >= ? ORDER BY ts, ledger_id
         """,
         (since_ts,),
     )

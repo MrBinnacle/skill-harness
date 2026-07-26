@@ -65,12 +65,13 @@ def get_confound_event_by_id(
 
 
 def list_confound_events_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict[str, Any]]:
-    """Return all confound events for a run, ordered by detected_at."""
+    """Return all confound events for a run, ordered by detected_at
+    (deterministic tie-break on confound_event_id)."""
     cur = conn.execute(
         """
         SELECT confound_event_id, run_id, primary_clause_id, affected_clause_id,
                axis, delta, null_sigma, k_threshold, delta_kind, detected_at
-        FROM confound_events WHERE run_id = ? ORDER BY detected_at
+        FROM confound_events WHERE run_id = ? ORDER BY detected_at, confound_event_id
         """,
         (run_id,),
     )
@@ -86,7 +87,7 @@ def select_confound_events_by_kind(
         """
         SELECT confound_event_id, run_id, primary_clause_id, affected_clause_id,
                axis, delta, null_sigma, k_threshold, delta_kind, detected_at
-        FROM confound_events WHERE delta_kind = ? ORDER BY detected_at
+        FROM confound_events WHERE delta_kind = ? ORDER BY detected_at, confound_event_id
         """,
         (delta_kind,),
     )

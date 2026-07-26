@@ -47,10 +47,11 @@ def get_skill_by_id(conn: sqlite3.Connection, skill_id: str) -> dict[str, Any] |
 
 
 def list_skills(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Return all skill rows ordered by imported_at."""
+    """Return all skill rows ordered by imported_at (deterministic tie-break
+    on skill_id)."""
     cur = conn.execute(
         "SELECT skill_id, name, source_path, source_sha256, imported_at"
-        " FROM skills ORDER BY imported_at"
+        " FROM skills ORDER BY imported_at, skill_id"
     )
     return [
         {
