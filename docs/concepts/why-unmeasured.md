@@ -24,9 +24,10 @@ aggregate-layer representation of a clause that was never reached by the runner 
 commonly because the runner's oracle gate fired before any subject-model calls were
 made. See `tier2_uncalibrated` for the runner-layer cause.
 
-Example: a skill with 17 domain-specific axes (e.g., `citation_presence_per_flag`)
-runs against a harness that has only four registered Tier-1 scorers (`verbosity`,
-`hedge_index`, `structure_score`, `compliance_proxy`). None of the axes match. The
+Example: a skill with 17 domain-specific axes (e.g., `legal_disclaimer_presence`)
+runs against a harness that has only five registered Tier-1 scorers (`verbosity`,
+`hedge_index`, `structure_score`, `compliance_proxy`, `citation_presence_per_flag`).
+None of the axes match. The
 runner fires the BLOCKER-1 gate for all 17 clauses, writes zero verdict rows, and the
 aggregator returns `no_data` for every clause.
 

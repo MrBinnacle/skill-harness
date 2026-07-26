@@ -37,8 +37,8 @@ Both API surfaces accept EITHER `ANTHROPIC_API_KEY` (direct Anthropic) OR
 - `skill init` — the extractor's OpenRouter fallback landed on `main` 2026-06-09
   (`b5b9fe6`). It is NOT in the `v0.1.0` tag; reproduce against `main`.
 - `run ablation --execute` — accepts either key (OpenRouter routing emits a stderr
-  warning). Pass `-SubjectModel` to vary the model id; see the script's `--help`
-  for the matrix.
+  warning). Pass `-SubjectModel` to vary the model id; the key/model matrix is
+  documented in the script's header comments.
 
 The reproduction script exits with a helpful error if neither key is present. The
 case study's HALT 2 narrative records the author hitting the pre-fallback asymmetry

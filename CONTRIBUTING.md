@@ -25,13 +25,15 @@ python -m venv .venv
 pre-commit install
 ```
 
-Verify everything works:
+Verify everything works (`PYTHONHASHSEED=0` is required — the Tier-1
+bit-equality tests refuse to collect without it; on Windows use
+`set PYTHONHASHSEED=0` first):
 
 ```bash
-pytest -q                              # 8 passed
-mypy --strict src tests                # 0 errors
-ruff check src tests                   # 0 issues
-ruff format --check src tests          # 0 reformats needed
+PYTHONHASHSEED=0 pytest -q -m "not live"   # all green (mirrors CI)
+mypy --strict src tests                    # 0 errors
+ruff check src tests                       # 0 issues
+ruff format --check src tests              # 0 reformats needed
 ```
 
 ## The discipline
@@ -83,7 +85,7 @@ For architectural changes, open a discussion before an issue.
 `ruff` and `mypy --strict` are the source of truth. Their configs live in `pyproject.toml`. Don't introduce per-file overrides without justification in the PR.
 
 - Line length: 100
-- Target: Python 3.11
+- Target: Python 3.12
 - Imports: sorted by `ruff` (`I` rules)
 - Type annotations: required on every function and method body (`mypy --strict`)
 - Docstrings: brief; the WHY (non-obvious invariants), not the WHAT (which the code already shows)

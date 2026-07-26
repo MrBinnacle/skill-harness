@@ -2,7 +2,7 @@
 # One-shot reproduction of the ai-slop-sentinel case study.
 #
 # Prerequisites:
-#   - Python 3.11+ with venv at .venv (run: python -m venv .venv && .venv\Scripts\pip install -e ".[dev]")
+#   - Python 3.12+ with venv at .venv (run: python -m venv .venv && .venv\Scripts\pip install -e ".[dev]")
 #   - ANTHROPIC_API_KEY (Anthropic direct) OR OPENROUTER_API_KEY (auto-routed via
 #     OpenRouter's Anthropic-compatible endpoint, with a stderr warning) set in the
 #     environment. Both `skill init` and `run ablation --execute` accept either key

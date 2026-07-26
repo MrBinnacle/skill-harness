@@ -40,11 +40,15 @@ Most benchmarks hand you a number no matter what. This tool refuses. That refusa
 > the tool doing its job, not a failure.
 >
 > **Honest maturity.** **Zero measured KEEPs exist in the program to date.** The paired
-> Full-vs-Null path that would produce one is coded and cost-free-validated but has *never fired* —
-> it launches only on the first task whose no-skill screen returns a pass rate below 1, and so far
-> every screened skill ceilings at 1. Store-backed coverage is partial: only a handful of the ~26
-> screen verdicts derive from an append-only evidence store (the two live runs plus a curated
-> batch-1 backfill); the rest are prose-backed pending backfill. A tool that has never said KEEP,
+> Full-vs-Null path that would produce one is coded and shaken down end-to-end — one paired k=8
+> run (2026-07-09, ≈$6.17) executed as a pre-registered apparatus shakedown and returned a
+> NO-GO datum, not a benefit measurement ([the double-ceiling case
+> study](docs/case-studies/double-ceiling-structurally-unmeasured.md)). A sized benefit run
+> launches only on the first task whose no-skill screen returns a pass rate below 1, and so far
+> every screened skill ceilings at 1. Store-backed coverage is partial: only a handful of the
+> program's screen verdicts (a record resting on 26/26 Null epochs across 6 screened tasks)
+> derive from an append-only evidence store (the two live runs plus a curated batch-1
+> backfill); the rest are prose-backed pending backfill. A tool that has never said KEEP,
 > and says so plainly, is more trustworthy than one that manufactures a KEEP to look useful. The
 > v0.1→v0.2 re-aim that got us here is pre-registered and published, not papered over:
 > [`docs/findings/v0.2-reaim-gate.md`](docs/findings/v0.2-reaim-gate.md).
@@ -84,7 +88,7 @@ skill-harness skill audit path/to/your/SKILL.md
 Two commands to your first verdict. `skill audit` is fully offline: a structural check against
 [Anthropic's authoring spec](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices),
 plus a preview of what a paid run could measure about this skill today and which claims would
-come back `UNMEASURED`. Real output:
+come back `UNMEASURED`. Output (abridged):
 
 ```text
 OFFLINE AUDIT — no API calls, no cost
@@ -104,13 +108,15 @@ Evaluability preflight — what a paid run could measure today:
   Behavior-shaped claims (correctness, tool use, outcomes): no mechanical
   instrument in v0.1 → verdict would be UNMEASURED, not an estimate.
 
-Summary: 3 pass · 0 warn — UNMEASURED is a verdict, not a failure.
+Summary: 2 pass · 0 warn — UNMEASURED is a verdict, not a failure.
 ```
 
 Note the third line of that report: when the tool can't read something, it says so and skips
 the check — it does not pass what it did not measure. That's the whole design, applied at every
 layer. `--strict` exits 1 on warnings for CI use. On Windows terminals, set `PYTHONUTF8=1`
-first.
+first. (`skill audit` itself never touches the network; the paid measurement paths fetch
+tiktoken's `cl100k_base` encoding (~1.7 MB) on first use — pre-seed `TIKTOKEN_CACHE_DIR` on
+air-gapped machines.)
 
 ## Measuring for real (API key required)
 
@@ -121,8 +127,8 @@ skill-harness run evaluate-skill <skill_id>            # aggregate verdicts
 ```
 
 Both `skill init` and `run ablation` accept **either** `ANTHROPIC_API_KEY` (direct) or
-`OPENROUTER_API_KEY` (auto-routed). Every `run` command is dry-run by default; `--execute` is
-required to spend money, and per-run/daily budget caps are enforced. Reproduction script and
+`OPENROUTER_API_KEY` (auto-routed). Every command that can spend money is dry-run by default;
+`--execute` is required to spend, and per-run/daily budget caps are enforced. Reproduction script and
 details: [`examples/`](examples/).
 
 ## What it measures today — and what it refuses to
@@ -142,8 +148,9 @@ contrast, run against an agentic multi-turn subject with deterministic outcome o
 admissibility field — because published agentic-benchmark experience puts harness-induced
 variance at 10–20 points on identical model weights, larger than most skill effects. The
 claim-level style path above still exists as the offline/audit surface. What has *not* yet
-fired is the paired Full-vs-Null run — see the status note at the top: it launches only when a
-screen returns a sub-1 pass rate, and none has yet.
+fired is a paired Full-vs-Null *benefit* run — the one paired execution to date was a
+pre-registered apparatus shakedown that returned NO-GO (see the status note at the top): a
+sized benefit run launches only when a screen returns a sub-1 pass rate, and none has yet.
 
 ## How it compares
 

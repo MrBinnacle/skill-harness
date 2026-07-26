@@ -238,7 +238,9 @@ set PYTHONUTF8=1
 set PYTHONHASHSEED=0  # before running pytest tests/oracles/tier1/
 ```
 
-Full development workflow: `CLAUDE.md` ENV RECIPE section.
+Full development workflow: `CLAUDE.md` ENV RECIPE section (local, not
+published; the tracked equivalents now live in `CONTRIBUTING.md` and
+`docs/INVARIANTS.md`).
 
 ---
 

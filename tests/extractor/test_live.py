@@ -1,6 +1,7 @@
 """Live integration test: calls the real Anthropic API.
 
-Marked ``@pytest.mark.live`` — excluded from the default test run.
+Marked ``@pytest.mark.live`` — excluded from CI's run (``-m "not live"``,
+which local runs should mirror; a bare ``pytest`` does NOT deselect it).
 Run explicitly with::
 
     pytest -m live tests/extractor/test_live.py

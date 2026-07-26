@@ -1,7 +1,8 @@
 """Batch-1 Stage-0 screen backfill manifest + apply logic.
 
-The 26 Stage-0 screen verdicts in the program to date exist only as prose (the
-v0.2 pre-registration + per-skill EVIDENCE.md). This backfill makes the subset
+The program's Stage-0 screen verdicts to date (a record resting on 26/26 Null
+epochs across 6 tasks, per the registered pre-registration) exist only as
+prose (the v0.2 pre-registration + per-skill EVIDENCE.md). This backfill makes the subset
 that HAS raw Inspect ``.eval`` logs on disk store-auditable: it ingests those
 logs into the screen store (migration 0501) so p0 — and therefore the keep/cut
 verdict — is DERIVED from append-only evidence rather than hand-transcribed.

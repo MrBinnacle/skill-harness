@@ -23,7 +23,7 @@ Grading the skill file — linting it, having an LLM judge it — answers *"is t
 
 ## Making the task harder should create a KEEP eventually — why doesn't it?
 
-It was tried. In one screen, a frontier agent passed 14/14 no-skill runs across two deliberately hardened tasks — making the traps more naturalistic did not open any headroom for a skill to fill. The pattern holds because a reminder-style skill only helps where the model's baseline behavior actually falls short; when the baseline is already competent, there's nothing to remind. Measurable benefit showed up only for a data-skepticism check the model genuinely sometimes skips. See [case-studies/double-ceiling-structurally-unmeasured.md](case-studies/double-ceiling-structurally-unmeasured.md).
+It was tried. Across two screens and a paired run, a frontier agent passed 14/14 no-skill epochs on two deliberately hardened tasks — making the traps more naturalistic did not open any headroom for a skill to fill. The pattern holds because a reminder-style skill only helps where the model's baseline behavior actually falls short; when the baseline is already competent, there's nothing to remind. The one hint of headroom was a data-skepticism check the model genuinely sometimes skips — an unpublished dogfooding observation, not a tracked verdict. See [case-studies/double-ceiling-structurally-unmeasured.md](case-studies/double-ceiling-structurally-unmeasured.md).
 
 ## Does it only work with Claude?
 

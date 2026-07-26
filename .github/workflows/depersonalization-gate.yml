@@ -7,7 +7,8 @@
 # hooks' suspenders.
 #
 # It runs ONLY the residue-* hooks (language: pygrep, zero external deps) so it stays
-# fast and does not duplicate the heavier ruff/mypy/gitleaks work that ci.yml covers.
+# fast and does not duplicate the heavier ruff/mypy work that ci.yml covers
+# (gitleaks runs as a local pre-commit hook only, not in CI).
 # The .pre-commit-config.yaml is the single source of truth for the patterns.
 name: de-personalization gate
 

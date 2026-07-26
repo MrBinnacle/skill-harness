@@ -8,6 +8,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`skill audit` now works fully offline on a cold cache.** The Tier-1 verbosity
+  module loaded tiktoken's `cl100k_base` encoding at import time, and `skill audit`
+  imports that module just to enumerate axis names — so the "fully offline, no cost"
+  command crashed on air-gapped machines with a network fetch to
+  `openaipublic.blob.core.windows.net`. The encoding now loads lazily on first
+  tokenization; audit never touches the network, and only paid measurement paths
+  fetch (pre-seed `TIKTOKEN_CACHE_DIR` for air-gapped measurement runs).
+- **Launch-surface fact corrections from a pre-launch readiness review.** README/
+  CHANGELOG/docstring claims brought back in line with the repo's own registered
+  record: the paired Full-vs-Null path is described as shaken down via the
+  pre-registered k=8 NO-GO apparatus run (≈$6.17), not "never fired /
+  cost-free-validated"; "~26 screen verdicts" corrected to the registered
+  denominator (26/26 Null epochs across 6 screened tasks) in README, CHANGELOG
+  0.2.0 entry, and `screen_backfill.py`; the audit sample's summary line corrected
+  from "3 pass" to the tool's real "2 pass" output; pyproject's description now
+  names the shipped verdict trio (KEEP / CUT / CAN'T-TELL-YET); the stale
+  "extractor has no OpenRouter fallback" claim in the ai-slop-sentinel case study
+  updated to record the 2026-06-09 fix; the FAQ's "one screen" 14/14 phrasing
+  corrected to "two screens and a paired run" with the data-skepticism aside marked
+  as an unpublished observation; four scorers → five in `why-unmeasured.md`;
+  `docs/INVARIANTS.md` replaces dead `CLAUDE.md` references in the PR template and
+  issue chooser; unpublished internal paths in case studies and concepts docs
+  marked as private provenance markers per `docs/PLAN.md`'s convention; SECURITY.md
+  Dependabot/pre-commit claim and dead profile-email fallback channel corrected;
+  `inspect-swe` maintainer-org provenance corrected in the supply-chain audit;
+  CONTRIBUTING's Python target (3.11 → 3.12), stale "8 passed" count, and verify
+  commands (now `PYTHONHASHSEED=0 pytest -q -m "not live"`, mirroring CI) fixed;
+  `live` marker text no longer claims deselect-by-default.
+
+### Changed
+- **Local pre-commit hooks now mirror CI verdicts.** `mirrors-mypy` bumped
+  v1.10.0 → v2.3.0 (the requirements-ci.txt pin), its default
+  `--ignore-missing-imports` overridden (it flipped CI-required `type: ignore`
+  comments to "unused"), and hook deps extended with the runtime stack
+  (openai/scipy/statsmodels/tiktoken/pytest-socket); ruff hook bumped to the CI
+  pin v0.15.22. `pre-commit run mypy --all-files` previously failed with 10
+  errors on a fresh clone; now green.
+- Packaging metadata: `pre-commit` added to the `dev` extras (CONTRIBUTING's
+  setup uses it), and `Changelog`/`Documentation` project URLs added for PyPI.
 - **Non-deterministic ordering in `calibration_events` audit queries.**
   `list_calibration_events_for_judge_axis` (and its sibling
   `select_calibration_events_by_state`) ordered by `validated_at DESC` with no
@@ -58,9 +97,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shows the two live end-to-end receipts (`append-only-evidence-design` and a hardened
   `git-pull-rebase-trap`, both **CUT (subsumed)** at a bare-arm pass rate of 1.00), and
   states the honest maturity plainly: **zero measured KEEPs in the program to date**, and
-  store-backed coverage is partial (a handful of the ~26 screen verdicts, the rest
-  prose-backed pending backfill). Replaces the earlier "v0.1 measures style-level effects"
-  framing.
+  store-backed coverage is partial (a handful of the program's screen verdicts — a record
+  resting on 26/26 Null epochs across 6 screened tasks — the rest prose-backed pending
+  backfill). Replaces the earlier "v0.1 measures style-level effects" framing.
 - **Paired KEEP path annotated as coded-but-never-fired, with a named firing trigger.**
   `aggregation.verdict` (Path B docstring) now records that the paired Full-vs-Null mapping
   launches only on the first task whose Null screen returns a pass rate below 1, and that
