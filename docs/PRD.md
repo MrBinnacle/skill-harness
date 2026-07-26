@@ -12,6 +12,23 @@ Author: TBD
      Rationale per amendment lives in the internal council findings log (not published).
      PRD stays spec; Council stays rationale. -->
 
+> **Amendment note (2026-07-26).** This is the ratified v1.1 spec; two sections
+> below predate the shipped v0.2 surface and are retained as the record rather
+> than silently rewritten:
+>
+> - **§12** lists Compliance Proxy, Citation Density, and Hedge Index as
+>   *Demoted from Tier 1 (NOT mechanical without further support)*. The
+>   "further support" subsequently shipped: the A33 mechanical-validity gate
+>   (offline, deterministic, bit-equal — see "Mechanical validity" below §12),
+>   and the v0.2.0 registry
+>   (`ablation/confound.py::get_default_tier1_scorers`) carries five Tier-1
+>   scorers: `verbosity`, `hedge_index`, `structure_score`, `compliance_proxy`,
+>   `citation_presence_per_flag`.
+> - **§18**'s "surface is locked — no new commands" records the v1.1 lock.
+>   v0.2 extended the surface under its own pre-registered gate
+>   (`docs/findings/v0.2-reaim-gate.md`): `skill audit` and the `screen` group
+>   (`screen verdict`, `screen backfill`). See `CHANGELOG.md` 0.2.0 / 0.2.0a0.
+
 ---
 
 # 1. Executive Summary
@@ -484,6 +501,10 @@ A contaminated delta must never be reported as clean evidence.
 
 # 12. Mechanical Metric Library (Initial)
 
+*(v1.1 position — see the Amendment note at the top of this file: the demotions
+below were later satisfied by the A33 mechanical-validity gate, and v0.2 ships
+five Tier-1 scorers.)*
+
 ## Demoted from Tier 1 (NOT mechanical without further support)
 
 * **Assertion Density** (`factual_claims / sentences`) — requires NLI / claim extraction
@@ -843,6 +864,9 @@ A new production reference outside this list fails the hook; `tests/test_structu
 ---
 
 # 18. CLI
+
+*(v1.1 surface — see the Amendment note at the top of this file: v0.2 added
+`skill audit` and the `screen` group under its own pre-registered gate.)*
 
 ## `skill init`
 
