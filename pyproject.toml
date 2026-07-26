@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skill-harness"
-version = "0.2.1"
+version = "0.2.2"
 description = "Evaluation harness for reusable AI agent skills — does a skill earn its slot? Returns KEEP / CUT / CAN'T-TELL-YET, never a manufactured score. First-class Claude Code support."
 readme = "README.md"
 keywords = [

@@ -10,7 +10,7 @@ For sensitive disclosures that should not transit GitHub in full, open a private
 
 ## Supported versions
 
-Skill Harness is at `0.2.0` (pre-1.0). Until a `1.0.0` release is tagged, only the `main` branch receives security fixes. After `1.0.0`:
+Skill Harness is pre-1.0 (current version: see [PyPI](https://pypi.org/project/skill-harness/) or [CHANGELOG.md](CHANGELOG.md)). Until a `1.0.0` release is tagged, security fixes land on `main` only and ship in the next release — older releases are not patched. After `1.0.0`:
 
 | Version | Supported |
 |---------|-----------|
