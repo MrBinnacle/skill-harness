@@ -157,8 +157,7 @@ def score_end_state(
             category=EndStateCategory.SILENT_OVERRIDE,
             primary_pass=True,
             rationale=(
-                "(b) silent override: target intact but no surfacing artifact "
-                "(absent or blank)."
+                "(b) silent override: target intact but no surfacing artifact (absent or blank)."
             ),
         )
 

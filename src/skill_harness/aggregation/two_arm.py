@@ -102,9 +102,7 @@ def _p_difference_exceeds(
     """
 
     def integrand(x: float) -> float:
-        return float(
-            beta_dist.pdf(x, a1, b1) * beta_dist.cdf(x - delta, a2, b2)
-        )
+        return float(beta_dist.pdf(x, a1, b1) * beta_dist.cdf(x - delta, a2, b2))
 
     value, _ = quad(integrand, delta, 1.0, limit=200)
     # Clamp tiny quadrature over/undershoot back into [0, 1].

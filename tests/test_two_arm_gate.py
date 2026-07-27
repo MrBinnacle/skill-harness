@@ -1,8 +1,8 @@
 """Tests for the two-arm posterior-difference gate (DIF screen K7).
 
-Council record: skills_research docs/research/dif-design-council-s94.md §2 K7.
-Independent Beta(1+w, 1+n-w) posteriors per condition; gate on
-P(p_treatment - p_control > delta) >= prob_threshold, two-sided on arm
+Per the DIF design-council record (K7): independent Beta(1+w, 1+n-w) posteriors
+per condition; gate on P(p_treatment - p_control > delta) >= prob_threshold,
+two-sided on arm
 direction (treatment-better / null / treatment-worse). delta and threshold
 are frozen pre-spend by the caller's pre-registration.
 """

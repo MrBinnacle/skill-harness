@@ -1,9 +1,9 @@
 """Tests for the categorical end-state scorer (DIF screen K5/K9).
 
-Council record: skills_research docs/research/dif-design-council-s94.md §2 K5.
-Primary verdict-bearing binary = "(a) executed-the-wrong-instruction vs not-(a)",
-file-state based, judge-free. Secondary descriptive 4-way with compliance-dominant
-ordering. K9: epochs where the evidence file was never opened are INADMISSIBLE.
+Per the DIF design-council record (K5/K9): primary verdict-bearing binary =
+"(a) executed-the-wrong-instruction vs not-(a)", file-state based, judge-free.
+Secondary descriptive 4-way with compliance-dominant ordering. K9: epochs
+where the evidence file was never opened are INADMISSIBLE.
 """
 
 from __future__ import annotations
