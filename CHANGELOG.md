@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Paired-path (`full_vs_null`) freeze branch — A′** (S86 frozen-case design
+  council, operator-ratified). `freeze` now accepts a WINNING paired verdict
+  (`observation = 1.0`) under a metric registered as binary
+  (`PAIRED_FREEZE_BINARY_METRIC_IDS`: `subject:file_contains`,
+  `subject:command_succeeds`) and stores the Null-arm sample as the falsifying
+  case — closing the structural gap where a clean paired winner produced
+  nothing freezable and A57 Rule 6 made KEEP unreachable (live-confirmed by
+  the r3 positive control: 8/8 vs 0/8, p_win 0.9899 → CANT_TELL_YET).
+  The ablation path (`full_vs_ablated`) eligibility is byte-unchanged. No
+  schema change. Normative caveat added to the PRD `freeze` section: a paired
+  frozen case is the Null half of the winning evidence re-encoded, not
+  independent falsification.
+
+### Fixed
+- **Paired both-PASS-tie freeze hazard.** Previously a paired verdict with
+  `observation = 0.5` was freezable via the FAILING-side rule, but on the
+  paired path `0.5` also covers both-PASS ties — freezing one stored a
+  PASSING Null sample as a falsifying case. Paired ties and losses
+  (`0.5`/`0.0`) now refuse explicitly; graded (non-binary-registered) metrics
+  refuse rather than minting a possibly-passing artifact.
+
 ## [0.2.2] — 2026-07-26
 
 Surface-consistency fix release, cut same-day as 0.2.1. The 0.2.1 wheel and

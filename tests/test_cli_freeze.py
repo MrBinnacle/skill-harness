@@ -542,3 +542,113 @@ class TestFreezeDryRunOpensReadonly:
             "freeze --execute must call open_evidence (writable) at least once; "
             f"recorded calls: {writable_calls}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests: Paired-path (full_vs_null) eligibility — A′ (S86 council record)
+# ---------------------------------------------------------------------------
+
+_BINARY_METRIC = "subject:file_contains"
+
+
+def _seed_paired_verdict(
+    ev: sqlite3.Connection,
+    verdict_id: str = _VERDICT_ID,
+    observation: float = 1.0,
+    metric_id: str = _BINARY_METRIC,
+) -> None:
+    """Seed a paired (full_vs_null) verdict with a binary subject metric."""
+    _seed_base(ev)
+    ev.execute(
+        "INSERT INTO metric_versions"
+        " (metric_id, version, implementation_hash, tier,"
+        " audited, mechanical_validity_test_passed, registered_at)"
+        " VALUES (?, '0.2.0', ?, 1, 1, 1, ?)",
+        (metric_id, _SHA2, _TS),
+    )
+    config = json.dumps({"contrast": "full_vs_null"})
+    ev.execute(
+        "INSERT INTO runs (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+        " VALUES (?, ?, 'evaluate_skill', ?, ?, ?)",
+        (_RUN_ID, _SKILL_ID, config, _TS, _TS2),
+    )
+    for sample_id, condition in [("sa-p-001", "full"), ("sb-p-001", "null")]:
+        output_text = f"Sample output for {sample_id}"
+        ev.execute(
+            "INSERT INTO samples (sample_id, run_id, clause_id, condition,"
+            " subject_model, output_text, output_sha256, sampled_at, sample_index)"
+            " VALUES (?, ?, ?, ?, 'claude-sonnet-4-6', ?, ?, ?, 0)",
+            (sample_id, _RUN_ID, _CLAUSE_ID, condition, output_text, sha256_of(output_text), _TS),
+        )
+    ev.execute(
+        """INSERT INTO oracle_verdicts (
+            verdict_id, run_id, clause_id, axis, comparison,
+            sample_a_id, sample_b_id, observation, oracle_tier,
+            metric_id, metric_version,
+            admissibility_state, written_at
+        ) VALUES (?, ?, ?, 'outcome', 'full_vs_null',
+            'sa-p-001', 'sb-p-001', ?, 1, ?, '0.2.0', 'admissible', ?)""",
+        (verdict_id, _RUN_ID, _CLAUSE_ID, observation, metric_id, _TS),
+    )
+
+
+class TestFreezePairedPath:
+    def test_paired_winning_verdict_freezes_exit_0(self, tmp_path: Path) -> None:
+        """A′: paired obs=1.0 under a registered-binary metric freezes."""
+        ev, rt = open_both(tmp_path)
+        _seed_paired_verdict(ev, observation=1.0)
+        ev.close()
+        rt.close()
+        result = _invoke(
+            "freeze",
+            _VERDICT_ID,
+            "--execute",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+            "--runtime-db",
+            str(tmp_path / "runtime.db"),
+        )
+        assert result.exit_code == 0, f"got {result.exit_code}:\n{result.output}"
+        ev = open_evidence(tmp_path / "evidence.db")
+        row = ev.execute(
+            "SELECT failing_input_text FROM frozen_cases WHERE verdict_id = ?", (_VERDICT_ID,)
+        ).fetchone()
+        ev.close()
+        assert row is not None
+        assert row[0] == "Sample output for sb-p-001"  # the Null-arm sample
+
+    def test_paired_tie_refused_exit_1(self, tmp_path: Path) -> None:
+        """A′: paired obs=0.5 may be a both-PASS tie — refused."""
+        ev, rt = open_both(tmp_path)
+        _seed_paired_verdict(ev, observation=0.5)
+        ev.close()
+        rt.close()
+        result = _invoke(
+            "freeze",
+            _VERDICT_ID,
+            "--execute",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+            "--runtime-db",
+            str(tmp_path / "runtime.db"),
+        )
+        assert result.exit_code == 1, f"got {result.exit_code}:\n{result.output}"
+        assert "1.0" in result.output
+
+    def test_paired_nonbinary_metric_refused_exit_1(self, tmp_path: Path) -> None:
+        """A′: paired obs=1.0 under an unregistered (graded) metric — refused."""
+        ev, rt = open_both(tmp_path)
+        _seed_paired_verdict(ev, observation=1.0, metric_id="subject:graded_rubric")
+        ev.close()
+        rt.close()
+        result = _invoke(
+            "freeze",
+            _VERDICT_ID,
+            "--execute",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+            "--runtime-db",
+            str(tmp_path / "runtime.db"),
+        )
+        assert result.exit_code == 1, f"got {result.exit_code}:\n{result.output}"
+        assert "binary" in result.output
