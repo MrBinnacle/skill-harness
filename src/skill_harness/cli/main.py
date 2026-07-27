@@ -1947,6 +1947,138 @@ def freeze(
             ev_conn.close()
 
 
+@cli.command("audit-metric")
+@click.argument("metric_id")
+@click.option(
+    "--attest",
+    default=None,
+    help=(
+        "REQUIRED non-empty operator attestation string. Echoed in output "
+        "(dry-run and execute) and intended for the operator's commit trail; "
+        "NOT stored in the DB (metric_versions has no attester column)."
+    ),
+)
+@click.option(
+    "--execute",
+    is_flag=True,
+    default=False,
+    help="Write the audited row (default: dry-run, no writes).",
+)
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB (created and bootstrapped on --execute if absent).",
+)
+def audit_metric(metric_id: str, attest: str | None, execute: bool, evidence_db: Path) -> None:
+    """Register an audited metric_versions row for a subject Tier-1 metric.
+
+    The audited-metric act (PRD §15.1; S88 A-double-prime): audited=1 attests
+    that a deliberate operator act registered this metric implementation,
+    hash-pinned against the shipped module at execution time. It is an
+    operator-attested, hash-pinned registration — NOT a claim of independent
+    construct-validity review. Attester identity lives in the operator's
+    commit trail, not the DB.
+
+    Pre-register-before-ingest: run this against a FRESH store BEFORE its
+    first ingest; ingest's existence guard then short-circuits and frozen
+    cases can label 'current'. No act flips audited on an existing row
+    (append-only): a store whose row was minted unaudited requires re-ingest
+    into a store audited first.
+
+    Defaults to dry-run — use --execute to write.
+    Idempotent: re-run after success exits 0 with 'already audited' ONLY if
+    the existing row is audited and its hash matches the live module; a hash
+    mismatch refuses loudly (implementation drift).
+
+    Exit codes (A58):
+      0  — registered or already audited
+      1  — refused (missing/blank --attest, unregistered metric_id,
+           existing unaudited row, hash drift, DB not found on dry-run)
+    """
+    from skill_harness.storage.migrations import open_evidence, open_evidence_readonly
+    from skill_harness.storage.repositories.evidence.frozen_cases import (
+        PAIRED_FREEZE_BINARY_METRIC_IDS,
+    )
+    from skill_harness.storage.repositories.evidence.metric_versions import (
+        plan_audited_metric_registration,
+        register_audited_metric,
+    )
+
+    # K3: the act is a deliberate typed attestation — refuse before any DB work.
+    if attest is None or not attest.strip():
+        raise click.ClickException(
+            'audit-metric requires a non-empty --attest "<text>" — the audited flip is '
+            "a deliberate operator act; type what you are attesting."
+        )
+
+    # Membership pre-check BEFORE opening the DB: --execute bootstraps an absent
+    # store, and a refused act must not leave one behind. The refusal logic
+    # itself stays single-sourced in plan_audited_metric_registration (K6);
+    # this only mirrors freeze's registry-membership guard (no third copy of
+    # the id strings).
+    if metric_id not in PAIRED_FREEZE_BINARY_METRIC_IDS:
+        raise click.ClickException(
+            f"metric {metric_id!r} is not registered for the audit-metric act. "
+            f"Registered metric ids: {sorted(PAIRED_FREEZE_BINARY_METRIC_IDS)}."
+        )
+
+    # I4: open read-only for dry-run (least-privilege); writable only on
+    # --execute. Mirrors freeze.
+    ev_conn: sqlite3.Connection | None = None
+    try:
+        try:
+            ev_conn = open_evidence(evidence_db) if execute else open_evidence_readonly(evidence_db)
+        except Exception as exc:  # includes BootstrapError when DB not found
+            raise click.ClickException(f"Cannot open evidence DB at {evidence_db}: {exc}") from exc
+
+        try:
+            plan = plan_audited_metric_registration(ev_conn, metric_id)
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+        if not execute:
+            if plan.action == "already_audited":
+                _console.print(
+                    f"\n[bold yellow]DRY-RUN[/] (no writes — use --execute to write)"
+                    f"\nmetric [bold]{metric_id}[/] is already audited at version "
+                    f"{plan.version} with a hash matching the live module — nothing to do."
+                    f"\n  attestation (echoed, not stored): {attest}"
+                )
+                return
+            _console.print(
+                f"\n[bold yellow]DRY-RUN[/] (no writes — use --execute to write)"
+                f"\nWOULD register audited metric_versions row:"
+                f"\n  metric_id:                        {plan.metric_id}"
+                f"\n  version:                          {plan.version}"
+                f"\n  implementation_hash (live):       {plan.implementation_hash}"
+                f"\n  tier:                             1"
+                f"\n  audited:                          1"
+                f"\n  mechanical_validity_test_passed:  1"
+                f"\n  attestation (echoed, not stored): {attest}"
+            )
+            return
+
+        try:
+            row = register_audited_metric(ev_conn, metric_id)
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+        verb = "already audited" if plan.action == "already_audited" else "registered"
+        colour = "yellow" if plan.action == "already_audited" else "green"
+        _console.print(
+            f"\n[{colour}]{verb}[/] audited metric [bold]{row['metric_id']}[/]"
+            f" version {row['version']}:"
+            f"\n  implementation_hash:              {row['implementation_hash']}"
+            f"\n  registered_at:                    {row['registered_at']}"
+            f"\n  attestation (echoed, not stored): {attest}"
+        )
+    finally:
+        if ev_conn is not None:
+            ev_conn.close()
+
+
 # ---------------------------------------------------------------------------
 # Render helpers for evaluate-skill and diff skill
 # ---------------------------------------------------------------------------

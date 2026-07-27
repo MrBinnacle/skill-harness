@@ -526,6 +526,8 @@ five Tier-1 scorers.)*
 
 Every Tier-1 metric must pass an offline-only, network-blocked, deterministic-output test before its `tier = 1` row inserts into `metric_versions`. Implementation primitive: `pytest-socket` + bit-equality assertion + `PYTHONHASHSEED=0` discipline; test modules carry `pytestmark = pytest.mark.disable_socket`. `metric_versions.mechanical_validity_test_passed = 1` flips only on tests-pass AND zero socket attempts. Failures auto-downgrade the metric to Tier 2.
 
+§12.1's outcome is `mechanical_validity_test_passed` only; the `audited` flip is the separate operator act defined in §15.1.
+
 ---
 
 ## Unsupported
@@ -699,7 +701,9 @@ SELECT version, implementation_hash FROM metric_versions
  LIMIT 1
 ```
 
-The `audited + validity_passed` filter is load-bearing: a metric_version that failed §12.1's mechanical-validity audit must NOT be considered current.
+The `audited + validity_passed` filter is load-bearing, and its two flags are distinct: `mechanical_validity_test_passed` records the outcome of §12.1's mechanical-validity audit gate, while `audited` records the separate operator act defined below. A metric_version missing either flag must NOT be considered current.
+
+**The audited flip (normative).** `audited = 1` on a metric_versions row attests: a deliberate operator act (`audit-metric`) registered this metric implementation, hash-pinned against the shipped module at execution time. It is an operator-attested, hash-pinned registration — NOT a claim of independent construct-validity review. The act requires a non-empty operator-typed attestation string (`--attest "<text>"`), echoed in its dry-run and execute output; it defaults to dry-run and writes only on `--execute`. No act flips audited on an existing row (append-only); a store whose row was minted unaudited requires re-ingest into a store audited first. Attester identity lives in the operator's commit trail, not the DB (`registered_at` already captures when). The schema layer cannot prevent a hand-crafted INSERT from forging `audited = 1` — the semantic is act-enforced only.
 
 **Auto-flip rule:** a clause whose only frozen cases are at non-current metric_versions transitions to `UNMEASURED(falsifying_case_stale)`. Stale cases remain in `frozen_cases` (audit trail) but do NOT count toward the §19 #7 PASSED gate. **No re-freeze command** — the operator re-runs `freeze` with a new verdict collected under the current metric_version (append-only; no stamp-renewal-without-evidence path).
 
@@ -945,6 +949,22 @@ Both paths: `admissibility_state = 'admissible'` AND `oracle_source = 'mechanica
 **Dry-run default** (consistent with `skill init`, `run ablation`, `calibrate`).
 
 **Discoverability:** Track D ablation report adds a `verdict_id` column for operator lookup.
+
+---
+
+## `audit-metric`
+
+`audit-metric <metric_id>` — register an audited `metric_versions` row for a subject Tier-1 metric (the §15.1 audited flip; pre-register-before-ingest).
+
+**Semantics:** normative definition in §15.1 "The audited flip". The row written is the exact shape ingest would write except `audited = 1`: `version = ORACLE_METRIC_VERSION`, `implementation_hash` computed live by ingest's own hash function (imported, never duplicated — the pin must keep binding to the oracle module), `tier = 1`, `mechanical_validity_test_passed = 1`.
+
+**Requires** a non-empty `--attest "<text>"` operator attestation (echoed in output, not stored — attester identity lives in the commit trail).
+
+**Refuses (exit 1):** metric not in `PAIRED_FREEZE_BINARY_METRIC_IDS`; an existing unaudited row at the same `(metric_id, version)` (append-only — recovery is audit-metric against a fresh store, then re-ingest); an existing audited row whose hash no longer matches the live module (implementation drift).
+
+**Idempotent:** re-run after success exits 0 with `"already audited"` only when the existing audited row's hash matches the live module.
+
+**Dry-run default** (consistent with `skill init`, `run ablation`, `freeze`, `calibrate`); prints the full would-be row including the live hash. Ingest's side of the contract: when its existence guard finds a pre-registered `(metric_id, version)` row, it recomputes the live hash and refuses fail-closed on mismatch (drift check; remedy = bump `ORACLE_METRIC_VERSION` or run the matching code).
 
 ---
 
