@@ -122,14 +122,17 @@ def test_no_mapping_emits_harmful() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Program invariant: zero measured KEEPs to date
+# Program invariant: zero production-skill KEEPs to date (the one measured KEEP,
+# 2026-07-27, is a declared synthetic positive control on the paired path —
+# out of scope of this screen-ceiling invariant)
 # ---------------------------------------------------------------------------
 
 
 def test_program_to_date_has_zero_keeps() -> None:
-    """Every screen in the program ceilinged (p0 >= 0.8: the 26/26 at 1.0 and P4.1
-    at 0.8). None can produce a KEEP — the S67 headline. If this ever fails, a real
-    KEEP has appeared and the ship-bar #4 decision re-opens."""
+    """Every production-skill screen in the program ceilinged (p0 >= 0.8: the
+    26/26 at 1.0 and P4.1 at 0.8). None can produce a KEEP — the S67 headline.
+    If this ever fails, a real KEEP has appeared and the ship-bar #4 decision
+    re-opens."""
     program_p0s = [1.0] * 26 + [0.8]  # 26/26 ceilings + P4.1
     verdicts = [screen_verdict(p).verdict for p in program_p0s]
     assert KeepCutVerdict.KEEP not in verdicts

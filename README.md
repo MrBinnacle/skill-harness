@@ -26,7 +26,8 @@ back labeled `UNMEASURED` instead of a made-up score.
 
 Most benchmarks hand you a number no matter what. This tool refuses. That refusal is the product.
 
-> **Status: v0.2.2 — on PyPI; the keep/cut verdict layer is live; zero measured KEEPs to date.**
+> **Status: v0.2.2 — on PyPI; the keep/cut verdict layer is live; first measured KEEP
+> (2026-07-27) is a declared synthetic positive control — zero production-skill KEEPs to date.**
 > The tool now answers the slot question with one of three verdicts: **KEEP** (measurably earns
 > its slot), **CUT** — either *subsumed* (the model already does the task without the skill) or
 > *no-lift* (measured on a task the model needed help with, and it didn't deliver) — or
@@ -40,17 +41,23 @@ Most benchmarks hand you a number no matter what. This tool refuses. That refusa
 > 1.00: the model passed every no-skill epoch, so there was nothing for the skill to add. That is
 > the tool doing its job, not a failure.
 >
-> **Honest maturity.** **Zero measured KEEPs exist in the program to date.** The paired
-> Full-vs-Null path that would produce one is coded and shaken down end-to-end — one paired k=8
+> **Honest maturity.** **Zero production-skill KEEPs exist in the program to date.** The full
+> KEEP lane — paired Full-vs-Null writer plus the audited-metric registration act — has fired
+> end-to-end exactly once (2026-07-27): a **declared synthetic positive control** (a skill
+> carrying an invented fact, so the effect is real by construction) earned a store-backed KEEP
+> at Full 8/8 vs Null 0/8, posterior p_win 0.99. That run validates the instrument — the label
+> fires when a real effect exists — and is labeled as such; it is not a production skill earning
+> its slot. Before it, one paired k=8
 > run (2026-07-09, ≈$6.17) executed as a pre-registered apparatus shakedown and returned a
 > NO-GO datum, not a benefit measurement ([the double-ceiling case
 > study](https://github.com/MrBinnacle/skill-harness/blob/main/docs/case-studies/double-ceiling-structurally-unmeasured.md)). A sized benefit run
 > launches only on the first task whose no-skill screen returns a pass rate below 1, and so far
-> every screened skill ceilings at 1. Store-backed coverage is partial: only a handful of the
+> every screened production skill ceilings at 1. Store-backed coverage is partial: only a handful of the
 > program's screen verdicts (a record resting on 26/26 Null epochs across 6 screened tasks)
 > derive from an append-only evidence store (the two live runs plus a curated batch-1
-> backfill); the rest are prose-backed pending backfill. A tool that has never said KEEP,
-> and says so plainly, is more trustworthy than one that manufactures a KEEP to look useful. The
+> backfill); the rest are prose-backed pending backfill. A tool that says KEEP only for a
+> measured effect — and labels its one synthetic-control KEEP as exactly that — is more
+> trustworthy than one that manufactures a KEEP to look useful. The
 > v0.1→v0.2 re-aim that got us here is pre-registered and published, not papered over:
 > [`docs/findings/v0.2-reaim-gate.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/v0.2-reaim-gate.md).
 

@@ -6,9 +6,9 @@ Short answers to the questions this tool provokes. Depth links point into the re
 
 No. `UNMEASURED` is a verdict, not an error. It means the evidence on the table doesn't support a keep/cut call — the task was too easy to separate the arms, the run was too noisy, or the judge for that axis isn't calibrated. The tool stores that state and reports it plainly instead of rounding noise up into a finding. A benchmark that always prints a number can't tell you when it doesn't actually know. See [concepts/why-unmeasured.md](concepts/why-unmeasured.md).
 
-## Zero measured KEEPs so far — is the tool broken?
+## Zero production-skill KEEPs so far — is the tool broken?
 
-No — and this is the most useful thing it tells you. On a frontier model, *"the model already does this fine without the skill"* is the most common truthful result. Every skill screened to date has ceilinged: the model passed the no-skill runs, so there was nothing for the skill to add. Two skills were run live end-to-end (`append-only-evidence-design` and a hardened `git-pull-rebase-trap`); both came back **CUT (subsumed)** at a bare-arm pass rate of 1.00. That's the instrument working. A tool that has never said KEEP, and says so plainly, is more trustworthy than one that manufactures a KEEP to look useful.
+No — and this is the most useful thing it tells you. On a frontier model, *"the model already does this fine without the skill"* is the most common truthful result. Every production skill screened to date has ceilinged: the model passed the no-skill runs, so there was nothing for the skill to add. Two skills were run live end-to-end (`append-only-evidence-design` and a hardened `git-pull-rebase-trap`); both came back **CUT (subsumed)** at a bare-arm pass rate of 1.00. That's the instrument working. The KEEP path itself is validated, not hypothetical: a declared synthetic positive control — a skill carrying an invented fact, so the effect exists by construction — earned the program's first store-backed KEEP (2026-07-27, Full 8/8 vs Null 0/8), confirming the label fires when a real effect is present. A tool that says KEEP only for a measured effect, and labels its one synthetic-control KEEP as exactly that, is more trustworthy than one that manufactures a KEEP to look useful.
 
 ## What's the difference between the CUT verdicts?
 
