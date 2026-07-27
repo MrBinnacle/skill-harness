@@ -96,6 +96,11 @@ class AlreadyIngestedError(EvalLogIngestError):
     """Raised when this pair of Inspect task ids was already written."""
 
 
+class MetricImplementationDriftError(EvalLogIngestError):
+    """Raised when the store's (metric_id, version) row pins a hash that no
+    longer matches the live module (S88 condition K2 — fail-closed re-check)."""
+
+
 class ParsedSample(BaseModel):
     """One subject trial extracted from an Inspect eval log."""
 
@@ -302,7 +307,23 @@ def write_paired_evidence(
                     created_at=now,
                 ),
             )
-        if get_metric_version(conn, metric_id, ORACLE_METRIC_VERSION) is None:
+        existing_metric = get_metric_version(conn, metric_id, ORACLE_METRIC_VERSION)
+        if existing_metric is not None:
+            # S88 K2 fail-closed re-check: the existence guard alone would let a
+            # drifted module keep minting verdicts under a stale registered hash
+            # (tamper-evidence blind spot — the hash is otherwise computed at
+            # exactly one time, first insert). Raising here aborts the
+            # transaction; nothing is written.
+            live_hash = _oracle_implementation_hash()
+            if existing_metric["implementation_hash"] != live_hash:
+                raise MetricImplementationDriftError(
+                    f"metric_versions row ({metric_id!r}, {ORACLE_METRIC_VERSION!r}) pins "
+                    f"implementation_hash {existing_metric['implementation_hash']}, but the "
+                    f"live oracle module hashes to {live_hash} — the scoring code changed "
+                    "after registration. Remedy: bump ORACLE_METRIC_VERSION for the changed "
+                    "implementation, or run the code matching the registered hash."
+                )
+        else:
             insert_metric_version(
                 conn,
                 MetricVersionWrite(
