@@ -27,8 +27,8 @@ from typing import Any
 
 from skill_harness.storage.models import FrozenCaseWrite
 
-# Paired-path (full_vs_null) freeze eligibility — A′ fallback registry (S86 council
-# record, skills_research docs/research/frozen-case-design-council.md).
+# Paired-path (full_vs_null) freeze eligibility — A-prime fallback registry (S86 council
+# record — private research notes; summarized in the PRD 'freeze' section).
 #
 # Under a BINARY metric, a paired obs=1.0 (full_score > null_score with scores in
 # {0.0, 1.0}) entails null_score == 0.0 — the Null sample failed the outcome
@@ -43,7 +43,7 @@ from skill_harness.storage.models import FrozenCaseWrite
 # fires instead: eligibility = obs==1.0 AND metric registered as binary; the
 # re-verify is pre-registered as the follow-on (needs per-arm scores persisted —
 # D22 lane). Registration is in-code because metric_versions is append-only and
-# carries no binary/graded flag (adding one is DDL, excluded from A′ by design).
+# carries no binary/graded flag (adding one is DDL, excluded from A-prime by design).
 PAIRED_FREEZE_BINARY_METRIC_IDS: frozenset[str] = frozenset(
     {
         # subject/inspect_adapter.py scorers: CORRECT/INCORRECT only, mapped
@@ -99,8 +99,8 @@ def freeze_verdict(
     Ablation path (comparison='full_vs_ablated', unchanged — A56):
     - verdict.observation in {0.0, 0.5}   (FAILING side)
 
-    Paired path (comparison='full_vs_null', A′ — S86 council record,
-    skills_research docs/research/frozen-case-design-council.md):
+    Paired path (comparison='full_vs_null', A-prime — S86 council record,
+    private research notes; normative summary in the PRD 'freeze' section):
     - verdict.observation == 1.0 (winning epoch: Full passed, Null failed)
     - verdict.metric_id in PAIRED_FREEZE_BINARY_METRIC_IDS (binary metrics
       only — see the registry's rationale; graded metrics refuse explicitly)
@@ -162,7 +162,7 @@ def freeze_verdict(
 
     # --- eligibility: observation, branched on comparison ---
     if comparison == "full_vs_null":
-        # A′ paired branch: only a winning epoch under a registered-binary
+        # A-prime paired branch: only a winning epoch under a registered-binary
         # metric proves sample_b (the Null arm) failed absolutely.
         if observation != 1.0:
             raise ValueError(

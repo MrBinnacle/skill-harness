@@ -1795,11 +1795,11 @@ def freeze(
     evidence_db: Path,
     runtime_db: Path,
 ) -> None:
-    """Promote a freezable verdict into the frozen regression suite (A56/A′).
+    """Promote a freezable verdict into the frozen regression suite (A56/A-prime).
 
     Eligibility (branches on verdict.comparison):
       - ablation (full_vs_ablated): verdict.observation in {0.0, 0.5} (FAILING side)
-      - paired (full_vs_null, A′): verdict.observation == 1.0 AND the metric
+      - paired (full_vs_null, A-prime): verdict.observation == 1.0 AND the metric
         registered as binary — the Null-arm sample is stored as the falsifying
         case. A paired frozen case is the Null half of the winning evidence
         re-encoded, not independent falsification (PRD §18 `freeze`).
@@ -1854,7 +1854,7 @@ def freeze(
         ) = verdict_row
 
         # ------------------------------------------------------------------
-        # Eligibility checks (A56 ablation / A′ paired) — mirror freeze_verdict
+        # Eligibility checks (A56 ablation / A-prime paired) — mirror freeze_verdict
         # ------------------------------------------------------------------
         if comparison == "full_vs_null":
             if observation != 1.0:

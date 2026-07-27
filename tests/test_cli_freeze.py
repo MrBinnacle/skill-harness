@@ -545,7 +545,7 @@ class TestFreezeDryRunOpensReadonly:
 
 
 # ---------------------------------------------------------------------------
-# Tests: Paired-path (full_vs_null) eligibility — A′ (S86 council record)
+# Tests: Paired-path (full_vs_null) eligibility — A-prime (S86 council record)
 # ---------------------------------------------------------------------------
 
 _BINARY_METRIC = "subject:file_contains"
@@ -594,7 +594,7 @@ def _seed_paired_verdict(
 
 class TestFreezePairedPath:
     def test_paired_winning_verdict_freezes_exit_0(self, tmp_path: Path) -> None:
-        """A′: paired obs=1.0 under a registered-binary metric freezes."""
+        """A-prime: paired obs=1.0 under a registered-binary metric freezes."""
         ev, rt = open_both(tmp_path)
         _seed_paired_verdict(ev, observation=1.0)
         ev.close()
@@ -618,7 +618,7 @@ class TestFreezePairedPath:
         assert row[0] == "Sample output for sb-p-001"  # the Null-arm sample
 
     def test_paired_tie_refused_exit_1(self, tmp_path: Path) -> None:
-        """A′: paired obs=0.5 may be a both-PASS tie — refused."""
+        """A-prime: paired obs=0.5 may be a both-PASS tie — refused."""
         ev, rt = open_both(tmp_path)
         _seed_paired_verdict(ev, observation=0.5)
         ev.close()
@@ -636,7 +636,7 @@ class TestFreezePairedPath:
         assert "1.0" in result.output
 
     def test_paired_nonbinary_metric_refused_exit_1(self, tmp_path: Path) -> None:
-        """A′: paired obs=1.0 under an unregistered (graded) metric — refused."""
+        """A-prime: paired obs=1.0 under an unregistered (graded) metric — refused."""
         ev, rt = open_both(tmp_path)
         _seed_paired_verdict(ev, observation=1.0, metric_id="subject:graded_rubric")
         ev.close()

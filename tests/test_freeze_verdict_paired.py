@@ -1,7 +1,7 @@
-"""Paired-path (full_vs_null) freeze tests — A′ arm-aware paired freeze branch.
+"""Paired-path (full_vs_null) freeze tests — A-prime arm-aware paired freeze branch.
 
-Design provenance: skills_research docs/research/frozen-case-design-council.md
-(S86, operator-ratified A′). Implemented under the record's pre-registered
+Design provenance: the S86 frozen-case design council record (private research
+notes; operator-ratified A-prime). Implemented under the record's pre-registered
 fallback eligibility — `observation == 1.0 AND metric registered as binary` —
 because the subject-path Tier-1 metrics (`subject:file_contains`,
 `subject:command_succeeds`) score SANDBOX state inside the Inspect sandbox,
@@ -206,8 +206,7 @@ class TestPairedWinFreezes:
         _seed_paired_win(evidence_db)
         fid = freeze_verdict(evidence_db, "vrd-paired-win", oracle_source="mechanical")
         row = evidence_db.execute(
-            "SELECT clause_id, axis, verdict_id, run_id FROM frozen_cases"
-            " WHERE frozen_case_id = ?",
+            "SELECT clause_id, axis, verdict_id, run_id FROM frozen_cases WHERE frozen_case_id = ?",
             (fid,),
         ).fetchone()
         assert row == ("cl1", "outcome", "vrd-paired-win", "run1")
@@ -303,7 +302,8 @@ class TestR3ShapedKeepEndToEnd:
     def test_without_freeze_gap_reproduces(self, evidence_db: sqlite3.Connection) -> None:
         """Pre-fix behavior: threshold cleared but nothing frozen → the r3 label."""
         self._seed_r3_shape(evidence_db)
-        status, sub = derive_clause_status(self._status_input(self._current_frozen_count(evidence_db)))
+        current = self._current_frozen_count(evidence_db)
+        status, sub = derive_clause_status(self._status_input(current))
         assert status is ClauseStatus.UNMEASURED
         assert sub is UnmeasuredSubReason.FALSIFYING_CASE_MISSING
         assert paired_verdict(status).verdict is KeepCutVerdict.CANT_TELL_YET
