@@ -929,9 +929,16 @@ May optionally mint a `runs.run_kind='evaluate_skill'` envelope as audit-trail m
 
 ## `freeze`
 
-`freeze <verdict_id>` — promote a failing verdict into the regression suite.
+`freeze <verdict_id>` — promote a freezable verdict into the regression suite.
 
-**v0.1 eligibility:** `observation ∈ {0.0, 0.5}` (FAILING side) AND `admissibility_state = 'admissible'` AND `oracle_source = 'mechanical'` (Tier-1 only; Tier-2 freezing deferred to v0.2 D22).
+**v0.1 eligibility** (branches on `verdict.comparison`):
+
+* Ablation path (`full_vs_ablated`, unchanged — A56): `observation ∈ {0.0, 0.5}` (FAILING side).
+* Paired path (`full_vs_null` — A′, S86 frozen-case design council): `observation = 1.0` (winning epoch) AND the verdict's metric is registered as binary (`PAIRED_FREEZE_BINARY_METRIC_IDS`); the Null-arm sample (`sample_b`) is stored as the falsifying case. Paired ties (`0.5`) and losses (`0.0`) refuse: without per-arm scores a `0.5` cannot be distinguished from a both-PASS tie, and freezing either would store a passing Null sample as a falsifying case. Under a binary metric, `observation = 1.0` entails the Null sample failed the outcome oracle absolutely; graded metrics refuse explicitly (freeze-time re-verification of absolute Null failure is pre-registered as the follow-on — it requires per-arm scores persisted, v0.2 D22 lane).
+
+Both paths: `admissibility_state = 'admissible'` AND `oracle_source = 'mechanical'` (Tier-1 only; Tier-2 freezing deferred to v0.2 D22).
+
+**Normative (A′):** a paired frozen case is the Null half of the winning evidence re-encoded, **not** independent falsification — on the paired path, any threshold-clearing run deterministically contains freezable evidence, so the §3.4 frozen-case gate does no independent inferential work there; anti-vacuity is discharged upstream by the Stage-0 Null screen (`p0 < 1`) and write-time admissibility, and a paired-path PASSED/KEEP must never be read as independently falsified.
 
 **Idempotent:** duplicate freeze of same `(clause_id, axis, failing_input_sha256)` raises UNIQUE → exit 0 with `"already frozen"` stderr (not silent no-op).
 

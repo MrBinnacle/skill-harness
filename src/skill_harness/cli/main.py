@@ -1795,10 +1795,14 @@ def freeze(
     evidence_db: Path,
     runtime_db: Path,
 ) -> None:
-    """Promote a FAILING verdict into the frozen regression suite (A56).
+    """Promote a freezable verdict into the frozen regression suite (A56/A-prime).
 
-    Eligibility:
-      - verdict.observation in {0.0, 0.5}  (FAILING side)
+    Eligibility (branches on verdict.comparison):
+      - ablation (full_vs_ablated): verdict.observation in {0.0, 0.5} (FAILING side)
+      - paired (full_vs_null, A-prime): verdict.observation == 1.0 AND the metric
+        registered as binary — the Null-arm sample is stored as the falsifying
+        case. A paired frozen case is the Null half of the winning evidence
+        re-encoded, not independent falsification (PRD §18 `freeze`).
       - verdict.admissibility_state == 'admissible'
       - verdict.oracle_source == 'mechanical' (Tier-1 only in v0.1)
       - verdict's parent run must be complete (completed_at IS NOT NULL)
@@ -1811,7 +1815,10 @@ def freeze(
       1  — validation refused (ineligibility, missing verdict, incomplete parent)
     """
     from skill_harness.storage.migrations import open_evidence, open_evidence_readonly
-    from skill_harness.storage.repositories.evidence.frozen_cases import freeze_verdict
+    from skill_harness.storage.repositories.evidence.frozen_cases import (
+        PAIRED_FREEZE_BINARY_METRIC_IDS,
+        freeze_verdict,
+    )
 
     # I4: open read-only for dry-run (least-privilege); writable only on --execute.
     # Mirrors open_evidence_readonly used by run evaluate-skill (main.py:1014).
@@ -1826,8 +1833,8 @@ def freeze(
         # Validate: verdict exists
         # ------------------------------------------------------------------
         verdict_row = ev_conn.execute(
-            """SELECT verdict_id, clause_id, axis, observation,
-                      admissibility_state, sample_b_id
+            """SELECT verdict_id, clause_id, axis, comparison, observation,
+                      admissibility_state, metric_id, sample_b_id
                FROM oracle_verdicts WHERE verdict_id = ?""",
             (verdict_id,),
         ).fetchone()
@@ -1839,15 +1846,32 @@ def freeze(
             _vrd_id,
             clause_id,
             axis,
+            comparison,
             observation,
             admissibility_state,
+            metric_id,
             sample_b_id,
         ) = verdict_row
 
         # ------------------------------------------------------------------
-        # Eligibility checks (A56)
+        # Eligibility checks (A56 ablation / A-prime paired) — mirror freeze_verdict
         # ------------------------------------------------------------------
-        if observation not in (0.0, 0.5):
+        if comparison == "full_vs_null":
+            if observation != 1.0:
+                raise click.ClickException(
+                    f"verdict {verdict_id!r} has observation={observation!r} "
+                    "(paired full_vs_null verdicts freeze only at observation 1.0 — "
+                    "a winning epoch whose Null arm failed absolutely; a paired 0.5 "
+                    "may be a both-PASS tie and 0.0 means the Null arm won)."
+                )
+            if metric_id not in PAIRED_FREEZE_BINARY_METRIC_IDS:
+                raise click.ClickException(
+                    f"verdict {verdict_id!r} uses metric {metric_id!r}, which is not "
+                    "registered as binary — paired freezing under a graded metric "
+                    f"could store a passing Null sample. Registered binary metrics: "
+                    f"{sorted(PAIRED_FREEZE_BINARY_METRIC_IDS)}."
+                )
+        elif observation not in (0.0, 0.5):
             raise click.ClickException(
                 f"verdict {verdict_id!r} has observation={observation!r} "
                 "(PASSING side — only FAILING verdicts with observation in {0.0, 0.5} can be "
@@ -1888,6 +1912,7 @@ def freeze(
                 f"\nWOULD freeze verdict [bold]{verdict_id}[/]:"
                 f"\n  clause_id:              {clause_id}"
                 f"\n  axis:                   {axis}"
+                f"\n  comparison:             {comparison}"
                 f"\n  observation:            {observation}"
                 f"\n  failing_input_sha256:   {failing_sha}"
                 f"\n  oracle_source:          {oracle_source}"

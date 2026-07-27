@@ -27,6 +27,32 @@ from typing import Any
 
 from skill_harness.storage.models import FrozenCaseWrite
 
+# Paired-path (full_vs_null) freeze eligibility — A-prime fallback registry (S86 council
+# record — private research notes; summarized in the PRD 'freeze' section).
+#
+# Under a BINARY metric, a paired obs=1.0 (full_score > null_score with scores in
+# {0.0, 1.0}) entails null_score == 0.0 — the Null sample failed the outcome
+# oracle ABSOLUTELY, so storing it as a falsifying case is sound. Under a graded
+# metric, full > null does NOT entail Null failure (full=0.8 > null=0.6), and
+# freezing would mint a poisoned artifact (referee attack, hub-confirmed).
+#
+# The record's primary design — freeze-time re-execution of the Tier-1 metric on
+# sample_b.output_text — is infeasible here: subject-path metrics score SANDBOX
+# state (a file read / command exit inside the Inspect sandbox, gone at freeze
+# time), while output_text stores the model completion. The record's fallback
+# fires instead: eligibility = obs==1.0 AND metric registered as binary; the
+# re-verify is pre-registered as the follow-on (needs per-arm scores persisted —
+# D22 lane). Registration is in-code because metric_versions is append-only and
+# carries no binary/graded flag (adding one is DDL, excluded from A-prime by design).
+PAIRED_FREEZE_BINARY_METRIC_IDS: frozenset[str] = frozenset(
+    {
+        # subject/inspect_adapter.py scorers: CORRECT/INCORRECT only, mapped
+        # {C: 1.0, I: 0.0} at ingest — binary by construction.
+        "subject:file_contains",
+        "subject:command_succeeds",
+    }
+)
+
 
 def insert_frozen_case(conn: sqlite3.Connection, case: FrozenCaseWrite) -> None:
     """Insert a new frozen_case row."""
@@ -66,13 +92,31 @@ def freeze_verdict(
     labeled_by: str | None = None,
     labeled_at: str | None = None,
 ) -> str:
-    """Promote a FAILING verdict into frozen_cases. Returns frozen_case_id.
+    """Promote a freezable verdict into frozen_cases. Returns frozen_case_id.
 
-    Eligibility (validated, raises on violation):
+    Eligibility (validated, raises on violation) — branches on verdict.comparison:
+
+    Ablation path (comparison='full_vs_ablated', unchanged — A56):
     - verdict.observation in {0.0, 0.5}   (FAILING side)
+
+    Paired path (comparison='full_vs_null', A-prime — S86 council record,
+    private research notes; normative summary in the PRD 'freeze' section):
+    - verdict.observation == 1.0 (winning epoch: Full passed, Null failed)
+    - verdict.metric_id in PAIRED_FREEZE_BINARY_METRIC_IDS (binary metrics
+      only — see the registry's rationale; graded metrics refuse explicitly)
+    - obs=0.5 refuses: without per-arm scores it cannot distinguish a
+      both-fail tie (Null genuinely failing) from a both-pass tie (Null
+      PASSING — freezing it would store a passing sample as falsifying)
+    - obs=0.0 refuses: the Null arm won; sample_b is a passing sample
+
+    Both paths:
     - verdict.admissibility_state == 'admissible'
     - verdict.oracle_source == 'mechanical' (Tier-1 only in v0.1 — A56)
     - verdict's parent runs.completed_at IS NOT NULL (also enforced by BEFORE INSERT trigger)
+
+    A paired frozen case is the Null half of the winning evidence re-encoded,
+    NOT independent falsification; anti-vacuity on the paired path is
+    discharged by Stage-0 + admissibility (normative — PRD §18 `freeze`).
 
     Idempotent: duplicate freeze (same clause_id, axis, failing_input_sha256) raises
     sqlite3.IntegrityError; the caller (CLI) MAY catch + report 'already frozen'
@@ -90,7 +134,7 @@ def freeze_verdict(
     # --- fetch verdict ---
     verdict_row = conn.execute(
         """
-        SELECT verdict_id, run_id, clause_id, axis,
+        SELECT verdict_id, run_id, clause_id, axis, comparison,
                observation, admissibility_state,
                oracle_tier, metric_id, metric_version,
                sample_a_id, sample_b_id
@@ -106,6 +150,7 @@ def freeze_verdict(
         run_id,
         clause_id,
         axis,
+        comparison,
         observation,
         admissibility_state,
         _oracle_tier,
@@ -115,8 +160,27 @@ def freeze_verdict(
         sample_b_id,
     ) = verdict_row
 
-    # --- eligibility: observation on FAILING side ---
-    if observation not in (0.0, 0.5):
+    # --- eligibility: observation, branched on comparison ---
+    if comparison == "full_vs_null":
+        # A-prime paired branch: only a winning epoch under a registered-binary
+        # metric proves sample_b (the Null arm) failed absolutely.
+        if observation != 1.0:
+            raise ValueError(
+                f"paired (full_vs_null) verdicts freeze only at observation 1.0 "
+                f"(winning epoch — Null failed absolutely under a binary metric); "
+                f"got {observation!r}. A paired 0.5 may be a both-PASS tie and "
+                f"0.0 means the Null arm won — freezing either would store a "
+                f"passing Null sample as a falsifying case."
+            )
+        if metric_id not in PAIRED_FREEZE_BINARY_METRIC_IDS:
+            raise ValueError(
+                f"paired (full_vs_null) freeze requires a metric registered as "
+                f"binary (one of {sorted(PAIRED_FREEZE_BINARY_METRIC_IDS)}); got "
+                f"{metric_id!r}. Under a graded metric full > null does not entail "
+                f"the Null sample failed — refusing to freeze a possibly-passing "
+                f"sample."
+            )
+    elif observation not in (0.0, 0.5):
         raise ValueError(
             f"verdict.observation must be 0.0 or 0.5 (FAILING side) to freeze; "
             f"got {observation!r}. Winning verdicts (1.0) cannot be frozen."
