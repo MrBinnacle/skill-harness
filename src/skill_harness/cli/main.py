@@ -2590,6 +2590,203 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
     )
 
 
+@screen.command("profile")
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB (read-only; no writes, no API calls).",
+)
+@click.option(
+    "--skills-root",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Root of a skills tree (<root>/<skill>/SKILL.md). Enables the "
+    "description-token standing-cost axis and library enumeration.",
+)
+@click.option(
+    "--show-held-columns",
+    is_flag=True,
+    default=False,
+    help="Show the HELD effect (95% CrI) and eff/cost columns (empty until the "
+    "paired path measures a per-skill effect).",
+)
+def screen_profile_cmd(
+    evidence_db: Path, skills_root: Path | None, show_held_columns: bool
+) -> None:
+    """Per-skill evaluation profile — separated GRADE-style axes (read-only VIEW).
+
+    Presents the harness's existing signals as SEPARATE columns — disposition,
+    verdict, evidence-quality, cost — one row per skill over the UNION of screened
+    skills and skills-root skills. It never fuses the axes into one ranking scalar
+    (GRADE / Guyatt 2008: keep evidence quality separate from strength). Evidence
+    quality is an ORDINAL label (Velleman & Wilkinson 1993 — no arithmetic on it).
+
+    The effect + eff/cost columns are HELD (the Stage-0 screen path yields no
+    paired per-skill effect yet); the fired-tax cost half is likewise held (no
+    sanctioned read-only open path exists for the runtime cost ledger yet).
+    """
+    from skill_harness.aggregation.profile import (
+        SkillProfileInput,
+        build_skill_profile,
+    )
+    from skill_harness.aggregation.verdict import screen_verdict
+    from skill_harness.extractor.errors import MalformedSkillError
+    from skill_harness.extractor.parser import parse_skill_file
+    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.migrations import open_evidence_readonly
+    from skill_harness.storage.repositories.evidence.screens import (
+        ScreenP0,
+        derive_p0_by_skill,
+    )
+
+    # --- Source the screened skills (read-only; p0 derived, never stored) -----
+    screened: dict[str, ScreenP0] = {}
+    if evidence_db.exists():
+        db_conn: sqlite3.Connection | None = None
+        try:
+            db_conn = open_evidence_readonly(evidence_db)
+            screened = {row.skill_name: row for row in derive_p0_by_skill(db_conn)}
+        except BootstrapError:
+            screened = {}
+        finally:
+            if db_conn is not None:
+                db_conn.close()
+
+    # --- Source the skills-root standing cost + disable-model-invocation flag --
+    # skills-root keys on the skill DIRECTORY name; the screen store keys on
+    # skill_name. In this store those identifiers are the same kebab-case slug, so
+    # the union below joins on that string. desc_token_cost is a chars/4 estimate;
+    # a disable-model-invocation skill is never loaded into context, so its
+    # standing tax is 0 (not None).
+    library: dict[str, tuple[int, bool]] = {}
+    if skills_root is not None and skills_root.is_dir():
+        for child in sorted(skills_root.iterdir()):
+            skill_md = child / "SKILL.md"
+            if not (child.is_dir() and skill_md.is_file()):
+                continue
+            try:
+                parsed = parse_skill_file(skill_md)
+            except (MalformedSkillError, OSError):
+                continue
+            description = parsed.frontmatter.get("description", "")
+            is_disable = parsed.frontmatter.get("disable-model-invocation", "").strip().lower() == (
+                "true"
+            )
+            desc_cost = 0 if is_disable else (len(description) + 3) // 4  # ceil(len/4)
+            library[child.name] = (desc_cost, is_disable)
+
+    if not screened and not library:
+        _console.print(
+            "\n[yellow]nothing to profile[/] — no screened skills and no --skills-root."
+            "\n[dim]  Run 'screen backfill --execute' or a screen, and/or pass --skills-root.[/]"
+        )
+        return
+
+    # --- Assemble the union into separated-axis inputs (no fusion) -------------
+    inputs: list[SkillProfileInput] = []
+    for skill in sorted(set(screened) | set(library)):
+        sp = screened.get(skill)
+        if sp is not None:
+            v = screen_verdict(sp.p0)
+            verdict = v.verdict
+            cut_sub_reason = v.cut_sub_reason
+            has_screen = True
+            n_trials = sp.n_trials
+        else:
+            verdict = None
+            cut_sub_reason = None
+            has_screen = False
+            n_trials = 0
+        # A screened skill absent from (or with no) skills-root has an unsourced
+        # standing cost (None), distinct from a real 0 for a never-loaded skill.
+        desc_cost_opt: int | None
+        desc_cost_opt, is_disable = library.get(skill, (None, False))
+        inputs.append(
+            SkillProfileInput(
+                skill=skill,
+                verdict=verdict,
+                cut_sub_reason=cut_sub_reason,
+                has_screen=has_screen,
+                n_trials=n_trials,
+                is_disable_model_invocation=is_disable,
+                desc_token_cost=desc_cost_opt,
+                fired_token_cost=None,  # HELD — no read-only runtime open path yet
+                fired_usd=None,
+            )
+        )
+
+    rows = build_skill_profile(inputs)
+
+    # --- Render: SEPARATE columns, per-axis vocabularies ----------------------
+    _disp_color = {"ADMITTED": "green", "EXCLUDED": "red", "NOT_YET_RANKABLE": "yellow"}
+    table = Table(title="Skill evaluation profile (separated GRADE-style axes)", show_lines=True)
+    table.add_column("skill", style="cyan", min_width=20, no_wrap=True)
+    table.add_column("disposition", min_width=12, no_wrap=True)
+    table.add_column("verdict", min_width=10, no_wrap=True)
+    table.add_column("evidence-quality", min_width=14, no_wrap=True)
+    table.add_column("desc-cost", justify="right", no_wrap=True)
+    table.add_column("fired-cost", justify="right", no_wrap=True)
+    if show_held_columns:
+        table.add_column("effect (95% CrI)", justify="center", no_wrap=True)
+        table.add_column("eff/cost", justify="right", no_wrap=True)
+
+    for row in rows:
+        disp = f"[{_disp_color[row.disposition]}]{row.disposition}[/]"
+        if row.verdict is None:
+            verdict_cell = "—"
+        else:
+            sub = f"({row.cut_sub_reason})" if row.cut_sub_reason else ""
+            verdict_cell = f"{row.verdict}{sub}"
+        desc_cell = "—" if row.desc_token_cost is None else f"{row.desc_token_cost:,}"
+        fired_cell = "—" if row.fired_token_cost is None else f"{row.fired_token_cost:,}"
+        cells = [
+            _sanitize_clause_text(row.skill, max_len=None),
+            disp,
+            verdict_cell,
+            row.evidence_quality,
+            desc_cell,
+            fired_cell,
+        ]
+        if show_held_columns:
+            # Effect is held: never a bare point — an em-dash until a CrI exists.
+            eff_cell = (
+                "—" if row.effect is None else f"[{row.effect.ci_lo:.2f}, {row.effect.ci_hi:.2f}]"
+            )
+            effpc_cell = "—" if row.effect_per_cost is None else f"{row.effect_per_cost:.4f}"
+            cells.extend([eff_cell, effpc_cell])
+        table.add_row(*cells)
+
+    _console.print(table)
+
+    # --- Footer notes (mirror the 'screen verdict' honesty footer) ------------
+    _console.print(
+        "\n[dim]Axes are SEPARATE and not fused into any ranking scalar (GRADE / Guyatt"
+        " 2008). evidence-quality is an ORDINAL label — compare, do not average"
+        " (Velleman & Wilkinson 1993). A verdict is a hardness screen, not a paired"
+        " measurement.[/]"
+    )
+    _console.print(
+        "[dim]desc-cost is a chars/4 estimate of the always-on description-token standing"
+        " tax (0 for disable-model-invocation skills — never loaded into context)."
+        " fired-cost (the per-epoch ledger tax) is HELD: no sanctioned read-only open"
+        " path exists for the runtime cost ledger yet.[/]"
+    )
+    if skills_root is None:
+        _console.print(
+            "[dim]No --skills-root: profiling screened skills only; the description-token"
+            " standing-cost axis and full library enumeration are shown as '—'.[/]"
+        )
+    if show_held_columns:
+        _console.print(
+            "[dim]effect (95% CrI) and eff/cost are HELD/scaffolded: the Stage-0 screen"
+            " path yields no paired per-skill effect, so both render '—'. Effect is a"
+            " Beta(1,1) equal-tailed 95% credible interval when measured — never a bare"
+            " point.[/]"
+        )
+
+
 @screen.command("backfill")
 @click.option(
     "--screens-root",
