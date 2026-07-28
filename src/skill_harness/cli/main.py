@@ -2650,6 +2650,17 @@ def screen_profile_cmd(
             screened = {row.skill_name: row for row in derive_p0_by_skill(db_conn)}
         except BootstrapError:
             screened = {}
+        except sqlite3.OperationalError:
+            # F-5 precedent (see 'skill clauses'): open_evidence_readonly does NOT
+            # apply migrations, so a PRESENT-but-malformed or pre-0501 evidence.db
+            # (missing screen_runs/screen_trials) makes derive_p0_by_skill raise
+            # OperationalError. Fall back to no screens — unlike 'screen verdict',
+            # this command can still profile the --skills-root library.
+            _console.print(
+                f"\n[yellow]evidence.db at {evidence_db} has no screen store "
+                "(missing/older schema); profiling the skills-root library only.[/]"
+            )
+            screened = {}
         finally:
             if db_conn is not None:
                 db_conn.close()
@@ -2661,6 +2672,12 @@ def screen_profile_cmd(
     # a disable-model-invocation skill is never loaded into context, so its
     # standing tax is 0 (not None).
     library: dict[str, tuple[int, bool]] = {}
+    if skills_root is not None and not skills_root.is_dir():
+        _console.print(
+            f"\n[yellow]--skills-root {skills_root} is not a directory — skipped.[/] "
+            "[dim]The description-token standing-cost axis and library enumeration "
+            "are unavailable.[/]"
+        )
     if skills_root is not None and skills_root.is_dir():
         for child in sorted(skills_root.iterdir()):
             skill_md = child / "SKILL.md"
@@ -2773,10 +2790,14 @@ def screen_profile_cmd(
         " fired-cost (the per-epoch ledger tax) is HELD: no sanctioned read-only open"
         " path exists for the runtime cost ledger yet.[/]"
     )
-    if skills_root is None:
+    if not library:
         _console.print(
-            "[dim]No --skills-root: profiling screened skills only; the description-token"
-            " standing-cost axis and full library enumeration are shown as '—'.[/]"
+            "[dim]No skills-root library: profiling screened skills only; the"
+            " description-token standing-cost axis and full library enumeration are shown"
+            " as '—'. UNMEASURABLE also depends on skills-root — the"
+            " disable-model-invocation flag is frontmatter-sourced, so a"
+            " disable-model-invocation skill profiled without skills-root cannot be"
+            " labelled UNMEASURABLE.[/]"
         )
     if show_held_columns:
         _console.print(

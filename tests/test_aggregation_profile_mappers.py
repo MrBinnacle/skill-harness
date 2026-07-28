@@ -12,9 +12,11 @@ from __future__ import annotations
 import pytest
 
 from skill_harness.aggregation.profile import (
+    EffectEstimate,
     EvidenceQuality,
     RankingDisposition,
     disposition_from_verdict,
+    effect_per_cost,
     evidence_quality_from_screen,
 )
 from skill_harness.aggregation.status import N_MIN
@@ -92,3 +94,24 @@ class TestEvidenceQualityFromScreen:
             )
             == EvidenceQuality.MEASURED_LOW
         )
+
+
+class TestEffectPerCost:
+    """The effect-per-cost display aid is defined ONLY where its inputs exist."""
+
+    def test_held_none_effect_returns_none(self) -> None:
+        # The current program state: no measured effect -> no eff/cost, ever.
+        assert effect_per_cost(None, 100) is None
+
+    def test_none_cost_returns_none(self) -> None:
+        eff = EffectEstimate(mean=0.4, ci_lo=0.1, ci_hi=0.7, is_prior_only=False)
+        assert effect_per_cost(eff, None) is None
+
+    def test_zero_cost_returns_none(self) -> None:
+        eff = EffectEstimate(mean=0.4, ci_lo=0.1, ci_hi=0.7, is_prior_only=False)
+        assert effect_per_cost(eff, 0) is None
+
+    def test_populated_effect_and_positive_cost_divides(self) -> None:
+        # Executable spec for the paired path: eff/cost = mean / desc_token_cost.
+        eff = EffectEstimate(mean=0.5, ci_lo=0.2, ci_hi=0.8, is_prior_only=False)
+        assert effect_per_cost(eff, 200) == 0.5 / 200

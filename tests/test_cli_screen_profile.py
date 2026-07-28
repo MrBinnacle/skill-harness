@@ -17,7 +17,7 @@ from typing import Any
 from click.testing import CliRunner
 
 from skill_harness.cli.main import cli
-from skill_harness.storage.migrations import open_evidence
+from skill_harness.storage.migrations import open_db, open_evidence
 from skill_harness.storage.models import ScreenRunWrite, ScreenTrialWrite
 from skill_harness.storage.repositories.evidence.screens import (
     insert_screen_run,
@@ -188,22 +188,32 @@ class TestScreenProfileHeldColumns:
 
     def test_held_columns_shown_with_flag(self, tmp_path: Path) -> None:
         evidence_db, skills_root = _make_library(tmp_path)
-        result = _invoke(
+        base_args = [
             "screen",
             "profile",
             "--evidence-db",
             str(evidence_db),
             "--skills-root",
             str(skills_root),
-            "--show-held-columns",
+        ]
+        hidden = _invoke(*base_args)
+        shown = _invoke(*base_args, "--show-held-columns")
+        assert hidden.exit_code == 0 and shown.exit_code == 0, shown.output
+
+        # The eff/cost header appears ONLY under the flag (unique token — not an
+        # incidental em-dash that also lives in a verdict cell).
+        assert "eff/cost" not in hidden.output
+        assert "eff/cost" in shown.output, (
+            f"--show-held-columns must reveal the held eff/cost column:\n{shown.output}"
         )
-        assert result.exit_code == 0, result.output
-        assert "eff/cost" in result.output, (
-            f"--show-held-columns must reveal the held eff/cost column:\n{result.output}"
+        # The two held columns (effect + eff/cost) each render an em-dash per row —
+        # a measured effect is absent, and effect is never a bare point. So the
+        # flagged render must carry strictly more em-dashes than the hidden one:
+        # exactly the effect columns' contribution, not just an incidental dash.
+        n_rows = 3  # alpha (screened) + beta + gamma
+        assert shown.output.count("—") >= hidden.output.count("—") + 2 * n_rows, (
+            f"held effect columns must render an em-dash per row:\n{shown.output}"
         )
-        # Held effect has no measured value yet -> rendered as an em-dash, never a
-        # bare point estimate.
-        assert "—" in result.output, result.output
 
 
 class TestScreenProfileNoSkillsRoot:
@@ -216,6 +226,61 @@ class TestScreenProfileNoSkillsRoot:
         # No skills-root -> desc-token standing-cost axis is unavailable; the
         # command says so and shows the cost as an em-dash.
         assert "skills-root" in result.output.lower(), result.output
+        # Honesty note: UNMEASURABLE depends on skills-root (frontmatter-sourced
+        # disable-model-invocation flag), so the footer must say so.
+        assert "UNMEASURABLE" in result.output, result.output
+
+
+class TestScreenProfileMalformedEvidenceDb:
+    def test_present_but_no_screen_tables_still_profiles_library(self, tmp_path: Path) -> None:
+        """F-5: a PRESENT evidence.db lacking screen_runs/screen_trials (pre-0501 or
+        malformed) must NOT traceback — it falls back to no screens and still profiles
+        the --skills-root library."""
+        evidence_db = tmp_path / "evidence.db"
+        # Valid SQLite file with a dummy table but no screen store (never migrated).
+        conn = open_db(evidence_db)
+        try:
+            conn.execute("CREATE TABLE dummy (x INTEGER)")
+            conn.commit()
+        finally:
+            conn.close()
+
+        skills_root = tmp_path / "skills"
+        _write_skill(skills_root, "some-helper", "A helper skill in the library.")
+
+        result = _invoke(
+            "screen",
+            "profile",
+            "--evidence-db",
+            str(evidence_db),
+            "--skills-root",
+            str(skills_root),
+        )
+        assert result.exit_code == 0, result.output
+        assert "Traceback" not in result.output, result.output
+        # Library still profiled.
+        assert "some-helper" in result.output, result.output
+        assert "UNMEASURED" in result.output, result.output
+
+
+class TestScreenProfileBadSkillsRoot:
+    def test_non_directory_skills_root_warns_and_continues(self, tmp_path: Path) -> None:
+        evidence_db = tmp_path / "evidence.db"
+        _seed_screen(evidence_db, "alpha-skill", n_trials=10, n_pass=10)
+        bogus_root = tmp_path / "does-not-exist"
+        result = _invoke(
+            "screen",
+            "profile",
+            "--evidence-db",
+            str(evidence_db),
+            "--skills-root",
+            str(bogus_root),
+        )
+        assert result.exit_code == 0, result.output
+        # A silent drop gives the user zero signal; the command must warn.
+        assert "not a directory" in result.output.lower(), result.output
+        # Screened skills are still profiled.
+        assert "alpha-skill" in result.output, result.output
 
 
 class TestScreenProfileHelp:

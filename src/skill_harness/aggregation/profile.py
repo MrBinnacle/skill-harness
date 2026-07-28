@@ -186,6 +186,22 @@ class SkillProfileRow:
     effect_per_cost: float | None  # HELD — None unless a measured effect is present
 
 
+def effect_per_cost(effect: EffectEstimate | None, desc_token_cost: int | None) -> float | None:
+    """Effect-per-standing-cost display aid — defined ONLY where its inputs exist.
+
+    Returns ``effect.mean / desc_token_cost`` when a measured effect is present and
+    the standing cost is a positive sourced value; otherwise ``None``. This is a
+    display aid shown BESIDE its inputs, never a cross-axis total order: it does not
+    combine evidence-quality or disposition, and it is undefined the moment either
+    input is missing. Effect is HELD today, so every caller gets ``None`` — but the
+    formula is kept as tested, executable spec for when the paired path measures an
+    effect (that is why this is a real helper, not an unreachable inline branch).
+    """
+    if effect is None or desc_token_cost is None or desc_token_cost <= 0:
+        return None
+    return effect.mean / desc_token_cost
+
+
 def build_skill_profile(inputs: list[SkillProfileInput]) -> list[SkillProfileRow]:
     """Assemble profile rows from already-sourced inputs (pure — no I/O).
 
@@ -204,11 +220,6 @@ def build_skill_profile(inputs: list[SkillProfileInput]) -> list[SkillProfileRow
             is_disable_model_invocation=inp.is_disable_model_invocation,
         )
         effect: EffectEstimate | None = None  # HELD
-        effect_per_cost: float | None = None
-        if effect is not None and inp.desc_token_cost is not None and inp.desc_token_cost > 0:
-            # Defined only where its inputs are measured. Unreachable while effect
-            # is held; kept so the paired path wires in without restructuring.
-            effect_per_cost = effect.mean / inp.desc_token_cost
         rows.append(
             SkillProfileRow(
                 skill=inp.skill,
@@ -220,7 +231,7 @@ def build_skill_profile(inputs: list[SkillProfileInput]) -> list[SkillProfileRow
                 fired_token_cost=inp.fired_token_cost,
                 fired_usd=inp.fired_usd,
                 effect=effect,
-                effect_per_cost=effect_per_cost,
+                effect_per_cost=effect_per_cost(effect, inp.desc_token_cost),
             )
         )
     return rows
