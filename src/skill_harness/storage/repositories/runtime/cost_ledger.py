@@ -79,6 +79,35 @@ def list_cost_ledger_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict
     return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
+def aggregate_cost_by_skill(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
+    """Roll up the fired-tax total per skill from the cost ledger.
+
+    Groups by ``skill_id`` and sums the four token columns
+    (``input_tok + cache_write_tok + cache_read_tok + output_tok``) into
+    ``total_tok`` and ``usd`` into ``total_usd``. Rows with a NULL ``skill_id``
+    (cost not attributable to a specific skill) are skipped. An empty ledger
+    yields ``{}``.
+
+    Returns ``{skill_id: {"total_tok": int, "total_usd": float}}``. Read-only —
+    a ``GROUP BY skill_id`` aggregate needs no row order, so there is no ORDER BY
+    (and therefore no timestamp-final ordering to tie-break).
+    """
+    cur = conn.execute(
+        """
+        SELECT skill_id,
+               SUM(input_tok + cache_write_tok + cache_read_tok + output_tok) AS total_tok,
+               SUM(usd) AS total_usd
+        FROM cost_ledger
+        WHERE skill_id IS NOT NULL
+        GROUP BY skill_id
+        """
+    )
+    out: dict[str, dict[str, Any]] = {}
+    for skill_id, total_tok, total_usd in cur.fetchall():
+        out[skill_id] = {"total_tok": int(total_tok), "total_usd": float(total_usd)}
+    return out
+
+
 def select_cost_ledger_since(conn: sqlite3.Connection, since_ts: str) -> list[dict[str, Any]]:
     """Return cost_ledger rows with ts >= since_ts (for rolling daily-cap check)."""
     cur = conn.execute(
