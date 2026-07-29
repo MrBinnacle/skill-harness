@@ -50,7 +50,7 @@ numpy==2.5.1
 # openai audited at 2.41.0 (docs/supply-chain/openai-audit-2026-06-08.md); the
 # pyproject.toml pin now caps at <3 so this constraint can never drift past
 # the audited major without a new audit (S4).
-openai==2.46.0
+openai==2.48.0
 packaging==26.2
 pandas==3.0.5
 pathspec==1.1.1
