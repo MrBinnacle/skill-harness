@@ -76,6 +76,24 @@ Enforced in:
 
 Spec: skill-harness #40 resolution record; drift-check row DC-10.
 
+## 6. Ratification binding (locked)
+
+Un-ratified spend is mechanically impossible: `run ablation --execute` refuses to
+proceed unless the invocation references a `docs/ratifications/RAT-*.md` record
+that (a) has status RATIFIED, (b) states a `hard_cap_usd` exactly equal to the
+`--max-usd` value registered through `run_budget.hard_cap_usd` (compared as
+integer cents), and (c) scope-matches the invocation (skill id + `--task-family`
++ `--estimand`). Dry-run stays ungated. Ratified in decision #47 (operator-picked
+mechanical binding, stronger than recommended); the eleven-field record checklist
+and signing order live in `docs/ratifications/README.md`.
+
+Enforced in:
+- `src/skill_harness/ratification.py::check_execute_ratification` (pure decision)
+- `src/skill_harness/cli/main.py` (`run ablation` --execute preflight)
+
+Spec: skill-harness #47 resolution record + #41 amendment; drift-check row DC-12
+(ledger internal consistency, independent reader).
+
 ---
 
 Re-pointed from "CLAUDE.md" to this file across `src/` and `tests/` (F5, then the

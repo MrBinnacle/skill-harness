@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`skill_harness.ratification` + the mechanical preflight gate on
+  `--execute`** (#57, PR-2 continuation; binding ratified on #47 —
+  operator-picked mechanical, stronger than recommended; historical-
+  classification obligation from the #41 amendment). Un-ratified spend is now
+  mechanically impossible: `run ablation --execute` refuses unless the
+  invocation references a `docs/ratifications/RAT-NNNN-<skill-slug>.md`
+  record with status RATIFIED, a `hard_cap_usd` exactly equal to the passed
+  `--max-usd` (compared as integer cents; #47 fixes caps to cent-rounded
+  values), and scope matching the invocation's skill id + new `--task-family`
+  + `--estimand` options. Dry-run stays ungated. Refusal lanes are typed
+  (record-missing / record-invalid / status-not-ratified / cap-mismatch /
+  scope-mismatch) and the gate fires before any DB connection, client
+  construction, or API-key check. Record validity is also enforced at parse
+  time: cap within the registered $35 ceiling, cap >= the record's own
+  worst-case cost, cent-quantized cap, gate-matched cost provenance
+  (`project_pair_usd` for Gate-2, `project_trial_usd` for Gate-1 — the #56
+  review carry-in), registered estimand only (`n/a` refused on forward-
+  looking records), and the verbatim disclosure line on self-certified
+  records. New `docs/ratifications/` ledger (README conventions + TEMPLATE
+  carrying the eleven-field checklist and signing order: SME first, operator
+  LAST pre-spend). The OBS front-matter schema (#41 ratified field list)
+  ships alongside so the parse fixtures double as the RAT/OBS schema contract
+  tests; `docs/observations/` itself is deliberately untouched (DC-13 stays
+  PLANNED). New `docs/INVARIANTS.md` §6 locks the binding. Drift row
+  **DC-12** (ledger internal consistency) is activated live with its own
+  deliberately independent reader — the src parser and the drift reader form
+  a differential pair.
 - **`skill_harness.oc.frontier` — frontier assembly with live cost
   projection under the $35 cap** (#56, PR-2 continuation; grid and budget
   ratified on #40, error semantics on #37, architecture on #42). Pure
