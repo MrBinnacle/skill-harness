@@ -208,6 +208,12 @@ def test_banned_terms_contain_the_e9r1_ban_with_empty_allowlist() -> None:
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _THIS_FILE = Path(__file__).resolve()
 _DEFINITION_SITE = _REPO_ROOT / "src" / "skill_harness" / "semantics.py"
+# The DC-3 drift-check row (#53) and its tests carry the token in their own
+# registered table / test data — same E1b structural exemption, not allowlist.
+_DRIFT_CHECK_SITES = (
+    _REPO_ROOT / "scripts" / "drift_check.py",
+    _REPO_ROOT / "tests" / "test_drift_check.py",
+)
 
 _SCAN_ROOTS = ("src", "tests", "docs", "scripts", "examples")
 _SCAN_SUFFIXES = {".py", ".md", ".txt", ".toml", ".yaml", ".yml"}
@@ -236,7 +242,7 @@ def test_banned_term_absent_repo_wide() -> None:
     pattern = re.compile(re.escape(_BANNED), re.IGNORECASE)
     violations: list[str] = []
     for path in _iter_scannable_files():
-        if path in {_THIS_FILE, _DEFINITION_SITE}:
+        if path in {_THIS_FILE, _DEFINITION_SITE, *_DRIFT_CHECK_SITES}:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         for lineno, line in enumerate(text.splitlines(), start=1):
