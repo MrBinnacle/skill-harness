@@ -116,6 +116,21 @@ jobs:
       - name: timestamp-final ORDER BY ban (deterministic tie-break on append-only tables)
         run: pre-commit run ban-timestamp-final-order-by --all-files
 
+  drift-check:
+    name: Drift check (locked contracts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      # Declarative contract table (#43/#53): pass-rule thresholds, sampling
+      # schedule, token bans, estimand vocabulary, registered claim sentences.
+      # Green output prints exactly what is covered — never more (F7).
+      - name: Run drift check
+        run: python scripts/drift_check.py
+
   release-gate:
     name: Release gate (surface lockstep)
     runs-on: ubuntu-latest
@@ -134,7 +149,7 @@ jobs:
 
   all-green:
     name: All checks green
-    needs: [lint, typecheck, test, structural-bans, release-gate]
+    needs: [lint, typecheck, test, structural-bans, drift-check, release-gate]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -144,6 +159,7 @@ jobs:
              [[ "${{ needs.typecheck.result }}" != "success" ]] || \
              [[ "${{ needs.test.result }}" != "success" ]] || \
              [[ "${{ needs.structural-bans.result }}" != "success" ]] || \
+             [[ "${{ needs.drift-check.result }}" != "success" ]] || \
              [[ "${{ needs.release-gate.result }}" != "success" ]]; then
             echo "One or more required checks failed."
             exit 1

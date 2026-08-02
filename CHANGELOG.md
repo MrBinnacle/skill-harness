@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Drift-check CI — declarative contract table** (#53, PR-1 of the instrument
+  upgrade; contract list ratified on #43). New `scripts/drift_check.py` in the
+  release-gate pattern: contract rows are DATA, so adding a locked contract is
+  a table row, not new code. Six live rows — DC-1 pass-rule thresholds
+  0.60/0.95/0.05 (cross-site equality across `aggregation/fit.py`,
+  `ablation/stopping.py`, `aggregation/status.py` + `INVARIANTS.md` quotes,
+  previously assumed, never enforced) · DC-2 sampling schedule N_MIN=8 /
+  N_INC=4 / N_MAX=40 · DC-3 the banned decision term, repo-wide with an EMPTY
+  allowlist (the CI enforcement of record the registry module pre-announced) ·
+  DC-4 estimand vocabulary (registry enum == the registered pair; no other
+  token in docs) · DC-5 the README launch-trigger sentence, both sites,
+  registered verbatim · DC-6 the spend-gating sentence + enforcement-pointer
+  liveness. Seven registered PLANNED rows (DC-7..DC-13) print as PLANNED until
+  the PR landing each surface activates them; DC-13's line records that its
+  surface (docs/observations/, PR #60) landed before this script existed and
+  activation is owed. Green output prints every covered contract, the coverage
+  boundary line, the PLANNED rows, and the allowlist even when empty; failures
+  are all listed, never first-fail. New `drift-check` job wired into the CI
+  all-green set.
 - **π_c invocation detection + zero-invocation refusal at subject ingest**
   (#52, PR-1 of the instrument upgrade; feasibility record #46). Every parsed
   sample now carries `invoked_skill` — the v1 detector
