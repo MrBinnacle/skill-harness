@@ -8,6 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`skill_harness.oc` — Gate-2 four-outcome lattice machinery** (#55, PR-2
+  continuation; rule forms ratified on #37, dual MME on #40, architecture on
+  #42). Three-sided paired decision rule {BENEFIT/HARM/EQUIVALENT}+UNRESOLVED
+  in the Goeman-partition form: the reference-prior Dirichlet over the four
+  paired cells (tie cells pooled) partitions the net lift δ = p_f − p_n at
+  the registered margin δ_min into three disjoint regions whose posterior
+  masses sum to 1 — γ stays the only confidence knob, and the zero-discordant
+  case is the #37-defined UNRESOLVED branch. New exact primitive
+  `dirichlet_delta_tail` (rational polygon integration of the integer-
+  parameter Dirichlet density — stdlib-exact, no quadrature, no simulation).
+  Dual-MME registration `MMESpec` (δ_min AND q_min) with the conforming-
+  region predicate H1 = {(d,q): δ ≥ δ_min ∧ q ≥ q_min} for #56's frontier
+  power target. Exact OC at any true (d, q) in two deliberately different
+  walks — trinomial convolution vs per-pair (x_f, x_n) lattice-DP curtailment
+  (#37 item 6, default-on; the scalar half-update state is ratified-
+  insufficient per #42) — pinned decision-identical differentially.
+  `gate2_worst_false_direction` reports the null false-direction rate as a
+  d-grid maximum PLUS the certified Bernstein-coefficient upper bound rather
+  than conflating a grid max with a supremum. Frequentist cross-checks per
+  #37 item 4: mid-p McNemar (exact conditional banned by name, FLL 2013),
+  Newcombe 1998 paired interval (method 10, anchored to the published Altman
+  2000 worked example), Tango 1998 score interval by deterministic bisection
+  inversion (anchored to a published clinical literal). Gate-2 floor items
+  from the banked prototype suite (trinomial sum-to-one, harm/benefit
+  symmetry, v3 curtailment identity) land as tests with independent
+  exact-fraction reference literals (order-swapped integration route);
+  boundary rows n=6 and n=40 covered. Drift-check row **DC-11** activated
+  live in this PR per the #43 same-PR extension rule (banned-methods tokens
+  scoped to oc/, with the printed E1b definition-site exemption for
+  `crosschecks.py`) — 9 live contracts, 4 PLANNED; `TokenBan` rows gain
+  per-row scoping (`roots` + `scan_repo_level`) and `LiveRow` carries a
+  tuple of token bans. Frontier assembly + live cost projection stays #56
+  (ZERO cost constants in this change, #42 convention 3).
 - **`skill_harness.oc` — pure-math OC engine, Gate-1 machinery** (#54, PR-2
   opener of the instrument upgrade; architecture ratified on #42, rule forms
   on #37, grid on #40). New top-level package importing NOTHING from the
