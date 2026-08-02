@@ -96,6 +96,7 @@ ORACLE_METRIC_VERSION: str = "0.3.0"
 # internally) and stays excluded until a non-claude_code solver exists.
 PI_C_DETECTOR_VERSION: str = "v1-skill-tool-call"
 SKILL_TOOL_FUNCTION: str = "Skill"
+SKILL_TOOL_ARGUMENT: str = "skill"  # arguments key naming the invoked skill
 PI_C_CONFIDENCE: float = 0.95
 
 _SCORE_VALUE_MAP: dict[str, float] = {"C": 1.0, "I": 0.0}
@@ -122,20 +123,6 @@ class MetricImplementationDriftError(EvalLogIngestError):
     longer matches the live module (S88 condition K2 — fail-closed re-check)."""
 
 
-class ZeroInvocationError(EvalLogIngestError):
-    """Refusal: the treated (Full) arm shows ZERO detected skill invocations.
-
-    A dead treated arm cannot distinguish "no effect" from "never invoked", so
-    no effect verdict is producible — the run surfaces as an INSTRUMENTATION
-    FINDING (delivery failure) instead of a null effect (#52). Carries the
-    mandatory π̂_c block on ``pi_c`` so the finding renders with its interval.
-    """
-
-    def __init__(self, message: str, *, pi_c: PiCSummary) -> None:
-        super().__init__(message)
-        self.pi_c = pi_c
-
-
 class PiCSummary(BaseModel):
     """π̂_c over the treated (Full) arm, with its Clopper-Pearson interval.
 
@@ -151,6 +138,20 @@ class PiCSummary(BaseModel):
     ci_low: float
     ci_high: float
     confidence: float
+
+
+class ZeroInvocationError(EvalLogIngestError):
+    """Refusal: the treated (Full) arm shows ZERO detected skill invocations.
+
+    A dead treated arm cannot distinguish "no effect" from "never invoked", so
+    no effect verdict is producible — the run surfaces as an INSTRUMENTATION
+    FINDING (delivery failure) instead of a null effect (#52). Carries the
+    mandatory π̂_c block on ``pi_c`` so the finding renders with its interval.
+    """
+
+    def __init__(self, message: str, *, pi_c: PiCSummary) -> None:
+        super().__init__(message)
+        self.pi_c = pi_c
 
 
 class ParsedSample(BaseModel):
@@ -224,7 +225,7 @@ def detect_skill_invocation(messages: Iterable[object], skill_name: str) -> bool
             if getattr(call, "function", None) != SKILL_TOOL_FUNCTION:
                 continue
             arguments = getattr(call, "arguments", None)
-            if isinstance(arguments, dict) and arguments.get("skill") == skill_name:
+            if isinstance(arguments, dict) and arguments.get(SKILL_TOOL_ARGUMENT) == skill_name:
                 return True
     return False
 
@@ -493,15 +494,7 @@ def write_paired_evidence(
                         "scorer": scorer_name,
                         "harness_pin_json": full.samples[0].harness_pin_json,
                         "harness_pin_fingerprint": full.samples[0].harness_pin_fingerprint,
-                        "pi_c": {
-                            "detector": PI_C_DETECTOR_VERSION,
-                            "invocations": pi_c.invocations,
-                            "trials": pi_c.trials,
-                            "pi_c_hat": pi_c.pi_c_hat,
-                            "ci_low": pi_c.ci_low,
-                            "ci_high": pi_c.ci_high,
-                            "confidence": pi_c.confidence,
-                        },
+                        "pi_c": {"detector": PI_C_DETECTOR_VERSION, **pi_c.model_dump()},
                     },
                     sort_keys=True,
                 ),
