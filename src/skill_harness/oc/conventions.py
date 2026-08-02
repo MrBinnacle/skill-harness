@@ -22,3 +22,12 @@ GRID_N_MAX: Final[int] = 40
 # The 12-24-pair band (#40, prototype P4) is a presentation highlight on the
 # frontier report, never a grid bound: enumeration is exact and $0, so
 # excluding rows saves nothing and loses information.
+BAND_N_LO: Final[int] = 12
+BAND_N_HI: Final[int] = 24
+
+# Provenance: #37 item 5 carries the candidate worst-case false-direction
+# target 0.05, finalized ONLY at row-pick - the frontier consumes it as an
+# overridable knob and never ratifies it (#56 acceptance criterion). A
+# ratified value would be a dated amendment to this comment, never a silent
+# constant change.
+CANDIDATE_FALSE_DIRECTION_TARGET: Final[float] = 0.05

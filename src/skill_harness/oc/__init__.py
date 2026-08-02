@@ -18,16 +18,34 @@ Grid conventions are ``oc``'s own registered constants (#40 provenance in
 :mod:`skill_harness.oc.conventions`; drift-check row DC-7).
 
 Gate-1 machinery landed with #54; the Gate-2 four-outcome (x_f, x_n) lattice
-machinery, dual-MME registration, and frequentist cross-checks land with
-#55. Frontier assembly with live cost projection is #56 - costs never enter
-below the frontier-assembly layer (#42 convention 3).
+machinery, dual-MME registration, and frequentist cross-checks landed with
+#55; frontier assembly landed with #56 - costs never enter below the
+frontier-assembly layer (#42 convention 3), and they enter it as registered
+knobs projected live by ``oracles.calibration.cost_projection``, keeping
+this package import-clean (drift rows DC-8/DC-9).
 """
 
 from __future__ import annotations
 
-from skill_harness.oc.conventions import GRID_N_MAX, GRID_N_MIN
+from skill_harness.oc.conventions import (
+    BAND_N_HI,
+    BAND_N_LO,
+    CANDIDATE_FALSE_DIRECTION_TARGET,
+    GRID_N_MAX,
+    GRID_N_MIN,
+)
 from skill_harness.oc.crosschecks import mcnemar_midp, newcombe_interval, tango_interval
 from skill_harness.oc.exact import beta_binomial_pmf, beta_cdf, dirichlet_delta_tail
+from skill_harness.oc.frontier import (
+    Frontier,
+    FrontierConfig,
+    FrontierGate1Block,
+    FrontierRow,
+    assemble_frontier,
+    frontier_gate1_block,
+    frontier_row,
+    render_frontier_table,
+)
 from skill_harness.oc.gate1 import (
     Gate1AttainedErrors,
     Gate1Decision,
@@ -52,8 +70,15 @@ from skill_harness.oc.gate2 import (
 )
 
 __all__ = [
+    "BAND_N_HI",
+    "BAND_N_LO",
+    "CANDIDATE_FALSE_DIRECTION_TARGET",
     "GRID_N_MAX",
     "GRID_N_MIN",
+    "Frontier",
+    "FrontierConfig",
+    "FrontierGate1Block",
+    "FrontierRow",
     "Gate1AttainedErrors",
     "Gate1Decision",
     "Gate1Design",
@@ -64,9 +89,12 @@ __all__ = [
     "Gate2OC",
     "Gate2RegionProbs",
     "MMESpec",
+    "assemble_frontier",
     "beta_binomial_pmf",
     "beta_cdf",
     "dirichlet_delta_tail",
+    "frontier_gate1_block",
+    "frontier_row",
     "gate1_attained_errors",
     "gate1_decide",
     "gate1_extension_pp",
@@ -77,5 +105,6 @@ __all__ = [
     "gate2_worst_false_direction",
     "mcnemar_midp",
     "newcombe_interval",
+    "render_frontier_table",
     "tango_interval",
 ]

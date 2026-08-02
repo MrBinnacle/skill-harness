@@ -57,6 +57,25 @@ Enforced in:
 
 Spec: skill-harness #40 + #42 resolution records; drift-check row DC-7.
 
+## 5. Budget ceilings (locked)
+
+Spend on any one skill-task evaluation is capped at $35 per skill-task evaluation
+(ratified in decision #40 — an operator-picked values decision). The cap tests the
+worst-case fixed-N projected cost pre-spend: curtailment savings are displayed as
+expectation, never assumed by the cap, and over-cap frontier rows render
+visible-but-infeasible, never hidden. The value is registered through the existing
+`runtime.run_budget.hard_cap_usd` per-run surface; the frontier (#56) marks
+feasibility pre-spend and the RAT preflight gate (#57) binds record cap == passed
+budget mechanically at `--execute` time. The daily calibration ceiling is unchanged:
+`DAILY_CAP_HARD_CEILING_USD = 100.0`.
+
+Enforced in:
+- `src/skill_harness/oracles/calibration/cost_projection.py::EVALUATION_HARD_CAP_USD = 35.0`
+- `src/skill_harness/oracles/calibration/cost_projection.py::DAILY_CAP_HARD_CEILING_USD = 100.0`
+- `src/skill_harness/oc/frontier.py` (over-cap rows assembled with `feasible=False`)
+
+Spec: skill-harness #40 resolution record; drift-check row DC-10.
+
 ---
 
 Re-pointed from "CLAUDE.md" to this file across `src/` and `tests/` (F5, then the
