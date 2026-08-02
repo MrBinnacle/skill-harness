@@ -20,6 +20,7 @@ from click.testing import CliRunner
 from skill_harness.ablation.runner import ClauseResult
 from skill_harness.ablation.stopping import StopDecision, StoppingReason
 from skill_harness.cli.main import cli
+from tests.ratification_fixture import ratified_exec_args
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -76,7 +77,7 @@ class TestAblationReportVerdictIdColumn:
                 "run",
                 "ablation",
                 "skill-test",
-                "--execute",
+                *ratified_exec_args("skill-test"),
                 env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
             )
 
@@ -103,7 +104,7 @@ class TestAblationReportVerdictIdColumn:
                 "run",
                 "ablation",
                 "skill-test",
-                "--execute",
+                *ratified_exec_args("skill-test"),
                 env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
             )
 
@@ -133,7 +134,7 @@ class TestAblationReportVerdictIdColumn:
                 "run",
                 "ablation",
                 "skill-test",
-                "--execute",
+                *ratified_exec_args("skill-test"),
                 env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
             )
 
@@ -167,7 +168,7 @@ class TestAblationReportVerdictIdColumn:
                 "run",
                 "ablation",
                 "skill-test",
-                "--execute",
+                *ratified_exec_args("skill-test"),
                 env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
             )
 
@@ -223,7 +224,7 @@ class TestRealClauseResultRendersVerdictId:
                 "run",
                 "ablation",
                 "skill-test",
-                "--execute",
+                *ratified_exec_args("skill-test"),
                 env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
             )
 
@@ -267,7 +268,7 @@ class TestRealClauseResultRendersVerdictId:
                 "run",
                 "ablation",
                 "skill-test",
-                "--execute",
+                *ratified_exec_args("skill-test"),
                 env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
             )
 

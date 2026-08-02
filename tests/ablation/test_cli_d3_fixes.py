@@ -24,6 +24,7 @@ from click.testing import CliRunner
 
 from skill_harness.cli.main import cli
 from skill_harness.storage.migrations import open_evidence, open_runtime
+from tests.ratification_fixture import ratified_exec_args
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -308,7 +309,7 @@ class TestB1FindIncompleteRunUnpatched:
                 "run",
                 "ablation",
                 _SKILL_ID,
-                "--execute",
+                *ratified_exec_args(_SKILL_ID),
                 "--runtime-db",
                 str(tmp_path / "runtime.db"),
                 "--evidence-db",
@@ -383,7 +384,7 @@ class TestB2DailyCapEnforcement:
                 "run",
                 "ablation",
                 _SKILL_ID,
-                "--execute",
+                *ratified_exec_args(_SKILL_ID),
                 "--daily-cap",
                 "20.0",
                 "--runtime-db",
@@ -433,7 +434,7 @@ class TestB2DailyCapEnforcement:
                 "run",
                 "ablation",
                 _SKILL_ID,
-                "--execute",
+                *ratified_exec_args(_SKILL_ID),
                 "--daily-cap",
                 "20.0",
                 "--runtime-db",
@@ -460,7 +461,7 @@ class TestB2DailyCapEnforcement:
             "run",
             "ablation",
             _SKILL_ID,
-            "--execute",
+            *ratified_exec_args(_SKILL_ID),
             "--daily-cap",
             "19.0",  # cap is 19.0 but 19.5 already spent
             "--runtime-db",
@@ -724,7 +725,7 @@ class TestM3LoadClausesFromDb:
             "run",
             "ablation",
             _SKILL_ID,
-            "--execute",
+            *ratified_exec_args(_SKILL_ID),
             "--evidence-db",
             str(tmp_path / "evidence.db"),
             "--runtime-db",
@@ -768,7 +769,7 @@ class TestM4ProgressFooter:
                 "run",
                 "ablation",
                 "skill-abc",
-                "--execute",
+                *ratified_exec_args(),
                 env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
             )
 
@@ -893,7 +894,7 @@ class TestM2ResumeUserMessage:
                 "run",
                 "ablation",
                 _SKILL_ID,
-                "--execute",
+                *ratified_exec_args(_SKILL_ID),
                 "--resume",
                 run_id,
                 "--evidence-db",
@@ -998,7 +999,7 @@ class TestM3ApiKeyPreflight:
                 "run",
                 "ablation",
                 _SKILL_ID,
-                "--execute",
+                *ratified_exec_args(_SKILL_ID),
                 "--evidence-db",
                 str(tmp_path / "evidence.db"),
                 "--runtime-db",
@@ -1043,7 +1044,7 @@ class TestM4ExitCodeContract:
             "run",
             "ablation",
             _SKILL_ID,
-            "--execute",
+            *ratified_exec_args(_SKILL_ID),
             "--daily-cap",
             "20.0",
             "--runtime-db",
@@ -1072,7 +1073,7 @@ class TestM4ExitCodeContract:
                 "run",
                 "ablation",
                 "skill-abc",
-                "--execute",
+                *ratified_exec_args(),
                 env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
             )
 
@@ -1102,7 +1103,7 @@ class TestM4ExitCodeContract:
                 "run",
                 "ablation",
                 "skill-abc",
-                "--execute",
+                *ratified_exec_args(),
                 env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
             )
 
@@ -1289,7 +1290,7 @@ class TestI4FooterHonesty:
                 "run",
                 "ablation",
                 "skill-i4",
-                "--execute",
+                *ratified_exec_args("skill-i4"),
                 "--max-usd",
                 "5.0",
                 "--daily-cap",

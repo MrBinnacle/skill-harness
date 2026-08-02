@@ -8,14 +8,21 @@ enforced. This script is that guard, the third instance of the house pattern
 the structural-bans CI job = token bans).
 
 Contract rows are DATA (the tables below): adding a contract is a table row,
-not new code. Eleven live rows ship checked (DC-1..DC-6 from #43/#53; DC-7
+not new code. Twelve live rows ship checked (DC-1..DC-6 from #43/#53; DC-7
 and DC-8 activated by the PR landing skill_harness/oc; DC-11 activated by
 the PR landing the Gate-2 cross-checks; DC-9 and DC-10 activated by the PR
-landing the frontier-assembly cost layer (#56) — all per the #43 same-PR
-extension rule); two registered PLANNED rows (DC-12/DC-13) print as PLANNED
-until the PR landing each surface activates them (activation happens in that
+landing the frontier-assembly cost layer (#56); DC-12 activated by the PR
+landing the ratification-ledger machinery (#57) — all per the #43 same-PR
+extension rule); one registered PLANNED row (DC-13) prints as PLANNED
+until the PR landing its surface activates it (activation happens in that
 same PR, never later). New rows enter only via a ratified decision or a
 locked INVARIANTS entry.
+
+DC-12's reader is deliberately independent of the src parser
+(skill_harness/ratification.py feeds the spend-time gate): the two parsers
+are a differential pair — a parse bug in one is observable against the
+other — so neither imports the other's logic, matching this script's
+expectation-never-imported-from-the-surface rule.
 
 Registered EXPECTATIONS live in this table; current STATE is read from the
 tree. The expectation is deliberately never imported from the surface being
@@ -92,6 +99,21 @@ class ImportScanBan:
 
 
 @dataclass(frozen=True)
+class RatLedgerContract:
+    """DC-12 (#47): internal consistency of every ratification record under
+    ``ledger_dir`` matching ``RAT-*.md``. Zero records is OK by design —
+    records land later as docs-only operator row-picks — but the registered
+    surface itself (the dir + its README) going missing is drift (DC-8
+    empty-package precedent). Per record: (a) ``hard_cap_usd`` <= the $35
+    ceiling AND >= the record's own ``worst_case_cost_usd``; (b) a
+    self-certified record carries the verbatim disclosure line."""
+
+    ledger_dir: str
+    cap_ceiling_usd: float
+    disclosure_line: str
+
+
+@dataclass(frozen=True)
 class EstimandContract:
     """The registry enum must hold EXACTLY the registered values, and every
     machine-readable ``estimand:`` field in docs must use a registered value
@@ -112,6 +134,7 @@ class LiveRow:
     token_bans: tuple[TokenBan, ...] = ()
     estimand_contract: EstimandContract | None = None
     import_ban: ImportScanBan | None = None
+    rat_ledger: RatLedgerContract | None = None
 
 
 @dataclass(frozen=True)
@@ -415,15 +438,21 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
             ),
         ),
     ),
+    LiveRow(
+        dc_id="DC-12",
+        summary=(
+            "RAT ledger internal consistency: hard_cap <= $35 and >= worst-case cost; "
+            "self-certified records carry the disclosure line (#47)"
+        ),
+        rat_ledger=RatLedgerContract(
+            ledger_dir="docs/ratifications",
+            cap_ceiling_usd=35.0,
+            disclosure_line="internally derived, not externally deliberated",
+        ),
+    ),
 )
 
 PLANNED_ROWS: tuple[PlannedRow, ...] = (
-    PlannedRow(
-        "DC-12",
-        "RAT record internal consistency: hard_cap <= $35 and >= worst-case cost; "
-        "self-certified records carry the disclosure line (#47)",
-        "the PR landing the first docs/ratifications/RAT-*.md record",
-    ),
     PlannedRow(
         "DC-13",
         "OBS ledger contract: front-matter parse + classification-state and "
@@ -578,6 +607,46 @@ def _check_estimand_contract(root: Path, contract: EstimandContract) -> list[str
     return failures
 
 
+_RAT_FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
+_RAT_FIELD = re.compile(r"^([a-z_]+):\s*(.+?)\s*$", re.MULTILINE)
+
+
+def _check_rat_ledger(root: Path, contract: RatLedgerContract) -> list[str]:
+    base = root / contract.ledger_dir
+    if not base.is_dir():
+        return [f"{contract.ledger_dir}: ledger dir missing (registered surface gone)"]
+    failures: list[str] = []
+    if not (base / "README.md").is_file():
+        failures.append(f"{contract.ledger_dir}/README.md missing (ledger conventions gone)")
+    for path in sorted(base.glob("RAT-*.md")):
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        block = _RAT_FRONTMATTER.match(text)
+        if block is None:
+            failures.append(f"{rel}: no leading front-matter block")
+            continue
+        fields = dict(_RAT_FIELD.findall(block.group(1)))
+        try:
+            hard_cap = float(fields["hard_cap_usd"])
+            worst_case = float(fields["worst_case_cost_usd"])
+        except (KeyError, ValueError) as exc:
+            failures.append(f"{rel}: cap fields unreadable ({exc!r})")
+            continue
+        if hard_cap > contract.cap_ceiling_usd:
+            failures.append(
+                f"{rel}: hard_cap_usd {hard_cap} exceeds the "
+                f"${contract.cap_ceiling_usd:.2f} ceiling"
+            )
+        if hard_cap < worst_case:
+            failures.append(
+                f"{rel}: hard_cap_usd {hard_cap} below the record's own "
+                f"worst-case cost {worst_case}"
+            )
+        if fields.get("sme_status") == "self-certified" and contract.disclosure_line not in text:
+            failures.append(f"{rel}: self-certified record missing the disclosure line")
+    return failures
+
+
 def _run_row(root: Path, row: LiveRow) -> list[str]:
     failures: list[str] = []
     for site in row.value_sites:
@@ -592,6 +661,8 @@ def _run_row(root: Path, row: LiveRow) -> list[str]:
         failures.extend(_check_estimand_contract(root, row.estimand_contract))
     if row.import_ban is not None:
         failures.extend(_check_import_ban(root, row.import_ban))
+    if row.rat_ledger is not None:
+        failures.extend(_check_rat_ledger(root, row.rat_ledger))
     return failures
 
 

@@ -25,6 +25,7 @@ from skill_harness.extractor import (
     MalformedSkillError,
     extract_skill,
 )
+from skill_harness.ratification import check_execute_ratification
 from skill_harness.storage.context import StorageContext
 from skill_harness.storage.recovery import find_resumable_run_for_skill
 
@@ -449,6 +450,36 @@ def run() -> None:
     show_default=True,
     help="Path to runtime DB (only used with --execute).",
 )
+@click.option(
+    "--ratification",
+    "ratification_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    metavar="RAT_FILE",
+    help=(
+        "Path to the RATIFIED row-pick record (docs/ratifications/RAT-NNNN-<slug>.md) "
+        "authorizing this spend. Required with --execute (#47 mechanical binding); "
+        "ignored on dry-run."
+    ),
+)
+@click.option(
+    "--task-family",
+    "task_family",
+    default=None,
+    help=(
+        "Task family this run evaluates; must match the ratification record's scope. "
+        "Required with --execute; ignored on dry-run."
+    ),
+)
+@click.option(
+    "--estimand",
+    "estimand",
+    default=None,
+    help=(
+        "Registered estimand name (treatment-policy | hypothetical); must match the "
+        "ratification record's scope. Required with --execute; ignored on dry-run."
+    ),
+)
 def run_ablation(
     skill_id: str,
     clause_id: str | None,
@@ -462,6 +493,9 @@ def run_ablation(
     probe_redundancy: bool,
     evidence_db: Path,
     runtime_db: Path,
+    ratification_path: Path | None,
+    task_family: str | None,
+    estimand: str | None,
 ) -> None:
     """Execute single-clause ablation.
 
@@ -496,7 +530,21 @@ def run_ablation(
         _cmd_dry_run(skill_id, clause_id, max_usd, daily_cap, evidence_db=effective_evidence_db)
         return
 
-    # EXECUTE path
+    # EXECUTE path — ratification preflight first (#47 mechanical binding,
+    # landed by #57): un-ratified spend is refused before any DB connection,
+    # client construction, or API-key check. Dry-run above stays ungated.
+    decision = check_execute_ratification(
+        ratification_path,
+        skill_id=skill_id,
+        task_family=task_family or "",
+        estimand=estimand or "",
+        max_usd=max_usd,
+    )
+    if not decision.allowed:
+        raise click.ClickException(
+            f"ratification preflight refused --execute [{decision.reason}]: {decision.detail}"
+        )
+
     _cmd_execute(
         skill_id=skill_id,
         clause_id=clause_id,

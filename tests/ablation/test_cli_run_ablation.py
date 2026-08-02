@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 from click.testing import CliRunner, Result
 
 from skill_harness.cli.main import cli
+from tests.ratification_fixture import ratified_exec_args
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -153,7 +154,7 @@ class TestExitCodes:
             "skill_harness.cli.main._execute_ablation_run",
             return_value=[passed],
         ):
-            result = _invoke("run", "ablation", "skill-abc", "--execute")
+            result = _invoke("run", "ablation", "skill-abc", *ratified_exec_args())
         assert result.exit_code == 0, f"Expected 0, got {result.exit_code}:\n{result.output}"
 
     def test_all_failed_exits_zero(self) -> None:
@@ -163,7 +164,7 @@ class TestExitCodes:
             "skill_harness.cli.main._execute_ablation_run",
             return_value=[failed],
         ):
-            result = _invoke("run", "ablation", "skill-abc", "--execute")
+            result = _invoke("run", "ablation", "skill-abc", *ratified_exec_args())
         assert result.exit_code == 0, (
             f"Expected 0 (verdict reached), got {result.exit_code}:\n{result.output}"
         )
@@ -177,7 +178,7 @@ class TestExitCodes:
             "skill_harness.cli.main._execute_ablation_run",
             return_value=[underpowered],
         ):
-            result = _invoke("run", "ablation", "skill-abc", "--execute")
+            result = _invoke("run", "ablation", "skill-abc", *ratified_exec_args())
         assert result.exit_code == 2, (
             f"UNMEASURED clause must exit 2, got {result.exit_code}:\n{result.output}"
         )
@@ -191,7 +192,7 @@ class TestExitCodes:
             "skill_harness.cli.main._execute_ablation_run",
             return_value=[confounded],
         ):
-            result = _invoke("run", "ablation", "skill-abc", "--execute")
+            result = _invoke("run", "ablation", "skill-abc", *ratified_exec_args())
         assert result.exit_code == 2, (
             f"Length-confounded UNMEASURED must exit 2, got {result.exit_code}:\n{result.output}"
         )
@@ -206,7 +207,7 @@ class TestExitCodes:
             "skill_harness.cli.main._execute_ablation_run",
             return_value=[passed, underpowered],
         ):
-            result = _invoke("run", "ablation", "skill-abc", "--execute")
+            result = _invoke("run", "ablation", "skill-abc", *ratified_exec_args())
         assert result.exit_code == 2, (
             f"≥1 UNMEASURED must exit 2, got {result.exit_code}:\n{result.output}"
         )
@@ -225,7 +226,7 @@ class TestUnmeasuredVsFailedRender:
             "skill_harness.cli.main._execute_ablation_run",
             return_value=clause_results,
         ):
-            return _invoke("run", "ablation", "skill-abc", "--execute")
+            return _invoke("run", "ablation", "skill-abc", *ratified_exec_args())
 
     def _make_passed(self) -> MagicMock:
         from skill_harness.ablation.stopping import StoppingReason
@@ -335,7 +336,7 @@ class TestBudgetFlagErrorNaming:
             "skill_harness.cli.main._execute_ablation_run",
             side_effect=BudgetAbortedError("run-001", 5.01, 5.0),
         ):
-            result = _invoke("run", "ablation", "skill-abc", "--execute", "--max-usd", "5.0")
+            result = _invoke("run", "ablation", "skill-abc", *ratified_exec_args(max_usd=5.0))
         assert result.exit_code != 0
         output = result.output
         assert "--max-usd" in output, f"Expected '--max-usd' in error output:\n{output}"
@@ -348,7 +349,9 @@ class TestBudgetFlagErrorNaming:
             "skill_harness.cli.main._execute_ablation_run",
             side_effect=_DailyCapExceededError(22.0, 20.0),
         ):
-            result = _invoke("run", "ablation", "skill-abc", "--execute", "--daily-cap", "20.0")
+            result = _invoke(
+                "run", "ablation", "skill-abc", *ratified_exec_args(), "--daily-cap", "20.0"
+            )
         assert result.exit_code != 0
         output = result.output
         assert "--daily-cap" in output, f"Expected '--daily-cap' in error output:\n{output}"
@@ -380,7 +383,9 @@ class TestResumeFlag:
             "skill_harness.cli.main._execute_ablation_run",
             return_value=[mock_result],
         ):
-            result = _invoke("run", "ablation", "skill-abc", "--execute", "--resume", "run-xyz-123")
+            result = _invoke(
+                "run", "ablation", "skill-abc", *ratified_exec_args(), "--resume", "run-xyz-123"
+            )
 
         output = result.output
         # Must print a resume-preview line naming the run_id
@@ -397,7 +402,7 @@ class TestResumeFlag:
             "skill_harness.cli.main._find_incomplete_run_for_execute",
             return_value="run-incomplete-001",
         ):
-            result = _invoke("run", "ablation", "skill-abc", "--execute")
+            result = _invoke("run", "ablation", "skill-abc", *ratified_exec_args())
 
         output = result.output
         # Must warn about the incomplete run and name the run_id

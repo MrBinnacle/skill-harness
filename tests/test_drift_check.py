@@ -37,8 +37,9 @@ _LIVE_IDS = (
     "DC-9",
     "DC-10",
     "DC-11",
+    "DC-12",
 )
-_PLANNED_IDS = ("DC-12", "DC-13")
+_PLANNED_IDS = ("DC-13",)
 
 # Every file a live row reads; copied verbatim into synthetic trees so each
 # failure test starts from a tree that is green by construction. The whole oc
@@ -62,6 +63,7 @@ _LIVE_SURFACES = (
     "docs/INVARIANTS.md",
     "docs/PLAN.md",
     "docs/PRD.md",
+    "docs/ratifications/README.md",
     "README.md",
 )
 
@@ -126,8 +128,9 @@ def test_green_prints_coverage_boundary_line() -> None:
 
 
 def test_green_prints_planned_rows() -> None:
-    """DC-12/DC-13 are registered-but-inactive and must render as PLANNED
-    (DC-7/DC-8 went live with #54; DC-11 with #55; DC-9/DC-10 with #56)."""
+    """DC-13 is registered-but-inactive and must render as PLANNED
+    (DC-7/DC-8 went live with #54; DC-11 with #55; DC-9/DC-10 with #56;
+    DC-12 with #57)."""
     r = _run()
     planned_lines = [line for line in r.stdout.splitlines() if "PLANNED" in line]
     for dc_id in _PLANNED_IDS:
@@ -497,3 +500,116 @@ def test_missing_value_site_pattern_blocks(tmp_path: Path) -> None:
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-1" in line for line in fail_lines), r.stdout
+
+
+# ---------------------------------------------------------------------------
+# DC-12: ratification-ledger internal consistency (#47; activated by #57)
+# ---------------------------------------------------------------------------
+
+_RAT_RECORD = """---
+rat: RAT-0001
+status: RATIFIED
+skill_id: skill-abc
+task_family: example-family
+estimand: treatment-policy
+gate: gate2
+n: 20
+worst_case_cost_usd: {worst}
+hard_cap_usd: {cap}
+cost_provenance: project_pair_usd
+sme_status: {sme}
+ratified_date: "2026-08-02"
+---
+
+# RAT-0001 - example row-pick (drift-lane fixture)
+{body}
+"""
+
+
+def _write_rat_record(
+    root: Path,
+    *,
+    worst: str = "15.55",
+    cap: str = "15.55",
+    sme: str = "deliberated",
+    body: str = "",
+) -> None:
+    path = root / "docs" / "ratifications" / "RAT-0001-skill-abc.md"
+    path.write_text(_RAT_RECORD.format(worst=worst, cap=cap, sme=sme, body=body), encoding="utf-8")
+
+
+def test_rat_ledger_zero_records_is_green(tmp_path: Path) -> None:
+    """DC-12 is zero-tolerant by design: records land later via docs-only
+    operator row-picks; an empty ledger with the README present is green."""
+    r = _run(_make_tree(tmp_path))
+    assert r.returncode == 0, r.stdout + r.stderr
+    ok_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("OK")]
+    assert any("DC-12" in line for line in ok_lines), r.stdout
+
+
+def test_rat_ledger_missing_dir_blocks(tmp_path: Path) -> None:
+    """The registered surface itself going missing is drift (DC-8 empty-package
+    precedent), even with zero records."""
+    import shutil as _shutil
+
+    root = _make_tree(tmp_path)
+    _shutil.rmtree(root / "docs" / "ratifications")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-12" in line for line in fail_lines), r.stdout
+
+
+def test_rat_valid_record_is_green(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path)
+    _write_rat_record(root)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_rat_cap_above_ceiling_blocks(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path)
+    _write_rat_record(root, worst="35.01", cap="35.01")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-12" in line and "RAT-0001" in line for line in fail_lines), r.stdout
+
+
+def test_rat_cap_below_worst_case_blocks(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path)
+    _write_rat_record(root, worst="15.56", cap="15.55")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-12" in line for line in fail_lines), r.stdout
+
+
+def test_rat_self_certified_without_disclosure_blocks(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path)
+    _write_rat_record(root, sme="self-certified")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-12" in line and "disclosure" in line for line in fail_lines), r.stdout
+
+
+def test_rat_self_certified_with_disclosure_is_green(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path)
+    _write_rat_record(
+        root,
+        sme="self-certified",
+        body="This record is internally derived, not externally deliberated.",
+    )
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_rat_unparseable_record_blocks(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path)
+    path = root / "docs" / "ratifications" / "RAT-0002-broken.md"
+    path.write_text("# no front-matter at all\n", encoding="utf-8")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-12" in line and "RAT-0002" in line for line in fail_lines), r.stdout
