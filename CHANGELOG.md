@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Estimand registry + decision-semantics vocabulary** (#51, PR-1 of the
+  instrument upgrade; resolution record #36). New `skill_harness.semantics`
+  module: the two named estimands (`treatment-policy` = agentic paired subject
+  layer, production default; `hypothetical` = ablation forced-injection,
+  diagnostic — ICH E9(R1) vocabulary), the 4-class delivery-mechanism taxonomy
+  (`model-pull` / `hand-invoked` / `hook-nudged` / `hook-blocked`) registered as
+  part of the treatment, per-mechanism π_c handling (detector lanes vs
+  structural π_c ≡ 1), and `RegisteredScope` — the
+  (skill × task family × estimand × delivery mechanism) claim boundary every
+  verdict now carries (`VerdictResult.scope`). Hand-invoked treatment-policy
+  registrations are the frozen-task design and refuse to register without a
+  declared Null-arm semantic. Verdict render surfaces (`screen verdict`,
+  `screen profile`) gained an enum-backed estimand column; verdicts without a
+  registered scope render `n/a (pre-registry observation)` — historical records
+  are never retrofitted. The E9(R1)-superseded analysis-population term
+  (`skill_harness.semantics.BANNED_DECISION_TERMS`) is banned repo-wide with an
+  EMPTY allowlist (pytest scan now; drift-check CI row DC-3 to follow).
 - **Paired-path (`full_vs_null`) freeze branch — A′** (S86 frozen-case design
   council, operator-ratified). `freeze` now accepts a WINNING paired verdict
   (`observation = 1.0`) under a metric registered as binary

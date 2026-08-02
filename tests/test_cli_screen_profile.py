@@ -289,3 +289,46 @@ class TestScreenProfileHelp:
         assert result.exit_code == 0
         assert "--skills-root" in result.output
         assert "--show-held-columns" in result.output
+
+
+class TestEstimandScopeColumn:
+    """#51 (record #36): wherever verdicts render, the estimand surfaces from the
+    Estimand enum — and a verdict with no registered scope (every screen-store
+    row today) renders the honest pre-registry n/a marker, never a retrofitted
+    label (#41 rule)."""
+
+    def test_screen_verdict_renders_estimand_column_with_pre_registry_marker(
+        self, tmp_path: Path
+    ) -> None:
+        evidence_db = tmp_path / "evidence.db"
+        _seed_screen(evidence_db, "alpha-skill", n_trials=10, n_pass=10)
+        result = _invoke("screen", "verdict", "--evidence-db", str(evidence_db))
+        assert result.exit_code == 0, result.output
+        assert "estimand" in result.output.lower(), (
+            f"'screen verdict' must render an estimand column:\n{result.output}"
+        )
+        from skill_harness.semantics import PRE_REGISTRY_ESTIMAND_LABEL
+
+        assert PRE_REGISTRY_ESTIMAND_LABEL in result.output, (
+            f"store rows are pre-registry observations and must say so:\n{result.output}"
+        )
+
+    def test_profile_renders_estimand_column(self, tmp_path: Path) -> None:
+        evidence_db, skills_root = _make_library(tmp_path)
+        result = _invoke(
+            "screen",
+            "profile",
+            "--evidence-db",
+            str(evidence_db),
+            "--skills-root",
+            str(skills_root),
+        )
+        assert result.exit_code == 0, result.output
+        assert "estimand" in result.output.lower(), (
+            f"profile must render the estimand scope column:\n{result.output}"
+        )
+        from skill_harness.semantics import PRE_REGISTRY_ESTIMAND_LABEL
+
+        # alpha is screened -> pre-registry marker; beta/gamma have no verdict
+        # at all, so their estimand cell is an em-dash (nothing to scope).
+        assert PRE_REGISTRY_ESTIMAND_LABEL in result.output, result.output

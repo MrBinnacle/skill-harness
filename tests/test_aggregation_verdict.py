@@ -7,9 +7,14 @@ the CUT(harmful) deferral gate.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from skill_harness.aggregation.status import ClauseStatus
+
+if TYPE_CHECKING:
+    from skill_harness.semantics import RegisteredScope
 from skill_harness.aggregation.verdict import (
     TRANSFORMATIVE_NULL_CEILING,
     CutSubReason,
@@ -137,3 +142,68 @@ def test_program_to_date_has_zero_keeps() -> None:
     verdicts = [screen_verdict(p).verdict for p in program_p0s]
     assert KeepCutVerdict.KEEP not in verdicts
     assert all(v == KeepCutVerdict.CUT for v in verdicts)
+
+
+# ---------------------------------------------------------------------------
+# Scope tuple on verdicts (#51, PR-1; resolution record #36) — every verdict is
+# scoped to a registered (skill x task family x estimand x delivery mechanism)
+# tuple; verdicts without one are pre-registry observations and say so.
+# ---------------------------------------------------------------------------
+
+
+def _registered_scope() -> RegisteredScope:
+    from skill_harness.semantics import DeliveryMechanism, Estimand, RegisteredScope
+
+    return RegisteredScope(
+        skill="example-skill",
+        task_family="example-family",
+        estimand=Estimand.TREATMENT_POLICY,
+        delivery_mechanism=DeliveryMechanism.HOOK_NUDGED,
+    )
+
+
+def test_screen_verdict_carries_registered_scope() -> None:
+    scope = _registered_scope()
+    r = screen_verdict(1.0, scope=scope)
+    assert r.scope is scope
+    assert r.estimand_label == "treatment-policy"
+
+
+def test_paired_verdict_carries_registered_scope() -> None:
+    scope = _registered_scope()
+    r = paired_verdict(ClauseStatus.PASSED, scope=scope)
+    assert r.scope is scope
+    assert r.estimand_label == "treatment-policy"
+
+
+def test_unscoped_verdict_is_a_pre_registry_observation() -> None:
+    """#41's honest-marker rule: a verdict with no registered scope (every
+    historical Stage-0 screen) renders estimand n/a — never a retrofitted label."""
+    from skill_harness.semantics import PRE_REGISTRY_ESTIMAND_LABEL
+
+    r = screen_verdict(1.0)
+    assert r.scope is None
+    assert r.estimand_label == PRE_REGISTRY_ESTIMAND_LABEL
+
+
+def test_estimand_label_values_come_from_the_enum() -> None:
+    """#51 AC (DC-4 surface): every estimand string a verdict can render is an
+    Estimand enum value or the ratified pre-registry marker — nothing free-typed."""
+    from skill_harness.semantics import (
+        PRE_REGISTRY_ESTIMAND_LABEL,
+        DeliveryMechanism,
+        Estimand,
+        RegisteredScope,
+    )
+
+    labels = {screen_verdict(1.0).estimand_label}
+    for estimand in Estimand:
+        scope = RegisteredScope(
+            skill="example-skill",
+            task_family="example-family",
+            estimand=estimand,
+            delivery_mechanism=DeliveryMechanism.MODEL_PULL,
+        )
+        labels.add(screen_verdict(1.0, scope=scope).estimand_label)
+    allowed = {e.value for e in Estimand} | {PRE_REGISTRY_ESTIMAND_LABEL}
+    assert labels <= allowed

@@ -162,6 +162,10 @@ class SkillProfileInput:
     desc_token_cost: int | None  # standing tax; 0 if never loaded, None if not sourced
     fired_token_cost: int | None  # per-epoch fired tax from the cost ledger; None if no data
     fired_usd: float | None
+    estimand: str | None = None
+    """The verdict's estimand scope label (#51) — ``VerdictResult.estimand_label``
+    at the source: an Estimand enum value, or the pre-registry n/a marker for
+    historical screens. None iff there is no verdict to scope (never screened)."""
 
 
 @dataclass(frozen=True)
@@ -177,6 +181,7 @@ class SkillProfileRow:
     skill: str
     verdict: str | None  # KeepCutVerdict value, or None (never screened)
     cut_sub_reason: str | None
+    estimand: str | None  # verdict scope qualifier (#51); None iff verdict is None
     disposition: str  # RankingDisposition value
     evidence_quality: str  # EvidenceQuality value
     desc_token_cost: int | None  # standing tax; 0 if never loaded, None if not sourced
@@ -225,6 +230,7 @@ def build_skill_profile(inputs: list[SkillProfileInput]) -> list[SkillProfileRow
                 skill=inp.skill,
                 verdict=inp.verdict.value if inp.verdict is not None else None,
                 cut_sub_reason=inp.cut_sub_reason.value if inp.cut_sub_reason is not None else None,
+                estimand=inp.estimand,
                 disposition=disposition.value,
                 evidence_quality=evidence_quality.value,
                 desc_token_cost=inp.desc_token_cost,
