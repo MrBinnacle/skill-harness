@@ -13,18 +13,19 @@ Two data paths feed a verdict (per the v0.2 pre-registration):
 
   Path A — Stage-0 Null screen (`p0`). Run the STOCK agent WITHOUT the skill on
     a domain task; `p0` = fraction of Null epochs that pass. This is the DOMINANT
-    path: every real verdict in the program to date (26/26 Null epochs across 6
-    tasks) is a screen outcome. `screen_verdict()` maps it.
+    path: every real verdict in the program to date is a screen outcome (the
+    per-record ledger in `docs/observations/` is canonical for those historical
+    records and their counts). `screen_verdict()` maps it.
 
   Path B — paired Full-vs-Null (`ClauseStatus`). Launches only when the screen
     shows the skill has room to matter. FIRING TRIGGER: the first task whose Null
     screen returns p0 < 1 (real-workload or engineered) — that is the first skill
     with epochs the skill could actually improve. Has NEVER fired to date: every
-    screen run so far ceilings at p0 = 1.00 (append-only-evidence-design, S71, and
-    git-pull-rebase-trap, S73, both CUT(subsumed)), so no paired run has been
-    warranted. The mapping is coded and $0-validated (7/7 oracle-discrimination
-    cases on the git-pull fixture) but unexercised on live paired data.
-    `paired_verdict()` maps it.
+    screen run so far ceilings at p0 = 1.00 (per-record history in
+    `docs/observations/`; dispositions stand as dated decisions), so no paired
+    run has been warranted. The mapping is coded and $0-validated (7/7
+    oracle-discrimination cases on the git-pull fixture) but unexercised on live
+    paired data. `paired_verdict()` maps it.
 
 Threshold provenance (do NOT silently retune — operator-accepted values decision):
   The instrument detects TRANSFORMATIVE skills only. Under arm-independence the
@@ -71,6 +72,7 @@ from enum import StrEnum
 from typing import assert_never
 
 from skill_harness.aggregation.status import ClauseStatus
+from skill_harness.semantics import PRE_REGISTRY_ESTIMAND_LABEL, RegisteredScope
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -129,11 +131,27 @@ paired path and for operator-facing rationale."""
 
 @dataclass(frozen=True)
 class VerdictResult:
-    """A verdict plus the machine-checkable reason and human rationale."""
+    """A verdict plus the machine-checkable reason and human rationale.
+
+    ``scope`` is the registered (skill x task family x estimand x delivery
+    mechanism) tuple the verdict is confined to (#36/#51). ``None`` means a
+    pre-registry observation — every historical Stage-0 screen — and renders as
+    the honest n/a marker, never a retrofitted label (#41 rule).
+    """
 
     verdict: KeepCutVerdict
     cut_sub_reason: CutSubReason | None  # set iff verdict == CUT
     rationale: str
+    scope: RegisteredScope | None = None
+
+    @property
+    def estimand_label(self) -> str:
+        """The estimand string render surfaces print — always an ``Estimand``
+        enum value or the ratified pre-registry marker, never free-typed (the
+        surface the DC-4 drift row pins)."""
+        if self.scope is None:
+            return PRE_REGISTRY_ESTIMAND_LABEL
+        return self.scope.estimand.value
 
 
 # ---------------------------------------------------------------------------
@@ -141,11 +159,13 @@ class VerdictResult:
 # ---------------------------------------------------------------------------
 
 
-def screen_verdict(p0: float) -> VerdictResult:
+def screen_verdict(p0: float, *, scope: RegisteredScope | None = None) -> VerdictResult:
     """Map a Stage-0 Null screen pass-rate to a keep/cut verdict.
 
     p0 is the fraction of Null-arm (no-skill) epochs that passed on a domain task.
-    See rules A1-A3 in the module docstring.
+    See rules A1-A3 in the module docstring. ``scope`` is the registered claim
+    boundary the verdict carries; omit it ONLY for pre-registry observations
+    (historical screens), which render estimand n/a.
     """
     if not 0.0 <= p0 <= 1.0:
         raise ValueError(f"p0 must be a pass-rate in [0, 1]; got {p0!r}")
@@ -163,7 +183,7 @@ def screen_verdict(p0: float) -> VerdictResult:
                 f"paired run can clear the bar; the model fails sometimes but not often "
                 f"enough for the skill to be transformative."
             )
-        return VerdictResult(KeepCutVerdict.CUT, CutSubReason.SUBSUMED, rationale)
+        return VerdictResult(KeepCutVerdict.CUT, CutSubReason.SUBSUMED, rationale, scope=scope)
 
     rationale = (
         f"CAN'T-TELL-YET: Null arm p0={p0:.2f} is at or below the "
@@ -171,7 +191,7 @@ def screen_verdict(p0: float) -> VerdictResult:
         f"skill could be transformative. No paired Full-vs-Null run has confirmed a "
         f"KEEP; this is a sourced candidate, not a verdict."
     )
-    return VerdictResult(KeepCutVerdict.CANT_TELL_YET, None, rationale)
+    return VerdictResult(KeepCutVerdict.CANT_TELL_YET, None, rationale, scope=scope)
 
 
 # ---------------------------------------------------------------------------
@@ -179,11 +199,14 @@ def screen_verdict(p0: float) -> VerdictResult:
 # ---------------------------------------------------------------------------
 
 
-def paired_verdict(clause_status: ClauseStatus) -> VerdictResult:
+def paired_verdict(
+    clause_status: ClauseStatus, *, scope: RegisteredScope | None = None
+) -> VerdictResult:
     """Map a paired-run terminal ClauseStatus to a keep/cut verdict.
 
     See rules B1-B4 in the module docstring. Path B has never fired to date; this
-    mapping is prospective.
+    mapping is prospective. ``scope`` is the registered claim boundary the
+    verdict carries; omit it ONLY for pre-registry observations.
     """
     match clause_status:
         case ClauseStatus.PASSED:
@@ -195,6 +218,7 @@ def paired_verdict(clause_status: ClauseStatus) -> VerdictResult:
                     f"~{TRANSFORMATIVE_NULL_CEILING:.2f}, Full ≥ "
                     f"~{TRANSFORMATIVE_FULL_FLOOR:.2f}, posterior ≥ pass threshold)."
                 ),
+                scope=scope,
             )
         case ClauseStatus.FAILED:
             return VerdictResult(
@@ -206,6 +230,7 @@ def paired_verdict(clause_status: ClauseStatus) -> VerdictResult:
                     "below the fail threshold). Not 'subsumed' — the model fails without "
                     "the skill."
                 ),
+                scope=scope,
             )
         case ClauseStatus.UNMEASURED:
             return VerdictResult(
@@ -215,6 +240,7 @@ def paired_verdict(clause_status: ClauseStatus) -> VerdictResult:
                     "CAN'T-TELL-YET: paired run is UNMEASURED (underpowered / budget / no "
                     "admissible data). Needs more epochs or a better-sourced task."
                 ),
+                scope=scope,
             )
         case ClauseStatus.CONFOUNDED:
             return VerdictResult(
@@ -225,6 +251,7 @@ def paired_verdict(clause_status: ClauseStatus) -> VerdictResult:
                     "difference co-varies with the arm). Verdict withheld until the "
                     "confound is resolved."
                 ),
+                scope=scope,
             )
         case _:
             assert_never(clause_status)

@@ -25,11 +25,14 @@ from skill_harness.aggregation.profile import (
 )
 
 # The exact separated field set. Adding any fused/composite field breaks this.
+# `estimand` (#51) is a scope qualifier on the verdict axis — the claim boundary
+# the verdict is confined to — not a new axis and not a fusable scalar.
 _EXPECTED_ROW_FIELDS = frozenset(
     {
         "skill",
         "verdict",
         "cut_sub_reason",
+        "estimand",
         "disposition",
         "evidence_quality",
         "desc_token_cost",

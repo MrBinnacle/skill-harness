@@ -115,3 +115,51 @@ class TestEffectPerCost:
         # Executable spec for the paired path: eff/cost = mean / desc_token_cost.
         eff = EffectEstimate(mean=0.5, ci_lo=0.2, ci_hi=0.8, is_prior_only=False)
         assert effect_per_cost(eff, 200) == 0.5 / 200
+
+
+class TestEstimandPassThrough:
+    """#51: the profile row carries the verdict's estimand scope label verbatim
+    (a qualifier on the verdict axis, sourced enum-side); None (no verdict at
+    all) stays None so the renderer can show an em-dash."""
+
+    def test_estimand_label_passes_through_to_row(self) -> None:
+        from skill_harness.aggregation.profile import SkillProfileInput, build_skill_profile
+        from skill_harness.semantics import PRE_REGISTRY_ESTIMAND_LABEL
+
+        (row,) = build_skill_profile(
+            [
+                SkillProfileInput(
+                    skill="alpha-skill",
+                    verdict=KeepCutVerdict.CUT,
+                    cut_sub_reason=None,
+                    has_screen=True,
+                    n_trials=10,
+                    is_disable_model_invocation=False,
+                    desc_token_cost=None,
+                    fired_token_cost=None,
+                    fired_usd=None,
+                    estimand=PRE_REGISTRY_ESTIMAND_LABEL,
+                )
+            ]
+        )
+        assert row.estimand == PRE_REGISTRY_ESTIMAND_LABEL
+
+    def test_estimand_defaults_to_none_when_unsourced(self) -> None:
+        from skill_harness.aggregation.profile import SkillProfileInput, build_skill_profile
+
+        (row,) = build_skill_profile(
+            [
+                SkillProfileInput(
+                    skill="beta-skill",
+                    verdict=None,
+                    cut_sub_reason=None,
+                    has_screen=False,
+                    n_trials=0,
+                    is_disable_model_invocation=False,
+                    desc_token_cost=None,
+                    fired_token_cost=None,
+                    fired_usd=None,
+                )
+            ]
+        )
+        assert row.estimand is None

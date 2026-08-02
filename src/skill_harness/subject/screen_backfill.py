@@ -1,11 +1,12 @@
 """Batch-1 Stage-0 screen backfill manifest + apply logic.
 
-The program's Stage-0 screen verdicts to date (a record resting on 26/26 Null
-epochs across 6 tasks, per the registered pre-registration) exist only as
-prose (the v0.2 pre-registration + per-skill EVIDENCE.md). This backfill makes the subset
-that HAS raw Inspect ``.eval`` logs on disk store-auditable: it ingests those
-logs into the screen store (migration 0501) so p0 — and therefore the keep/cut
-verdict — is DERIVED from append-only evidence rather than hand-transcribed.
+The program's historical Stage-0 screen verdicts are pre-registry observations
+recorded per task family in the OBS ledger (``docs/observations/`` — canonical
+for the per-record counts and their decomposition; estimand n/a, π_c
+not-instrumented). This backfill makes the subset that HAS raw Inspect ``.eval``
+logs on disk store-auditable: it ingests those logs into the screen store
+(migration 0501) so p0 — and therefore the keep/cut verdict — is DERIVED from
+append-only evidence rather than hand-transcribed.
 
 SCOPE (honest): only batch-1's 4 skills have local ``.eval`` logs
 (``.private/microrun/`` — gitignored, not shipped). This manifest backfills 3

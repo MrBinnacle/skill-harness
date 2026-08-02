@@ -2569,6 +2569,10 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
     table.add_column("p0", width=6, justify="right")
     table.add_column("epochs", width=8, justify="right")
     table.add_column("verdict", min_width=14)
+    # Scope column (#51): store rows predate the estimand registry, so every
+    # cell today is the honest pre-registry n/a marker — never a retrofitted
+    # label. Values come from VerdictResult.estimand_label (enum-backed).
+    table.add_column("estimand", min_width=14, no_wrap=True)
     table.add_column("rationale", min_width=40, max_width=70)
 
     for row in rows:
@@ -2580,6 +2584,7 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
             f"{row.p0:.2f}",
             f"{row.n_pass}/{row.n_trials}",
             f"[{verdict_color}]{v.verdict.value}{sub}[/]",
+            f"[dim]{v.estimand_label}[/]",
             _sanitize_clause_text(v.rationale, max_len=None),
         )
     _console.print(table)
@@ -2705,15 +2710,18 @@ def screen_profile_cmd(
     inputs: list[SkillProfileInput] = []
     for skill in sorted(set(screened) | set(library)):
         sp = screened.get(skill)
+        estimand: str | None
         if sp is not None:
             v = screen_verdict(sp.p0)
             verdict = v.verdict
             cut_sub_reason = v.cut_sub_reason
+            estimand = v.estimand_label  # pre-registry marker for store rows (#51)
             has_screen = True
             n_trials = sp.n_trials
         else:
             verdict = None
             cut_sub_reason = None
+            estimand = None  # no verdict at all — nothing to scope
             has_screen = False
             n_trials = 0
         # A screened skill absent from (or with no) skills-root has an unsourced
@@ -2731,6 +2739,7 @@ def screen_profile_cmd(
                 desc_token_cost=desc_cost_opt,
                 fired_token_cost=None,  # HELD — no read-only runtime open path yet
                 fired_usd=None,
+                estimand=estimand,
             )
         )
 
@@ -2742,6 +2751,7 @@ def screen_profile_cmd(
     table.add_column("skill", style="cyan", min_width=20, no_wrap=True)
     table.add_column("disposition", min_width=12, no_wrap=True)
     table.add_column("verdict", min_width=10, no_wrap=True)
+    table.add_column("estimand", min_width=14, no_wrap=True)
     table.add_column("evidence-quality", min_width=14, no_wrap=True)
     table.add_column("desc-cost", justify="right", no_wrap=True)
     table.add_column("fired-cost", justify="right", no_wrap=True)
@@ -2758,10 +2768,13 @@ def screen_profile_cmd(
             verdict_cell = f"{row.verdict}{sub}"
         desc_cell = "—" if row.desc_token_cost is None else f"{row.desc_token_cost:,}"
         fired_cell = "—" if row.fired_token_cost is None else f"{row.fired_token_cost:,}"
+        # Estimand scope qualifier (#51): em-dash iff there is no verdict to scope.
+        estimand_cell = "—" if row.estimand is None else f"[dim]{row.estimand}[/]"
         cells = [
             _sanitize_clause_text(row.skill, max_len=None),
             disp,
             verdict_cell,
+            estimand_cell,
             row.evidence_quality,
             desc_cell,
             fired_cell,
