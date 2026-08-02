@@ -42,6 +42,13 @@ Author: TBD
 > by dated amendment. The README's "How it compares" section is the canonical
 > rendering; this PRD defers to it and to the #39 record.
 
+> **Amendment note (2026-08-02) — OBS ledger.** The program's historical
+> Stage-0 screen records are ledgered per-record in
+> [`docs/observations/`](observations/README.md) (re-scoping semantics:
+> [#41](https://github.com/MrBinnacle/skill-harness/issues/41)). The ledger is
+> canonical for per-record counts, evidence basis, and classification state;
+> this PRD continues to defer to the README as the canonical prose rendering.
+
 ---
 
 # 1. Executive Summary
