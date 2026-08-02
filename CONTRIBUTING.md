@@ -65,7 +65,7 @@ Tier-2 judges output `{A, B, tie}` for one named axis. Scalar grading and Likert
 
 ## PR conventions
 
-- **Title**: conventional-commit format. `feat(scope): description`, `fix(scope): description`, etc. Scopes match the build tracks: `storage`, `extractor`, `oracle`, `runner`, `aggregation`, `cli`, `docs`, `ci`.
+- **Title**: conventional-commit format. `feat(scope): description`, `fix(scope): description`, etc. Scopes match the build tracks: `storage`, `extractor`, `oracle`, `runner`, `aggregation`, `subject`, `oc`, `cli`, `docs`, `ci`.
 - **Description**: state what changes and why. Link the council finding ID or PRD section if applicable.
 - **Tests**: every PR runs `ruff check`, `mypy --strict`, `pytest -q` in CI. All three must pass.
 - **Scope**: small PRs preferred. If you're touching more than 3 files, consider whether the change should be split.
