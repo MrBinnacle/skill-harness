@@ -29,6 +29,19 @@ Author: TBD
 >   (`docs/findings/v0.2-reaim-gate.md`): `skill audit` and the `screen` group
 >   (`screen verdict`, `screen backfill`). See `CHANGELOG.md` 0.2.0 / 0.2.0a0.
 
+> **Amendment note (2026-08-01) — positioning & prior art.** Public positioning
+> language ratified on tracker
+> [#39](https://github.com/MrBinnacle/skill-harness/issues/39): prior art named
+> (adewale/skill-eval-harness; BACKTRACE, arXiv:2607.27484; ASSAY,
+> arXiv:2606.15390); differentiators claimed with their nearest adjacents named;
+> zero first-mover or only-tool claims (falsified by the verified survey). The
+> two differentiator-grade claims — the pre-spend characterized-error
+> eligibility gate and thresholds-earned-never-authored — carry visible
+> claim-status labels tied to the external-deliberation plan
+> ([#45](https://github.com/MrBinnacle/skill-harness/issues/45)) and change only
+> by dated amendment. The README's "How it compares" section is the canonical
+> rendering; this PRD defers to it and to the #39 record.
+
 ---
 
 # 1. Executive Summary
