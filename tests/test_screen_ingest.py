@@ -51,6 +51,7 @@ def make_null_sample(
         epoch=epoch,
         scorer_name="command_succeeds",
         score_value=score,
+        invoked_skill=False,  # structurally impossible in a Null screen (#46)
         output_text=f"null-output-{epoch}",
         subject_model="anthropic/claude-sonnet-5",
         harness_pin_json=None,
@@ -129,6 +130,7 @@ def test_non_null_condition_refused(conn: sqlite3.Connection) -> None:
         epoch=1,
         scorer_name="command_succeeds",
         score_value=1.0,
+        invoked_skill=True,
         output_text="x",
         subject_model="m",
         harness_pin_json=None,

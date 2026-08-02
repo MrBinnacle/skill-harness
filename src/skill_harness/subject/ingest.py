@@ -21,6 +21,14 @@ Design constraints:
 - Idempotency: the evidence ``run_id`` is derived deterministically from the
   two Inspect task ids, so re-ingesting the same pair of logs raises
   ``AlreadyIngestedError`` instead of double-counting.
+- π_c instrumentation (#46/#52): every parsed sample carries ``invoked_skill``
+  (v1 detector = a Skill tool-call naming the skill under test, observed in the
+  parsed message stream). Every paired write reports π̂_c with a mandatory
+  Clopper-Pearson interval over the Full arm, and a treated arm with ZERO
+  detected invocations refuses the write (``ZeroInvocationError``) — a dead-arm
+  run is an instrumentation finding, never a null effect. Eval logs are
+  zstd-compressed (zip method 93): ingestion goes through ``read_eval_log``
+  only, never raw archive handling.
 """
 
 from __future__ import annotations
@@ -29,11 +37,13 @@ import hashlib
 import json
 import sqlite3
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict
+from scipy.stats import beta as beta_dist  # type: ignore[import-untyped]
 
 from skill_harness.storage.models import (
     ClauseWrite,
@@ -75,7 +85,19 @@ OUTCOME_AXIS: str = "outcome"
 # Version of the subject outcome-oracle decision logic (score decoding +
 # pairing + observation mapping). Bump on any semantic change; the registered
 # implementation_hash pins the exact source alongside it.
-ORACLE_METRIC_VERSION: str = "0.2.0"
+# 0.3.0: π_c instrumentation (#52) — pairing gains the zero-invocation refusal
+# and the Null-contamination structural check; runs record the π_c block.
+ORACLE_METRIC_VERSION: str = "0.3.0"
+
+# π_c (invocation-rate) instrumentation — #46 resolution binds the contract.
+# v1 detector = branch (a) only: a Skill tool-call whose arguments name the
+# skill under test. Branch (b) (a visible SKILL.md file-read) is DEAD CODE
+# under the inspect_swe.claude_code solver (the Skill tool loads SKILL.md
+# internally) and stays excluded until a non-claude_code solver exists.
+PI_C_DETECTOR_VERSION: str = "v1-skill-tool-call"
+SKILL_TOOL_FUNCTION: str = "Skill"
+SKILL_TOOL_ARGUMENT: str = "skill"  # arguments key naming the invoked skill
+PI_C_CONFIDENCE: float = 0.95
 
 _SCORE_VALUE_MAP: dict[str, float] = {"C": 1.0, "I": 0.0}
 
@@ -101,6 +123,37 @@ class MetricImplementationDriftError(EvalLogIngestError):
     longer matches the live module (S88 condition K2 — fail-closed re-check)."""
 
 
+class PiCSummary(BaseModel):
+    """π̂_c over the treated (Full) arm, with its Clopper-Pearson interval.
+
+    Mandatory on every :class:`IngestResult` — availability evidence never
+    ships without its invocation rate (#52: "mandatory, not optional").
+    """
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    invocations: int
+    trials: int
+    pi_c_hat: float
+    ci_low: float
+    ci_high: float
+    confidence: float
+
+
+class ZeroInvocationError(EvalLogIngestError):
+    """Refusal: the treated (Full) arm shows ZERO detected skill invocations.
+
+    A dead treated arm cannot distinguish "no effect" from "never invoked", so
+    no effect verdict is producible — the run surfaces as an INSTRUMENTATION
+    FINDING (delivery failure) instead of a null effect (#52). Carries the
+    mandatory π̂_c block on ``pi_c`` so the finding renders with its interval.
+    """
+
+    def __init__(self, message: str, *, pi_c: PiCSummary) -> None:
+        super().__init__(message)
+        self.pi_c = pi_c
+
+
 class ParsedSample(BaseModel):
     """One subject trial extracted from an Inspect eval log."""
 
@@ -111,6 +164,7 @@ class ParsedSample(BaseModel):
     epoch: int
     scorer_name: str
     score_value: float  # 1.0 pass | 0.0 fail (outcome oracle)
+    invoked_skill: bool  # v1 π_c detector verdict for this trial (#46/#52)
     output_text: str
     subject_model: str
     harness_pin_json: str | None
@@ -146,6 +200,65 @@ class IngestResult(BaseModel):
     verdict_ids: tuple[str, ...]
     admissibility_state: Literal["admissible", "inadmissible"]
     inadmissibility_reason: str | None
+    pi_c: PiCSummary  # mandatory — never optional (#52)
+
+
+def detect_skill_invocation(messages: Iterable[object], skill_name: str) -> bool:
+    """v1 π_c detector (#46 branch (a)): did this trial invoke the skill?
+
+    Fires iff the message stream contains a tool-call entry with
+    ``function == "Skill"`` and ``arguments["skill"] == skill_name``. Only
+    ``tool_calls`` lists are consulted — tool-role RESULT messages also carry a
+    ``function`` field and must not count. Branch (b) (a visible file-read of
+    the skill's SKILL.md) is dead code under the ``inspect_swe.claude_code``
+    solver and stays excluded (#46).
+
+    Deliberately conservative: any shape this duck-typed scan does not
+    recognize counts as NOT invoked (an undercount can only make the
+    zero-invocation refusal fire more, never fabricate an invocation).
+    """
+    if not skill_name:
+        return False
+    for message in messages:
+        calls = getattr(message, "tool_calls", None) or ()
+        for call in calls:
+            if getattr(call, "function", None) != SKILL_TOOL_FUNCTION:
+                continue
+            arguments = getattr(call, "arguments", None)
+            if isinstance(arguments, dict) and arguments.get(SKILL_TOOL_ARGUMENT) == skill_name:
+                return True
+    return False
+
+
+def clopper_pearson(
+    invocations: int, trials: int, *, confidence: float = PI_C_CONFIDENCE
+) -> tuple[float, float]:
+    """Exact (Clopper-Pearson) two-sided binomial interval for π_c.
+
+    Beta-quantile form: lower = Beta(a/2; x, n-x+1), upper = Beta(1-a/2; x+1,
+    n-x) at level a = 1-confidence, with the exact closed endpoints 0 at x=0
+    and 1 at x=n. Chosen over
+    approximate intervals because π_c reporting is mandatory at any n and the
+    treated-arm n here is routinely tiny (#52).
+    """
+    if trials < 1:
+        raise ValueError(f"trials must be >= 1; got {trials}")
+    if not 0 <= invocations <= trials:
+        raise ValueError(f"invocations must be in [0, {trials}]; got {invocations}")
+    if not 0.0 < confidence < 1.0:
+        raise ValueError(f"confidence must be in (0, 1); got {confidence}")
+    alpha = 1.0 - confidence
+    low = (
+        0.0
+        if invocations == 0
+        else float(beta_dist.ppf(alpha / 2, invocations, trials - invocations + 1))
+    )
+    high = (
+        1.0
+        if invocations == trials
+        else float(beta_dist.ppf(1 - alpha / 2, invocations + 1, trials - invocations))
+    )
+    return low, high
 
 
 def parse_eval_log(path: Path) -> ParsedEvalLog:
@@ -174,10 +287,12 @@ def parse_eval_log(path: Path) -> ParsedEvalLog:
         pin = metadata.get("harness_pin")
         usage = _sum_usage(getattr(s, "model_usage", None) or {})
         completion = getattr(s.output, "completion", "") or ""
+        skill_name = str(metadata.get("skill", ""))
         samples.append(
             ParsedSample(
                 condition=_require_condition(metadata.get("condition"), path),
-                skill_name=str(metadata.get("skill", "")),
+                skill_name=skill_name,
+                invoked_skill=detect_skill_invocation(s.messages or [], skill_name),
                 epoch=int(s.epoch),
                 scorer_name=scorer_name,
                 score_value=_score_to_float(score.value, path),
@@ -247,12 +362,34 @@ def write_paired_evidence(
     every verdict of this run is written ``inadmissible``
     (``harness_pin_missing`` / ``harness_pin_mismatch``).
 
+    π_c rule (#52): π̂_c over the Full arm plus its Clopper-Pearson interval is
+    computed on every write, returned on ``IngestResult.pi_c`` (mandatory) and
+    recorded in the run's ``config_json``. Zero detected invocations in the
+    treated arm REFUSE the write — an instrumentation finding, not evidence.
+
     :raises EvalLogNotSuccessError: either log's status is not ``success``.
-    :raises PairedLogMismatchError: the logs are not a valid Full/Null pair.
+    :raises PairedLogMismatchError: the logs are not a valid Full/Null pair
+        (including a detected skill invocation in the Null arm — control-arm
+        contamination).
+    :raises ZeroInvocationError: zero detected invocations in the Full arm.
     :raises AlreadyIngestedError: this pair of task ids was already written.
     :raises FileNotFoundError: ``skill_dir`` has no SKILL.md.
     """
     _validate_pair(full, null)
+
+    pi_c = _pi_c_summary(full.samples)
+    if pi_c.invocations == 0:
+        raise ZeroInvocationError(
+            f"INSTRUMENTATION FINDING — dead treated arm: 0 skill invocations "
+            f"detected across {pi_c.trials} Full-arm epoch(s) "
+            f"(pi_c_hat=0.00, {PI_C_CONFIDENCE:.0%} CI "
+            f"[{pi_c.ci_low:.3f}, {pi_c.ci_high:.3f}], detector "
+            f"{PI_C_DETECTOR_VERSION}). Refusing to produce an effect verdict: "
+            f"'no effect' cannot be distinguished from 'never invoked'. This is "
+            f"a delivery/instrumentation failure, not evidence about the "
+            f"skill's effect.",
+            pi_c=pi_c,
+        )
 
     skill_source = skill_dir / "SKILL.md"
     if not skill_source.is_file():
@@ -357,6 +494,7 @@ def write_paired_evidence(
                         "scorer": scorer_name,
                         "harness_pin_json": full.samples[0].harness_pin_json,
                         "harness_pin_fingerprint": full.samples[0].harness_pin_fingerprint,
+                        "pi_c": {"detector": PI_C_DETECTOR_VERSION, **pi_c.model_dump()},
                     },
                     sort_keys=True,
                 ),
@@ -435,6 +573,7 @@ def write_paired_evidence(
         verdict_ids=tuple(verdict_ids),
         admissibility_state=admissibility_state,
         inadmissibility_reason=inadmissibility_reason,
+        pi_c=pi_c,
     )
 
 
@@ -474,6 +613,31 @@ def _validate_pair(full: ParsedEvalLog, null: ParsedEvalLog) -> None:
     scorers = {s.scorer_name for s in full.samples} | {s.scorer_name for s in null.samples}
     if len(scorers) != 1:
         raise PairedLogMismatchError(f"logs disagree on the scorer: {sorted(scorers)}")
+
+    contaminated = sorted(s.epoch for s in null.samples if s.invoked_skill)
+    if contaminated:
+        raise PairedLogMismatchError(
+            f"null log {null.task_name!r} carries detected skill invocation(s) in "
+            f"epoch(s) {contaminated} — control-arm contamination. The Skill tool "
+            f"is structurally not launchable in the Null arm (#46), so this means "
+            f"mislabelled arms or a misconfigured harness: an apparatus error, "
+            f"not evidence."
+        )
+
+
+def _pi_c_summary(samples: tuple[ParsedSample, ...]) -> PiCSummary:
+    """π̂_c + Clopper-Pearson interval over the treated arm's parsed samples."""
+    trials = len(samples)
+    invocations = sum(1 for s in samples if s.invoked_skill)
+    ci_low, ci_high = clopper_pearson(invocations, trials, confidence=PI_C_CONFIDENCE)
+    return PiCSummary(
+        invocations=invocations,
+        trials=trials,
+        pi_c_hat=invocations / trials,
+        ci_low=ci_low,
+        ci_high=ci_high,
+        confidence=PI_C_CONFIDENCE,
+    )
 
 
 def _pin_admissibility(
