@@ -174,6 +174,68 @@ Honest guidance: if you want the most *featureful* skill benchmarking today, use
 skill-eval-harness. Use this harness when what you care about is whether the number deserves to
 exist.
 
+### Prior art, named
+
+The instrument upgrade now locked on the
+[tracker map](https://github.com/MrBinnacle/skill-harness/issues/35) was designed against a
+verified prior-art survey (twelve keystone claims checked against primary sources — which is
+why no first-mover or only-tool claim appears in this repo). The three works that matter most:
+
+- **[skill-eval-harness](https://github.com/adewale/skill-eval-harness)** (adewale, MIT,
+  provider-agnostic — not Claude-Code-specific): the closest tool twin. Paired with/without
+  runs with a sign-flip significance test, removal-only ablation with canonical-hash
+  provenance on both arms, explicit tune/holdout/holdback splits, leakage lint, and
+  lift-per-dollar telemetry. Several of those disciplines are on our adoption path, with
+  attribution.
+- **BACKTRACE** ([arXiv:2607.27484](https://arxiv.org/abs/2607.27484), Hu et al.): post-hoc
+  skill attribution against a matched no-skill counterfactual — intervening on skill meaning,
+  wording, identity, content, and assignment, and eliciting attribution only after the answer
+  is committed.
+- **ASSAY** ([arXiv:2606.15390](https://arxiv.org/abs/2606.15390), Wang et al.): per-skill
+  causal attribution via randomized masking, and the finding that skill libraries show
+  pervasive causal heterogeneity — individual skills routinely help on some task types while
+  hurting on others, with the opposing effects canceling in aggregate.
+
+### What this harness claims — and what it doesn't
+
+Positioning under the same rules as the verdicts: no first-mover claims (the survey falsified
+them); where a neighbor has an adjacent mechanism we name it rather than pretend it doesn't
+exist; and the two claims that carry the most weight are visibly status-labeled until external
+deliberation has run. Tense matters here: the refusal verdicts are live today, while the
+characterized gate and earned-threshold machinery are the registered upgrade contract (locked
+decision records on the tracker map above) — claimed as design commitments, not shipped code.
+
+1. **Pre-spend characterized-error eligibility gate.** No paid run launches until the
+   decision rule's attained error rates — enumerated on the exact lattice, never quoted
+   nominal — are registered and a human has picked a conforming row. Nearest prior art:
+   skill-eval-harness's budget pre-projection gate + trigger matrix (adjacent, but without
+   attained-error characterization). We have not found this gate in characterized form
+   elsewhere.
+
+   > *Claim status: scheduled for external deliberation
+   > ([#45](https://github.com/MrBinnacle/skill-harness/issues/45)). Upgrades to "externally
+   > reviewed" or degrades to "internally derived, not externally deliberated" by dated
+   > amendment — never silently.*
+
+2. **Thresholds are earned, never authored.** Decision thresholds enter the harness only when
+   a human picks a row from enumerated frontier tables (configuration → attained errors →
+   cost) whose rows already meet registered targets — never by authoring a number free-hand.
+   The pick is signed on an append-only ratification record before any paid run.
+
+   > *Claim status: scheduled for external deliberation
+   > ([#45](https://github.com/MrBinnacle/skill-harness/issues/45)); same amendment mechanics
+   > as above.*
+
+3. **Refusal machinery, live.** `UNMEASURED` and CAN'T-TELL-YET are first-class verdicts
+   today; the registered upgrade adds the π_c invocation-rate refusal predicate — a skill
+   that never fires gets its availability claim refused, not scored. Prior art flags
+   weak-evidence cases (oracle tiers, audit warnings); flagging still emits the number, and
+   refusal doesn't.
+4. **A receipts ecosystem, not just a meter.** Verdicts bind to a public skills collection
+   that executes them — [MrBinnacle/skills](https://github.com/MrBinnacle/skills) retires
+   entries into `RETIRED.md` with the evidence linked — and this harness publishes its own
+   null results the same way.
+
 ## Why this exists
 
 With-vs-without skill benchmarking at 3 runs apiece is now common practice, and it is
