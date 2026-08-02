@@ -8,13 +8,14 @@ enforced. This script is that guard, the third instance of the house pattern
 the structural-bans CI job = token bans).
 
 Contract rows are DATA (the tables below): adding a contract is a table row,
-not new code. Nine live rows ship checked (DC-1..DC-6 from #43/#53; DC-7 and
-DC-8 activated by the PR landing skill_harness/oc; DC-11 activated by the PR
-landing the Gate-2 cross-checks — both per the #43 same-PR extension rule);
-four registered PLANNED rows (DC-9/DC-10/DC-12/DC-13) print as PLANNED until
-the PR landing each surface activates them (activation happens in that same
-PR, never later). New rows enter only via a ratified decision or a locked
-INVARIANTS entry.
+not new code. Eleven live rows ship checked (DC-1..DC-6 from #43/#53; DC-7
+and DC-8 activated by the PR landing skill_harness/oc; DC-11 activated by
+the PR landing the Gate-2 cross-checks; DC-9 and DC-10 activated by the PR
+landing the frontier-assembly cost layer (#56) — all per the #43 same-PR
+extension rule); two registered PLANNED rows (DC-12/DC-13) print as PLANNED
+until the PR landing each surface activates them (activation happens in that
+same PR, never later). New rows enter only via a ratified decision or a
+locked INVARIANTS entry.
 
 Registered EXPECTATIONS live in this table; current STATE is read from the
 tree. The expectation is deliberately never imported from the surface being
@@ -344,6 +345,47 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         ),
     ),
     LiveRow(
+        dc_id="DC-9",
+        summary=(
+            "'PAIR_COST' token ban in src/skill_harness/ (costs live from PRICE_PER_MTOK, #40)"
+        ),
+        token_bans=(
+            TokenBan(
+                term="PAIR_COST",
+                roots=("src/skill_harness",),
+                suffixes=frozenset({".py"}),
+                exemptions=frozenset(),
+                scan_repo_level=False,
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-10",
+        summary=(
+            "budget values: $35 per-evaluation cap + $100 DAILY_CAP_HARD_CEILING_USD == doc quotes"
+        ),
+        value_sites=(
+            ValueSite(
+                "src/skill_harness/oracles/calibration/cost_projection.py",
+                r"^EVALUATION_HARD_CAP_USD: float = ([0-9.]+)$",
+                ("35.0",),
+            ),
+            ValueSite(
+                "src/skill_harness/oracles/calibration/cost_projection.py",
+                r"^DAILY_CAP_HARD_CEILING_USD: float = ([0-9.]+)$",
+                ("100.0",),
+            ),
+        ),
+        registered_texts=(
+            RegisteredText("docs/INVARIANTS.md", "$35 per skill-task evaluation"),
+            RegisteredText("docs/INVARIANTS.md", "`DAILY_CAP_HARD_CEILING_USD = 100.0`"),
+            RegisteredText(
+                "docs/PLAN.md",
+                "Hard ceiling on `--daily-cap` ($100) prevents operator bypass",
+            ),
+        ),
+    ),
+    LiveRow(
         dc_id="DC-11",
         summary=(
             "banned-methods tokens in oc/: 'exact conditional'/'exact_conditional'/'wald' "
@@ -376,16 +418,6 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
 )
 
 PLANNED_ROWS: tuple[PlannedRow, ...] = (
-    PlannedRow(
-        "DC-9",
-        "PAIR_COST token ban in src/skill_harness/ (costs live from PRICE_PER_MTOK, #40)",
-        "the PR-2 change landing the frontier-assembly cost layer",
-    ),
-    PlannedRow(
-        "DC-10",
-        "budget values: $35 per-evaluation cap + $100 DAILY_CAP_HARD_CEILING_USD == doc quotes",
-        "the PR-2 change landing the budget surfaces (#40)",
-    ),
     PlannedRow(
         "DC-12",
         "RAT record internal consistency: hard_cap <= $35 and >= worst-case cost; "

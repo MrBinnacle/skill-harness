@@ -62,7 +62,12 @@ jobs:
   test:
     name: Test (${{ matrix.os }} · py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    # 10 -> 15 (#56): the slow-marked full-grid frontier test pushed the
+    # windows py3.13 cell to 9m20s against the old 10-minute ceiling (40s of
+    # headroom); #57/#58 add more tests. Headroom, not license - if a cell
+    # ever needs >15, thin the slow lane instead (#40's logged even-n
+    # thinning clause), never bump blindly.
+    timeout-minutes: 15
     # PYTHONHASHSEED=0 required by tests/oracles/tier1 autouse fixture for
     # A33 mechanical-validity bit-equality discipline.
     env:

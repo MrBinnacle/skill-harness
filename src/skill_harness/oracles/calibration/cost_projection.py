@@ -61,6 +61,21 @@ MODEL_PRICING_USD_PER_M: dict[str, dict[str, float]] = {
 DAILY_CAP_HARD_CEILING_USD: float = 100.0
 DAILY_CAP_OVERRIDE_ENV: str = "SKILL_HARNESS_DAILY_CAP_OVERRIDE"
 
+# ---------------------------------------------------------------------------
+# #40 per-evaluation hard cap (registered budget value; drift row DC-10)
+# ---------------------------------------------------------------------------
+
+# Ratified decision #40 (operator-picked values decision): $35 hard cap per
+# skill-task evaluation. The cap tests WORST-CASE FIXED-N projected cost
+# pre-spend - never curtailed expectation (a hard cap that assumes savings
+# is not hard, #40(b)) - and is registered through the EXISTING
+# runtime.run_budget.hard_cap_usd per-run surface. The oc frontier (#56)
+# marks over-cap rows visible-but-infeasible against this value; the RAT
+# preflight gate (#57) binds record cap == passed budget mechanically.
+# Drift row DC-10 pins this value and the daily ceiling above against the
+# locked doc quotes.
+EVALUATION_HARD_CAP_USD: float = 35.0
+
 # T_out estimate per call: ~50 tokens (choice + rationale per A36)
 _T_OUT_PER_CALL: int = 50
 
@@ -244,3 +259,66 @@ def validate_daily_cap(requested: float) -> float:
             f"set {DAILY_CAP_OVERRIDE_ENV}=1 to override"
         )
     return requested
+
+
+# ---------------------------------------------------------------------------
+# Evaluation-run projections (#56): live PRICE_PER_MTOK -> USD, worst case
+# ---------------------------------------------------------------------------
+
+
+def _project_tokens_usd(model_id: str, input_tokens: float, output_tokens: float) -> float:
+    """Worst-case USD for one unit of calibrated token spend.
+
+    Deliberately assumes NO cache discount: this feeds the #40 pre-spend
+    hard-cap projection, and a cap that assumes savings is not hard. Rates
+    come from the canonical PRICE_PER_MTOK table (F3 single source of truth);
+    an unknown model raises KeyError rather than default-pricing - a cap
+    projection must never silently price the wrong model.
+    """
+    if input_tokens < 0 or output_tokens < 0:
+        raise ValueError(
+            f"token counts must be >= 0; got input={input_tokens}, output={output_tokens}"
+        )
+    rates = PRICE_PER_MTOK[model_id]
+    return round((input_tokens * rates["input"] + output_tokens * rates["output"]) / 1e6, 8)
+
+
+def project_pair_usd(
+    model_id: str, *, input_tokens_per_pair: float, output_tokens_per_pair: float
+) -> float:
+    """Worst-case projected USD for ONE Gate-2 evaluation pair (#40(c)).
+
+    The frontier's cost column is computed live from the current
+    PRICE_PER_MTOK rates times the CALIBRATED tokens-per-pair measurement
+    supplied by the caller - never a hard-coded per-pair dollar constant
+    (drift row DC-9 bans the prototype's snapshot constant by token).
+
+    :param model_id: Subject model in the canonical pricing table.
+    :param input_tokens_per_pair: Calibrated input tokens across both arms
+        of one pair, >= 0.
+    :param output_tokens_per_pair: Calibrated output tokens across both arms
+        of one pair, >= 0.
+    :returns: Projected USD per pair (no cache discount - worst case).
+    :raises KeyError: If the model is not in the canonical pricing table.
+    :raises ValueError: If a token count is negative.
+    """
+    return _project_tokens_usd(model_id, input_tokens_per_pair, output_tokens_per_pair)
+
+
+def project_trial_usd(
+    model_id: str, *, input_tokens_per_trial: float, output_tokens_per_trial: float
+) -> float:
+    """Worst-case projected USD for ONE Gate-1 screen trial (single arm).
+
+    Same worst-case discipline as :func:`project_pair_usd`; the Gate-1
+    screen cost is display-only on the frontier (the #40 hard cap tests the
+    Gate-2 pair spend, matching that record's own worst-case arithmetic).
+
+    :param model_id: Subject model in the canonical pricing table.
+    :param input_tokens_per_trial: Calibrated input tokens per trial, >= 0.
+    :param output_tokens_per_trial: Calibrated output tokens per trial, >= 0.
+    :returns: Projected USD per trial (no cache discount - worst case).
+    :raises KeyError: If the model is not in the canonical pricing table.
+    :raises ValueError: If a token count is negative.
+    """
+    return _project_tokens_usd(model_id, input_tokens_per_trial, output_tokens_per_trial)

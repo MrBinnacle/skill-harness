@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`skill_harness.oc.frontier` — frontier assembly with live cost
+  projection under the $35 cap** (#56, PR-2 continuation; grid and budget
+  ratified on #40, error semantics on #37, architecture on #42). Pure
+  functions from registered knobs to the deliberation artifact:
+  `assemble_frontier` enumerates the FULL integer grid n = 6–40 (every row,
+  never a shortlist — the function takes no grid parameter at all), with the
+  12–24 band as a presentation-highlight flag only (`BAND_N_LO`/`BAND_N_HI`
+  registered in `oc.conventions`). Every row carries the attained
+  family-wise error columns (#37 item 5: the Gate-2 null false-direction
+  bounds PAIR — d-grid max + certified Bernstein upper bound — with
+  conformance judged on the CERTIFIED bound), grid-min power over the
+  registered H1 alternative points (points outside H1 are refused, never
+  silently filtered), curtailed-E[N] expectation columns, the config-level
+  Gate-1 block (attained zone-edge pair + P(UNRESOLVED)-vs-p0 profile), and
+  the worst-case FIXED-N cost `n × usd_per_pair` tested against the
+  registered hard cap pre-spend (#40(b): curtailment savings display as
+  expectation, never enter the cap). Over-cap rows assemble and render
+  visible-but-infeasible (#40(d)); `ratifiable` is the registered
+  conjunction (feasible ∧ power floor ∧ candidate α). The grid is enforced
+  at THIS layer (`frontier_row` refuses n outside 6–40) — the math layer
+  stays unbounded per #42/#55. Costs enter `oc` only as registered knobs:
+  the live PRICE_PER_MTOK → USD projections land in
+  `cost_projection.project_pair_usd` / `project_trial_usd` (worst-case: full
+  input rate, no cache discount; unknown model raises rather than
+  default-prices), and `EVALUATION_HARD_CAP_USD = 35.0` is registered next
+  to the daily ceiling. `CANDIDATE_FALSE_DIRECTION_TARGET = 0.05` is carried
+  as a registered CANDIDATE knob default — finalized only at row-pick, never
+  ratified here. New `docs/INVARIANTS.md` §5 locks the budget ceilings.
+  Drift rows **DC-9** (per-pair dollar-constant token ban in
+  `src/skill_harness/`) and **DC-10** (budget values == doc quotes)
+  activated live in this PR per the #43 same-PR rule — 11 live contracts, 2
+  PLANNED. The full-grid assembly test is `slow`-marked (~2 min of exact
+  enumeration, measured before authoring); CI's `-m "not live"` selection
+  runs it.
 - **`skill_harness.oc` — Gate-2 four-outcome lattice machinery** (#55, PR-2
   continuation; rule forms ratified on #37, dual MME on #40, architecture on
   #42). Three-sided paired decision rule {BENEFIT/HARM/EQUIVALENT}+UNRESOLVED

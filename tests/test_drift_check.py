@@ -25,12 +25,26 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPT = _REPO_ROOT / "scripts" / "drift_check.py"
 
-_LIVE_IDS = ("DC-1", "DC-2", "DC-3", "DC-4", "DC-5", "DC-6", "DC-7", "DC-8", "DC-11")
-_PLANNED_IDS = ("DC-9", "DC-10", "DC-12", "DC-13")
+_LIVE_IDS = (
+    "DC-1",
+    "DC-2",
+    "DC-3",
+    "DC-4",
+    "DC-5",
+    "DC-6",
+    "DC-7",
+    "DC-8",
+    "DC-9",
+    "DC-10",
+    "DC-11",
+)
+_PLANNED_IDS = ("DC-12", "DC-13")
 
 # Every file a live row reads; copied verbatim into synthetic trees so each
 # failure test starts from a tree that is green by construction. The whole oc
-# package is copied because DC-8 and DC-11 scan every .py under it.
+# package is copied because DC-8, DC-9 and DC-11 scan every .py under it
+# (DC-9 scans all of src/skill_harness/, which in the synthetic tree is
+# exactly these copies).
 _LIVE_SURFACES = (
     "src/skill_harness/aggregation/fit.py",
     "src/skill_harness/aggregation/status.py",
@@ -41,9 +55,12 @@ _LIVE_SURFACES = (
     "src/skill_harness/oc/conventions.py",
     "src/skill_harness/oc/crosschecks.py",
     "src/skill_harness/oc/exact.py",
+    "src/skill_harness/oc/frontier.py",
     "src/skill_harness/oc/gate1.py",
     "src/skill_harness/oc/gate2.py",
+    "src/skill_harness/oracles/calibration/cost_projection.py",
     "docs/INVARIANTS.md",
+    "docs/PLAN.md",
     "docs/PRD.md",
     "README.md",
 )
@@ -109,8 +126,8 @@ def test_green_prints_coverage_boundary_line() -> None:
 
 
 def test_green_prints_planned_rows() -> None:
-    """DC-9/DC-10/DC-12/DC-13 are registered-but-inactive and must render as
-    PLANNED (DC-7/DC-8 went live with #54; DC-11 with #55)."""
+    """DC-12/DC-13 are registered-but-inactive and must render as PLANNED
+    (DC-7/DC-8 went live with #54; DC-11 with #55; DC-9/DC-10 with #56)."""
     r = _run()
     planned_lines = [line for line in r.stdout.splitlines() if "PLANNED" in line]
     for dc_id in _PLANNED_IDS:
@@ -334,6 +351,7 @@ def test_empty_oc_package_blocks_import_ban(tmp_path: Path) -> None:
         "src/skill_harness/oc/conventions.py",
         "src/skill_harness/oc/crosschecks.py",
         "src/skill_harness/oc/exact.py",
+        "src/skill_harness/oc/frontier.py",
         "src/skill_harness/oc/gate1.py",
         "src/skill_harness/oc/gate2.py",
     ):
@@ -390,6 +408,79 @@ def test_crosschecks_definition_site_stays_exempt(tmp_path: Path) -> None:
     r = _run(_make_tree(tmp_path))
     assert r.returncode == 0
     assert "src/skill_harness/oc/crosschecks.py" in r.stdout
+
+
+def test_hardcoded_pair_dollar_constant_blocks(tmp_path: Path) -> None:
+    """DC-9 (activated by the frontier PR per the #43 same-PR rule): any
+    reappearance of the prototype's hard-coded per-pair dollar constant
+    inside src/skill_harness/ must block with the location (#40(c): costs
+    live from PRICE_PER_MTOK)."""
+    root = _make_tree(tmp_path)
+    (root / "src/skill_harness/tuning.py").write_text(
+        "PAIR_COST = 0.77  # measured v0.2 snapshot\n", encoding="utf-8"
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-9" in line and "tuning.py" in line for line in fail_lines), r.stdout
+
+
+def test_pair_dollar_token_outside_src_does_not_fire_dc9(tmp_path: Path) -> None:
+    """DC-9's registered scope is src/skill_harness/ exactly — the token in
+    docs/ (e.g. quoting the prototype's history) must NOT fire this row."""
+    root = _make_tree(tmp_path)
+    (root / "docs" / "history.md").write_text(
+        "The prototype hard-coded PAIR_COST = 0.77 as a v0.2 snapshot.\n",
+        encoding="utf-8",
+    )
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_evaluation_cap_drift_blocks(tmp_path: Path) -> None:
+    """DC-10 (activated by the frontier PR): moving the $35 per-evaluation
+    cap off the #40-ratified value must block."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "src/skill_harness/oracles/calibration/cost_projection.py",
+        "EVALUATION_HARD_CAP_USD: float = 35.0",
+        "EVALUATION_HARD_CAP_USD: float = 30.0",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-10" in line and "cost_projection.py" in line for line in fail_lines), r.stdout
+
+
+def test_daily_ceiling_drift_blocks(tmp_path: Path) -> None:
+    """DC-10: the $100 daily calibration ceiling is pinned by the same row."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "src/skill_harness/oracles/calibration/cost_projection.py",
+        "DAILY_CAP_HARD_CEILING_USD: float = 100.0",
+        "DAILY_CAP_HARD_CEILING_USD: float = 150.0",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-10" in line for line in fail_lines), r.stdout
+
+
+def test_budget_doc_quote_drift_blocks(tmp_path: Path) -> None:
+    """DC-10: the locked INVARIANTS budget quote drifting must block."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "docs/INVARIANTS.md",
+        "$35 per skill-task evaluation",
+        "$40 per skill-task evaluation",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-10" in line and "INVARIANTS" in line for line in fail_lines), r.stdout
 
 
 def test_missing_value_site_pattern_blocks(tmp_path: Path) -> None:

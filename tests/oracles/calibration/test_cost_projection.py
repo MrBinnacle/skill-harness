@@ -25,9 +25,12 @@ def test_pythonhashseed_set() -> None:
 # ------------------------------------------------------------------
 from skill_harness.oracles.calibration.cost_projection import (  # noqa: E402
     DAILY_CAP_HARD_CEILING_USD,
+    EVALUATION_HARD_CAP_USD,
     MODEL_PRICING_USD_PER_M,
     CostProjection,
     project_calibration_cost,
+    project_pair_usd,
+    project_trial_usd,
 )
 
 # ------------------------------------------------------------------
@@ -398,3 +401,84 @@ class TestDailyCapHardCeiling:
 
     def test_hard_ceiling_value(self) -> None:
         assert pytest.approx(100.0) == DAILY_CAP_HARD_CEILING_USD
+
+
+# ------------------------------------------------------------------
+# #56 / #40: evaluation cap + live per-pair / per-trial projections
+# ------------------------------------------------------------------
+
+
+class TestEvaluationHardCap:
+    """#40 (operator-picked values decision): $35 per skill-task evaluation,
+    registered as a named constant next to the daily ceiling (drift row DC-10
+    pins both against the doc quotes)."""
+
+    def test_cap_value(self) -> None:
+        assert EVALUATION_HARD_CAP_USD == 35.0
+
+    def test_cap_sits_under_the_daily_ceiling(self) -> None:
+        assert EVALUATION_HARD_CAP_USD < DAILY_CAP_HARD_CEILING_USD
+
+
+class TestPairAndTrialProjections:
+    """#40(c): the frontier's cost column is PRICE_PER_MTOK x calibrated
+    tokens — never a hard-coded per-pair dollar constant (drift row DC-9).
+    These projections are deliberately worst-case: full input rate, no cache
+    discount (a hard cap that assumes savings is not hard, #40(b))."""
+
+    def test_pair_literal_sonnet(self) -> None:
+        # 200k in x $3/M + 4k out x $15/M = 0.60 + 0.06
+        usd = project_pair_usd(
+            "claude-sonnet-4-6",
+            input_tokens_per_pair=200_000,
+            output_tokens_per_pair=4_000,
+        )
+        assert usd == pytest.approx(0.66)
+
+    def test_pair_literal_haiku(self) -> None:
+        # 200k in x $1/M + 4k out x $5/M = 0.20 + 0.02
+        usd = project_pair_usd(
+            "claude-haiku-4-5",
+            input_tokens_per_pair=200_000,
+            output_tokens_per_pair=4_000,
+        )
+        assert usd == pytest.approx(0.22)
+
+    def test_trial_literal_sonnet(self) -> None:
+        # 100k in x $3/M + 2k out x $15/M = 0.30 + 0.03
+        usd = project_trial_usd(
+            "claude-sonnet-4-6",
+            input_tokens_per_trial=100_000,
+            output_tokens_per_trial=2_000,
+        )
+        assert usd == pytest.approx(0.33)
+
+    def test_rates_flow_from_the_canonical_table(self) -> None:
+        """Mirror of the F3 single-source-of-truth regression: the projection
+        must reproduce arithmetic done directly against PRICE_PER_MTOK."""
+        from skill_harness.ablation.subject import PRICE_PER_MTOK
+
+        for model in ("claude-sonnet-4-6", "claude-opus-4-7", "gpt-5.4"):
+            rates = PRICE_PER_MTOK[model]
+            expected = 123_456 * rates["input"] / 1e6 + 7_890 * rates["output"] / 1e6
+            usd = project_pair_usd(
+                model, input_tokens_per_pair=123_456, output_tokens_per_pair=7_890
+            )
+            assert usd == pytest.approx(expected)
+
+    def test_unknown_model_raises_not_defaults(self) -> None:
+        """A cap projection must never silently price the wrong model."""
+        with pytest.raises(KeyError):
+            project_pair_usd(
+                "claude-nonexistent", input_tokens_per_pair=1000, output_tokens_per_pair=100
+            )
+
+    def test_negative_tokens_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            project_pair_usd(
+                "claude-sonnet-4-6", input_tokens_per_pair=-1, output_tokens_per_pair=100
+            )
+        with pytest.raises(ValueError):
+            project_trial_usd(
+                "claude-sonnet-4-6", input_tokens_per_trial=100, output_tokens_per_trial=-1
+            )
