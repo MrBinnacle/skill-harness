@@ -60,8 +60,9 @@ carries the aggregate arithmetic.
 ## Disposition of record
 
 `sqlite-expert` was archived (cut) from the live library 2026-07-10 on this
-registration's own null result. That dated decision **stands**; any change
-would be a new dated decision, never an edit.
+registration's own null result. That dated decision **stands** per #41's
+dispositions-stand rule (E5); any change would be a new dated decision, never
+an edit.
 
 ## Amendment log
 

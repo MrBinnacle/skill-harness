@@ -60,10 +60,14 @@ backfill --execute`).
 
 ## Disposition of record
 
-Screened out of collection admission 2026-07-10 (ceiling). A later live
-re-screen (2026-07-20, natively store-backed, outside this ledger) returned
-the same outcome and the disposition CUT (subsumed) was recorded then. Both
-dated decisions **stand**; any change would be a new dated decision.
+Screened out of collection admission 2026-07-10 (ceiling; recorded in the
+collection's
+[RETIRED.md](https://github.com/MrBinnacle/skills/blob/main/RETIRED.md)
+screened-out table). A later live re-screen (2026-07-20, natively
+store-backed, outside this ledger) returned the same outcome and the
+disposition CUT (subsumed) was recorded then. Both dated decisions **stand**
+per #41's dispositions-stand rule (E5); any change would be a new dated
+decision.
 
 ## Amendment log
 

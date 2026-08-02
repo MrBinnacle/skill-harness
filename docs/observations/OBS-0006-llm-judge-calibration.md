@@ -64,8 +64,11 @@ mixed canon.
 
 ## Disposition of record
 
-Screened out of collection admission 2026-07-10 (ceiling). The dated decision
-**stands**; any change would be a new dated decision.
+Screened out of collection admission 2026-07-10 (ceiling; recorded in the
+collection's
+[RETIRED.md](https://github.com/MrBinnacle/skills/blob/main/RETIRED.md)
+screened-out table). The dated decision **stands** per #41's
+dispositions-stand rule (E5); any change would be a new dated decision.
 
 ## Amendment log
 

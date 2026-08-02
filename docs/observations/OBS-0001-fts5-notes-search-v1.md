@@ -53,8 +53,9 @@ hardening. Registered in
 
 The subject skill `sqlite-expert` was archived (cut) from the live library on
 2026-07-10 on this registration's own null result. That dated decision
-**stands**; re-scoping annotates the evidence and never reverses a decision.
-Any change of disposition would be a new dated decision.
+**stands** per #41's dispositions-stand rule (E5): re-scoping annotates the
+evidence and never reverses a decision. Any change of disposition would be a
+new dated decision.
 
 ## Amendment log
 

@@ -47,8 +47,8 @@ deterministically materializes the screen store (`skill-harness screen
 backfill --execute`). The manifest also carries this task's twin log
 (11-10-33, identical task input and harness pin) ingested **inadmissible** as
 an apparatus void — append-only keeps the evidence while p0 excludes it; a
-naive ingest-both would have derived p0 = 3/6 and manufactured a false
-KEEP-candidate.
+naive ingest-both would have derived p0 = 3/6 and manufactured a spurious
+below-ceiling signal.
 
 ## What this record does not assert
 
@@ -61,11 +61,14 @@ KEEP-candidate.
 
 ## Disposition of record
 
-Screened out of collection admission 2026-07-10 (ceiling). Separately, the
-skill is retained in the author's private library on documented non-screen
-grounds (two saves in a different setting than the screen measures —
-RETIRED.md footnote). Both dated decisions **stand**; any change would be a
-new dated decision.
+Screened out of collection admission 2026-07-10 (ceiling; recorded in the
+collection's
+[RETIRED.md](https://github.com/MrBinnacle/skills/blob/main/RETIRED.md)
+screened-out table). Separately, the skill is retained in the author's
+private library on documented non-screen grounds (two saves in a different
+setting than the screen measures — RETIRED.md footnote). Both dated decisions
+**stand** per #41's dispositions-stand rule (E5); any change would be a new
+dated decision.
 
 ## Amendment log
 

@@ -36,7 +36,8 @@ registration and the retained raw evidence at ledger-authoring time
 Total: 18/18 Stage-0 Null epochs + 8/8 Stage-1 Null epochs = **26/26 Null
 epochs across 6 independently-authored tasks**, exactly as registered.
 
-**Reconciliation note.** The "6 task families" figure circulating in prose is
+**Reconciliation note.** The "6 families" figure carried by the re-scoping
+ticket ([#50](https://github.com/MrBinnacle/skill-harness/issues/50)) is
 prose-derived; the reconciled referent is the registration's *6
 independently-authored tasks* above (the two FTS5 task versions are distinct
 tasks sharing one subject skill). Screens run *after* this registration lineage
@@ -68,7 +69,7 @@ target for the planned DC-13 consistency check, registered on
 | `pi_c` | `not-instrumented` — the historical instrument did not measure compliance |
 | `estimand` | `n/a` — pre-registry observation, no registered estimand |
 | `classification` | `DEFERRED` until the first Gate-1 row-pick ratification (#47), which is obligated to classify all OBS records in the same motion; recorded then as a dated amendment with the attained posterior |
-| `disposition_of_record` | the dated historical decision, standing; tense-marked. Keep/cut vocabulary appears **only** in this field — observation records assert counts, never skill verdicts |
+| `disposition_of_record` | the dated historical decision, standing per #41's dispositions-stand rule (E5: re-scoping annotates evidence, never reverses decisions); tense-marked. Keep/cut vocabulary appears **only** in this field and its per-record "Disposition of record" section — observation records assert counts, never skill verdicts |
 
 Records are append-only: corrections and classification events land as dated
 amendment blocks, never edits.
