@@ -25,17 +25,22 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPT = _REPO_ROOT / "scripts" / "drift_check.py"
 
-_LIVE_IDS = ("DC-1", "DC-2", "DC-3", "DC-4", "DC-5", "DC-6")
-_PLANNED_IDS = ("DC-7", "DC-8", "DC-9", "DC-10", "DC-11", "DC-12", "DC-13")
+_LIVE_IDS = ("DC-1", "DC-2", "DC-3", "DC-4", "DC-5", "DC-6", "DC-7", "DC-8")
+_PLANNED_IDS = ("DC-9", "DC-10", "DC-11", "DC-12", "DC-13")
 
 # Every file a live row reads; copied verbatim into synthetic trees so each
-# failure test starts from a tree that is green by construction.
+# failure test starts from a tree that is green by construction. The whole oc
+# package is copied because DC-8 scans every .py under it.
 _LIVE_SURFACES = (
     "src/skill_harness/aggregation/fit.py",
     "src/skill_harness/aggregation/status.py",
     "src/skill_harness/ablation/stopping.py",
     "src/skill_harness/semantics.py",
     "src/skill_harness/cli/main.py",
+    "src/skill_harness/oc/__init__.py",
+    "src/skill_harness/oc/conventions.py",
+    "src/skill_harness/oc/exact.py",
+    "src/skill_harness/oc/gate1.py",
     "docs/INVARIANTS.md",
     "docs/PRD.md",
     "README.md",
@@ -253,6 +258,83 @@ def test_spend_gating_sentence_mutation_blocks(tmp_path: Path) -> None:
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-6" in line for line in fail_lines), r.stdout
+
+
+def test_grid_constant_drift_blocks(tmp_path: Path) -> None:
+    """DC-7 (activated by the oc-landing PR per the #43 same-PR rule): moving
+    a grid constant off the #40-ratified value must block."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "src/skill_harness/oc/conventions.py",
+        "GRID_N_MAX: Final[int] = 40",
+        "GRID_N_MAX: Final[int] = 39",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-7" in line for line in fail_lines), r.stdout
+
+
+def test_grid_provenance_comment_drift_blocks(tmp_path: Path) -> None:
+    """DC-7: the #40-provenance comment at the definition site is part of the
+    contract - rewording it away must block."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "src/skill_harness/oc/conventions.py",
+        "Provenance: ratified decision #40",
+        "Provenance: team preference",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-7" in line and "conventions.py" in line for line in fail_lines), r.stdout
+
+
+def test_grid_doc_quote_drift_blocks(tmp_path: Path) -> None:
+    """DC-7: the locked INVARIANTS grid quote drifting must block."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "docs/INVARIANTS.md",
+        "`GRID_N_MIN = 6` / `GRID_N_MAX = 40`",
+        "`GRID_N_MIN = 8` / `GRID_N_MAX = 40`",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-7" in line and "INVARIANTS" in line for line in fail_lines), r.stdout
+
+
+def test_forbidden_import_inside_oc_blocks(tmp_path: Path) -> None:
+    """DC-8: any import of ablation/subject/stopping inside oc/ must block,
+    naming the file and line."""
+    root = _make_tree(tmp_path)
+    (root / "src/skill_harness/oc/helper.py").write_text(
+        "from skill_harness.ablation.stopping import N_MAX\n", encoding="utf-8"
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-8" in line and "helper.py" in line for line in fail_lines), r.stdout
+
+
+def test_empty_oc_package_blocks_import_ban(tmp_path: Path) -> None:
+    """DC-8: a tree where the oc package is gone must block - a ban with no
+    surface to guard is drift, not a pass."""
+    root = _make_tree(tmp_path)
+    for rel in (
+        "src/skill_harness/oc/__init__.py",
+        "src/skill_harness/oc/conventions.py",
+        "src/skill_harness/oc/exact.py",
+        "src/skill_harness/oc/gate1.py",
+    ):
+        (root / rel).unlink()
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-8" in line for line in fail_lines), r.stdout
 
 
 def test_missing_value_site_pattern_blocks(tmp_path: Path) -> None:

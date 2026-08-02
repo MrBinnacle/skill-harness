@@ -42,6 +42,21 @@ Enforced in:
 
 Spec: `docs/PRD.md` §6 "Admissibility System".
 
+## 4. OC enumeration grid (locked)
+
+The `skill_harness.oc` engine enumerates the full integer grid `n = 6-40`
+(`GRID_N_MIN = 6` / `GRID_N_MAX = 40`). The 12-24-pair band is a presentation
+highlight, never a grid bound. Ratified in decision #40: the floor is the smallest
+n where a Gate-2 call is mathematically reachable in the locked gamma range; the
+ceiling reconciles with the legacy instrument's `N_MAX` by ratified decision, not
+by import — `oc` registers its own constants (#42 convention 2).
+
+Enforced in:
+- `src/skill_harness/oc/conventions.py::GRID_N_MIN/GRID_N_MAX = 6/40` (with the
+  #40-provenance comment; deliberately not imported from `ablation/stopping.py`)
+
+Spec: skill-harness #40 + #42 resolution records; drift-check row DC-7.
+
 ---
 
 Re-pointed from "CLAUDE.md" to this file across `src/` and `tests/` (F5, then the

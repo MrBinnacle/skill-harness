@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`skill_harness.oc` — pure-math OC engine, Gate-1 machinery** (#54, PR-2
+  opener of the instrument upgrade; architecture ratified on #42, rule forms
+  on #37, grid on #40). New top-level package importing NOTHING from the
+  ablation or subject layers (the legacy `sizing.py`/`stopping.py` stay
+  untouched as characterized legacy artifacts — parallel machinery, not a
+  refactor). Gate-1 two-point indifference-zone rule (QUALIFIES tests
+  p0 ≤ θ_lo, REJECTED tests p0 ≥ θ_hi, declared don't-care zone between; the
+  one-point rule is refused at construction), Lee-Liu-style predictive-
+  probability extension governor (one-step beta-binomial PP against a
+  registered floor, bounded by an outer batch cap, fully inside the exact OC
+  characterization), exact binomial OC enumeration reporting ATTAINED (never
+  nominal) zone-edge errors, and deterministic curtailment default-on —
+  determination against the full design tree so the decision-identity holds
+  under extension, pinned differentially by test (per-trial DP vs batch
+  convolution). Grid constants `GRID_N_MIN=6`/`GRID_N_MAX=40` are `oc`'s own
+  registered conventions with the #40-provenance comment, deliberately not
+  imported from legacy stopping constants; new locked INVARIANTS §4 entry.
+  The banked prototype suite (#42 convention 4) lands as the Gate-1 test
+  floor with independent exact-fraction reference literals; boundary rows
+  n=6 and n=40 covered. Drift-check rows **DC-7** (grid constants + doc
+  quotes + provenance comment) and **DC-8** (import-direction ban, new
+  `ImportScanBan` check kind) activated live in this PR per the #43 same-PR
+  extension rule — 8 live contracts, 5 PLANNED. Gate-2 four-outcome lattice
+  DP is #55; frontier assembly + live cost projection is #56 (costs never
+  enter below the frontier-assembly layer, #42 convention 3).
 - **Drift-check CI — declarative contract table** (#53, PR-1 of the instrument
   upgrade; contract list ratified on #43). New `scripts/drift_check.py` in the
   release-gate pattern: contract rows are DATA, so adding a locked contract is

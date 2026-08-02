@@ -8,11 +8,12 @@ enforced. This script is that guard, the third instance of the house pattern
 the structural-bans CI job = token bans).
 
 Contract rows are DATA (the tables below): adding a contract is a table row,
-not new code. Six live rows (DC-1..DC-6) ship checked; seven registered
-PLANNED rows (DC-7..DC-13) print as PLANNED until the PR landing each surface
-activates them (#43 extension rule: activation happens in that same PR, never
-later). New rows enter only via a ratified decision or a locked INVARIANTS
-entry.
+not new code. Eight live rows ship checked (DC-1..DC-6 from #43/#53; DC-7 and
+DC-8 activated by the PR landing skill_harness/oc per the #43 same-PR
+extension rule); five registered PLANNED rows (DC-9..DC-13) print as PLANNED
+until the PR landing each surface activates them (activation happens in that
+same PR, never later). New rows enter only via a ratified decision or a
+locked INVARIANTS entry.
 
 Registered EXPECTATIONS live in this table; current STATE is read from the
 tree. The expectation is deliberately never imported from the surface being
@@ -73,6 +74,18 @@ class TokenBan:
 
 
 @dataclass(frozen=True)
+class ImportScanBan:
+    """An import-direction ban: no import statement in any ``.py`` file under
+    ``package_root`` may reference a forbidden module name. Only import lines
+    are scanned (conservative: a forbidden token anywhere on an import line
+    fails). An empty or missing package is drift too - the ban must have a
+    surface to guard."""
+
+    package_root: str
+    forbidden: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class EstimandContract:
     """The registry enum must hold EXACTLY the registered values, and every
     machine-readable ``estimand:`` field in docs must use a registered value
@@ -92,6 +105,7 @@ class LiveRow:
     live_pointers: tuple[str, ...] = ()
     token_ban: TokenBan | None = None
     estimand_contract: EstimandContract | None = None
+    import_ban: ImportScanBan | None = None
 
 
 @dataclass(frozen=True)
@@ -262,19 +276,60 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         ),
         live_pointers=("src/skill_harness/cli/main.py",),
     ),
+    LiveRow(
+        dc_id="DC-7",
+        summary=(
+            "oc grid constants GRID_N_MIN=6/GRID_N_MAX=40 == doc quotes + #40-provenance comment"
+        ),
+        value_sites=(
+            ValueSite(
+                "src/skill_harness/oc/conventions.py",
+                r"^GRID_N_MIN: Final\[int\] = (\d+)$",
+                ("6",),
+            ),
+            ValueSite(
+                "src/skill_harness/oc/conventions.py",
+                r"^GRID_N_MAX: Final\[int\] = (\d+)$",
+                ("40",),
+            ),
+        ),
+        registered_texts=(
+            # The #40-provenance comment at the definition site (one line each
+            # so whitespace normalization keeps the contains-check exact).
+            RegisteredText(
+                "src/skill_harness/oc/conventions.py",
+                "Provenance: ratified decision #40 fixes the full integer grid n = 6-40;",
+            ),
+            RegisteredText(
+                "src/skill_harness/oc/conventions.py",
+                "ceiling is fixed by ratified decision, not by the legacy rule (#42",
+            ),
+            # The locked INVARIANTS entry (doc quotes).
+            RegisteredText(
+                "docs/INVARIANTS.md",
+                "The `skill_harness.oc` engine enumerates the full integer grid `n = 6-40`",
+            ),
+            RegisteredText(
+                "docs/INVARIANTS.md",
+                "`GRID_N_MIN = 6` / `GRID_N_MAX = 40`",
+            ),
+            RegisteredText(
+                "docs/INVARIANTS.md",
+                "presentation highlight, never a grid bound",
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-8",
+        summary="oc import-direction ban: no ablation/subject/stopping imports inside oc/",
+        import_ban=ImportScanBan(
+            package_root="src/skill_harness/oc",
+            forbidden=("ablation", "subject", "stopping"),
+        ),
+    ),
 )
 
 PLANNED_ROWS: tuple[PlannedRow, ...] = (
-    PlannedRow(
-        "DC-7",
-        "oc grid constants GRID_N_MIN=6/GRID_N_MAX=40 == doc quotes + #40-provenance comment",
-        "the PR-2 change landing skill_harness/oc (#42)",
-    ),
-    PlannedRow(
-        "DC-8",
-        "oc import-direction ban: no ablation/subject/stopping imports inside oc/",
-        "the PR-2 change landing skill_harness/oc (#42)",
-    ),
     PlannedRow(
         "DC-9",
         "PAIR_COST token ban in src/skill_harness/ (costs live from PRICE_PER_MTOK, #40)",
@@ -395,6 +450,23 @@ def _check_token_ban(root: Path, ban: TokenBan) -> list[str]:
     return failures
 
 
+def _check_import_ban(root: Path, ban: ImportScanBan) -> list[str]:
+    base = root / ban.package_root
+    files = sorted(base.rglob("*.py")) if base.is_dir() else []
+    files = [p for p in files if "__pycache__" not in p.parts]
+    if not files:
+        return [f"{ban.package_root}: no .py files found (import-direction ban unreachable)"]
+    import_line = re.compile(r"^\s*(?:from|import)\s")
+    failures: list[str] = []
+    for path in files:
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if import_line.match(line) and any(tok in line for tok in ban.forbidden):
+                failures.append(f"forbidden import direction at {rel}:{lineno}: {line.strip()!r}")
+    return failures
+
+
 def _check_estimand_contract(root: Path, contract: EstimandContract) -> list[str]:
     failures: list[str] = []
     text = _read(root, contract.registry_path)
@@ -444,6 +516,8 @@ def _run_row(root: Path, row: LiveRow) -> list[str]:
         failures.extend(_check_token_ban(root, row.token_ban))
     if row.estimand_contract is not None:
         failures.extend(_check_estimand_contract(root, row.estimand_contract))
+    if row.import_ban is not None:
+        failures.extend(_check_import_ban(root, row.import_ban))
     return failures
 
 
