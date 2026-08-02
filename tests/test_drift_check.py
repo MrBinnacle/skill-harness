@@ -126,6 +126,20 @@ def test_green_prints_allowlist_even_when_empty() -> None:
     assert allow and "EMPTY" in allow[0], r.stdout
 
 
+def test_green_prints_structural_exemptions() -> None:
+    """F7 visibility: the E1b structural carve-outs are printed too, so the
+    EMPTY allowlist line can never overstate the ban's true coverage."""
+    r = _run()
+    exempt_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("EXEMPT")]
+    for rel in (
+        "src/skill_harness/semantics.py",
+        "tests/test_semantics.py",
+        "scripts/drift_check.py",
+        "tests/test_drift_check.py",
+    ):
+        assert any(rel in line for line in exempt_lines), r.stdout
+
+
 # ---------------------------------------------------------------------------
 # Failure lanes — synthetic trees; failures are ALL listed, never first-fail
 # ---------------------------------------------------------------------------

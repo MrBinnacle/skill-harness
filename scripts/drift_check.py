@@ -499,6 +499,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Token-ban allowlist (grows only by dated amendment): {entries}")
     else:
         print("Token-ban allowlist (grows only by dated amendment): EMPTY")
+    # F7 visibility: structural exemptions are carve-outs too — print them so
+    # the ban's true coverage is never overstated by the EMPTY allowlist line.
+    print("Structural scan exemptions (definition sites + scan machinery, not allowlist entries):")
+    for rel in sorted(_BAN_STRUCTURAL_EXEMPTIONS):
+        print(f"  EXEMPT   {rel}")
 
     if report.total_failures:
         print(f"DRIFT CHECK: BLOCKED - {report.total_failures} contract violation(s) listed above.")
