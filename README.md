@@ -60,6 +60,12 @@ Most benchmarks hand you a number no matter what. This tool refuses. That refusa
 > trustworthy than one that manufactures a KEEP to look useful. The
 > v0.1→v0.2 re-aim that got us here is pre-registered and published, not papered over:
 > [`docs/findings/v0.2-reaim-gate.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/v0.2-reaim-gate.md).
+>
+> **Amendment (2026-08-02).** The historical Stage-0 screen records behind that aggregate now
+> live as per-record, machine-parseable entries in the
+> [OBS ledger](https://github.com/MrBinnacle/skill-harness/blob/main/docs/observations/README.md),
+> which is canonical for per-record counts, evidence basis, and classification state; history is
+> annotated there, never rewritten.
 
 ## The question other skill evals don't answer
 

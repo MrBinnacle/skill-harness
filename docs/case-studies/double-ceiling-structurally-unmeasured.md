@@ -125,3 +125,10 @@ All numbers registered in
 local to the operator (publishing gold implementations would contaminate
 future evals — the C3 rule from the findings doc). Runs 2026-07-09/10;
 subject `claude-sonnet-5`; agent Claude Code 2.1.197; total arc spend ≈$8.
+
+> **Amendment (2026-08-02).** The Stage-0 screen records behind this case
+> study are ledgered per-record in
+> [`docs/observations/`](../observations/README.md) with machine-parseable
+> front-matter and a classification state of DEFERRED (re-scoping semantics:
+> [#41](https://github.com/MrBinnacle/skill-harness/issues/41)). The ledger is
+> canonical for per-record counts; the history above is unchanged.
