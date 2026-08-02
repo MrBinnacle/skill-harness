@@ -8,12 +8,13 @@ enforced. This script is that guard, the third instance of the house pattern
 the structural-bans CI job = token bans).
 
 Contract rows are DATA (the tables below): adding a contract is a table row,
-not new code. Eight live rows ship checked (DC-1..DC-6 from #43/#53; DC-7 and
-DC-8 activated by the PR landing skill_harness/oc per the #43 same-PR
-extension rule); five registered PLANNED rows (DC-9..DC-13) print as PLANNED
-until the PR landing each surface activates them (activation happens in that
-same PR, never later). New rows enter only via a ratified decision or a
-locked INVARIANTS entry.
+not new code. Nine live rows ship checked (DC-1..DC-6 from #43/#53; DC-7 and
+DC-8 activated by the PR landing skill_harness/oc; DC-11 activated by the PR
+landing the Gate-2 cross-checks — both per the #43 same-PR extension rule);
+four registered PLANNED rows (DC-9/DC-10/DC-12/DC-13) print as PLANNED until
+the PR landing each surface activates them (activation happens in that same
+PR, never later). New rows enter only via a ratified decision or a locked
+INVARIANTS entry.
 
 Registered EXPECTATIONS live in this table; current STATE is read from the
 tree. The expectation is deliberately never imported from the surface being
@@ -63,14 +64,18 @@ class RegisteredText:
 
 @dataclass(frozen=True)
 class TokenBan:
-    """A repo-wide banned token (structural-bans pattern). ``exemptions`` are
-    the structural definition-site/scanner self-exclusions (E1b pattern) —
-    NOT allowlist entries; the allowlist is a separate, printed surface."""
+    """A banned token (structural-bans pattern). ``exemptions`` are the
+    structural definition-site/scanner self-exclusions (E1b pattern) — NOT
+    allowlist entries; the allowlist is a separate, printed surface.
+    ``scan_repo_level`` adds the root-level ``*.md`` files + ``pyproject.toml``
+    to the scan (the repo-wide rows keep it on; a package-scoped row like
+    DC-11 turns it off so the scan matches its registered scope exactly)."""
 
     term: str
     roots: tuple[str, ...]
     suffixes: frozenset[str]
     exemptions: frozenset[str]
+    scan_repo_level: bool = True
 
 
 @dataclass(frozen=True)
@@ -103,7 +108,7 @@ class LiveRow:
     value_sites: tuple[ValueSite, ...] = ()
     registered_texts: tuple[RegisteredText, ...] = ()
     live_pointers: tuple[str, ...] = ()
-    token_ban: TokenBan | None = None
+    token_bans: tuple[TokenBan, ...] = ()
     estimand_contract: EstimandContract | None = None
     import_ban: ImportScanBan | None = None
 
@@ -138,6 +143,15 @@ TOKEN_BAN_ALLOWLIST: frozenset[str] = frozenset()
 allowlist is an invisible coverage hole. Grows only by dated amendment (the
 first legitimate QUOTE of a banned term in an append-only record adds that
 file here, in that PR, with a dated note). Printed even when empty."""
+
+# DC-11 scope: the registered row bans method tokens IN oc/ (#37 item 4 bans
+# the exact conditional McNemar test and Wald intervals by name), so the scan
+# roots are exactly the package. crosschecks.py is the E1b definition site:
+# its docstrings must NAME the banned methods and quote the banning
+# literature verbatim (FLL 2013) — a structural exemption, printed, never an
+# allowlist entry.
+_OC_BAN_ROOTS = ("src/skill_harness/oc",)
+_OC_BAN_EXEMPTIONS = frozenset({"src/skill_harness/oc/crosschecks.py"})
 
 LIVE_ROWS: tuple[LiveRow, ...] = (
     LiveRow(
@@ -215,11 +229,13 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
     LiveRow(
         dc_id="DC-3",
         summary='"per-protocol" token ban, repo-wide, allowlist EMPTY (E9(R1) rule, #36)',
-        token_ban=TokenBan(
-            term="per-protocol",
-            roots=_BAN_SCAN_ROOTS,
-            suffixes=_BAN_SCAN_SUFFIXES,
-            exemptions=_BAN_STRUCTURAL_EXEMPTIONS,
+        token_bans=(
+            TokenBan(
+                term="per-protocol",
+                roots=_BAN_SCAN_ROOTS,
+                suffixes=_BAN_SCAN_SUFFIXES,
+                exemptions=_BAN_STRUCTURAL_EXEMPTIONS,
+            ),
         ),
         value_sites=(
             # Cross-site: the registry's own ban constants must state the same
@@ -327,6 +343,36 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
             forbidden=("ablation", "subject", "stopping"),
         ),
     ),
+    LiveRow(
+        dc_id="DC-11",
+        summary=(
+            "banned-methods tokens in oc/: 'exact conditional'/'exact_conditional'/'wald' "
+            "(mid-p only + Newcombe/Tango only, #37 item 4)"
+        ),
+        token_bans=(
+            TokenBan(
+                term="exact conditional",
+                roots=_OC_BAN_ROOTS,
+                suffixes=frozenset({".py"}),
+                exemptions=_OC_BAN_EXEMPTIONS,
+                scan_repo_level=False,
+            ),
+            TokenBan(
+                term="exact_conditional",
+                roots=_OC_BAN_ROOTS,
+                suffixes=frozenset({".py"}),
+                exemptions=_OC_BAN_EXEMPTIONS,
+                scan_repo_level=False,
+            ),
+            TokenBan(
+                term="wald",
+                roots=_OC_BAN_ROOTS,
+                suffixes=frozenset({".py"}),
+                exemptions=_OC_BAN_EXEMPTIONS,
+                scan_repo_level=False,
+            ),
+        ),
+    ),
 )
 
 PLANNED_ROWS: tuple[PlannedRow, ...] = (
@@ -339,11 +385,6 @@ PLANNED_ROWS: tuple[PlannedRow, ...] = (
         "DC-10",
         "budget values: $35 per-evaluation cap + $100 DAILY_CAP_HARD_CEILING_USD == doc quotes",
         "the PR-2 change landing the budget surfaces (#40)",
-    ),
-    PlannedRow(
-        "DC-11",
-        "banned-methods tokens in oc/ (exact-conditional McNemar, Wald intervals; #37)",
-        "PR-2; exact token patterns defined there, or the row becomes a named review obligation",
     ),
     PlannedRow(
         "DC-12",
@@ -428,10 +469,11 @@ def _iter_ban_files(root: Path, ban: TokenBan) -> list[Path]:
             for p in base.rglob("*")
             if p.is_file() and p.suffix in ban.suffixes and "__pycache__" not in p.parts
         )
-    files.extend(p for p in root.glob("*.md"))
-    pyproject = root / "pyproject.toml"
-    if pyproject.is_file():
-        files.append(pyproject)
+    if ban.scan_repo_level:
+        files.extend(p for p in root.glob("*.md"))
+        pyproject = root / "pyproject.toml"
+        if pyproject.is_file():
+            files.append(pyproject)
     return files
 
 
@@ -512,8 +554,8 @@ def _run_row(root: Path, row: LiveRow) -> list[str]:
         failures.extend(_check_registered_text(root, reg))
     for pointer in row.live_pointers:
         failures.extend(_check_pointer(root, pointer))
-    if row.token_ban is not None:
-        failures.extend(_check_token_ban(root, row.token_ban))
+    for ban in row.token_bans:
+        failures.extend(_check_token_ban(root, ban))
     if row.estimand_contract is not None:
         failures.extend(_check_estimand_contract(root, row.estimand_contract))
     if row.import_ban is not None:
@@ -575,8 +617,13 @@ def main(argv: list[str] | None = None) -> int:
         print("Token-ban allowlist (grows only by dated amendment): EMPTY")
     # F7 visibility: structural exemptions are carve-outs too — print them so
     # the ban's true coverage is never overstated by the EMPTY allowlist line.
+    # Union across every live token ban (DC-3 repo-wide + DC-11 oc-scoped).
+    all_exemptions: set[str] = set()
+    for row in LIVE_ROWS:
+        for ban in row.token_bans:
+            all_exemptions |= ban.exemptions
     print("Structural scan exemptions (definition sites + scan machinery, not allowlist entries):")
-    for rel in sorted(_BAN_STRUCTURAL_EXEMPTIONS):
+    for rel in sorted(all_exemptions):
         print(f"  EXEMPT   {rel}")
 
     if report.total_failures:

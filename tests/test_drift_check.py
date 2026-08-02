@@ -25,12 +25,12 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPT = _REPO_ROOT / "scripts" / "drift_check.py"
 
-_LIVE_IDS = ("DC-1", "DC-2", "DC-3", "DC-4", "DC-5", "DC-6", "DC-7", "DC-8")
-_PLANNED_IDS = ("DC-9", "DC-10", "DC-11", "DC-12", "DC-13")
+_LIVE_IDS = ("DC-1", "DC-2", "DC-3", "DC-4", "DC-5", "DC-6", "DC-7", "DC-8", "DC-11")
+_PLANNED_IDS = ("DC-9", "DC-10", "DC-12", "DC-13")
 
 # Every file a live row reads; copied verbatim into synthetic trees so each
 # failure test starts from a tree that is green by construction. The whole oc
-# package is copied because DC-8 scans every .py under it.
+# package is copied because DC-8 and DC-11 scan every .py under it.
 _LIVE_SURFACES = (
     "src/skill_harness/aggregation/fit.py",
     "src/skill_harness/aggregation/status.py",
@@ -39,8 +39,10 @@ _LIVE_SURFACES = (
     "src/skill_harness/cli/main.py",
     "src/skill_harness/oc/__init__.py",
     "src/skill_harness/oc/conventions.py",
+    "src/skill_harness/oc/crosschecks.py",
     "src/skill_harness/oc/exact.py",
     "src/skill_harness/oc/gate1.py",
+    "src/skill_harness/oc/gate2.py",
     "docs/INVARIANTS.md",
     "docs/PRD.md",
     "README.md",
@@ -107,7 +109,8 @@ def test_green_prints_coverage_boundary_line() -> None:
 
 
 def test_green_prints_planned_rows() -> None:
-    """DC-7..DC-13 are registered-but-inactive and must render as PLANNED."""
+    """DC-9/DC-10/DC-12/DC-13 are registered-but-inactive and must render as
+    PLANNED (DC-7/DC-8 went live with #54; DC-11 with #55)."""
     r = _run()
     planned_lines = [line for line in r.stdout.splitlines() if "PLANNED" in line]
     for dc_id in _PLANNED_IDS:
@@ -133,7 +136,8 @@ def test_green_prints_allowlist_even_when_empty() -> None:
 
 def test_green_prints_structural_exemptions() -> None:
     """F7 visibility: the E1b structural carve-outs are printed too, so the
-    EMPTY allowlist line can never overstate the ban's true coverage."""
+    EMPTY allowlist line can never overstate the ban's true coverage — the
+    union across ALL live token bans, including DC-11's definition site."""
     r = _run()
     exempt_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("EXEMPT")]
     for rel in (
@@ -141,6 +145,7 @@ def test_green_prints_structural_exemptions() -> None:
         "tests/test_semantics.py",
         "scripts/drift_check.py",
         "tests/test_drift_check.py",
+        "src/skill_harness/oc/crosschecks.py",
     ):
         assert any(rel in line for line in exempt_lines), r.stdout
 
@@ -327,14 +332,64 @@ def test_empty_oc_package_blocks_import_ban(tmp_path: Path) -> None:
     for rel in (
         "src/skill_harness/oc/__init__.py",
         "src/skill_harness/oc/conventions.py",
+        "src/skill_harness/oc/crosschecks.py",
         "src/skill_harness/oc/exact.py",
         "src/skill_harness/oc/gate1.py",
+        "src/skill_harness/oc/gate2.py",
     ):
         (root / rel).unlink()
     r = _run(root)
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-8" in line for line in fail_lines), r.stdout
+
+
+def test_banned_method_identifier_in_oc_blocks(tmp_path: Path) -> None:
+    """DC-11 (activated by the Gate-2 PR per the #43 same-PR rule): a Wald
+    implementation appearing anywhere in oc/ must block with the location."""
+    root = _make_tree(tmp_path)
+    (root / "src/skill_harness/oc/intervals.py").write_text(
+        "def wald_interval(x: int, n: int) -> tuple[float, float]:\n    ...\n",
+        encoding="utf-8",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-11" in line and "intervals.py" in line for line in fail_lines), r.stdout
+
+
+def test_exact_conditional_token_in_oc_blocks(tmp_path: Path) -> None:
+    """DC-11: both the prose form and the identifier form of the banned exact
+    conditional test are caught inside oc/."""
+    root = _make_tree(tmp_path)
+    (root / "src/skill_harness/oc/extra.py").write_text(
+        "USE_EXACT_CONDITIONAL = True  # switch to the exact conditional test\n",
+        encoding="utf-8",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-11" in line and "extra.py" in line for line in fail_lines), r.stdout
+
+
+def test_banned_method_token_outside_oc_does_not_fire_dc11(tmp_path: Path) -> None:
+    """DC-11's registered scope is oc/ exactly — the same token at repo level
+    or in docs/ must NOT fire this row (scan_repo_level off)."""
+    root = _make_tree(tmp_path)
+    (root / "docs" / "method-note.md").write_text(
+        "Newcombe beats the Wald interval at small n.\n", encoding="utf-8"
+    )
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_crosschecks_definition_site_stays_exempt(tmp_path: Path) -> None:
+    """crosschecks.py names the banned methods and quotes FLL 2013 verbatim by
+    necessity (E1b definition site) — the synthetic tree containing it is
+    green, and the exemption is printed rather than silent."""
+    r = _run(_make_tree(tmp_path))
+    assert r.returncode == 0
+    assert "src/skill_harness/oc/crosschecks.py" in r.stdout
 
 
 def test_missing_value_site_pattern_blocks(tmp_path: Path) -> None:
