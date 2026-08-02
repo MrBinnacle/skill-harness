@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **π_c invocation detection + zero-invocation refusal at subject ingest**
+  (#52, PR-1 of the instrument upgrade; feasibility record #46). Every parsed
+  sample now carries `invoked_skill` — the v1 detector
+  (`detect_skill_invocation`, `v1-skill-tool-call`) fires iff the parsed
+  message stream contains a Skill tool-call naming the skill under test; the
+  SKILL.md-read branch is dead code under the `inspect_swe.claude_code` solver
+  and stays excluded. Every paired write reports π̂_c over the Full arm with a
+  mandatory exact Clopper-Pearson interval (`IngestResult.pi_c`, mirrored into
+  the run's `config_json`), so a "skill had no effect" result can never hide
+  "skill was never invoked". A treated arm with ZERO detected invocations
+  refuses the write (`ZeroInvocationError`) and surfaces as an INSTRUMENTATION
+  FINDING, never a null effect; a detected invocation in the Null arm refuses
+  as control-arm contamination (structurally impossible per #46 — 0/22 Null
+  epochs fired, now a regression fixture). Ingestion stays exclusively on the
+  `read_eval_log` reader API (eval logs are zstd-compressed zip entries — raw
+  archive handling stays banned). `ORACLE_METRIC_VERSION` bumped to `0.3.0`
+  (pairing semantics gained the refusal rules).
 - **Estimand registry + decision-semantics vocabulary** (#51, PR-1 of the
   instrument upgrade; resolution record #36). New `skill_harness.semantics`
   module: the two named estimands (`treatment-policy` = agentic paired subject

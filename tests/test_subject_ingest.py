@@ -15,22 +15,30 @@ import sqlite3
 from collections.abc import Iterator
 from importlib.util import find_spec
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
 from skill_harness.storage.migrations import open_evidence
 from skill_harness.subject.ingest import (
     ORACLE_METRIC_VERSION,
+    PI_C_CONFIDENCE,
+    PI_C_DETECTOR_VERSION,
     WHOLE_SKILL_CLAUSE_INDEX,
     AlreadyIngestedError,
     EvalLogIngestError,
     EvalLogNotSuccessError,
+    IngestResult,
     PairedLogMismatchError,
     ParsedEvalLog,
     ParsedSample,
+    ZeroInvocationError,
     _derived_run_id,
     _observation,
     _score_to_float,
+    clopper_pearson,
+    detect_skill_invocation,
     write_paired_evidence,
 )
 
@@ -63,13 +71,19 @@ def make_sample(
     fingerprint: str | None = PIN_FP,
     skill_name: str = "some-skill",
     scorer_name: str = "file_contains",
+    invoked: bool | None = None,
 ) -> ParsedSample:
+    # Default mirrors the live lanes: a Full-arm epoch invoked the skill, a
+    # Null-arm epoch structurally cannot (#46: 0/22 Null false positives).
+    if invoked is None:
+        invoked = condition == "full"
     return ParsedSample(
         condition=condition,  # type: ignore[arg-type]
         skill_name=skill_name,
         epoch=epoch,
         scorer_name=scorer_name,
         score_value=score,
+        invoked_skill=invoked,
         output_text=f"output-{condition}-{epoch}",
         subject_model="openrouter/anthropic/claude-haiku-4.5",
         harness_pin_json=PIN_JSON if fingerprint is not None else None,
@@ -340,6 +354,250 @@ def test_refused_write_leaves_no_rows_behind(conn: sqlite3.Connection, skill_dir
         write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
     assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM samples").fetchone()[0] == 0
+
+
+# ---------------------------------------------------------------------------
+# π_c detector — v1 = Skill tool-call in the parsed message stream (#46/#52)
+#
+# Message stand-ins mirror the transcript shapes evidence-quoted in the #46
+# probe report (pi-c-probe-S140.md): assistant messages carry
+# ``tool_calls[] = {id, function, arguments, type}``; tool-role result
+# messages carry ``{id, content, role, tool_call_id, function}`` and NO
+# ``tool_calls`` list.
+# ---------------------------------------------------------------------------
+
+
+def _call(function: str, arguments: object) -> SimpleNamespace:
+    return SimpleNamespace(
+        id="toolu_016dR19oSdWPAjByXazXfqeW",
+        function=function,
+        arguments=arguments,
+        type="function",
+    )
+
+
+def _assistant(*calls: SimpleNamespace) -> SimpleNamespace:
+    return SimpleNamespace(role="assistant", tool_calls=list(calls) or None)
+
+
+def _tool_result(function: str, content: str) -> SimpleNamespace:
+    # Tool-role result message: carries `function` but NO `tool_calls` — must
+    # never fire the detector on its own.
+    return SimpleNamespace(role="tool", function=function, content=content, tool_call_id="toolu_x")
+
+
+def _plain(role: str) -> SimpleNamespace:
+    return SimpleNamespace(role=role)
+
+
+def test_detector_fires_on_matching_skill_tool_call() -> None:
+    # Mirror of the #46 epoch-3 hit: Skill call with extra `args` key, followed
+    # by its "Launching skill: ..." tool result.
+    messages = [
+        _plain("system"),
+        _plain("user"),
+        _assistant(
+            _call("Bash", {"command": "ls"}),
+            _call("Skill", {"skill": "sqlite-expert", "args": "Implement /root/notes_search.py"}),
+        ),
+        _tool_result("Skill", "Launching skill: sqlite-expert"),
+    ]
+    assert detect_skill_invocation(messages, "sqlite-expert") is True
+
+
+def test_detector_ignores_other_skills_and_other_tools() -> None:
+    messages = [
+        _assistant(_call("Skill", {"skill": "other-skill"})),
+        _assistant(_call("Bash", {"command": "cat SKILL.md"})),
+        _assistant(_call("Write", {"path": "out.py"})),
+    ]
+    assert detect_skill_invocation(messages, "sqlite-expert") is False
+
+
+def test_detector_does_not_fire_on_tool_result_messages() -> None:
+    # The result message carries function="Skill" but is not an invocation.
+    messages = [_tool_result("Skill", "Launching skill: sqlite-expert")]
+    assert detect_skill_invocation(messages, "sqlite-expert") is False
+
+
+def test_detector_is_conservative_on_malformed_shapes() -> None:
+    assert detect_skill_invocation([], "sqlite-expert") is False
+    assert detect_skill_invocation([_assistant()], "sqlite-expert") is False
+    # arguments not a dict / missing the skill key → NOT invoked
+    assert (
+        detect_skill_invocation([_assistant(_call("Skill", "sqlite-expert"))], "sqlite-expert")
+        is False
+    )
+    assert (
+        detect_skill_invocation([_assistant(_call("Skill", {"args": "x"}))], "sqlite-expert")
+        is False
+    )
+    # exact function-name match only ("Skill", as observed; lowercase is unknown)
+    assert (
+        detect_skill_invocation(
+            [_assistant(_call("skill", {"skill": "sqlite-expert"}))], "sqlite-expert"
+        )
+        is False
+    )
+    # blank skill-under-test name can never count as invoked
+    assert detect_skill_invocation([_assistant(_call("Skill", {"skill": ""}))], "") is False
+
+
+def test_detector_null_arm_regression_fixture_0_of_22() -> None:
+    """The #46 structural result as a regression fixture: 0/22 Null-arm epochs
+    fired. Synthetic epoch streams mirror the probed Null-arm tool inventories
+    (Bash/Write only — the Skill tool is not launchable when the skill is not
+    passed to the solver)."""
+    epochs: list[list[SimpleNamespace]] = []
+    for i in range(22):
+        epochs.append(
+            [
+                _plain("system"),
+                _plain("user"),
+                _assistant(_call("Bash", {"command": f"python task_{i}.py"})),
+                _tool_result("Bash", "exit=0"),
+                _assistant(_call("Write", {"path": f"out_{i}.txt"})),
+                _tool_result("Write", "ok"),
+                _plain("assistant"),
+            ]
+        )
+    fires = sum(detect_skill_invocation(m, "sqlite-expert") for m in epochs)
+    assert fires == 0
+
+
+# ---------------------------------------------------------------------------
+# Clopper-Pearson interval (mandatory π̂_c bound; #52)
+# ---------------------------------------------------------------------------
+
+
+def test_clopper_pearson_matches_reference_values() -> None:
+    # x=2, n=8 (the #46 probe point): exact 95% CI
+    low, high = clopper_pearson(2, 8)
+    assert low == pytest.approx(0.0318540, abs=1e-6)
+    assert high == pytest.approx(0.6508558, abs=1e-6)
+
+
+def test_clopper_pearson_boundary_cases_are_exact() -> None:
+    # x=0: lower bound exactly 0; upper = 1 - (alpha/2)^(1/n)
+    low, high = clopper_pearson(0, 8)
+    assert low == 0.0
+    assert high == pytest.approx(1 - 0.025 ** (1 / 8), abs=1e-9)
+    # x=n: symmetric
+    low, high = clopper_pearson(8, 8)
+    assert high == 1.0
+    assert low == pytest.approx(0.025 ** (1 / 8), abs=1e-9)
+
+
+def test_clopper_pearson_rejects_bad_inputs() -> None:
+    with pytest.raises(ValueError):
+        clopper_pearson(0, 0)
+    with pytest.raises(ValueError):
+        clopper_pearson(-1, 8)
+    with pytest.raises(ValueError):
+        clopper_pearson(9, 8)
+    with pytest.raises(ValueError):
+        clopper_pearson(1, 8, confidence=1.0)
+
+
+# ---------------------------------------------------------------------------
+# π_c at the write seam: mandatory reporting + zero-invocation refusal (#52)
+# ---------------------------------------------------------------------------
+
+
+def test_ingest_result_reports_pi_c_with_interval(
+    conn: sqlite3.Connection, skill_dir: Path
+) -> None:
+    full = make_log(
+        "full",
+        (
+            make_sample("full", 1, 1.0, invoked=True),
+            make_sample("full", 2, 1.0, invoked=False),
+            make_sample("full", 3, 0.0, invoked=True),
+        ),
+    )
+    null = make_log(
+        "null",
+        (
+            make_sample("null", 1, 0.0),
+            make_sample("null", 2, 1.0),
+            make_sample("null", 3, 0.0),
+        ),
+    )
+    result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    assert result.pi_c.invocations == 2
+    assert result.pi_c.trials == 3
+    assert result.pi_c.pi_c_hat == pytest.approx(2 / 3)
+    expected_low, expected_high = clopper_pearson(2, 3)
+    assert result.pi_c.ci_low == pytest.approx(expected_low)
+    assert result.pi_c.ci_high == pytest.approx(expected_high)
+    assert result.pi_c.confidence == PI_C_CONFIDENCE
+
+
+def test_run_config_records_the_pi_c_block(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    full = make_log("full", (make_sample("full", 1, 1.0), make_sample("full", 2, 1.0)))
+    null = make_log("null", (make_sample("null", 1, 0.0), make_sample("null", 2, 0.0)))
+    result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    row = conn.execute("SELECT config_json FROM runs WHERE run_id = ?", (result.run_id,)).fetchone()
+    config = json.loads(row[0])
+    assert config["pi_c"] == {
+        "detector": PI_C_DETECTOR_VERSION,
+        "invocations": 2,
+        "trials": 2,
+        "pi_c_hat": 1.0,
+        "ci_low": result.pi_c.ci_low,
+        "ci_high": result.pi_c.ci_high,
+        "confidence": PI_C_CONFIDENCE,
+    }
+
+
+def test_pi_c_is_mandatory_on_ingest_result() -> None:
+    # "mandatory, not optional": IngestResult cannot be constructed without it.
+    with pytest.raises(ValidationError):
+        IngestResult(  # type: ignore[call-arg]
+            run_id="r",
+            skill_id="s",
+            clause_id="c",
+            sample_ids=(),
+            verdict_ids=(),
+            admissibility_state="admissible",
+            inadmissibility_reason=None,
+        )
+
+
+def test_zero_invocations_in_treated_arm_refuses_as_instrumentation_finding(
+    conn: sqlite3.Connection, skill_dir: Path
+) -> None:
+    full = make_log(
+        "full",
+        (make_sample("full", 1, 1.0, invoked=False), make_sample("full", 2, 1.0, invoked=False)),
+    )
+    null = make_log("null", (make_sample("null", 1, 0.0), make_sample("null", 2, 0.0)))
+    with pytest.raises(ZeroInvocationError) as excinfo:
+        write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    message = str(excinfo.value)
+    # renders as an instrumentation finding, never as a null effect
+    assert "INSTRUMENTATION FINDING" in message
+    assert "not evidence" in message
+    # the finding carries the mandatory π̂_c block for reporting
+    assert excinfo.value.pi_c.invocations == 0
+    assert excinfo.value.pi_c.trials == 2
+    assert excinfo.value.pi_c.ci_low == 0.0
+    # refusal means refusal: nothing was written
+    assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM samples").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM oracle_verdicts").fetchone()[0] == 0
+
+
+def test_null_arm_detected_invocation_refuses_as_contamination(
+    conn: sqlite3.Connection, skill_dir: Path
+) -> None:
+    # #46: the Skill tool is structurally not launchable in the Null arm; a
+    # detected Null invocation means the arms are mislabelled or the harness is
+    # misconfigured — an apparatus error, not evidence.
+    full = make_log("full", (make_sample("full", 1, 1.0),))
+    null = make_log("null", (make_sample("null", 1, 0.0, invoked=True),))
+    with pytest.raises(PairedLogMismatchError, match="contamination"):
+        write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
 
 
 # ---------------------------------------------------------------------------
