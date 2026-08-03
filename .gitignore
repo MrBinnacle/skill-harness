@@ -68,3 +68,6 @@ logs/
 .private/
 .claude/
 /CLAUDE.md
+
+# AFK factory (sandcastle) runtime residue
+.sandcastle/
