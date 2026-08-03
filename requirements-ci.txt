@@ -22,7 +22,7 @@
 #
 # Captured 2026-07-19 from a clean venv running `pip install -e ".[dev]"`.
 Pygments==2.20.0
-annotated-types==0.7.0
+annotated-types==0.8.0
 anthropic==0.120.0
 anyio==4.14.2
 ast_serialize==0.6.0
@@ -57,7 +57,7 @@ pathspec==1.1.1
 patsy==1.0.2
 pluggy==1.6.0
 pydantic==2.13.4
-pydantic_core==2.46.4
+pydantic_core==2.47.0
 pytest-cov==7.1.0
 pytest-socket==0.8.0
 pytest-xdist==3.8.0
