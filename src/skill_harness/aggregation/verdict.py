@@ -38,15 +38,25 @@ Threshold provenance (do NOT silently retune — operator-accepted values decisi
 
 Screen verdict rules (Path A, `screen_verdict`), ordered:
   A1. p0 outside [0, 1] → ValueError (not a rate).
-  A2. p0 > TRANSFORMATIVE_NULL_CEILING → CUT(subsumed). The Null arm is too
-      competent for the skill to be transformative; no affordable paired run can
-      change that (a marginal lift below the bar is refused BY DESIGN).
-        - p0 == 1.0: total ceiling — the model never fails without the skill.
-        - ceiling > p0 > 1.0-nothing: subsumed WITH measured headroom — the model
-          fails sometimes, but not often enough to clear the transformative bar.
-  A3. p0 <= TRANSFORMATIVE_NULL_CEILING → CANT_TELL_YET. The Null arm fails often
-      enough that the skill COULD be transformative — but no paired run has
-      confirmed a KEEP. This is a task-sourcing success, not a verdict yet.
+  A2. p0 > TRANSFORMATIVE_NULL_CEILING, split by value_class (the #74/#76 guard):
+        - value_class == transformative-lift → CUT(subsumed). The Null arm is too
+          competent for the skill to be transformative; no affordable paired run
+          can change that (a marginal lift below the bar is refused BY DESIGN).
+            - p0 == 1.0: total ceiling — the model never fails without the skill.
+            - ceiling > p0 > 1.0-nothing: subsumed WITH measured headroom — fails
+              sometimes, but not often enough to clear the transformative bar.
+        - any other class, OR unset (default) → CANT_TELL_YET (wrong instrument),
+          NEVER CUT. The transformative-lift estimand is the WRONG INSTRUMENT for a
+          trap/discipline/calibration skill: a high Null pass-rate means "the trap
+          did not fire in this screen", not "the model does this unaided" — so a
+          CUT(subsumed) here would be a category error. The verdict carries
+          ``wrong_instrument=True`` (the board routes the cell to the
+          field-evidence lane). The default is "not transformative-lift" so an
+          UNCLASSIFIED skill is never false-CUT while its class is pending.
+  A3. p0 <= TRANSFORMATIVE_NULL_CEILING → CANT_TELL_YET (sourced candidate),
+      unchanged, regardless of value_class. The Null arm fails often enough that
+      the skill COULD be transformative — but no paired run has confirmed a KEEP.
+      This is a task-sourcing success, not a verdict yet.
 
 Paired verdict rules (Path B, `paired_verdict`):
   B1. ClauseStatus.PASSED → KEEP (paired posterior cleared the transformative bar).
@@ -109,6 +119,42 @@ class CutSubReason(StrEnum):
     See harmful_verdict_supported()."""
 
 
+class ValueClass(StrEnum):
+    """The value KIND of a skill — which estimand can even see it (#74/#76).
+
+    The screen path measures TRANSFORMATIVE LIFT only (the module docstring's
+    threshold provenance: "the instrument detects TRANSFORMATIVE skills only").
+    So ``screen_verdict``'s ``p0 above the bar → CUT(subsumed)`` mapping is VALID
+    ONLY for a skill whose value IS transformative lift. For any other class it
+    is a category error — the wrong instrument — so the guard withholds the CUT
+    and routes to the field-evidence lane instead (US-1/US-2).
+
+    Deliberately NOT the ``Estimand`` enum. ``Estimand`` is the decision TARGET of
+    a measured arm — ratified at exactly two members, docstring-locked and
+    ``drift_check.py`` DC-4-guarded against a third (C-FIX-1). ``ValueClass`` is
+    orthogonal: the skill's value kind, not a scope/estimand field (it is NOT read
+    off ``RegisteredScope`` — the four target records are pre-registry screens with
+    ``scope = None``, and #41 bans retrofitting a label onto them, so the class
+    must be an independent parameter). Unlike ``Estimand``, this enum is EXPECTED
+    to grow: the third partition (F8a — ``field-governed`` vs ``variance``) is
+    named at the S2 classification of the real portfolio, in the follow-up
+    classify-the-11 ticket, NOT here. This ticket ships the guard mechanism with
+    the two settled members.
+    """
+
+    TRANSFORMATIVE_LIFT = "transformative-lift"
+    """The screen instrument's own estimand: the skill is meant to let the model
+    succeed on a task it fails unaided. p0 above the bar genuinely means
+    "subsumed" for this class → the existing CUT stands."""
+
+    TRAP_DISCIPLINE = "trap-discipline"
+    """A guard/discipline skill (e.g. a git-pull-rebase trap): it prevents a wrong
+    action, it does not add a capability. p0 = 1.00 on a Null screen means "the
+    trap did not fire here", NOT "the model does this unaided" — the
+    transformative-lift instrument cannot see its value, so it must never be CUT
+    on a screen ceiling."""
+
+
 # ---------------------------------------------------------------------------
 # Locked thresholds (operator-accepted; see module docstring provenance)
 # ---------------------------------------------------------------------------
@@ -143,6 +189,15 @@ class VerdictResult:
     cut_sub_reason: CutSubReason | None  # set iff verdict == CUT
     rationale: str
     scope: RegisteredScope | None = None
+    wrong_instrument: bool = False
+    """Board-layer routing signal (#74/#76). Set True only when the screen path
+    WITHHELD a CUT because ``value_class`` is not transformative-lift — the
+    transformative-lift instrument cannot see this skill's value. The future
+    BoardCell consumes this to route the cell to the field-evidence lane
+    (``evidence_lane = field``) and render "HOLD — wrong instrument" rather than
+    "HOLD — untested (sourced candidate)". Default False keeps every existing
+    verdict and call site unchanged; it is never True on a CUT or a KEEP, nor on
+    the ordinary below-bar sourced-candidate CANT_TELL_YET."""
 
     @property
     def estimand_label(self) -> str:
@@ -159,18 +214,58 @@ class VerdictResult:
 # ---------------------------------------------------------------------------
 
 
-def screen_verdict(p0: float, *, scope: RegisteredScope | None = None) -> VerdictResult:
+def screen_verdict(
+    p0: float,
+    *,
+    scope: RegisteredScope | None = None,
+    value_class: ValueClass | None = None,
+) -> VerdictResult:
     """Map a Stage-0 Null screen pass-rate to a keep/cut verdict.
 
     p0 is the fraction of Null-arm (no-skill) epochs that passed on a domain task.
     See rules A1-A3 in the module docstring. ``scope`` is the registered claim
     boundary the verdict carries; omit it ONLY for pre-registry observations
     (historical screens), which render estimand n/a.
+
+    ``value_class`` is the #74/#76 wrong-instrument guard: the ``p0 above the bar
+    → CUT(subsumed)`` mapping fires ONLY for ``ValueClass.TRANSFORMATIVE_LIFT``.
+    For any other class — or when UNSET (the default is "not transformative-lift",
+    so an unclassified skill is never false-CUT) — an above-bar p0 yields
+    CANT_TELL_YET carrying ``wrong_instrument=True`` (route to the field lane),
+    never CUT. Below the bar the verdict is the sourced-candidate CANT_TELL_YET
+    regardless of class.
     """
     if not 0.0 <= p0 <= 1.0:
         raise ValueError(f"p0 must be a pass-rate in [0, 1]; got {p0!r}")
 
     if p0 > TRANSFORMATIVE_NULL_CEILING:
+        if value_class is not ValueClass.TRANSFORMATIVE_LIFT:
+            if value_class is None:
+                class_clause = (
+                    "this skill has no value class yet (unclassified), so it cannot be "
+                    "confirmed transformative-lift and the subsumed CUT is withheld until "
+                    "the skill is classified"
+                )
+            else:
+                class_clause = (
+                    f"this skill's value class is {value_class.value!r}, not "
+                    f"transformative-lift, so the transformative instrument cannot see its "
+                    f"value (e.g. a trap/discipline skill scoring p0=1 means the trap did "
+                    f"not fire, NOT that the model is unaided) and CUT(subsumed) would be a "
+                    f"category error"
+                )
+            rationale = (
+                f"CAN'T-TELL-YET (wrong instrument): Null arm p0={p0:.2f} is above the "
+                f"~{TRANSFORMATIVE_NULL_CEILING:.2f} transformative bar, but {class_clause}. "
+                f"Verdict withheld; routed to the field-evidence lane."
+            )
+            return VerdictResult(
+                KeepCutVerdict.CANT_TELL_YET,
+                None,
+                rationale,
+                scope=scope,
+                wrong_instrument=True,
+            )
         if p0 >= 1.0:
             rationale = (
                 f"CUT (subsumed): Null arm passed every epoch (p0={p0:.2f}) — the "

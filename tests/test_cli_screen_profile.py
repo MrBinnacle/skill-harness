@@ -84,9 +84,10 @@ def _write_skill(root: Path, dir_name: str, description: str, *, disable: bool =
 
 
 def _make_library(tmp_path: Path) -> tuple[Path, Path]:
-    """alpha screened (p0=1 -> CUT, 10 trials -> MEASURED_HIGH); beta never
-    screened (NOT_YET_RANKABLE/UNMEASURED); gamma disable-model-invocation
-    (UNMEASURABLE)."""
+    """alpha screened (p0=1; UNCLASSIFIED under the #74/#76 guard -> CANT_TELL_YET
+    (wrong instrument) -> NOT_YET_RANKABLE, never a false EXCLUDED on a ceiling;
+    10 trials -> MEASURED_HIGH); beta never screened (NOT_YET_RANKABLE/UNMEASURED);
+    gamma disable-model-invocation (UNMEASURABLE)."""
     evidence_db = tmp_path / "evidence.db"
     _seed_screen(evidence_db, "alpha-skill", n_trials=10, n_pass=10)
     skills_root = tmp_path / "skills"
@@ -154,7 +155,7 @@ class TestScreenProfileSeparatedColumns:
         assert result.exit_code == 0, result.output
         assert "UNMEASURABLE" in result.output, result.output
 
-    def test_screened_skill_is_excluded_and_measured_high(self, tmp_path: Path) -> None:
+    def test_screened_ceiling_is_not_yet_rankable_and_measured_high(self, tmp_path: Path) -> None:
         evidence_db, skills_root = _make_library(tmp_path)
         result = _invoke(
             "screen",
@@ -165,8 +166,11 @@ class TestScreenProfileSeparatedColumns:
             str(skills_root),
         )
         assert result.exit_code == 0, result.output
-        # alpha p0=1.0 -> CUT(subsumed) -> EXCLUDED; 10 trials >= N_MIN -> MEASURED_HIGH.
-        assert "EXCLUDED" in result.output, result.output
+        # alpha p0=1.0 is UNCLASSIFIED under the #74/#76 guard -> CANT_TELL_YET
+        # (wrong instrument) -> NOT_YET_RANKABLE, NOT a false EXCLUDED. The evidence
+        # axis is independent of the verdict: 10 trials >= N_MIN -> MEASURED_HIGH.
+        assert "NOT_YET_RANKABLE" in result.output, result.output
+        assert "CANT_TELL_YET" in result.output, result.output
         assert "MEASURED_HIGH" in result.output, result.output
 
 
