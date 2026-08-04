@@ -359,10 +359,12 @@ def test_cli_screen_verdict_empty_store(tmp_path: Path) -> None:
 
 
 def test_cli_screen_verdict_renders_cant_tell_for_unclassified_ceiling(tmp_path: Path) -> None:
-    """#74/#76 guard, US-3: store rows carry no value_class, so a screen ceiling
-    (p0=1) renders CANT_TELL_YET (wrong instrument), NOT a false CUT(subsumed).
-    The CLI passes no value_class, so this is the honest unclassified render the
-    moment the guard ships — the false CUT is gone here, not deferred to a board."""
+    """#74/#76/#77 guard, US-3: an UNREGISTERED skill_name ('ceiling-skill' is not in
+    the classify-the-11 registry) → value_class_for → None → a screen ceiling (p0=1)
+    renders CANT_TELL_YET (wrong instrument), NOT a false CUT(subsumed). This is the
+    honest default render — the false CUT is gone here, not deferred to a board.
+    (Registered non-transformative skills take the same CANT_TELL_YET path via their
+    class; see test_value_class_registry for the OBS-0003..0006 flip.)"""
     db = tmp_path / "evidence.db"
     c = open_evidence(db)
     write_screen_evidence(

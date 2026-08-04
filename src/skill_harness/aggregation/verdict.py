@@ -136,10 +136,14 @@ class ValueClass(StrEnum):
     off ``RegisteredScope`` — the four target records are pre-registry screens with
     ``scope = None``, and #41 bans retrofitting a label onto them, so the class
     must be an independent parameter). Unlike ``Estimand``, this enum is EXPECTED
-    to grow: the third partition (F8a — ``field-governed`` vs ``variance``) is
-    named at the S2 classification of the real portfolio, in the follow-up
-    classify-the-11 ticket, NOT here. This ticket ships the guard mechanism with
-    the two settled members.
+    to grow: the third partition (F8a) was left to be named from the real portfolio
+    in the follow-up classify-the-11 ticket (#77), NOT at #76. #77 resolved F8a from
+    the actual distribution of the 11 skills → ``CALIBRATION`` (the pre-registered
+    placeholder candidates ``field-governed`` / ``variance`` were not what the real
+    portfolio named). The guard branches only on ``TRANSFORMATIVE_LIFT`` vs not, so
+    every non-transformative member (trap-discipline, calibration) withholds the CUT
+    identically; the distinction is descriptive (which non-transformative KIND), not
+    a guard-behaviour change.
     """
 
     TRANSFORMATIVE_LIFT = "transformative-lift"
@@ -153,6 +157,16 @@ class ValueClass(StrEnum):
     trap did not fire here", NOT "the model does this unaided" — the
     transformative-lift instrument cannot see its value, so it must never be CUT
     on a screen ceiling."""
+
+    CALIBRATION = "calibration"
+    """An evaluation/measurement-soundness skill (e.g. bayesian-eval-discipline,
+    llm-judge-calibration, append-only-evidence-design): it makes a measurement
+    trustworthy — statistical rigour, judge calibration, evidence integrity. Like
+    trap-discipline it adds no task capability the transformative-lift screen can
+    see, so p0 = 1.00 on a Null screen means "this screen task did not exercise the
+    calibration hazard", NOT "the model does this unaided" — it must never be CUT
+    on a screen ceiling. Named at #77 as the canonical F8a third partition, from
+    the real portfolio (3 of the 11 are calibration; 0 are transformative-lift)."""
 
 
 # ---------------------------------------------------------------------------

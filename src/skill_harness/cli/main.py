@@ -2582,6 +2582,7 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
     skill's Null-arm pass rate maps to KEEP / CUT / CAN'T-TELL-YET via the locked
     transformative bar. To date every screened skill ceilings (p0=1) → CUT.
     """
+    from skill_harness.aggregation.value_class_registry import value_class_for
     from skill_harness.aggregation.verdict import screen_verdict
     from skill_harness.storage.errors import BootstrapError
     from skill_harness.storage.migrations import open_evidence_readonly
@@ -2624,13 +2625,13 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
     table.add_column("rationale", min_width=40, max_width=70)
 
     for row in rows:
-        # Value-class guard (#74/#76): store rows carry no value_class yet, so this
-        # is UNCLASSIFIED → the guard renders CANT_TELL_YET (wrong instrument), never
-        # a false CUT(subsumed) on a screen ceiling. This is US-3: the false CUTs are
-        # gone the moment the guard ships. The classify-the-11 follow-up ticket
-        # threads the real per-skill value_class here (transformative-lift skills then
-        # CUT again, non-transformative stay CANT_TELL_YET).
-        v = screen_verdict(row.p0)
+        # Value-class guard (#74/#76/#77): the per-skill value_class comes from the
+        # classify-the-11 registry (US-16). A transformative-lift skill above the bar
+        # CUTs (subsumed); every non-transformative class (trap-discipline, calibration)
+        # renders CANT_TELL_YET (wrong instrument) — the four false CUTs (OBS-0003..0006)
+        # are structurally withheld, not by accident of being unclassified (US-3). A
+        # skill_name absent from the registry → None → the same honest CANT_TELL_YET.
+        v = screen_verdict(row.p0, value_class=value_class_for(row.skill_name))
         sub = f"({v.cut_sub_reason.value})" if v.cut_sub_reason else ""
         verdict_color = {"KEEP": "green", "CUT": "red", "CANT_TELL_YET": "yellow"}[v.verdict.value]
         table.add_row(
@@ -2690,6 +2691,7 @@ def screen_profile_cmd(
         SkillProfileInput,
         build_skill_profile,
     )
+    from skill_harness.aggregation.value_class_registry import value_class_for
     from skill_harness.aggregation.verdict import screen_verdict
     from skill_harness.extractor.errors import MalformedSkillError
     from skill_harness.extractor.parser import parse_skill_file
@@ -2766,11 +2768,11 @@ def screen_profile_cmd(
         sp = screened.get(skill)
         estimand: str | None
         if sp is not None:
-            # Value-class guard (#74/#76): store rows are UNCLASSIFIED (see the
-            # `screen verdict` command) → CANT_TELL_YET (wrong instrument) →
-            # NOT_YET_RANKABLE, never a false EXCLUDED on a screen ceiling. The
-            # classify-the-11 ticket threads the real per-skill value_class here.
-            v = screen_verdict(sp.p0)
+            # Value-class guard (#74/#76/#77): the per-skill value_class comes from
+            # the classify-the-11 registry (see the `screen verdict` command). Every
+            # non-transformative class → CANT_TELL_YET (wrong instrument) →
+            # NOT_YET_RANKABLE, never a false EXCLUDED on a screen ceiling.
+            v = screen_verdict(sp.p0, value_class=value_class_for(sp.skill_name))
             verdict = v.verdict
             cut_sub_reason = v.cut_sub_reason
             estimand = v.estimand_label  # pre-registry marker for store rows (#51)
