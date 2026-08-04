@@ -26,9 +26,9 @@ Classification of the real portfolio (S172 operator classification, recorded #77
   calibration         : 3   — evaluation/measurement-soundness skills.
   trap-discipline     : 8   — point-guards against a specific wrong action.
 
-The empty transformative-lift class TRIPS the signed S2-kill criterion
-(``skills_research:docs/audit/F6-signoff-S166.md``): ship the classification +
-CAN'T-TELL-YET/field surface, do NOT build the S3 board apparatus for zero customers.
+The empty transformative-lift class TRIPS the signed S2-kill criterion (the F6
+sign-off, S166): ship the classification + CAN'T-TELL-YET/field surface, do NOT
+build the S3 board apparatus for zero customers.
 
 A skill_name absent from this map resolves to ``None`` (unclassified) → the guard's
 honest default (CAN'T-TELL-YET, never a false CUT). All 11 portfolio skills are present.
