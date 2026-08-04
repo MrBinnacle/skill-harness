@@ -94,6 +94,37 @@ Enforced in:
 Spec: skill-harness #47 resolution record + #41 amendment; drift-check row DC-12
 (ledger internal consistency, independent reader).
 
+## 7. Task-frontier phase firewall
+
+A task family's phases — calibration, confirmation, matched — are separated at the
+**semantic-lineage** level by a **physical partition**, not by a query predicate.
+Each phase owns its own append-only table, and an observation's phase is read out of
+the frozen manifest and **stamped at write time**, never recomputed at read: a
+manifest that later repartitions a lineage cannot move an already-written record.
+Calibration data selects a difficulty rung and must therefore stay out of the effect
+estimate (split-sample validity — otherwise the rung's winner's curse biases the
+effect); the partition is what will keep it out once the estimator is wired. No
+public accessor hands calibration or confirmation *observations* to a caller in
+**bulk**, and none takes a phase as an argument; a later ticket exposes the selected
+rung as a *decision*. This removes the row-leakage bug class — defense in depth, not
+a claim that misuse is impossible.
+
+Enforced in:
+- `src/skill_harness/task_frontier/` (`load_manifest`, `admit`, `matched_evidence`,
+  `audit_observation`; spec #89's fourth call `calibration_rung` is not built)
+- `src/skill_harness/storage/migrations_sql/evidence/0700_task_frontier.sql`
+  (three tables, per-table `phase` CHECK, `append_only_violation` triggers)
+- `tests/task_frontier/test_tracer.py` (pins the exported surface so a bulk
+  convenience accessor cannot reopen the leak path; proves the stamp is a snapshot)
+- `tests/storage/test_task_frontier_store.py` (proves the triggers and the
+  per-table phase CHECKs actually fire)
+
+Scope: #90 built the tracer. Total refusing manifest validation (#92), the
+matched-phase feed into `oc/gate2` (#91), confirmation-attempt accounting (#93) and
+the synthetic no-leak proof (#94) are **not yet built**.
+
+Spec: skill-harness #89 (task-frontier MVP), spine #84 unit 2.
+
 ---
 
 Re-pointed from "CLAUDE.md" to this file across `src/` and `tests/` (F5, then the

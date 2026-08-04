@@ -22,6 +22,7 @@ development without collision.  Each track owns an exclusive range:
 | E     | 0400–0499  | Aggregation / status reporting |
 | v0.2  | 0500–0599  | Subject layer (harness pin, screen store) — per the A30 ledger note in `0500` |
 | Board | 0600–0699  | Honest Live Board delivery spine (model pin / drift fingerprint, #75) |
+| Frontier | 0700–0799 | Task-frontier spine — calibration/confirmation/matched phase partition (#89/#90) |
 
 **Why this matters:**
 

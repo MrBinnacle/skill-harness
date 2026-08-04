@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`skill_harness.task_frontier` — the calibration/confirmation/matched phase
+  firewall, tracer bullet** (#90, spec #89, spine #84 unit 2). A task family
+  now flows end to end, thinly: a frozen `TaskFamilyManifest` loads and
+  exposes a phase→semantic-lineage partition; `admit()` reads a lineage's
+  phase out of that freeze and stamps it on the record **at write time**; the
+  record lands in a phase-partitioned append-only store; and it reads back
+  under the phase it was admitted to. Migration `0700_task_frontier` adds
+  three physically separate tables (`task_frontier_{calibration,confirmation,
+  matched}_obs`), each CHECK-pinned to its own phase literal and carrying the
+  usual `append_only_violation` UPDATE/DELETE triggers — so repartitioning an
+  already-written record aborts. Spec #89 rejected the single-table
+  `WHERE phase = 'matched'` alternative: under a read-time filter the
+  split-sample firewall survives only while every caller remembers the
+  predicate. The public surface is `load_manifest` / `admit` /
+  `matched_evidence` / `audit_observation`, with **no bulk** accessor for the
+  walled-off phases, no call taking a phase as an argument, and no way to
+  enumerate a phase's lineages — pinned by a test so a convenience accessor
+  cannot quietly reopen the leak path. This removes the row-leakage bug class
+  (defense in depth); it is not a claim that misuse is impossible.
+  Scope note — this is the tracer only, no spend and no real skill measured:
+  `load_manifest` carries a **subset** of spec #89's manifest shape and
+  *refuses* unrecognised keys rather than dropping them (so a manifest cannot
+  appear to register a `hard_budget` that nothing read); spec #89's fourth
+  call `calibration_rung` is **not built**; and the matched-phase feed into
+  `oc/gate2` (#91), total manifest validation (#92), confirmation-attempt
+  accounting (#93) and the synthetic no-leak proof (#94) are tracked
+  follow-ups, named as not-yet-built rather than implied. One #92 guard landed
+  early with its prove-it-bites test — a semantic lineage claimed by two phases
+  is refused at load, because accepting it would breach the firewall inside the
+  tracer itself.
 - **Mandatory model pin on new verdict mints + drift fingerprint** (#75,
   Honest Live Board S1). Every newly-minted `oracle_verdicts` row carries an
   `ArticleFingerprint`: primary `model_snapshot` (or response-fingerprint
