@@ -3,7 +3,7 @@
 This module is a REPORTING-LAYER VIEW, not a new measurement. It presents the
 harness's already-computed signals as SEPARATE columns, one row per skill:
 
-    [ skill | disposition | verdict | evidence-quality | cost | (effect — HELD) ]
+    [ skill | disposition | verdict | evidence-quality | cost | effect ]
 
 It never fuses those axes into a single ranking scalar. The discipline is the
 GRADE separation: Guyatt et al. (BMJ 2008;336:924-6) warn that schemes which fail
@@ -24,6 +24,8 @@ from enum import StrEnum
 
 from skill_harness.aggregation.status import N_MIN
 from skill_harness.aggregation.verdict import CutSubReason, KeepCutVerdict
+from skill_harness.oc import Gate2Decision, Gate2Design, gate2_decide
+from skill_harness.oc.crosschecks import newcombe_interval
 
 # ---------------------------------------------------------------------------
 # Axis vocabularies (each axis has its OWN enum — never a shared scalar)
@@ -68,28 +70,74 @@ do arithmetic on: an ordinal scale admits sort/compare, not averaging."""
 
 
 # ---------------------------------------------------------------------------
-# Effect scaffold (HELD — the field exists; nothing populates it yet)
+# Effect estimate (Stage-0 screen path leaves it None; matched Gate-2 populates)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class EffectEstimate:
-    """A per-skill effect estimate as a Beta(1,1) equal-tailed 95% credible interval.
+    """A per-skill effect estimate as a signed interval, never a bare point.
 
-    The harness computes an equal-tailed credible interval under a uniform
-    Beta(1,1) prior (see ``aggregation/fit.py``): the posterior is
-    Beta(1 + wins, 1 + losses) and the interval is its 2.5/97.5 quantile bracket.
-    Effect is always reported as this bracket, never as a bare point.
+    Two producers:
 
-    HELD: the Stage-0 screen path produces no per-skill PAIRED effect, so no row
-    carries an effect yet (``effect`` stays ``None`` everywhere). The field is
-    scaffolded so the paired path can populate it later without a schema change.
+    - Matched Gate-2 path (#85): signed paired delta = (full-only - null-only) / n
+      with the Newcombe (1998) 95% interval over the four-outcome table, plus the
+      three-sided Gate-2 decision (benefit / harm / equivalent / unresolved).
+      ``decision`` is set; ``is_prior_only`` is False.
+    - Scaffold / display-aid construction (tests, effect-per-cost): a rate-style
+      bracket may omit ``decision`` (None). The Stage-0 screen path never builds
+      one — profile rows keep ``effect is None`` there.
     """
 
     mean: float
     ci_lo: float
     ci_hi: float
     is_prior_only: bool
+    decision: Gate2Decision | None = None
+
+
+def effect_from_matched_gate2(
+    design: Gate2Design,
+    *,
+    both_pass: int,
+    full_only: int,
+    null_only: int,
+    both_fail: int,
+) -> EffectEstimate:
+    """Map a matched four-outcome table through Gate-2 to a signed EffectEstimate.
+
+    Pure: no I/O. The caller pre-registers ``design`` (n_pairs, gamma, dual MME);
+    this function ships no default delta / prob_threshold. Routes through
+    ``gate2_decide`` only — never ``two_arm_gate`` (DIF-confined).
+
+    :param design: Registered Gate-2 design (pair count + gamma + dual MME).
+    :param both_pass: Pairs where both arms pass.
+    :param full_only: Full-only-win pairs (x_f).
+    :param null_only: Null-only-win pairs (x_n).
+    :param both_fail: Pairs where both arms fail.
+    :returns: Populated effect with signed MLE delta, Newcombe interval, decision.
+    :raises ValueError: If any cell is negative, the table is empty, or the cell
+        sum disagrees with ``design.n_pairs``.
+    """
+    cells = (both_pass, full_only, null_only, both_fail)
+    if any(v < 0 for v in cells):
+        raise ValueError(f"all four paired-outcome counts must be >= 0; got {cells}")
+    n = both_pass + full_only + null_only + both_fail
+    if n == 0:
+        raise ValueError("the 2x2 table must contain at least one pair")
+    if n != design.n_pairs:
+        raise ValueError(
+            f"paired-outcome counts must sum to design.n_pairs={design.n_pairs}; got {n}"
+        )
+    decision = gate2_decide(design, full_only, null_only)
+    ci_lo, ci_hi = newcombe_interval(both_pass, full_only, null_only, both_fail)
+    return EffectEstimate(
+        mean=(full_only - null_only) / n,
+        ci_lo=ci_lo,
+        ci_hi=ci_hi,
+        is_prior_only=False,
+        decision=decision,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +215,10 @@ class SkillProfileInput:
     at the source: an Estimand enum value, or the pre-registry n/a marker for
     historical screens. None iff there is no verdict to scope (never screened)."""
 
+    effect: EffectEstimate | None = None
+    """Matched Gate-2 effect (#85). None on the Stage-0 screen path (no paired
+    effect). When set, ``build_skill_profile`` carries it onto the row."""
+
 
 @dataclass(frozen=True)
 class SkillProfileRow:
@@ -187,8 +239,8 @@ class SkillProfileRow:
     desc_token_cost: int | None  # standing tax; 0 if never loaded, None if not sourced
     fired_token_cost: int | None
     fired_usd: float | None
-    effect: EffectEstimate | None  # HELD — None for now
-    effect_per_cost: float | None  # HELD — None unless a measured effect is present
+    effect: EffectEstimate | None  # None on Stage-0 screen path; set on matched path
+    effect_per_cost: float | None  # None unless a measured effect is present
 
 
 def effect_per_cost(effect: EffectEstimate | None, desc_token_cost: int | None) -> float | None:
@@ -198,9 +250,8 @@ def effect_per_cost(effect: EffectEstimate | None, desc_token_cost: int | None) 
     the standing cost is a positive sourced value; otherwise ``None``. This is a
     display aid shown BESIDE its inputs, never a cross-axis total order: it does not
     combine evidence-quality or disposition, and it is undefined the moment either
-    input is missing. Effect is HELD today, so every caller gets ``None`` — but the
-    formula is kept as tested, executable spec for when the paired path measures an
-    effect (that is why this is a real helper, not an unreachable inline branch).
+    input is missing. The Stage-0 screen path leaves effect None so every screen
+    caller gets ``None``; the matched Gate-2 path supplies a real estimate.
     """
     if effect is None or desc_token_cost is None or desc_token_cost <= 0:
         return None
@@ -210,11 +261,10 @@ def effect_per_cost(effect: EffectEstimate | None, desc_token_cost: int | None) 
 def build_skill_profile(inputs: list[SkillProfileInput]) -> list[SkillProfileRow]:
     """Assemble profile rows from already-sourced inputs (pure — no I/O).
 
-    Rows are ordered by skill name for stable output. ``effect`` is always ``None``
-    for now (the screen path yields no paired effect), so ``effect_per_cost`` — which
-    is only defined where ``effect is not None and desc_token_cost > 0`` — is also
-    always ``None``. That is correct: an effect-per-cost display aid is shown only
-    beside a real, measured effect, never invented from its absence.
+    Rows are ordered by skill name for stable output. ``effect`` is taken from the
+    input when the matched Gate-2 path supplied one; the Stage-0 screen path leaves
+    it None, so ``effect_per_cost`` stays None there too. An effect-per-cost display
+    aid is shown only beside a real, measured effect, never invented from absence.
     """
     rows: list[SkillProfileRow] = []
     for inp in sorted(inputs, key=lambda i: i.skill):
@@ -224,7 +274,7 @@ def build_skill_profile(inputs: list[SkillProfileInput]) -> list[SkillProfileRow
             n_trials=inp.n_trials,
             is_disable_model_invocation=inp.is_disable_model_invocation,
         )
-        effect: EffectEstimate | None = None  # HELD
+        effect = inp.effect
         rows.append(
             SkillProfileRow(
                 skill=inp.skill,

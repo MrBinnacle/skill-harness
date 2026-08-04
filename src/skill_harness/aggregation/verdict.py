@@ -67,22 +67,26 @@ Paired verdict rules (Path B, `paired_verdict`):
   B3. ClauseStatus.UNMEASURED → CANT_TELL_YET (underpowered / budget / no data).
   B4. ClauseStatus.CONFOUNDED → CANT_TELL_YET (evidence exists but is confounded).
 
-CUT(harmful) is DEFERRED from v1 (design lock S64): representing "actively worse"
-honestly requires a SIGNED-delta confidence interval, and today's
-`ContributionSummary.full_vs_null_delta` is a bare point estimate with no CI — it
-cannot distinguish "no effect" from "worse". The sub-reason is defined so the
-verdict vocabulary is complete, but no mapping emits it yet; see
-`harmful_verdict_supported()`.
+CUT(harmful) requires a SIGNED-delta interval. The Stage-0 screen path and the
+bare-point `ContributionSummary.full_vs_null_delta` still cannot distinguish
+"no effect" from "worse", so `screen_verdict` / `paired_verdict` never emit it.
+The matched Gate-2 path (#85) produces a signed-delta interval via
+`effect_from_matched_gate2`; `matched_gate2_verdict` emits CUT(harmful) there,
+and `harmful_verdict_supported(effect)` returns True for that estimate.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import assert_never
+from typing import TYPE_CHECKING, assert_never
 
 from skill_harness.aggregation.status import ClauseStatus
+from skill_harness.oc import Gate2Decision
 from skill_harness.semantics import PRE_REGISTRY_ESTIMAND_LABEL, RegisteredScope
+
+if TYPE_CHECKING:
+    from skill_harness.aggregation.profile import EffectEstimate
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -113,10 +117,10 @@ class CutSubReason(StrEnum):
     did not deliver a transformative lift (ClauseStatus.FAILED)."""
 
     HARMFUL = "harmful"
-    """Skill makes outcomes measurably WORSE. NOT YET DERIVABLE — requires a
-    signed-delta confidence interval the current point-estimate delta cannot
-    supply. Defined for vocabulary completeness; no mapping emits it in v1.
-    See harmful_verdict_supported()."""
+    """Skill makes outcomes measurably WORSE. Emitted only by the matched
+    Gate-2 path (`matched_gate2_verdict`) once a signed-delta interval is
+    available; never by screen_verdict / paired_verdict. See
+    harmful_verdict_supported()."""
 
 
 class ValueClass(StrEnum):
@@ -367,17 +371,78 @@ def paired_verdict(
 
 
 # ---------------------------------------------------------------------------
+# Path C — matched Gate-2 effect (signed-delta interval)
+# ---------------------------------------------------------------------------
+
+
+def matched_gate2_verdict(
+    effect: EffectEstimate, *, scope: RegisteredScope | None = None
+) -> VerdictResult:
+    """Map a matched Gate-2 EffectEstimate to a keep/cut verdict.
+
+    Harm is a first-class CUT sub-reason here — never folded into no_lift.
+    Requires ``effect.decision`` from ``effect_from_matched_gate2``; a scaffold
+    estimate without a Gate-2 decision is refused (no silent coercion).
+    """
+    if effect.decision is None:
+        raise ValueError(
+            "matched_gate2_verdict requires effect.decision from the matched "
+            "Gate-2 path; a scaffold EffectEstimate without a decision cannot "
+            "be coerced into a verdict"
+        )
+    delta_clause = (
+        f"signed delta={effect.mean:.3f}, 95% CI [{effect.ci_lo:.3f}, {effect.ci_hi:.3f}]"
+    )
+    match effect.decision:
+        case Gate2Decision.BENEFIT:
+            return VerdictResult(
+                KeepCutVerdict.KEEP,
+                None,
+                f"KEEP: matched Gate-2 certified BENEFIT ({delta_clause}).",
+                scope=scope,
+            )
+        case Gate2Decision.HARM:
+            return VerdictResult(
+                KeepCutVerdict.CUT,
+                CutSubReason.HARMFUL,
+                (
+                    f"CUT (harmful): matched Gate-2 certified HARM ({delta_clause}). "
+                    f"First-class harm — not 'no lift'."
+                ),
+                scope=scope,
+            )
+        case Gate2Decision.EQUIVALENT:
+            return VerdictResult(
+                KeepCutVerdict.CUT,
+                CutSubReason.NO_LIFT,
+                (
+                    f"CUT (no lift): matched Gate-2 certified EQUIVALENT ({delta_clause}). "
+                    f"Not harmful — the interval does not support worse."
+                ),
+                scope=scope,
+            )
+        case Gate2Decision.UNRESOLVED:
+            return VerdictResult(
+                KeepCutVerdict.CANT_TELL_YET,
+                None,
+                (f"CAN'T-TELL-YET: matched Gate-2 left the contrast UNRESOLVED ({delta_clause})."),
+                scope=scope,
+            )
+        case _:
+            assert_never(effect.decision)
+
+
+# ---------------------------------------------------------------------------
 # CUT(harmful) support gate
 # ---------------------------------------------------------------------------
 
 
-def harmful_verdict_supported() -> bool:
-    """Whether the harness can currently emit a CUT(harmful) verdict.
+def harmful_verdict_supported(effect: EffectEstimate | None = None) -> bool:
+    """Whether the harness can emit a CUT(harmful) verdict for this estimate.
 
-    Always False in v1: CUT(harmful) needs a SIGNED-delta confidence interval to
-    distinguish "actively worse" from "no effect". Today's
-    ContributionSummary.full_vs_null_delta is a bare point estimate with no CI, so
-    "worse" cannot be told from "no effect" honestly. Wire this to True only once a
-    paired run produces a signed-delta interval.
+    No-arg / None → False: the Stage-0 screen path and bare-point
+    ContributionSummary.full_vs_null_delta still cannot distinguish worse from
+    no-effect. A matched Gate-2 EffectEstimate (decision set, signed interval)
+    → True: harm is then a first-class Gate-2 outcome via matched_gate2_verdict.
     """
-    return False
+    return effect is not None and effect.decision is not None
