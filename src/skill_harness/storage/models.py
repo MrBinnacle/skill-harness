@@ -14,6 +14,7 @@ Design constraints (per A24 council finding):
 from __future__ import annotations
 
 import re
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
@@ -23,6 +24,35 @@ from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
 OUTPUT_TEXT_MAX_BYTES: int = 256 * 1024  # 256 KB — oracle_verdicts.output_text
 CLAUSE_TEXT_MAX_BYTES: int = 64 * 1024  # 64 KB  — clauses.clause_text
+
+# ---------------------------------------------------------------------------
+# Task-frontier enumerated values (migration 0700)
+# ---------------------------------------------------------------------------
+# Defined HERE, not in `task_frontier/`, because the write model is the lowest
+# layer that must know them and `storage` may not import upward. The
+# `task_frontier` package re-exports these very objects as its public `Phase` /
+# `Arm`, so the SQL CHECK, the write model and the seam enum are ONE definition
+# rather than three that need a drift guard.
+
+
+class TaskFrontierPhase(StrEnum):
+    """The three walled-off phases. Values match migration 0700's CHECK literals."""
+
+    CALIBRATION = "calibration"
+    CONFIRMATION = "confirmation"
+    MATCHED = "matched"
+
+
+class TaskFrontierArm(StrEnum):
+    """Which arm of the whole-skill contrast produced an observation."""
+
+    FULL = "full"
+    NULL = "null"
+
+
+TASK_FRONTIER_PHASES: frozenset[str] = frozenset(member.value for member in TaskFrontierPhase)
+TASK_FRONTIER_ARMS: frozenset[str] = frozenset(member.value for member in TaskFrontierArm)
+TASK_FRONTIER_ADMISSIBILITY_STATES: frozenset[str] = frozenset({"admissible", "inadmissible"})
 
 # ---------------------------------------------------------------------------
 # Shared validator helpers
@@ -720,4 +750,98 @@ class ScreenTrialWrite(BaseModel):
     def no_control_chars_optional(cls, v: object, info: ValidationInfo) -> object:
         if isinstance(v, str):
             return _check_text(v, info.field_name or "field")
+        return v
+
+
+class TaskFrontierObservationWrite(BaseModel):
+    """Insert shape for the three task-frontier phase partitions (migration 0700).
+
+    ONE write shape, THREE physical tables: `phase` selects the partition at
+    write time (see `repositories.evidence.task_frontier.PHASE_TABLES`). The
+    column is CHECK-pinned per table, so this model's `phase` validator and the
+    SQL CHECK are two independent guards on the same invariant — a mis-routed
+    row is refused by whichever fires first.
+
+    Refusal over coercion (the `two_arm_gate` / `oc` convention): an unknown
+    phase, arm or admissibility state raises rather than being normalised.
+    """
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    observation_id: str
+    task_family_id: str
+    task_family_version: str
+    semantic_lineage_id: str
+    phase: str
+    instance_id: str
+    arm: str
+    passed: int  # 1 = this arm passed the task instance, 0 = failed
+    generator_fingerprint: str
+    oracle_fingerprint: str
+    admissibility_state: str
+    inadmissibility_reason: str | None
+    observed_at: str
+    ingested_at: str
+
+    @field_validator(
+        "observation_id",
+        "task_family_id",
+        "task_family_version",
+        "semantic_lineage_id",
+        "phase",
+        "instance_id",
+        "arm",
+        "generator_fingerprint",
+        "oracle_fingerprint",
+        "admissibility_state",
+        "observed_at",
+        "ingested_at",
+    )
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("inadmissibility_reason", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object, info: ValidationInfo) -> object:
+        if isinstance(v, str):
+            return _check_text(v, info.field_name or "field")
+        return v
+
+    @field_validator("phase")
+    @classmethod
+    def known_phase(cls, v: str) -> str:
+        if v not in TASK_FRONTIER_PHASES:
+            raise ValueError(
+                f"phase must be one of {sorted(TASK_FRONTIER_PHASES)} — each names its own "
+                f"physical partition and there is no catch-all table; got {v!r}"
+            )
+        return v
+
+    @field_validator("arm")
+    @classmethod
+    def known_arm(cls, v: str) -> str:
+        if v not in TASK_FRONTIER_ARMS:
+            raise ValueError(
+                f"arm must be one of {sorted(TASK_FRONTIER_ARMS)} — the frontier measures the "
+                f"whole-skill Full-vs-Null contrast, not clause ablation; got {v!r}"
+            )
+        return v
+
+    @field_validator("admissibility_state")
+    @classmethod
+    def known_admissibility_state(cls, v: str) -> str:
+        if v not in TASK_FRONTIER_ADMISSIBILITY_STATES:
+            raise ValueError(
+                f"admissibility_state must be one of "
+                f"{sorted(TASK_FRONTIER_ADMISSIBILITY_STATES)}; got {v!r}"
+            )
+        return v
+
+    @field_validator("passed")
+    @classmethod
+    def passed_is_a_bit(cls, v: int) -> int:
+        if v not in (0, 1):
+            raise ValueError(f"passed must be 0 or 1; got {v}")
         return v
