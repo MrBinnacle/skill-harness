@@ -2624,6 +2624,12 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
     table.add_column("rationale", min_width=40, max_width=70)
 
     for row in rows:
+        # Value-class guard (#74/#76): store rows carry no value_class yet, so this
+        # is UNCLASSIFIED → the guard renders CANT_TELL_YET (wrong instrument), never
+        # a false CUT(subsumed) on a screen ceiling. This is US-3: the false CUTs are
+        # gone the moment the guard ships. The classify-the-11 follow-up ticket
+        # threads the real per-skill value_class here (transformative-lift skills then
+        # CUT again, non-transformative stay CANT_TELL_YET).
         v = screen_verdict(row.p0)
         sub = f"({v.cut_sub_reason.value})" if v.cut_sub_reason else ""
         verdict_color = {"KEEP": "green", "CUT": "red", "CANT_TELL_YET": "yellow"}[v.verdict.value]
@@ -2760,6 +2766,10 @@ def screen_profile_cmd(
         sp = screened.get(skill)
         estimand: str | None
         if sp is not None:
+            # Value-class guard (#74/#76): store rows are UNCLASSIFIED (see the
+            # `screen verdict` command) → CANT_TELL_YET (wrong instrument) →
+            # NOT_YET_RANKABLE, never a false EXCLUDED on a screen ceiling. The
+            # classify-the-11 ticket threads the real per-skill value_class here.
             v = screen_verdict(sp.p0)
             verdict = v.verdict
             cut_sub_reason = v.cut_sub_reason

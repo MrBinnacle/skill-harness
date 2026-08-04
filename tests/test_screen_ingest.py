@@ -15,7 +15,12 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from skill_harness.aggregation.verdict import CutSubReason, KeepCutVerdict, screen_verdict
+from skill_harness.aggregation.verdict import (
+    CutSubReason,
+    KeepCutVerdict,
+    ValueClass,
+    screen_verdict,
+)
 from skill_harness.cli.main import cli
 from skill_harness.storage.migrations import open_evidence
 from skill_harness.storage.repositories.evidence.screens import derive_p0_by_skill
@@ -250,12 +255,16 @@ def test_p0_multiple_skills_and_verdicts(conn: sqlite3.Connection) -> None:
         conn=conn,
     )
     by_skill = {r.skill_name: r for r in derive_p0_by_skill(conn)}
-    assert by_skill["ceiling-skill"].p0 == 1.0
-    assert screen_verdict(by_skill["ceiling-skill"].p0).verdict is KeepCutVerdict.CUT
-    assert screen_verdict(by_skill["ceiling-skill"].p0).cut_sub_reason is CutSubReason.SUBSUMED
+    # Store rows are historical transformative-lift screens (#74/#76 guard: the
+    # CUT-on-ceiling mapping is the transformative-lift class; pass it explicitly).
+    tl = ValueClass.TRANSFORMATIVE_LIFT
+    ceiling_p0 = by_skill["ceiling-skill"].p0
+    assert ceiling_p0 == 1.0
+    assert screen_verdict(ceiling_p0, value_class=tl).verdict is KeepCutVerdict.CUT
+    assert screen_verdict(ceiling_p0, value_class=tl).cut_sub_reason is CutSubReason.SUBSUMED
     assert by_skill["hard-skill"].p0 == pytest.approx(1 / 3)
     # p0 = 0.33 > 0.3 bar -> still CUT(subsumed) with headroom
-    assert screen_verdict(by_skill["hard-skill"].p0).verdict is KeepCutVerdict.CUT
+    assert screen_verdict(by_skill["hard-skill"].p0, value_class=tl).verdict is KeepCutVerdict.CUT
 
 
 def test_skill_with_only_inadmissible_screens_has_no_p0_row(conn: sqlite3.Connection) -> None:
@@ -296,8 +305,12 @@ def test_apply_manifest_clean(tmp_path: Path, conn: sqlite3.Connection) -> None:
     report = apply_manifest(root, conn, parse=fake_parse)
     assert len(report.ingested) == len(BATCH1_MANIFEST)
     assert report.mismatches == ()
-    # 3 admissible skills ceiling
-    verdicts = {r.skill_name: screen_verdict(r.p0).verdict for r in derive_p0_by_skill(conn)}
+    # 3 admissible skills ceiling; store rows are historical transformative-lift
+    # screens (#74/#76), so the CUT-on-ceiling mapping is exercised with that class.
+    verdicts = {
+        r.skill_name: screen_verdict(r.p0, value_class=ValueClass.TRANSFORMATIVE_LIFT).verdict
+        for r in derive_p0_by_skill(conn)
+    }
     assert all(v is KeepCutVerdict.CUT for v in verdicts.values())
     assert "sqlite-tie-break-red-test-trap" in verdicts  # the void log did not sink it
 
@@ -345,7 +358,11 @@ def test_cli_screen_verdict_empty_store(tmp_path: Path) -> None:
     assert "No admissible screens" in res.output
 
 
-def test_cli_screen_verdict_renders_cut(tmp_path: Path) -> None:
+def test_cli_screen_verdict_renders_cant_tell_for_unclassified_ceiling(tmp_path: Path) -> None:
+    """#74/#76 guard, US-3: store rows carry no value_class, so a screen ceiling
+    (p0=1) renders CANT_TELL_YET (wrong instrument), NOT a false CUT(subsumed).
+    The CLI passes no value_class, so this is the honest unclassified render the
+    moment the guard ships — the false CUT is gone here, not deferred to a board."""
     db = tmp_path / "evidence.db"
     c = open_evidence(db)
     write_screen_evidence(
@@ -358,7 +375,10 @@ def test_cli_screen_verdict_renders_cut(tmp_path: Path) -> None:
     c.close()
     res = CliRunner().invoke(cli, ["screen", "verdict", "--evidence-db", str(db)])
     assert res.exit_code == 0
-    assert "CUT" in res.output
+    # A ceiling (p0=1) rendering CANT_TELL_YET IS the guard firing: without it a
+    # ceiling maps to CUT. (The wrong-instrument rationale wraps across the narrow
+    # rationale cell, so it is asserted at the function level, not scraped here.)
+    assert "CANT_TELL_YET" in res.output
     assert "ceiling-skill" in res.output
 
 
