@@ -45,6 +45,7 @@ from typing import Literal, NamedTuple
 from pydantic import BaseModel, ConfigDict
 from scipy.stats import beta as beta_dist  # type: ignore[import-untyped]
 
+from skill_harness.storage.article_fingerprint import ArticleFingerprint
 from skill_harness.storage.models import (
     ClauseWrite,
     MetricVersionWrite,
@@ -539,6 +540,9 @@ def write_paired_evidence(
         null_by_epoch = {s.epoch: s for s in null.samples}
         for epoch in sorted(by_epoch):
             verdict_id = str(uuid.uuid4())
+            # #75: every new mint pins the measured model (ArticleFingerprint).
+            pin = _article_fingerprint_for_pair(full_by_epoch[epoch], null_by_epoch[epoch])
+            pin_cols = pin.as_verdict_columns()
             insert_oracle_verdict(
                 conn,
                 OracleVerdictWrite(
@@ -561,6 +565,10 @@ def write_paired_evidence(
                     admissibility_state=admissibility_state,
                     inadmissibility_reason=inadmissibility_reason,
                     written_at=now,
+                    model_snapshot=pin_cols.model_snapshot,
+                    response_fingerprint=pin_cols.response_fingerprint,
+                    requalify_on_drift=pin_cols.requalify_on_drift,
+                    drift_fingerprint=pin_cols.drift_fingerprint,
                 ),
             )
             verdict_ids.append(verdict_id)
@@ -651,6 +659,30 @@ def _pin_admissibility(
     if len(fingerprints) > 1:
         return "inadmissible", "harness_pin_mismatch"
     return "admissible", None
+
+
+def _article_fingerprint_for_pair(
+    full_sample: ParsedSample, null_sample: ParsedSample
+) -> ArticleFingerprint:
+    """Build the mandatory model pin for a newly-minted paired verdict (#75).
+
+    Prefer ``model_snapshot`` from the measured subject model. When both arms
+    lack a usable model id, fall back to a response fingerprint (sha256 of the
+    Full-arm output) with ``requalify_on_drift=True``.
+    """
+    models = {full_sample.subject_model, null_sample.subject_model} - {None, ""}
+    if len(models) == 1:
+        return ArticleFingerprint(model_snapshot=next(iter(models)))
+    if len(models) > 1 and full_sample.subject_model:
+        # Prefer the Full arm's model as the pin when arms disagree — the
+        # harness-pin admissibility path already flags cross-arm harness drift;
+        # the article pin records what Full was measured on.
+        return ArticleFingerprint(model_snapshot=full_sample.subject_model)
+    output_fp = hashlib.sha256(full_sample.output_text.encode("utf-8")).hexdigest()
+    return ArticleFingerprint(
+        response_fingerprint=output_fp,
+        requalify_on_drift=True,
+    )
 
 
 def _observation(full_score: float, null_score: float) -> float:

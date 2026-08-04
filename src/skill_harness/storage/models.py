@@ -335,7 +335,13 @@ class SampleWrite(BaseModel):
 
 
 class OracleVerdictWrite(BaseModel):
-    """Insert shape for evidence.oracle_verdicts."""
+    """Insert shape for evidence.oracle_verdicts.
+
+    Model-pin columns (migration 0600 / #75) are optional on the write shape so
+    historical and test fixtures may omit them. New mints MUST supply a pin via
+    ``ArticleFingerprint`` at the mint path — see
+    ``skill_harness.storage.article_fingerprint``.
+    """
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
@@ -356,6 +362,11 @@ class OracleVerdictWrite(BaseModel):
     admissibility_state: str
     inadmissibility_reason: str | None
     written_at: str
+    # 0600 — model pin + drift fingerprint (nullable: no retrofit of historical)
+    model_snapshot: str | None = None
+    response_fingerprint: str | None = None
+    requalify_on_drift: int = 0
+    drift_fingerprint: str | None = None
 
     @field_validator(
         "verdict_id",
@@ -379,6 +390,9 @@ class OracleVerdictWrite(BaseModel):
         "judge_id",
         "calibration_event_id",
         "inadmissibility_reason",
+        "model_snapshot",
+        "response_fingerprint",
+        "drift_fingerprint",
         mode="before",
     )
     @classmethod

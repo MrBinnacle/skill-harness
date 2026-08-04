@@ -21,6 +21,7 @@ development without collision.  Each track owns an exclusive range:
 | D     | 0300–0399  | Ablation runner                |
 | E     | 0400–0499  | Aggregation / status reporting |
 | v0.2  | 0500–0599  | Subject layer (harness pin, screen store) — per the A30 ledger note in `0500` |
+| Board | 0600–0699  | Honest Live Board delivery spine (model pin / drift fingerprint, #75) |
 
 **Why this matters:**
 

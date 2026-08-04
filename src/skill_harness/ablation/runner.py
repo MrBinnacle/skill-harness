@@ -66,6 +66,7 @@ from skill_harness.ablation.subject import (
     project_call_cost,
     sha256_of_output,
 )
+from skill_harness.storage.article_fingerprint import ArticleFingerprint
 from skill_harness.storage.models import (
     ConfoundEventWrite,
     CostLedgerWrite,
@@ -1202,6 +1203,9 @@ class AblationRunner:
                 f"got full_sample_id={full_sample_id!r}, abl_sample_id={abl_sample_id!r}"
             )
 
+        # #75: every new mint pins the measured model (ArticleFingerprint).
+        pin_cols = ArticleFingerprint(model_snapshot=self._subject_model_id).as_verdict_columns()
+
         verdict = OracleVerdictWrite(
             verdict_id=verdict_id,
             run_id=run_id,
@@ -1220,6 +1224,10 @@ class AblationRunner:
             admissibility_state=admissibility_state,
             inadmissibility_reason=inadmissibility_reason,
             written_at=now,
+            model_snapshot=pin_cols.model_snapshot,
+            response_fingerprint=pin_cols.response_fingerprint,
+            requalify_on_drift=pin_cols.requalify_on_drift,
+            drift_fingerprint=pin_cols.drift_fingerprint,
         )
 
         with writer_transaction(self._evidence):
