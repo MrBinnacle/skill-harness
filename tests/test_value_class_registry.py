@@ -21,7 +21,6 @@ from skill_harness.aggregation.value_class_registry import (
     value_class_for,
 )
 from skill_harness.aggregation.verdict import (
-    CutSubReason,
     KeepCutVerdict,
     ValueClass,
     screen_verdict,
@@ -107,9 +106,9 @@ def test_obs_records_ceiling_flips_to_cant_tell_not_cut(skill_name: str) -> None
     assert vc is not ValueClass.TRANSFORMATIVE_LIFT
 
     v = screen_verdict(1.0, value_class=vc)
+    # CANT_TELL_YET (not CUT) with no subsumed sub-reason == the false CUT withheld.
     assert v.verdict is KeepCutVerdict.CANT_TELL_YET
-    assert v.verdict is not KeepCutVerdict.CUT
-    assert v.cut_sub_reason is not CutSubReason.SUBSUMED
+    assert v.cut_sub_reason is None
     assert v.wrong_instrument is True
     assert "wrong instrument" in v.rationale.lower()
 
