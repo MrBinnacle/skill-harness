@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Mandatory model pin on new verdict mints + drift fingerprint** (#75,
+  Honest Live Board S1). Every newly-minted `oracle_verdicts` row carries an
+  `ArticleFingerprint`: primary `model_snapshot` (or response-fingerprint
+  fallback with `requalify_on_drift`), plus a `drift_fingerprint` token so a
+  later fleet-model change is detectable (precondition for the board's
+  day-one stale badge). Migration `0600_model_snapshot` adds the four columns
+  as nullable — pre-registry / historical rows are not retrofitted (#41
+  no-retrofit). Enforcement is at the mint paths (`subject.ingest`,
+  `ablation.runner`) via `ArticleFingerprint`; bare repository inserts of
+  historical-shaped writes remain valid.
 - **`skill_harness.ratification` + the mechanical preflight gate on
   `--execute`** (#57, PR-2 continuation; binding ratified on #47 —
   operator-picked mechanical, stronger than recommended; historical-

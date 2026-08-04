@@ -1,6 +1,6 @@
 """Repository functions for evidence.oracle_verdicts (append-only).
 
-Columns (from migrations/evidence/0001_initial.sql):
+Columns (from migrations/evidence/0001_initial.sql + 0600_model_snapshot.sql):
     verdict_id              TEXT PRIMARY KEY
     run_id                  TEXT NOT NULL REFERENCES runs
     clause_id               TEXT NOT NULL REFERENCES clauses
@@ -18,6 +18,10 @@ Columns (from migrations/evidence/0001_initial.sql):
     admissibility_state     TEXT NOT NULL CHECK (admissible|inadmissible)
     inadmissibility_reason  TEXT  (nullable)
     written_at              TEXT NOT NULL
+    model_snapshot          TEXT  (nullable — 0600; pin on new mints)
+    response_fingerprint    TEXT  (nullable — 0600; fallback pin)
+    requalify_on_drift      INTEGER NOT NULL DEFAULT 0  (0600)
+    drift_fingerprint       TEXT  (nullable — 0600; fleet-model drift token)
 
 A29 — use get_admissible_verdicts() (queries the VIEW) for aggregation;
       use audit_all_verdicts() in skill_harness.audit for auditing (raw table).
@@ -39,8 +43,9 @@ def insert_oracle_verdict(conn: sqlite3.Connection, verdict: OracleVerdictWrite)
             verdict_id, run_id, clause_id, axis, comparison,
             sample_a_id, sample_b_id, observation, oracle_tier,
             metric_id, metric_version, judge_id, calibration_event_id,
-            position_swap_agreement, admissibility_state, inadmissibility_reason, written_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            position_swap_agreement, admissibility_state, inadmissibility_reason, written_at,
+            model_snapshot, response_fingerprint, requalify_on_drift, drift_fingerprint
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             verdict.verdict_id,
@@ -60,6 +65,10 @@ def insert_oracle_verdict(conn: sqlite3.Connection, verdict: OracleVerdictWrite)
             verdict.admissibility_state,
             verdict.inadmissibility_reason,
             verdict.written_at,
+            verdict.model_snapshot,
+            verdict.response_fingerprint,
+            verdict.requalify_on_drift,
+            verdict.drift_fingerprint,
         ),
     )
 
