@@ -73,6 +73,20 @@ bare-point `ContributionSummary.full_vs_null_delta` still cannot distinguish
 The matched Gate-2 path (#85) produces a signed-delta interval via
 `effect_from_matched_gate2`; `matched_gate2_verdict` emits CUT(harmful) there,
 and `harmful_verdict_supported(effect)` returns True for that estimate.
+
+Path C verdict rules (`matched_gate2_verdict`), by Gate2Decision (#86/#87):
+  C1. decision is None → ValueError (refusal-over-coercion; no silent scaffold map).
+  C2. BENEFIT → KEEP (class-independent).
+  C3. HARM → CUT(harmful) (class-independent — harm is cut regardless of intended value).
+  C4. EQUIVALENT, split by value_class (the #76/#77 guard, mirrored onto Path C at #87):
+        - value_class == transformative-lift → CUT(no_lift). Pass-rate lift is this
+          class's estimand; EQUIVALENT means the skill did not deliver it.
+        - any other class, OR unset (default) → CANT_TELL_YET (wrong_instrument=True),
+          NEVER CUT. Guard/calibration skills are measured on hazard-enriched pairs;
+          EQUIVALENT does not mean "delete it" — the pass/fail-lift instrument is the
+          wrong instrument for a non-lift skill. Unset defaults to "not transformative-
+          lift" so an unclassified skill is never false-CUT while its class is pending.
+  C5. UNRESOLVED → CANT_TELL_YET (class-independent).
 """
 
 from __future__ import annotations
@@ -208,14 +222,15 @@ class VerdictResult:
     rationale: str
     scope: RegisteredScope | None = None
     wrong_instrument: bool = False
-    """Board-layer routing signal (#74/#76). Set True only when the screen path
-    WITHHELD a CUT because ``value_class`` is not transformative-lift — the
-    transformative-lift instrument cannot see this skill's value. The future
+    """Board-layer routing signal (#74/#76/#87). Set True when a path WITHHELD a
+    CUT because ``value_class`` is not transformative-lift — the
+    transformative-lift instrument cannot see this skill's value. Fires on the
+    screen path (above-bar p0) and on Path C (matched EQUIVALENT). The future
     BoardCell consumes this to route the cell to the field-evidence lane
     (``evidence_lane = field``) and render "HOLD — wrong instrument" rather than
     "HOLD — untested (sourced candidate)". Default False keeps every existing
     verdict and call site unchanged; it is never True on a CUT or a KEEP, nor on
-    the ordinary below-bar sourced-candidate CANT_TELL_YET."""
+    the ordinary below-bar sourced-candidate / UNRESOLVED CANT_TELL_YET."""
 
     @property
     def estimand_label(self) -> str:
@@ -376,13 +391,22 @@ def paired_verdict(
 
 
 def matched_gate2_verdict(
-    effect: EffectEstimate, *, scope: RegisteredScope | None = None
+    effect: EffectEstimate,
+    *,
+    scope: RegisteredScope | None = None,
+    value_class: ValueClass | None = None,
 ) -> VerdictResult:
     """Map a matched Gate-2 EffectEstimate to a keep/cut verdict.
 
     Harm is a first-class CUT sub-reason here — never folded into no_lift.
     Requires ``effect.decision`` from ``effect_from_matched_gate2``; a scaffold
     estimate without a Gate-2 decision is refused (no silent coercion).
+
+    ``value_class`` is the #76/#77/#87 wrong-instrument guard on EQUIVALENT:
+    ``EQUIVALENT → CUT(no_lift)`` fires ONLY for ``ValueClass.TRANSFORMATIVE_LIFT``.
+    For any other class — or when UNSET (default "not transformative-lift") —
+    EQUIVALENT yields CANT_TELL_YET carrying ``wrong_instrument=True``, never CUT.
+    BENEFIT / HARM / UNRESOLVED are class-independent (see rules C2-C5).
     """
     if effect.decision is None:
         raise ValueError(
@@ -412,6 +436,33 @@ def matched_gate2_verdict(
                 scope=scope,
             )
         case Gate2Decision.EQUIVALENT:
+            if value_class is not ValueClass.TRANSFORMATIVE_LIFT:
+                if value_class is None:
+                    class_clause = (
+                        "this skill has no value class yet (unclassified), so it cannot be "
+                        "confirmed transformative-lift and the no-lift CUT is withheld until "
+                        "the skill is classified"
+                    )
+                else:
+                    class_clause = (
+                        f"this skill's value class is {value_class.value!r}, not "
+                        f"transformative-lift, so the pass/fail-lift instrument cannot see its "
+                        f"value (e.g. a guard skill measured EQUIVALENT on hazard-enriched "
+                        f"pairs does not mean 'delete it') and CUT(no_lift) would be a "
+                        f"category error"
+                    )
+                rationale = (
+                    f"CAN'T-TELL-YET (wrong instrument): matched Gate-2 certified "
+                    f"EQUIVALENT ({delta_clause}), but {class_clause}. "
+                    f"Verdict withheld; routed to the field-evidence lane."
+                )
+                return VerdictResult(
+                    KeepCutVerdict.CANT_TELL_YET,
+                    None,
+                    rationale,
+                    scope=scope,
+                    wrong_instrument=True,
+                )
             return VerdictResult(
                 KeepCutVerdict.CUT,
                 CutSubReason.NO_LIFT,

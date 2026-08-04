@@ -23,6 +23,7 @@ from skill_harness.aggregation.profile import (
 from skill_harness.aggregation.verdict import (
     CutSubReason,
     KeepCutVerdict,
+    ValueClass,
     harmful_verdict_supported,
     matched_gate2_verdict,
 )
@@ -133,16 +134,97 @@ class TestHarmIsFirstClass:
         assert result.cut_sub_reason is None
 
     def test_equivalent_is_cut_no_lift_not_harmful(self) -> None:
+        """EQUIVALENT → CUT(no_lift) only for transformative-lift (#87)."""
         bp, xf, xn, bf, _ = _CASES["equivalent"]
-        result = matched_gate2_verdict(_effect(bp, xf, xn, bf))
+        result = matched_gate2_verdict(
+            _effect(bp, xf, xn, bf),
+            value_class=ValueClass.TRANSFORMATIVE_LIFT,
+        )
         assert result.verdict is KeepCutVerdict.CUT
         assert result.cut_sub_reason is CutSubReason.NO_LIFT
+        assert result.wrong_instrument is False
 
     def test_unresolved_is_cant_tell_yet(self) -> None:
         bp, xf, xn, bf, _ = _CASES["unresolved"]
         result = matched_gate2_verdict(_effect(bp, xf, xn, bf))
         assert result.verdict is KeepCutVerdict.CANT_TELL_YET
         assert result.cut_sub_reason is None
+
+
+class TestMatchedGate2ValueClassGuard:
+    """#87: Path C EQUIVALENT disposition is value-class-aware (mirror #76/#77)."""
+
+    @pytest.mark.parametrize(
+        "vc",
+        [ValueClass.TRAP_DISCIPLINE, ValueClass.CALIBRATION, None],
+    )
+    def test_equivalent_non_transformative_is_cant_tell_wrong_instrument(
+        self, vc: ValueClass | None
+    ) -> None:
+        """Guard/calibration/unset + EQUIVALENT → CANT_TELL_YET(wrong_instrument), never CUT."""
+        bp, xf, xn, bf, _ = _CASES["equivalent"]
+        result = matched_gate2_verdict(_effect(bp, xf, xn, bf), value_class=vc)
+        assert result.verdict is KeepCutVerdict.CANT_TELL_YET
+        assert result.cut_sub_reason is None
+        assert result.wrong_instrument is True
+
+    def test_equivalent_transformative_is_cut_no_lift(self) -> None:
+        bp, xf, xn, bf, _ = _CASES["equivalent"]
+        result = matched_gate2_verdict(
+            _effect(bp, xf, xn, bf),
+            value_class=ValueClass.TRANSFORMATIVE_LIFT,
+        )
+        assert result.verdict is KeepCutVerdict.CUT
+        assert result.cut_sub_reason is CutSubReason.NO_LIFT
+        assert result.wrong_instrument is False
+
+    @pytest.mark.parametrize(
+        "vc",
+        [
+            ValueClass.TRANSFORMATIVE_LIFT,
+            ValueClass.TRAP_DISCIPLINE,
+            ValueClass.CALIBRATION,
+            None,
+        ],
+    )
+    def test_harm_is_cut_harmful_for_every_class(self, vc: ValueClass | None) -> None:
+        bp, xf, xn, bf, _ = _CASES["clear_harm"]
+        result = matched_gate2_verdict(_effect(bp, xf, xn, bf), value_class=vc)
+        assert result.verdict is KeepCutVerdict.CUT
+        assert result.cut_sub_reason is CutSubReason.HARMFUL
+        assert result.wrong_instrument is False
+
+    @pytest.mark.parametrize(
+        "vc",
+        [
+            ValueClass.TRANSFORMATIVE_LIFT,
+            ValueClass.TRAP_DISCIPLINE,
+            ValueClass.CALIBRATION,
+            None,
+        ],
+    )
+    def test_benefit_is_keep_for_every_class(self, vc: ValueClass | None) -> None:
+        bp, xf, xn, bf, _ = _CASES["clear_benefit"]
+        result = matched_gate2_verdict(_effect(bp, xf, xn, bf), value_class=vc)
+        assert result.verdict is KeepCutVerdict.KEEP
+        assert result.cut_sub_reason is None
+        assert result.wrong_instrument is False
+
+    @pytest.mark.parametrize(
+        "vc",
+        [
+            ValueClass.TRANSFORMATIVE_LIFT,
+            ValueClass.TRAP_DISCIPLINE,
+            ValueClass.CALIBRATION,
+            None,
+        ],
+    )
+    def test_unresolved_is_cant_tell_for_every_class(self, vc: ValueClass | None) -> None:
+        bp, xf, xn, bf, _ = _CASES["unresolved"]
+        result = matched_gate2_verdict(_effect(bp, xf, xn, bf), value_class=vc)
+        assert result.verdict is KeepCutVerdict.CANT_TELL_YET
+        assert result.cut_sub_reason is None
+        assert result.wrong_instrument is False
 
 
 class TestProfilePopulatesEffectOnMatchedPath:
