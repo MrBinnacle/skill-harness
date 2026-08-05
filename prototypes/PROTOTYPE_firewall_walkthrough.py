@@ -19,7 +19,14 @@ import tempfile
 from pathlib import Path
 
 from skill_harness.storage.migrations import open_evidence
-from skill_harness.task_frontier import Arm, Observation, admit, audit_observation, load_manifest, matched_evidence
+from skill_harness.task_frontier import (
+    Arm,
+    Observation,
+    admit,
+    audit_observation,
+    load_manifest,
+    matched_evidence,
+)
 
 # ---------------------------------------------------------------------------
 # Plain-English names for the jargon, so the output is readable.
@@ -68,8 +75,10 @@ def show_pools(conn, manifest, note=""):
             print(f"       {obs_id:<12} from {recipe:<20} {with_or_without}  {outcome}")
 
     scorer_sees = matched_evidence(conn, manifest)
-    print(f"\n   >>> WHAT THE SCORER CAN SEE: {len(scorer_sees)} result(s) — "
-          f"{[r.observation_id for r in scorer_sees]}")
+    print(
+        f"\n   >>> WHAT THE SCORER CAN SEE: {len(scorer_sees)} result(s) — "
+        f"{[r.observation_id for r in scorer_sees]}"
+    )
 
 
 def record(conn, manifest, obs_id, recipe, arm, passed):
@@ -136,9 +145,9 @@ def main():
 
   THE FIX: three pools of tasks that can never mix.
 
-     1. {POOL_NAME['calibration']:<25} picks how hard the tasks should be
-     2. {POOL_NAME['confirmation']:<25} double-checks that choice on fresh tasks
-     3. {POOL_NAME['matched']:<25} the ONLY pool that scores the skill
+     1. {POOL_NAME["calibration"]:<25} picks how hard the tasks should be
+     2. {POOL_NAME["confirmation"]:<25} double-checks that choice on fresh tasks
+     3. {POOL_NAME["matched"]:<25} the ONLY pool that scores the skill
 
   Scratch database: {workdir}
   (deleted when this exits -- nothing here touches your real evidence store)
@@ -187,7 +196,7 @@ def main():
 
     cheating_manifest = build_manifest(
         {
-            "recipe-easy-lookup": "matched",   # <-- moved from difficulty-picking
+            "recipe-easy-lookup": "matched",  # <-- moved from difficulty-picking
             "recipe-nested-query": "confirmation",
             "recipe-multi-hop": "matched",
         }
