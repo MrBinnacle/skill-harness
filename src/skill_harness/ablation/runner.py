@@ -39,7 +39,6 @@ from typing import Any, NoReturn
 from skill_harness.ablation.confound import (
     N_NULL_FLOOR,
     ConfoundEvent,
-    MetricFn,
     NullAccumulator,
     check_operator_length_tolerance,
     delta_to_observation,
@@ -66,6 +65,7 @@ from skill_harness.ablation.subject import (
     project_call_cost,
     sha256_of_output,
 )
+from skill_harness.oracles.tier1.axis_registry import MetricFn
 from skill_harness.storage.article_fingerprint import ArticleFingerprint
 from skill_harness.storage.models import (
     ConfoundEventWrite,
@@ -1312,6 +1312,12 @@ class AblationRunner:
         (wrong) axis. It is UNMEASURED — no admissible verdict, never aggregated.
         Per docs/INVARIANTS.md #3: "Tier-2 inadmissible without a calibrated (judge_id, axis)
         record" and "no admissible evidence => UNMEASURED never PASSED".
+
+        Matching is raw exact membership, deliberately (#117). It must stay
+        identical to ``_score_primary_axis``'s ``self._scorers.get(axis)``: a gate
+        that normalised the axis at all would admit clauses that lookup then
+        misses, converting a safe UNMEASURED into an uncaught RuntimeError.
+        ``axis_registry.classify_axis`` applies the same no-normalisation rule.
         """
         return clause_spec.oracle_tier == 1 and clause_spec.axis in self._scorers
 

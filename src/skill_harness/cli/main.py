@@ -180,11 +180,17 @@ def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
 
     # M2: warn about Tier-1 axes with no registered scorer (TEST-ARCH-2)
     try:
-        from skill_harness.ablation.confound import get_default_tier1_scorers
+        from skill_harness.oracles.tier1.axis_registry import AxisScoreability, classify_axis
 
-        scorers = get_default_tier1_scorers()
         for clause in result.clauses:
-            if clause.oracle_tier == 1 and clause.axis not in scorers:
+            # Asks the axis registry directly (#117) rather than membership-testing
+            # the scorer dict: same verdict, same no-normalisation rule as the
+            # runner's pre-sampling gate, and it does not import the metric modules
+            # (and so tiktoken) just to print a warning.
+            if (
+                clause.oracle_tier == 1
+                and classify_axis(clause.axis) is AxisScoreability.UNSCOREABLE
+            ):
                 _console.print(
                     f"[yellow][!] axis {clause.axis!r} has no registered Tier-1 scorer;"
                     f" will return UNMEASURED at run ablation.[/]"

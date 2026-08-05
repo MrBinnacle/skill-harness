@@ -24,9 +24,10 @@ from __future__ import annotations
 
 import contextlib
 import statistics
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
+
+from skill_harness.oracles.tier1.axis_registry import MetricFn, get_tier1_scorers
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -38,12 +39,8 @@ N_NULL_FLOOR: Final[int] = 30
 K_THRESHOLD: Final[float] = 2.0
 """Sigma multiplier for confound threshold (A47)."""
 
-# Standard Tier-1 axis names (matches function names in tier1 modules)
-AXIS_VERBOSITY: Final[str] = "verbosity"
-AXIS_HEDGE_INDEX: Final[str] = "hedge_index"
-AXIS_STRUCTURE_SCORE: Final[str] = "structure_score"
-AXIS_COMPLIANCE_PROXY: Final[str] = "compliance_proxy"
-AXIS_CITATION_PRESENCE_PER_FLAG: Final[str] = "citation_presence_per_flag"
+# The AXIS_* name constants moved to oracles/tier1/axis_registry.py, which is now
+# the only place the Tier-1 axis names are written down (#117).
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -84,31 +81,17 @@ class ConfoundEvent:
 # Metric scorer registry (injected by runner, not module-level globals)
 # ---------------------------------------------------------------------------
 
-# Type alias for a metric scoring function
-MetricFn = Callable[[str], float]
-
 
 def get_default_tier1_scorers() -> dict[str, MetricFn]:
     """Return the default set of Tier-1 metric scoring functions.
 
-    Only imports when called (avoids import-time side effects in tests).
-    These are the Tier-1 metrics available per A14/A33.
+    Ablation-layer alias for the axis registry's
+    :func:`~skill_harness.oracles.tier1.axis_registry.get_tier1_scorers`, which
+    owns both the names and the functions (#117). Kept rather than inlined at
+    the four call sites because this is the name they already import, and the
+    ablation layer is where scorers are injected.
     """
-    from skill_harness.oracles.tier1.citation_presence_per_flag import (
-        compute_citation_presence_per_flag,
-    )
-    from skill_harness.oracles.tier1.compliance_proxy import compute_compliance_proxy
-    from skill_harness.oracles.tier1.hedge_index import compute_hedge_index
-    from skill_harness.oracles.tier1.structure_score import compute_structure_score
-    from skill_harness.oracles.tier1.verbosity import count_tokens
-
-    return {
-        AXIS_VERBOSITY: count_tokens,
-        AXIS_HEDGE_INDEX: compute_hedge_index,
-        AXIS_STRUCTURE_SCORE: compute_structure_score,
-        AXIS_COMPLIANCE_PROXY: compute_compliance_proxy,
-        AXIS_CITATION_PRESENCE_PER_FLAG: compute_citation_presence_per_flag,
-    }
+    return get_tier1_scorers()
 
 
 # ---------------------------------------------------------------------------

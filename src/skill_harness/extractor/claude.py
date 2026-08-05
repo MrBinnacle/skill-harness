@@ -27,6 +27,7 @@ from pydantic import ValidationError
 
 from skill_harness.extractor.errors import ExtractorClaudeError
 from skill_harness.extractor.models import ExtractedClause, FalsifyingCaseSchema
+from skill_harness.oracles.tier1.axis_registry import TIER1_AXES
 
 _MODEL = "claude-sonnet-4-6"
 
@@ -39,7 +40,20 @@ _OPENROUTER_ANTHROPIC_BASE_URL = "https://openrouter.ai/api/v1"
 # OpenRouter model slugs use dots (4.6), not dashes (4-6) as Anthropic direct does.
 _OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6"
 
-_SYSTEM_PROMPT = """\
+
+def _render_axis_catalog() -> str:
+    """Render the registered Tier-1 axes as aligned prompt lines.
+
+    Built from ``TIER1_AXES`` rather than typed out here, so the prompt cannot
+    drift from the scorers that actually exist (#117 — the hand-typed copy this
+    replaces had already lost an axis). Column width follows the longest
+    registered name, so alignment survives axes being added or removed.
+    """
+    width = max((len(axis.name) for axis in TIER1_AXES), default=0)
+    return "\n".join(f"  {axis.name.ljust(width)}  — {axis.description}" for axis in TIER1_AXES)
+
+
+_SYSTEM_PROMPT_BODY = """\
 You are a clause extraction specialist for a deterministic LLM skill evaluation harness.
 
 Your task is to identify every *behavioral clause* in the skill document and return them \
@@ -68,12 +82,12 @@ should beat B on the axis
 
 Registered Tier-1 mechanical scorer names (PREFER these exact strings for axis when the \
 clause semantics match — an exact match enables automatic mechanical measurement):
-  verbosity                     — output token/word count
-  hedge_index                   — proportion of hedge words (maybe, perhaps, could, etc.)
-  structure_score               — heading and paragraph-break density
-  compliance_proxy              — directive-keyword density
-  citation_presence_per_flag    — fraction of flagged items that include a citation marker
 """
+
+# Concatenated rather than interpolated: the prompt body is prose that may grow
+# braces, and an f-string over it would turn the next literal brace into a
+# formatting bug in a string nobody type-checks.
+_SYSTEM_PROMPT = _SYSTEM_PROMPT_BODY + _render_axis_catalog() + "\n"
 
 # JSON Schema for the extract_clauses tool input.
 _EXTRACT_CLAUSES_SCHEMA: dict[str, Any] = {

@@ -19,13 +19,26 @@ was meant to do is already done, for real, by the DB-backed metric_versions
 table, so wiring it would have been parallel machinery duplicating an
 existing mechanism, not closing a gap.)
 
-Available metrics:
+Registered ablation axes (``axis_registry.py`` is the single authority for this
+list; ``ablation/confound.py`` and the extractor system prompt both derive from
+it rather than restating it — #117):
   hedge_index.py     — Hedge Index (frozen wordlist SHA-256 pinned).
   verbosity.py       — Token count via tiktoken cl100k_base (offline).
   structure_score.py — Heading + paragraph-break density.
   compliance_proxy.py — Directive-keyword density (honest heuristic).
   citation_presence_per_flag.py — Flag-citation ratio for sentinel-style
                                    review outputs (ai-slop-sentinel clause 0).
+
+Also in this package, deliberately NOT a registered axis:
+  end_state_categorical.py — Categorical end-state scorer for instruction-
+      conflict screens (DIF K5/K9). Not a ``(text) -> float`` metric: it
+      consumes an ``EpochEndState`` of mechanical sandbox facts and returns a
+      4-way category plus an admissibility flag, so it cannot enter ablation's
+      Full-vs-Ablated text-delta path. See ``axis_registry.TIER1_AXES``.
+
+``axis_registry.py`` is not a revival of the deleted ``registry.py`` described
+above: it registers nothing at import time, carries no provenance, and is a
+frozen name/description table with live production consumers.
 """
 
 __all__: list[str] = []
