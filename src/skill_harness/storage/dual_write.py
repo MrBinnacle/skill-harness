@@ -74,7 +74,13 @@ def write_verdict_with_cost_entry(
     verdict: OracleVerdictWrite,
     cost_entry: CostLedgerWrite,
 ) -> None:
-    """Track D per-API-call write: append oracle_verdict + append cost_ledger entry.
+    """Track D dual-write: append oracle_verdict + append cost_ledger entry.
+
+    **Historical / reconciler-only (#81).** This helper is dormant (zero live
+    callers) and deliberately uses the raw ``insert_oracle_verdict`` repository
+    path so reconciler and historical backfill inserts may omit pin columns
+    (#41 no-retrofit). New verdict mints MUST NOT use this helper — route
+    through ``mint_oracle_verdict`` (which requires an ``ArticleFingerprint``).
 
     Evidence side: INSERT oracle_verdicts (append-only; audit truth).
     Runtime side:  INSERT cost_ledger (operational accounting).
@@ -85,6 +91,7 @@ def write_verdict_with_cost_entry(
     """
     # --- Evidence half ---
     with writer_transaction(evidence_conn):
+        # Historical/reconciler path — see docstring (#81). Not a new-mint site.
         verdicts_repo.insert_oracle_verdict(evidence_conn, verdict)
 
     # --- Runtime half ---

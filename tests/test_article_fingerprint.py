@@ -1,9 +1,11 @@
-"""Issue #75 — mandatory model pin on new verdict mints + drift fingerprint.
+"""Issue #75 / #81 — mandatory model pin on new verdict mints + drift fingerprint.
 
 Acceptance (external behaviour only):
 - A new mint with neither model_snapshot nor response-fingerprint fallback is rejected.
+- The guarded new-mint entrypoint refuses without a valid pin (#81).
 - A pre-registry / historical record is not retrofitted with a snapshot.
 - A drift fingerprint is captured such that a subsequent fleet-model change is detectable.
+- Raw insert_oracle_verdict remains usable for historical / no-retrofit inserts.
 """
 
 from __future__ import annotations
@@ -23,7 +25,10 @@ from skill_harness.storage.article_fingerprint import (
 )
 from skill_harness.storage.migrations import open_evidence
 from skill_harness.storage.models import OracleVerdictWrite
-from skill_harness.storage.repositories.evidence.oracle_verdicts import insert_oracle_verdict
+from skill_harness.storage.repositories.evidence.oracle_verdicts import (
+    insert_oracle_verdict,
+    mint_oracle_verdict,
+)
 from skill_harness.subject.ingest import (
     ParsedEvalLog,
     ParsedSample,
@@ -128,6 +133,29 @@ def _seed_parents(conn: sqlite3.Connection) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _bare_verdict(*, verdict_id: str = "v-bare") -> OracleVerdictWrite:
+    """Historical-shaped write with no pin columns (nullable by design — #41)."""
+    return OracleVerdictWrite(
+        verdict_id=verdict_id,
+        run_id="run1",
+        clause_id="cl1",
+        axis="verbosity",
+        comparison="full_vs_ablated",
+        sample_a_id="sa",
+        sample_b_id="sb",
+        observation=1.0,
+        oracle_tier=1,
+        metric_id="m1",
+        metric_version="1.0.0",
+        judge_id=None,
+        calibration_event_id=None,
+        position_swap_agreement=None,
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        written_at=_TS,
+    )
+
+
 def test_article_fingerprint_rejects_unpinned_mint() -> None:
     """Neither model_snapshot nor response-fingerprint fallback → reject."""
     with pytest.raises((ValueError, ValidationError)):
@@ -138,6 +166,38 @@ def test_article_fingerprint_rejects_response_fingerprint_without_requalify_flag
     """Response-fingerprint fallback requires requalify_on_drift."""
     with pytest.raises((ValueError, ValidationError)):
         ArticleFingerprint(response_fingerprint="deadbeef" * 8)
+
+
+def test_mint_entrypoint_refuses_without_valid_pin(conn: sqlite3.Connection) -> None:
+    """#81: guarded mint entrypoint refuses when no valid pin can be supplied."""
+    _seed_parents(conn)
+    bare = _bare_verdict(verdict_id="mint-reject-unpinned")
+
+    with pytest.raises((ValueError, ValidationError)):
+        mint_oracle_verdict(conn, bare, pin=ArticleFingerprint())
+
+    row = conn.execute(
+        "SELECT 1 FROM oracle_verdicts WHERE verdict_id = 'mint-reject-unpinned'"
+    ).fetchone()
+    assert row is None
+
+
+def test_mint_entrypoint_persists_pin_columns(conn: sqlite3.Connection) -> None:
+    """#81: guarded mint applies ArticleFingerprint columns onto the written row."""
+    _seed_parents(conn)
+    model = "claude-sonnet-4-6"
+    pin = ArticleFingerprint(model_snapshot=model)
+
+    mint_oracle_verdict(conn, _bare_verdict(verdict_id="mint-pinned"), pin=pin)
+    conn.commit()
+
+    row = conn.execute(
+        "SELECT model_snapshot, response_fingerprint, requalify_on_drift, drift_fingerprint"
+        " FROM oracle_verdicts WHERE verdict_id = 'mint-pinned'"
+    ).fetchone()
+    assert row is not None
+    assert row[0] == model
+    assert row[3] == pin.drift_fingerprint
 
 
 def test_mint_via_ingest_pins_model_snapshot(conn: sqlite3.Connection, skill_dir: Path) -> None:
@@ -170,28 +230,8 @@ def test_historical_verdict_may_lack_model_snapshot(conn: sqlite3.Connection) ->
     _seed_parents(conn)
 
     # Direct repository insert of a historical-shaped write (no pin fields).
-    insert_oracle_verdict(
-        conn,
-        OracleVerdictWrite(
-            verdict_id="historical-v1",
-            run_id="run1",
-            clause_id="cl1",
-            axis="verbosity",
-            comparison="full_vs_ablated",
-            sample_a_id="sa",
-            sample_b_id="sb",
-            observation=1.0,
-            oracle_tier=1,
-            metric_id="m1",
-            metric_version="1.0.0",
-            judge_id=None,
-            calibration_event_id=None,
-            position_swap_agreement=None,
-            admissibility_state="admissible",
-            inadmissibility_reason=None,
-            written_at=_TS,
-        ),
-    )
+    # Raw insert_oracle_verdict remains the historical/reconciler path (#81 AC).
+    insert_oracle_verdict(conn, _bare_verdict(verdict_id="historical-v1"))
     conn.commit()
 
     row = conn.execute(
