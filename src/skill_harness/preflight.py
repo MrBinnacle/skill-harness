@@ -14,6 +14,7 @@ https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Final, Literal
@@ -78,6 +79,14 @@ class ArtifactAuditReport(BaseModel):
     standing_cost_calibrated: int | None
     standing_cost_calibration_factor: float
     standing_cost_calibration_range: tuple[float, float]
+    # Fired cost: body tokens charged when the skill runs. Always measured when
+    # the artifact parses (empty body is a hard parser error, not a zero).
+    fired_cost_raw: int | None
+    fired_cost_calibrated: int | None
+    # Aux cost: other documentation beside the skill (progressive disclosure).
+    # Real zero when none; None only when an aux file cannot be read as text.
+    aux_cost_raw: int | None
+    aux_cost_calibrated: int | None
 
     @property
     def warn_count(self) -> int:
@@ -319,6 +328,101 @@ def _compute_standing_cost(
 
 
 # ---------------------------------------------------------------------------
+# Fired cost (mechanical — body tokens when the skill actually runs)
+# ---------------------------------------------------------------------------
+
+
+def _compute_fired_cost(parsed: ParsedSkill) -> tuple[int, int]:
+    """Return (raw, calibrated) cl100k token counts for the skill body."""
+    from skill_harness.oracles.tier1.verbosity import count_tokens
+
+    raw = count_tokens(parsed.body)
+    return raw, round(raw * STANDING_COST_CALIBRATION_FACTOR)
+
+
+# ---------------------------------------------------------------------------
+# Aux cost (mechanical — progressive-disclosure docs beside the skill)
+# ---------------------------------------------------------------------------
+
+# Documentation suffixes counted as aux. Scripts/binaries are not documentation.
+_AUX_DOC_SUFFIXES: Final[frozenset[str]] = frozenset({".md", ".markdown", ".txt", ".rst"})
+
+
+def _enumerate_aux_doc_files(skill_path: Path) -> list[Path]:
+    """List documentation files in the skill directory, excluding the skill file.
+
+    Resolves the skill path first so a skill directory reached via symlink is
+    entered once. Walk does not follow symlinks outward; each real file is
+    counted at most once.
+    """
+    skill_resolved = skill_path.resolve()
+    root = skill_resolved.parent
+    seen: set[Path] = set()
+    found: list[Path] = []
+
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+        # Do not descend into symlinked subdirectories (outward or cross-linked).
+        dirnames[:] = [d for d in dirnames if not (Path(dirpath) / d).is_symlink()]
+        for name in filenames:
+            candidate = Path(dirpath) / name
+            if candidate.suffix.lower() not in _AUX_DOC_SUFFIXES:
+                continue
+            if candidate.is_symlink():
+                # Symlink file: only count if the target stays inside the skill dir.
+                try:
+                    real = candidate.resolve()
+                except OSError:
+                    continue
+                try:
+                    real.relative_to(root)
+                except ValueError:
+                    continue
+            else:
+                if not candidate.is_file():
+                    continue
+                real = candidate.resolve()
+            if real == skill_resolved:
+                continue
+            if real in seen:
+                continue
+            seen.add(real)
+            found.append(real)
+
+    return sorted(found)
+
+
+def _compute_aux_cost(
+    skill_path: Path,
+) -> tuple[int | None, int | None, list[AuditFinding]]:
+    """Return (raw, calibrated, findings) for progressive-disclosure aux docs.
+
+    A skill with no aux documentation reports raw/calibrated 0 (a real zero).
+    Unreadable aux text refuses the number entirely.
+    """
+    from skill_harness.oracles.tier1.verbosity import count_tokens
+
+    findings: list[AuditFinding] = []
+    total = 0
+    for doc in _enumerate_aux_doc_files(skill_path):
+        try:
+            text = doc.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            findings.append(
+                AuditFinding(
+                    level="warn",
+                    code="aux-cost-unreadable",
+                    message=f"aux documentation file {doc.name!r} could not be read "
+                    f"as UTF-8 text ({exc}) — aux cost UNMEASURED "
+                    "(no number; a silent skip would understate progressive-disclosure tax)",
+                )
+            )
+            return None, None, findings
+        total += count_tokens(text)
+
+    return total, round(total * STANDING_COST_CALIBRATION_FACTOR), findings
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -332,11 +436,14 @@ def audit_skill_artifact(path: Path) -> ArtifactAuditReport:
     """
     parsed = parse_skill_file(path)
     standing_raw, standing_cal, standing_findings = _compute_standing_cost(parsed)
+    fired_raw, fired_cal = _compute_fired_cost(parsed)
+    aux_raw, aux_cal, aux_findings = _compute_aux_cost(path)
     findings = [
         *_check_name(parsed),
         *_check_description(parsed),
         *_check_body(parsed),
         *standing_findings,
+        *aux_findings,
     ]
 
     # Evaluability preflight: the authoritative list of mechanically scorable
@@ -359,4 +466,8 @@ def audit_skill_artifact(path: Path) -> ArtifactAuditReport:
         standing_cost_calibrated=standing_cal,
         standing_cost_calibration_factor=STANDING_COST_CALIBRATION_FACTOR,
         standing_cost_calibration_range=STANDING_COST_CALIBRATION_RANGE,
+        fired_cost_raw=fired_raw,
+        fired_cost_calibrated=fired_cal,
+        aux_cost_raw=aux_raw,
+        aux_cost_calibrated=aux_cal,
     )

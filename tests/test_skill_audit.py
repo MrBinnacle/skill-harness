@@ -354,3 +354,221 @@ def test_standing_cost_deterministic(tmp_path: Path) -> None:
     b = CliRunner().invoke(cli, ["skill", "audit", str(path)])
     assert a.exit_code == 0 and b.exit_code == 0
     assert a.output == b.output
+
+
+# ---------------------------------------------------------------------------
+# Fired cost + aux cost (mechanical; body vs progressive-disclosure docs)
+# ---------------------------------------------------------------------------
+
+
+def test_fired_cost_from_skill_body(tmp_path: Path) -> None:
+    """Fired cost is cl100k tokens of the skill body (not frontmatter)."""
+    from skill_harness.oracles.tier1.verbosity import count_tokens
+    from skill_harness.preflight import STANDING_COST_CALIBRATION_FACTOR
+
+    report = audit_skill_artifact(write_skill(tmp_path, GOOD_SKILL))
+    # Body after frontmatter close (parser keeps leading newline).
+    body = "\n# PDF Processing\n\nUse pdfplumber for text extraction from `scripts/helper.py`.\n"
+    expected_raw = count_tokens(body)
+    assert report.fired_cost_raw == expected_raw
+    assert report.fired_cost_calibrated == round(expected_raw * STANDING_COST_CALIBRATION_FACTOR)
+    assert report.fired_cost_raw is not None
+    # Distinct from standing: body tokens ≠ name+description tokens.
+    assert report.fired_cost_raw != report.standing_cost_raw
+
+
+def test_aux_cost_zero_when_no_aux_files(tmp_path: Path) -> None:
+    """No sibling documentation → real zero, not missing/error."""
+    report = audit_skill_artifact(write_skill(tmp_path, GOOD_SKILL))
+    assert report.aux_cost_raw == 0
+    assert report.aux_cost_calibrated == 0
+
+
+def test_aux_cost_counts_sibling_documentation(tmp_path: Path) -> None:
+    """Aux cost sums other documentation files beside the skill file."""
+    from skill_harness.oracles.tier1.verbosity import count_tokens
+    from skill_harness.preflight import STANDING_COST_CALIBRATION_FACTOR
+
+    skill_dir = tmp_path / "my-skill"
+    skill_dir.mkdir()
+    write_skill(skill_dir, GOOD_SKILL)
+    aux_a = "AAA reference material for progressive disclosure.\n"
+    aux_b = "BBB deeper notes the body may point the model at.\n"
+    (skill_dir / "REFERENCE.md").write_text(aux_a, encoding="utf-8")
+    (skill_dir / "notes.txt").write_text(aux_b, encoding="utf-8")
+    # Non-documentation must not contribute.
+    (skill_dir / "helper.py").write_text("print('not docs')\n", encoding="utf-8")
+
+    report = audit_skill_artifact(skill_dir / "SKILL.md")
+    expected_raw = count_tokens(aux_a) + count_tokens(aux_b)
+    assert report.aux_cost_raw == expected_raw
+    assert report.aux_cost_calibrated == round(expected_raw * STANDING_COST_CALIBRATION_FACTOR)
+
+
+def test_aux_cost_skill_dir_via_symlink_counted_once(tmp_path: Path) -> None:
+    """Skill directory reached through a symlink is counted once (no double-count)."""
+    from skill_harness.oracles.tier1.verbosity import count_tokens
+
+    real_dir = tmp_path / "real-skill"
+    real_dir.mkdir()
+    write_skill(real_dir, GOOD_SKILL)
+    aux_text = "Unique aux payload that must not be double-counted.\n"
+    (real_dir / "EXTRA.md").write_text(aux_text, encoding="utf-8")
+
+    link_dir = tmp_path / "linked-skill"
+    link_dir.symlink_to(real_dir, target_is_directory=True)
+
+    via_link = audit_skill_artifact(link_dir / "SKILL.md")
+    via_real = audit_skill_artifact(real_dir / "SKILL.md")
+    expected = count_tokens(aux_text)
+    assert via_link.aux_cost_raw == expected
+    assert via_real.aux_cost_raw == expected
+    assert via_link.aux_cost_raw == via_real.aux_cost_raw
+
+
+def test_aux_cost_does_not_follow_symlinks_outward(tmp_path: Path) -> None:
+    """Outward symlinks from the skill dir must not pull in foreign docs."""
+    from skill_harness.oracles.tier1.verbosity import count_tokens
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    foreign = "FOREIGN documentation that must not be counted.\n"
+    (outside / "FOREIGN.md").write_text(foreign, encoding="utf-8")
+
+    skill_dir = tmp_path / "scoped-skill"
+    skill_dir.mkdir()
+    write_skill(skill_dir, GOOD_SKILL)
+    local = "Local aux only.\n"
+    (skill_dir / "LOCAL.md").write_text(local, encoding="utf-8")
+    (skill_dir / "escape.md").symlink_to(outside / "FOREIGN.md")
+    # Symlinked subdirectory pointing outside — must not be walked into.
+    (skill_dir / "other-pkg").symlink_to(outside, target_is_directory=True)
+
+    report = audit_skill_artifact(skill_dir / "SKILL.md")
+    assert report.aux_cost_raw == count_tokens(local)
+
+
+def test_costs_deliberately_different_sizes_not_swappable(tmp_path: Path) -> None:
+    """Description, body, and aux are sized so swapping any two figures fails."""
+    from skill_harness.oracles.tier1.verbosity import count_tokens
+    from skill_harness.preflight import STANDING_COST_CALIBRATION_FACTOR
+
+    # Standing (name+desc) small, body medium, aux large — three distinct bands.
+    name = "sz-skill"
+    desc = "Tiny desc. Use when sizing."  # short
+    body = ("BODY-MED " * 40).strip() + "\n"  # medium
+    aux = ("AUX-LARGE " * 200).strip() + "\n"  # large
+
+    skill_dir = tmp_path / "sized"
+    skill_dir.mkdir()
+    content = f"---\nname: {name}\ndescription: {desc}\n---\n\n{body}"
+    write_skill(skill_dir, content)
+    (skill_dir / "BIG.md").write_text(aux, encoding="utf-8")
+
+    report = audit_skill_artifact(skill_dir / "SKILL.md")
+    standing = count_tokens(name) + count_tokens(desc)
+    # Parser body includes the blank line after ---.
+    fired = count_tokens("\n" + body)
+    aux_raw = count_tokens(aux)
+
+    assert report.standing_cost_raw == standing
+    assert report.fired_cost_raw == fired
+    assert report.aux_cost_raw == aux_raw
+    # Strict inequality bands — any pairwise swap fails.
+    assert standing < fired < aux_raw
+    assert report.standing_cost_calibrated == round(standing * STANDING_COST_CALIBRATION_FACTOR)
+    assert report.fired_cost_calibrated == round(fired * STANDING_COST_CALIBRATION_FACTOR)
+    assert report.aux_cost_calibrated == round(aux_raw * STANDING_COST_CALIBRATION_FACTOR)
+
+
+def test_inversion_human_only_large_body_vs_invocable_small_body(tmp_path: Path) -> None:
+    """Standing-cost order is the reverse of body-size order (size ≠ standing cost).
+
+    Human-only skills pay zero standing tax regardless of body size; a tiny
+    model-invocable skill still pays standing cost on its listing line.
+    """
+    large_body = "# Human-only manual\n\n" + ("paragraph of guidance\n" * 80)
+    human = (
+        "---\n"
+        "name: big-manual\n"
+        "description: Operator manual. Use when invoked by hand only.\n"
+        "disable-model-invocation: true\n"
+        "---\n"
+        f"{large_body}"
+    )
+    small_body = "# Tiny\n\nGo.\n"
+    invocable = (
+        "---\n"
+        "name: tiny-auto\n"
+        "description: Small auto skill with a longer listing line for discovery. "
+        "Use when the model should pick this up automatically on matching tasks.\n"
+        "---\n"
+        f"{small_body}"
+    )
+
+    human_dir = tmp_path / "human"
+    inv_dir = tmp_path / "inv"
+    human_dir.mkdir()
+    inv_dir.mkdir()
+    human_report = audit_skill_artifact(write_skill(human_dir, human))
+    inv_report = audit_skill_artifact(write_skill(inv_dir, invocable))
+
+    assert human_report.standing_cost_raw == 0
+    assert inv_report.standing_cost_raw is not None and inv_report.standing_cost_raw > 0
+    assert human_report.fired_cost_raw is not None and inv_report.fired_cost_raw is not None
+    assert human_report.fired_cost_raw > inv_report.fired_cost_raw
+    # The inversion: larger body, smaller standing cost.
+    assert human_report.standing_cost_raw < inv_report.standing_cost_raw
+    assert human_report.fired_cost_raw > inv_report.fired_cost_raw
+
+
+def test_cli_three_costs_named_in_evaluability_block(tmp_path: Path) -> None:
+    path = write_skill(tmp_path, GOOD_SKILL)
+    result = CliRunner().invoke(cli, ["skill", "audit", str(path)])
+    assert result.exit_code == 0, result.output
+    out = result.output
+    eval_idx = out.lower().index("evaluability preflight")
+    section = out[eval_idx:].lower()
+    assert "standing cost" in section
+    assert "fired cost" in section
+    assert "aux cost" in section
+    # No combined size figure.
+    assert "total cost" not in section
+    assert "combined size" not in section
+    assert "body size" not in section
+    for label in ("standing cost", "fired cost", "aux cost"):
+        idx = section.index(label)
+        chunk = section[idx : idx + 160]
+        assert "mechanical" in chunk
+        assert "raw" in chunk
+        assert "calibrat" in chunk
+        assert "1.128" in chunk
+
+
+def test_cli_aux_zero_visible(tmp_path: Path) -> None:
+    path = write_skill(tmp_path, GOOD_SKILL)
+    result = CliRunner().invoke(cli, ["skill", "audit", str(path)])
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "aux cost" in out.lower()
+    # Zero aux must be a printed figure (report field is 0; CLI shows it).
+    aux_line = next(line for line in out.splitlines() if "aux cost" in line.lower())
+    assert re.search(r"raw\s+0\b", aux_line, re.IGNORECASE) or re.search(
+        r"\b0\s+tokens\b", aux_line, re.IGNORECASE
+    )
+
+
+def test_fired_and_aux_offline_deterministic(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "det"
+    skill_dir.mkdir()
+    write_skill(skill_dir, GOOD_SKILL)
+    (skill_dir / "REF.md").write_text("Deterministic aux text.\n", encoding="utf-8")
+    path = skill_dir / "SKILL.md"
+    a = audit_skill_artifact(path)
+    b = audit_skill_artifact(path)
+    assert a.fired_cost_raw == b.fired_cost_raw
+    assert a.aux_cost_raw == b.aux_cost_raw
+    ca = CliRunner().invoke(cli, ["skill", "audit", str(path)])
+    cb = CliRunner().invoke(cli, ["skill", "audit", str(path)])
+    assert ca.exit_code == 0 and cb.exit_code == 0
+    assert ca.output == cb.output

@@ -269,23 +269,51 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
         "  Judge-graded axes: require a calibrated (judge, axis) pair — none exists"
         " in a fresh install → UNMEASURED until you run `calibrate`."
     )
-    # Standing cost sits beside evaluability — never a standalone quoteable block.
-    # Mechanical only: arithmetic on frontmatter text, not a measure of skill effect.
+    # Cost figures sit beside evaluability — never a standalone quoteable block.
+    # Mechanical only: arithmetic on text, not a measure of skill effect.
+    lo, hi = report.standing_cost_calibration_range
+    factor = report.standing_cost_calibration_factor
     if report.standing_cost_raw is None:
+        # Hyphenated label so this line is not mistaken for a measured
+        # "standing cost … raw N" figure when other costs print raw counts.
         _console.print(
-            "  Standing cost (mechanical): [yellow]UNMEASURED[/] — frontmatter could not"
+            "  Standing-cost (mechanical): [yellow]UNMEASURED[/] — frontmatter could not"
             " be parsed well enough to count the router listing line"
             " (see standing-cost-unparseable)."
         )
     else:
-        lo, hi = report.standing_cost_calibration_range
         _console.print(
             f"  Standing cost (mechanical): raw {report.standing_cost_raw} tokens · "
             f"calibrated {report.standing_cost_calibrated} tokens "
-            f"(x{report.standing_cost_calibration_factor}, "
+            f"(x{factor}, "
             f"measured range {lo}-{hi}) -- "
             "router listing line (name + description) charged every turn; "
             "0 when disable-model-invocation keeps the skill unlisted."
+        )
+    if report.fired_cost_raw is None:
+        _console.print(
+            "  Fired-cost (mechanical): [yellow]UNMEASURED[/] — skill body could not be tokenized."
+        )
+    else:
+        _console.print(
+            f"  Fired cost (mechanical): raw {report.fired_cost_raw} tokens · "
+            f"calibrated {report.fired_cost_calibrated} tokens "
+            f"(x{factor}, measured range {lo}-{hi}) -- "
+            "skill body charged when the skill runs and its body is read."
+        )
+    if report.aux_cost_raw is None:
+        _console.print(
+            "  Aux-cost (mechanical): [yellow]UNMEASURED[/] — progressive-disclosure"
+            " documentation beside the skill could not be read"
+            " (see aux-cost-unreadable)."
+        )
+    else:
+        _console.print(
+            f"  Aux cost (mechanical): raw {report.aux_cost_raw} tokens · "
+            f"calibrated {report.aux_cost_calibrated} tokens "
+            f"(x{factor}, measured range {lo}-{hi}) -- "
+            "other documentation files beside the skill (progressive disclosure); "
+            "0 when the skill directory has none."
         )
     _console.print(
         f"\nSummary: {report.pass_count} pass · {report.warn_count} warn — "
