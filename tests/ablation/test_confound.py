@@ -15,12 +15,12 @@ from __future__ import annotations
 from skill_harness.ablation.confound import (
     K_THRESHOLD,
     N_NULL_FLOOR,
-    MetricFn,
     NullAccumulator,
     check_operator_length_tolerance,
     delta_to_observation,
     detect_confounds,
 )
+from skill_harness.oracles.tier1.axis_registry import MetricFn
 
 # ---------------------------------------------------------------------------
 # Fake metric scorer for tests (deterministic, no wordlist needed)

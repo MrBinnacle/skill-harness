@@ -739,6 +739,34 @@ class TestTier2Unmeasured:
         )
         self._assert_unmeasured_no_evidence(ev, run_id, results[0])
 
+    def test_whitespace_padded_registered_axis_is_unmeasured_not_a_crash(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        """``' verbosity '`` must land UNMEASURED, the same as any unknown axis (#117).
+
+        The gate and ``_score_primary_axis`` look the axis up the same raw way, so a
+        padded name fails both. Regression guard: a normalising gate (a whitespace
+        strip was tried and reverted during #117 review) admits the clause, the raw
+        scorer lookup then misses, and ``_score_primary_axis`` raises a bare
+        ``RuntimeError`` — which the sampling loop catches only as
+        ``_ScorerCrashError``, so it escapes and aborts the whole run. Silent
+        UNMEASURED is the correct, fail-closed outcome; an aborted run is not.
+        """
+        ev, rt = seeded_db_pair
+        clause = _make_clause("clause-padded", "Be brief.", 0, " verbosity ")
+        _seed_clause(ev, clause)
+
+        runner, _ = _make_runner(ev, rt)
+        run_id = "padded-axis-run"
+        results = runner.run_ablation(
+            skill_id=_SKILL_ID,
+            clauses=[clause],
+            user_message=_USER_MSG,
+            max_usd=10.0,
+            run_id=run_id,
+        )
+        self._assert_unmeasured_no_evidence(ev, run_id, results[0])
+
 
 # ---------------------------------------------------------------------------
 # 3. Confound threshold trigger + A46 write-side assertion

@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`skill_harness.oracles.tier1.axis_registry` — single source of truth for the
+  Tier-1 axis names, and a fail-closed classifier for proposed axes** (#117,
+  parent #102). The axis names existed twice — as `AXIS_*` constants in
+  `ablation/confound.py` and as hand-typed prose in the extractor system prompt
+  — and the copies had already drifted (the prompt omitted an axis present in
+  `oracles/tier1/`). `TIER1_AXES` is now the only place the names are written
+  down: `get_tier1_scorers()` zips its scorer tuple against `TIER1_AXIS_NAMES`
+  (`strict=True`, so a scorer added without its registry entry errors), and the
+  extractor renders its axis catalog from the registry at import time rather
+  than listing names in the prompt string. A test parses the names back out of
+  the finished prompt and asserts equality with the registry, so the two cannot
+  separate again. `classify_axis(axis)` is the containment boundary the model's
+  proposals pass through: total over `str`, never raises, and returns
+  `AxisScoreability.UNSCOREABLE` for anything not registered. Matching is plain
+  exact comparison with **no** normalisation — not even a whitespace strip —
+  because `AblationRunner._is_tier1_measurable`, `_score_primary_axis` and
+  `detect_confounds` all compare the axis raw; a gate that normalised would
+  admit clauses the scorer lookup then missed, converting a safe UNMEASURED into
+  an uncaught `RuntimeError` mid-run (caught in review, regression-tested in
+  `tests/ablation/test_runner.py`). Normalising once at the extractor boundary is
+  the correct fix and is a named follow-up, not done here.
+  `oracles/tier1/end_state_categorical.py` is reconciled as a documented
+  exclusion: `score_end_state` is not a `(text) -> float` metric, so it cannot
+  enter ablation's Full-vs-Ablated text-delta path.
 - **Guarded new-mint entrypoint for oracle verdicts** (#81, follow-up to #75).
   `mint_oracle_verdict(conn, verdict, *, pin: ArticleFingerprint)` is the single
   structural gate for newly-minted rows — pin columns are taken from the
@@ -240,6 +264,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   schema change. Normative caveat added to the PRD `freeze` section: a paired
   frozen case is the Null half of the winning evidence re-encoded, not
   independent falsification.
+
+### Removed
+- **`skill_harness.ablation.confound.AXIS_VERBOSITY`, `AXIS_HEDGE_INDEX`,
+  `AXIS_STRUCTURE_SCORE`, `AXIS_COMPLIANCE_PROXY`,
+  `AXIS_CITATION_PRESENCE_PER_FLAG`, and `MetricFn`** (#117). Breaking for any
+  importer; acceptable pre-1.0, and no in-tree caller survived (`test_confound.py`
+  moved its `MetricFn` import). The axis names now live only in
+  `oracles.tier1.axis_registry.TIER1_AXES` / `TIER1_AXIS_NAMES`, and `MetricFn`
+  is importable from that module. `get_default_tier1_scorers()` is unchanged and
+  is still the ablation-layer way to resolve the default scorer set.
 
 ### Fixed
 - **Paired both-PASS-tie freeze hazard.** Previously a paired verdict with
