@@ -32,6 +32,7 @@ from skill_harness.aggregation.status import (
 
 def make_input(
     *,
+    axis: str = "verbosity",
     admissible_verdict_count: int = 0,
     total_verdict_count: int = 0,
     confounded_verdict_count: int = 0,
@@ -43,6 +44,7 @@ def make_input(
     bh_fdr_pass: bool | None = None,
 ) -> ClauseStatusInput:
     return ClauseStatusInput(
+        axis=axis,
         admissible_verdict_count=admissible_verdict_count,
         total_verdict_count=total_verdict_count,
         confounded_verdict_count=confounded_verdict_count,
@@ -424,6 +426,7 @@ class TestEnumValues:
         assert UnmeasuredSubReason.FALSIFYING_CASE_MISSING.value == "falsifying_case_missing"
         assert UnmeasuredSubReason.BUDGET_EXHAUSTED.value == "budget_exhausted"
         assert UnmeasuredSubReason.FALSIFYING_CASE_STALE.value == "falsifying_case_stale"
+        assert UnmeasuredSubReason.MECHANICAL_VACUOUS.value == "mechanical_vacuous"
 
 
 # ---------------------------------------------------------------------------
@@ -485,3 +488,108 @@ def test_single_inadmissible_verdict_gives_inadmissible_subreason() -> None:
     assert sub == UnmeasuredSubReason.INADMISSIBLE, (
         f"Expected INADMISSIBLE with 1 inadmissible verdict, got {sub!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Rule 0: axis not in Tier-1 registry → UNMEASURED(mechanical_vacuous)
+# ---------------------------------------------------------------------------
+
+
+class TestRule0MechanicalVacuous:
+    """Five axis shapes (acceptance #122); each is its own case."""
+
+    def test_registered_axis_not_mechanical_vacuous(self) -> None:
+        """(a) registered axis e.g. 'verbosity' — must NOT be MECHANICAL_VACUOUS."""
+        inp = make_input(
+            axis="verbosity",
+            admissible_verdict_count=0,
+            total_verdict_count=0,
+        )
+        status, sub = derive_clause_status(inp)
+        assert status == ClauseStatus.UNMEASURED
+        assert sub == UnmeasuredSubReason.NO_DATA
+
+    def test_unregistered_axis_is_mechanical_vacuous(self) -> None:
+        """(b) unregistered axis e.g. 'formality' — must be MECHANICAL_VACUOUS."""
+        inp = make_input(
+            axis="formality",
+            admissible_verdict_count=0,
+            total_verdict_count=0,
+        )
+        status, sub = derive_clause_status(inp)
+        assert status == ClauseStatus.UNMEASURED
+        assert sub == UnmeasuredSubReason.MECHANICAL_VACUOUS
+
+    def test_empty_string_is_mechanical_vacuous(self) -> None:
+        """(c) empty string — must be MECHANICAL_VACUOUS."""
+        inp = make_input(axis="")
+        status, sub = derive_clause_status(inp)
+        assert status == ClauseStatus.UNMEASURED
+        assert sub == UnmeasuredSubReason.MECHANICAL_VACUOUS
+
+    def test_case_mismatch_is_mechanical_vacuous(self) -> None:
+        """(d) case-mismatch near-miss 'Verbosity' — case-sensitive fail-closed."""
+        inp = make_input(axis="Verbosity")
+        status, sub = derive_clause_status(inp)
+        assert status == ClauseStatus.UNMEASURED
+        assert sub == UnmeasuredSubReason.MECHANICAL_VACUOUS
+
+    def test_padded_near_miss_is_mechanical_vacuous(self) -> None:
+        """(e) padded near-miss ' verbosity' — no strip, fail-closed."""
+        inp = make_input(axis=" verbosity")
+        status, sub = derive_clause_status(inp)
+        assert status == ClauseStatus.UNMEASURED
+        assert sub == UnmeasuredSubReason.MECHANICAL_VACUOUS
+
+    def test_rule0_precedes_no_data(self) -> None:
+        """Rule 0 fires before NO_DATA even when there are zero verdicts."""
+        inp = make_input(
+            axis="formality",
+            admissible_verdict_count=0,
+            total_verdict_count=0,
+        )
+        _status, sub = derive_clause_status(inp)
+        assert sub == UnmeasuredSubReason.MECHANICAL_VACUOUS
+
+    def test_rule0_precedes_inadmissible(self) -> None:
+        """Rule 0 fires before INADMISSIBLE when all verdicts are inadmissible."""
+        inp = make_input(
+            axis="formality",
+            admissible_verdict_count=0,
+            total_verdict_count=5,
+            confounded_verdict_count=0,
+        )
+        _status, sub = derive_clause_status(inp)
+        assert sub == UnmeasuredSubReason.MECHANICAL_VACUOUS
+
+    def test_testable_and_unscoreable_keeps_frozen_case_count(self) -> None:
+        """Constructibly testable + mechanically unscoreable: frozen count untouched.
+
+        Status is UNMEASURED(mechanical_vacuous); current_frozen_case_count is an
+        input and derive_clause_status is pure — it must not clear or rewrite it.
+        """
+        frozen = 2
+        inp = make_input(
+            axis="formality",
+            admissible_verdict_count=10,
+            total_verdict_count=10,
+            n_verdicts=10,
+            p_win_gt_threshold=0.97,
+            current_frozen_case_count=frozen,
+        )
+        status, sub = derive_clause_status(inp)
+        assert status == ClauseStatus.UNMEASURED
+        assert sub == UnmeasuredSubReason.MECHANICAL_VACUOUS
+        assert inp.current_frozen_case_count == frozen
+
+
+def test_extracted_clause_vacuity_flag_literal_unchanged() -> None:
+    """ExtractedClause.vacuity_flag still has exactly two members; no mechanical_vacuous."""
+    from typing import get_args
+
+    from skill_harness.extractor.models import ExtractedClause
+
+    members = get_args(ExtractedClause.model_fields["vacuity_flag"].annotation)
+    assert members == ("none", "semantic_vacuous_pending_review")
+    assert len(members) == 2
+    assert "mechanical_vacuous" not in members

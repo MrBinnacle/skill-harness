@@ -1223,6 +1223,76 @@ class TestCoverage:
             ev.close()
             rt.close()
 
+    def test_unscoreable_axis_remains_in_coverage_denominator(self, tmp_path: Path) -> None:
+        """Unregistered axis stays in total_clause_count; status is mechanical_vacuous.
+
+        2 clauses: one scoreable (verbosity) with a frozen case, one unscoreable
+        (formality). Coverage denominator is 2; formality reports
+        UNMEASURED(mechanical_vacuous) and is not filtered out of the total.
+        """
+        ev, rt = open_both(tmp_path)
+        try:
+            insert_skill(ev)
+            insert_clause(ev, clause_id="c-scoreable", axis="verbosity", clause_index=0)
+            insert_clause(ev, clause_id="c-unscoreable", axis="formality", clause_index=1)
+            insert_metric_version(ev, metric_id="verbosity")
+            config = json.dumps(
+                {
+                    "run_id": RUN_ID,
+                    "skill_id": SKILL_ID,
+                    "clauses": [
+                        {"clause_id": "c-scoreable", "axis": "verbosity"},
+                        {"clause_id": "c-unscoreable", "axis": "formality"},
+                    ],
+                    "subject_model": "model",
+                    "user_message": "test",
+                    "family_size": 2,
+                    "stopping_reasons": {},
+                },
+                sort_keys=True,
+            )
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES (?, ?, 'ablation', ?, ?, ?)",
+                (RUN_ID, SKILL_ID, config, _TS, _TS2),
+            )
+            insert_run_progress(rt, state="completed")
+            insert_frozen_case(ev, "fc-scoreable", clause_id="c-scoreable", axis="verbosity")
+            insert_frozen_case(
+                ev,
+                "fc-unscoreable",
+                clause_id="c-unscoreable",
+                axis="formality",
+                metric_id="verbosity",
+            )
+
+            report = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+
+            assert len(report.clauses) == 2
+            # Both clauses remain in the coverage denominator (not filtered out).
+            assert report.coverage == 1.0  # both have frozen cases → 2/2
+            by_id = {c.clause_id: c for c in report.clauses}
+            unscoreable = by_id["c-unscoreable"]
+            assert unscoreable.status == "UNMEASURED"
+            assert unscoreable.sub_reason == "mechanical_vacuous"
+            # Frozen case still present in DB (not cleared by status derivation).
+            frozen_left = ev.execute(
+                "SELECT COUNT(*) FROM frozen_cases"
+                " WHERE clause_id = 'c-unscoreable' AND axis = 'formality'"
+            ).fetchone()[0]
+            assert frozen_left >= 1
+            assert unscoreable.frozen_case_count_at_current_metric_version >= 1
+        finally:
+            ev.close()
+            rt.close()
+
 
 # ---------------------------------------------------------------------------
 # Tests: JSON byte stability end-to-end
@@ -1382,9 +1452,10 @@ class TestMultiClauseSkill:
         try:
             insert_skill(ev)
             insert_clause(ev, clause_id="c1", clause_index=0)
-            insert_clause(ev, clause_id="c2", axis="clarity", clause_index=1)
+            # Registered Tier-1 axis with no verdicts → no_data (not mechanical_vacuous).
+            insert_clause(ev, clause_id="c2", axis="hedge_index", clause_index=1)
             insert_metric_version(ev, metric_id="verbosity")
-            insert_metric_version(ev, metric_id="clarity")
+            insert_metric_version(ev, metric_id="hedge_index")
 
             config = json.dumps(
                 {
@@ -1392,7 +1463,7 @@ class TestMultiClauseSkill:
                     "skill_id": SKILL_ID,
                     "clauses": [
                         {"clause_id": "c1", "axis": AXIS},
-                        {"clause_id": "c2", "axis": "clarity"},
+                        {"clause_id": "c2", "axis": "hedge_index"},
                     ],
                     "subject_model": "model",
                     "user_message": "test",

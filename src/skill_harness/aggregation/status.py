@@ -4,6 +4,7 @@ Implements `derive_clause_status()` — a pure function that maps clause evidenc
 to a (ClauseStatus, UnmeasuredSubReason | None) pair.
 
 State derivation rules (A57, ordered by priority):
+  0. Axis has no registered Tier-1 mechanical scorer → UNMEASURED(mechanical_vacuous)
   1. No admissible+non-confounded verdicts → UNMEASURED(no_data)
   2. Verdicts exist but ALL confounded → CONFOUNDED
   3. N < N_min (8) → UNMEASURED(underpowered)
@@ -24,11 +25,18 @@ Additional sub-reasons:
 
 The inadmissible and budget_exhausted checks are applied BEFORE the N-count checks
 because they explain WHY there is insufficient admissible evidence.
+
+Rule 0 is load-bearing and must come first: if no registered scorer can ever
+measure the axis, NO_DATA is a false explanation (it implies more sampling would
+resolve the clause). Scoreability is exact membership in TIER1_AXIS_NAMES via
+classify_axis — never fuzzy, never case-insensitive, never a Tier-2 judge.
 """
 
 from __future__ import annotations
 
 from enum import StrEnum
+
+from skill_harness.oracles.tier1.axis_registry import AxisScoreability, classify_axis
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -61,6 +69,14 @@ class UnmeasuredSubReason(StrEnum):
     sample size. Pre-fix this fell through to the generic Rule 8 UNDERPOWERED
     branch with no way to distinguish "not enough evidence yet" from "enough
     evidence, but doesn't survive FDR correction"."""
+    MECHANICAL_VACUOUS = "mechanical_vacuous"
+    """No registered Tier-1 mechanical scorer can see this axis.
+
+    Orthogonal to write-time vacuity_flag: a clause may be constructibly
+    testable (has a falsifying case) and still mechanically unscoreable.
+    Lifetime is registry-dependent — recomputed at aggregation, never frozen
+    onto clauses.vacuity_flag.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +98,9 @@ class ClauseStatusInput:
 
     Attributes
     ----------
+    axis : str
+        Measurement axis for the clause (exact string; matched against TIER1_AXIS_NAMES
+        via classify_axis — no normalisation).
     admissible_verdict_count : int
         Count of rows from admissible_verdicts VIEW for this clause/axis.
     total_verdict_count : int
@@ -112,6 +131,7 @@ class ClauseStatusInput:
     def __init__(
         self,
         *,
+        axis: str,
         admissible_verdict_count: int,
         total_verdict_count: int,
         confounded_verdict_count: int,
@@ -122,6 +142,7 @@ class ClauseStatusInput:
         run_state: str | None = None,
         bh_fdr_pass: bool | None = None,
     ) -> None:
+        self.axis = axis
         self.admissible_verdict_count = admissible_verdict_count
         self.total_verdict_count = total_verdict_count
         self.confounded_verdict_count = confounded_verdict_count
@@ -146,6 +167,10 @@ def derive_clause_status(
     Implements A57 rules in priority order.  The function is pure — no DB
     access, no side effects.  All queries must be pre-computed by the engine.
     """
+    # Rule 0: axis not mechanically scoreable by any registered Tier-1 scorer
+    if classify_axis(inp.axis) is AxisScoreability.UNSCOREABLE:
+        return ClauseStatus.UNMEASURED, UnmeasuredSubReason.MECHANICAL_VACUOUS
+
     # Rule 1: No admissible+non-confounded verdicts at all
     if inp.admissible_verdict_count == 0:
         # Distinguish: were there ANY verdicts (just all inadmissible)?

@@ -376,6 +376,7 @@ def aggregate_skill(
 
         # Build state machine input
         inp = ClauseStatusInput(
+            axis=axis,
             admissible_verdict_count=admissible_count,
             total_verdict_count=total,
             confounded_verdict_count=confounded,
