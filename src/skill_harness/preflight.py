@@ -333,10 +333,20 @@ def _compute_standing_cost(
 
 
 def _compute_fired_cost(parsed: ParsedSkill) -> tuple[int, int]:
-    """Return (raw, calibrated) cl100k token counts for the skill body."""
+    """Return (raw, calibrated) cl100k token counts for the skill body.
+
+    Line endings are normalised first. The body is sliced from raw decoded
+    bytes, so a CRLF checkout keeps its ``\\r`` characters and the tokenizer
+    charges for them — the same skill would cost more on Windows than on
+    Linux, which makes the figure a property of the checkout rather than of
+    the skill. Frontmatter is already newline-stable (the parser splits it
+    into lines) and aux cost is too (it reads in text mode); this is the one
+    figure sliced from bytes, so it is the one that has to normalise.
+    """
     from skill_harness.oracles.tier1.verbosity import count_tokens
 
-    raw = count_tokens(parsed.body)
+    body = parsed.body.replace("\r\n", "\n").replace("\r", "\n")
+    raw = count_tokens(body)
     return raw, round(raw * STANDING_COST_CALIBRATION_FACTOR)
 
 
