@@ -295,6 +295,8 @@ def _seed_underpowered(
             sample_b_id=sb,
             observation=1.0,
         )
+    # Instantiated frozen case required for aggregation; underpowered still → UNMEASURED.
+    _insert_frozen_case(ev, frozen_case_id="fc-underpowered", clause_id=clause_id, run_id=run_id)
 
 
 # ---------------------------------------------------------------------------

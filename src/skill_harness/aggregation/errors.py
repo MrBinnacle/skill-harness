@@ -18,9 +18,14 @@ class PreconditionError(Exception):
     code : str
         ``"incomplete_runs"`` — one or more runs for skill_id lack completed_at.
         ``"no_completed_runs"`` — no ablation runs with completed_at exist for skill_id.
+        ``"no_clauses"`` — skill has zero authored clauses.
+        ``"no_instantiated_frozen_cases"`` — clauses exist but none has an
+        instantiated failing input in ``frozen_cases`` yet (instrument gap;
+        freeze stage has not produced oracle-bound cases). Not a finding that
+        clauses were checked and none is testable.
     payload : list[str] | None
         When code == "incomplete_runs": list of incomplete run_ids.
-        When code == "no_completed_runs": None.
+        Otherwise: None.
 
     E.3 catches these and emits exit 1 with a user-facing message.
     """
