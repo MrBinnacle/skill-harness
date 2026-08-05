@@ -2624,7 +2624,13 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
 
     Read-only. p0 is DERIVED from admissible screen trials (never stored); each
     skill's Null-arm pass rate maps to KEEP / CUT / CAN'T-TELL-YET via the locked
-    transformative bar. To date every screened skill ceilings (p0=1) → CUT.
+    transformative bar, gated by the skill's registered value_class (#74/#77).
+
+    A ceiling (p0=1) means CUT only for a transformative-lift skill, where it
+    genuinely reads "the model does this unaided." For any other class it means
+    "the trap did not fire in this Null screen" — the wrong instrument for the
+    question — and the verdict is CAN'T-TELL-YET, never CUT. An unclassified
+    skill is treated as not-transformative, so it cannot be false-CUT.
     """
     from skill_harness.aggregation.value_class_registry import value_class_for
     from skill_harness.aggregation.verdict import screen_verdict
