@@ -90,6 +90,25 @@ clause semantics match — an exact match enables automatic mechanical measureme
 # formatting bug in a string nobody type-checks.
 _SYSTEM_PROMPT = _SYSTEM_PROMPT_BODY + _render_axis_catalog() + "\n"
 
+# ⛔ JSON-Schema keywords that strict tool use REJECTS with a 400.
+#
+# Verified live against ``claude-opus-5`` on 2026-08-05, four calls:
+#   no-strict + full schema          -> 200
+#   strict    + full schema          -> 400 "For 'integer' type, property 'minimum'
+#                                            is not supported"
+#   strict    - numeric bounds       -> 200
+#   strict    - length/pattern only  -> 400  (so length keywords are NOT the offender)
+#
+# `minLength` and friends are fine and are deliberately NOT listed here.
+#
+# This is enforced by a structural test rather than by review, because the failure is
+# invisible to every offline check: the extractor's unit tests mock the Anthropic client,
+# so a schema the API rejects still passes lint, mypy --strict and the full CI matrix.
+# The only thing that catches it is walking the schema for banned keys.
+_STRICT_BANNED_KEYWORDS: frozenset[str] = frozenset(
+    {"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"}
+)
+
 # JSON Schema for the extract_clauses tool input.
 _EXTRACT_CLAUSES_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -110,8 +129,11 @@ _EXTRACT_CLAUSES_SCHEMA: dict[str, Any] = {
                 "properties": {
                     "clause_index": {
                         "type": "integer",
-                        "minimum": 0,
-                        "description": "Zero-based authoring-order index.",
+                        # ⛔ NO numeric bounds here. Strict tool use rejects `minimum` /
+                        # `maximum` / `exclusiveMinimum` with a 400 (see _STRICT_BANNED_KEYWORDS).
+                        # The bound is not lost: ExtractedClause.clause_index is
+                        # Annotated[int, Field(ge=0)] and rejects a negative after the call.
+                        "description": "Zero-based authoring-order index. Must be >= 0.",
                     },
                     "clause_text": {
                         "type": "string",
@@ -157,8 +179,10 @@ _EXTRACT_CLAUSES_SCHEMA: dict[str, Any] = {
                             },
                             "min_reproducibility": {
                                 "type": "number",
-                                "exclusiveMinimum": 0.0,
-                                "maximum": 1.0,
+                                # ⛔ NO numeric bounds — see clause_index above. The range is
+                                # enforced by FalsifyingCaseSchema.min_reproducibility, which
+                                # is Annotated[float, Field(gt=0.0, le=1.0)].
+                                "description": "Reproducibility floor in (0.0, 1.0].",
                             },
                         },
                         "additionalProperties": False,
