@@ -63,7 +63,7 @@ from skill_harness.storage.repositories.evidence.metric_versions import (
     insert_metric_version,
 )
 from skill_harness.storage.repositories.evidence.oracle_verdicts import (
-    insert_oracle_verdict,
+    mint_oracle_verdict,
 )
 from skill_harness.storage.repositories.evidence.runs import (
     get_run_by_id,
@@ -540,10 +540,9 @@ def write_paired_evidence(
         null_by_epoch = {s.epoch: s for s in null.samples}
         for epoch in sorted(by_epoch):
             verdict_id = str(uuid.uuid4())
-            # #75: every new mint pins the measured model (ArticleFingerprint).
+            # #75/#81: every new mint goes through the guarded entrypoint.
             pin = _article_fingerprint_for_pair(full_by_epoch[epoch], null_by_epoch[epoch])
-            pin_cols = pin.as_verdict_columns()
-            insert_oracle_verdict(
+            mint_oracle_verdict(
                 conn,
                 OracleVerdictWrite(
                     verdict_id=verdict_id,
@@ -565,11 +564,8 @@ def write_paired_evidence(
                     admissibility_state=admissibility_state,
                     inadmissibility_reason=inadmissibility_reason,
                     written_at=now,
-                    model_snapshot=pin_cols.model_snapshot,
-                    response_fingerprint=pin_cols.response_fingerprint,
-                    requalify_on_drift=pin_cols.requalify_on_drift,
-                    drift_fingerprint=pin_cols.drift_fingerprint,
                 ),
+                pin=pin,
             )
             verdict_ids.append(verdict_id)
 

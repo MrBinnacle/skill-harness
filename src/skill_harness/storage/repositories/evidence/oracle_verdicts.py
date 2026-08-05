@@ -23,6 +23,10 @@ Columns (from migrations/evidence/0001_initial.sql + 0600_model_snapshot.sql):
     requalify_on_drift      INTEGER NOT NULL DEFAULT 0  (0600)
     drift_fingerprint       TEXT  (nullable — 0600; fleet-model drift token)
 
+Write paths (#81):
+    mint_oracle_verdict     — guarded new-mint entrypoint (requires ArticleFingerprint)
+    insert_oracle_verdict   — raw insert for historical / reconciler / fixtures only
+
 A29 — use get_admissible_verdicts() (queries the VIEW) for aggregation;
       use audit_all_verdicts() in skill_harness.audit for auditing (raw table).
 """
@@ -32,11 +36,47 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
+from skill_harness.storage.article_fingerprint import ArticleFingerprint
 from skill_harness.storage.models import OracleVerdictWrite
 
 
+def mint_oracle_verdict(
+    conn: sqlite3.Connection,
+    verdict: OracleVerdictWrite,
+    *,
+    pin: ArticleFingerprint,
+) -> None:
+    """Guarded new-mint entrypoint — requires a valid model pin (#81).
+
+    All newly-minted verdicts MUST go through this function. ``pin`` is an
+    ``ArticleFingerprint`` (primary ``model_snapshot``, or response-fingerprint
+    fallback with ``requalify_on_drift``); construction of an unpinned fingerprint
+    is rejected, so a bare write cannot slip through. Pin columns on ``verdict``
+    are overwritten from ``pin``.
+
+    Historical / reconciler inserts that must remain unpinned (#41 no-retrofit)
+    use ``insert_oracle_verdict`` directly — not this function. The DB layer
+    cannot distinguish new-mint from historical (nullable pin columns), so the
+    structural boundary is this entrypoint, not a NOT NULL/CHECK constraint.
+    """
+    cols = pin.as_verdict_columns()
+    pinned = verdict.model_copy(
+        update={
+            "model_snapshot": cols.model_snapshot,
+            "response_fingerprint": cols.response_fingerprint,
+            "requalify_on_drift": cols.requalify_on_drift,
+            "drift_fingerprint": cols.drift_fingerprint,
+        }
+    )
+    insert_oracle_verdict(conn, pinned)
+
+
 def insert_oracle_verdict(conn: sqlite3.Connection, verdict: OracleVerdictWrite) -> None:
-    """Insert a new oracle_verdict row."""
+    """Insert an oracle_verdict row (raw repository write).
+
+    Reserved for historical / reconciler / test-fixture inserts that may omit
+    pin columns (#41 no-retrofit). New mints MUST use ``mint_oracle_verdict``.
+    """
     conn.execute(
         """
         INSERT INTO oracle_verdicts (

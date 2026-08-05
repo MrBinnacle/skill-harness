@@ -77,7 +77,7 @@ from skill_harness.storage.models import (
     SampleWrite,
 )
 from skill_harness.storage.repositories.evidence.confound_events import insert_confound_event
-from skill_harness.storage.repositories.evidence.oracle_verdicts import insert_oracle_verdict
+from skill_harness.storage.repositories.evidence.oracle_verdicts import mint_oracle_verdict
 from skill_harness.storage.repositories.evidence.runs import complete_run, get_run_by_id, insert_run
 from skill_harness.storage.repositories.evidence.samples import insert_sample
 from skill_harness.storage.repositories.runtime.cost_ledger import insert_cost_ledger_entry
@@ -1203,8 +1203,8 @@ class AblationRunner:
                 f"got full_sample_id={full_sample_id!r}, abl_sample_id={abl_sample_id!r}"
             )
 
-        # #75: every new mint pins the measured model (ArticleFingerprint).
-        pin_cols = ArticleFingerprint(model_snapshot=self._subject_model_id).as_verdict_columns()
+        # #75/#81: every new mint goes through the guarded entrypoint.
+        pin = ArticleFingerprint(model_snapshot=self._subject_model_id)
 
         verdict = OracleVerdictWrite(
             verdict_id=verdict_id,
@@ -1224,10 +1224,6 @@ class AblationRunner:
             admissibility_state=admissibility_state,
             inadmissibility_reason=inadmissibility_reason,
             written_at=now,
-            model_snapshot=pin_cols.model_snapshot,
-            response_fingerprint=pin_cols.response_fingerprint,
-            requalify_on_drift=pin_cols.requalify_on_drift,
-            drift_fingerprint=pin_cols.drift_fingerprint,
         )
 
         with writer_transaction(self._evidence):
@@ -1238,7 +1234,7 @@ class AblationRunner:
                     f"!= ablated_clause_id={clause_id!r}"
                 )
 
-            insert_oracle_verdict(self._evidence, verdict)
+            mint_oracle_verdict(self._evidence, verdict, pin=pin)
 
             # Write confound events in the same transaction (A45: two-table, A47: threshold)
 

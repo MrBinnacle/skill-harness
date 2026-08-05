@@ -368,9 +368,9 @@ class OracleVerdictWrite(BaseModel):
     """Insert shape for evidence.oracle_verdicts.
 
     Model-pin columns (migration 0600 / #75) are optional on the write shape so
-    historical and test fixtures may omit them. New mints MUST supply a pin via
-    ``ArticleFingerprint`` at the mint path — see
-    ``skill_harness.storage.article_fingerprint``.
+    historical and test fixtures may omit them. New mints MUST go through
+    ``mint_oracle_verdict`` with an ``ArticleFingerprint`` (#81) — see
+    ``skill_harness.storage.repositories.evidence.oracle_verdicts``.
     """
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)

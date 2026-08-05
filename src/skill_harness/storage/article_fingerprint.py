@@ -1,4 +1,4 @@
-"""Article fingerprint — model pin required on every newly-minted verdict (#75).
+"""Article fingerprint — model pin required on every newly-minted verdict (#75/#81).
 
 An ``ArticleFingerprint`` pins the model a verdict was measured on so no cell
 floats free of its measuring model. Primary form is ``model_snapshot``; when no
@@ -9,6 +9,10 @@ snapshot exists the fallback is a captured ``response_fingerprint`` plus a
 model (precondition for the board's day-one stale badge). Historical /
 pre-registry rows may lack a pin entirely (#41 no-retrofit) — those yield no
 stale badge from this mechanism.
+
+New mints are structurally gated by ``mint_oracle_verdict`` (requires this
+value object). Raw ``insert_oracle_verdict`` stays open for historical /
+reconciler inserts only (#81).
 """
 
 from __future__ import annotations

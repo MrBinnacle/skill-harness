@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Guarded new-mint entrypoint for oracle verdicts** (#81, follow-up to #75).
+  `mint_oracle_verdict(conn, verdict, *, pin: ArticleFingerprint)` is the single
+  structural gate for newly-minted rows — pin columns are taken from the
+  fingerprint so a bare write cannot slip past. `subject.ingest` and
+  `ablation.runner` route through it. Raw `insert_oracle_verdict` remains open
+  for historical / reconciler / no-retrofit inserts (#41). The dormant
+  `dual_write.write_verdict_with_cost_entry` path is documented as
+  historical/reconciler-only (not a new-mint site).
 - **`skill_harness.task_frontier` — the calibration/confirmation/matched phase
   firewall, tracer bullet** (#90, spec #89, spine #84 unit 2). A task family
   now flows end to end, thinly: a frozen `TaskFamilyManifest` loads and
