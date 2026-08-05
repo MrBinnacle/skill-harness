@@ -365,6 +365,7 @@ class TestPreRegisterThenIngestKeepEndToEnd:
         # Rule 6 tail (r3 measured posterior: Full 8/8 vs Null 0/8, p_win 0.9899)
         status, sub = derive_clause_status(
             ClauseStatusInput(
+                axis="verbosity",
                 admissible_verdict_count=8,
                 total_verdict_count=8,
                 confounded_verdict_count=0,

@@ -290,6 +290,7 @@ class TestR3ShapedKeepEndToEnd:
     def _status_input(self, current_frozen: int) -> ClauseStatusInput:
         # r3 measured posterior: Full 8/8 vs Null 0/8 → Beta(9,1), p_win 0.9899
         return ClauseStatusInput(
+            axis="verbosity",
             admissible_verdict_count=8,
             total_verdict_count=8,
             confounded_verdict_count=0,
