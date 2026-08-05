@@ -123,3 +123,6 @@ class ExtractionResult(BaseModel):
 
     raw_frontmatter: dict[str, Any]
     """Parsed frontmatter key/value pairs (empty dict if no frontmatter)."""
+
+    extractor_model: Annotated[str, Field(min_length=1)]
+    """Model id used for this extraction (bare or provider-prefixed)."""

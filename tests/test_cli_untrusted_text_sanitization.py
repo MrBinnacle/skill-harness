@@ -56,6 +56,7 @@ def _make_result_with_clause_text(clause_text: str) -> ExtractionResult:
             )
         ],
         raw_frontmatter={"name": "test-skill"},
+        extractor_model="claude-opus-5",
     )
 
 
@@ -220,6 +221,7 @@ def test_skill_init_does_not_interpret_markup_in_skill_name(
             )
         ],
         raw_frontmatter={"name": "test-skill"},
+        extractor_model="claude-opus-5",
     )
     runner = CliRunner()
 

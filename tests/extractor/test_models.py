@@ -169,9 +169,11 @@ def test_extraction_result_valid() -> None:
         source_sha256=sha,
         clauses=[clause],
         raw_frontmatter={"name": "test-skill"},
+        extractor_model="claude-opus-5",
     )
     assert result.name == "test-skill"
     assert len(result.clauses) == 1
+    assert result.extractor_model == "claude-opus-5"
 
 
 def test_extraction_result_sha256_length_enforced() -> None:
@@ -184,4 +186,5 @@ def test_extraction_result_sha256_length_enforced() -> None:
             source_sha256="tooshort",  # must be 64 chars
             clauses=[clause],
             raw_frontmatter={},
+            extractor_model="claude-opus-5",
         )

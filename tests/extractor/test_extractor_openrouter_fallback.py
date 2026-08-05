@@ -259,7 +259,7 @@ def test_call_extract_clauses_uses_openrouter_when_anthropic_key_absent(
             [_make_tool_use_block({"clauses": [_valid_raw_clause(0)]})]
         )
 
-        clauses = call_extract_clauses("Test skill body.")
+        clauses, model_id = call_extract_clauses("Test skill body.")
 
     # Anthropic constructor must have been called with OpenRouter base_url + api_key
     mock_cls.assert_called_once()
@@ -278,6 +278,8 @@ def test_call_extract_clauses_uses_openrouter_when_anthropic_key_absent(
         f"messages.create model must be provider-prefixed for OpenRouter, "
         f"got {create_kwargs.get('model')!r}"
     )
+    assert model_id == "anthropic/claude-opus-5"
+    assert create_kwargs.get("model") == model_id
 
     # Extraction must succeed and return valid clauses
     assert len(clauses) == 1
