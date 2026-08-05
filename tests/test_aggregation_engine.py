@@ -552,6 +552,7 @@ class TestFamilySizeMismatchWarning:
                     sample_b_id=sb,
                     observation=1.0,
                 )
+            insert_frozen_case(ev, frozen_case_id="fc-fs", clause_id=CLAUSE_ID, run_id="run-fs-1")
 
             with caplog.at_level(logging.WARNING, logger="skill_harness.aggregation.engine"):
                 report = aggregate_skill(
@@ -586,11 +587,15 @@ def _seed_healthy_evidence(
     rt: sqlite3.Connection,
     n_wins: int = 9,
     n_losses: int = 1,
-    with_frozen_case: bool = False,
+    with_frozen_case: bool = True,
     with_full_vs_null: bool = False,
     family_size: int = 1,
 ) -> None:
-    """Seed a minimal valid evidence dataset for aggregate_skill()."""
+    """Seed a minimal valid evidence dataset for aggregate_skill().
+
+    Default includes one frozen_case: corpus-wide zero frozen_cases is a
+    PreconditionError (no_instantiated_frozen_cases), not a 0.0 coverage report.
+    """
     insert_skill(ev)
     insert_clause(ev)
     insert_metric_version(ev)
@@ -745,16 +750,58 @@ class TestHealthyAggregation:
         losses → p ≈ 1.0 ≥ 0.95) so the ONLY thing separating this from PASSED is
         the missing frozen case — making the assertion a real regression guard.
 
-        The prior assertion accepted ``status in ("UNMEASURED", "PASSED")`` — i.e.
-        it accepted the exact forbidden outcome, so a wiring regression feeding a
-        positive frozen-case count into the classifier would have stayed green.
-        This pins the status AND the sub_reason via the full aggregate path (the
-        sub_reason='falsifying_case_missing' branch was previously unasserted end
-        to end).
+        A second anchor clause carries an instantiated frozen case so the skill
+        clears the corpus-wide no_instantiated_frozen_cases precondition; the
+        clause under test still has zero frozen cases.
         """
         ev, rt = open_both(tmp_path)
         try:
-            _seed_healthy_evidence(ev, rt, n_wins=30, n_losses=2, with_frozen_case=False)
+            insert_skill(ev)
+            insert_clause(ev, clause_id=CLAUSE_ID, clause_index=0)
+            insert_clause(ev, clause_id="clause-anchor", axis="clarity", clause_index=1)
+            insert_metric_version(ev, metric_id="verbosity")
+            insert_metric_version(ev, metric_id="clarity")
+            config = json.dumps(
+                {
+                    "run_id": RUN_ID,
+                    "skill_id": SKILL_ID,
+                    "clauses": [
+                        {"clause_id": CLAUSE_ID, "axis": AXIS},
+                        {"clause_id": "clause-anchor", "axis": "clarity"},
+                    ],
+                    "subject_model": "claude-sonnet-4-6",
+                    "user_message": "test",
+                    "family_size": 2,
+                    "stopping_reasons": {},
+                },
+                sort_keys=True,
+            )
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES (?, ?, 'ablation', ?, ?, ?)",
+                (RUN_ID, SKILL_ID, config, _TS, _TS2),
+            )
+            insert_run_progress(rt, state="completed")
+            for i in range(32):
+                sa, sb = f"sa-{i}", f"sb-{i}"
+                insert_sample(ev, sa, clause_id=CLAUSE_ID, condition="full", sample_index=i)
+                insert_sample(ev, sb, clause_id=CLAUSE_ID, condition="ablated", sample_index=i)
+                insert_verdict(
+                    ev,
+                    verdict_id=f"v-{i}",
+                    clause_id=CLAUSE_ID,
+                    axis=AXIS,
+                    sample_a_id=sa,
+                    sample_b_id=sb,
+                    observation=1.0 if i < 30 else 0.0,
+                    metric_id="verbosity",
+                )
+            # Anchor only: corpus-wide zero frozen_cases would refuse aggregation.
+            insert_frozen_case(
+                ev, frozen_case_id="fc-anchor", clause_id="clause-anchor", axis="clarity"
+            )
+
             report = aggregate_skill(
                 SKILL_ID,
                 evidence_conn_ro=ev,
@@ -762,7 +809,7 @@ class TestHealthyAggregation:
                 harness_version=_HARNESS_VER,
                 generated_at_utc=_GEN_AT,
             )
-            clause = report.clauses[0]
+            clause = next(c for c in report.clauses if c.clause_id == CLAUSE_ID)
             assert clause.status == "UNMEASURED", (
                 f"no frozen case must forbid PASSED even with a passing posterior; "
                 f"got status={clause.status!r} sub_reason={clause.sub_reason!r}"
@@ -777,7 +824,51 @@ class TestHealthyAggregation:
         """S49 G1 (companion): weaker evidence + no frozen case is still never PASSED."""
         ev, rt = open_both(tmp_path)
         try:
-            _seed_healthy_evidence(ev, rt, n_wins=9, n_losses=1, with_frozen_case=False)
+            insert_skill(ev)
+            insert_clause(ev, clause_id=CLAUSE_ID, clause_index=0)
+            insert_clause(ev, clause_id="clause-anchor", axis="clarity", clause_index=1)
+            insert_metric_version(ev, metric_id="verbosity")
+            insert_metric_version(ev, metric_id="clarity")
+            config = json.dumps(
+                {
+                    "run_id": RUN_ID,
+                    "skill_id": SKILL_ID,
+                    "clauses": [
+                        {"clause_id": CLAUSE_ID, "axis": AXIS},
+                        {"clause_id": "clause-anchor", "axis": "clarity"},
+                    ],
+                    "subject_model": "claude-sonnet-4-6",
+                    "user_message": "test",
+                    "family_size": 2,
+                    "stopping_reasons": {},
+                },
+                sort_keys=True,
+            )
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES (?, ?, 'ablation', ?, ?, ?)",
+                (RUN_ID, SKILL_ID, config, _TS, _TS2),
+            )
+            insert_run_progress(rt, state="completed")
+            for i in range(10):
+                sa, sb = f"sa-{i}", f"sb-{i}"
+                insert_sample(ev, sa, clause_id=CLAUSE_ID, condition="full", sample_index=i)
+                insert_sample(ev, sb, clause_id=CLAUSE_ID, condition="ablated", sample_index=i)
+                insert_verdict(
+                    ev,
+                    verdict_id=f"v-{i}",
+                    clause_id=CLAUSE_ID,
+                    axis=AXIS,
+                    sample_a_id=sa,
+                    sample_b_id=sb,
+                    observation=1.0 if i < 9 else 0.0,
+                    metric_id="verbosity",
+                )
+            insert_frozen_case(
+                ev, frozen_case_id="fc-anchor", clause_id="clause-anchor", axis="clarity"
+            )
+
             report = aggregate_skill(
                 SKILL_ID,
                 evidence_conn_ro=ev,
@@ -785,7 +876,7 @@ class TestHealthyAggregation:
                 harness_version=_HARNESS_VER,
                 generated_at_utc=_GEN_AT,
             )
-            clause = report.clauses[0]
+            clause = next(c for c in report.clauses if c.clause_id == CLAUSE_ID)
             assert clause.status != "PASSED"
         finally:
             ev.close()
@@ -816,12 +907,13 @@ class TestHealthyAggregation:
         """No verdicts at all → UNMEASURED(no_data)."""
         ev, rt = open_both(tmp_path)
         try:
-            # Seed everything EXCEPT verdicts
+            # Seed everything EXCEPT verdicts (frozen case required for aggregation)
             insert_skill(ev)
             insert_clause(ev)
             insert_metric_version(ev)
             insert_run(ev, family_size=1)
             insert_run_progress(rt, state="completed")
+            insert_frozen_case(ev, frozen_case_id="fc-001")
 
             report = aggregate_skill(
                 SKILL_ID,
@@ -1042,19 +1134,29 @@ class TestStaleFrozenCaseIntegration:
 
 
 class TestCoverage:
-    def test_coverage_zero_no_frozen_cases(self, tmp_path: Path) -> None:
-        """No frozen cases → coverage=0.0."""
+    def test_nonempty_clauses_zero_frozen_cases_refuses(self, tmp_path: Path) -> None:
+        """Non-empty clauses + zero frozen_cases → PreconditionError (instrument gap).
+
+        Coverage: 0% across N clauses with zero instantiated cases corpus-wide is
+        a falsehood — freeze has not produced oracle-bound cases yet. Must not be
+        reportable as a finding that clauses were checked and none is testable.
+        """
         ev, rt = open_both(tmp_path)
         try:
             _seed_healthy_evidence(ev, rt, with_frozen_case=False)
-            report = aggregate_skill(
-                SKILL_ID,
-                evidence_conn_ro=ev,
-                runtime_conn=rt,
-                harness_version=_HARNESS_VER,
-                generated_at_utc=_GEN_AT,
-            )
-            assert report.coverage == 0.0
+            with pytest.raises(PreconditionError) as exc_info:
+                aggregate_skill(
+                    SKILL_ID,
+                    evidence_conn_ro=ev,
+                    runtime_conn=rt,
+                    harness_version=_HARNESS_VER,
+                    generated_at_utc=_GEN_AT,
+                )
+            assert exc_info.value.code == "no_instantiated_frozen_cases"
+            assert exc_info.value.payload is None
+            # Refusal names the instrument gap, not a "none testable" finding.
+            assert "testable" not in exc_info.value.code
+            assert "instantiated" in exc_info.value.code
         finally:
             ev.close()
             rt.close()
@@ -1072,6 +1174,51 @@ class TestCoverage:
                 generated_at_utc=_GEN_AT,
             )
             assert report.coverage == 1.0
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_coverage_partial_fraction(self, tmp_path: Path) -> None:
+        """2 clauses, 1 with a frozen case → coverage=0.5 (arithmetic unchanged)."""
+        ev, rt = open_both(tmp_path)
+        try:
+            insert_skill(ev)
+            insert_clause(ev, clause_id="c1", clause_index=0)
+            insert_clause(ev, clause_id="c2", axis="clarity", clause_index=1)
+            insert_metric_version(ev, metric_id="verbosity")
+            insert_metric_version(ev, metric_id="clarity")
+            config = json.dumps(
+                {
+                    "run_id": RUN_ID,
+                    "skill_id": SKILL_ID,
+                    "clauses": [
+                        {"clause_id": "c1", "axis": AXIS},
+                        {"clause_id": "c2", "axis": "clarity"},
+                    ],
+                    "subject_model": "model",
+                    "user_message": "test",
+                    "family_size": 2,
+                    "stopping_reasons": {},
+                },
+                sort_keys=True,
+            )
+            ev.execute(
+                "INSERT INTO runs"
+                " (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+                " VALUES (?, ?, 'ablation', ?, ?, ?)",
+                (RUN_ID, SKILL_ID, config, _TS, _TS2),
+            )
+            insert_run_progress(rt, state="completed")
+            insert_frozen_case(ev, "fc-c1", clause_id="c1", axis=AXIS)
+
+            report = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+            assert report.coverage == 0.5
         finally:
             ev.close()
             rt.close()
@@ -1212,6 +1359,7 @@ class TestMultiClauseSkill:
                     observation=1.0,
                     metric_id="verbosity",
                 )
+            insert_frozen_case(ev, "fc-c1", clause_id="c1", axis=AXIS)
 
             report = aggregate_skill(
                 SKILL_ID,
@@ -1382,6 +1530,9 @@ class TestAblationOperatorHashMIXED:
                     sample_b_id=sb,
                     observation=1.0,
                 )
+            insert_frozen_case(
+                ev, frozen_case_id="fc-op-hash", clause_id=cl_id, axis=AXIS, run_id=run1
+            )
 
             with caplog.at_level(logging.WARNING, logger="skill_harness.aggregation.engine"):
                 report = aggregate_skill(
@@ -1438,6 +1589,9 @@ class TestAblationOperatorHashMIXED:
                     sample_b_id=sb,
                     observation=1.0,
                 )
+            insert_frozen_case(
+                ev, frozen_case_id="fc-op-same", clause_id=cl_id, axis=AXIS, run_id=run1
+            )
 
             report = aggregate_skill(
                 sk_id,
@@ -1629,6 +1783,7 @@ class TestPriorOnlyMarker:
             insert_metric_version(ev)
             insert_run(ev, family_size=1)
             insert_run_progress(rt, state="completed")
+            insert_frozen_case(ev, frozen_case_id="fc-prior")
 
             report = aggregate_skill(
                 SKILL_ID,
@@ -1746,6 +1901,7 @@ class TestMetricVersionMIXED:
                     observation=1.0,
                     metric_version=mv,
                 )
+            insert_frozen_case(ev, frozen_case_id="fc-mv", clause_id=cl_id, axis=AXIS, run_id=run1)
 
             with caplog.at_level(logging.WARNING, logger="skill_harness.aggregation.engine"):
                 report = aggregate_skill(

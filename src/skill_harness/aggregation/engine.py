@@ -70,6 +70,8 @@ def aggregate_skill(
     - any incomplete runs for skill_id → PreconditionError('incomplete_runs', [run_ids])
     - no completed runs for skill_id → PreconditionError('no_completed_runs')
     - no clauses authored for skill_id → PreconditionError('no_clauses')
+    - clauses exist but none has an instantiated frozen_cases row →
+      PreconditionError('no_instantiated_frozen_cases')
     """
     # ------------------------------------------------------------------
     # Precondition 1: No incomplete runs (would bias aggregation)
@@ -441,7 +443,9 @@ def aggregate_skill(
 
     # ------------------------------------------------------------------
     # Coverage = tested_clauses / total_clauses (A15)
-    # tested = has ≥1 frozen_case (has a constructible falsifying case)
+    # tested = has ≥1 row in frozen_cases: an instantiated failing input with an
+    # oracle binding (human-labeled or mechanically scored) — not merely that a
+    # falsifying case is constructible in principle from an extractor recipe.
     # ------------------------------------------------------------------
     tested_clause_ids = (
         {
@@ -460,6 +464,12 @@ def aggregate_skill(
     # OBS-G2: zero clauses is a precondition failure — Coverage: 0% on zero clauses is a falsehood.
     if total_clause_count == 0:
         raise PreconditionError("no_clauses")
+    # Corpus-wide zero frozen_cases is the same falsehood wearing a different hat:
+    # the freeze stage has not produced any instantiated, oracle-bound cases yet
+    # (instrument gap). It is not a finding that clauses were checked and none is
+    # testable.
+    if not tested_clause_ids:
+        raise PreconditionError("no_instantiated_frozen_cases")
     coverage = len(tested_clause_ids) / total_clause_count
 
     # ------------------------------------------------------------------

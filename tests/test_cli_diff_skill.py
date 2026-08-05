@@ -278,6 +278,8 @@ def _seed_underpowered_skill(
             sample_b_id=sb,
             observation=1.0,
         )
+    # Instantiated frozen case required for aggregation; underpowered still → UNMEASURED.
+    _insert_frozen_case(ev, frozen_case_id=f"fc-under-{run_id}", clause_id=clause_id, run_id=run_id)
 
 
 # ---------------------------------------------------------------------------
@@ -687,6 +689,8 @@ def _seed_no_verdict_skill(
     _insert_run(ev, run_id=run_id, skill_id=skill_id, clause_id=clause_id)
     _insert_run_progress(rt, run_id=run_id, state="completed")
     # No samples or verdicts inserted → clause has no admissible data
+    # Instantiated frozen case required for aggregation precondition.
+    _insert_frozen_case(ev, frozen_case_id=f"fc-nov-{run_id}", clause_id=clause_id, run_id=run_id)
 
 
 class TestDiffSkillZeroAxisAlignment:
