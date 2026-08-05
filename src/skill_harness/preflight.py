@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -29,6 +29,11 @@ from skill_harness.extractor.parser import ParsedSkill, parse_skill_file
 NAME_MAX_CHARS = 64
 DESCRIPTION_MAX_CHARS = 1024
 BODY_MAX_LINES = 500  # "Keep SKILL.md body under 500 lines for optimal performance"
+
+# Offline cl100k_base counts run ~1.128x under the exact tokenizer
+# (measured range 1.084-1.179). Raw is a floor; never silently apply the factor.
+STANDING_COST_CALIBRATION_FACTOR: Final[float] = 1.128
+STANDING_COST_CALIBRATION_RANGE: Final[tuple[float, float]] = (1.084, 1.179)
 
 _NAME_PATTERN = re.compile(r"^[a-z0-9-]+$")
 _RESERVED_NAME_WORDS = ("anthropic", "claude")
@@ -67,6 +72,12 @@ class ArtifactAuditReport(BaseModel):
     body_words: int
     findings: tuple[AuditFinding, ...]
     measurable_axes: tuple[str, ...]
+    # Standing cost: router-listing tokens (name + description). None when the
+    # frontmatter could not be parsed well enough to measure — never silently 0.
+    standing_cost_raw: int | None
+    standing_cost_calibrated: int | None
+    standing_cost_calibration_factor: float
+    standing_cost_calibration_range: tuple[float, float]
 
     @property
     def warn_count(self) -> int:
@@ -240,6 +251,58 @@ def _check_body(parsed: ParsedSkill) -> list[AuditFinding]:
 
 
 # ---------------------------------------------------------------------------
+# Standing cost (mechanical router-listing tax — every turn, used or not)
+# ---------------------------------------------------------------------------
+
+
+def _description_is_unparsed_block_scalar(parsed: ParsedSkill) -> bool:
+    desc = parsed.frontmatter.get("description", "")
+    return desc.strip() in _YAML_BLOCK_SCALAR_INDICATORS
+
+
+def _is_disable_model_invocation(parsed: ParsedSkill) -> bool:
+    flag = parsed.frontmatter.get("disable-model-invocation", "")
+    return flag.strip().lower() == "true"
+
+
+def _compute_standing_cost(
+    parsed: ParsedSkill,
+) -> tuple[int | None, int | None, list[AuditFinding]]:
+    """Return (raw, calibrated, extra findings) for the per-turn standing tax.
+
+    Standing cost is the cl100k_base token count of the router listing line
+    (frontmatter ``name`` + ``description``). A skill with
+    ``disable-model-invocation: true`` is never listed → raw/calibrated 0.
+    When description cannot be read (block scalar), refuse the number entirely.
+    """
+    findings: list[AuditFinding] = []
+
+    if _is_disable_model_invocation(parsed):
+        return 0, 0, findings
+
+    if _description_is_unparsed_block_scalar(parsed):
+        findings.append(
+            AuditFinding(
+                level="warn",
+                code="standing-cost-unparseable",
+                message="frontmatter description uses a multi-line YAML block scalar "
+                "this audit's minimal parser cannot read — standing cost UNMEASURED "
+                "(no number; a silent default would understate the per-turn tax)",
+            )
+        )
+        return None, None, findings
+
+    # Lazy import: count_tokens loads tiktoken on first use; audit stays import-safe.
+    from skill_harness.oracles.tier1.verbosity import count_tokens
+
+    name = parsed.frontmatter.get("name", "")
+    description = parsed.frontmatter.get("description", "")
+    raw = count_tokens(name) + count_tokens(description)
+    calibrated = round(raw * STANDING_COST_CALIBRATION_FACTOR)
+    return raw, calibrated, findings
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -252,10 +315,12 @@ def audit_skill_artifact(path: Path) -> ArtifactAuditReport:
     :raises OSError: unreadable file (propagated).
     """
     parsed = parse_skill_file(path)
+    standing_raw, standing_cal, standing_findings = _compute_standing_cost(parsed)
     findings = [
         *_check_name(parsed),
         *_check_description(parsed),
         *_check_body(parsed),
+        *standing_findings,
     ]
 
     # Evaluability preflight: the authoritative list of mechanically scorable
@@ -274,4 +339,8 @@ def audit_skill_artifact(path: Path) -> ArtifactAuditReport:
         body_words=len(parsed.body.split()),
         findings=tuple(findings),
         measurable_axes=measurable_axes,
+        standing_cost_raw=standing_raw,
+        standing_cost_calibrated=standing_cal,
+        standing_cost_calibration_factor=STANDING_COST_CALIBRATION_FACTOR,
+        standing_cost_calibration_range=STANDING_COST_CALIBRATION_RANGE,
     )

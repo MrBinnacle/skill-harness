@@ -269,12 +269,31 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
         "  Judge-graded axes: require a calibrated (judge, axis) pair — none exists"
         " in a fresh install → UNMEASURED until you run `calibrate`."
     )
+    # Standing cost sits beside evaluability — never a standalone quoteable block.
+    # Mechanical only: arithmetic on frontmatter text, not a measure of skill effect.
+    if report.standing_cost_raw is None:
+        _console.print(
+            "  Standing cost (mechanical): [yellow]UNMEASURED[/] — frontmatter could not"
+            " be parsed well enough to count the router listing line"
+            " (see standing-cost-unparseable)."
+        )
+    else:
+        lo, hi = report.standing_cost_calibration_range
+        _console.print(
+            f"  Standing cost (mechanical): raw {report.standing_cost_raw} tokens · "
+            f"calibrated {report.standing_cost_calibrated} tokens "
+            f"(x{report.standing_cost_calibration_factor}, "
+            f"measured range {lo}-{hi}) -- "
+            "router listing line (name + description) charged every turn; "
+            "0 when disable-model-invocation keeps the skill unlisted."
+        )
     _console.print(
         f"\nSummary: {report.pass_count} pass · {report.warn_count} warn — "
         "UNMEASURED is a verdict, not a failure (docs/concepts/why-unmeasured.md)."
     )
     if strict and report.warn_count > 0:
         ctx.exit(1)
+
 
 
 @skill.command("clauses")
