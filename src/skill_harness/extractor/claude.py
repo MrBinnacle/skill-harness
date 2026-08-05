@@ -1,7 +1,7 @@
 """Claude API wrapper for clause extraction.
 
 Uses the Anthropic Python SDK with tool-use to extract structured clause
-data from a skill body. Model: ``claude-sonnet-4-6`` (model-pinning
+data from a skill body. Model: ``claude-opus-5`` (model-pinning
 convention for Track B execution work).
 
 Tool design:
@@ -9,6 +9,8 @@ Tool design:
   list of clause objects.
 - ``tool_choice={"type": "tool", "name": "extract_clauses"}`` forces Claude
   to use the tool (no free-text fallback).
+- ``strict: True`` on the tool definition makes the API guarantee
+  ``tool_use.input`` validates against the schema exactly.
 - The raw body is embedded verbatim in the user message.
 
 D4 note: extractor calibration is deferred to v0.2 — no (extractor_id,
@@ -29,7 +31,7 @@ from skill_harness.extractor.errors import ExtractorClaudeError
 from skill_harness.extractor.models import ExtractedClause, FalsifyingCaseSchema
 from skill_harness.oracles.tier1.axis_registry import TIER1_AXES
 
-_MODEL = "claude-sonnet-4-6"
+_MODEL = "claude-opus-5"
 
 # OpenRouter Anthropic-compatible Messages API endpoint.
 # Verified from https://openrouter.ai/anthropic/claude-sonnet-4.6/api (2026-06-09):
@@ -37,8 +39,7 @@ _MODEL = "claude-sonnet-4-6"
 _OPENROUTER_ANTHROPIC_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Provider-prefixed model ID required by the OpenRouter Anthropic-compat endpoint.
-# OpenRouter model slugs use dots (4.6), not dashes (4-6) as Anthropic direct does.
-_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6"
+_OPENROUTER_MODEL = "anthropic/claude-opus-5"
 
 
 def _render_axis_catalog() -> str:
@@ -178,7 +179,7 @@ def _make_extractor_client() -> tuple[anthropic.Anthropic, str]:
     Returns a ``(client, model_id)`` tuple.  The ``model_id`` is what should be
     passed to ``messages.create`` — for direct Anthropic it is the bare model name
     (``_MODEL``); for the OpenRouter fallback it is the provider-prefixed form
-    (``_OPENROUTER_MODEL``, e.g. ``"anthropic/claude-sonnet-4.6"``).
+    (``_OPENROUTER_MODEL``, e.g. ``"anthropic/claude-opus-5"``).
 
     Resolution rules:
 
@@ -222,7 +223,7 @@ def _call_once(client: anthropic.Anthropic, body: str, model: str = _MODEL) -> l
     try:
         response = client.messages.create(
             model=model,
-            max_tokens=8192,
+            max_tokens=16000,
             system=_SYSTEM_PROMPT,
             tools=[
                 {
@@ -231,6 +232,7 @@ def _call_once(client: anthropic.Anthropic, body: str, model: str = _MODEL) -> l
                         "Return all behavioral clauses extracted from the skill document."
                     ),
                     "input_schema": _EXTRACT_CLAUSES_SCHEMA,
+                    "strict": True,
                 }
             ],
             tool_choice={"type": "tool", "name": "extract_clauses"},
@@ -274,21 +276,22 @@ def _call_once(client: anthropic.Anthropic, body: str, model: str = _MODEL) -> l
     return raw_clauses
 
 
-def call_extract_clauses(body: str, *, no_retry: bool = False) -> list[ExtractedClause]:
+def call_extract_clauses(body: str, *, no_retry: bool = False) -> tuple[list[ExtractedClause], str]:
     """Call Claude to extract clauses from ``body``.
 
     :param body: The skill document body text (post-frontmatter).
     :param no_retry: If True, disable the single retry on transient
         ``'clauses' field of unexpected type: str`` anomaly.  Use in CI or
         test contexts that require strict-fail behaviour.
-    :returns: List of ``ExtractedClause`` objects.
+    :returns: ``(clauses, extractor_model)`` — validated clauses and the model
+        id actually used for the call (bare or OpenRouter-prefixed).
     :raises ExtractorClaudeError: On API error, empty result, or validation
         failure deserializing the tool call response.
     """
-    client, _model_for_routing = _make_extractor_client()
+    client, model_for_routing = _make_extractor_client()
 
     try:
-        raw_clauses = _call_once(client, body, _model_for_routing)
+        raw_clauses = _call_once(client, body, model_for_routing)
     except ExtractorClaudeError as exc:
         # Retry only the specific transient anomaly where the API returns the
         # 'clauses' field as a string instead of a list.  This was observed
@@ -300,7 +303,7 @@ def call_extract_clauses(body: str, *, no_retry: bool = False) -> list[Extracted
                 file=sys.stderr,
             )
             time.sleep(1)
-            raw_clauses = _call_once(client, body, _model_for_routing)
+            raw_clauses = _call_once(client, body, model_for_routing)
         else:
             raise
 
@@ -331,4 +334,4 @@ def call_extract_clauses(body: str, *, no_retry: bool = False) -> list[Extracted
             f"{len(errors)} of {len(raw_clauses)} clauses failed validation:\n" + "\n".join(errors)
         )
 
-    return clauses
+    return clauses, model_for_routing

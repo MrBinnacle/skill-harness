@@ -47,6 +47,7 @@ def _make_result(name: str = "test-skill", n_clauses: int = 3) -> ExtractionResu
         source_sha256=sha,
         clauses=clauses,
         raw_frontmatter={"name": name},
+        extractor_model="claude-opus-5",
     )
 
 

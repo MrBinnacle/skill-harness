@@ -89,10 +89,36 @@ def test_returns_clauses_on_success(mock_anthropic_cls: MagicMock) -> None:
         [_make_tool_use_block({"clauses": [_valid_raw_clause(0)]})]
     )
 
-    clauses = call_extract_clauses("Some skill body text.")
+    clauses, model_id = call_extract_clauses("Some skill body text.")
     assert len(clauses) == 1
     assert clauses[0].clause_index == 0
     assert clauses[0].axis == "specificity"
+    assert model_id == "claude-opus-5"
+
+
+@patch("skill_harness.extractor.claude.anthropic.Anthropic")
+def test_api_call_uses_strict_tool_and_no_sampling_params(
+    mock_anthropic_cls: MagicMock,
+) -> None:
+    """Strict tool use is the enforced schema contract; Opus 5 rejects sampling knobs."""
+    mock_client = MagicMock()
+    mock_anthropic_cls.return_value = mock_client
+    mock_client.messages.create.return_value = _make_response(
+        [_make_tool_use_block({"clauses": [_valid_raw_clause(0)]})]
+    )
+
+    call_extract_clauses("Some skill body text.")
+
+    kwargs = mock_client.messages.create.call_args.kwargs
+    assert kwargs["model"] == "claude-opus-5"
+    assert kwargs["max_tokens"] == 16000
+    assert "temperature" not in kwargs
+    assert "top_p" not in kwargs
+    assert "top_k" not in kwargs
+    tools = kwargs["tools"]
+    assert len(tools) == 1
+    assert tools[0]["name"] == "extract_clauses"
+    assert tools[0]["strict"] is True
 
 
 @patch("skill_harness.extractor.claude.anthropic.Anthropic")
@@ -103,7 +129,7 @@ def test_returns_multiple_clauses(mock_anthropic_cls: MagicMock) -> None:
         [_make_tool_use_block({"clauses": [_valid_raw_clause(i) for i in range(5)]})]
     )
 
-    clauses = call_extract_clauses("Body text.")
+    clauses, _model_id = call_extract_clauses("Body text.")
     assert len(clauses) == 5
 
 
@@ -127,7 +153,7 @@ def test_handles_semantic_vacuous_clause(mock_anthropic_cls: MagicMock) -> None:
         ]
     )
 
-    clauses = call_extract_clauses("Vague skill.")
+    clauses, _model_id = call_extract_clauses("Vague skill.")
     assert len(clauses) == 1
     assert clauses[0].vacuity_flag == "semantic_vacuous_pending_review"
     assert clauses[0].falsifying_case is None
@@ -266,7 +292,7 @@ def test_retries_once_on_clauses_field_unexpected_type_str(
     good_response = _make_response([_make_tool_use_block({"clauses": [_valid_raw_clause(0)]})])
     mock_client.messages.create.side_effect = [bad_response, good_response]
 
-    clauses = call_extract_clauses("Some skill body text.")
+    clauses, _model_id = call_extract_clauses("Some skill body text.")
     assert len(clauses) == 1
     assert clauses[0].clause_index == 0
     assert mock_client.messages.create.call_count == 2

@@ -63,8 +63,8 @@ def _make_vacuous_clause(index: int) -> ExtractedClause:
     )
 
 
-def _mock_extract(n_clauses: int = 5) -> list[ExtractedClause]:
-    return [_make_clause(i) for i in range(n_clauses)]
+def _mock_extract(n_clauses: int = 5) -> tuple[list[ExtractedClause], str]:
+    return ([_make_clause(i) for i in range(n_clauses)], "claude-opus-5")
 
 
 # ---------------------------------------------------------------------------
@@ -76,11 +76,12 @@ def _mock_extract(n_clauses: int = 5) -> list[ExtractedClause]:
 def test_mostly_prose_fixture_produces_valid_result(
     mock_call: Any,
 ) -> None:
-    mock_call.return_value = [_make_vacuous_clause(0), _make_clause(1)]
+    mock_call.return_value = ([_make_vacuous_clause(0), _make_clause(1)], "claude-opus-5")
     result = extract_skill(_MOSTLY_PROSE, evidence_conn=None)
     assert isinstance(result, ExtractionResult)
     assert result.name == "mostly-prose-skill"
     assert len(result.clauses) == 2
+    assert result.extractor_model == "claude-opus-5"
 
 
 @patch("skill_harness.extractor.pipeline.call_extract_clauses")
