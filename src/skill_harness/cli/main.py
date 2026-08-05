@@ -274,10 +274,8 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
     lo, hi = report.standing_cost_calibration_range
     factor = report.standing_cost_calibration_factor
     if report.standing_cost_raw is None:
-        # Hyphenated label so this line is not mistaken for a measured
-        # "standing cost … raw N" figure when other costs print raw counts.
         _console.print(
-            "  Standing-cost (mechanical): [yellow]UNMEASURED[/] — frontmatter could not"
+            "  Standing cost (mechanical): [yellow]UNMEASURED[/] — frontmatter could not"
             " be parsed well enough to count the router listing line"
             " (see standing-cost-unparseable)."
         )
@@ -292,7 +290,7 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
         )
     if report.fired_cost_raw is None:
         _console.print(
-            "  Fired-cost (mechanical): [yellow]UNMEASURED[/] — skill body could not be tokenized."
+            "  Fired cost (mechanical): [yellow]UNMEASURED[/] — skill body could not be tokenized."
         )
     else:
         _console.print(
@@ -303,7 +301,7 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
         )
     if report.aux_cost_raw is None:
         _console.print(
-            "  Aux-cost (mechanical): [yellow]UNMEASURED[/] — progressive-disclosure"
+            "  Aux cost (mechanical): [yellow]UNMEASURED[/] — progressive-disclosure"
             " documentation beside the skill could not be read"
             " (see aux-cost-unreadable)."
         )
