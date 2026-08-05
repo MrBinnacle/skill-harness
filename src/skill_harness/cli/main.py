@@ -295,7 +295,6 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
         ctx.exit(1)
 
 
-
 @skill.command("clauses")
 @click.argument("skill_id")
 @click.option(
