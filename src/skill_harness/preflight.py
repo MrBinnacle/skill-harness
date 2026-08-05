@@ -260,6 +260,22 @@ def _description_is_unparsed_block_scalar(parsed: ParsedSkill) -> bool:
     return desc.strip() in _YAML_BLOCK_SCALAR_INDICATORS
 
 
+def _router_listing_is_readable(parsed: ParsedSkill) -> bool:
+    """True when name + description can support a standing-cost measurement.
+
+    The router listing line is those two keys. Readable only if both are present,
+    non-empty, and description is not a bare YAML block-scalar indicator the
+    minimal parser cannot expand.
+    """
+    name = parsed.frontmatter.get("name")
+    if name is None or not str(name).strip():
+        return False
+    description = parsed.frontmatter.get("description")
+    if description is None or not str(description).strip():
+        return False
+    return not _description_is_unparsed_block_scalar(parsed)
+
+
 def _is_disable_model_invocation(parsed: ParsedSkill) -> bool:
     flag = parsed.frontmatter.get("disable-model-invocation", "")
     return flag.strip().lower() == "true"
@@ -273,20 +289,20 @@ def _compute_standing_cost(
     Standing cost is the cl100k_base token count of the router listing line
     (frontmatter ``name`` + ``description``). A skill with
     ``disable-model-invocation: true`` is never listed → raw/calibrated 0.
-    When description cannot be read (block scalar), refuse the number entirely.
+    When the listing line cannot be read, refuse the number entirely.
     """
     findings: list[AuditFinding] = []
 
     if _is_disable_model_invocation(parsed):
         return 0, 0, findings
 
-    if _description_is_unparsed_block_scalar(parsed):
+    if not _router_listing_is_readable(parsed):
         findings.append(
             AuditFinding(
                 level="warn",
                 code="standing-cost-unparseable",
-                message="frontmatter description uses a multi-line YAML block scalar "
-                "this audit's minimal parser cannot read — standing cost UNMEASURED "
+                message="router listing line (frontmatter name + description) is not "
+                "readable as a single-line pair — standing cost UNMEASURED "
                 "(no number; a silent default would understate the per-turn tax)",
             )
         )

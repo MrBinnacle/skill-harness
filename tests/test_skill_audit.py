@@ -221,9 +221,7 @@ def test_standing_cost_from_name_and_description(tmp_path: Path) -> None:
     desc = "Extracts text and tables from PDF files. Use when working with PDFs."
     expected_raw = count_tokens(name) + count_tokens(desc)
     assert report.standing_cost_raw == expected_raw
-    assert report.standing_cost_calibrated == round(
-        expected_raw * STANDING_COST_CALIBRATION_FACTOR
-    )
+    assert report.standing_cost_calibrated == round(expected_raw * STANDING_COST_CALIBRATION_FACTOR)
     assert report.standing_cost_calibration_factor == STANDING_COST_CALIBRATION_FACTOR
     assert report.standing_cost_calibration_range == STANDING_COST_CALIBRATION_RANGE
 
@@ -287,8 +285,65 @@ def test_unparseable_frontmatter_finding_and_no_standing_cost_number(tmp_path: P
     assert "raw" not in cost_section or "standing cost" not in cost_section
 
 
+def test_name_without_description_standing_cost_unmeasured(tmp_path: Path) -> None:
+    """name present but no non-empty description → UNMEASURED, no cost number."""
+    content = "---\nname: ok-skill\n---\n\nBody.\n"
+    report = audit_skill_artifact(write_skill(tmp_path, content))
+    codes = {f.code for f in report.findings}
+    assert "standing-cost-unparseable" in codes
+    assert report.standing_cost_raw is None
+    assert report.standing_cost_calibrated is None
+
+    path = write_skill(tmp_path, content, filename="no-desc.md")
+    result = CliRunner().invoke(cli, ["skill", "audit", str(path)])
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "standing-cost-unparseable" in out
+    assert not re.search(r"standing cost[^\n]*\d", out, re.IGNORECASE)
+    cost_section = out.lower().split("evaluability preflight", 1)[-1]
+    assert "raw" not in cost_section or "standing cost" not in cost_section
+
+
 def test_strict_exits_nonzero_on_unparseable_standing_cost(tmp_path: Path) -> None:
     path = write_skill(tmp_path, BLOCK_SCALAR_SKILL)
+    result = CliRunner().invoke(cli, ["skill", "audit", str(path), "--strict"])
+    assert result.exit_code == 1
+
+
+def test_strict_exits_nonzero_on_name_without_description_standing_cost(
+    tmp_path: Path,
+) -> None:
+    content = "---\nname: ok-skill\n---\n\nBody.\n"
+    path = write_skill(tmp_path, content)
+    result = CliRunner().invoke(cli, ["skill", "audit", str(path), "--strict"])
+    assert result.exit_code == 1
+
+
+def test_no_frontmatter_standing_cost_unmeasured(tmp_path: Path) -> None:
+    """No frontmatter block → UNMEASURED, no cost number (especially not 0)."""
+    content = "# No frontmatter\n\nJust a body.\n"
+    report = audit_skill_artifact(write_skill(tmp_path, content))
+    codes = {f.code for f in report.findings}
+    assert "standing-cost-unparseable" in codes
+    assert report.standing_cost_raw is None
+    assert report.standing_cost_calibrated is None
+
+    path = write_skill(tmp_path, content, filename="no-fm.md")
+    result = CliRunner().invoke(cli, ["skill", "audit", str(path)])
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "standing-cost-unparseable" in out
+    assert not re.search(r"standing cost[^\n]*\d", out, re.IGNORECASE)
+    cost_section = out.lower().split("evaluability preflight", 1)[-1]
+    assert "raw" not in cost_section or "standing cost" not in cost_section
+    # Must not look like disable-model-invocation's real zero.
+    assert not re.search(r"\braw\s+0\b", out, re.IGNORECASE)
+    assert not re.search(r"\b0\s+tokens\b", out, re.IGNORECASE)
+
+
+def test_strict_exits_nonzero_on_no_frontmatter_standing_cost(tmp_path: Path) -> None:
+    content = "# No frontmatter\n\nJust a body.\n"
+    path = write_skill(tmp_path, content)
     result = CliRunner().invoke(cli, ["skill", "audit", str(path), "--strict"])
     assert result.exit_code == 1
 
