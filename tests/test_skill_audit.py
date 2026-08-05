@@ -408,6 +408,33 @@ def test_fired_cost_from_skill_body(tmp_path: Path) -> None:
     assert report.fired_cost_raw != report.standing_cost_raw
 
 
+def test_fired_cost_is_newline_normalised(tmp_path: Path) -> None:
+    """Identical skill, LF vs CRLF on disk → identical fired cost.
+
+    The body is sliced from raw decoded bytes rather than read in text mode,
+    so without normalisation every ``\\r`` is charged and the same skill costs
+    more on a Windows checkout than on a Linux one. That would make the figure
+    a property of how the file was checked out instead of of the skill.
+
+    Bytes are written explicitly so this pins the behaviour on every platform,
+    not only the one whose line ending differs from the author's.
+    """
+    lf = tmp_path / "lf.md"
+    crlf = tmp_path / "crlf.md"
+    lf.write_bytes(GOOD_SKILL.encode("utf-8"))
+    crlf.write_bytes(GOOD_SKILL.replace("\n", "\r\n").encode("utf-8"))
+
+    lf_report = audit_skill_artifact(lf)
+    crlf_report = audit_skill_artifact(crlf)
+
+    assert lf_report.fired_cost_raw == crlf_report.fired_cost_raw
+    assert lf_report.fired_cost_calibrated == crlf_report.fired_cost_calibrated
+    # Standing and aux are already newline-stable; assert it so a future change
+    # to either path cannot reintroduce a platform-dependent figure unnoticed.
+    assert lf_report.standing_cost_raw == crlf_report.standing_cost_raw
+    assert lf_report.aux_cost_raw == crlf_report.aux_cost_raw
+
+
 def test_aux_cost_zero_when_no_aux_files(tmp_path: Path) -> None:
     """No sibling documentation → real zero, not missing/error."""
     report = audit_skill_artifact(write_skill(tmp_path, GOOD_SKILL))
