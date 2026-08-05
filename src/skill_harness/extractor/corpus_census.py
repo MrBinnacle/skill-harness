@@ -1,0 +1,417 @@
+"""Deterministic census of an extracted-clause JSONL corpus (#118).
+
+Pure arithmetic over clause records already on disk — no API calls, no model
+judgment. Same input always produces the same output.
+
+Reports how much of the corpus is mechanically measurable today (scoreable
+axis, comparator specified, falsifying-case structural completeness) plus a
+vacuity-flag queue-marker tally. Does not tune thresholds or reclassify
+clauses to raise the measurable fraction.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Final, Literal, TextIO
+
+from skill_harness.oracles.tier1.axis_registry import AxisScoreability, classify_axis
+
+_COMPARATORS_SPECIFIED: Final[frozenset[str]] = frozenset({"increase", "decrease", "preserve"})
+_FC_REQUIRED_KEYS: Final[tuple[str, ...]] = (
+    "input_population_spec",
+    "expected_directional_pair",
+    "min_reproducibility",
+)
+_FC_UNMEASURABLE_REASON: Final[str] = (
+    "clause records lack a falsifying_case object "
+    "(boolean-only has_falsifying_case schema or key absent); "
+    "structural completeness is unmeasurable for this input"
+)
+
+
+@dataclass(frozen=True)
+class _SkillRow:
+    slug: str
+    ok: bool
+    clauses: tuple[Mapping[str, Any], ...]
+    error_type: str | None
+    error: str | None
+
+
+@dataclass(frozen=True)
+class CensusResult:
+    """Immutable census figures. Serialises to a stable JSON receipt."""
+
+    extractor_model: str | None
+    input_path: str
+    rows_total: int
+    metadata_rows_skipped: int
+    skills_covered: int
+    failed_extraction_slugs: tuple[str, ...]
+    total_clauses: int
+    scoreable_axis_count: int
+    unscoreable_axis_count: int
+    comparator_specified_count: int
+    comparator_unspecified_count: int
+    falsifying_case_status: Literal["measured", "unmeasurable_for_this_input"]
+    falsifying_case_reason: str | None
+    falsifying_case_applicable_count: int
+    falsifying_case_complete_count: int
+    falsifying_case_incomplete_count: int
+    vacuity_none_count: int
+    vacuity_semantic_pending_count: int
+    vacuity_other: tuple[tuple[str, int], ...]
+    axis_distribution: tuple[tuple[str, int], ...]
+
+    def to_receipt(self) -> dict[str, Any]:
+        """Build the JSON-serialisable receipt (sorted-key friendly)."""
+        total = self.total_clauses
+        failed_slugs = list(self.failed_extraction_slugs)
+        receipt: dict[str, Any] = {
+            "axis_distribution": [
+                {
+                    "axis": axis,
+                    "count": count,
+                    "percent_of_clauses": _percent(count, total),
+                }
+                for axis, count in self.axis_distribution
+            ],
+            "comparator_specified": {
+                "count": self.comparator_specified_count,
+                "percent_of_clauses": _percent(self.comparator_specified_count, total),
+            },
+            "comparator_unspecified": {
+                "count": self.comparator_unspecified_count,
+                "percent_of_clauses": _percent(self.comparator_unspecified_count, total),
+            },
+            "extractor_model": self.extractor_model,
+            "failed_extractions": {
+                "count": len(failed_slugs),
+                "slugs": failed_slugs,
+            },
+            "falsifying_case_structural_completeness": _fc_receipt_block(self),
+            "input_path": self.input_path,
+            "metadata_rows_skipped": self.metadata_rows_skipped,
+            "rows_total": self.rows_total,
+            "scoreable_axis": {
+                "count": self.scoreable_axis_count,
+                "percent_of_clauses": _percent(self.scoreable_axis_count, total),
+            },
+            "skills_covered": self.skills_covered,
+            "total_clauses": self.total_clauses,
+            "unscoreable_axis": {
+                "count": self.unscoreable_axis_count,
+                "percent_of_clauses": _percent(self.unscoreable_axis_count, total),
+            },
+            "vacuity_flag_tally": {
+                "none": self.vacuity_none_count,
+                "other": [{"flag": flag, "count": count} for flag, count in self.vacuity_other],
+                "semantic_vacuous_pending_review": self.vacuity_semantic_pending_count,
+            },
+        }
+        return receipt
+
+
+def _percent(count: int, total: int) -> float | None:
+    if total == 0:
+        return None
+    # Fixed-decimal round-trip so the same ratio always serialises identically.
+    return float(f"{(100.0 * count) / total:.6f}")
+
+
+def _fc_receipt_block(result: CensusResult) -> dict[str, Any]:
+    if result.falsifying_case_status == "unmeasurable_for_this_input":
+        return {
+            "reason": result.falsifying_case_reason,
+            "status": "unmeasurable_for_this_input",
+        }
+    applicable = result.falsifying_case_applicable_count
+    return {
+        "applicable_clauses_vacuity_none": applicable,
+        "percent_complete_of_applicable": _percent(
+            result.falsifying_case_complete_count, applicable
+        ),
+        "status": "measured",
+        "structurally_complete": result.falsifying_case_complete_count,
+        "structurally_incomplete": result.falsifying_case_incomplete_count,
+    }
+
+
+def _is_metadata_row(row: Mapping[str, Any]) -> bool:
+    if "record_type" in row:
+        return True
+    return "slug" not in row
+
+
+def _parse_skill_row(row: Mapping[str, Any]) -> _SkillRow:
+    slug = str(row["slug"])
+    ok = bool(row.get("ok", True))
+    raw_clauses = row.get("clauses")
+    if not ok:
+        clauses: tuple[Mapping[str, Any], ...] = ()
+    elif isinstance(raw_clauses, list):
+        clauses = tuple(c for c in raw_clauses if isinstance(c, Mapping))
+    else:
+        clauses = ()
+    error_type = row.get("error_type")
+    error = row.get("error")
+    return _SkillRow(
+        slug=slug,
+        ok=ok,
+        clauses=clauses,
+        error_type=str(error_type) if error_type is not None else None,
+        error=str(error) if error is not None else None,
+    )
+
+
+def _load_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    text = path.read_text(encoding="utf-8")
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            obj = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{path}: line {line_no}: invalid JSON: {exc}") from exc
+        if not isinstance(obj, dict):
+            raise ValueError(f"{path}: line {line_no}: expected a JSON object")
+        rows.append(obj)
+    return rows
+
+
+def _extract_extractor_model(rows: Sequence[Mapping[str, Any]]) -> str | None:
+    for row in rows:
+        if row.get("record_type") == "header":
+            model = row.get("extractor_model")
+            if isinstance(model, str) and model:
+                return model
+    for row in rows:
+        model = row.get("extractor_model")
+        if isinstance(model, str) and model and not _is_metadata_row(row):
+            return model
+    return None
+
+
+def _falsifying_case_complete(clause: Mapping[str, Any]) -> bool:
+    fc = clause.get("falsifying_case")
+    if not isinstance(fc, Mapping):
+        return False
+    for key in _FC_REQUIRED_KEYS:
+        if key not in fc:
+            return False
+        value = fc[key]
+        if value is None:
+            return False
+        if isinstance(value, str) and value == "":
+            return False
+    return True
+
+
+def _clauses_have_falsifying_case_key(clauses: Iterable[Mapping[str, Any]]) -> bool:
+    return any("falsifying_case" in clause for clause in clauses)
+
+
+def run_census(input_path: Path | str) -> CensusResult:
+    """Compute the census for a clause-JSONL file at ``input_path``."""
+    path = Path(input_path)
+    rows = _load_jsonl(path)
+
+    metadata_skipped = 0
+    covered = 0
+    failed_slugs: list[str] = []
+    all_clauses: list[Mapping[str, Any]] = []
+
+    for row in rows:
+        if _is_metadata_row(row):
+            metadata_skipped += 1
+            continue
+        skill = _parse_skill_row(row)
+        if not skill.ok:
+            failed_slugs.append(skill.slug)
+            continue
+        covered += 1
+        all_clauses.extend(skill.clauses)
+
+    failed_slugs_sorted = tuple(sorted(failed_slugs))
+    extractor_model = _extract_extractor_model(rows)
+
+    scoreable = 0
+    unscoreable = 0
+    comp_specified = 0
+    comp_unspecified = 0
+    vacuity_none = 0
+    vacuity_semantic = 0
+    vacuity_other_counts: dict[str, int] = {}
+    axis_counts: dict[str, int] = {}
+
+    fc_schema_present = _clauses_have_falsifying_case_key(all_clauses)
+    fc_applicable = 0
+    fc_complete = 0
+    fc_incomplete = 0
+
+    for clause in all_clauses:
+        axis = clause.get("axis")
+        axis_str = axis if isinstance(axis, str) else ""
+        axis_counts[axis_str] = axis_counts.get(axis_str, 0) + 1
+        if classify_axis(axis_str) is AxisScoreability.TIER1_MECHANICAL:
+            scoreable += 1
+        else:
+            unscoreable += 1
+
+        comparator = clause.get("comparator")
+        if comparator in _COMPARATORS_SPECIFIED:
+            comp_specified += 1
+        else:
+            # comparator_unspecified, missing, or any other value
+            comp_unspecified += 1
+
+        vacuity = clause.get("vacuity_flag")
+        if vacuity == "none":
+            vacuity_none += 1
+        elif vacuity == "semantic_vacuous_pending_review":
+            vacuity_semantic += 1
+        else:
+            flag_key = str(vacuity) if vacuity is not None else ""
+            vacuity_other_counts[flag_key] = vacuity_other_counts.get(flag_key, 0) + 1
+
+        if vacuity == "none" and fc_schema_present:
+            fc_applicable += 1
+            if _falsifying_case_complete(clause):
+                fc_complete += 1
+            else:
+                fc_incomplete += 1
+
+    if fc_schema_present:
+        fc_status: Literal["measured", "unmeasurable_for_this_input"] = "measured"
+        fc_reason: str | None = None
+    else:
+        fc_status = "unmeasurable_for_this_input"
+        fc_reason = _FC_UNMEASURABLE_REASON
+        fc_applicable = 0
+        fc_complete = 0
+        fc_incomplete = 0
+
+    axis_distribution = tuple(sorted(axis_counts.items(), key=lambda item: item[0]))
+    vacuity_other = tuple(sorted(vacuity_other_counts.items(), key=lambda item: item[0]))
+
+    return CensusResult(
+        extractor_model=extractor_model,
+        input_path=path.as_posix(),
+        rows_total=len(rows),
+        metadata_rows_skipped=metadata_skipped,
+        skills_covered=covered,
+        failed_extraction_slugs=failed_slugs_sorted,
+        total_clauses=len(all_clauses),
+        scoreable_axis_count=scoreable,
+        unscoreable_axis_count=unscoreable,
+        comparator_specified_count=comp_specified,
+        comparator_unspecified_count=comp_unspecified,
+        falsifying_case_status=fc_status,
+        falsifying_case_reason=fc_reason,
+        falsifying_case_applicable_count=fc_applicable,
+        falsifying_case_complete_count=fc_complete,
+        falsifying_case_incomplete_count=fc_incomplete,
+        vacuity_none_count=vacuity_none,
+        vacuity_semantic_pending_count=vacuity_semantic,
+        vacuity_other=vacuity_other,
+        axis_distribution=axis_distribution,
+    )
+
+
+def receipt_json_bytes(result: CensusResult) -> bytes:
+    """Canonical JSON receipt bytes — sorted keys, stable separators, trailing newline."""
+    payload = json.dumps(
+        result.to_receipt(),
+        ensure_ascii=True,
+        sort_keys=True,
+        indent=2,
+    )
+    return (payload + "\n").encode("utf-8")
+
+
+def format_human_report(result: CensusResult) -> str:
+    """Deterministic human-readable census report."""
+    total = result.total_clauses
+    lines: list[str] = [
+        "corpus census",
+        f"  input: {result.input_path}",
+        f"  extractor_model: {result.extractor_model!s}",
+        f"  rows_total: {result.rows_total}",
+        f"  metadata_rows_skipped: {result.metadata_rows_skipped}",
+        f"  skills_covered: {result.skills_covered}",
+        (
+            f"  failed_extractions: {len(result.failed_extraction_slugs)}"
+            f" {list(result.failed_extraction_slugs)}"
+        ),
+        f"  total_clauses: {total}",
+        (
+            f"  scoreable_axis: {result.scoreable_axis_count}"
+            f" ({_percent(result.scoreable_axis_count, total)}%)"
+        ),
+        (
+            f"  unscoreable_axis: {result.unscoreable_axis_count}"
+            f" ({_percent(result.unscoreable_axis_count, total)}%)"
+        ),
+        (
+            f"  comparator_unspecified: {result.comparator_unspecified_count}"
+            f" ({_percent(result.comparator_unspecified_count, total)}%)"
+        ),
+        (
+            f"  comparator_specified: {result.comparator_specified_count}"
+            f" ({_percent(result.comparator_specified_count, total)}%)"
+        ),
+    ]
+    if result.falsifying_case_status == "unmeasurable_for_this_input":
+        lines.append("  falsifying_case_structural_completeness: unmeasurable_for_this_input")
+        lines.append(f"    reason: {result.falsifying_case_reason}")
+    else:
+        lines.append("  falsifying_case_structural_completeness: measured")
+        lines.append(
+            f"    applicable (vacuity_flag=none): {result.falsifying_case_applicable_count}"
+        )
+        complete_pct = _percent(
+            result.falsifying_case_complete_count,
+            result.falsifying_case_applicable_count,
+        )
+        incomplete_pct = _percent(
+            result.falsifying_case_incomplete_count,
+            result.falsifying_case_applicable_count,
+        )
+        lines.append(
+            f"    structurally_complete: {result.falsifying_case_complete_count} ({complete_pct}%)"
+        )
+        lines.append(
+            f"    structurally_incomplete: {result.falsifying_case_incomplete_count}"
+            f" ({incomplete_pct}%)"
+        )
+    lines.append("  vacuity_flag_tally (queue marker, not detector accuracy):")
+    lines.append(f"    none: {result.vacuity_none_count}")
+    lines.append(f"    semantic_vacuous_pending_review: {result.vacuity_semantic_pending_count}")
+    for flag, count in result.vacuity_other:
+        lines.append(f"    {flag!r}: {count}")
+    lines.append("  axis_distribution:")
+    for axis, count in result.axis_distribution:
+        lines.append(f"    {axis!r}: {count} ({_percent(count, total)}%)")
+    return "\n".join(lines) + "\n"
+
+
+def write_receipt(result: CensusResult, path: Path | str) -> None:
+    """Write the canonical JSON receipt to ``path``."""
+    Path(path).write_bytes(receipt_json_bytes(result))
+
+
+def emit_report(
+    result: CensusResult,
+    *,
+    stdout: TextIO,
+    receipt_path: Path | str | None = None,
+) -> None:
+    """Write the human report to ``stdout`` and optionally a JSON receipt."""
+    stdout.write(format_human_report(result))
+    if receipt_path is not None:
+        write_receipt(result, receipt_path)
