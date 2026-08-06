@@ -451,6 +451,29 @@ def test_cli_without_evidence_refuses_instantiated(tmp_path: Path) -> None:
     assert "percent" not in data["corpus"]["instantiated_coverage"]
 
 
+def test_cli_report_is_ascii_only(tmp_path: Path) -> None:
+    """Report text must be ASCII: a Windows console is cp1252 by default.
+
+    A single em dash in the report is written as byte 0x97 there and then
+    fails to decode in any UTF-8 reader, which took out both windows CI
+    cells on the first run of this module. Asserting on the bytes a user
+    actually sees is the only check that catches a reintroduced character;
+    it fails the moment one appears.
+    """
+    receipt = tmp_path / "receipt.json"
+    proc = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(_MULTI), "--receipt", str(receipt)],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(_REPO),
+    )
+    assert proc.returncode == 0, proc.stderr
+    offenders = sorted({ch for ch in proc.stdout if not ch.isascii()})
+    assert not offenders, f"non-ASCII in CLI report: {offenders!r}"
+
+
 def test_no_second_predicate_implementation_in_coverage_module() -> None:
     cov_path = _REPO / "src" / "skill_harness" / "extractor" / "corpus_coverage.py"
     text = cov_path.read_text(encoding="utf-8")

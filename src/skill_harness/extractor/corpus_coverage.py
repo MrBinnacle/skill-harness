@@ -32,7 +32,7 @@ from skill_harness.storage.migrations import open_evidence
 _MISSING_STAGE_NOTE: Final[str] = (
     "No stage exists that converts an extractor input_population_spec into a "
     "frozen_cases.failing_input_text. Such a stage would require: draw a concrete "
-    "input from the population spec; bind an oracle — a human label, or a "
+    "input from the population spec; bind an oracle - a human label, or a "
     "registered mechanical scorer with metric_id / metric_version / "
     "implementation_hash. Out of scope for this measurement."
 )
