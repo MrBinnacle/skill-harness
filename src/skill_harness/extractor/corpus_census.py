@@ -42,6 +42,21 @@ class _SkillRow:
 
 
 @dataclass(frozen=True)
+class SkillCensusRow:
+    """Per-skill census slice (constructible / FC structural completeness)."""
+
+    slug: str
+    total_clauses: int
+    falsifying_case_status: Literal["measured", "unmeasurable_for_this_input"]
+    falsifying_case_reason: str | None
+    falsifying_case_applicable_count: int
+    falsifying_case_complete_count: int
+    falsifying_case_incomplete_count: int
+    constructible_count: int
+    """Clauses with a structurally complete falsifying_case (any vacuity)."""
+
+
+@dataclass(frozen=True)
 class CensusResult:
     """Immutable census figures. Serialises to a stable JSON receipt."""
 
@@ -65,6 +80,7 @@ class CensusResult:
     vacuity_semantic_pending_count: int
     vacuity_other: tuple[tuple[str, int], ...]
     axis_distribution: tuple[tuple[str, int], ...]
+    per_skill: tuple[SkillCensusRow, ...] = ()
 
     def to_receipt(self) -> dict[str, Any]:
         """Build the JSON-serialisable receipt (sorted-key friendly)."""
@@ -95,6 +111,7 @@ class CensusResult:
             "falsifying_case_structural_completeness": _fc_receipt_block(self),
             "input_path": self.input_path,
             "metadata_rows_skipped": self.metadata_rows_skipped,
+            "per_skill": [_skill_receipt_row(row) for row in self.per_skill],
             "rows_total": self.rows_total,
             "scoreable_axis": {
                 "count": self.scoreable_axis_count,
@@ -138,6 +155,32 @@ def _fc_receipt_block(result: CensusResult) -> dict[str, Any]:
         "structurally_complete": result.falsifying_case_complete_count,
         "structurally_incomplete": result.falsifying_case_incomplete_count,
     }
+
+
+def _skill_receipt_row(row: SkillCensusRow) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "constructible_count": row.constructible_count,
+        "slug": row.slug,
+        "total_clauses": row.total_clauses,
+    }
+    if row.falsifying_case_status == "unmeasurable_for_this_input":
+        base["falsifying_case_structural_completeness"] = {
+            "reason": row.falsifying_case_reason,
+            "status": "unmeasurable_for_this_input",
+        }
+        return base
+    applicable = row.falsifying_case_applicable_count
+    base["falsifying_case_structural_completeness"] = {
+        "applicable_clauses_vacuity_none": applicable,
+        "percent_complete_of_applicable": _percent(row.falsifying_case_complete_count, applicable),
+        "status": "measured",
+        "structurally_complete": row.falsifying_case_complete_count,
+        "structurally_incomplete": row.falsifying_case_incomplete_count,
+    }
+    base["constructible_coverage_percent_of_clauses"] = _percent(
+        row.constructible_count, row.total_clauses
+    )
+    return base
 
 
 def _is_metadata_row(row: Mapping[str, Any]) -> bool:
@@ -197,7 +240,13 @@ def _extract_extractor_model(rows: Sequence[Mapping[str, Any]]) -> str | None:
     return None
 
 
-def _falsifying_case_complete(clause: Mapping[str, Any]) -> bool:
+def falsifying_case_complete(clause: Mapping[str, Any]) -> bool:
+    """True iff ``clause`` carries a structurally complete falsifying_case object.
+
+    Required keys (all present, non-None, non-empty string):
+    ``input_population_spec``, ``expected_directional_pair``, ``min_reproducibility``.
+    A bare boolean or missing key is incomplete.
+    """
     fc = clause.get("falsifying_case")
     if not isinstance(fc, Mapping):
         return False
@@ -216,6 +265,44 @@ def _clauses_have_falsifying_case_key(clauses: Iterable[Mapping[str, Any]]) -> b
     return any("falsifying_case" in clause for clause in clauses)
 
 
+def _skill_fc_row(skill: _SkillRow) -> SkillCensusRow:
+    """Per-skill FC structural completeness + constructible count."""
+    clauses = skill.clauses
+    fc_schema_present = _clauses_have_falsifying_case_key(clauses)
+    constructible = sum(1 for c in clauses if falsifying_case_complete(c))
+    if not fc_schema_present:
+        return SkillCensusRow(
+            slug=skill.slug,
+            total_clauses=len(clauses),
+            falsifying_case_status="unmeasurable_for_this_input",
+            falsifying_case_reason=_FC_UNMEASURABLE_REASON,
+            falsifying_case_applicable_count=0,
+            falsifying_case_complete_count=0,
+            falsifying_case_incomplete_count=0,
+            constructible_count=0,
+        )
+    applicable = 0
+    complete = 0
+    incomplete = 0
+    for clause in clauses:
+        if clause.get("vacuity_flag") == "none":
+            applicable += 1
+            if falsifying_case_complete(clause):
+                complete += 1
+            else:
+                incomplete += 1
+    return SkillCensusRow(
+        slug=skill.slug,
+        total_clauses=len(clauses),
+        falsifying_case_status="measured",
+        falsifying_case_reason=None,
+        falsifying_case_applicable_count=applicable,
+        falsifying_case_complete_count=complete,
+        falsifying_case_incomplete_count=incomplete,
+        constructible_count=constructible,
+    )
+
+
 def run_census(input_path: Path | str) -> CensusResult:
     """Compute the census for a clause-JSONL file at ``input_path``."""
     path = Path(input_path)
@@ -225,6 +312,7 @@ def run_census(input_path: Path | str) -> CensusResult:
     covered = 0
     failed_slugs: list[str] = []
     all_clauses: list[Mapping[str, Any]] = []
+    ok_skills: list[_SkillRow] = []
 
     for row in rows:
         if _is_metadata_row(row):
@@ -235,6 +323,7 @@ def run_census(input_path: Path | str) -> CensusResult:
             failed_slugs.append(skill.slug)
             continue
         covered += 1
+        ok_skills.append(skill)
         all_clauses.extend(skill.clauses)
 
     failed_slugs_sorted = tuple(sorted(failed_slugs))
@@ -281,7 +370,7 @@ def run_census(input_path: Path | str) -> CensusResult:
 
         if vacuity == "none" and fc_schema_present:
             fc_applicable += 1
-            if _falsifying_case_complete(clause):
+            if falsifying_case_complete(clause):
                 fc_complete += 1
             else:
                 fc_incomplete += 1
@@ -298,6 +387,7 @@ def run_census(input_path: Path | str) -> CensusResult:
 
     axis_distribution = tuple(sorted(axis_counts.items(), key=lambda item: item[0]))
     vacuity_other = tuple(sorted(vacuity_other_counts.items(), key=lambda item: item[0]))
+    per_skill = tuple(sorted((_skill_fc_row(s) for s in ok_skills), key=lambda r: r.slug))
 
     return CensusResult(
         extractor_model=extractor_model,
@@ -320,6 +410,7 @@ def run_census(input_path: Path | str) -> CensusResult:
         vacuity_semantic_pending_count=vacuity_semantic,
         vacuity_other=vacuity_other,
         axis_distribution=axis_distribution,
+        per_skill=per_skill,
     )
 
 
