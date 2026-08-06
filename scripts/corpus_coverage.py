@@ -21,11 +21,20 @@ from pathlib import Path
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows consoles default to cp1252, so any non-ASCII byte in this report
+    # raises UnicodeEncodeError on write and UnicodeDecodeError in a UTF-8
+    # reader. Report text is kept ASCII-only; this is the belt-and-braces half
+    # so a future non-ASCII string degrades instead of aborting the run.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(
         description=(
             "Dual corpus coverage: constructible (structurally complete "
             "falsifying_case) vs instantiated (>=1 frozen_cases row). "
-            "Pure computation — no API calls, no model judgment."
+            "Pure computation - no API calls, no model judgment."
         )
     )
     parser.add_argument(
