@@ -33,7 +33,7 @@ _FC_UNMEASURABLE_REASON: Final[str] = (
 # #123: attached to every rendered semantic_vacuous_pending_review count.
 # Honest state: a model thought this, and nobody has checked.
 _UNREVIEWED_SEMANTIC_VACUOUS_LABEL: Final[str] = (
-    "unreviewed model judgement — a model's judgement about model "
+    "unreviewed model judgement: a model's judgement about model "
     "instructions, not an adjudicated finding"
 )
 

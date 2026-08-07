@@ -384,3 +384,45 @@ def test_failed_row_with_empty_clauses_never_enters_axis_counts(path: Path) -> N
         + receipt["metadata_rows_skipped"]
         == receipt["rows_total"]
     )
+
+
+def test_cli_report_is_ascii_only(tmp_path: Path) -> None:
+    """Report text must be ASCII: a Windows console is cp1252 by default.
+
+    A single em dash is written as byte 0x97 there and then fails to decode
+    in any UTF-8 reader. That took out both windows CI cells on #121, and
+    again on #123 when a new label reintroduced one into this module -- which
+    the coverage module's guard could not see, because it only ever checked
+    the coverage CLI. Asserting on the bytes a user actually sees is the only
+    check that catches a reintroduced character.
+    """
+    receipt = tmp_path / "receipt.json"
+    proc = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(_CURRENT), "--receipt", str(receipt)],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(_REPO),
+    )
+    assert proc.returncode == 0, proc.stderr
+    offenders = sorted({ch for ch in proc.stdout if not ch.isascii()})
+    assert not offenders, f"non-ASCII in CLI report: {offenders!r}"
+
+
+def test_cli_help_text_is_ascii_only() -> None:
+    """--help is a user-facing surface too, and it is not covered above.
+
+    The argparse description carried a latent em dash that no test ever
+    rendered, so the defect sat in the module while the report was clean.
+    """
+    proc = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(_REPO),
+    )
+    offenders = sorted({ch for ch in proc.stdout if not ch.isascii()})
+    assert not offenders, f"non-ASCII in CLI --help: {offenders!r}"

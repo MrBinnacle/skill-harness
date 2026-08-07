@@ -15,10 +15,19 @@ from pathlib import Path
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows consoles default to cp1252, so any non-ASCII byte in this report
+    # raises UnicodeEncodeError on write and UnicodeDecodeError in a UTF-8
+    # reader. Report text is kept ASCII-only; this is the belt-and-braces half
+    # so a future non-ASCII string degrades instead of aborting the run.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(
         description=(
             "Deterministic census of how much of an extracted-clause JSONL "
-            "corpus is mechanically measurable today. Pure computation — no "
+            "corpus is mechanically measurable today. Pure computation - no "
             "API calls, no model judgment."
         )
     )
