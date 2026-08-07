@@ -259,7 +259,8 @@ def test_call_extract_clauses_uses_openrouter_when_anthropic_key_absent(
             [_make_tool_use_block({"clauses": [_valid_raw_clause(0)]})]
         )
 
-        clauses, model_id = call_extract_clauses("Test skill body.")
+        clauses, instrument = call_extract_clauses("Test skill body.")
+        model_id = instrument.model_id
 
     # Anthropic constructor must have been called with OpenRouter base_url + api_key
     mock_cls.assert_called_once()

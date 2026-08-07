@@ -170,10 +170,14 @@ def test_extraction_result_valid() -> None:
         clauses=[clause],
         raw_frontmatter={"name": "test-skill"},
         extractor_model="claude-opus-5",
+        system_prompt_sha256="b" * 64,
+        tool_schema_sha256="c" * 64,
     )
     assert result.name == "test-skill"
     assert len(result.clauses) == 1
     assert result.extractor_model == "claude-opus-5"
+    assert result.system_prompt_sha256 == "b" * 64
+    assert result.tool_schema_sha256 == "c" * 64
 
 
 def test_extraction_result_sha256_length_enforced() -> None:
@@ -187,4 +191,6 @@ def test_extraction_result_sha256_length_enforced() -> None:
             clauses=[clause],
             raw_frontmatter={},
             extractor_model="claude-opus-5",
+            system_prompt_sha256="b" * 64,
+            tool_schema_sha256="c" * 64,
         )

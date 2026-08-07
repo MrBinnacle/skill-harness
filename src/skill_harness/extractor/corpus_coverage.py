@@ -47,6 +47,10 @@ _REASON_NO_INSTANTIATED: Final[str] = (
     "none is testable."
 )
 _REASON_NO_CLAUSES: Final[str] = "no_clauses: skill has zero authored clauses"
+_REASON_MIXED_GENERATIONS: Final[str] = (
+    "mixed_extractor_generations: corpus rows come from more than one extractor "
+    "instrument generation; refusing to merge into one coverage figure"
+)
 
 
 @dataclass(frozen=True)
@@ -102,6 +106,10 @@ class CoverageResult:
     input_path: str
     evidence_path: str | None
     extractor_model: str | None
+    system_prompt_sha256: str | None
+    tool_schema_sha256: str | None
+    extractor_generation_status: Literal["known", "unknown", "mixed"]
+    extractor_generation_reason: str | None
     rows_total: int
     metadata_rows_skipped: int
     skills_covered: int
@@ -121,6 +129,12 @@ class CoverageResult:
                 "total_clauses": self.total_clauses,
             },
             "evidence_path": self.evidence_path,
+            "extractor_generation": {
+                "reason": self.extractor_generation_reason,
+                "status": self.extractor_generation_status,
+                "system_prompt_sha256": self.system_prompt_sha256,
+                "tool_schema_sha256": self.tool_schema_sha256,
+            },
             "extractor_model": self.extractor_model,
             "failed_extractions": {"count": len(failed), "slugs": failed},
             "input_path": self.input_path,
@@ -136,6 +150,8 @@ class CoverageResult:
             ],
             "rows_total": self.rows_total,
             "skills_covered": self.skills_covered,
+            "system_prompt_sha256": self.system_prompt_sha256,
+            "tool_schema_sha256": self.tool_schema_sha256,
         }
 
 
@@ -314,6 +330,7 @@ def run_coverage(
         inst_index, corpus_frozen_total = _load_instantiated_index(epath)
 
     evidence_supplied = evidence_path is not None
+    mixed_generations = census.corpus_figures_status == "refused"
 
     per_skill_rows: list[SkillCoverageRow] = []
     corpus_instantiated_num = 0
@@ -345,18 +362,38 @@ def run_coverage(
             )
         )
 
-    corpus_constructible = _corpus_constructible(census)
-    corpus_instantiated = _instantiated_for_scope(
-        denominator=census.total_clauses,
-        instantiated_count=corpus_instantiated_num if evidence_supplied else 0,
-        evidence_supplied=evidence_supplied,
-        corpus_frozen_total=corpus_frozen_total,
-    )
+    if mixed_generations:
+        corpus_constructible = CoverageFigure(
+            label="constructible",
+            status="refused",
+            reason=census.corpus_figures_reason or _REASON_MIXED_GENERATIONS,
+            numerator=0,
+            denominator=census.total_clauses,
+        )
+        corpus_instantiated = CoverageFigure(
+            label="instantiated",
+            status="refused",
+            reason=census.corpus_figures_reason or _REASON_MIXED_GENERATIONS,
+            numerator=0,
+            denominator=census.total_clauses,
+        )
+    else:
+        corpus_constructible = _corpus_constructible(census)
+        corpus_instantiated = _instantiated_for_scope(
+            denominator=census.total_clauses,
+            instantiated_count=corpus_instantiated_num if evidence_supplied else 0,
+            evidence_supplied=evidence_supplied,
+            corpus_frozen_total=corpus_frozen_total,
+        )
 
     return CoverageResult(
         input_path=path.as_posix(),
         evidence_path=evidence_posix,
         extractor_model=census.extractor_model,
+        system_prompt_sha256=census.system_prompt_sha256,
+        tool_schema_sha256=census.tool_schema_sha256,
+        extractor_generation_status=census.extractor_generation_status,
+        extractor_generation_reason=census.extractor_generation_reason,
         rows_total=census.rows_total,
         metadata_rows_skipped=census.metadata_rows_skipped,
         skills_covered=census.skills_covered,
@@ -407,6 +444,16 @@ def format_human_report(result: CoverageResult) -> str:
         f"  input: {result.input_path}",
         f"  evidence: {result.evidence_path!s}",
         f"  extractor_model: {result.extractor_model!s}",
+        f"  system_prompt_sha256: {result.system_prompt_sha256!s}",
+        f"  tool_schema_sha256: {result.tool_schema_sha256!s}",
+        (
+            f"  extractor_generation: {result.extractor_generation_status}"
+            + (
+                f" ({result.extractor_generation_reason})"
+                if result.extractor_generation_reason
+                else ""
+            )
+        ),
         f"  rows_total: {result.rows_total}",
         f"  metadata_rows_skipped: {result.metadata_rows_skipped}",
         f"  skills_covered: {result.skills_covered}",

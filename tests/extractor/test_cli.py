@@ -48,6 +48,8 @@ def _make_result(name: str = "test-skill", n_clauses: int = 3) -> ExtractionResu
         clauses=clauses,
         raw_frontmatter={"name": name},
         extractor_model="claude-opus-5",
+        system_prompt_sha256="b" * 64,
+        tool_schema_sha256="c" * 64,
     )
 
 

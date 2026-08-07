@@ -9,7 +9,11 @@ from unittest.mock import patch
 import pytest
 
 from skill_harness.extractor.errors import ExtractorClaudeError, MalformedSkillError
-from skill_harness.extractor.models import ExtractedClause, FalsifyingCaseSchema
+from skill_harness.extractor.models import (
+    ExtractedClause,
+    ExtractorInstrument,
+    FalsifyingCaseSchema,
+)
 from skill_harness.extractor.pipeline import _clause_id, _to_db_comparator, extract_skill
 from skill_harness.storage.migrations import open_evidence
 
@@ -98,7 +102,12 @@ def test_to_db_comparator_unspecified_raises() -> None:
 
 @patch("skill_harness.extractor.pipeline.call_extract_clauses")
 def test_extract_skill_dry_run_returns_result(mock_call: Any, tmp_path: Path) -> None:
-    mock_call.return_value = ([_make_clause(0), _make_clause(1)], "claude-opus-5")
+    mock_call.return_value = (
+        [_make_clause(0), _make_clause(1)],
+        ExtractorInstrument(
+            model_id="claude-opus-5", system_prompt_sha256="b" * 64, tool_schema_sha256="c" * 64
+        ),
+    )
     skill_path = _make_skill_file(tmp_path)
 
     result = extract_skill(skill_path, evidence_conn=None)
@@ -111,7 +120,12 @@ def test_extract_skill_dry_run_returns_result(mock_call: Any, tmp_path: Path) ->
 
 @patch("skill_harness.extractor.pipeline.call_extract_clauses")
 def test_extract_skill_dry_run_does_not_write_to_db(mock_call: Any, tmp_path: Path) -> None:
-    mock_call.return_value = ([_make_clause(0)], "claude-opus-5")
+    mock_call.return_value = (
+        [_make_clause(0)],
+        ExtractorInstrument(
+            model_id="claude-opus-5", system_prompt_sha256="b" * 64, tool_schema_sha256="c" * 64
+        ),
+    )
     skill_path = _make_skill_file(tmp_path)
 
     # No evidence_conn passed → dry-run → must not touch any DB.
@@ -129,7 +143,12 @@ def test_extract_skill_dry_run_does_not_write_to_db(mock_call: Any, tmp_path: Pa
 
 @patch("skill_harness.extractor.pipeline.call_extract_clauses")
 def test_extract_skill_persists_skill_row(mock_call: Any, tmp_path: Path) -> None:
-    mock_call.return_value = ([_make_clause(0), _make_clause(1)], "claude-opus-5")
+    mock_call.return_value = (
+        [_make_clause(0), _make_clause(1)],
+        ExtractorInstrument(
+            model_id="claude-opus-5", system_prompt_sha256="b" * 64, tool_schema_sha256="c" * 64
+        ),
+    )
     skill_path = _make_skill_file(tmp_path)
     evidence_conn = open_evidence(tmp_path / "evidence.db")
 
@@ -148,7 +167,12 @@ def test_extract_skill_persists_skill_row(mock_call: Any, tmp_path: Path) -> Non
 
 @patch("skill_harness.extractor.pipeline.call_extract_clauses")
 def test_extract_skill_persists_clause_rows(mock_call: Any, tmp_path: Path) -> None:
-    mock_call.return_value = ([_make_clause(0), _make_clause(1)], "claude-opus-5")
+    mock_call.return_value = (
+        [_make_clause(0), _make_clause(1)],
+        ExtractorInstrument(
+            model_id="claude-opus-5", system_prompt_sha256="b" * 64, tool_schema_sha256="c" * 64
+        ),
+    )
     skill_path = _make_skill_file(tmp_path)
     evidence_conn = open_evidence(tmp_path / "evidence.db")
 
@@ -170,7 +194,12 @@ def test_extract_skill_persists_clause_rows(mock_call: Any, tmp_path: Path) -> N
 def test_extract_skill_stores_falsifying_case_sha256(mock_call: Any, tmp_path: Path) -> None:
     clause = _make_clause(0, comparator="increase")
     assert clause.falsifying_case is not None
-    mock_call.return_value = ([clause], "claude-opus-5")
+    mock_call.return_value = (
+        [clause],
+        ExtractorInstrument(
+            model_id="claude-opus-5", system_prompt_sha256="b" * 64, tool_schema_sha256="c" * 64
+        ),
+    )
 
     skill_path = _make_skill_file(tmp_path)
     evidence_conn = open_evidence(tmp_path / "evidence.db")
@@ -191,7 +220,12 @@ def test_extract_skill_stores_falsifying_case_sha256(mock_call: Any, tmp_path: P
 
 @patch("skill_harness.extractor.pipeline.call_extract_clauses")
 def test_extract_skill_preserve_comparator_stored_as_match(mock_call: Any, tmp_path: Path) -> None:
-    mock_call.return_value = ([_make_clause(0, comparator="preserve")], "claude-opus-5")
+    mock_call.return_value = (
+        [_make_clause(0, comparator="preserve")],
+        ExtractorInstrument(
+            model_id="claude-opus-5", system_prompt_sha256="b" * 64, tool_schema_sha256="c" * 64
+        ),
+    )
     skill_path = _make_skill_file(tmp_path)
     evidence_conn = open_evidence(tmp_path / "evidence.db")
 
@@ -224,7 +258,12 @@ def test_extract_skill_raises_on_comparator_unspecified_at_persist(
         falsifying_case=None,
     )
     c_normal = _make_clause(1, comparator="increase")
-    mock_call.return_value = ([c_unspec, c_normal], "claude-opus-5")
+    mock_call.return_value = (
+        [c_unspec, c_normal],
+        ExtractorInstrument(
+            model_id="claude-opus-5", system_prompt_sha256="b" * 64, tool_schema_sha256="c" * 64
+        ),
+    )
 
     skill_path = _make_skill_file(tmp_path)
     evidence_conn = open_evidence(tmp_path / "evidence.db")
@@ -260,7 +299,12 @@ def test_extract_skill_dry_run_does_not_raise_on_comparator_unspecified(
         vacuity_flag="semantic_vacuous_pending_review",
         falsifying_case=None,
     )
-    mock_call.return_value = ([c_unspec], "claude-opus-5")
+    mock_call.return_value = (
+        [c_unspec],
+        ExtractorInstrument(
+            model_id="claude-opus-5", system_prompt_sha256="b" * 64, tool_schema_sha256="c" * 64
+        ),
+    )
     skill_path = _make_skill_file(tmp_path)
 
     result = extract_skill(skill_path, evidence_conn=None)

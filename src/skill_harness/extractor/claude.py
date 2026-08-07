@@ -19,16 +19,22 @@ skill_genre) record is written here.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import sys
 import time
-from typing import Any
+from typing import Any, cast
 
 import anthropic
 from pydantic import ValidationError
 
 from skill_harness.extractor.errors import ExtractorClaudeError
-from skill_harness.extractor.models import ExtractedClause, FalsifyingCaseSchema
+from skill_harness.extractor.models import (
+    ExtractedClause,
+    ExtractorInstrument,
+    FalsifyingCaseSchema,
+)
 from skill_harness.oracles.tier1.axis_registry import TIER1_AXES
 
 _MODEL = "claude-opus-5"
@@ -237,8 +243,52 @@ def _make_extractor_client() -> tuple[anthropic.Anthropic, str]:
     )
 
 
-def _call_once(client: anthropic.Anthropic, body: str, model: str = _MODEL) -> list[Any]:
+def _extract_clauses_tools() -> list[dict[str, Any]]:
+    """Build the tools list actually passed to ``messages.create``.
+
+    Constructed once per call so the tool-schema hash is taken from the same
+    object graph the request uses (a mock cannot diverge from production).
+    """
+    return [
+        {
+            "name": "extract_clauses",
+            "description": ("Return all behavioral clauses extracted from the skill document."),
+            "input_schema": _EXTRACT_CLAUSES_SCHEMA,
+            "strict": True,
+        }
+    ]
+
+
+def _instrument_from_request(
+    model: str,
+    system: str,
+    tools: list[dict[str, Any]],
+) -> ExtractorInstrument:
+    """Hash the exact system prompt and tool schema strings sent to the API."""
+    system_prompt_sha256 = hashlib.sha256(system.encode("utf-8")).hexdigest()
+    # Canonical JSON of the input_schema (the tool schema identity), matching
+    # judge_id's tool_schema_sha256 construction.
+    schema = tools[0]["input_schema"]
+    schema_bytes = json.dumps(schema, sort_keys=True, ensure_ascii=True).encode("utf-8")
+    tool_schema_sha256 = hashlib.sha256(schema_bytes).hexdigest()
+    return ExtractorInstrument(
+        model_id=model,
+        system_prompt_sha256=system_prompt_sha256,
+        tool_schema_sha256=tool_schema_sha256,
+    )
+
+
+def _call_once(
+    client: anthropic.Anthropic,
+    body: str,
+    model: str,
+    system: str,
+    tools: list[dict[str, Any]],
+) -> list[Any]:
     """Make a single API call and return the raw clauses list.
+
+    ``system`` and ``tools`` must be the same objects used to build the
+    :class:`ExtractorInstrument` for this call.
 
     :raises ExtractorClaudeError: On API error, missing tool block, wrong input type,
         or 'clauses' field of unexpected type.  The last error is the transient
@@ -248,17 +298,8 @@ def _call_once(client: anthropic.Anthropic, body: str, model: str = _MODEL) -> l
         response = client.messages.create(
             model=model,
             max_tokens=16000,
-            system=_SYSTEM_PROMPT,
-            tools=[
-                {
-                    "name": "extract_clauses",
-                    "description": (
-                        "Return all behavioral clauses extracted from the skill document."
-                    ),
-                    "input_schema": _EXTRACT_CLAUSES_SCHEMA,
-                    "strict": True,
-                }
-            ],
+            system=system,
+            tools=cast(Any, tools),
             tool_choice={"type": "tool", "name": "extract_clauses"},
             messages=[
                 {
@@ -300,22 +341,29 @@ def _call_once(client: anthropic.Anthropic, body: str, model: str = _MODEL) -> l
     return raw_clauses
 
 
-def call_extract_clauses(body: str, *, no_retry: bool = False) -> tuple[list[ExtractedClause], str]:
+def call_extract_clauses(
+    body: str, *, no_retry: bool = False
+) -> tuple[list[ExtractedClause], ExtractorInstrument]:
     """Call Claude to extract clauses from ``body``.
 
     :param body: The skill document body text (post-frontmatter).
     :param no_retry: If True, disable the single retry on transient
         ``'clauses' field of unexpected type: str`` anomaly.  Use in CI or
         test contexts that require strict-fail behaviour.
-    :returns: ``(clauses, extractor_model)`` — validated clauses and the model
-        id actually used for the call (bare or OpenRouter-prefixed).
+    :returns: ``(clauses, instrument)`` — validated clauses and the instrument
+        triple (model pin, system-prompt hash, tool-schema hash) computed from
+        the exact strings sent on the request.
     :raises ExtractorClaudeError: On API error, empty result, or validation
         failure deserializing the tool call response.
     """
     client, model_for_routing = _make_extractor_client()
+    # Build request identity once; hashes and messages.create share these values.
+    system = _SYSTEM_PROMPT
+    tools = _extract_clauses_tools()
+    instrument = _instrument_from_request(model_for_routing, system, tools)
 
     try:
-        raw_clauses = _call_once(client, body, model_for_routing)
+        raw_clauses = _call_once(client, body, model_for_routing, system, tools)
     except ExtractorClaudeError as exc:
         # Retry only the specific transient anomaly where the API returns the
         # 'clauses' field as a string instead of a list.  This was observed
@@ -327,7 +375,7 @@ def call_extract_clauses(body: str, *, no_retry: bool = False) -> tuple[list[Ext
                 file=sys.stderr,
             )
             time.sleep(1)
-            raw_clauses = _call_once(client, body, model_for_routing)
+            raw_clauses = _call_once(client, body, model_for_routing, system, tools)
         else:
             raise
 
@@ -358,4 +406,4 @@ def call_extract_clauses(body: str, *, no_retry: bool = False) -> tuple[list[Ext
             f"{len(errors)} of {len(raw_clauses)} clauses failed validation:\n" + "\n".join(errors)
         )
 
-    return clauses, model_for_routing
+    return clauses, instrument
