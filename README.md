@@ -31,15 +31,19 @@ Most benchmarks hand you a number no matter what. This tool refuses. That refusa
 > The tool now answers the slot question with one of three verdicts: **KEEP** (measurably earns
 > its slot), **CUT** — either *subsumed* (the model already does the task without the skill) or
 > *no-lift* (measured on a task the model needed help with, and it didn't deliver) — or
-> **CAN'T-TELL-YET** (the evidence doesn't support a verdict). A made-up score is never emitted in
-> place of CAN'T-TELL-YET.
+> **CAN'T-TELL-YET** (the evidence doesn't support a verdict). Screen-path **CUT (subsumed)**
+> for an above-bar `p0` fires only when the skill's registered value class is
+> `TRANSFORMATIVE_LIFT`; other value classes are routed to **CAN'T-TELL-YET** (wrong instrument)
+> by the value-class guard. A made-up score is never emitted in place of CAN'T-TELL-YET.
 >
 > **Run live, end-to-end** (Inspect + Docker + deterministic oracle, direct Anthropic frontier
 > model, 3 epochs each, store-backed): two real skills —
 > [`append-only-evidence-design`](https://github.com/MrBinnacle/skills) and a hardened
 > `git-pull-rebase-trap` — both returned **CUT (subsumed)** at a bare-arm pass rate of
-> 1.00: the model passed every no-skill epoch, so there was nothing for the skill to add. That is
-> the tool doing its job, not a failure.
+> 1.00 under the pre-guard mapping (the model passed every no-skill epoch). Those dated results
+> stand; they are not retracted. The value-class guard has since reclassified both to
+> **CAN'T-TELL-YET**: an above-bar `p0` maps to CUT(subsumed) only for `TRANSFORMATIVE_LIFT`, and
+> both skills are registered as other classes (`calibration` and `trap-discipline`).
 >
 > **Honest maturity.** **Zero production-skill KEEPs exist in the program to date.** The full
 > KEEP lane — paired Full-vs-Null writer plus the audited-metric registration act — has fired
