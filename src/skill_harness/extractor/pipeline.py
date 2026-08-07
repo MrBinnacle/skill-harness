@@ -108,9 +108,9 @@ def extract_skill(
     parsed = parse_skill_file(path)
 
     # 2. Call Claude to extract clauses.
-    clauses, extractor_model = call_extract_clauses(parsed.body)
+    clauses, instrument = call_extract_clauses(parsed.body)
 
-    # 3. Build the ExtractionResult.
+    # 3. Build the ExtractionResult (instrument triple on every result row).
     result = ExtractionResult(
         skill_id=parsed.source_sha256,
         name=parsed.name,
@@ -118,7 +118,9 @@ def extract_skill(
         source_sha256=parsed.source_sha256,
         clauses=clauses,
         raw_frontmatter=dict(parsed.frontmatter),
-        extractor_model=extractor_model,
+        extractor_model=instrument.model_id,
+        system_prompt_sha256=instrument.system_prompt_sha256,
+        tool_schema_sha256=instrument.tool_schema_sha256,
     )
 
     # 4. Persist (if evidence_conn provided).

@@ -20,9 +20,83 @@ D4 note: extractor calibration (extractor_id, skill_genre) is deferred to v0.2.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+_SHA256_HEX_LEN = 64
+
+
+class ExtractorInstrument(BaseModel):
+    """Identity of one extractor instrument generation.
+
+    Triple mirrors judge_id inputs: model pin, system-prompt hash, tool-schema
+    hash. Two rows are the same generation iff all three agree.
+    """
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    model_id: Annotated[str, Field(min_length=1)]
+    """Model id used for the call (bare or provider-prefixed)."""
+
+    system_prompt_sha256: Annotated[
+        str, Field(min_length=_SHA256_HEX_LEN, max_length=_SHA256_HEX_LEN)
+    ]
+    """SHA-256 hex of the exact system prompt string sent to the API."""
+
+    tool_schema_sha256: Annotated[
+        str, Field(min_length=_SHA256_HEX_LEN, max_length=_SHA256_HEX_LEN)
+    ]
+    """SHA-256 hex of the canonical JSON tool schema sent to the API."""
+
+    def same_generation_as(self, other: ExtractorInstrument) -> bool:
+        """True iff both instruments are the same generation."""
+        return (
+            self.model_id == other.model_id
+            and self.system_prompt_sha256 == other.system_prompt_sha256
+            and self.tool_schema_sha256 == other.tool_schema_sha256
+        )
+
+
+def compare_extractor_generations(
+    left: ExtractorInstrument | None,
+    right: ExtractorInstrument | None,
+) -> Literal["same", "different", "unknown"]:
+    """Compare two extraction-row instruments.
+
+    ``unknown`` when either side lacks a complete triple (legacy corpus rows).
+    Never treats a missing triple as matching the current instrument.
+    """
+    if left is None or right is None:
+        return "unknown"
+    return "same" if left.same_generation_as(right) else "different"
+
+
+def instrument_from_mapping(row: Mapping[str, Any]) -> ExtractorInstrument | None:
+    """Parse an instrument triple from a corpus / result mapping.
+
+    Returns ``None`` (generation-unknown) when any of the three fields is
+    absent or not a non-empty string of the expected shape. Does not read
+    header records specially — callers pass data rows.
+    """
+    model = row.get("extractor_model")
+    prompt_sha = row.get("system_prompt_sha256")
+    schema_sha = row.get("tool_schema_sha256")
+    if not isinstance(model, str) or not model:
+        return None
+    if not isinstance(prompt_sha, str) or len(prompt_sha) != _SHA256_HEX_LEN:
+        return None
+    if not isinstance(schema_sha, str) or len(schema_sha) != _SHA256_HEX_LEN:
+        return None
+    try:
+        return ExtractorInstrument(
+            model_id=model,
+            system_prompt_sha256=prompt_sha,
+            tool_schema_sha256=schema_sha,
+        )
+    except Exception:
+        return None
 
 
 class FalsifyingCaseSchema(BaseModel):
@@ -126,3 +200,21 @@ class ExtractionResult(BaseModel):
 
     extractor_model: Annotated[str, Field(min_length=1)]
     """Model id used for this extraction (bare or provider-prefixed)."""
+
+    system_prompt_sha256: Annotated[
+        str, Field(min_length=_SHA256_HEX_LEN, max_length=_SHA256_HEX_LEN)
+    ]
+    """SHA-256 hex of the exact system prompt string sent to the API."""
+
+    tool_schema_sha256: Annotated[
+        str, Field(min_length=_SHA256_HEX_LEN, max_length=_SHA256_HEX_LEN)
+    ]
+    """SHA-256 hex of the canonical JSON tool schema sent to the API."""
+
+    def instrument(self) -> ExtractorInstrument:
+        """Return the instrument triple recorded on this result."""
+        return ExtractorInstrument(
+            model_id=self.extractor_model,
+            system_prompt_sha256=self.system_prompt_sha256,
+            tool_schema_sha256=self.tool_schema_sha256,
+        )

@@ -17,6 +17,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, TextIO
 
+from skill_harness.extractor.models import (
+    ExtractorInstrument,
+    compare_extractor_generations,
+    instrument_from_mapping,
+)
 from skill_harness.oracles.tier1.axis_registry import AxisScoreability, classify_axis
 
 _COMPARATORS_SPECIFIED: Final[frozenset[str]] = frozenset({"increase", "decrease", "preserve"})
@@ -45,6 +50,20 @@ class _SkillRow:
     clauses: tuple[Mapping[str, Any], ...]
     error_type: str | None
     error: str | None
+    instrument: ExtractorInstrument | None
+
+
+_REASON_MIXED_GENERATIONS: Final[str] = (
+    "mixed_extractor_generations: corpus rows come from more than one extractor "
+    "instrument generation (model pin / system_prompt_sha256 / tool_schema_sha256); "
+    "refusing to merge into one figure"
+)
+
+_REASON_GENERATION_UNKNOWN: Final[str] = (
+    "extractor_generation_unknown: one or more skill rows lack the instrument "
+    "triple (extractor_model, system_prompt_sha256, tool_schema_sha256); "
+    "legacy rows are not assumed to match the current instrument"
+)
 
 
 @dataclass(frozen=True)
@@ -67,6 +86,10 @@ class CensusResult:
     """Immutable census figures. Serialises to a stable JSON receipt."""
 
     extractor_model: str | None
+    system_prompt_sha256: str | None
+    tool_schema_sha256: str | None
+    extractor_generation_status: Literal["known", "unknown", "mixed"]
+    extractor_generation_reason: str | None
     input_path: str
     rows_total: int
     metadata_rows_skipped: int
@@ -77,7 +100,7 @@ class CensusResult:
     unscoreable_axis_count: int
     comparator_specified_count: int
     comparator_unspecified_count: int
-    falsifying_case_status: Literal["measured", "unmeasurable_for_this_input"]
+    falsifying_case_status: Literal["measured", "unmeasurable_for_this_input", "refused"]
     falsifying_case_reason: str | None
     falsifying_case_applicable_count: int
     falsifying_case_complete_count: int
@@ -87,6 +110,9 @@ class CensusResult:
     vacuity_other: tuple[tuple[str, int], ...]
     axis_distribution: tuple[tuple[str, int], ...]
     per_skill: tuple[SkillCensusRow, ...] = ()
+    # Corpus-wide tallies are refused when generations are mixed.
+    corpus_figures_status: Literal["measured", "refused"] = "measured"
+    corpus_figures_reason: str | None = None
 
     def to_receipt(self) -> dict[str, Any]:
         """Build the JSON-serialisable receipt (sorted-key friendly)."""
@@ -109,6 +135,13 @@ class CensusResult:
                 "count": self.comparator_unspecified_count,
                 "percent_of_clauses": _percent(self.comparator_unspecified_count, total),
             },
+            "corpus_figures_status": self.corpus_figures_status,
+            "extractor_generation": {
+                "reason": self.extractor_generation_reason,
+                "status": self.extractor_generation_status,
+                "system_prompt_sha256": self.system_prompt_sha256,
+                "tool_schema_sha256": self.tool_schema_sha256,
+            },
             "extractor_model": self.extractor_model,
             "failed_extractions": {
                 "count": len(failed_slugs),
@@ -124,6 +157,8 @@ class CensusResult:
                 "percent_of_clauses": _percent(self.scoreable_axis_count, total),
             },
             "skills_covered": self.skills_covered,
+            "system_prompt_sha256": self.system_prompt_sha256,
+            "tool_schema_sha256": self.tool_schema_sha256,
             "total_clauses": self.total_clauses,
             "unscoreable_axis": {
                 "count": self.unscoreable_axis_count,
@@ -143,6 +178,8 @@ class CensusResult:
                 },
             },
         }
+        if self.corpus_figures_status == "refused":
+            receipt["corpus_figures_reason"] = self.corpus_figures_reason
         return receipt
 
 
@@ -158,6 +195,11 @@ def _fc_receipt_block(result: CensusResult) -> dict[str, Any]:
         return {
             "reason": result.falsifying_case_reason,
             "status": "unmeasurable_for_this_input",
+        }
+    if result.falsifying_case_status == "refused":
+        return {
+            "reason": result.falsifying_case_reason,
+            "status": "refused",
         }
     applicable = result.falsifying_case_applicable_count
     return {
@@ -221,6 +263,7 @@ def _parse_skill_row(row: Mapping[str, Any]) -> _SkillRow:
         clauses=clauses,
         error_type=str(error_type) if error_type is not None else None,
         error=str(error) if error is not None else None,
+        instrument=instrument_from_mapping(row) if ok else None,
     )
 
 
@@ -252,6 +295,45 @@ def _extract_extractor_model(rows: Sequence[Mapping[str, Any]]) -> str | None:
         if isinstance(model, str) and model and not _is_metadata_row(row):
             return model
     return None
+
+
+def _resolve_corpus_generation(
+    skills: Sequence[_SkillRow],
+) -> tuple[
+    Literal["known", "unknown", "mixed"],
+    str | None,
+    ExtractorInstrument | None,
+    Literal["measured", "refused"],
+    str | None,
+]:
+    """Classify corpus instrument generation across ok skill rows.
+
+    - all rows carry the same complete triple → known / measured
+    - any row lacks the triple → unknown (legacy); still measured within the
+      file but never assumed to match the current instrument
+    - two or more distinct complete triples → mixed; refuse corpus merge
+    - mix of known triple(s) and missing → mixed; refuse corpus merge
+    """
+    if not skills:
+        return "unknown", _REASON_GENERATION_UNKNOWN, None, "measured", None
+
+    instruments = [s.instrument for s in skills]
+    known = [i for i in instruments if i is not None]
+    unknown_count = len(instruments) - len(known)
+
+    if unknown_count and not known:
+        return "unknown", _REASON_GENERATION_UNKNOWN, None, "measured", None
+
+    if unknown_count and known:
+        return "mixed", _REASON_MIXED_GENERATIONS, None, "refused", _REASON_MIXED_GENERATIONS
+
+    # All known: check pairwise identity.
+    assert known
+    first = known[0]
+    for other in known[1:]:
+        if compare_extractor_generations(first, other) != "same":
+            return "mixed", _REASON_MIXED_GENERATIONS, None, "refused", _REASON_MIXED_GENERATIONS
+    return "known", None, first, "measured", None
 
 
 def falsifying_case_complete(clause: Mapping[str, Any]) -> bool:
@@ -341,7 +423,20 @@ def run_census(input_path: Path | str) -> CensusResult:
         all_clauses.extend(skill.clauses)
 
     failed_slugs_sorted = tuple(sorted(failed_slugs))
-    extractor_model = _extract_extractor_model(rows)
+    gen_status, gen_reason, corpus_instrument, figures_status, figures_reason = (
+        _resolve_corpus_generation(ok_skills)
+    )
+    extractor_model = (
+        corpus_instrument.model_id
+        if corpus_instrument is not None
+        else _extract_extractor_model(rows)
+    )
+    system_prompt_sha256 = (
+        corpus_instrument.system_prompt_sha256 if corpus_instrument is not None else None
+    )
+    tool_schema_sha256 = (
+        corpus_instrument.tool_schema_sha256 if corpus_instrument is not None else None
+    )
 
     scoreable = 0
     unscoreable = 0
@@ -389,28 +484,54 @@ def run_census(input_path: Path | str) -> CensusResult:
             else:
                 fc_incomplete += 1
 
-    if fc_schema_present:
-        fc_status: Literal["measured", "unmeasurable_for_this_input"] = "measured"
-        fc_reason: str | None = None
+    if figures_status == "refused":
+        # Mixed generations: do not emit a blended corpus figure. Counts stay
+        # at zero in the receipt so a reader cannot treat them as a single
+        # instrument's tallies; per_skill rows remain the unit of analysis.
+        fc_status: Literal["measured", "unmeasurable_for_this_input", "refused"] = "refused"
+        fc_reason: str | None = figures_reason
+        fc_applicable = 0
+        fc_complete = 0
+        fc_incomplete = 0
+        scoreable = 0
+        unscoreable = 0
+        comp_specified = 0
+        comp_unspecified = 0
+        vacuity_none = 0
+        vacuity_semantic = 0
+        vacuity_other_counts = {}
+        axis_counts = {}
+        total_clauses = len(all_clauses)
+    elif fc_schema_present:
+        fc_status = "measured"
+        fc_reason = None
+        total_clauses = len(all_clauses)
     else:
         fc_status = "unmeasurable_for_this_input"
         fc_reason = _FC_UNMEASURABLE_REASON
         fc_applicable = 0
         fc_complete = 0
         fc_incomplete = 0
+        total_clauses = len(all_clauses)
 
     axis_distribution = tuple(sorted(axis_counts.items(), key=lambda item: item[0]))
     vacuity_other = tuple(sorted(vacuity_other_counts.items(), key=lambda item: item[0]))
+    # Per-skill figures remain available even when corpus merge is refused —
+    # each skill row is a single instrument (or unknown), not a blend.
     per_skill = tuple(sorted((_skill_fc_row(s) for s in ok_skills), key=lambda r: r.slug))
 
     return CensusResult(
         extractor_model=extractor_model,
+        system_prompt_sha256=system_prompt_sha256,
+        tool_schema_sha256=tool_schema_sha256,
+        extractor_generation_status=gen_status,
+        extractor_generation_reason=gen_reason,
         input_path=path.as_posix(),
         rows_total=len(rows),
         metadata_rows_skipped=metadata_skipped,
         skills_covered=covered,
         failed_extraction_slugs=failed_slugs_sorted,
-        total_clauses=len(all_clauses),
+        total_clauses=total_clauses,
         scoreable_axis_count=scoreable,
         unscoreable_axis_count=unscoreable,
         comparator_specified_count=comp_specified,
@@ -425,6 +546,8 @@ def run_census(input_path: Path | str) -> CensusResult:
         vacuity_other=vacuity_other,
         axis_distribution=axis_distribution,
         per_skill=per_skill,
+        corpus_figures_status=figures_status,
+        corpus_figures_reason=figures_reason,
     )
 
 
@@ -446,6 +569,17 @@ def format_human_report(result: CensusResult) -> str:
         "corpus census",
         f"  input: {result.input_path}",
         f"  extractor_model: {result.extractor_model!s}",
+        f"  system_prompt_sha256: {result.system_prompt_sha256!s}",
+        f"  tool_schema_sha256: {result.tool_schema_sha256!s}",
+        (
+            f"  extractor_generation: {result.extractor_generation_status}"
+            + (
+                f" ({result.extractor_generation_reason})"
+                if result.extractor_generation_reason
+                else ""
+            )
+        ),
+        f"  corpus_figures_status: {result.corpus_figures_status}",
         f"  rows_total: {result.rows_total}",
         f"  metadata_rows_skipped: {result.metadata_rows_skipped}",
         f"  skills_covered: {result.skills_covered}",
@@ -454,25 +588,40 @@ def format_human_report(result: CensusResult) -> str:
             f" {list(result.failed_extraction_slugs)}"
         ),
         f"  total_clauses: {total}",
-        (
-            f"  scoreable_axis: {result.scoreable_axis_count}"
-            f" ({_percent(result.scoreable_axis_count, total)}%)"
-        ),
-        (
-            f"  unscoreable_axis: {result.unscoreable_axis_count}"
-            f" ({_percent(result.unscoreable_axis_count, total)}%)"
-        ),
-        (
-            f"  comparator_unspecified: {result.comparator_unspecified_count}"
-            f" ({_percent(result.comparator_unspecified_count, total)}%)"
-        ),
-        (
-            f"  comparator_specified: {result.comparator_specified_count}"
-            f" ({_percent(result.comparator_specified_count, total)}%)"
-        ),
     ]
+    if result.corpus_figures_status == "refused":
+        lines.append(f"  corpus_figures_reason: {result.corpus_figures_reason}")
+        lines.append(
+            "  note: corpus-wide tallies refused; see per_skill rows "
+            "(not merged across extractor generations)"
+        )
+        return "\n".join(lines) + "\n"
+
+    lines.extend(
+        [
+            (
+                f"  scoreable_axis: {result.scoreable_axis_count}"
+                f" ({_percent(result.scoreable_axis_count, total)}%)"
+            ),
+            (
+                f"  unscoreable_axis: {result.unscoreable_axis_count}"
+                f" ({_percent(result.unscoreable_axis_count, total)}%)"
+            ),
+            (
+                f"  comparator_unspecified: {result.comparator_unspecified_count}"
+                f" ({_percent(result.comparator_unspecified_count, total)}%)"
+            ),
+            (
+                f"  comparator_specified: {result.comparator_specified_count}"
+                f" ({_percent(result.comparator_specified_count, total)}%)"
+            ),
+        ]
+    )
     if result.falsifying_case_status == "unmeasurable_for_this_input":
         lines.append("  falsifying_case_structural_completeness: unmeasurable_for_this_input")
+        lines.append(f"    reason: {result.falsifying_case_reason}")
+    elif result.falsifying_case_status == "refused":
+        lines.append("  falsifying_case_structural_completeness: refused")
         lines.append(f"    reason: {result.falsifying_case_reason}")
     else:
         lines.append("  falsifying_case_structural_completeness: measured")

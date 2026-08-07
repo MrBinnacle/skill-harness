@@ -89,11 +89,13 @@ def test_returns_clauses_on_success(mock_anthropic_cls: MagicMock) -> None:
         [_make_tool_use_block({"clauses": [_valid_raw_clause(0)]})]
     )
 
-    clauses, model_id = call_extract_clauses("Some skill body text.")
+    clauses, instrument = call_extract_clauses("Some skill body text.")
     assert len(clauses) == 1
     assert clauses[0].clause_index == 0
     assert clauses[0].axis == "specificity"
-    assert model_id == "claude-opus-5"
+    assert instrument.model_id == "claude-opus-5"
+    assert len(instrument.system_prompt_sha256) == 64
+    assert len(instrument.tool_schema_sha256) == 64
 
 
 @patch("skill_harness.extractor.claude.anthropic.Anthropic")
@@ -129,7 +131,7 @@ def test_returns_multiple_clauses(mock_anthropic_cls: MagicMock) -> None:
         [_make_tool_use_block({"clauses": [_valid_raw_clause(i) for i in range(5)]})]
     )
 
-    clauses, _model_id = call_extract_clauses("Body text.")
+    clauses, _instrument = call_extract_clauses("Body text.")
     assert len(clauses) == 5
 
 
@@ -153,7 +155,7 @@ def test_handles_semantic_vacuous_clause(mock_anthropic_cls: MagicMock) -> None:
         ]
     )
 
-    clauses, _model_id = call_extract_clauses("Vague skill.")
+    clauses, _instrument = call_extract_clauses("Vague skill.")
     assert len(clauses) == 1
     assert clauses[0].vacuity_flag == "semantic_vacuous_pending_review"
     assert clauses[0].falsifying_case is None
@@ -292,7 +294,7 @@ def test_retries_once_on_clauses_field_unexpected_type_str(
     good_response = _make_response([_make_tool_use_block({"clauses": [_valid_raw_clause(0)]})])
     mock_client.messages.create.side_effect = [bad_response, good_response]
 
-    clauses, _model_id = call_extract_clauses("Some skill body text.")
+    clauses, _instrument = call_extract_clauses("Some skill body text.")
     assert len(clauses) == 1
     assert clauses[0].clause_index == 0
     assert mock_client.messages.create.call_count == 2

@@ -16,6 +16,7 @@ import pytest
 from skill_harness.extractor.models import (
     ExtractedClause,
     ExtractionResult,
+    ExtractorInstrument,
     FalsifyingCaseSchema,
 )
 from skill_harness.extractor.pipeline import extract_skill
@@ -63,8 +64,13 @@ def _make_vacuous_clause(index: int) -> ExtractedClause:
     )
 
 
-def _mock_extract(n_clauses: int = 5) -> tuple[list[ExtractedClause], str]:
-    return ([_make_clause(i) for i in range(n_clauses)], "claude-opus-5")
+def _mock_extract(n_clauses: int = 5) -> tuple[list[ExtractedClause], ExtractorInstrument]:
+    return (
+        [_make_clause(i) for i in range(n_clauses)],
+        ExtractorInstrument(
+            model_id="claude-opus-5", system_prompt_sha256="b" * 64, tool_schema_sha256="c" * 64
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +82,12 @@ def _mock_extract(n_clauses: int = 5) -> tuple[list[ExtractedClause], str]:
 def test_mostly_prose_fixture_produces_valid_result(
     mock_call: Any,
 ) -> None:
-    mock_call.return_value = ([_make_vacuous_clause(0), _make_clause(1)], "claude-opus-5")
+    mock_call.return_value = (
+        [_make_vacuous_clause(0), _make_clause(1)],
+        ExtractorInstrument(
+            model_id="claude-opus-5", system_prompt_sha256="b" * 64, tool_schema_sha256="c" * 64
+        ),
+    )
     result = extract_skill(_MOSTLY_PROSE, evidence_conn=None)
     assert isinstance(result, ExtractionResult)
     assert result.name == "mostly-prose-skill"
