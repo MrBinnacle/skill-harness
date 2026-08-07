@@ -30,6 +30,12 @@ _FC_UNMEASURABLE_REASON: Final[str] = (
     "(boolean-only has_falsifying_case schema or key absent); "
     "structural completeness is unmeasurable for this input"
 )
+# #123: attached to every rendered semantic_vacuous_pending_review count.
+# Honest state: a model thought this, and nobody has checked.
+_UNREVIEWED_SEMANTIC_VACUOUS_LABEL: Final[str] = (
+    "unreviewed model judgement — a model's judgement about model "
+    "instructions, not an adjudicated finding"
+)
 
 
 @dataclass(frozen=True)
@@ -126,7 +132,15 @@ class CensusResult:
             "vacuity_flag_tally": {
                 "none": self.vacuity_none_count,
                 "other": [{"flag": flag, "count": count} for flag, count in self.vacuity_other],
-                "semantic_vacuous_pending_review": self.vacuity_semantic_pending_count,
+                # Reviewed vs unreviewed stay separate buckets so a later
+                # reviewed category cannot collapse into one undifferentiated total.
+                "reviewed": {},
+                "unreviewed": {
+                    "semantic_vacuous_pending_review": {
+                        "count": self.vacuity_semantic_pending_count,
+                        "label": _UNREVIEWED_SEMANTIC_VACUOUS_LABEL,
+                    },
+                },
             },
         }
         return receipt
@@ -482,7 +496,11 @@ def format_human_report(result: CensusResult) -> str:
         )
     lines.append("  vacuity_flag_tally (queue marker, not detector accuracy):")
     lines.append(f"    none: {result.vacuity_none_count}")
-    lines.append(f"    semantic_vacuous_pending_review: {result.vacuity_semantic_pending_count}")
+    lines.append(
+        f"    semantic_vacuous_pending_review: {result.vacuity_semantic_pending_count}"
+        f" ({_UNREVIEWED_SEMANTIC_VACUOUS_LABEL})"
+    )
+    lines.append("    reviewed: (none)")
     for flag, count in result.vacuity_other:
         lines.append(f"    {flag!r}: {count}")
     lines.append("  axis_distribution:")
