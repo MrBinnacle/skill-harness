@@ -86,6 +86,89 @@ def test_current_gen_vacuity_flag_tally() -> None:
     assert result.vacuity_other == ()
 
 
+# ---------------------------------------------------------------------------
+# #123 — unreviewed marker attached to semantic_vacuous_pending_review counts
+# ---------------------------------------------------------------------------
+
+_UNREVIEWED_MARKER_PHRASE = "unreviewed model judgement"
+_UNREVIEWED_MEANING_PHRASE = "model's judgement about model instructions"
+_NOT_ADJUDICATED_PHRASE = "not an adjudicated finding"
+
+
+def test_human_report_marks_semantic_vacuous_count_as_unreviewed() -> None:
+    """#123: rendered count carries explicit unreviewed marker on the same line.
+
+    A reader who sees only the figure must still see that it is an unreviewed
+    model judgement, not an adjudicated finding. Marker is words, not a symbol.
+    """
+    result = run_census(_CURRENT)
+    assert result.vacuity_semantic_pending_count == 1
+    human = format_human_report(result)
+    # Find the line that carries the semantic_vacuous_pending_review count.
+    tally_lines = [
+        line
+        for line in human.splitlines()
+        if "semantic_vacuous_pending_review" in line and "1" in line
+    ]
+    assert tally_lines, (
+        "human report must render semantic_vacuous_pending_review with its count:\n" + human
+    )
+    line = tally_lines[0]
+    assert _UNREVIEWED_MARKER_PHRASE in line.lower(), (
+        f"count line must carry unreviewed marker in the same output as the number:\n{line!r}"
+    )
+    assert _UNREVIEWED_MEANING_PHRASE in line.lower() or _NOT_ADJUDICATED_PHRASE in line.lower(), (
+        f"marker must state meaning in words (model judgement, not adjudicated):\n{line!r}"
+    )
+
+
+def test_receipt_separates_unreviewed_from_reviewed_vacuity() -> None:
+    """#123: receipt shape separates unreviewed from reviewed; never one total.
+
+    Reviewed bucket is present (empty today) so a later reviewed category cannot
+    be collapsed into the unreviewed count.
+    """
+    result = run_census(_CURRENT)
+    receipt = result.to_receipt()
+    tally = receipt["vacuity_flag_tally"]
+    assert "unreviewed" in tally, "receipt must nest pending-review under unreviewed"
+    assert "reviewed" in tally, "receipt must expose a reviewed bucket (empty until review exists)"
+    unreviewed = tally["unreviewed"]
+    assert isinstance(unreviewed, dict)
+    pending = unreviewed["semantic_vacuous_pending_review"]
+    assert isinstance(pending, dict)
+    assert pending["count"] == 1
+    label = str(pending.get("label", "")).lower()
+    assert _UNREVIEWED_MARKER_PHRASE in label
+    assert _UNREVIEWED_MEANING_PHRASE in label or _NOT_ADJUDICATED_PHRASE in label
+    # Bare int under the old key would let readers treat it as final; forbid collapse.
+    assert not isinstance(tally.get("semantic_vacuous_pending_review"), int)
+    assert isinstance(tally["reviewed"], dict)
+    # No undifferentiated total that sums reviewed + unreviewed.
+    assert "total" not in tally
+    assert "all" not in tally
+
+
+def test_cli_stdout_and_receipt_carry_unreviewed_marker(tmp_path: Path) -> None:
+    """#123: reporting seam (CLI stdout + JSON receipt) both disclose unreviewed."""
+    receipt_path = tmp_path / "receipt.json"
+    proc = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(_CURRENT), "--receipt", str(receipt_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(_REPO),
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "semantic_vacuous_pending_review" in proc.stdout
+    assert _UNREVIEWED_MARKER_PHRASE in proc.stdout.lower()
+    data = json.loads(receipt_path.read_text(encoding="utf-8"))
+    pending = data["vacuity_flag_tally"]["unreviewed"]["semantic_vacuous_pending_review"]
+    assert pending["count"] == 1
+    assert _UNREVIEWED_MARKER_PHRASE in str(pending["label"]).lower()
+
+
 def test_current_gen_records_extractor_model_from_header() -> None:
     result = run_census(_CURRENT)
     assert result.extractor_model == "claude-opus-5"
