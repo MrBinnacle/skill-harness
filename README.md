@@ -12,19 +12,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/MrBinnacle/skill-harness/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/skill-harness.svg)](https://pypi.org/project/skill-harness/)
 
-*An evaluation harness for reusable AI agent skills — a **skill disposition engine**. First-class
-Claude Code support, built to extend to other agent ecosystems.*
-
-**You installed a skill that's supposed to make your AI assistant better. Is it actually doing
-anything?**
-
-Skills ride along in every conversation and take up context space, so a skill that does nothing
-isn't free — it's dead weight. This tool measures whether a skill earns its slot: it runs the
-same task **with** the skill and **without** it, and compares. You get one of three honest
-answers: *it helped*, *it didn't*, or *this can't be measured yet* — and that third answer comes
-back labeled `UNMEASURED` instead of a made-up score.
-
-Most benchmarks hand you a number no matter what. This tool refuses. That refusal is the product.
+*An evaluation harness for reusable AI agent skills. First-class Claude Code
+support, built to extend to other agent ecosystems.*
 
 > **Status: v0.2.2 — on PyPI; the keep/cut verdict layer is live; first measured KEEP
 > (2026-07-27) is a declared synthetic positive control — zero production-skill KEEPs to date.**
@@ -66,28 +55,55 @@ Most benchmarks hand you a number no matter what. This tool refuses. That refusa
 > v0.1→v0.2 re-aim that got us here is pre-registered and published, not papered over:
 > [`docs/findings/v0.2-reaim-gate.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/v0.2-reaim-gate.md).
 >
+> **Named UNMEASURED gaps (field-wide; this instrument names them with a pre-registered fix).**
+> BetterBench ([arXiv:2411.12990](https://arxiv.org/abs/2411.12990)) found most benchmarks
+> report neither extraction repeat-variance nor detector precision. Under the current
+> generation this harness states the same gaps under their own names:
+> - **Extraction repeat-variance:** UNMEASURED
+>   ([#152](https://github.com/MrBinnacle/skill-harness/issues/152)).
+> - **Vacuity-flag precision:** UNMEASURED — corpus flags are detector outputs, not
+>   validated findings ([#153](https://github.com/MrBinnacle/skill-harness/issues/153)).
+>
 > **Amendment (2026-08-02).** The historical Stage-0 screen records behind that aggregate now
 > live as per-record, machine-parseable entries in the
 > [OBS ledger](https://github.com/MrBinnacle/skill-harness/blob/main/docs/observations/README.md),
 > which is canonical for per-record counts, evidence basis, and classification state; history is
 > annotated there, never rewritten.
 
-## The question other skill evals don't answer
+## Why this exists
 
-Most skill-evaluation tools **score the skill file itself** — lint it, have an LLM judge grade
-it, simulate runs against it. That answers *"is this artifact well-made?"* It's a reasonable
-question. It is not the question that decides an install.
+With-vs-without skill benchmarking at 3 runs apiece is now common practice, and it is
+trap-laden: run-to-run noise (we measured ±17.6% on agentic tasks in a 60-trial
+Opus-class arc — receipt:
+[`docs/findings/why-naive-skill-benchmarks-mislead.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/why-naive-skill-benchmarks-mislead.md))
+swallows all but huge effects; hand-matched tasks quietly bias the result; pass/fail test
+banks price a skill's *cost* while structurally missing its *benefit*; and synthetic test
+oracles leak their own answers through docstrings. The measured findings, with evidence
+grades, live in that same receipt. The independent literature agrees on the stakes:
+low-quality skills don't just fail to help — they actively degrade performance. A tool that
+can honestly say "no measurable effect" is the missing instrument.
 
-The question that decides an install is *"is my agent measurably better with this than without
-it?"* — and the only way to answer it is a paired comparison against the no-skill baseline.
-That's what this harness does, with three properties the certification-style tools don't have:
+## The question
 
-1. **A control arm.** Every measurement is with-vs-without, not a score in a vacuum. Frontier
-   models often ace the task with no skill at all — in our own testing, *"the model already does
-   this fine"* has been the most common truthful result. A score-in-a-vacuum can't tell you that.
-2. **An honest failure mode.** When the evidence doesn't support a verdict — too noisy, task too
-   easy, judge uncalibrated — the answer is `UNMEASURED`, stored and first-class, never an
-   estimate that launders noise into a finding.
+**What does this skill cost you, and which parts of it are earning that cost?**
+
+That is the question this harness is built to surface. It does not hand you a verdict in
+place of your own value judgement — you decide whether the measured cost is worth paying,
+and which pieces of the skill earn their share. The keep/cut lane exists and is honest when
+the evidence supports it; it is not the front-door frame.
+
+Most skill-evaluation tools **score the skill file itself** — lint it, have an LLM judge
+grade it, simulate runs against it. That answers *"is this artifact well-made?"* It is a
+reasonable question. It is not the install question. The install question needs a control
+arm, an honest failure mode, and a paper trail:
+
+1. **A control arm.** Every paid measurement is with-vs-without, not a score in a vacuum.
+   Frontier models often ace the task with no skill at all — in our own testing, *"the model
+   already does this fine"* has been the most common truthful result. A score-in-a-vacuum
+   can't tell you that.
+2. **An honest failure mode.** When the evidence doesn't support a call — too noisy, task
+   too easy, judge uncalibrated — the answer is `UNMEASURED`, stored and first-class, never
+   an estimate that launders noise into a finding.
 3. **A paper trail.** Evidence admissibility is checked and snapshotted at write time in an
    append-only store. Every number can show its work; inadmissible data is kept but never
    aggregated.
@@ -97,17 +113,28 @@ This harness is also the instrument behind the evidence records in
 skills are re-screened on each major model release and publicly retired when models stop
 needing them.
 
-## 60-second start — no API key, no cost
+## Free offline surface: `skill audit`
+
+No API key. No database. No network (the audit path itself never touches the network; the
+paid measurement paths fetch tiktoken's `cl100k_base` encoding (~1.7 MB) on first use —
+pre-seed `TIKTOKEN_CACHE_DIR` on air-gapped machines).
 
 ```bash
 pip install skill-harness
 skill-harness skill audit path/to/your/SKILL.md
 ```
 
-Two commands to your first verdict. `skill audit` is fully offline: a structural check against
-[Anthropic's authoring spec](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices),
-plus a preview of what a paid run could measure about this skill today and which claims would
-come back `UNMEASURED`. Output (abridged):
+`skill audit` is fully offline. It reports three things:
+
+1. **Cost triple** — standing / fired / aux, each as raw tokens and calibrated tokens
+   (router listing line charged every turn; body charged when the skill fires; progressive-
+   disclosure docs beside the skill). Mechanical arithmetic on text, not a skill-effect claim.
+2. **Structural checks** against
+   [Anthropic's authoring spec](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices).
+3. **Evaluability preflight** — what a paid run could measure about this skill today, and
+   which claims would come back `UNMEASURED`.
+
+Output (abridged):
 
 ```text
 OFFLINE AUDIT — no API calls, no cost
@@ -121,6 +148,10 @@ OFFLINE AUDIT — no API calls, no cost
         minimal frontmatter parser cannot read — checks skipped
         (UNMEASURED, not passed)
 
+  Standing cost (mechanical): raw … tokens · calibrated … tokens
+  Fired cost (mechanical):    raw … tokens · calibrated … tokens
+  Aux cost (mechanical):      raw … tokens · calibrated … tokens
+
 Evaluability preflight — what a paid run could measure today:
   Tier-1 mechanical axes: citation_presence_per_flag, compliance_proxy,
   hedge_index, structure_score, verbosity (style-shaped only).
@@ -130,12 +161,29 @@ Evaluability preflight — what a paid run could measure today:
 Summary: 2 pass · 0 warn — UNMEASURED is a verdict, not a failure.
 ```
 
-Note the third line of that report: when the tool can't read something, it says so and skips
-the check — it does not pass what it did not measure. That's the whole design, applied at every
-layer. `--strict` exits 1 on warnings for CI use. On Windows terminals, set `PYTHONUTF8=1`
-first. (`skill audit` itself never touches the network; the paid measurement paths fetch
-tiktoken's `cl100k_base` encoding (~1.7 MB) on first use — pre-seed `TIKTOKEN_CACHE_DIR` on
-air-gapped machines.)
+When the tool can't read something, it says so and skips the check — it does not pass what
+it did not measure. That's the whole design, applied at every layer. `--strict` exits 1 on
+warnings for CI use. On Windows terminals, set `PYTHONUTF8=1` first.
+
+## Evidence grades and refusal
+
+The other half of the product is the refusal machinery — co-equal with the cost surface,
+not a demoted basement and not the front door.
+
+**Whole-skill keep/cut lane** (live): one of three answers when the evidence supports a
+call — **KEEP**, **CUT** (subsumed or no-lift), or **CAN'T-TELL-YET** — with the
+value-class guard above. A made-up score is never emitted in place of CAN'T-TELL-YET.
+
+**Claim-level `UNMEASURED`** is first-class and typed. When a clause cannot be measured,
+the harness names *why* with one of eight sub-reasons (`no_data`, `inadmissible`,
+`underpowered`, `falsifying_case_missing`, `budget_exhausted`, `falsifying_case_stale`,
+`fdr_correction_failed`, `mechanical_vacuous`) rather than inventing a score. Full
+definitions:
+[`docs/concepts/why-unmeasured.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/concepts/why-unmeasured.md).
+
+LLM-judge results count **only** from a calibrated (judge, axis) pair: position-swapped,
+length-controlled, injection-defended, with human agreement measured before a single judged
+verdict is admitted.
 
 ## Measuring for real (API key required)
 
@@ -155,10 +203,7 @@ details: [`examples/`](https://github.com/MrBinnacle/skill-harness/tree/main/exa
 v0.1's honest scope: directional effects on **style** (verbosity, hedging, structure, citation
 presence), measured claim by claim with a single-turn subject. Behavior-shaped claims —
 correctness, tool use, outcomes — have no mechanical instrument in v0.1 and return
-`UNMEASURED`. LLM-judge verdicts count **only** from a calibrated (judge, axis) pair:
-position-swapped, length-controlled, injection-defended, with human agreement measured before a
-single judged verdict is admitted
-([`docs/concepts/why-unmeasured.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/concepts/why-unmeasured.md)).
+`UNMEASURED`.
 
 The v0.2 re-aim ([gate doc](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/v0.2-reaim-gate.md)) landed in v0.2.0: the
 whole-skill Stage-0 screen (does the model pass *without* the skill?) is the primary, dominant
@@ -168,8 +213,8 @@ admissibility field — because published agentic-benchmark experience puts harn
 variance at 10–20 points on identical model weights, larger than most skill effects. The
 claim-level style path above still exists as the offline/audit surface. What has *not* yet
 fired is a paired Full-vs-Null *benefit* run — the one paired execution to date was a
-pre-registered apparatus shakedown that returned NO-GO (see the status note at the top): a
-sized benefit run launches only when a screen returns a sub-1 pass rate, and none has yet.
+pre-registered apparatus shakedown that returned NO-GO (see the status note at the top):
+a sized benefit run launches only when a screen returns a sub-1 pass rate, and none has yet.
 
 ## How it compares
 
@@ -246,18 +291,6 @@ decision records on the tracker map above) — claimed as design commitments, no
    that executes them — [MrBinnacle/skills](https://github.com/MrBinnacle/skills) retires
    entries into `RETIRED.md` with the evidence linked — and this harness publishes its own
    null results the same way.
-
-## Why this exists
-
-With-vs-without skill benchmarking at 3 runs apiece is now common practice, and it is
-trap-laden: run-to-run noise (we measured ±17.6% on agentic tasks) swallows all but huge
-effects; hand-matched tasks quietly bias the result; pass/fail test banks price a skill's
-*cost* while structurally missing its *benefit*; and synthetic test oracles leak their own
-answers through docstrings. The measured findings, with evidence grades:
-[`docs/findings/why-naive-skill-benchmarks-mislead.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/why-naive-skill-benchmarks-mislead.md).
-The independent literature agrees on the stakes: low-quality skills don't just fail to help —
-they actively degrade performance. A tool that can honestly say "no measurable effect" is the
-missing instrument.
 
 ## Dig deeper
 
