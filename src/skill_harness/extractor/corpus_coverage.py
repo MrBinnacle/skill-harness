@@ -175,7 +175,12 @@ class CoverageResult:
     metadata_rows_skipped: int
     skills_covered: int
     failed_extraction_slugs: tuple[str, ...]
-    total_clauses: int
+    known_clause_subtotal: int
+    """Inherited from the census: clauses across successful extractions only.
+
+    A subtotal, never a total -- failed extractions contributed zero clauses,
+    so this denominator under a 'total' name would overclaim completeness.
+    """
     corpus_constructible: CoverageFigure
     corpus_instantiated: CoverageFigure
     per_skill: tuple[SkillCoverageRow, ...]
@@ -189,7 +194,7 @@ class CoverageResult:
             "corpus": {
                 "constructible_coverage": self.corpus_constructible.to_receipt(),
                 "instantiated_coverage": self.corpus_instantiated.to_receipt(),
-                "total_clauses": self.total_clauses,
+                "known_clause_subtotal": self.known_clause_subtotal,
             },
             "evidence_path": self.evidence_path,
             "extractor_generation": {
@@ -249,7 +254,7 @@ def _corpus_constructible(census: CensusResult) -> CoverageFigure:
             status="unmeasurable_for_this_input",
             reason=census.falsifying_case_reason,
             numerator=0,
-            denominator=census.total_clauses,
+            denominator=census.known_clause_subtotal,
         )
     # Constructible = structurally complete FC / total clauses (not vacuity-none only).
     complete = sum(row.constructible_count for row in census.per_skill)
@@ -258,7 +263,7 @@ def _corpus_constructible(census: CensusResult) -> CoverageFigure:
         status="measured",
         reason=None,
         numerator=complete,
-        denominator=census.total_clauses,
+        denominator=census.known_clause_subtotal,
     )
 
 
@@ -479,19 +484,19 @@ def run_coverage(
             status="refused",
             reason=census.corpus_figures_reason or _REASON_MIXED_GENERATIONS,
             numerator=0,
-            denominator=census.total_clauses,
+            denominator=census.known_clause_subtotal,
         )
         corpus_instantiated = CoverageFigure(
             label="instantiated",
             status="refused",
             reason=census.corpus_figures_reason or _REASON_MIXED_GENERATIONS,
             numerator=0,
-            denominator=census.total_clauses,
+            denominator=census.known_clause_subtotal,
         )
     else:
         corpus_constructible = _corpus_constructible(census)
         corpus_instantiated = _instantiated_for_scope(
-            denominator=census.total_clauses,
+            denominator=census.known_clause_subtotal,
             instantiated_count=corpus_instantiated_num if evidence_supplied else 0,
             evidence_supplied=evidence_supplied,
             corpus_frozen_total=corpus_frozen_total,
@@ -511,7 +516,7 @@ def run_coverage(
         metadata_rows_skipped=census.metadata_rows_skipped,
         skills_covered=census.skills_covered,
         failed_extraction_slugs=census.failed_extraction_slugs,
-        total_clauses=census.total_clauses,
+        known_clause_subtotal=census.known_clause_subtotal,
         corpus_constructible=corpus_constructible,
         corpus_instantiated=corpus_instantiated,
         per_skill=tuple(per_skill_rows),
@@ -576,7 +581,7 @@ def format_human_report(result: CoverageResult) -> str:
             f"  failed_extractions: {len(result.failed_extraction_slugs)}"
             f" {list(result.failed_extraction_slugs)}"
         ),
-        f"  total_clauses: {result.total_clauses}",
+        f"  known_clause_subtotal: {result.known_clause_subtotal}",
         "  corpus-wide:",
     ]
     lines.extend(_format_figure(result.corpus_constructible, indent="    "))

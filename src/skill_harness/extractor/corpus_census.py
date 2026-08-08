@@ -95,7 +95,15 @@ class CensusResult:
     metadata_rows_skipped: int
     skills_covered: int
     failed_extraction_slugs: tuple[str, ...]
-    total_clauses: int
+    known_clause_subtotal: int
+    """Clauses across successfully-extracted rows ONLY.
+
+    Named a subtotal, never a total: rows in ``failed_extraction_slugs``
+    contributed zero clauses and an unknown number went unextracted, so a
+    'total' here would report a partial denominator under a complete name.
+    Per-skill rows keep ``total_clauses`` -- within one successful extraction
+    the count genuinely is total.
+    """
     scoreable_axis_count: int
     unscoreable_axis_count: int
     comparator_specified_count: int
@@ -116,7 +124,7 @@ class CensusResult:
 
     def to_receipt(self) -> dict[str, Any]:
         """Build the JSON-serialisable receipt (sorted-key friendly)."""
-        total = self.total_clauses
+        total = self.known_clause_subtotal
         failed_slugs = list(self.failed_extraction_slugs)
         receipt: dict[str, Any] = {
             "axis_distribution": [
@@ -159,7 +167,7 @@ class CensusResult:
             "skills_covered": self.skills_covered,
             "system_prompt_sha256": self.system_prompt_sha256,
             "tool_schema_sha256": self.tool_schema_sha256,
-            "total_clauses": self.total_clauses,
+            "known_clause_subtotal": self.known_clause_subtotal,
             "unscoreable_axis": {
                 "count": self.unscoreable_axis_count,
                 "percent_of_clauses": _percent(self.unscoreable_axis_count, total),
@@ -501,18 +509,18 @@ def run_census(input_path: Path | str) -> CensusResult:
         vacuity_semantic = 0
         vacuity_other_counts = {}
         axis_counts = {}
-        total_clauses = len(all_clauses)
+        known_clause_subtotal = len(all_clauses)
     elif fc_schema_present:
         fc_status = "measured"
         fc_reason = None
-        total_clauses = len(all_clauses)
+        known_clause_subtotal = len(all_clauses)
     else:
         fc_status = "unmeasurable_for_this_input"
         fc_reason = _FC_UNMEASURABLE_REASON
         fc_applicable = 0
         fc_complete = 0
         fc_incomplete = 0
-        total_clauses = len(all_clauses)
+        known_clause_subtotal = len(all_clauses)
 
     axis_distribution = tuple(sorted(axis_counts.items(), key=lambda item: item[0]))
     vacuity_other = tuple(sorted(vacuity_other_counts.items(), key=lambda item: item[0]))
@@ -531,7 +539,7 @@ def run_census(input_path: Path | str) -> CensusResult:
         metadata_rows_skipped=metadata_skipped,
         skills_covered=covered,
         failed_extraction_slugs=failed_slugs_sorted,
-        total_clauses=total_clauses,
+        known_clause_subtotal=known_clause_subtotal,
         scoreable_axis_count=scoreable,
         unscoreable_axis_count=unscoreable,
         comparator_specified_count=comp_specified,
@@ -564,7 +572,7 @@ def receipt_json_bytes(result: CensusResult) -> bytes:
 
 def format_human_report(result: CensusResult) -> str:
     """Deterministic human-readable census report."""
-    total = result.total_clauses
+    total = result.known_clause_subtotal
     lines: list[str] = [
         "corpus census",
         f"  input: {result.input_path}",
@@ -587,7 +595,7 @@ def format_human_report(result: CensusResult) -> str:
             f"  failed_extractions: {len(result.failed_extraction_slugs)}"
             f" {list(result.failed_extraction_slugs)}"
         ),
-        f"  total_clauses: {total}",
+        f"  known_clause_subtotal: {total}",
     ]
     if result.corpus_figures_status == "refused":
         lines.append(f"  corpus_figures_reason: {result.corpus_figures_reason}")

@@ -316,7 +316,7 @@ def test_legacy_corpus_reads_as_generation_unknown(tmp_path: Path) -> None:
     assert census.system_prompt_sha256 is None
     assert census.tool_schema_sha256 is None
     assert census.corpus_figures_status == "measured"
-    assert census.total_clauses == 1
+    assert census.known_clause_subtotal == 1
 
     coverage = run_coverage(path)
     assert coverage.extractor_generation_status == "unknown"
@@ -422,7 +422,7 @@ def test_same_generation_corpus_merges(tmp_path: Path) -> None:
     assert census.corpus_figures_status == "measured"
     assert census.system_prompt_sha256 == "b" * 64
     assert census.tool_schema_sha256 == "c" * 64
-    assert census.total_clauses == 2
+    assert census.known_clause_subtotal == 2
     coverage = run_coverage(path)
     assert coverage.corpus_constructible.status == "measured"
     assert coverage.corpus_constructible.numerator == 2
