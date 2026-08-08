@@ -19,6 +19,11 @@ vacuity_kind (#141) refines the pending-review flag without changing its values:
     "not_a_directive"  -- clause boundary captured non-directive prose
     None               -- when vacuity_flag is "none"
 
+vacuity_reason (#141 scope amendment) is free-text rationale for the vacuity call:
+    str  -- model-supplied one-line reason (no enum, no length cap; stored verbatim)
+    ""   -- present but empty (distinct from absence)
+    None -- when vacuity_flag is "none", or legacy flagged rows never asked
+
 falsifying_case is independent of vacuity_flag (#136): a flagged clause may still
 carry a complete case (detector false positive), and a non-flagged clause may
 lack one.
@@ -155,6 +160,10 @@ class ExtractedClause(BaseModel):
       - weak_directive: behavioural instruction too vague/metaphorical to state
         a direction on a measurable axis
       - not_a_directive: clause boundary captured non-directive prose
+
+    ``vacuity_reason`` (#141) is free-text rationale for the vacuity call when
+    flagged; ``None`` when ``vacuity_flag == "none"``. No enum and no length
+    cap — empty string is distinct from absence.
     """
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
@@ -180,15 +189,20 @@ class ExtractedClause(BaseModel):
     vacuity_kind: VacuityKind | None = None
     """Finer condition when flagged; None when vacuity_flag is none (#141)."""
 
+    vacuity_reason: str | None = None
+    """Free-text reason when flagged; None when none. Verbatim, uncapped (#141)."""
+
     falsifying_case: FalsifyingCaseSchema | None = None
     """Optional constructible falsifying case; independent of vacuity_flag (#136)."""
 
     @model_validator(mode="after")
     def _vacuity_kind_matches_flag(self) -> ExtractedClause:
-        """Couple vacuity_kind to vacuity_flag without collapsing the two kinds."""
+        """Couple vacuity_kind/reason to vacuity_flag without collapsing kinds."""
         if self.vacuity_flag == "none":
             if self.vacuity_kind is not None:
                 raise ValueError("vacuity_kind must be None when vacuity_flag is 'none'")
+            if self.vacuity_reason is not None:
+                raise ValueError("vacuity_reason must be None when vacuity_flag is 'none'")
         elif self.vacuity_kind is None:
             raise ValueError(
                 "vacuity_kind is required when vacuity_flag is "
