@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI: dual corpus coverage — constructible vs instantiated (#121).
+"""CLI: dual corpus coverage — constructible vs instantiated (#121, #136).
 
 Usage:
     python scripts/corpus_coverage.py PATH/to/clauses.jsonl \\
@@ -11,6 +11,13 @@ Reports two distinct figures side by side (never blended):
   - constructible coverage (offline from clause JSONL)
   - instantiated coverage (from evidence.frozen_cases; named refusal when
     the freeze stage has produced no cases, or no evidence DB is supplied)
+
+Also reports (#136):
+  - cross-tab of case-presence against vacuity_flag==none
+  - whether constructible coverage is independent of vacuity_flag on this
+    input, or equal to the vacuity_none fraction by construction
+    (off-diagonal empty)
+  - detector false positives: flagged clauses that still carry a complete case
 """
 
 from __future__ import annotations
@@ -34,6 +41,9 @@ def main(argv: list[str] | None = None) -> int:
         description=(
             "Dual corpus coverage: constructible (structurally complete "
             "falsifying_case) vs instantiated (>=1 frozen_cases row). "
+            "Also states whether constructible coverage is independent of "
+            "vacuity_flag on the input or equal by construction, and surfaces "
+            "detector false positives (flagged + complete case). "
             "Pure computation - no API calls, no model judgment."
         )
     )

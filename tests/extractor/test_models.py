@@ -102,36 +102,48 @@ def test_extracted_clause_valid() -> None:
 
 
 # ---------------------------------------------------------------------------
-# ExtractedClause — vacuity / falsifying_case invariant
+# ExtractedClause — vacuity and falsifying_case are independent (#136)
 # ---------------------------------------------------------------------------
 
 
-def test_none_vacuity_requires_falsifying_case() -> None:
-    with pytest.raises(Exception, match="falsifying_case is required"):
-        ExtractedClause.model_validate(_valid_clause(vacuity_flag="none", falsifying_case=None))
-
-
-def test_semantic_vacuous_forbids_falsifying_case() -> None:
+def test_four_combinations_of_flag_and_case_all_valid() -> None:
+    """(flagged, not flagged) x (case present, case absent) must all construct."""
     fc = FalsifyingCaseSchema.model_validate(_valid_fc())
-    with pytest.raises(Exception, match="falsifying_case must be None"):
-        ExtractedClause.model_validate(
+    combos: list[tuple[str, FalsifyingCaseSchema | None]] = [
+        ("none", fc),
+        ("none", None),
+        ("semantic_vacuous_pending_review", fc),
+        ("semantic_vacuous_pending_review", None),
+    ]
+    for flag, case in combos:
+        clause = ExtractedClause.model_validate(
             _valid_clause(
-                vacuity_flag="semantic_vacuous_pending_review",
-                falsifying_case=fc,
+                vacuity_flag=flag,
+                falsifying_case=case,
+                comparator="comparator_unspecified" if flag != "none" else "increase",
             )
         )
+        assert clause.vacuity_flag == flag
+        if case is None:
+            assert clause.falsifying_case is None
+        else:
+            assert clause.falsifying_case is not None
 
 
-def test_semantic_vacuous_without_falsifying_case_is_valid() -> None:
-    clause = ExtractedClause.model_validate(
-        _valid_clause(
-            vacuity_flag="semantic_vacuous_pending_review",
-            falsifying_case=None,
-            comparator="comparator_unspecified",
-        )
-    )
-    assert clause.vacuity_flag == "semantic_vacuous_pending_review"
-    assert clause.falsifying_case is None
+def test_falsifying_case_schema_strictness_unchanged() -> None:
+    """FalsifyingCaseSchema stays strict: empty required field and OOR min_repro rejected."""
+    with pytest.raises(Exception):
+        FalsifyingCaseSchema.model_validate(_valid_fc(input_population_spec=""))
+    with pytest.raises(Exception):
+        FalsifyingCaseSchema.model_validate(_valid_fc(expected_directional_pair=""))
+    with pytest.raises(Exception):
+        FalsifyingCaseSchema.model_validate(_valid_fc(min_reproducibility=0.0))
+    with pytest.raises(Exception):
+        FalsifyingCaseSchema.model_validate(_valid_fc(min_reproducibility=1.1))
+    with pytest.raises(Exception):
+        FalsifyingCaseSchema.model_validate({**_valid_fc(), "extra_field": "nope"})
+    assert FalsifyingCaseSchema.model_config.get("strict") is True
+    assert FalsifyingCaseSchema.model_config.get("extra") == "forbid"
 
 
 def test_clause_index_must_be_non_negative() -> None:

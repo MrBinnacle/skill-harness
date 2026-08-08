@@ -235,7 +235,13 @@ def test_partial_validation_failure_raises(mock_anthropic_cls: MagicMock) -> Non
         "comparator": "increase",
         "oracle_tier": 1,
         "vacuity_flag": "none",
-        # Missing falsifying_case — should fail validation
+        # Incomplete falsifying_case — empty required field still fails (#136 keeps
+        # FalsifyingCaseSchema strict; only the vacuity coupling was removed).
+        "falsifying_case": {
+            "input_population_spec": "",
+            "expected_directional_pair": "A beats B",
+            "min_reproducibility": 0.5,
+        },
     }
 
     mock_client.messages.create.return_value = _make_response(
@@ -258,7 +264,11 @@ def test_all_clauses_fail_validation_raises(mock_anthropic_cls: MagicMock) -> No
         "comparator": "increase",
         "oracle_tier": 1,
         "vacuity_flag": "none",
-        # Missing falsifying_case
+        "falsifying_case": {
+            "input_population_spec": "pop",
+            "expected_directional_pair": "pair",
+            "min_reproducibility": 0.0,  # out of range — still rejected
+        },
     }
 
     mock_client.messages.create.return_value = _make_response(

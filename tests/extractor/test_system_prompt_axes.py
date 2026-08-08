@@ -48,3 +48,12 @@ def test_prompt_catalog_parse_is_not_vacuous() -> None:
     """Guard the guard: an empty parse would match an empty registry silently."""
     assert len(_axis_names_in_prompt()) == len(TIER1_AXES)
     assert TIER1_AXES, "registry is empty — parity above would pass on nothing"
+
+
+def test_prompt_does_not_couple_vacuity_to_falsifying_case() -> None:
+    """#136: vacuity judgement and falsifying_case are independent prompt asks."""
+    assert "lacks a constructible falsifying case" not in _SYSTEM_PROMPT
+    # Must not condition case writing on vacuity_flag==none.
+    assert 'For non-vacuous clauses (vacuity_flag="none"), you MUST provide' not in (_SYSTEM_PROMPT)
+    assert "independently of the vacuity judgement" in _SYSTEM_PROMPT
+    assert "Do not condition this judgement on whether a falsifying case" in (_SYSTEM_PROMPT)

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Extractor vacuity flag and falsifying case are independently observable**
+  (#136, build half of #128). Removed the `falsifying_case_iff_testable` model
+  validator and the prompt instruction that coupled the two fields, so a corpus
+  can express disagreement (flagged-but-constructible detector false positives,
+  and non-flagged clauses without a case). `FalsifyingCaseSchema` strictness is
+  unchanged. `scripts/corpus_coverage.py` now reports the case-presence x
+  `vacuity_flag==none` cross-tab, states whether constructible coverage is
+  independent of vacuity on the input or equal by construction (off-diagonal
+  empty), and surfaces detector false positives rather than discarding them.
+  Instantiated coverage remains a separate figure. Re-extraction of the live
+  6-skill corpus is post-merge (API key required).
+
 ### Added
 - **`skill_harness.oracles.tier1.axis_registry` — single source of truth for the
   Tier-1 axis names, and a fail-closed classifier for proposed axes** (#117,

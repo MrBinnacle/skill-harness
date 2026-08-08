@@ -11,8 +11,12 @@ DB comparator mapping (schema constraint: increase|decrease|match):
     "comparator_unspecified" -> "comparator_unspecified"  [rejected by DB CHECK; caller must handle]
 
 Vacuity flag values in v0.1 (A16: mechanical_vacuous deferred to Track C):
-    "none"                              -- non-vacuous clause with falsifying case
+    "none"                              -- extractor did not flag the clause as vacuous
     "semantic_vacuous_pending_review"   -- Claude flagged as likely untestable
+
+falsifying_case is independent of vacuity_flag (#136): a flagged clause may still
+carry a complete case (detector false positive), and a non-flagged clause may
+lack one.
 
 D4 note: extractor calibration (extractor_id, skill_genre) is deferred to v0.2.
 """
@@ -23,7 +27,7 @@ import json
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 _SHA256_HEX_LEN = 64
 
@@ -159,16 +163,7 @@ class ExtractedClause(BaseModel):
     """v0.1 vacuity classification."""
 
     falsifying_case: FalsifyingCaseSchema | None = None
-    """Present iff vacuity_flag == 'none'."""
-
-    @model_validator(mode="after")
-    def falsifying_case_iff_testable(self) -> ExtractedClause:
-        """Enforce: falsifying_case required iff vacuity_flag == 'none'."""
-        if self.vacuity_flag == "none" and self.falsifying_case is None:
-            raise ValueError("falsifying_case is required when vacuity_flag == 'none'")
-        if self.vacuity_flag != "none" and self.falsifying_case is not None:
-            raise ValueError("falsifying_case must be None when vacuity_flag != 'none'")
-        return self
+    """Optional constructible falsifying case; independent of vacuity_flag (#136)."""
 
 
 class ExtractionResult(BaseModel):
