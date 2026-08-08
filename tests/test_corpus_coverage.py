@@ -180,7 +180,7 @@ def test_census_per_skill_constructible_and_receipt_keys_stable() -> None:
     receipt = result.to_receipt()
     # #118 corpus-wide keys must still be present with same semantics.
     for key in (
-        "total_clauses",
+        "known_clause_subtotal",
         "scoreable_axis",
         "unscoreable_axis",
         "comparator_specified",
@@ -196,7 +196,7 @@ def test_census_per_skill_constructible_and_receipt_keys_stable() -> None:
         "rows_total",
     ):
         assert key in receipt
-    assert receipt["total_clauses"] == 6
+    assert receipt["known_clause_subtotal"] == 6
     assert receipt["failed_extractions"] == {"count": 1, "slugs": ["brandkit"]}
     assert "per_skill" in receipt
 
@@ -350,7 +350,7 @@ def test_failed_and_metadata_excluded_and_named() -> None:
     assert result.metadata_rows_skipped == 2
     assert result.failed_extraction_slugs == ("broken-skill",)
     assert result.skills_covered == 2
-    assert result.total_clauses == 5
+    assert result.known_clause_subtotal == 5
     assert "broken-skill" not in [r.slug for r in result.per_skill]
     receipt = result.to_receipt()
     assert receipt["failed_extractions"] == {"count": 1, "slugs": ["broken-skill"]}
@@ -497,7 +497,7 @@ def test_decoupled_four_cells_coverages_genuinely_differ() -> None:
     result = run_coverage(_DECOUPLED)
     # 5 clauses: none+case, none-no-case, 2x flagged+case, flagged-no-case
     # constructible = 3/5; vacuity_none = 2/5 — ratios genuinely differ.
-    assert result.total_clauses == 5
+    assert result.known_clause_subtotal == 5
     assert result.corpus_constructible.status == "measured"
     assert result.corpus_constructible.numerator == 3
     assert result.corpus_constructible.denominator == 5

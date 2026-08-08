@@ -47,7 +47,7 @@ def test_current_gen_excludes_metadata_and_failed_from_denominators() -> None:
     assert result.skills_covered == 2
     assert result.failed_extraction_slugs == ("brandkit",)
     # 5 clauses from skill-alpha + 1 from skill-beta; brandkit contributes 0
-    assert result.total_clauses == 6
+    assert result.known_clause_subtotal == 6
 
 
 def test_current_gen_scoreable_axis_uses_registry_join() -> None:
@@ -56,7 +56,8 @@ def test_current_gen_scoreable_axis_uses_registry_join() -> None:
     # citation_presence_per_flag = 5 scoreable; formality = 1 unscoreable
     assert result.scoreable_axis_count == 5
     assert result.unscoreable_axis_count == 1
-    assert result.scoreable_axis_count + result.unscoreable_axis_count == result.total_clauses
+    axis_sum = result.scoreable_axis_count + result.unscoreable_axis_count
+    assert axis_sum == result.known_clause_subtotal
     # Sanity: the unscoreable axis really is outside the registry.
     assert classify_axis("formality") is AxisScoreability.UNSCOREABLE
     assert "formality" not in TIER1_AXIS_NAMES
@@ -178,7 +179,7 @@ def test_current_gen_axis_distribution_sorted_and_complete() -> None:
     result = run_census(_CURRENT)
     axes = [name for name, _ in result.axis_distribution]
     assert axes == sorted(axes)
-    assert sum(count for _, count in result.axis_distribution) == result.total_clauses
+    assert sum(count for _, count in result.axis_distribution) == result.known_clause_subtotal
     as_dict = dict(result.axis_distribution)
     assert as_dict["compliance_proxy"] == 1
     assert as_dict["formality"] == 1
@@ -189,7 +190,7 @@ def test_current_gen_receipt_has_required_fields() -> None:
     result = run_census(_CURRENT)
     receipt = result.to_receipt()
     assert receipt["extractor_model"] == "claude-opus-5"
-    assert receipt["total_clauses"] == 6
+    assert receipt["known_clause_subtotal"] == 6
     assert receipt["scoreable_axis"]["count"] == 5
     assert receipt["unscoreable_axis"]["count"] == 1
     assert receipt["comparator_unspecified"]["count"] == 1
@@ -248,7 +249,7 @@ def test_older_gen_refuses_structural_completeness_never_zero() -> None:
 def test_older_gen_still_computes_other_categories() -> None:
     result = run_census(_OLDER)
     # 3 + 1 clauses from two ok skills; brandkit failed excluded
-    assert result.total_clauses == 4
+    assert result.known_clause_subtotal == 4
     assert result.skills_covered == 2
     assert result.failed_extraction_slugs == ("brandkit",)
     assert result.metadata_rows_skipped == 0
@@ -320,7 +321,7 @@ def test_cli_writes_receipt_and_stdout(tmp_path: Path) -> None:
         cwd=str(_REPO),
     )
     assert proc.returncode == 0, proc.stderr
-    assert "total_clauses: 6" in proc.stdout
+    assert "known_clause_subtotal: 6" in proc.stdout
     assert "scoreable_axis: 5" in proc.stdout
     assert "failed_extractions: 1" in proc.stdout
     assert "brandkit" in proc.stdout
@@ -328,7 +329,7 @@ def test_cli_writes_receipt_and_stdout(tmp_path: Path) -> None:
     assert receipt.is_file()
     data = json.loads(receipt.read_text(encoding="utf-8"))
     assert data["extractor_model"] == "claude-opus-5"
-    assert data["total_clauses"] == 6
+    assert data["known_clause_subtotal"] == 6
 
 
 def test_cli_older_gen_refuses_on_stdout(tmp_path: Path) -> None:
