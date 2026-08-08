@@ -26,14 +26,18 @@ def _make_clause(
     index: int = 0,
     comparator: str = "increase",
     vacuity_flag: str = "none",
+    vacuity_kind: str | None = None,
 ) -> ExtractedClause:
     fc = None
+    kind: str | None = None
     if vacuity_flag == "none":
         fc = FalsifyingCaseSchema(
             input_population_spec="Factual prompts",
             expected_directional_pair="A beats B on specificity",
             min_reproducibility=0.8,
         )
+    else:
+        kind = vacuity_kind if vacuity_kind is not None else "weak_directive"
     return ExtractedClause(
         clause_index=index,
         clause_text=f"Clause {index} text.",
@@ -41,6 +45,7 @@ def _make_clause(
         comparator=comparator,  # type: ignore[arg-type]
         oracle_tier=1,
         vacuity_flag=vacuity_flag,  # type: ignore[arg-type]
+        vacuity_kind=kind,  # type: ignore[arg-type]
         falsifying_case=fc,
     )
 
@@ -255,6 +260,7 @@ def test_extract_skill_raises_on_comparator_unspecified_at_persist(
         comparator="comparator_unspecified",
         oracle_tier=2,
         vacuity_flag="semantic_vacuous_pending_review",
+        vacuity_kind="weak_directive",
         falsifying_case=None,
     )
     c_normal = _make_clause(1, comparator="increase")
@@ -297,6 +303,7 @@ def test_extract_skill_dry_run_does_not_raise_on_comparator_unspecified(
         comparator="comparator_unspecified",
         oracle_tier=2,
         vacuity_flag="semantic_vacuous_pending_review",
+        vacuity_kind="weak_directive",
         falsifying_case=None,
     )
     mock_call.return_value = (

@@ -116,9 +116,11 @@ def test_four_combinations_of_flag_and_case_all_valid() -> None:
         ("semantic_vacuous_pending_review", None),
     ]
     for flag, case in combos:
+        kind = None if flag == "none" else "weak_directive"
         clause = ExtractedClause.model_validate(
             _valid_clause(
                 vacuity_flag=flag,
+                vacuity_kind=kind,
                 falsifying_case=case,
                 comparator="comparator_unspecified" if flag != "none" else "increase",
             )

@@ -73,14 +73,27 @@ length, specificity, instruction_following).
 3. Has a direction: it either increases, decreases, or preserves a measurable axis.
 
 Instructions:
-- Extract EVERY clause, including weak or potentially vacuous ones.
+- Extract EVERY clause, including weak or potentially vacuous ones. Do not skip \
+non-directives; collecting them is part of the measurement.
 - For each clause, identify the measurement axis (a short noun phrase), the comparator \
 (increase/decrease/preserve/comparator_unspecified), and the preferred oracle tier \
 (1=mechanical counting, 2=human judge, 3=real-world consequence).
-- Judge vacuity on its own terms: mark vacuity_flag as \
-"semantic_vacuous_pending_review" when the clause is vague or metaphorical \
-(e.g. "be helpful", "sound natural"); otherwise mark vacuity_flag as "none". \
-Do not condition this judgement on whether a falsifying case can be written.
+- Judge vacuity on its own terms. Set vacuity_flag to \
+"semantic_vacuous_pending_review" only for one of the two conditions below, and set \
+vacuity_kind to name which condition. Otherwise set vacuity_flag to "none" and \
+vacuity_kind to null. Do not condition this judgement on whether a falsifying case \
+can be written.
+  * weak_directive — a behavioural instruction that is too vague or metaphorical to \
+state a direction on a measurable axis. Example: "be helpful", "sound natural".
+  * not_a_directive — the clause boundary captured text that is not a behavioural \
+directive at all (trigger conditions, factual statements, definitions). Examples: \
+"Invoke when user asks to evaluate, pressure test, validate, or decide go/no-go on \
+an initiative with meaningful downside." (trigger condition); "Encoding ties as \
+`0.5` and updating `Beta(1+w, 1+n-w)` with `w = sum_of_encoded_outcomes` is a \
+quasi-Bayesian heuristic." (factual statement).
+- A directive with a constructible falsifying case is vacuity_flag "none" (and \
+vacuity_kind null), even if it is long, technical, or hedged. Do not flag sound \
+testable directives.
 - Provide a falsifying_case wherever one can be written, independently of the \
 vacuity judgement. A flagged clause may still carry a case; a non-flagged clause \
 may lack one. When you provide a falsifying_case it must include:
@@ -169,6 +182,18 @@ _EXTRACT_CLAUSES_SCHEMA: dict[str, Any] = {
                         "type": "string",
                         "enum": ["none", "semantic_vacuous_pending_review"],
                         "description": "Vacuity classification.",
+                    },
+                    "vacuity_kind": {
+                        "type": "string",
+                        "enum": ["weak_directive", "not_a_directive"],
+                        "description": (
+                            "Required when vacuity_flag is "
+                            "semantic_vacuous_pending_review. weak_directive: "
+                            "behavioural but too vague or metaphorical to state a "
+                            "direction on a measurable axis. not_a_directive: "
+                            "clause boundary captured non-directive prose. "
+                            "Omit when vacuity_flag is none."
+                        ),
                     },
                     "falsifying_case": {
                         "type": "object",

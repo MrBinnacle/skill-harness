@@ -41,6 +41,16 @@ _UNREVIEWED_SEMANTIC_VACUOUS_LABEL: Final[str] = (
     "unreviewed model judgement: a model's judgement about model "
     "instructions, not an adjudicated finding"
 )
+# #141: finer conditions under semantic_vacuous_pending_review.
+_VACUITY_KIND_WEAK: Final[str] = "weak_directive"
+_VACUITY_KIND_NOT_DIRECTIVE: Final[str] = "not_a_directive"
+_WEAK_DIRECTIVE_LABEL: Final[str] = (
+    "behavioural instruction too vague or metaphorical to state a direction on a measurable axis"
+)
+_NOT_A_DIRECTIVE_LABEL: Final[str] = (
+    "clause boundary captured text that is not a behavioural directive"
+)
+_UNSPECIFIED_KIND_LABEL: Final[str] = "flagged without vacuity_kind (legacy extraction row)"
 
 
 @dataclass(frozen=True)
@@ -107,6 +117,9 @@ class CensusResult:
     falsifying_case_incomplete_count: int
     vacuity_none_count: int
     vacuity_semantic_pending_count: int
+    vacuity_weak_directive_count: int
+    vacuity_not_a_directive_count: int
+    vacuity_kind_unspecified_count: int
     vacuity_other: tuple[tuple[str, int], ...]
     axis_distribution: tuple[tuple[str, int], ...]
     per_skill: tuple[SkillCensusRow, ...] = ()
@@ -172,6 +185,20 @@ class CensusResult:
                 "reviewed": {},
                 "unreviewed": {
                     "semantic_vacuous_pending_review": {
+                        "by_kind": {
+                            "not_a_directive": {
+                                "count": self.vacuity_not_a_directive_count,
+                                "label": _NOT_A_DIRECTIVE_LABEL,
+                            },
+                            "unspecified": {
+                                "count": self.vacuity_kind_unspecified_count,
+                                "label": _UNSPECIFIED_KIND_LABEL,
+                            },
+                            "weak_directive": {
+                                "count": self.vacuity_weak_directive_count,
+                                "label": _WEAK_DIRECTIVE_LABEL,
+                            },
+                        },
                         "count": self.vacuity_semantic_pending_count,
                         "label": _UNREVIEWED_SEMANTIC_VACUOUS_LABEL,
                     },
@@ -444,6 +471,9 @@ def run_census(input_path: Path | str) -> CensusResult:
     comp_unspecified = 0
     vacuity_none = 0
     vacuity_semantic = 0
+    vacuity_weak = 0
+    vacuity_not_directive = 0
+    vacuity_kind_unspecified = 0
     vacuity_other_counts: dict[str, int] = {}
     axis_counts: dict[str, int] = {}
 
@@ -473,6 +503,13 @@ def run_census(input_path: Path | str) -> CensusResult:
             vacuity_none += 1
         elif vacuity == "semantic_vacuous_pending_review":
             vacuity_semantic += 1
+            kind = clause.get("vacuity_kind")
+            if kind == _VACUITY_KIND_WEAK:
+                vacuity_weak += 1
+            elif kind == _VACUITY_KIND_NOT_DIRECTIVE:
+                vacuity_not_directive += 1
+            else:
+                vacuity_kind_unspecified += 1
         else:
             flag_key = str(vacuity) if vacuity is not None else ""
             vacuity_other_counts[flag_key] = vacuity_other_counts.get(flag_key, 0) + 1
@@ -499,6 +536,9 @@ def run_census(input_path: Path | str) -> CensusResult:
         comp_unspecified = 0
         vacuity_none = 0
         vacuity_semantic = 0
+        vacuity_weak = 0
+        vacuity_not_directive = 0
+        vacuity_kind_unspecified = 0
         vacuity_other_counts = {}
         axis_counts = {}
         total_clauses = len(all_clauses)
@@ -543,6 +583,9 @@ def run_census(input_path: Path | str) -> CensusResult:
         falsifying_case_incomplete_count=fc_incomplete,
         vacuity_none_count=vacuity_none,
         vacuity_semantic_pending_count=vacuity_semantic,
+        vacuity_weak_directive_count=vacuity_weak,
+        vacuity_not_a_directive_count=vacuity_not_directive,
+        vacuity_kind_unspecified_count=vacuity_kind_unspecified,
         vacuity_other=vacuity_other,
         axis_distribution=axis_distribution,
         per_skill=per_skill,
@@ -649,6 +692,17 @@ def format_human_report(result: CensusResult) -> str:
         f"    semantic_vacuous_pending_review: {result.vacuity_semantic_pending_count}"
         f" ({_UNREVIEWED_SEMANTIC_VACUOUS_LABEL})"
     )
+    lines.append(
+        f"      weak_directive: {result.vacuity_weak_directive_count} ({_WEAK_DIRECTIVE_LABEL})"
+    )
+    lines.append(
+        f"      not_a_directive: {result.vacuity_not_a_directive_count} ({_NOT_A_DIRECTIVE_LABEL})"
+    )
+    if result.vacuity_kind_unspecified_count:
+        lines.append(
+            f"      unspecified_kind: {result.vacuity_kind_unspecified_count}"
+            f" ({_UNSPECIFIED_KIND_LABEL})"
+        )
     lines.append("    reviewed: (none)")
     for flag, count in result.vacuity_other:
         lines.append(f"    {flag!r}: {count}")

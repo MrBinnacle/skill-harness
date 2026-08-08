@@ -14,6 +14,11 @@ Vacuity flag values in v0.1 (A16: mechanical_vacuous deferred to Track C):
     "none"                              -- extractor did not flag the clause as vacuous
     "semantic_vacuous_pending_review"   -- Claude flagged as likely untestable
 
+vacuity_kind (#141) refines the pending-review flag without changing its values:
+    "weak_directive"   -- behavioural instruction too vague/metaphorical to measure
+    "not_a_directive"  -- clause boundary captured non-directive prose
+    None               -- when vacuity_flag is "none"
+
 falsifying_case is independent of vacuity_flag (#136): a flagged clause may still
 carry a complete case (detector false positive), and a non-flagged clause may
 lack one.
@@ -27,9 +32,13 @@ import json
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 _SHA256_HEX_LEN = 64
+
+# Finer condition under semantic_vacuous_pending_review (#141).
+# None when vacuity_flag == "none". Never a self-reported false_positive label.
+VacuityKind = Literal["weak_directive", "not_a_directive"]
 
 
 class ExtractorInstrument(BaseModel):
@@ -140,6 +149,12 @@ class ExtractedClause(BaseModel):
     ``vacuity_flag`` in v0.1 is either "none" or
     "semantic_vacuous_pending_review". "mechanical_vacuous" is reserved for
     Track C integration and must not appear here.
+
+    ``vacuity_kind`` (#141) distinguishes two conditions under the pending-review
+    flag and is ``None`` when ``vacuity_flag == "none"``:
+      - weak_directive: behavioural instruction too vague/metaphorical to state
+        a direction on a measurable axis
+      - not_a_directive: clause boundary captured non-directive prose
     """
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
@@ -162,8 +177,25 @@ class ExtractedClause(BaseModel):
     vacuity_flag: Literal["none", "semantic_vacuous_pending_review"]
     """v0.1 vacuity classification."""
 
+    vacuity_kind: VacuityKind | None = None
+    """Finer condition when flagged; None when vacuity_flag is none (#141)."""
+
     falsifying_case: FalsifyingCaseSchema | None = None
     """Optional constructible falsifying case; independent of vacuity_flag (#136)."""
+
+    @model_validator(mode="after")
+    def _vacuity_kind_matches_flag(self) -> ExtractedClause:
+        """Couple vacuity_kind to vacuity_flag without collapsing the two kinds."""
+        if self.vacuity_flag == "none":
+            if self.vacuity_kind is not None:
+                raise ValueError("vacuity_kind must be None when vacuity_flag is 'none'")
+        elif self.vacuity_kind is None:
+            raise ValueError(
+                "vacuity_kind is required when vacuity_flag is "
+                "'semantic_vacuous_pending_review' "
+                "(weak_directive or not_a_directive)"
+            )
+        return self
 
 
 class ExtractionResult(BaseModel):
