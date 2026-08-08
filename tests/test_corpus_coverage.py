@@ -495,19 +495,20 @@ def test_decoupled_four_cells_coverages_genuinely_differ() -> None:
     hand-faked bypass of a production invariant) can express disagreement.
     """
     result = run_coverage(_DECOUPLED)
-    # 4 clauses: none+case, none-no-case, flagged+case, flagged-no-case
-    # constructible = complete cases = 2 (idx 0 and 2)
-    assert result.total_clauses == 4
+    # 5 clauses: none+case, none-no-case, 2x flagged+case, flagged-no-case
+    # constructible = 3/5; vacuity_none = 2/5 — ratios genuinely differ.
+    assert result.total_clauses == 5
     assert result.corpus_constructible.status == "measured"
-    assert result.corpus_constructible.numerator == 2
-    assert result.corpus_constructible.denominator == 4
-    # vacuity_none = 2 → same ratio numerically here, but...
+    assert result.corpus_constructible.numerator == 3
+    assert result.corpus_constructible.denominator == 5
     xtab = result.case_vacuity_crosstab
     assert xtab.none_with_case == 1
     assert xtab.none_without_case == 1
-    assert xtab.flagged_with_case == 1
+    assert xtab.flagged_with_case == 2
     assert xtab.flagged_without_case == 1
-    # ...the figures are independent: off-diagonal non-empty.
+    vacuity_none_count = xtab.none_with_case + xtab.none_without_case
+    assert vacuity_none_count == 2
+    assert result.corpus_constructible.numerator != vacuity_none_count
     assert xtab.constructible_vs_vacuity_flag == "independent"
     # Instantiated stays a separate figure (refused without evidence).
     assert result.corpus_instantiated.label == "instantiated"
@@ -526,21 +527,22 @@ def test_decoupled_four_cells_coverages_genuinely_differ() -> None:
 def test_detector_false_positive_surfaced_not_discarded() -> None:
     result = run_coverage(_DECOUPLED)
     xtab = result.case_vacuity_crosstab
-    assert xtab.flagged_with_case == 1
-    assert len(xtab.detector_false_positives) == 1
-    fp = xtab.detector_false_positives[0]
+    assert xtab.flagged_with_case == 2
+    assert len(xtab.detector_false_positives) == 2
+    fps_by_index = {fp.clause_index: fp for fp in xtab.detector_false_positives}
+    assert set(fps_by_index) == {2, 4}
+    fp = fps_by_index[2]
     assert fp.slug == "skill-decoupled"
-    assert fp.clause_index == 2
     assert fp.vacuity_flag == "semantic_vacuous_pending_review"
     assert fp.axis == "compliance_proxy"
     assert "detector FP" in fp.clause_text
     human = format_human_report(result)
-    assert "detector_false_positives: 1" in human
+    assert "detector_false_positives: 2" in human
     assert "skill-decoupled" in human
     assert "semantic_vacuous_pending_review" in human
     receipt = result.to_receipt()
-    assert receipt["case_vacuity_crosstab"]["detector_false_positives_count"] == 1
-    assert receipt["case_vacuity_crosstab"]["cells"]["flagged_with_case"] == 1
+    assert receipt["case_vacuity_crosstab"]["detector_false_positives_count"] == 2
+    assert receipt["case_vacuity_crosstab"]["cells"]["flagged_with_case"] == 2
 
 
 def test_equal_by_construction_when_off_diagonal_empty(tmp_path: Path) -> None:
