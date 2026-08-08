@@ -1,13 +1,20 @@
-"""Dual corpus coverage: constructible vs instantiated (#121).
+"""Dual corpus coverage: constructible vs instantiated (#121, #136).
 
 Two distinct figures, always reported side by side, never blended:
 
 - **Constructible coverage** — clauses with a structurally complete
   ``falsifying_case`` / total clauses. Zero-power: offline over clause JSONL.
+  Independent of ``vacuity_flag`` (#136): a flagged clause may still carry a
+  complete case (detector false positive), and a non-flagged clause may lack one.
 - **Instantiated coverage** — clauses with ≥1 row in ``frozen_cases`` / total
   clauses. Comes from the evidence database. When the freeze stage has never
   produced an instantiated case (or no evidence DB is supplied), this figure is
   a **named refusal**, never a fabricated ``0%``.
+
+Also reports the case-presence x ``vacuity_flag==none`` cross-tabulation and
+states whether constructible coverage is independent of ``vacuity_flag`` on
+the given input or equal to the vacuity_none fraction by construction
+(off-diagonal empty).
 
 Per-skill and corpus-wide. Failed extractions and metadata rows stay out of
 every denominator. Boolean-only ``falsifying_case`` schemas inherit the census
@@ -25,6 +32,7 @@ from typing import Any, Final, Literal, TextIO
 from skill_harness.extractor.corpus_census import (
     CensusResult,
     SkillCensusRow,
+    falsifying_case_complete,
     run_census,
 )
 from skill_harness.storage.migrations import open_evidence
@@ -100,6 +108,59 @@ class SkillCoverageRow:
 
 
 @dataclass(frozen=True)
+class DetectorFalsePositive:
+    """Flagged (vacuity_flag != none) clause that still carries a complete case."""
+
+    slug: str
+    clause_index: int | None
+    clause_text: str
+    axis: str
+    vacuity_flag: str
+
+
+@dataclass(frozen=True)
+class CaseVacuityCrosstab:
+    """Cross-tab of falsifying-case presence against vacuity_flag == 'none'."""
+
+    none_with_case: int
+    none_without_case: int
+    flagged_with_case: int
+    flagged_without_case: int
+    # independent: off-diagonal non-empty, so constructible can disagree with
+    # vacuity_none/total. equal_by_construction: off-diagonal empty on this input
+    # (case presence coincides with vacuity_flag==none).
+    constructible_vs_vacuity_flag: Literal["independent", "equal_by_construction"]
+    detector_false_positives: tuple[DetectorFalsePositive, ...]
+
+    def to_receipt(self) -> dict[str, Any]:
+        return {
+            "cells": {
+                "flagged_with_case": self.flagged_with_case,
+                "flagged_without_case": self.flagged_without_case,
+                "none_with_case": self.none_with_case,
+                "none_without_case": self.none_without_case,
+            },
+            "constructible_vs_vacuity_flag": self.constructible_vs_vacuity_flag,
+            "detector_false_positives": [
+                {
+                    "axis": fp.axis,
+                    "clause_index": fp.clause_index,
+                    "clause_text": fp.clause_text,
+                    "slug": fp.slug,
+                    "vacuity_flag": fp.vacuity_flag,
+                }
+                for fp in self.detector_false_positives
+            ],
+            "detector_false_positives_count": len(self.detector_false_positives),
+            "what_it_measures": (
+                "cross-tab of structurally complete falsifying_case presence "
+                "against vacuity_flag=='none'; flagged_with_case cells are "
+                "detector false positives (surfaced, not discarded)"
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class CoverageResult:
     """Dual coverage receipt: constructible + instantiated, per skill and corpus."""
 
@@ -119,10 +180,12 @@ class CoverageResult:
     corpus_instantiated: CoverageFigure
     per_skill: tuple[SkillCoverageRow, ...]
     missing_stage_note: str
+    case_vacuity_crosstab: CaseVacuityCrosstab
 
     def to_receipt(self) -> dict[str, Any]:
         failed = list(self.failed_extraction_slugs)
         return {
+            "case_vacuity_crosstab": self.case_vacuity_crosstab.to_receipt(),
             "corpus": {
                 "constructible_coverage": self.corpus_constructible.to_receipt(),
                 "instantiated_coverage": self.corpus_instantiated.to_receipt(),
@@ -260,6 +323,54 @@ def _skill_clauses_by_slug(input_path: Path) -> dict[str, list[Mapping[str, Any]
     return out
 
 
+def _build_case_vacuity_crosstab(
+    clauses_by_slug: Mapping[str, list[Mapping[str, Any]]],
+) -> CaseVacuityCrosstab:
+    """Cross-tab case presence against vacuity_flag==none; surface detector FPs."""
+    none_with = 0
+    none_without = 0
+    flagged_with = 0
+    flagged_without = 0
+    fps: list[DetectorFalsePositive] = []
+    for slug in sorted(clauses_by_slug):
+        for clause in clauses_by_slug[slug]:
+            is_none = clause.get("vacuity_flag") == "none"
+            has_case = falsifying_case_complete(clause)
+            if is_none and has_case:
+                none_with += 1
+            elif is_none and not has_case:
+                none_without += 1
+            elif (not is_none) and has_case:
+                flagged_with += 1
+                vacuity = clause.get("vacuity_flag")
+                axis = clause.get("axis")
+                text = clause.get("clause_text")
+                fps.append(
+                    DetectorFalsePositive(
+                        slug=slug,
+                        clause_index=_parse_clause_index(clause),
+                        clause_text=text if isinstance(text, str) else "",
+                        axis=axis if isinstance(axis, str) else "",
+                        vacuity_flag=str(vacuity) if vacuity is not None else "",
+                    )
+                )
+            else:
+                flagged_without += 1
+    # Off-diagonal empty <=> case presence coincides with vacuity_flag==none.
+    if none_without == 0 and flagged_with == 0:
+        relation: Literal["independent", "equal_by_construction"] = "equal_by_construction"
+    else:
+        relation = "independent"
+    return CaseVacuityCrosstab(
+        none_with_case=none_with,
+        none_without_case=none_without,
+        flagged_with_case=flagged_with,
+        flagged_without_case=flagged_without,
+        constructible_vs_vacuity_flag=relation,
+        detector_false_positives=tuple(fps),
+    )
+
+
 def _instantiated_for_scope(
     *,
     denominator: int,
@@ -386,6 +497,8 @@ def run_coverage(
             corpus_frozen_total=corpus_frozen_total,
         )
 
+    crosstab = _build_case_vacuity_crosstab(clauses_by_slug)
+
     return CoverageResult(
         input_path=path.as_posix(),
         evidence_path=evidence_posix,
@@ -403,6 +516,7 @@ def run_coverage(
         corpus_instantiated=corpus_instantiated,
         per_skill=tuple(per_skill_rows),
         missing_stage_note=_MISSING_STAGE_NOTE,
+        case_vacuity_crosstab=crosstab,
     )
 
 
@@ -439,6 +553,7 @@ def _format_figure(fig: CoverageFigure, *, indent: str = "    ") -> list[str]:
 
 def format_human_report(result: CoverageResult) -> str:
     """Deterministic human-readable dual-coverage report."""
+    xtab = result.case_vacuity_crosstab
     lines: list[str] = [
         "corpus coverage (constructible vs instantiated)",
         f"  input: {result.input_path}",
@@ -466,6 +581,33 @@ def format_human_report(result: CoverageResult) -> str:
     ]
     lines.extend(_format_figure(result.corpus_constructible, indent="    "))
     lines.extend(_format_figure(result.corpus_instantiated, indent="    "))
+    lines.append("  case_presence_x_vacuity_flag_none:")
+    lines.append(f"    none_with_case: {xtab.none_with_case}")
+    lines.append(f"    none_without_case: {xtab.none_without_case}")
+    lines.append(f"    flagged_with_case: {xtab.flagged_with_case}")
+    lines.append(f"    flagged_without_case: {xtab.flagged_without_case}")
+    lines.append(f"  constructible_coverage_vs_vacuity_flag: {xtab.constructible_vs_vacuity_flag}")
+    if xtab.constructible_vs_vacuity_flag == "independent":
+        lines.append(
+            "    note: constructible coverage is independent of vacuity_flag "
+            "on this input (off-diagonal non-empty)"
+        )
+    else:
+        lines.append(
+            "    note: constructible coverage equals vacuity_flag==none "
+            "fraction by construction on this input (off-diagonal empty)"
+        )
+    lines.append(
+        f"  detector_false_positives: {len(xtab.detector_false_positives)}"
+        " (flagged clauses that still carry a complete falsifying_case)"
+    )
+    for fp in xtab.detector_false_positives:
+        idx = "None" if fp.clause_index is None else str(fp.clause_index)
+        lines.append(
+            f"    - slug={fp.slug} clause_index={idx} "
+            f"vacuity_flag={fp.vacuity_flag} axis={fp.axis!r} "
+            f"text={fp.clause_text!r}"
+        )
     lines.append("  per_skill:")
     for row in result.per_skill:
         lines.append(f"    slug: {row.slug}")
@@ -490,8 +632,10 @@ def emit_report(
 
 # Public surface for the dual-coverage measurement.
 __all__ = [
+    "CaseVacuityCrosstab",
     "CoverageFigure",
     "CoverageResult",
+    "DetectorFalsePositive",
     "SkillCoverageRow",
     "emit_report",
     "format_human_report",

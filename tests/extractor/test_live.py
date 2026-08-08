@@ -36,8 +36,8 @@ def test_live_extract_ai_slop_sentinel() -> None:
     Assertions:
     - At least 5 clauses extracted.
     - Every clause has axis, comparator, oracle_tier, vacuity_flag populated.
-    - Every clause with vacuity_flag='none' has a non-None falsifying_case.
-    - The falsifying_case.sha256_hex() is a 64-char hex string.
+    - Falsifying case is independent of vacuity_flag (#136); when present it is complete.
+    - The falsifying_case.sha256_hex() is a 64-char hex string when a case is present.
     """
     result = extract_skill(_AI_SLOP_SENTINEL, evidence_conn=None)
 
@@ -62,11 +62,8 @@ def test_live_extract_ai_slop_sentinel() -> None:
             f"Clause {clause.clause_index}: invalid vacuity_flag '{clause.vacuity_flag}'"
         )
 
-        # Falsifying case populated for non-vacuous clauses.
-        if clause.vacuity_flag == "none":
-            assert clause.falsifying_case is not None, (
-                f"Clause {clause.clause_index} has vacuity_flag='none' but no falsifying_case"
-            )
+        # Case presence is independent of vacuity_flag; when present, complete.
+        if clause.falsifying_case is not None:
             sha = clause.falsifying_case.sha256_hex()
             assert len(sha) == 64, (
                 f"Clause {clause.clause_index}: sha256_hex length {len(sha)} != 64"

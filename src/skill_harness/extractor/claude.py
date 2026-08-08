@@ -77,9 +77,13 @@ Instructions:
 - For each clause, identify the measurement axis (a short noun phrase), the comparator \
 (increase/decrease/preserve/comparator_unspecified), and the preferred oracle tier \
 (1=mechanical counting, 2=human judge, 3=real-world consequence).
-- Mark vacuity_flag as "semantic_vacuous_pending_review" when the clause is vague, \
-metaphorical, or lacks a constructible falsifying case (e.g. "be helpful", "sound natural").
-- For non-vacuous clauses (vacuity_flag="none"), you MUST provide a falsifying_case with:
+- Judge vacuity on its own terms: mark vacuity_flag as \
+"semantic_vacuous_pending_review" when the clause is vague or metaphorical \
+(e.g. "be helpful", "sound natural"); otherwise mark vacuity_flag as "none". \
+Do not condition this judgement on whether a falsifying case can be written.
+- Provide a falsifying_case wherever one can be written, independently of the \
+vacuity judgement. A flagged clause may still carry a case; a non-flagged clause \
+may lack one. When you provide a falsifying_case it must include:
   * input_population_spec: what kinds of inputs to draw from
   * expected_directional_pair: describe a (A=with clause, B=without clause) pair where A \
 should beat B on the axis
@@ -168,7 +172,10 @@ _EXTRACT_CLAUSES_SCHEMA: dict[str, Any] = {
                     },
                     "falsifying_case": {
                         "type": "object",
-                        "description": "Required when vacuity_flag is 'none'.",
+                        "description": (
+                            "Optional constructible falsifying case; provide whenever "
+                            "one can be written, independently of vacuity_flag."
+                        ),
                         "required": [
                             "input_population_spec",
                             "expected_directional_pair",

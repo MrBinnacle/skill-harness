@@ -479,3 +479,119 @@ def test_no_second_predicate_implementation_in_coverage_module() -> None:
     text = cov_path.read_text(encoding="utf-8")
     assert "def falsifying_case_complete" not in text
     assert "_FC_REQUIRED_KEYS" not in text
+
+
+# ---------------------------------------------------------------------------
+# #136 — vacuity / case decoupling: cross-tab, independence, detector FPs
+# ---------------------------------------------------------------------------
+
+_DECOUPLED = _FIXTURES / "decoupled_four_cells.jsonl"
+
+
+def test_decoupled_four_cells_coverages_genuinely_differ() -> None:
+    """Constructible coverage and vacuity_none/total differ when off-diagonal filled.
+
+    Carried from #128: once the iff validator is gone, a real input (not a
+    hand-faked bypass of a production invariant) can express disagreement.
+    """
+    result = run_coverage(_DECOUPLED)
+    # 4 clauses: none+case, none-no-case, flagged+case, flagged-no-case
+    # constructible = complete cases = 2 (idx 0 and 2)
+    assert result.total_clauses == 4
+    assert result.corpus_constructible.status == "measured"
+    assert result.corpus_constructible.numerator == 2
+    assert result.corpus_constructible.denominator == 4
+    # vacuity_none = 2 → same ratio numerically here, but...
+    xtab = result.case_vacuity_crosstab
+    assert xtab.none_with_case == 1
+    assert xtab.none_without_case == 1
+    assert xtab.flagged_with_case == 1
+    assert xtab.flagged_without_case == 1
+    # ...the figures are independent: off-diagonal non-empty.
+    assert xtab.constructible_vs_vacuity_flag == "independent"
+    # Instantiated stays a separate figure (refused without evidence).
+    assert result.corpus_instantiated.label == "instantiated"
+    assert result.corpus_instantiated.status == "refused"
+    # Constructible is not merged into instantiated.
+    assert result.corpus_constructible.label == "constructible"
+    receipt = result.to_receipt()
+    assert "constructible_coverage" in receipt["corpus"]
+    assert "instantiated_coverage" in receipt["corpus"]
+    assert (
+        receipt["corpus"]["constructible_coverage"]
+        is not receipt["corpus"]["instantiated_coverage"]
+    )
+
+
+def test_detector_false_positive_surfaced_not_discarded() -> None:
+    result = run_coverage(_DECOUPLED)
+    xtab = result.case_vacuity_crosstab
+    assert xtab.flagged_with_case == 1
+    assert len(xtab.detector_false_positives) == 1
+    fp = xtab.detector_false_positives[0]
+    assert fp.slug == "skill-decoupled"
+    assert fp.clause_index == 2
+    assert fp.vacuity_flag == "semantic_vacuous_pending_review"
+    assert fp.axis == "compliance_proxy"
+    assert "detector FP" in fp.clause_text
+    human = format_human_report(result)
+    assert "detector_false_positives: 1" in human
+    assert "skill-decoupled" in human
+    assert "semantic_vacuous_pending_review" in human
+    receipt = result.to_receipt()
+    assert receipt["case_vacuity_crosstab"]["detector_false_positives_count"] == 1
+    assert receipt["case_vacuity_crosstab"]["cells"]["flagged_with_case"] == 1
+
+
+def test_equal_by_construction_when_off_diagonal_empty(tmp_path: Path) -> None:
+    """Coupled-pattern corpus still reports equal_by_construction on the data."""
+    payload = (
+        '{"slug":"skill-eq","ok":true,"extractor_model":"claude-opus-5",'
+        '"system_prompt_sha256":"'
+        + ("a" * 64)
+        + '","tool_schema_sha256":"'
+        + ("b" * 64)
+        + '","clauses":['
+        '{"clause_index":0,"clause_text":"ok","axis":"verbosity","comparator":"increase",'
+        '"oracle_tier":1,"vacuity_flag":"none","falsifying_case":{'
+        '"input_population_spec":"x","expected_directional_pair":"y",'
+        '"min_reproducibility":0.5}},'
+        '{"clause_index":1,"clause_text":"vague","axis":"formality","comparator":'
+        '"comparator_unspecified","oracle_tier":2,'
+        '"vacuity_flag":"semantic_vacuous_pending_review"}'
+        "]}\n"
+    )
+    path = tmp_path / "eq.jsonl"
+    path.write_text(payload, encoding="utf-8")
+    result = run_coverage(path)
+    xtab = result.case_vacuity_crosstab
+    assert xtab.none_with_case == 1
+    assert xtab.none_without_case == 0
+    assert xtab.flagged_with_case == 0
+    assert xtab.flagged_without_case == 1
+    assert xtab.constructible_vs_vacuity_flag == "equal_by_construction"
+    assert result.corpus_constructible.numerator == 1
+    assert result.corpus_constructible.denominator == 2
+    human = format_human_report(result)
+    assert "equal_by_construction" in human
+    assert "by construction on this input" in human
+
+
+def test_report_states_independent_or_equal_by_construction() -> None:
+    independent = format_human_report(run_coverage(_DECOUPLED))
+    assert "constructible_coverage_vs_vacuity_flag: independent" in independent
+    assert "independent of vacuity_flag" in independent
+    proc = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(_DECOUPLED)],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(_REPO),
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "constructible_coverage_vs_vacuity_flag: independent" in proc.stdout
+    assert "detector_false_positives:" in proc.stdout
+    # Instantiated remains separately labelled.
+    assert "instantiated_coverage:" in proc.stdout
+    assert "constructible_coverage:" in proc.stdout
