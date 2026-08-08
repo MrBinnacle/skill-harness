@@ -19,17 +19,17 @@ admissible evidence was produced. The sub-reasons are:
 
 ### `no_data`
 
-No `oracle_verdicts` rows exist for this clause in the evidence database. This is the
-aggregate-layer representation of a clause that was never reached by the runner — most
-commonly because the runner's oracle gate fired before any subject-model calls were
-made. See `tier2_uncalibrated` for the runner-layer cause.
+No `oracle_verdicts` rows exist for this clause in the evidence database, and the
+clause's axis *is* mechanically scoreable — an unscoreable axis returns
+`mechanical_vacuous` first (see below), because `no_data` would falsely imply that
+more sampling could resolve it. This is the aggregate-layer representation of a
+scoreable clause that was never reached by the runner. See `tier2_uncalibrated`
+for the runner-layer cause.
 
-Example: a skill with 17 domain-specific axes (e.g., `legal_disclaimer_presence`)
-runs against a harness that has only five registered Tier-1 scorers (`verbosity`,
-`hedge_index`, `structure_score`, `compliance_proxy`, `citation_presence_per_flag`).
-None of the axes match. The
-runner fires the BLOCKER-1 gate for all 17 clauses, writes zero verdict rows, and the
-aggregator returns `no_data` for every clause.
+Example: a skill's clauses land on registered axes, but the run that would sample
+this clause was never started — or ended before this clause's first sample was
+made and stored. Zero verdict rows exist. The fix is to run (or resume) the
+evaluation; the instrument exists, the evidence does not yet.
 
 ### `inadmissible`
 
@@ -45,10 +45,9 @@ but excluded from aggregation. The clause has data, but no admissible data.
 
 ### `underpowered`
 
-Admissible verdict rows exist, but the sample count is below `N_min`. At the default
-thresholds (win_rate threshold = 0.60, confidence = 0.95), `N_min = 5`. A posterior
-computed from fewer than 5 samples cannot be trusted to meet the `P(win_rate > 0.60)
->= 0.95` pass criterion.
+Admissible verdict rows exist, but the sample count is below `N_min = 8`
+(`aggregation/status.py`). A posterior computed from fewer than 8 samples cannot be
+trusted to meet the `P(win_rate > 0.60) >= 0.95` pass criterion.
 
 Example: a run is interrupted after 3 samples per clause. The harness stores what it
 has. On aggregation, the underpowered clauses return `UNMEASURED(underpowered)`. The
@@ -85,6 +84,46 @@ Example: a scorer for `citation_presence_per_flag` is updated with a bug fix tha
 changes its output on existing test inputs. All frozen cases produced by the prior
 scorer version are now stale. The clause returns `UNMEASURED(falsifying_case_stale)`
 until new cases are frozen against the updated scorer version.
+
+### `fdr_correction_failed`
+
+The raw (uncorrected) posterior crossed the pass threshold, but the skill-level
+BH-FDR correction rejected this clause (`bh_fdr_pass = False`). Distinct from
+`underpowered`: the sample count and the raw posterior are both fine — what failed
+is the multiple-testing correction, not the sample size. Testing many clauses at
+once inflates the chance that at least one crosses the threshold by luck; this
+sub-reason names a clause that did not survive the correction that keeps the
+family of results honest.
+
+Example: a skill with 40 clauses runs to completion. One clause's raw posterior
+reads `P(win_rate > 0.60) = 0.96`, but across 40 simultaneous tests the BH-FDR
+gate rejects it. Reporting "not enough evidence yet" would be a false explanation
+— there is enough evidence, and it does not survive correction.
+
+### `mechanical_vacuous`
+
+No registered Tier-1 mechanical scorer can see this clause's axis, so no amount of
+further sampling could ever produce a mechanical measurement. This is Rule 0 —
+checked before everything else, including `no_data` — because when no instrument
+exists, "no data yet" is a false explanation: it implies more sampling would
+resolve the clause, and it would not.
+
+Scoreability is exact membership in the axis registry
+(`oracles/tier1/axis_registry.py`) — never fuzzy, never case-insensitive, never a
+Tier-2 judge. And it is recomputed from the current registry on every aggregation
+read, never frozen onto the clause: registering a scorer for the axis resolves it
+on the next read, with no re-extraction.
+
+This is orthogonal to the write-time `vacuity_flag`: a clause can be constructibly
+testable — carrying a structurally complete falsifying case — and still be
+mechanically unscoreable today.
+
+Example: a skill with 17 domain-specific axes (e.g., `legal_disclaimer_presence`)
+runs against a harness that has only five registered Tier-1 scorers (`verbosity`,
+`hedge_index`, `structure_score`, `compliance_proxy`,
+`citation_presence_per_flag`). None of the 17 match. Every one of those clauses
+returns `UNMEASURED(mechanical_vacuous)` — not `no_data` — naming the missing
+instrument rather than implying missing effort.
 
 ## Contrast with the field's pattern
 
