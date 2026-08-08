@@ -60,6 +60,7 @@ def _make_vacuous_clause(index: int) -> ExtractedClause:
         comparator="comparator_unspecified",
         oracle_tier=2,
         vacuity_flag="semantic_vacuous_pending_review",
+        vacuity_kind="weak_directive",
         falsifying_case=None,
     )
 

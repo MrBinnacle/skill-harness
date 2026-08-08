@@ -58,6 +58,7 @@ def _valid_raw_clause(
     index: int = 0,
     vacuity_flag: str = "none",
     comparator: str = "increase",
+    vacuity_kind: str | None = None,
 ) -> dict[str, Any]:
     base: dict[str, Any] = {
         "clause_index": index,
@@ -73,6 +74,8 @@ def _valid_raw_clause(
             "expected_directional_pair": "A more specific than B",
             "min_reproducibility": 0.75,
         }
+    else:
+        base["vacuity_kind"] = vacuity_kind if vacuity_kind is not None else "weak_directive"
     return base
 
 
