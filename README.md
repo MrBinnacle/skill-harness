@@ -40,8 +40,9 @@ Most benchmarks hand you a number no matter what. This tool refuses. That refusa
 > model, 3 epochs each, store-backed): two real skills —
 > [`append-only-evidence-design`](https://github.com/MrBinnacle/skills) and a hardened
 > `git-pull-rebase-trap` — both returned **CUT (subsumed)** at a bare-arm pass rate of
-> 1.00 under the pre-guard mapping (the model passed every no-skill epoch). Those dated results
-> stand; they are not retracted. The value-class guard has since reclassified both to
+> 1.00 under the pre-guard mapping (the model passed every no-skill epoch). Those runs are
+> preserved as dated historical output of the pre-guard code, not as current verdicts. The
+> value-class guard has since reclassified both to
 > **CAN'T-TELL-YET**: an above-bar `p0` maps to CUT(subsumed) only for `TRANSFORMATIVE_LIFT`, and
 > both skills are registered as other classes (`calibration` and `trap-discipline`).
 >
