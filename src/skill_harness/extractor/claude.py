@@ -91,6 +91,10 @@ directive at all (trigger conditions, factual statements, definitions). Examples
 an initiative with meaningful downside." (trigger condition); "Encoding ties as \
 `0.5` and updating `Beta(1+w, 1+n-w)` with `w = sum_of_encoded_outcomes` is a \
 quasi-Bayesian heuristic." (factual statement).
+- Whenever vacuity_flag is "semantic_vacuous_pending_review", also set \
+vacuity_reason to a one-line free-text reason for that call. Write the reason \
+verbatim; do not summarise it into a label. When vacuity_flag is "none", set \
+vacuity_reason to null.
 - A directive with a constructible falsifying case is vacuity_flag "none" (and \
 vacuity_kind null), even if it is long, technical, or hedged. Do not flag sound \
 testable directives.
@@ -193,6 +197,14 @@ _EXTRACT_CLAUSES_SCHEMA: dict[str, Any] = {
                             "direction on a measurable axis. not_a_directive: "
                             "clause boundary captured non-directive prose. "
                             "Omit when vacuity_flag is none."
+                        ),
+                    },
+                    "vacuity_reason": {
+                        "type": "string",
+                        "description": (
+                            "One-line free-text reason for the vacuity call when "
+                            "vacuity_flag is semantic_vacuous_pending_review. "
+                            "No controlled vocabulary. Omit when vacuity_flag is none."
                         ),
                     },
                     "falsifying_case": {

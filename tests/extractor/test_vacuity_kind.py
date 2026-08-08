@@ -1,9 +1,10 @@
 """#141 — separate weak_directive from not_a_directive under the vacuity flag.
 
-Pins external behaviour: ExtractedClause carries vacuity_kind, the system prompt
-states both conditions (without defining weak_directive via case-constructibility),
-JSONL serialisation preserves the field, census surfaces report the two counts
-separately, and storage vacuity_flag values stay unchanged.
+Pins external behaviour: ExtractedClause carries vacuity_kind and free-text
+vacuity_reason, the system prompt states both conditions (without defining
+weak_directive via case-constructibility) and asks for a one-line reason,
+JSONL serialisation preserves both fields, census surfaces report the two
+counts separately, and storage vacuity_flag values stay unchanged.
 """
 
 from __future__ import annotations
@@ -47,6 +48,7 @@ def _clause(**overrides: object) -> ExtractedClause:
         "oracle_tier": 1,
         "vacuity_flag": "none",
         "vacuity_kind": None,
+        "vacuity_reason": None,
         "falsifying_case": _fc(),
     }
     data.update(overrides)
@@ -66,10 +68,12 @@ def test_weak_directive_clause_carries_kind() -> None:
         comparator="comparator_unspecified",
         vacuity_flag="semantic_vacuous_pending_review",
         vacuity_kind="weak_directive",
+        vacuity_reason="metaphorical helpfulness with no measurable axis",
         falsifying_case=None,
     )
     assert clause.vacuity_flag == "semantic_vacuous_pending_review"
     assert clause.vacuity_kind == "weak_directive"
+    assert clause.vacuity_reason == "metaphorical helpfulness with no measurable axis"
 
 
 def test_not_a_directive_trigger_condition() -> None:
@@ -84,10 +88,12 @@ def test_not_a_directive_trigger_condition() -> None:
         comparator="comparator_unspecified",
         vacuity_flag="semantic_vacuous_pending_review",
         vacuity_kind="not_a_directive",
+        vacuity_reason="trigger condition, not a behavioural directive",
         falsifying_case=None,
     )
     assert clause.vacuity_kind == "not_a_directive"
     assert clause.vacuity_flag == "semantic_vacuous_pending_review"
+    assert clause.vacuity_reason == "trigger condition, not a behavioural directive"
 
 
 def test_not_a_directive_factual_statement() -> None:
@@ -102,15 +108,18 @@ def test_not_a_directive_factual_statement() -> None:
         comparator="comparator_unspecified",
         vacuity_flag="semantic_vacuous_pending_review",
         vacuity_kind="not_a_directive",
+        vacuity_reason="factual statement about an encoding heuristic",
         falsifying_case=None,
     )
     assert clause.vacuity_kind == "not_a_directive"
+    assert clause.vacuity_reason == "factual statement about an encoding heuristic"
 
 
 def test_normal_testable_clause_remains_none() -> None:
     clause = _clause()
     assert clause.vacuity_flag == "none"
     assert clause.vacuity_kind is None
+    assert clause.vacuity_reason is None
 
 
 def test_flagged_without_kind_rejected() -> None:
@@ -128,6 +137,11 @@ def test_none_flag_rejects_non_null_kind() -> None:
         _clause(vacuity_flag="none", vacuity_kind="weak_directive")
 
 
+def test_none_flag_rejects_non_null_reason() -> None:
+    with pytest.raises(Exception, match="vacuity_reason"):
+        _clause(vacuity_flag="none", vacuity_reason="should not be set")
+
+
 def test_false_positive_label_is_not_a_kind_value() -> None:
     """Detector must not self-report false_positive as a vacuity_kind."""
     with pytest.raises(Exception):
@@ -137,6 +151,51 @@ def test_false_positive_label_is_not_a_kind_value() -> None:
             falsifying_case=None,
             comparator="comparator_unspecified",
         )
+
+
+def test_absent_reason_distinct_from_empty_string_reason() -> None:
+    """None (absent/legacy) must not collapse into empty string."""
+    absent = _clause(
+        vacuity_flag="semantic_vacuous_pending_review",
+        vacuity_kind="weak_directive",
+        vacuity_reason=None,
+        falsifying_case=None,
+        comparator="comparator_unspecified",
+    )
+    empty = _clause(
+        vacuity_flag="semantic_vacuous_pending_review",
+        vacuity_kind="weak_directive",
+        vacuity_reason="",
+        falsifying_case=None,
+        comparator="comparator_unspecified",
+    )
+    assert absent.vacuity_reason is None
+    assert empty.vacuity_reason == ""
+    assert absent.vacuity_reason != empty.vacuity_reason
+
+
+def test_long_unusual_non_ascii_reason_round_trips_unaltered() -> None:
+    reason = (
+        'Clause mixes metaphor ("be the north star") with a procedural aside '
+        "about β-priors and a parenthetical in Ελληνικά + 日本語 — "
+        "not a measurable axis; kept verbatim for later review. " * 8
+    )
+    assert any(ord(ch) > 127 for ch in reason)
+    clause = _clause(
+        clause_text="Be the north star for the team.",
+        axis="guidance",
+        comparator="comparator_unspecified",
+        vacuity_flag="semantic_vacuous_pending_review",
+        vacuity_kind="weak_directive",
+        vacuity_reason=reason,
+        falsifying_case=None,
+    )
+    dumped = clause.model_dump(mode="json")
+    line = json.dumps(dumped, ensure_ascii=False, sort_keys=True)
+    parsed = json.loads(line)
+    assert parsed["vacuity_reason"] == reason
+    restored = ExtractedClause.model_validate(parsed)
+    assert restored.vacuity_reason == reason
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +246,7 @@ def test_jsonl_serialisation_includes_kind_for_each_condition() -> None:
         comparator="comparator_unspecified",
         vacuity_flag="semantic_vacuous_pending_review",
         vacuity_kind="weak_directive",
+        vacuity_reason="vague naturalness with no axis",
         falsifying_case=None,
     )
     non_dir = _clause(
@@ -196,6 +256,7 @@ def test_jsonl_serialisation_includes_kind_for_each_condition() -> None:
         comparator="comparator_unspecified",
         vacuity_flag="semantic_vacuous_pending_review",
         vacuity_kind="not_a_directive",
+        vacuity_reason="invocation trigger, not a directive",
         falsifying_case=None,
     )
     none_clause = _clause(clause_index=2)
@@ -206,8 +267,11 @@ def test_jsonl_serialisation_includes_kind_for_each_condition() -> None:
     ]
     parsed = [json.loads(line) for line in lines]
     assert parsed[0]["vacuity_kind"] == "weak_directive"
+    assert parsed[0]["vacuity_reason"] == "vague naturalness with no axis"
     assert parsed[1]["vacuity_kind"] == "not_a_directive"
+    assert parsed[1]["vacuity_reason"] == "invocation trigger, not a directive"
     assert parsed[2]["vacuity_kind"] is None
+    assert parsed[2]["vacuity_reason"] is None
     assert parsed[2]["vacuity_flag"] == "none"
 
 
@@ -223,6 +287,11 @@ def test_prompt_states_both_conditions_with_examples() -> None:
     assert "sound natural" in _SYSTEM_PROMPT.lower() or '"sound natural"' in _SYSTEM_PROMPT
     assert "go/no-go" in _SYSTEM_PROMPT
     assert "quasi-Bayesian" in _SYSTEM_PROMPT or "quasi-bayesian" in _SYSTEM_PROMPT.lower()
+
+
+def test_prompt_asks_for_one_line_reason_on_flagged_clauses() -> None:
+    assert "vacuity_reason" in _SYSTEM_PROMPT
+    assert "one-line" in _SYSTEM_PROMPT.lower() or "one line" in _SYSTEM_PROMPT.lower()
 
 
 def test_prompt_states_constructible_case_is_none_even_if_long_technical_hedged() -> None:
@@ -242,6 +311,10 @@ def test_tool_schema_exposes_vacuity_kind_enum() -> None:
     props = _EXTRACT_CLAUSES_SCHEMA["properties"]["clauses"]["items"]["properties"]
     assert "vacuity_kind" in props
     assert props["vacuity_kind"]["enum"] == ["weak_directive", "not_a_directive"]
+    assert "vacuity_reason" in props
+    assert props["vacuity_reason"]["type"] == "string"
+    assert "enum" not in props["vacuity_reason"]
+    assert "maxLength" not in props["vacuity_reason"]
     # vacuity_flag values themselves are unchanged.
     assert props["vacuity_flag"]["enum"] == ["none", "semantic_vacuous_pending_review"]
 
@@ -283,6 +356,7 @@ def test_extraction_round_trips_both_kinds_and_stamps_instrument(
             "oracle_tier": 2,
             "vacuity_flag": "semantic_vacuous_pending_review",
             "vacuity_kind": "weak_directive",
+            "vacuity_reason": "vague helpfulness",
         },
         {
             "clause_index": 1,
@@ -292,6 +366,7 @@ def test_extraction_round_trips_both_kinds_and_stamps_instrument(
             "oracle_tier": 2,
             "vacuity_flag": "semantic_vacuous_pending_review",
             "vacuity_kind": "not_a_directive",
+            "vacuity_reason": "trigger condition",
         },
         {
             "clause_index": 2,
@@ -315,6 +390,11 @@ def test_extraction_round_trips_both_kinds_and_stamps_instrument(
     assert [c.vacuity_kind for c in clauses] == [
         "weak_directive",
         "not_a_directive",
+        None,
+    ]
+    assert [c.vacuity_reason for c in clauses] == [
+        "vague helpfulness",
+        "trigger condition",
         None,
     ]
     assert [c.vacuity_flag for c in clauses] == [
@@ -458,11 +538,16 @@ def test_storage_vacuity_flag_check_unchanged() -> None:
         "('none','mechanical_vacuous','semantic_vacuous_pending_review'))" in sql
     )
     assert "vacuity_kind" not in sql
-    # No storage-layer module should grow a vacuity_kind column from this ticket.
+    assert "vacuity_reason" not in sql
+    # No storage-layer module should grow kind/reason columns from this ticket.
     storage_root = _REPO / "src" / "skill_harness" / "storage"
     offenders = [
         p
         for p in storage_root.rglob("*")
-        if p.is_file() and "vacuity_kind" in p.read_text(encoding="utf-8", errors="ignore")
+        if p.is_file()
+        and (
+            "vacuity_kind" in p.read_text(encoding="utf-8", errors="ignore")
+            or "vacuity_reason" in p.read_text(encoding="utf-8", errors="ignore")
+        )
     ]
     assert offenders == []
