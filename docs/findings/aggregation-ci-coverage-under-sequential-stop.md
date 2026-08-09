@@ -31,6 +31,27 @@ hi = binom.ppf(0.975, n=500, p=0.95) = 484
 E[X] = 475
 ```
 
+## Direction and evidence strength (the two misses are not equivalent)
+
+The spec's severity vocabulary is fixed at four levels ranked by damage
+(WRONG_NUMBER > CORRUPTION > CRASH > HYGIENE) and the work order maps any
+coverage miss to WRONG_NUMBER; the vocabulary carries no direction qualifier.
+This section is that qualifier, so triage can rank the two grid points by
+damage rather than reading them as equivalent:
+
+- **`small` (p=0.65) — under-coverage, the dangerous direction.** X=441
+  sits 24 counts below the band edge; exact one-sided tail
+  P(X ≤ 441 | Binomial(500, 0.95)) ≈ 1.5e-9. Intervals here are effectively
+  narrower than their nominal label — false precision, the direction that
+  misleads a reader into trusting a pinned rate.
+- **`large` (p=0.85) — over-coverage, the conservative direction.** X=491
+  sits 7 counts above the band edge; exact one-sided tail
+  P(X ≥ 491) ≈ 1.7e-4 — decisive at this seed, though five orders of
+  magnitude weaker than the `small` shortfall, and measured on a single
+  master seed. The interval is wider than nominal here — a real breach of
+  the pre-registered two-sided band, but the deviation errs toward caution,
+  not false confidence.
+
 ---
 
 ## Why this is a finding, not a retune
@@ -43,6 +64,16 @@ Optional stopping is known to bias stopped sums as estimators of the underlying
 rate; equal-tailed Bayesian credible intervals are not exact frequentist CIs at
 every `(n, p)` even under fixed-n. The calibration harness makes the joint
 failure mode measurable and pins it with seeds.
+
+**Mechanism status: hypothesis, not established.** The direction pattern —
+under-coverage at p=0.65 (where 65% of arms run to `N_MAX`, mean n ≈ 33) and
+over-coverage at p=0.85 (where 98% stop early "passed" at mean n ≈ 15, and the
+equal-tailed Beta interval at small n is wide) — is *consistent* with the joint
+effect of stopping-induced selection and small-n interval width, but this run
+does not decompose the two: no fixed-n counterfactual at the matched
+n-distribution was simulated, so how much each contributes is not measured.
+A reader deciding what to change (stopper cadence vs interval construction)
+should not read a settled causal story off this document; it isn't one.
 
 ---
 
