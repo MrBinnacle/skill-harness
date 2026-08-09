@@ -63,8 +63,7 @@ REASON_AMBIGUOUS: Final[str] = (
     "extraction output is not stable across runs, refusing to choose"
 )
 REASON_LEGACY: Final[str] = (
-    "legacy_extraction_missing_instrument_identity: "
-    "row predates the generation stamp"
+    "legacy_extraction_missing_instrument_identity: row predates the generation stamp"
 )
 REASON_UNREADABLE: Final[str] = "unreadable_extraction_file: 0 valid rows"
 
@@ -192,9 +191,7 @@ def load_clause_evidence(
     if len(matches) == 0:
         return ClauseEvidenceOutcome(
             kind="no_matching_extraction",
-            refusal_detail=REASON_NO_MATCHING.format(
-                sha16=source_sha256[:16], path=str(path)
-            ),
+            refusal_detail=REASON_NO_MATCHING.format(sha16=source_sha256[:16], path=str(path)),
             measured=None,
             unparseable_line_count=unparseable,
             match_count=0,
@@ -249,14 +246,8 @@ def format_summary_lines(summary: ClauseEvidenceSummary) -> list[str]:
     kind_bit = ", ".join(kind_parts) if kind_parts else "none"
     return [
         f"clauses: {summary.clause_count}",
-        (
-            f"flagged: {summary.flagged_count} ({kind_bit}) "
-            f"({UNREVIEWED_SEMANTIC_VACUOUS_LABEL})"
-        ),
-        (
-            f"scoreable-axis: {summary.scoreable_axis_count} "
-            f"(as of current scorer registry)"
-        ),
+        (f"flagged: {summary.flagged_count} ({kind_bit}) ({UNREVIEWED_SEMANTIC_VACUOUS_LABEL})"),
+        (f"scoreable-axis: {summary.scoreable_axis_count} (as of current scorer registry)"),
         f"Constructible coverage: {summary.constructible_count}/{summary.clause_count}",
         INSTANTIATED_COVERAGE_REFUSAL,
     ]
