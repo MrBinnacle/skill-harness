@@ -36,7 +36,7 @@ Author: TBD
 > arXiv:2606.15390); differentiators claimed with their nearest adjacents named;
 > zero first-mover or only-tool claims (falsified by the verified survey). The
 > two differentiator-grade claims — the pre-spend characterized-error
-> eligibility gate and thresholds-earned-never-authored — carry visible
+> eligibility gate and thresholds-ratified-never-authored — carry visible
 > claim-status labels tied to the external-deliberation plan
 > ([#45](https://github.com/MrBinnacle/skill-harness/issues/45)) and change only
 > by dated amendment. The README's "How it compares" section is the canonical

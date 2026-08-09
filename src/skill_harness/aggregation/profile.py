@@ -38,7 +38,7 @@ class RankingDisposition(StrEnum):
     This is a single-axis eligibility label, NOT a rank or score.
     """
 
-    ADMITTED = "ADMITTED"  # a KEEP — earns its slot
+    ADMITTED = "ADMITTED"  # a KEEP - worth its slot
     EXCLUDED = "EXCLUDED"  # a CUT — cut from the library
     NOT_YET_RANKABLE = "NOT_YET_RANKABLE"  # needs evidence before it can compete
 

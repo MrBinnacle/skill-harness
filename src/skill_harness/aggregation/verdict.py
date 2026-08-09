@@ -2,7 +2,7 @@
 
 Maps measurement outcomes to the decision the operator actually has:
 
-    "I run ~75 skills in my Claude Code setup. Which earn their slot, and which
+    "I run ~75 skills in my Claude Code setup. Which are worth their slot, and which
      are dead weight I should delete?"
 
 This module is PURE logic — no I/O, no DB, no datetime, no wire format. It maps
@@ -31,7 +31,7 @@ Threshold provenance (do NOT silently retune — operator-accepted values decisi
   The instrument detects TRANSFORMATIVE skills only. Under arm-independence the
   locked stopping rule's 80%-power region requires roughly Null pass ≤ ~0.3 AND
   Full pass ≥ ~0.8 (v0.2-preregistration.md, "Detectability disclosure", accepted
-  2026-07-09). A skill can only earn KEEP if the Null arm fails often enough
+  2026-07-09). A skill can only reach KEEP if the Null arm fails often enough
   (p0 ≤ ~0.3) that a transformative lift is even detectable. The "~" is the
   pre-registration's own hedge — the boundary is soft; a p0 near the ceiling is
   borderline, not a sharp verdict flip.
