@@ -327,7 +327,7 @@ class TestProfileRowFidelity:
         design = Gate2Design(n_pairs=4, gamma=0.95, mme=MMESpec(delta_min=0.1, q_min=0.7))
         with pytest.raises(ValueError, match="at least one pair"):
             effect_from_matched_gate2(design, both_pass=0, full_only=0, null_only=0, both_fail=0)
-        with pytest.raises(ValueError, match="design.n_pairs=4"):
+        with pytest.raises(ValueError, match=r"design\.n_pairs=4"):
             effect_from_matched_gate2(design, both_pass=1, full_only=0, null_only=0, both_fail=0)
 
 
