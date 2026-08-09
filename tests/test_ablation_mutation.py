@@ -45,8 +45,8 @@ class TestSizingContracts:
 
     def test_pass_threshold_includes_equality(self) -> None:
         """Document PASS_PROB_THRESHOLD is a closed upper bar used by sizing."""
-        assert PASS_PROB_THRESHOLD == pytest.approx(0.95)
-        assert FAIL_PROB_THRESHOLD == pytest.approx(0.05)
+        assert pytest.approx(0.95) == PASS_PROB_THRESHOLD
+        assert pytest.approx(0.05) == FAIL_PROB_THRESHOLD
 
     def test_minimum_detectable_q_grid_includes_one(self) -> None:
         """Grid must reach q=1.0 (kills n_steps off-by-one that skips 1.0)."""
