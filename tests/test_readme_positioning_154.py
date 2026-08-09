@@ -64,7 +64,7 @@ def test_four_part_section_order() -> None:
 
 def test_ratified_question_verbatim() -> None:
     text = _readme()
-    assert "What does this skill cost you, and which parts of it are earning that cost?" in text
+    assert "What does this skill cost you, and which parts of it are worth that cost?" in text
 
 
 def test_honest_maturity_names_both_gaps_with_tickets() -> None:
