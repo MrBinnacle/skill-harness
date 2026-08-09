@@ -2,8 +2,8 @@
 
 Coverage:
 - to_json_dict produces all required top-level keys
-- report_schema_version = "1.3.0" (bumped in B5 hostile-review fix for is_prior_only;
-  was "1.2.0" in M3 pre-tag fix, "1.1.0" in C1 fix-loop per A60)
+- report_schema_version = "1.4.0" (bumped in #187 for anytime-valid CS fields;
+  was "1.3.0" in B5 is_prior_only, "1.2.0" in M3, "1.1.0" in C1 per A60)
 - to_json_bytes is byte-stable for identical input
 - to_json_bytes is UTF-8 with trailing newline
 - Nested structures serialise correctly (tuples → lists, etc.)
@@ -40,12 +40,13 @@ def make_clause_report(
     subject_model: str | None = "claude-sonnet-4-6",
     user_message_sha256: str | None = "a" * 64,
 ) -> ClauseReport:
+    ci = (0.55, 0.90)
     return ClauseReport(
         clause_id=clause_id,
         status=status,
         sub_reason=sub_reason,
         posterior_mean=0.75,
-        credible_interval_95=(0.55, 0.90),
+        credible_interval_95=ci,
         p_win_gt_threshold=p,
         frozen_case_count_at_current_metric_version=1,
         metric_id_per_axis={"verbosity": "metric_v1"},
@@ -56,6 +57,10 @@ def make_clause_report(
         w_observation_sum=w,
         subject_model=subject_model,
         user_message_sha256=user_message_sha256,
+        posterior_credible_interval_95=ci,
+        sequential_confidence_sequence_95=(0.50, 0.92),
+        interval_method="predictable_plugin_betting_cs_v1",
+        interval_status="VALID",
     )
 
 
@@ -108,17 +113,18 @@ class TestSchemaVersion:
         # 1.1.0 bumped in C1 fix-loop per A60 (A55 axes)
         # 1.2.0 bumped in M3 pre-tag fix (coverage_warnings)
         # 1.3.0 bumped in B5 hostile-review fix (is_prior_only)
-        assert REPORT_SCHEMA_VERSION == "1.3.0"
+        # 1.4.0 bumped in #187 (anytime-valid CS fields)
+        assert REPORT_SCHEMA_VERSION == "1.4.0"
 
     def test_schema_version_in_dict(self) -> None:
         report = make_skill_report()
         d = to_json_dict(report)
-        assert d["report_schema_version"] == "1.3.0"
+        assert d["report_schema_version"] == "1.4.0"
 
     def test_schema_version_in_bytes(self) -> None:
         report = make_skill_report()
         data = json.loads(to_json_bytes(report))
-        assert data["report_schema_version"] == "1.3.0"
+        assert data["report_schema_version"] == "1.4.0"
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +162,10 @@ class TestRequiredKeys:
             "sub_reason",
             "posterior_mean",
             "credible_interval_95",
+            "posterior_credible_interval_95",
+            "sequential_confidence_sequence_95",
+            "interval_method",
+            "interval_status",
             "p_win_gt_threshold",
             "frozen_case_count_at_current_metric_version",
             "metric_id_per_axis",
@@ -456,3 +466,43 @@ class TestI1NanInJsonFix:
 
         with _pytest.raises(ValueError):
             to_json_bytes(bad_report)
+
+
+# ---------------------------------------------------------------------------
+# Schema 1.4.0 — anytime-valid CS fields (#187)
+# ---------------------------------------------------------------------------
+
+
+class TestSchema140CSFields:
+    def test_cs_fields_round_trip(self) -> None:
+        report = make_skill_report()
+        d = to_json_dict(report)
+        clause = d["clauses"][0]  # type: ignore[index]
+        assert clause["posterior_credible_interval_95"] == [0.55, 0.90]
+        assert clause["sequential_confidence_sequence_95"] == [0.50, 0.92]
+        assert clause["interval_method"] == "predictable_plugin_betting_cs_v1"
+        assert clause["interval_status"] == "VALID"
+        restored = skill_report_from_dict(d)
+        c0 = restored.clauses[0]
+        assert c0.posterior_credible_interval_95 == (0.55, 0.90)
+        assert c0.sequential_confidence_sequence_95 == (0.50, 0.92)
+        assert c0.interval_method == "predictable_plugin_betting_cs_v1"
+        assert c0.interval_status == "VALID"
+
+    def test_null_cs_serialises(self) -> None:
+        cr = make_clause_report()
+        # Rebuild with null CS (incomparable / prior path)
+        from dataclasses import replace
+
+        cr2 = replace(
+            cr,
+            sequential_confidence_sequence_95=None,
+            interval_status="UNMEASURED_INCOMPARABLE_POOL",
+        )
+        report = make_skill_report(clause_reports=(cr2,))
+        d = to_json_dict(report)
+        clause = d["clauses"][0]  # type: ignore[index]
+        assert clause["sequential_confidence_sequence_95"] is None
+        assert clause["interval_status"] == "UNMEASURED_INCOMPARABLE_POOL"
+        restored = skill_report_from_dict(d)
+        assert restored.clauses[0].sequential_confidence_sequence_95 is None

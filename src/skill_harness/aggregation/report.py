@@ -1,6 +1,6 @@
 """SkillReport dataclass + JSON serialisation (A60).
 
-Schema version: "1.3.0" (semver). v0.1 lifetime is 1.x additive-only.
+Schema version: "1.4.0" (semver). v0.1 lifetime is 1.x additive-only.
   1.1.0 — A55 comparability axes (subject_model, user_message_sha256).
   1.2.0 — coverage_warnings field on VectorSummary (M3 pre-tag fix).
   1.3.0 — is_prior_only field on ClauseReport (B5 hostile-review fix): True when a
@@ -9,6 +9,11 @@ Schema version: "1.3.0" (semver). v0.1 lifetime is 1.x additive-only.
           measurement. The numeric fields keep their existing type/semantics
           (additive-only) — is_prior_only is the required guard a consumer must check
           before treating them as measured data.
+  1.4.0 — #187 anytime-valid confidence sequence beside the posterior interval:
+          posterior_credible_interval_95 (alias of the Bayesian equal-tailed interval),
+          sequential_confidence_sequence_95 (predictable-plugin betting CS, or null),
+          interval_method, interval_status. Legacy credible_interval_95 keeps its
+          exact Bayesian-posterior-only meaning for compatibility.
 Any breaking change (field removal, type change, rename) requires:
   1. Major version bump.
   2. A ``diff skill`` consumer compatibility check (E.3 territory).
@@ -32,7 +37,12 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-REPORT_SCHEMA_VERSION = "1.3.0"
+REPORT_SCHEMA_VERSION = "1.4.0"
+
+# interval_status vocabulary (#187)
+INTERVAL_STATUS_VALID = "VALID"
+INTERVAL_STATUS_UNMEASURED_INCOMPARABLE_POOL = "UNMEASURED_INCOMPARABLE_POOL"
+INTERVAL_STATUS_PRIOR_ONLY = "PRIOR_ONLY"
 
 
 @dataclass(frozen=True)
@@ -73,6 +83,10 @@ class ClauseReport:
     status: str  # ClauseStatus value
     sub_reason: str | None  # UnmeasuredSubReason value when status=UNMEASURED
     posterior_mean: float
+    # Legacy Bayesian equal-tailed 95% posterior credible interval (Beta).
+    # Bayesian-posterior-only — NOT a frequentist coverage claim under sequential
+    # stopping. Retained for compatibility; prefer sequential_confidence_sequence_95
+    # for frequentist anytime-valid coverage (#187).
     credible_interval_95: tuple[float, float]
     p_win_gt_threshold: float
     frozen_case_count_at_current_metric_version: int
@@ -90,6 +104,12 @@ class ClauseReport:
     # Beta(1,1) PRIOR, not a measurement. Consumers MUST check this before treating
     # the numeric fields as measured data.
     is_prior_only: bool = False
+    # 1.4.0 (#187): explicit posterior alias (same numbers as credible_interval_95).
+    posterior_credible_interval_95: tuple[float, float] = (0.0, 1.0)
+    # Anytime-valid betting CS; null when interval_status != VALID.
+    sequential_confidence_sequence_95: tuple[float, float] | None = None
+    interval_method: str = "none"
+    interval_status: str = INTERVAL_STATUS_PRIOR_ONLY
 
 
 @dataclass(frozen=True)
@@ -118,12 +138,17 @@ class SkillReport:
 
 
 def _clause_to_dict(clause: ClauseReport) -> dict[str, object]:
+    seq = clause.sequential_confidence_sequence_95
     return {
         "clause_id": clause.clause_id,
         "status": clause.status,
         "sub_reason": clause.sub_reason,
         "posterior_mean": clause.posterior_mean,
         "credible_interval_95": list(clause.credible_interval_95),
+        "posterior_credible_interval_95": list(clause.posterior_credible_interval_95),
+        "sequential_confidence_sequence_95": list(seq) if seq is not None else None,
+        "interval_method": clause.interval_method,
+        "interval_status": clause.interval_status,
         "p_win_gt_threshold": clause.p_win_gt_threshold,
         "frozen_case_count_at_current_metric_version": (
             clause.frozen_case_count_at_current_metric_version
@@ -232,6 +257,25 @@ def skill_report_from_dict(d: dict[str, Any]) -> SkillReport:
             subject_model=c.get("subject_model"),
             user_message_sha256=c.get("user_message_sha256"),
             is_prior_only=bool(c.get("is_prior_only", False)),
+            posterior_credible_interval_95=(
+                float(c["posterior_credible_interval_95"][0]),
+                float(c["posterior_credible_interval_95"][1]),
+            )
+            if c.get("posterior_credible_interval_95") is not None
+            else (
+                float(c["credible_interval_95"][0]),
+                float(c["credible_interval_95"][1]),
+            ),
+            sequential_confidence_sequence_95=(
+                (
+                    float(c["sequential_confidence_sequence_95"][0]),
+                    float(c["sequential_confidence_sequence_95"][1]),
+                )
+                if c.get("sequential_confidence_sequence_95") is not None
+                else None
+            ),
+            interval_method=str(c.get("interval_method", "none")),
+            interval_status=str(c.get("interval_status", INTERVAL_STATUS_PRIOR_ONLY)),
         )
         for c in d["clauses"]
     )

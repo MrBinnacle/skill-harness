@@ -2348,17 +2348,32 @@ def _render_evaluate_skill_report(report: Any, vacuity_count: int = 0) -> None:
     clause_table.add_column("status", min_width=12)
     clause_table.add_column("sub_reason", min_width=20)
     clause_table.add_column("posterior_mean", min_width=14, justify="right")
-    clause_table.add_column("CI 95%", min_width=16, justify="right")
+    # #187: lead with the anytime-valid confidence sequence; posterior interval
+    # is Bayesian-only (no frequentist coverage claim under sequential stop).
+    clause_table.add_column("CS 95% (anytime-valid)", min_width=18, justify="right")
+    clause_table.add_column("posterior CrI 95%", min_width=16, justify="right")
 
     for clause in report.clauses:
         status = clause.status
         sub_reason = clause.sub_reason or "—"
-        ci_lo, ci_hi = clause.credible_interval_95
+        post_lo, post_hi = clause.posterior_credible_interval_95
         # B5: is_prior_only clauses carry an uninformative Beta(1,1) PRIOR
         # (posterior_mean=0.5 etc.), not a measurement — render a dim placeholder
         # instead of the fabricated numbers so a reader never mistakes UNMEASURED
         # for "measured at 0.5".
-        ci_str = "[dim]— (prior)[/]" if clause.is_prior_only else f"[{ci_lo:.3f}, {ci_hi:.3f}]"
+        if clause.is_prior_only:
+            cs_str = "[dim]— (prior)[/]"
+            post_str = "[dim]— (prior)[/]"
+        elif clause.interval_status == "UNMEASURED_INCOMPARABLE_POOL":
+            cs_str = "[dim]— (incomparable pool)[/]"
+            post_str = f"[{post_lo:.3f}, {post_hi:.3f}]"
+        elif clause.sequential_confidence_sequence_95 is not None:
+            cs_lo, cs_hi = clause.sequential_confidence_sequence_95
+            cs_str = f"[{cs_lo:.3f}, {cs_hi:.3f}]"
+            post_str = f"[{post_lo:.3f}, {post_hi:.3f}]"
+        else:
+            cs_str = "[dim]—[/]"
+            post_str = f"[{post_lo:.3f}, {post_hi:.3f}]"
 
         if status == "UNMEASURED":
             status_str = f"[yellow]{status}[/]"
@@ -2380,7 +2395,8 @@ def _render_evaluate_skill_report(report: Any, vacuity_count: int = 0) -> None:
             status_str,
             sub_reason,
             posterior_mean_str,
-            ci_str,
+            cs_str,
+            post_str,
         )
 
     _console.print(clause_table)

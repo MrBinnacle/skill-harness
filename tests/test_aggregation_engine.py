@@ -698,8 +698,8 @@ class TestHealthyAggregation:
             )
             # 1.1.0 bumped in C1 fix-loop per A60 (A55 axes)
             # 1.2.0 bumped in M3 pre-tag fix (coverage_warnings)
-            # 1.3.0 bumped in B5 hostile-review fix (is_prior_only)
-            assert report.report_schema_version == "1.3.0"
+            # 1.4.0 bumped in #187 (anytime-valid CS fields)
+            assert report.report_schema_version == "1.4.0"
         finally:
             ev.close()
             rt.close()
@@ -2010,6 +2010,121 @@ class TestMetricVersionMIXED:
             )
             clause = report.clauses[0]
             assert clause.metric_version_per_axis.get(AXIS) == "1.0.0"
+        finally:
+            ev.close()
+            rt.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: #187 — anytime-valid CS fields + incomparable-pool refusal
+# ---------------------------------------------------------------------------
+
+
+class TestConfidenceSequenceReportFields:
+    """#187: comparable pools carry a VALID CS; MIXED pools refuse it."""
+
+    def test_comparable_pool_emits_valid_cs(self, tmp_path: Path) -> None:
+        ev, rt = open_both(tmp_path)
+        try:
+            _seed_healthy_evidence(ev, rt, n_wins=9, n_losses=1)
+            report = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+            clause = report.clauses[0]
+            assert clause.is_prior_only is False
+            assert clause.interval_status == "VALID"
+            assert clause.interval_method == "predictable_plugin_betting_cs_v1"
+            assert clause.sequential_confidence_sequence_95 is not None
+            lo, hi = clause.sequential_confidence_sequence_95
+            assert 0.0 <= lo <= hi <= 1.0
+            assert clause.posterior_credible_interval_95 == clause.credible_interval_95
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_mixed_op_hash_refuses_cs(self, tmp_path: Path) -> None:
+        """interval_status=UNMEASURED_INCOMPARABLE_POOL and null sequence on MIXED pool.
+
+        This test fails if the refusal path is removed (sequence would be non-null).
+        """
+        ev, rt = open_both(tmp_path)
+        try:
+            sk_id = "skill-cs-mixed"
+            cl_id = "clause-cs-mixed"
+            run1 = "run-cs-mixed-1"
+            run2 = "run-cs-mixed-2"
+
+            insert_skill(ev, skill_id=sk_id)
+            insert_clause(ev, clause_id=cl_id, skill_id=sk_id)
+            insert_metric_version(ev)
+
+            _insert_run_with_op_hash(ev, rt, run1, sk_id, cl_id, AXIS, "hash-aaa")
+            _insert_run_with_op_hash(ev, rt, run2, sk_id, cl_id, AXIS, "hash-bbb")
+
+            for i, (run_id, sa, sb) in enumerate([(run1, "sa1", "sb1"), (run2, "sa2", "sb2")]):
+                insert_sample(
+                    ev, sa, run_id=run_id, clause_id=cl_id, condition="full", sample_index=i
+                )
+                insert_sample(
+                    ev, sb, run_id=run_id, clause_id=cl_id, condition="ablated", sample_index=i
+                )
+                insert_verdict(
+                    ev,
+                    verdict_id=f"v-cs-m-{i}",
+                    run_id=run_id,
+                    clause_id=cl_id,
+                    axis=AXIS,
+                    sample_a_id=sa,
+                    sample_b_id=sb,
+                    observation=1.0,
+                )
+            insert_frozen_case(
+                ev, frozen_case_id="fc-cs-mixed", clause_id=cl_id, axis=AXIS, run_id=run1
+            )
+
+            report = aggregate_skill(
+                sk_id,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+            clause = report.clauses[0]
+            assert clause.ablation_operator_hash == "MIXED"
+            assert clause.interval_status == "UNMEASURED_INCOMPARABLE_POOL"
+            assert clause.sequential_confidence_sequence_95 is None
+            # Posterior still present (decision rule unchanged).
+            assert clause.credible_interval_95[0] <= clause.credible_interval_95[1]
+            assert clause.posterior_credible_interval_95 == clause.credible_interval_95
+        finally:
+            ev.close()
+            rt.close()
+
+    def test_prior_only_has_no_cs(self, tmp_path: Path) -> None:
+        ev, rt = open_both(tmp_path)
+        try:
+            # Skill + clause + completed run + frozen case, but no verdicts.
+            insert_skill(ev)
+            insert_clause(ev)
+            insert_run(ev)
+            insert_run_progress(rt)
+            insert_metric_version(ev)
+            insert_frozen_case(ev, frozen_case_id="fc-cs-prior")
+            report = aggregate_skill(
+                SKILL_ID,
+                evidence_conn_ro=ev,
+                runtime_conn=rt,
+                harness_version=_HARNESS_VER,
+                generated_at_utc=_GEN_AT,
+            )
+            clause = report.clauses[0]
+            assert clause.is_prior_only is True
+            assert clause.sequential_confidence_sequence_95 is None
+            assert clause.interval_status == "PRIOR_ONLY"
         finally:
             ev.close()
             rt.close()
