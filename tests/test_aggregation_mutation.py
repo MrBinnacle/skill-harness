@@ -16,6 +16,11 @@ from skill_harness.aggregation.two_arm import (
     _p_difference_exceeds,
     two_arm_gate,
 )
+from skill_harness.semantics import (
+    DeliveryMechanism,
+    Estimand,
+    RegisteredScope,
+)
 
 
 class TestTwoArmBoundaryContracts:
@@ -336,13 +341,7 @@ class TestProfileRowFidelity:
 # ---------------------------------------------------------------------------
 
 
-def _scope() -> object:
-    from skill_harness.semantics import (
-        DeliveryMechanism,
-        Estimand,
-        RegisteredScope,
-    )
-
+def _scope() -> RegisteredScope:
     return RegisteredScope(
         skill="s1",
         task_family="tf",
@@ -367,7 +366,7 @@ class TestVerdictContracts:
         )
         assert effect.decision is Gate2Decision.HARM
         scope = _scope()
-        result = matched_gate2_verdict(effect, scope=scope)  # type: ignore[arg-type]
+        result = matched_gate2_verdict(effect, scope=scope)
         assert result.verdict is KeepCutVerdict.CUT
         assert result.cut_sub_reason is CutSubReason.HARMFUL
         assert result.scope is scope
@@ -393,7 +392,7 @@ class TestVerdictContracts:
         scope = _scope()
         result = matched_gate2_verdict(
             effect,
-            scope=scope,  # type: ignore[arg-type]
+            scope=scope,
             value_class=ValueClass.TRANSFORMATIVE_LIFT,
         )
         assert result.verdict is KeepCutVerdict.CUT
@@ -414,7 +413,7 @@ class TestVerdictContracts:
         )
         assert effect.decision is Gate2Decision.UNRESOLVED
         scope = _scope()
-        result = matched_gate2_verdict(effect, scope=scope)  # type: ignore[arg-type]
+        result = matched_gate2_verdict(effect, scope=scope)
         assert result.verdict is KeepCutVerdict.CANT_TELL_YET
         assert result.scope is scope
         assert "CAN'T-TELL-YET" in (result.rationale or "")
@@ -658,15 +657,23 @@ class TestReportKillers:
             ),
         )
         d = to_json_dict(report)
-        assert d["clauses"][0]["is_prior_only"] is True
-        assert "is_prior_only" in d["clauses"][0]
-        assert d["clauses"][0]["sub_reason"] == "no_data"
+        clauses = d["clauses"]
+        assert isinstance(clauses, list)
+        clause0 = clauses[0]
+        assert isinstance(clause0, dict)
+        assert clause0["is_prior_only"] is True
+        assert "is_prior_only" in clause0
+        assert clause0["sub_reason"] == "no_data"
         restored = skill_report_from_dict(d)
         assert restored.clauses[0].is_prior_only is True
         assert restored.clauses[0].sub_reason == "no_data"
         # Missing-key default: drop is_prior_only → False.
         d2 = to_json_dict(report)
-        del d2["clauses"][0]["is_prior_only"]
+        clauses2 = d2["clauses"]
+        assert isinstance(clauses2, list)
+        clause2 = clauses2[0]
+        assert isinstance(clause2, dict)
+        del clause2["is_prior_only"]
         restored_default = skill_report_from_dict(d2)
         assert restored_default.clauses[0].is_prior_only is False
         raw = to_json_bytes(report)
@@ -674,7 +681,9 @@ class TestReportKillers:
         assert b"is_prior_only" in raw
         # Missing coverage_warnings defaults to [].
         d3 = to_json_dict(report)
-        del d3["vector"]["coverage_warnings"]
+        vector = d3["vector"]
+        assert isinstance(vector, dict)
+        del vector["coverage_warnings"]
         restored_cw = skill_report_from_dict(d3)
         assert restored_cw.vector.coverage_warnings == []
 
@@ -692,7 +701,7 @@ class TestVerdictScopeAndRationale:
         # High null ceiling → CUT subsumed when transformative-lift.
         result = screen_verdict(
             p0=0.95,
-            scope=scope,  # type: ignore[arg-type]
+            scope=scope,
             value_class=ValueClass.TRANSFORMATIVE_LIFT,
         )
         assert result.verdict is KeepCutVerdict.CUT
@@ -705,7 +714,7 @@ class TestVerdictScopeAndRationale:
         from skill_harness.aggregation.verdict import KeepCutVerdict, screen_verdict
 
         scope = _scope()
-        result = screen_verdict(p0=0.95, scope=scope, value_class=None)  # type: ignore[arg-type]
+        result = screen_verdict(p0=0.95, scope=scope, value_class=None)
         assert result.verdict is KeepCutVerdict.CANT_TELL_YET
         assert result.scope is scope
         assert result.rationale is not None
@@ -716,7 +725,7 @@ class TestVerdictScopeAndRationale:
         from skill_harness.aggregation.verdict import KeepCutVerdict, screen_verdict
 
         scope = _scope()
-        result = screen_verdict(p0=0.1, scope=scope)  # type: ignore[arg-type]
+        result = screen_verdict(p0=0.1, scope=scope)
         assert result.verdict is KeepCutVerdict.CANT_TELL_YET
         assert result.scope is scope
         assert result.rationale is not None
@@ -731,14 +740,14 @@ class TestVerdictScopeAndRationale:
         )
 
         scope = _scope()
-        keep = paired_verdict(ClauseStatus.PASSED, scope=scope)  # type: ignore[arg-type]
+        keep = paired_verdict(ClauseStatus.PASSED, scope=scope)
         assert keep.verdict is KeepCutVerdict.KEEP
         assert keep.scope is scope
         assert keep.rationale is not None
         assert "KEEP" in keep.rationale
         assert "transformative bar" in keep.rationale
 
-        cut = paired_verdict(ClauseStatus.FAILED, scope=scope)  # type: ignore[arg-type]
+        cut = paired_verdict(ClauseStatus.FAILED, scope=scope)
         assert cut.verdict is KeepCutVerdict.CUT
         assert cut.cut_sub_reason is CutSubReason.NO_LIFT
         assert cut.scope is scope
@@ -746,12 +755,12 @@ class TestVerdictScopeAndRationale:
         assert "CUT (no lift)" in cut.rationale
         assert "Not 'subsumed'" in cut.rationale
 
-        unm = paired_verdict(ClauseStatus.UNMEASURED, scope=scope)  # type: ignore[arg-type]
+        unm = paired_verdict(ClauseStatus.UNMEASURED, scope=scope)
         assert unm.verdict is KeepCutVerdict.CANT_TELL_YET
         assert unm.scope is scope
         assert unm.rationale is not None
 
-        conf = paired_verdict(ClauseStatus.CONFOUNDED, scope=scope)  # type: ignore[arg-type]
+        conf = paired_verdict(ClauseStatus.CONFOUNDED, scope=scope)
         assert conf.verdict is KeepCutVerdict.CANT_TELL_YET
         assert conf.scope is scope
 
@@ -766,7 +775,7 @@ class TestVerdictScopeAndRationale:
         )
         assert effect.decision is Gate2Decision.BENEFIT
         scope = _scope()
-        result = matched_gate2_verdict(effect, scope=scope)  # type: ignore[arg-type]
+        result = matched_gate2_verdict(effect, scope=scope)
         assert result.verdict is KeepCutVerdict.KEEP
         assert result.scope is scope
         assert result.rationale is not None
