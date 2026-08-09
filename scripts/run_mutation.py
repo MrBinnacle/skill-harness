@@ -11,6 +11,7 @@ Usage:
 Writes setup.cfg (gitignored) for the chosen module, then invokes `mutmut run`.
 Results live under mutants/ and are summarized by `mutmut results`.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -93,7 +94,7 @@ SETUP_CFG_TEMPLATE = textwrap.dedent(
     only_mutate =
     {only_mutate}
     do_not_mutate =
-        **/__init__.py
+    {do_not_mutate}
     also_copy =
         docs/
         examples/
@@ -123,8 +124,14 @@ def write_setup_cfg(module: str, only_mutate_override: list[str] | None) -> Path
     only = only_mutate_override if only_mutate_override else spec["only_mutate"]
     # Drop test paths that do not exist yet (mutation killer modules land later).
     tests = [t for t in spec["tests"] if (ROOT / t).exists() or t.endswith("/")]
+    # audit/ is only __init__.py (A29 raw-oracle surface) — must mutate it.
+    if module == "audit":
+        do_not = "    # (none — audit package body lives in __init__.py)"
+    else:
+        do_not = "    **/__init__.py"
     body = SETUP_CFG_TEMPLATE.format(
         only_mutate="\n".join(f"    {p}" for p in only),
+        do_not_mutate=do_not,
         tests="\n".join(f"    {t}" for t in tests),
     )
     path = ROOT / "setup.cfg"
