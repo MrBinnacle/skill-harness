@@ -17,7 +17,7 @@ support, built to extend to other agent ecosystems.*
 
 > **Status: v0.2.2 — on PyPI; the keep/cut verdict layer is live; first measured KEEP
 > (2026-07-27) is a declared synthetic positive control — zero production-skill KEEPs to date.**
-> The tool now answers the slot question with one of three verdicts: **KEEP** (measurably earns
+> The tool now answers the slot question with one of three verdicts: **KEEP** (measurably worth
 > its slot), **CUT** — either *subsumed* (the model already does the task without the skill) or
 > *no-lift* (measured on a task the model needed help with, and it didn't deliver) — or
 > **CAN'T-TELL-YET** (the evidence doesn't support a verdict). Screen-path **CUT (subsumed)**
@@ -38,10 +38,10 @@ support, built to extend to other agent ecosystems.*
 > **Honest maturity.** **Zero production-skill KEEPs exist in the program to date.** The full
 > KEEP lane — paired Full-vs-Null writer plus the audited-metric registration act — has fired
 > end-to-end exactly once (2026-07-27): a **declared synthetic positive control** (a skill
-> carrying an invented fact, so the effect is real by construction) earned a store-backed KEEP
+> carrying an invented fact, so the effect is real by construction) returned a store-backed KEEP
 > at Full 8/8 vs Null 0/8, posterior p_win 0.99. That run validates the instrument — the label
-> fires when a real effect exists — and is labeled as such; it is not a production skill earning
-> its slot. Before it, one paired k=8
+> fires when a real effect exists — and is labeled as such; it is not a production skill shown
+> to be worth its slot. Before it, one paired k=8
 > run (2026-07-09, ≈$6.17) executed as a pre-registered apparatus shakedown and returned a
 > NO-GO datum, not a benefit measurement ([the double-ceiling case
 > study](https://github.com/MrBinnacle/skill-harness/blob/main/docs/case-studies/double-ceiling-structurally-unmeasured.md)). A sized benefit run
@@ -88,11 +88,11 @@ can honestly say "no measurable effect" is the missing instrument.
 
 ## The question
 
-**What does this skill cost you, and which parts of it are earning that cost?**
+**What does this skill cost you, and which parts of it are worth that cost?**
 
 That is the question this harness is built to surface. It does not hand you a verdict in
 place of your own value judgement — you decide whether the measured cost is worth paying,
-and which pieces of the skill earn their share. The keep/cut lane exists and is honest when
+and which pieces of the skill are worth their share. The keep/cut lane exists and is honest when
 the evidence supports it; it is not the front-door frame.
 
 Most skill-evaluation tools **score the skill file itself** — lint it, have an LLM judge
