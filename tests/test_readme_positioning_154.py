@@ -67,14 +67,13 @@ def test_ratified_question_verbatim() -> None:
     assert "What does this skill cost you, and which parts of it are earning that cost?" in text
 
 
-def test_honest_maturity_names_two_unmeasured_gaps_with_tickets() -> None:
+def test_honest_maturity_names_both_gaps_with_tickets() -> None:
+    # #152 resolved 2026-08-08 (3x repeat: 29/33/34 clauses, not stable), so the
+    # repeat-variance line pins the measured figure, not an UNMEASURED gap.
     text = _readme()
-    assert re.search(
-        r"Extraction repeat-variance.*UNMEASURED.*#152|"
-        r"UNMEASURED.*Extraction repeat-variance.*#152",
-        text,
-        re.DOTALL | re.IGNORECASE,
-    )
+    assert "**Extraction repeat-variance:** MEASURED for one skill" in text
+    assert "29/33/34" in text
+    assert "not stable" in text
     assert "github.com/MrBinnacle/skill-harness/issues/152" in text
     assert re.search(
         r"Vacuity-flag precision.*UNMEASURED.*#153|"

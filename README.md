@@ -55,12 +55,15 @@ support, built to extend to other agent ecosystems.*
 > v0.1→v0.2 re-aim that got us here is pre-registered and published, not papered over:
 > [`docs/findings/v0.2-reaim-gate.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/v0.2-reaim-gate.md).
 >
-> **Named UNMEASURED gaps (field-wide; this instrument names them with a pre-registered fix).**
+> **Named measurement gaps (field-wide; this instrument names them with a pre-registered fix).**
 > BetterBench ([arXiv:2411.12990](https://arxiv.org/abs/2411.12990)) found most benchmarks
 > report neither extraction repeat-variance nor detector precision. Under the current
-> generation this harness states the same gaps under their own names:
-> - **Extraction repeat-variance:** UNMEASURED
->   ([#152](https://github.com/MrBinnacle/skill-harness/issues/152)).
+> generation this harness names both, and states the figure where one now exists:
+> - **Extraction repeat-variance:** MEASURED for one skill under the current generation,
+>   and not stable — a 3x repeat returned 29/33/34 clauses (identical-text core 20; the
+>   flag decision on that core was 19/20 stable). Clause-level rates remain unquotable as
+>   properties of skills-in-general
+>   ([#152](https://github.com/MrBinnacle/skill-harness/issues/152), resolution and receipts on the ticket).
 > - **Vacuity-flag precision:** UNMEASURED — corpus flags are detector outputs, not
 >   validated findings ([#153](https://github.com/MrBinnacle/skill-harness/issues/153)).
 >
