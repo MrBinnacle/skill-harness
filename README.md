@@ -64,8 +64,12 @@ support, built to extend to other agent ecosystems.*
 >   flag decision on that core was 19/20 stable). Clause-level rates remain unquotable as
 >   properties of skills-in-general
 >   ([#152](https://github.com/MrBinnacle/skill-harness/issues/152), resolution and receipts on the ticket).
-> - **Vacuity-flag precision:** UNMEASURED — corpus flags are detector outputs, not
->   validated findings ([#153](https://github.com/MrBinnacle/skill-harness/issues/153)).
+> - **Vacuity-flag precision:** MEASURED at 0.97 weighted flag-precision (0.972–0.975
+>   depending on UNDECIDED handling; Wilson 95% band [0.923, 0.986]; blind cross-family
+>   panel of 5, n=102 estimation rows, one frozen capture) — flag-level only, this
+>   generation only. The kind boundary is NOT reliable (kind-precision 0.835; treat
+>   kinds as advisory)
+>   ([#153](https://github.com/MrBinnacle/skill-harness/issues/153), resolution and receipts on the ticket).
 >
 > **Amendment (2026-08-02).** The historical Stage-0 screen records behind that aggregate now
 > live as per-record, machine-parseable entries in the
@@ -261,7 +265,7 @@ Positioning under the same rules as the verdicts: no first-mover claims (the sur
 them); where a neighbor has an adjacent mechanism we name it rather than pretend it doesn't
 exist; and the two claims that carry the most weight are visibly status-labeled until external
 deliberation has run. Tense matters here: the refusal verdicts are live today, while the
-characterized gate and earned-threshold machinery are the registered upgrade contract (locked
+characterized gate and ratified-threshold machinery are the registered upgrade contract (locked
 decision records on the tracker map above) — claimed as design commitments, not shipped code.
 
 1. **Pre-spend characterized-error eligibility gate.** No paid run launches until the
@@ -276,7 +280,7 @@ decision records on the tracker map above) — claimed as design commitments, no
    > reviewed" or degrades to "internally derived, not externally deliberated" by dated
    > amendment — never silently.*
 
-2. **Thresholds are earned, never authored.** Decision thresholds enter the harness only when
+2. **Thresholds are ratified, never authored.** Decision thresholds enter the harness only when
    a human picks a row from enumerated frontier tables (configuration → attained errors →
    cost) whose rows already meet registered targets — never by authoring a number free-hand.
    The pick is signed on an append-only ratification record before any paid run.

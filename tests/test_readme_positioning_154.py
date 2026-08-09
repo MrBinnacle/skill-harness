@@ -75,12 +75,12 @@ def test_honest_maturity_names_both_gaps_with_tickets() -> None:
     assert "29/33/34" in text
     assert "not stable" in text
     assert "github.com/MrBinnacle/skill-harness/issues/152" in text
-    assert re.search(
-        r"Vacuity-flag precision.*UNMEASURED.*#153|"
-        r"UNMEASURED.*[Vv]acuity-flag precision.*#153",
-        text,
-        re.DOTALL | re.IGNORECASE,
-    )
+    # #153 resolved 2026-08-08 (blind cross-family adjudication, n=102 estimation
+    # rows), so the precision line pins the measured figure, not an UNMEASURED gap.
+    assert "**Vacuity-flag precision:** MEASURED" in text
+    assert "0.972" in text
+    assert "flag-level only" in text
+    assert "kind-precision 0.835" in text
     assert "github.com/MrBinnacle/skill-harness/issues/153" in text
 
 
