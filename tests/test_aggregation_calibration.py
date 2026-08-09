@@ -254,6 +254,21 @@ def run_full_calibration(
     )
 
 
+# The full grid costs minutes per computation on the Windows CI runners, and the
+# test job has a 15-minute cap (ci.yml `timeout-minutes`) that the py3.12 cell
+# exceeded when this module computed the grid six times. Compute it once per
+# module and share; the determinism test still performs one independent
+# recompute, so the cache never hides nondeterminism.
+_FULL_CALIBRATION_CACHE: tuple[GridPointResult, ...] | None = None
+
+
+def _cached_full_calibration() -> tuple[GridPointResult, ...]:
+    global _FULL_CALIBRATION_CACHE
+    if _FULL_CALIBRATION_CACHE is None:
+        _FULL_CALIBRATION_CACHE = run_full_calibration()
+    return _FULL_CALIBRATION_CACHE
+
+
 # ---------------------------------------------------------------------------
 # Tolerance constants pin
 # ---------------------------------------------------------------------------
@@ -327,7 +342,7 @@ def test_coverage_within_binomial_tolerance_per_grid_point(
     Outside the band -> WRONG_NUMBER finding + xfail; never retune thresholds
     or aggregation math.
     """
-    result = run_calibration_grid_point(label, planted_p, seed=seed)
+    result = next(r for r in _cached_full_calibration() if r.label == label)
 
     assert result.n_reps == N_REPS
     assert result.seed == seed
@@ -346,8 +361,12 @@ def test_coverage_within_binomial_tolerance_per_grid_point(
 
 
 def test_calibration_harness_is_deterministic() -> None:
-    """Same seeds yield bit-identical counts (no network, no wall clock)."""
-    a = run_full_calibration()
+    """Same seeds yield bit-identical counts (no network, no wall clock).
+
+    Compares the shared cached grid against one genuinely independent
+    recompute, the one place the cache is deliberately bypassed.
+    """
+    a = _cached_full_calibration()
     b = run_full_calibration()
     assert a == b
 
@@ -366,7 +385,7 @@ def test_calibration_report_records_coverage_table() -> None:
         assert label in text
         assert str(planted_p) in text or f"{planted_p:.2f}" in text
 
-    results = run_full_calibration()
+    results = _cached_full_calibration()
     for result in results:
         assert str(result.coverage_count) in text
         for reason in result.stopping_reason_counts:
