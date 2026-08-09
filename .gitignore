@@ -71,3 +71,10 @@ logs/
 
 # AFK factory (sandcastle) runtime residue
 .sandcastle/
+
+# mutmut (container-side mutation testing; #166)
+mutants/
+setup.cfg
+mutmut-stats.json
+*.meta
+*.spans
