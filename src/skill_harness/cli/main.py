@@ -117,13 +117,35 @@ def skill() -> None:
     show_default=True,
     help="Path to runtime DB (only used with --execute).",
 )
-def skill_init(path: Path, execute: bool, evidence_db: Path, runtime_db: Path) -> None:
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help=(
+        "Append full ExtractionResult as one JSONL line (dry-run or --execute). "
+        "Refuses if the file already has a row for the same source sha."
+    ),
+)
+def skill_init(
+    path: Path,
+    execute: bool,
+    evidence_db: Path,
+    runtime_db: Path,
+    out_path: Path | None,
+) -> None:
     """Import a skill artifact and extract atomic clauses.
 
     Calls the Anthropic API to extract behavioral clauses from PATH.
     Without --execute, prints a dry-run summary and exits (no DB writes).
     With --execute, persists skill + clauses to the evidence DB.
+    Optional --out writes the full extraction JSONL for skill audit --extraction.
     """
+    from skill_harness.extractor.clause_evidence import (
+        SameShaExtractionRowError,
+        append_extraction_result,
+    )
+
     try:
         if execute:
             with StorageContext(evidence_db, runtime_db) as ctx:
@@ -132,6 +154,10 @@ def skill_init(path: Path, execute: bool, evidence_db: Path, runtime_db: Path) -
         else:
             result = extract_skill(path, evidence_conn=None)
             _print_result(result, persisted=False)
+        if out_path is not None:
+            append_extraction_result(out_path, result)
+    except SameShaExtractionRowError as exc:
+        raise click.ClickException(str(exc)) from exc
     except (ExtractionError, ValueError) as exc:
         # C4b: extract_skill (--execute path) raises a raw ValueError when a clause
         # persists as comparator_unspecified (extractor/pipeline.py _to_db_comparator's
@@ -210,7 +236,9 @@ Column legend:
 Tier-2: human-calibrated judge; Tier-3: real-world consequence.
   vacuity_flag — none: clause is testable; \
 mechanical_vacuous: no metric exists for this axis; \
-semantic_vacuous_pending_review: extractor judged clause un-falsifiable."""
+semantic_vacuous_pending_review: extractor judged clause un-falsifiable.
+Note: vacuity kind and reason are not stored in the DB; they live in the \
+extraction output (skill init --out) and render via skill audit --extraction."""
 
 
 @skill.command("audit")
@@ -221,13 +249,29 @@ semantic_vacuous_pending_review: extractor judged clause un-falsifiable."""
     default=False,
     help="Exit 1 if any warning is found (for CI gates).",
 )
+@click.option(
+    "--extraction",
+    "extraction_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help=(
+        "JSONL from skill init --out; join on source_sha256 for clause evidence "
+        "(zero-power; no DB)."
+    ),
+)
 @click.pass_context
-def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
+def skill_audit(
+    ctx: click.Context,
+    path: Path,
+    strict: bool,
+    extraction_path: Path | None,
+) -> None:
     """Offline preflight of a skill artifact — no API key, no DB, no cost.
 
     Structural lint against Anthropic's published authoring spec, plus an
     evaluability preflight: which axes a paid evaluation could mechanically
     measure today, and which claims would honestly come back UNMEASURED.
+    Optional --extraction joins extraction JSONL for clause-evidence (still no DB).
     """
     from skill_harness.preflight import audit_skill_artifact
 
@@ -323,8 +367,73 @@ def skill_audit(ctx: click.Context, path: Path, strict: bool) -> None:
         f"\nSummary: {report.pass_count} pass · {report.warn_count} warn — "
         "UNMEASURED is a verdict, not a failure (docs/concepts/why-unmeasured.md)."
     )
+    _print_clause_evidence(report.source_sha256, extraction_path)
     if strict and report.warn_count > 0:
         ctx.exit(1)
+
+
+def _print_clause_evidence(source_sha256: str, extraction_path: Path | None) -> None:
+    """Render the clause-evidence section after cost/evaluability (issue #157)."""
+    from skill_harness.extractor.clause_evidence import (
+        SECTION_TITLE,
+        format_instrument_line,
+        format_refusal_line,
+        format_summary_lines,
+        format_unparseable_warning,
+        load_clause_evidence,
+        no_extraction_outcome,
+    )
+
+    if extraction_path is None:
+        outcome = no_extraction_outcome()
+        _console.print(format_refusal_line(outcome))
+        return
+
+    outcome = load_clause_evidence(extraction_path, source_sha256)
+    if outcome.kind != "measured":
+        _console.print(format_refusal_line(outcome))
+        if outcome.unparseable_line_count and outcome.kind != "unreadable_extraction_file":
+            _console.print(format_unparseable_warning(outcome.unparseable_line_count))
+        return
+
+    assert outcome.measured is not None
+    measured = outcome.measured
+    _console.print(f"\n[bold]{SECTION_TITLE}[/]")
+    _console.print(format_instrument_line(measured.instrument))
+
+    table = Table(
+        title="Clauses (scoreable as of current scorer registry)",
+        show_lines=True,
+    )
+    table.add_column("#", style="dim", width=4)
+    table.add_column("Axis", style="cyan", min_width=14)
+    table.add_column("Scoreable", width=10, justify="center")
+    table.add_column("Vacuity", min_width=12)
+    table.add_column("Kind", min_width=16)
+    table.add_column("Reason", min_width=20, max_width=60)
+    table.add_column("FC", width=4, justify="center")
+
+    for row in measured.rows:
+        kind_cell = "-"
+        if row.vacuity_kind is not None:
+            kind_cell = f"{row.vacuity_kind} (advisory)"
+        reason_cell = "-"
+        if row.vacuity_reason is not None:
+            reason_cell = _sanitize_clause_text(row.vacuity_reason)
+        table.add_row(
+            str(row.clause_index),
+            _sanitize_clause_text(row.axis, max_len=40),
+            "Y" if row.scoreable else "-",
+            row.vacuity_flag,
+            kind_cell,
+            reason_cell,
+            "Y" if row.constructible_fc else "-",
+        )
+    _console.print(table)
+    for line in format_summary_lines(measured.summary):
+        _console.print(line)
+    if outcome.unparseable_line_count:
+        _console.print(format_unparseable_warning(outcome.unparseable_line_count))
 
 
 @skill.command("clauses")
