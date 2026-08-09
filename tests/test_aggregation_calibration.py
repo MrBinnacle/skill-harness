@@ -1,70 +1,33 @@
-"""Coverage calibration by simulation for aggregation 95% intervals (#164).
+"""Coverage calibration: legacy posterior CI (#164) + anytime-valid CS (#187).
 
-Offline, seeded, deterministic. Extends the one-shot planted synthetic control
-into a repeated quantitative property: plant known clause-level win-rates on a
-grid (null / small / large), drive each replication through the production
-sequential stopper, run the stopped ``(w, n)`` through ``fit_skill`` (the
-interval producer used by ``engine.aggregate_skill``), and measure how often the
-95% credible interval contains the planted truth.
+Offline, seeded, deterministic. Two estimands share the sequential stopper:
 
-## What is driven
+1. **Legacy posterior interval** (characterization of #164 finding):
+   ``fit_skill`` unpooled Beta(1+w, 1+n-w) equal-tailed 95% credible interval.
+   Grid remains null/small/large at pinned seeds; measured rates 0.940 / 0.882 /
+   0.982 must still reproduce. Strict xfails remain **only** on this legacy
+   characterization (``small``, ``large``), never on the production CS.
 
-- Observation generation mirrors ``ablation/runner.py``:
-  ``BetaBinomialAccumulator.add`` → ``check_stop`` / ``next_check_at``
-  (``N_MIN=8``, ``N_INC=4``, ``N_MAX=40``). No fixed-n draws.
-- ``fit_skill`` (``aggregation/fit.py``) — unpooled Beta(1+w, 1+n-w) 95%
-  equal-tailed credible interval (K=1 < ``K_MIN_FOR_EB``).
-- ``two_arm_gate`` (``aggregation/two_arm.py``) — secondary pipeline exercise:
-  planted arm vs an independent control arm at Bernoulli(0.5), DIF K7 constants
-  ``delta=0.1``, ``prob_threshold=0.95``. Recorded for the report; not the
-  coverage estimand (the gate emits directional posterior mass, not a CI).
-- ``aggregate_skill`` (``engine.py``) is the DB orchestrator over already-stopped
-  verdicts; its interval numerics are delegated to ``fit_skill``. This harness
-  therefore drives ``fit_skill`` directly (same surface A/A #163 and differential
-  #165 use for pure numerics).
-
-## Planted-effect grid (clause win-rate estimand)
-
-| Label | Planted ``p`` | Interpretation |
-| --- | --- | --- |
-| ``null`` | 0.50 | chance-level rate (exact null vs 0.5) |
-| ``small`` | 0.65 | modest lift above the locked 0.60 pass threshold |
-| ``large`` | 0.85 | large, early-stop-prone rate |
-
-## Tolerance arithmetic (N=500, nominal coverage = 0.95)
-
-Under a well-calibrated 95% interval the coverage count ``X`` is modelled as
-``X ~ Binomial(N=500, π=0.95)``. The acceptance band is the central 95%
-probability mass of that binomial (exact, via ``scipy.stats.binom.ppf``):
-
-    lo = binom.ppf(0.025, n=500, p=0.95)   # = 465
-    hi = binom.ppf(0.975, n=500, p=0.95)   # = 484
-    E[X] = 500 * 0.95 = 475
-
-Assert ``lo <= X <= hi`` **per grid point**. This is a Monte-Carlo check that
-observed coverage sits near nominal — not a claim that equal-tailed Beta
-credible intervals are exact frequentist 95% CIs at every (n, p), nor that
-optional stopping preserves coverage. If ``X`` falls outside, do **not** retune
-aggregation math or stopper thresholds: file a finding (severity WRONG_NUMBER),
-xfail with a pointer, record seed + count + ``StoppingReason`` histogram.
+2. **Production confidence sequence** (#187):
+   ``betting_confidence_sequence`` (predictable-plugin hedged CS). Dense grid
+   p in {0.05, 0.25, 0.50, 0.58, 0.60, 0.62, 0.65, 0.75, 0.85, 0.95} x
+   tie rates {0%, 20%, 50%}. Contract: coverage >= registered lower tolerance
+   at every grid point (overcoverage is NOT a failure). Width metrics
+   (median, p90) are recorded for the report; they never reject valid
+   overcoverage.
 
 ## Sequential-stopping requirement
 
-Each replication generates observations by:
+Each replication generates observations through the production stopper
+(``N_MIN=8``, ``N_INC=4``, ``N_MAX=40``). Ties: with probability ``tie_rate``
+emit 0.5; otherwise Bernoulli(p) on {0, 1}.
 
-    acc = BetaBinomialAccumulator()
-    next_at = N_MIN
-    while True:
-        while acc.n < next_at and acc.n < N_MAX:
-            acc.add(Bernoulli(p) in {0.0, 1.0})  # no ties in this harness
-        decision = acc.check_stop()
-        if decision.should_stop:
-            break
-        next_at = next_check_at(acc.n)
+## Compute budget
 
-Stopped ``(w, n)`` feed ``fit_skill``. Each planted arm's ``StoppingReason`` is
-tallied for the report (control-arm reasons for the two-arm side-channel are
-tallied separately and not mixed into the coverage arm histogram).
+Each dense-grid cell is computed **at most once** at module scope (shared
+cache) plus at most one independent recompute for the determinism assertion.
+The dense suite is a separate CI job (see ``.github/workflows/ci.yml``) so
+the matrix cell's 15-minute cap is not raised.
 """
 
 from __future__ import annotations
@@ -85,6 +48,9 @@ from skill_harness.ablation.stopping import (
     StoppingReason,
     next_check_at,
 )
+from skill_harness.aggregation.confidence_sequence import (
+    betting_confidence_sequence,
+)
 from skill_harness.aggregation.fit import ClauseObservations, fit_skill
 from skill_harness.aggregation.two_arm import two_arm_gate
 
@@ -93,15 +59,31 @@ from skill_harness.aggregation.two_arm import two_arm_gate
 # ---------------------------------------------------------------------------
 
 N_REPS = 500
-SEED = 164_2026_08_09  # issue #164, deterministic
+SEED = 164_2026_08_09  # issue #164, deterministic (legacy characterization)
+SEED_CS = 187_2026_08_09  # issue #187 dense CS grid
 NOMINAL_COVERAGE = 0.95
 
-# Planted clause win-rates (null / small / large). Seed offset = grid index.
+# Legacy #164 planted clause win-rates (null / small / large). Seed offset = grid index.
 EFFECT_GRID: tuple[tuple[str, float], ...] = (
     ("null", 0.50),
     ("small", 0.65),
     ("large", 0.85),
 )
+
+# #187 dense CS grid
+CS_P_GRID: tuple[float, ...] = (
+    0.05,
+    0.25,
+    0.50,
+    0.58,
+    0.60,
+    0.62,
+    0.65,
+    0.75,
+    0.85,
+    0.95,
+)
+CS_TIE_RATES: tuple[float, ...] = (0.0, 0.20, 0.50)
 
 # Two-arm side-channel (pipeline exercise; not the coverage estimand).
 CONTROL_P = 0.50
@@ -112,11 +94,14 @@ PROB_THRESHOLD = 0.95
 COV_COUNT_LO = int(binom.ppf(0.025, N_REPS, NOMINAL_COVERAGE))
 COV_COUNT_HI = int(binom.ppf(0.975, N_REPS, NOMINAL_COVERAGE))
 
+# CS contract: coverage count must be >= lower edge of the binomial band.
+# Overcoverage (above COV_COUNT_HI) is NOT a failure for the CS.
+CS_COV_COUNT_LO = COV_COUNT_LO  # 465
+
 _REPORT = Path(__file__).resolve().parent.parent / "docs" / "assurance" / "calibration-report.md"
 
-# Grid points whose measured coverage falls outside the binomial band under the
-# locked sequential stopper + unpooled Beta CI. Findings, not math changes.
-# See docs/findings/aggregation-ci-coverage-under-sequential-stop.md
+# Grid points whose measured *legacy posterior* coverage falls outside the band.
+# Findings, not math changes. Strict xfail ONLY on legacy characterization.
 _XFAIL_OUTSIDE_BAND: frozenset[str] = frozenset({"small", "large"})
 
 
@@ -135,30 +120,40 @@ def _no_network(socket_disabled: None) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _run_arm_sequential(rng: np.random.Generator, p: float) -> StopDecision:
-    """Draw Bernoulli(p) observations through the real sequential stopper."""
+def _run_arm_sequential(
+    rng: np.random.Generator,
+    p: float,
+    *,
+    tie_rate: float = 0.0,
+) -> tuple[StopDecision, list[float]]:
+    """Draw observations through the real sequential stopper; return decision + path."""
     acc = BetaBinomialAccumulator()
     next_at = N_MIN
     decision: StopDecision | None = None
+    path: list[float] = []
     while acc.n < N_MAX:
         target = min(next_at, N_MAX)
         while acc.n < target:
-            obs = 1.0 if float(rng.random()) < p else 0.0
+            if tie_rate > 0.0 and float(rng.random()) < tie_rate:
+                obs = 0.5
+            else:
+                obs = 1.0 if float(rng.random()) < p else 0.0
             acc.add(obs)
+            path.append(obs)
         decision = acc.check_stop()
         if decision.should_stop:
-            return decision
+            return decision, path
         next_at = next_check_at(acc.n)
         if next_at > N_MAX:
             break
     if decision is None:
         decision = acc.check_stop()
-    return decision
+    return decision, path
 
 
 @dataclass(frozen=True)
 class GridPointResult:
-    """Coverage summary for one planted-effect grid point."""
+    """Coverage summary for one planted-effect grid point (legacy posterior)."""
 
     label: str
     planted_p: float
@@ -174,6 +169,24 @@ class GridPointResult:
     mean_n_planted: float
 
 
+@dataclass(frozen=True)
+class CSGridPointResult:
+    """Coverage + width summary for one CS dense-grid cell."""
+
+    label: str
+    planted_p: float
+    tie_rate: float
+    n_reps: int
+    seed: int
+    coverage_count: int
+    coverage_rate: float
+    cov_count_lo: int
+    stopping_reason_counts: dict[str, int]
+    mean_n_planted: float
+    median_width: float
+    p90_width: float
+
+
 def run_calibration_grid_point(
     label: str,
     planted_p: float,
@@ -181,7 +194,7 @@ def run_calibration_grid_point(
     n_reps: int = N_REPS,
     seed: int,
 ) -> GridPointResult:
-    """Run ``n_reps`` sequential replications at one planted rate; score CI coverage."""
+    """Run ``n_reps`` sequential replications at one planted rate; score legacy CI coverage."""
     rng = np.random.default_rng(seed)
     covered = 0
     stopping_reason_counts: Counter[str] = Counter()
@@ -189,7 +202,7 @@ def run_calibration_grid_point(
     n_sum = 0
 
     for _ in range(n_reps):
-        planted = _run_arm_sequential(rng, planted_p)
+        planted, _path = _run_arm_sequential(rng, planted_p)
         reason = planted.stopping_reason
         assert reason is not None
         stopping_reason_counts[reason.value] += 1
@@ -208,7 +221,7 @@ def run_calibration_grid_point(
             covered += 1
 
         # Side-channel: two_arm_gate on planted vs independent null control.
-        control = _run_arm_sequential(rng, CONTROL_P)
+        control, _ = _run_arm_sequential(rng, CONTROL_P)
         gate = two_arm_gate(
             int(planted.w_accumulator),
             planted.n_samples,
@@ -237,12 +250,65 @@ def run_calibration_grid_point(
     )
 
 
+def run_cs_grid_point(
+    label: str,
+    planted_p: float,
+    tie_rate: float,
+    *,
+    n_reps: int = N_REPS,
+    seed: int,
+    cs_fn: object = betting_confidence_sequence,
+) -> CSGridPointResult:
+    """Sequential replications scoring the production (or poison) CS coverage.
+
+    Estimand is the observation mean under the DGP
+    ``X = 0.5 w.p. tie_rate, else Bern(planted_p)``, i.e.
+    ``mu = tie_rate * 0.5 + (1 - tie_rate) * planted_p``. The CS targets the
+    mean of bounded observations, not a latent Bernoulli parameter.
+    """
+    true_mean = tie_rate * 0.5 + (1.0 - tie_rate) * planted_p
+    rng = np.random.default_rng(seed)
+    covered = 0
+    stopping_reason_counts: Counter[str] = Counter()
+    n_sum = 0
+    widths: list[float] = []
+
+    for _ in range(n_reps):
+        planted, path = _run_arm_sequential(rng, planted_p, tie_rate=tie_rate)
+        reason = planted.stopping_reason
+        assert reason is not None
+        stopping_reason_counts[reason.value] += 1
+        n_sum += planted.n_samples
+        assert len(path) == planted.n_samples
+
+        cs = cs_fn(path)  # type: ignore[operator]
+        if cs.lo <= true_mean <= cs.hi:
+            covered += 1
+        widths.append(float(cs.hi - cs.lo))
+
+    widths_arr = np.asarray(widths, dtype=float)
+    return CSGridPointResult(
+        label=label,
+        planted_p=planted_p,
+        tie_rate=tie_rate,
+        n_reps=n_reps,
+        seed=seed,
+        coverage_count=covered,
+        coverage_rate=covered / n_reps,
+        cov_count_lo=int(binom.ppf(0.025, n_reps, NOMINAL_COVERAGE)),
+        stopping_reason_counts=dict(stopping_reason_counts),
+        mean_n_planted=n_sum / n_reps,
+        median_width=float(np.median(widths_arr)),
+        p90_width=float(np.percentile(widths_arr, 90)),
+    )
+
+
 def run_full_calibration(
     *,
     n_reps: int = N_REPS,
     master_seed: int = SEED,
 ) -> tuple[GridPointResult, ...]:
-    """Run every grid point with ``master_seed + grid_index`` child seeds."""
+    """Run every legacy grid point with ``master_seed + grid_index`` child seeds."""
     return tuple(
         run_calibration_grid_point(
             label,
@@ -254,12 +320,36 @@ def run_full_calibration(
     )
 
 
-# The full grid costs minutes per computation on the Windows CI runners, and the
-# test job has a 15-minute cap (ci.yml `timeout-minutes`) that the py3.12 cell
-# exceeded when this module computed the grid six times. Compute it once per
-# module and share; the determinism test still performs one independent
-# recompute, so the cache never hides nondeterminism.
+def run_full_cs_calibration(
+    *,
+    n_reps: int = N_REPS,
+    master_seed: int = SEED_CS,
+    cs_fn: object = betting_confidence_sequence,
+) -> tuple[CSGridPointResult, ...]:
+    """Dense CS grid; child seed = master + flat index."""
+    results: list[CSGridPointResult] = []
+    idx = 0
+    for tie_rate in CS_TIE_RATES:
+        for p in CS_P_GRID:
+            label = f"p{p:.2f}_tie{int(tie_rate * 100):02d}"
+            results.append(
+                run_cs_grid_point(
+                    label,
+                    p,
+                    tie_rate,
+                    n_reps=n_reps,
+                    seed=master_seed + idx,
+                    cs_fn=cs_fn,
+                )
+            )
+            idx += 1
+    return tuple(results)
+
+
+# Shared caches — each grid computed at most once per process (+ one recompute
+# for determinism). Keeps the dense suite inside CI budget.
 _FULL_CALIBRATION_CACHE: tuple[GridPointResult, ...] | None = None
+_FULL_CS_CALIBRATION_CACHE: tuple[CSGridPointResult, ...] | None = None
 
 
 def _cached_full_calibration() -> tuple[GridPointResult, ...]:
@@ -267,6 +357,13 @@ def _cached_full_calibration() -> tuple[GridPointResult, ...]:
     if _FULL_CALIBRATION_CACHE is None:
         _FULL_CALIBRATION_CACHE = run_full_calibration()
     return _FULL_CALIBRATION_CACHE
+
+
+def _cached_full_cs_calibration() -> tuple[CSGridPointResult, ...]:
+    global _FULL_CS_CALIBRATION_CACHE
+    if _FULL_CS_CALIBRATION_CACHE is None:
+        _FULL_CS_CALIBRATION_CACHE = run_full_cs_calibration()
+    return _FULL_CS_CALIBRATION_CACHE
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +392,7 @@ def test_effect_grid_includes_null_small_large() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Core coverage harness (parametrized per grid point)
+# Legacy posterior coverage harness (parametrized per grid point) — #164
 # ---------------------------------------------------------------------------
 
 
@@ -305,7 +402,7 @@ def _coverage_mark(label: str) -> pytest.MarkDecorator | None:
             strict=True,
             reason=(
                 "finding: docs/findings/aggregation-ci-coverage-under-sequential-stop.md "
-                f"(grid point {label!r}; severity WRONG_NUMBER)"
+                f"(grid point {label!r}; severity WRONG_NUMBER; legacy posterior only)"
             ),
         )
     return None
@@ -330,7 +427,7 @@ def test_coverage_within_binomial_tolerance_per_grid_point(
     planted_p: float,
     seed: int,
 ) -> None:
-    """N=500 sequential replications: CI coverage inside Binomial(500, 0.95) band.
+    """N=500 sequential replications: legacy posterior CI coverage band.
 
     Tolerance arithmetic (see module docstring)::
 
@@ -339,8 +436,8 @@ def test_coverage_within_binomial_tolerance_per_grid_point(
         hi = binom.ppf(0.975, 500, 0.95) = 484
         assert lo <= coverage_count <= hi
 
-    Outside the band -> WRONG_NUMBER finding + xfail; never retune thresholds
-    or aggregation math.
+    Outside the band -> WRONG_NUMBER finding + xfail on *legacy only*; never
+    retune thresholds or aggregation math. Production CS is asserted separately.
     """
     result = next(r for r in _cached_full_calibration() if r.label == label)
 
@@ -358,6 +455,14 @@ def test_coverage_within_binomial_tolerance_per_grid_point(
         f"{NOMINAL_COVERAGE}). rate={result.coverage_rate:.4f}; seed={seed}. "
         "Do not retune aggregation math — file docs/findings with severity WRONG_NUMBER."
     )
+
+
+def test_legacy_posterior_pinned_rates_reproduce() -> None:
+    """#164 pinned rates must still reproduce at master seed 164_2026_08_09."""
+    results = {r.label: r for r in _cached_full_calibration()}
+    assert results["null"].coverage_count == 470  # 0.940
+    assert results["small"].coverage_count == 441  # 0.882
+    assert results["large"].coverage_count == 491  # 0.982
 
 
 def test_calibration_harness_is_deterministic() -> None:
@@ -390,3 +495,31 @@ def test_calibration_report_records_coverage_table() -> None:
         assert str(result.coverage_count) in text
         for reason in result.stopping_reason_counts:
             assert reason in text
+
+    # #187 additions
+    assert "confidence sequence" in text.lower() or "predictable_plugin" in text
+    assert "187" in text
+
+
+# ---------------------------------------------------------------------------
+# Helpers exported for tests/test_aggregation_cs_calibration.py (#187)
+# ---------------------------------------------------------------------------
+
+
+def _cs_grid_params() -> list[object]:
+    params: list[object] = []
+    idx = 0
+    for tie_rate in CS_TIE_RATES:
+        for p in CS_P_GRID:
+            label = f"p{p:.2f}_tie{int(tie_rate * 100):02d}"
+            params.append(
+                pytest.param(label, p, tie_rate, SEED_CS + idx, id=label),
+            )
+            idx += 1
+    return params
+
+
+def test_cs_dense_grid_contract() -> None:
+    """#187 dense grid shape is locked (full suite lives under calibration mark)."""
+    assert CS_P_GRID == (0.05, 0.25, 0.50, 0.58, 0.60, 0.62, 0.65, 0.75, 0.85, 0.95)
+    assert CS_TIE_RATES == (0.0, 0.20, 0.50)

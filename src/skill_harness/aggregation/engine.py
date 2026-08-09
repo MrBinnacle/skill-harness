@@ -27,9 +27,16 @@ from collections import defaultdict
 from sqlite3 import Connection
 from typing import Any
 
+from skill_harness.aggregation.confidence_sequence import (
+    INTERVAL_METHOD_V1,
+    betting_confidence_sequence,
+)
 from skill_harness.aggregation.errors import MalformedRunConfig, PreconditionError
 from skill_harness.aggregation.fit import ClauseObservations, ClausePosterior, FitResult, fit_skill
 from skill_harness.aggregation.report import (
+    INTERVAL_STATUS_PRIOR_ONLY,
+    INTERVAL_STATUS_UNMEASURED_INCOMPARABLE_POOL,
+    INTERVAL_STATUS_VALID,
     REPORT_SCHEMA_VERSION,
     ClauseReport,
     ContributionSummary,
@@ -143,11 +150,14 @@ def aggregate_skill(
     for run in completed_runs:
         run_id = run["run_id"]
 
-        # Admissible+non-confounded verdicts (VIEW)
+        # Admissible+non-confounded verdicts (VIEW). Deterministic evidence order
+        # (written_at, verdict_id) so the betting CS walks the same filtration the
+        # sequential stopper saw (#187).
         admissible_rows = evidence_conn_ro.execute(
             "SELECT clause_id, axis, observation, comparison, "
             "metric_id, metric_version "
-            "FROM admissible_verdicts WHERE run_id = ?",
+            "FROM admissible_verdicts WHERE run_id = ? "
+            "ORDER BY written_at, verdict_id",
             (run_id,),
         ).fetchall()
 
@@ -419,26 +429,57 @@ def aggregate_skill(
             skill_id=skill_id,
         )
 
+        op_hash_val = _resolve_op_hash(clause_axis_op_hashes.get(key, set()), skill_id, key)
+
+        # #187: anytime-valid CS only on comparable pools. Mixing models, prompts,
+        # metrics, metric versions, or ablation operators → refuse the sequence
+        # (null + UNMEASURED_INCOMPARABLE_POOL). Posterior decision rule unchanged.
+        posterior_ci = (ci_lo, ci_hi)
+        seq_cs: tuple[float, float] | None
+        interval_method: str
+        interval_status: str
+        if is_prior_only or n == 0:
+            seq_cs = None
+            interval_method = "none"
+            interval_status = INTERVAL_STATUS_PRIOR_ONLY
+        elif _pool_is_incomparable(
+            subject_model=subject_model_val,
+            user_message_sha256=user_msg_sha256_val,
+            metric_id=metric_id_val,
+            metric_version=metric_ver_val,
+            ablation_operator_hash=op_hash_val,
+        ):
+            seq_cs = None
+            interval_method = INTERVAL_METHOD_V1
+            interval_status = INTERVAL_STATUS_UNMEASURED_INCOMPARABLE_POOL
+        else:
+            cs = betting_confidence_sequence(obs_list)
+            seq_cs = (cs.lo, cs.hi)
+            interval_method = cs.method
+            interval_status = INTERVAL_STATUS_VALID
+
         clause_reports.append(
             ClauseReport(
                 clause_id=clause_id,
                 status=status.value,
                 sub_reason=sub_reason.value if sub_reason is not None else None,
                 posterior_mean=post_mean,
-                credible_interval_95=(ci_lo, ci_hi),
+                credible_interval_95=posterior_ci,
                 p_win_gt_threshold=p_win,
                 frozen_case_count_at_current_metric_version=frozen_current_counts.get(key, 0),
                 metric_id_per_axis={axis: metric_id_val} if metric_id_val else {},
                 metric_version_per_axis={axis: metric_ver_val} if metric_ver_val else {},
-                ablation_operator_hash=_resolve_op_hash(
-                    clause_axis_op_hashes.get(key, set()), skill_id, key
-                ),
+                ablation_operator_hash=op_hash_val,
                 run_ids_aggregated=tuple(sorted(clause_axis_run_ids.get(key, set()))),
                 n_verdicts=n,
                 w_observation_sum=w,
                 subject_model=subject_model_val,
                 user_message_sha256=user_msg_sha256_val,
                 is_prior_only=is_prior_only,
+                posterior_credible_interval_95=posterior_ci,
+                sequential_confidence_sequence_95=seq_cs,
+                interval_method=interval_method,
+                interval_status=interval_status,
             )
         )
 
@@ -763,6 +804,24 @@ def _derive_a55_fields(
     )
 
     return subject_model, user_message_sha256
+
+
+def _pool_is_incomparable(
+    *,
+    subject_model: str | None,
+    user_message_sha256: str | None,
+    metric_id: str | None,
+    metric_version: str | None,
+    ablation_operator_hash: str,
+) -> bool:
+    """True when any comparability axis is MIXED — refuse one CS over the pool."""
+    return (
+        subject_model == "MIXED"
+        or user_message_sha256 == "MIXED"
+        or metric_id == "MIXED"
+        or metric_version == "MIXED"
+        or ablation_operator_hash == "MIXED"
+    )
 
 
 def _fetch_run_state(runtime_conn: Connection, run_id: str) -> str | None:

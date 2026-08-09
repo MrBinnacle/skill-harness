@@ -142,21 +142,99 @@ See `docs/findings/aggregation-ci-coverage-under-sequential-stop.md`
 (severity `WRONG_NUMBER`).
 
 - `small` and `large` are `@pytest.mark.xfail(strict=True)` with a pointer to
-  that finding.
+  that finding — **legacy posterior interval only**.
 - `null` remains a hard assert (inside band at this seed).
-- **No production thresholds or aggregation math were changed.**
+- **Locked stopper constants and the posterior decision rule were not changed.**
+- **#187 fix:** production report surface adds an anytime-valid predictable-plugin
+  betting confidence sequence (`predictable_plugin_betting_cs_v1`) beside the
+  posterior interval. Only the CS may carry a frequentist coverage claim.
+  Finding status: **closed**.
 
-If a future run disagrees:
+If a future *legacy posterior* run disagrees:
 
 1. Do **not** widen the band or retune `fit_skill` / stopper constants.  
 2. Update the finding with the new seed, `X`, band, and `StoppingReason`
    histogram.  
-3. Adjust xfail markers only to match measured misses (strict xfail).
+3. Adjust xfail markers only to match measured misses (strict xfail) on the
+   legacy characterization — never on the production CS.
+
+---
+
+## #187 anytime-valid confidence sequence (production interval)
+
+| Item | Value |
+| --- | --- |
+| Method id | `predictable_plugin_betting_cs_v1` |
+| Construction | Waudby-Smith & Ramdas hedged capital + predictable plug-in λ (JRSS-B 2024 / arXiv:2010.09686) |
+| Module | `src/skill_harness/aggregation/confidence_sequence.py` |
+| Harness | `tests/test_aggregation_cs_calibration.py` (`pytest -m calibration`) |
+| Master seed | `187_2026_08_09` (child seed = master + flat grid index) |
+| Grid | p ∈ {0.05, 0.25, 0.50, 0.58, 0.60, 0.62, 0.65, 0.75, 0.85, 0.95} × tie rates {0%, 20%, 50%} |
+| Contract | coverage count ≥ 465 / 500 (binom lower edge); **overcoverage is not a failure** |
+| Width metrics | median width and 90th-percentile width recorded per cell (never used to reject valid overcoverage) |
+| Incomparable pools | `interval_status=UNMEASURED_INCOMPARABLE_POOL`, sequence field null |
+
+### Coverage + width table (seed `187_2026_08_09`, N=500)
+
+Estimand is the observation mean under the DGP
+`X = 0.5` w.p. `tie_rate`, else `Bern(p)`, i.e.
+`mu = tie_rate * 0.5 + (1 - tie_rate) * p`. Lower coverage tolerance = 465.
+Overcoverage is not a failure. Wall clock for one full dense grid on linux
+py3.13 ≈ **199 s** (~6.6 s/cell); determinism recompute doubles that. Slowest
+cell ≈ 7 s. Windows budget at 2× ≈ 14 min — inside the dedicated calibration
+job's 40-minute timeout.
+
+| label | p | tie | X | rate | med_w | p90_w | mean_n |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| p0.05_tie00 | 0.05 | 0.00 | 498 | 0.996 | 0.540 | 0.635 | 8.0 |
+| p0.25_tie00 | 0.25 | 0.00 | 495 | 0.990 | 0.662 | 0.763 | 10.4 |
+| p0.50_tie00 | 0.50 | 0.00 | 499 | 0.998 | 0.475 | 0.732 | 28.6 |
+| p0.58_tie00 | 0.58 | 0.00 | 499 | 0.998 | 0.455 | 0.647 | 33.6 |
+| p0.60_tie00 | 0.60 | 0.00 | 500 | 1.000 | 0.452 | 0.543 | 34.8 |
+| p0.62_tie00 | 0.62 | 0.00 | 499 | 0.998 | 0.449 | 0.540 | 34.7 |
+| p0.65_tie00 | 0.65 | 0.00 | 499 | 0.998 | 0.448 | 0.540 | 33.2 |
+| p0.75_tie00 | 0.75 | 0.00 | 499 | 0.998 | 0.466 | 0.540 | 24.5 |
+| p0.85_tie00 | 0.85 | 0.00 | 499 | 0.998 | 0.510 | 0.540 | 14.8 |
+| p0.95_tie00 | 0.95 | 0.00 | 500 | 1.000 | 0.540 | 0.540 | 9.8 |
+| p0.05_tie20 | 0.05 | 0.20 | 499 | 0.998 | 0.607 | 0.669 | 8.4 |
+| p0.25_tie20 | 0.25 | 0.20 | 499 | 0.998 | 0.635 | 0.703 | 12.6 |
+| p0.50_tie20 | 0.50 | 0.20 | 498 | 0.996 | 0.423 | 0.634 | 32.2 |
+| p0.58_tie20 | 0.58 | 0.20 | 499 | 0.998 | 0.404 | 0.540 | 35.8 |
+| p0.60_tie20 | 0.60 | 0.20 | 500 | 1.000 | 0.406 | 0.511 | 35.8 |
+| p0.62_tie20 | 0.62 | 0.20 | 500 | 1.000 | 0.402 | 0.503 | 36.4 |
+| p0.65_tie20 | 0.65 | 0.20 | 500 | 1.000 | 0.396 | 0.490 | 35.7 |
+| p0.75_tie20 | 0.75 | 0.20 | 499 | 0.998 | 0.395 | 0.508 | 31.7 |
+| p0.85_tie20 | 0.85 | 0.20 | 498 | 0.996 | 0.443 | 0.540 | 22.5 |
+| p0.95_tie20 | 0.95 | 0.20 | 499 | 0.998 | 0.503 | 0.574 | 13.3 |
+| p0.05_tie50 | 0.05 | 0.50 | 499 | 0.998 | 0.599 | 0.668 | 10.7 |
+| p0.25_tie50 | 0.25 | 0.50 | 499 | 0.998 | 0.481 | 0.650 | 17.9 |
+| p0.50_tie50 | 0.50 | 0.50 | 499 | 0.998 | 0.340 | 0.527 | 33.1 |
+| p0.58_tie50 | 0.58 | 0.50 | 498 | 0.996 | 0.326 | 0.409 | 36.8 |
+| p0.60_tie50 | 0.60 | 0.50 | 499 | 0.998 | 0.321 | 0.414 | 36.9 |
+| p0.62_tie50 | 0.62 | 0.50 | 496 | 0.992 | 0.322 | 0.375 | 38.0 |
+| p0.65_tie50 | 0.65 | 0.50 | 500 | 1.000 | 0.317 | 0.362 | 38.7 |
+| p0.75_tie50 | 0.75 | 0.50 | 500 | 1.000 | 0.307 | 0.349 | 39.0 |
+| p0.85_tie50 | 0.85 | 0.50 | 500 | 1.000 | 0.294 | 0.352 | 37.5 |
+| p0.95_tie50 | 0.95 | 0.50 | 498 | 0.996 | 0.282 | 0.444 | 32.7 |
+
+Lowest coverage count on the grid: **495** (p=0.25, tie=0%) — still above 465.
+`StoppingReason` values observed: `passed`, `failed`, `underpowered_nmax`
+(`budget_exhausted` is set by the runner on external budget abort, not by
+`check_stop`, so it does not appear in this pure-stopper harness).
+
+Poison-direction control: `miscalibrated_nonpredictable_cs` (non-predictable λ)
+is demonstrated RED (below lower tolerance) at p=0.65, proving the harness can
+catch an invalid sequence.
 
 ---
 
 ## How to re-run
 
 ```bash
+# Legacy posterior characterization (#164 pins)
 PYTHONHASHSEED=0 python -m pytest tests/test_aggregation_calibration.py -q
+
+# Production CS dense grid (#187)
+PYTHONHASHSEED=0 python -m pytest tests/test_aggregation_cs_calibration.py -q -m calibration
 ```
+

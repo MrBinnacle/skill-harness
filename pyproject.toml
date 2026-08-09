@@ -118,6 +118,8 @@ markers = [
   # Run Tier-1 tests with: PYTHONHASHSEED=0 pytest tests/oracles/tier1/
   # If PYTHONHASHSEED is not set, tests/oracles/tier1/conftest.py raises AssertionError.
   "no_network: test must run fully offline (pytest-socket blocks sockets)",
+  # #187 dense CS coverage grid — own CI job (do not fold into the 15m matrix cell).
+  "calibration: dense sequential coverage calibration (deselect with -m 'not calibration')",
 ]
 filterwarnings = ["error"]
 

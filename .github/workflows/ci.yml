@@ -91,9 +91,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -c requirements-ci.txt -e ".[dev]"
       - name: pytest
-        # `-m "not live"` mirrors local gate; live tests require ANTHROPIC_API_KEY
-        # (not provisioned in CI). Live test surface = tests/extractor/test_live.py.
-        run: pytest -q -m "not live" --cov=src/skill_harness --cov-report=term-missing
+        # `-m "not live and not calibration"` mirrors local gate; live tests require
+        # ANTHROPIC_API_KEY (not provisioned in CI). Dense CS calibration (#187) runs
+        # in the dedicated calibration job below — do not fold it into this 15m cell.
+        run: pytest -q -m "not live and not calibration" --cov=src/skill_harness --cov-report=term-missing
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -101,6 +102,35 @@ jobs:
           name: coverage-report
           path: .coverage
           if-no-files-found: ignore
+
+  calibration:
+    name: Calibration CS grid (${{ matrix.os }} · py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    # Dense #187 grid is ~10× the #164 grid. Own job so the matrix cell's 15m
+    # cap is never raised. Budget windows at 2× linux (~30m); headroom to 40.
+    timeout-minutes: 40
+    env:
+      PYTHONHASHSEED: "0"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements-ci.txt -e ".[dev]"
+      - name: pytest calibration
+        run: pytest -q -m calibration --tb=short
 
   structural-bans:
     name: Structural bans (raw sqlite3.connect / oracle_verdicts / timestamp ORDER BY)
@@ -154,7 +184,7 @@ jobs:
 
   all-green:
     name: All checks green
-    needs: [lint, typecheck, test, structural-bans, drift-check, release-gate]
+    needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -163,6 +193,7 @@ jobs:
           if [[ "${{ needs.lint.result }}" != "success" ]] || \
              [[ "${{ needs.typecheck.result }}" != "success" ]] || \
              [[ "${{ needs.test.result }}" != "success" ]] || \
+             [[ "${{ needs.calibration.result }}" != "success" ]] || \
              [[ "${{ needs.structural-bans.result }}" != "success" ]] || \
              [[ "${{ needs.drift-check.result }}" != "success" ]] || \
              [[ "${{ needs.release-gate.result }}" != "success" ]]; then

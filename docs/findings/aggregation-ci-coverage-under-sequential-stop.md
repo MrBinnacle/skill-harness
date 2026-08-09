@@ -1,11 +1,11 @@
 # Finding: aggregation 95% CI coverage under sequential stopping
 
 **Severity:** `WRONG_NUMBER`  
-**Ticket:** #164 (coverage calibration by simulation)  
-**Status:** open — detection landed; production math **not** changed  
-**Harness:** `tests/test_aggregation_calibration.py`  
+**Ticket:** #164 (coverage calibration by simulation); closed by #187  
+**Status:** closed — public report surface leads with the anytime-valid confidence sequence (`sequential_confidence_sequence_95`); legacy posterior interval retained as Bayesian-only (`posterior_credible_interval_95` / `credible_interval_95`). Sequential CS calibration suite green under the dense #187 grid.  
+**Harness:** `tests/test_aggregation_calibration.py` (legacy posterior characterization) + `tests/test_aggregation_cs_calibration.py` (production CS)  
 **Report:** `docs/assurance/calibration-report.md`  
-**Master seed:** `164_2026_08_09` (`numpy.random.default_rng`; per-point seed = master + grid index)
+**Master seed (legacy):** `164_2026_08_09` · **Master seed (CS):** `187_2026_08_09`
 
 ---
 
