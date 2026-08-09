@@ -78,6 +78,14 @@ dev = [
   # CONTRIBUTING.md's setup says `pre-commit install` right after `pip install -e ".[dev]"`;
   # ship the tool that command needs.
   "pre-commit>=4",
+  # #161 — test-time numerical-reference + hygiene surface (assurance-pass manifest).
+  # scipy/statsmodels already runtime deps; re-declared here so `pip install -e ".[dev]"`
+  # alone still lands the full test stack. numpy is the explicit numerical base.
+  # pytest-randomly is installable only — not wired into CI invocations yet.
+  "scipy>=1.11",
+  "statsmodels>=0.14",
+  "numpy>=2.0",
+  "pytest-randomly>=4.1",
 ]
 
 [project.scripts]

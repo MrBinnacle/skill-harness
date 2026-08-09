@@ -59,6 +59,7 @@ pluggy==1.6.0
 pydantic==2.13.4
 pydantic_core==2.46.4
 pytest-cov==7.1.0
+pytest-randomly==4.1.0
 pytest-socket==0.8.0
 pytest-xdist==3.8.0
 pytest==9.1.1
