@@ -23,8 +23,8 @@ All three gates green, as expected before the assurance pass starts changing
 detections.
 
 Skipped pytest cells (not failures): extractor live/three-skills paths that
-need an external `ai-slop-sentinel` SKILL.md (3), and subject-layer cells that
-need the optional Inspect extra (5).
+need an external `ai-slop-sentinel` SKILL.md (4), and subject-layer cells that
+need the optional Inspect extra (4).
 
 ---
 
