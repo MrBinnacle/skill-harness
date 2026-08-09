@@ -76,6 +76,10 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/skill_harness/audit/*.py",
         ],
         "tests": [
+            # Direct importers of skill_harness.audit (A29 raw oracle surface).
+            "tests/test_repo_roundtrip.py",
+            "tests/test_admissibility_write_time_snapshot.py",
+            "tests/test_dual_write_partial.py",
             "tests/test_skill_audit.py",
             "tests/test_audit_metric.py",
             "tests/test_clause_evidence_audit.py",
@@ -125,8 +129,9 @@ def write_setup_cfg(module: str, only_mutate_override: list[str] | None) -> Path
     # Drop test paths that do not exist yet (mutation killer modules land later).
     tests = [t for t in spec["tests"] if (ROOT / t).exists() or t.endswith("/")]
     # audit/ is only __init__.py (A29 raw-oracle surface) — must mutate it.
+    # mutmut rejects empty do_not_mutate entries; use a never-matching path.
     if module == "audit":
-        do_not = "    # (none — audit package body lives in __init__.py)"
+        do_not = "    __never_match_audit_init_must_mutate__/**"
     else:
         do_not = "    **/__init__.py"
     body = SETUP_CFG_TEMPLATE.format(
@@ -159,7 +164,7 @@ def main() -> int:
     print(cfg.read_text(encoding="utf-8"), flush=True)
     cmd = [sys.executable, "-m", "mutmut", "run", *args.mutmut_args]
     print("+", " ".join(cmd), flush=True)
-    return subprocess.call(cmd, cwd=ROOT)
+    return subprocess.call(cmd, cwd=ROOT)  # noqa: S603
 
 
 if __name__ == "__main__":
