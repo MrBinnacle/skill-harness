@@ -131,17 +131,13 @@ def _clause_evidence_section(out: str) -> str:
 
 
 @patch("skill_harness.cli.main.extract_skill")
-def test_skill_init_out_writes_round_trippable_jsonl(
-    mock_extract: Any, tmp_path: Path
-) -> None:
+def test_skill_init_out_writes_round_trippable_jsonl(mock_extract: Any, tmp_path: Path) -> None:
     skill = _write_skill(tmp_path)
     sha = "a" * 64
     mock_extract.return_value = _make_result(source_sha256=sha)
     out = tmp_path / "extraction.jsonl"
 
-    result = CliRunner().invoke(
-        cli, ["skill", "init", str(skill), "--out", str(out)]
-    )
+    result = CliRunner().invoke(cli, ["skill", "init", str(skill), "--out", str(out)])
     assert result.exit_code == 0, result.output
     lines = out.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
@@ -162,27 +158,21 @@ def test_skill_init_out_works_with_execute(
     mock_ctx.evidence_conn = object()
     out = tmp_path / "with_exec.jsonl"
 
-    result = CliRunner().invoke(
-        cli, ["skill", "init", "--execute", str(skill), "--out", str(out)]
-    )
+    result = CliRunner().invoke(cli, ["skill", "init", "--execute", str(skill), "--out", str(out)])
     assert result.exit_code == 0, result.output
     loaded = ExtractionResult.model_validate_json(out.read_text(encoding="utf-8").strip())
     assert loaded.source_sha256 == sha
 
 
 @patch("skill_harness.cli.main.extract_skill")
-def test_skill_init_out_same_sha_refuses_exit_1(
-    mock_extract: Any, tmp_path: Path
-) -> None:
+def test_skill_init_out_same_sha_refuses_exit_1(mock_extract: Any, tmp_path: Path) -> None:
     skill = _write_skill(tmp_path)
     sha = "e" * 64
     mock_extract.return_value = _make_result(source_sha256=sha)
     out = tmp_path / "dup.jsonl"
     append_extraction_result(out, _make_result(source_sha256=sha))
 
-    result = CliRunner().invoke(
-        cli, ["skill", "init", str(skill), "--out", str(out)]
-    )
+    result = CliRunner().invoke(cli, ["skill", "init", str(skill), "--out", str(out)])
     assert result.exit_code == 1
     assert "refusing to append" in result.output
     assert sha[:16] in result.output
@@ -255,19 +245,20 @@ def test_audit_extraction_no_match(tmp_path: Path) -> None:
     append_extraction_result(out, _make_result(source_sha256="f" * 64))
     sha = _sha_for_skill(skill)
 
-    result = CliRunner().invoke(
-        cli, ["skill", "audit", str(skill), "--extraction", str(out)]
-    )
+    result = CliRunner().invoke(cli, ["skill", "audit", str(skill), "--extraction", str(out)])
     assert result.exit_code == 0, result.output
     section = _clause_evidence_section(result.output)
     assert "no_matching_extraction" in section
     assert sha[:16] in section
     assert "UNMEASURED" in section
-    assert not any(
-        tok == "0" and "coverage" in ln.lower()
-        for ln in section.splitlines()
-        for tok in ln.split()
-    ) or "no_matching" in section  # refusal, not bare zero coverage
+    assert (
+        not any(
+            tok == "0" and "coverage" in ln.lower()
+            for ln in section.splitlines()
+            for tok in ln.split()
+        )
+        or "no_matching" in section
+    )  # refusal, not bare zero coverage
 
 
 def test_audit_extraction_duplicates(tmp_path: Path) -> None:
@@ -278,9 +269,7 @@ def test_audit_extraction_duplicates(tmp_path: Path) -> None:
     row = _make_result(source_sha256=sha).model_dump_json()
     out.write_text(row + "\n" + row + "\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        cli, ["skill", "audit", str(skill), "--extraction", str(out)]
-    )
+    result = CliRunner().invoke(cli, ["skill", "audit", str(skill), "--extraction", str(out)])
     assert result.exit_code == 0, result.output
     section = _clause_evidence_section(result.output)
     assert "ambiguous_duplicate_rows" in section
@@ -299,9 +288,7 @@ def test_audit_extraction_legacy_missing_instrument(tmp_path: Path) -> None:
     del data["tool_schema_sha256"]
     out.write_text(json.dumps(data) + "\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        cli, ["skill", "audit", str(skill), "--extraction", str(out)]
-    )
+    result = CliRunner().invoke(cli, ["skill", "audit", str(skill), "--extraction", str(out)])
     assert result.exit_code == 0, result.output
     section = _clause_evidence_section(result.output)
     assert "legacy_extraction_missing_instrument_identity" in section
@@ -313,9 +300,7 @@ def test_audit_extraction_unreadable_empty_file(tmp_path: Path) -> None:
     out = tmp_path / "empty.jsonl"
     out.write_text("", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        cli, ["skill", "audit", str(skill), "--extraction", str(out)]
-    )
+    result = CliRunner().invoke(cli, ["skill", "audit", str(skill), "--extraction", str(out)])
     assert result.exit_code == 0, result.output
     section = _clause_evidence_section(result.output)
     assert "unreadable_extraction_file" in section
@@ -327,9 +312,7 @@ def test_audit_extraction_unreadable_all_garbage(tmp_path: Path) -> None:
     out = tmp_path / "garbage.jsonl"
     out.write_text("not-json\n{bad\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        cli, ["skill", "audit", str(skill), "--extraction", str(out)]
-    )
+    result = CliRunner().invoke(cli, ["skill", "audit", str(skill), "--extraction", str(out)])
     assert result.exit_code == 0, result.output
     section = _clause_evidence_section(result.output)
     assert "unreadable_extraction_file" in section
@@ -386,9 +369,7 @@ def test_audit_never_opens_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert r1.exit_code == 0, r1.output
     assert "no_extraction" in r1.output
 
-    r2 = CliRunner().invoke(
-        cli, ["skill", "audit", str(skill), "--extraction", str(out)]
-    )
+    r2 = CliRunner().invoke(cli, ["skill", "audit", str(skill), "--extraction", str(out)])
     assert r2.exit_code == 0, r2.output
     assert "Clause evidence (zero-power)" in r2.output
 
@@ -446,12 +427,14 @@ def test_clause_evidence_section_is_ascii_only(tmp_path: Path) -> None:
 
     # Happy-path section body without Rich table borders: instrument + summary.
     for line in section.splitlines():
-        if line.startswith("extractor ") or line.startswith("clauses:") or line.startswith(
-            "flagged:"
-        ) or line.startswith("scoreable-axis:") or line.startswith(
-            "Constructible coverage:"
-        ) or line.startswith("Instantiated coverage:") or line.startswith(
-            "Clause evidence"
+        if (
+            line.startswith("extractor ")
+            or line.startswith("clauses:")
+            or line.startswith("flagged:")
+            or line.startswith("scoreable-axis:")
+            or line.startswith("Constructible coverage:")
+            or line.startswith("Instantiated coverage:")
+            or line.startswith("Clause evidence")
         ):
             bad = sorted({ch for ch in line if not ch.isascii()})
             assert not bad, f"non-ASCII in owned line {line!r}: {bad!r}"
@@ -461,9 +444,7 @@ def test_skill_clauses_legend_notes_extraction_carrier() -> None:
     assert "skill init --out" in _SKILL_CLAUSES_LEGEND
     assert "skill audit --extraction" in _SKILL_CLAUSES_LEGEND
     assert "vacuity kind and reason are not stored in the DB" in _SKILL_CLAUSES_LEGEND
-    note_line = next(
-        ln for ln in _SKILL_CLAUSES_LEGEND.splitlines() if ln.startswith("Note:")
-    )
+    note_line = next(ln for ln in _SKILL_CLAUSES_LEGEND.splitlines() if ln.startswith("Note:"))
     offenders = sorted({ch for ch in note_line if not ch.isascii()})
     assert not offenders, f"non-ASCII in legend note: {offenders!r}"
 
