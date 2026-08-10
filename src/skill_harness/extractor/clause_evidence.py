@@ -41,12 +41,15 @@ from skill_harness.extractor.models import (
     instrument_from_mapping,
 )
 from skill_harness.extractor.vacuity_policy import (
+    AdjudicationRecord,
     FlagEvidenceStatus,
     KindEvidenceStatus,
     VacuityFlagCalibrationReceipt,
     VacuityPolicyView,
+    clause_context_sha256,
     derive_vacuity_policy,
     exclusion_label_for_flag,
+    load_adjudication_records,
     load_default_receipts,
     match_calibration_receipt,
 )
@@ -55,6 +58,11 @@ from skill_harness.oracles.tier1.axis_registry import AxisScoreability, classify
 # Honest exclusion label for the calibrated generation (#188). Kept as a module
 # constant for the matching triple; generation-mismatched rows use a derived label.
 _DEFAULT_RECEIPTS: Final[tuple[VacuityFlagCalibrationReceipt, ...]] = load_default_receipts()
+# #189: checked-in per-row adjudication records; rows whose (source sha, clause
+# context sha) join a record surface ADJUDICATED instead of ADVISORY.
+_DEFAULT_ADJUDICATIONS: Final[Mapping[tuple[str, str], AdjudicationRecord]] = (
+    load_adjudication_records()
+)
 _DEFAULT_MATCHED: Final[VacuityFlagCalibrationReceipt | None] = (
     _DEFAULT_RECEIPTS[0] if _DEFAULT_RECEIPTS else None
 )
@@ -355,12 +363,17 @@ def _measure_row(
         text_raw = clause.get("clause_text")
         text_s = text_raw if isinstance(text_raw, str) else ""
 
+        effective_sha = source_sha if len(source_sha) == 64 else ("0" * 64)
+        adjudication = _DEFAULT_ADJUDICATIONS.get(
+            (effective_sha, clause_context_sha256(text_s))
+        )
         policy: VacuityPolicyView = derive_vacuity_policy(
             instrument=instrument,
             vacuity_flag=flag_s,
             predicted_vacuity_kind=kind_s,
-            source_sha256=source_sha if len(source_sha) == 64 else ("0" * 64),
+            source_sha256=effective_sha,
             clause_text=text_s,
+            adjudication=adjudication,
         )
 
         if flag_s != "none":

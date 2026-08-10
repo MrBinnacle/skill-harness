@@ -1,0 +1,64 @@
+{
+  "receipt_id": "vacuity-flag-adjudication-2026-08-09",
+  "capture_date": "2026-08-09",
+  "description": "Full-population flag/kind adjudication + preregistered recall sample for semantic_vacuous_pending_review (issue 189). Protocol preregistered and frozen before the first paid call. Per-row verdicts: vacuity-adjudication-2026-08-09.jsonl (join key: source_sha256 + clause_context_sha256, never clause_index).",
+  "instrument_triple": {
+    "extractor_model": "claude-opus-5",
+    "system_prompt_sha256": "525ac4445febc96403e139af752d7a17790c2cd3bf54f56b8dcf3c1773eb7054",
+    "tool_schema_sha256": "39c50daa5e2438b45d86b877d2215be3246d7f27bc4e0c29e6062e158a9e0cd3"
+  },
+  "panel": {
+    "seats": 3,
+    "models": ["openai/gpt-5.6-sol", "google/gemini-3.1-pro-preview", "x-ai/grok-4.5"],
+    "anchor_seat": "openai/gpt-5.6-sol",
+    "majority_rule": "2/3 else UNDECIDED",
+    "context": "full source SKILL.md supplied per (skill, seat) call; seats blind to detector flag/kind/reason and prior verdicts",
+    "verdicts": 1206,
+    "missing_verdicts": 0
+  },
+  "arm_A_census": {
+    "flagged_population_size": 282,
+    "adjudicated_rows": 282,
+    "flag_correct": 270,
+    "flag_wrong": 11,
+    "undecided": 1,
+    "flag_precision_undecided_wrong": 0.9574,
+    "flag_precision_undecided_correct": 0.961,
+    "anchor_seat_solo_precision": 0.9397,
+    "note": "Census, not a sample: 0.9574-0.9610 is the population figure for this instrument triple; remaining uncertainty is adjudicator uncertainty only."
+  },
+  "arm_B_recall": {
+    "status": "MEASURED",
+    "design": "n=120 stratified by oracle tier from the 1,015 unflagged clauses (t1=370/44, t2=599/61, t3=46/15), drawn without replacement, seed 189",
+    "sampled_positives": 11,
+    "recall_undecided_clean": 0.7524,
+    "recall_undecided_vacuous": 0.7331,
+    "stratified_fpc_95": [0.66, 0.874],
+    "skill_cluster_bootstrap_95": [0.622, 0.913],
+    "specificity": 0.9872,
+    "npv": 0.9124,
+    "prevalence": 0.2767,
+    "note": "Never quote the recall point without an interval; skill-level n is 47. Bootstrap resamples the 47 skills with replacement (2000 reps, seed 189)."
+  },
+  "arm_C_kind": {
+    "flag_correct_rows": 270,
+    "confusion": {
+      "not_a_directive_predicted": {"not_a_directive": 255, "weak_directive": 0},
+      "weak_directive_predicted": {"not_a_directive": 9, "weak_directive": 6}
+    },
+    "not_a_directive_precision": 1.0,
+    "not_a_directive_n": 255,
+    "weak_directive_precision": 0.4,
+    "weak_directive_n": 15,
+    "overall_kind_match": 0.9667,
+    "note": "Overall 0.9667 is published only beside the class split (255/255 and 6/15). weak_directive predictions remain ADVISORY (precision 0.40). Historical S211 class split of record is 77/77 + 4/20 = 81/97; the published 77/78 was an off-by-one denominator, reconciled 2026-08-09."
+  },
+  "agreement": {
+    "fleiss_kappa_arm_A": 0.603,
+    "fleiss_kappa_arm_B": 0.606,
+    "note": "Per-arm figures are the quotable ones; the pooled 0.866 is inflated by pooling two populations with opposite base rates."
+  },
+  "leakage_rule": "Every row adjudicated by this program is development/diagnosis material only for any future detector revision. A prompt or schema change stamps a NEW extractor generation; evaluation of a revision runs on held-out skills and clauses against per-class thresholds preregistered before the holdout runs.",
+  "generation_lock": "All figures die with the instrument triple above. A row from any other triple has NO calibration claim.",
+  "supersedes_note": "Extends (does not replace) receipt vacuity-flag-calibration-2026-08-08: that receipt remains the loaded calibration default pending a coordinated README/label update; this receipt is the committed record of the issue-189 program and the source of the per-row ADJUDICATED upgrades."
+}

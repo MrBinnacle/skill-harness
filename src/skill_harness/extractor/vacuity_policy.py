@@ -42,6 +42,14 @@ _PACKAGE_RECEIPT_PATH: Final[Path] = (
     Path(__file__).resolve().parent / "calibration" / _DEFAULT_RECEIPT_NAME
 )
 
+_ADJ_RECORDS_NAME: Final[str] = "vacuity-adjudication-2026-08-09.jsonl"
+_REPO_ADJ_RECORDS_PATH: Final[Path] = (
+    Path(__file__).resolve().parents[3] / "docs" / "calibration" / _ADJ_RECORDS_NAME
+)
+_PACKAGE_ADJ_RECORDS_PATH: Final[Path] = (
+    Path(__file__).resolve().parent / "calibration" / _ADJ_RECORDS_NAME
+)
+
 _ADJUDICATED_KINDS: Final[frozenset[str]] = frozenset(
     {"weak_directive", "not_a_directive", "testable_directive", "undecided"}
 )
@@ -139,6 +147,56 @@ def load_calibration_receipt(path: Path | str | None = None) -> VacuityFlagCalib
 def load_default_receipts() -> tuple[VacuityFlagCalibrationReceipt, ...]:
     """All checked-in receipts the policy layer knows about."""
     return (load_calibration_receipt(),)
+
+
+def default_adjudication_records_path() -> Path:
+    """Path to the committed per-row adjudication records of record."""
+    if _PACKAGE_ADJ_RECORDS_PATH.is_file():
+        return _PACKAGE_ADJ_RECORDS_PATH
+    return _REPO_ADJ_RECORDS_PATH
+
+
+def load_adjudication_records(
+    path: Path | str | None = None,
+) -> dict[tuple[str, str], AdjudicationRecord]:
+    """Load checked-in adjudication records keyed on (source_sha256, clause_context_sha256).
+
+    Fail-closed on malformed rows, unknown kinds, and duplicate join keys: an
+    adjudication file that cannot be trusted whole upgrades nothing. A missing
+    file returns an empty mapping (no records, everything stays ADVISORY).
+    """
+    target = Path(path) if path is not None else default_adjudication_records_path()
+    if not target.is_file():
+        return {}
+    records: dict[tuple[str, str], AdjudicationRecord] = {}
+    for lineno, line in enumerate(target.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        raw = json.loads(line)
+        if not isinstance(raw, dict):
+            raise ValueError(f"{target}:{lineno}: expected a JSON object")
+        source = raw.get("source_sha256")
+        ctx = raw.get("clause_context_sha256")
+        kind = raw.get("adjudicated_vacuity_kind")
+        receipt = raw.get("adjudication_receipt")
+        if not isinstance(source, str) or len(source) != _SHA_LEN:
+            raise ValueError(f"{target}:{lineno}: source_sha256 invalid")
+        if not isinstance(ctx, str) or len(ctx) != _SHA_LEN:
+            raise ValueError(f"{target}:{lineno}: clause_context_sha256 invalid")
+        if not isinstance(kind, str) or kind not in _ADJUDICATED_KINDS:
+            raise ValueError(f"{target}:{lineno}: adjudicated_vacuity_kind invalid: {kind!r}")
+        if not isinstance(receipt, str) or not receipt:
+            raise ValueError(f"{target}:{lineno}: adjudication_receipt required")
+        key = (source, ctx)
+        if key in records:
+            raise ValueError(f"{target}:{lineno}: duplicate adjudication join key")
+        records[key] = AdjudicationRecord(
+            source_sha256=source,
+            clause_context_sha256=ctx,
+            adjudicated_vacuity_kind=kind,  # type: ignore[arg-type]
+            adjudication_receipt=receipt,
+        )
+    return records
 
 
 def match_calibration_receipt(
