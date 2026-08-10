@@ -14,7 +14,6 @@ from click.testing import CliRunner
 from skill_harness.cli.main import _SKILL_CLAUSES_LEGEND, cli
 from skill_harness.extractor.clause_evidence import (
     INSTANTIATED_COVERAGE_REFUSAL,
-    UNREVIEWED_SEMANTIC_VACUOUS_LABEL,
     append_extraction_result,
     load_clause_evidence,
     no_extraction_outcome,
@@ -219,7 +218,13 @@ def test_audit_extraction_happy_path(tmp_path: Path) -> None:
     assert "schema " + ("c" * 12) in section
     assert "verbosity" in section
     assert "weak_directive (advisory)" in section
-    assert UNREVIEWED_SEMANTIC_VACUOUS_LABEL in section
+    # #188: exclusion label is flag-based + pending review + generation scope.
+    # Fixture instrument is not the calibrated triple → UNMEASURED form.
+    assert "flag-based" in section.lower()
+    assert "pending review" in section.lower()
+    assert "UNMEASURED_GENERATION_MISMATCH" in section
+    assert "unreviewed model judgement" in section.lower()
+    assert "ADVISORY" in section or "advisory" in section
     assert "as of current scorer registry" in section.lower()
     assert "Constructible coverage:" in section
     assert INSTANTIATED_COVERAGE_REFUSAL in section

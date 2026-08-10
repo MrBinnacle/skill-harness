@@ -34,19 +34,34 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal
 
-from skill_harness.extractor.corpus_census import (
-    _UNREVIEWED_SEMANTIC_VACUOUS_LABEL,
-    falsifying_case_complete,
-)
+from skill_harness.extractor.corpus_census import falsifying_case_complete
 from skill_harness.extractor.models import (
     ExtractionResult,
     ExtractorInstrument,
     instrument_from_mapping,
 )
+from skill_harness.extractor.vacuity_policy import (
+    FlagEvidenceStatus,
+    KindEvidenceStatus,
+    VacuityFlagCalibrationReceipt,
+    VacuityPolicyView,
+    derive_vacuity_policy,
+    exclusion_label_for_flag,
+    load_default_receipts,
+    match_calibration_receipt,
+)
 from skill_harness.oracles.tier1.axis_registry import AxisScoreability, classify_axis
 
-# Re-export the issue-123 label so render sites import one symbol, not a fork.
-UNREVIEWED_SEMANTIC_VACUOUS_LABEL: Final[str] = _UNREVIEWED_SEMANTIC_VACUOUS_LABEL
+# Honest exclusion label for the calibrated generation (#188). Kept as a module
+# constant for the matching triple; generation-mismatched rows use a derived label.
+_DEFAULT_RECEIPTS: Final[tuple[VacuityFlagCalibrationReceipt, ...]] = load_default_receipts()
+_DEFAULT_MATCHED: Final[VacuityFlagCalibrationReceipt | None] = (
+    _DEFAULT_RECEIPTS[0] if _DEFAULT_RECEIPTS else None
+)
+UNREVIEWED_SEMANTIC_VACUOUS_LABEL: Final[str] = exclusion_label_for_flag(
+    flag_evidence_status="CALIBRATED_FROZEN_CAPTURE",
+    calibration_receipt=_DEFAULT_MATCHED,
+)
 
 SECTION_TITLE: Final[str] = "Clause evidence (zero-power) -- from extraction output"
 
@@ -92,8 +107,13 @@ class ClauseEvidenceRow:
     scoreable: bool
     vacuity_flag: str
     vacuity_kind: str | None
+    """Model prediction only — advisory until adjudicated (#188)."""
     vacuity_reason: str | None
     constructible_fc: bool
+    flag_evidence_status: FlagEvidenceStatus
+    kind_evidence_status: KindEvidenceStatus
+    adjudicated_vacuity_kind: str | None
+    adjudication_receipt: str | None
 
 
 @dataclass(frozen=True)
@@ -103,6 +123,9 @@ class ClauseEvidenceSummary:
     flagged_by_kind: tuple[tuple[str, int], ...]
     scoreable_axis_count: int
     constructible_count: int
+    flag_evidence_status: FlagEvidenceStatus
+    exclusion_label: str
+    calibration_receipt_id: str | None
 
 
 @dataclass(frozen=True)
@@ -110,6 +133,7 @@ class ClauseEvidenceMeasured:
     instrument: ExtractorInstrument
     rows: tuple[ClauseEvidenceRow, ...]
     summary: ClauseEvidenceSummary
+    calibration_receipt: VacuityFlagCalibrationReceipt | None
 
 
 @dataclass(frozen=True)
@@ -242,11 +266,17 @@ def format_instrument_line(instrument: ExtractorInstrument) -> str:
 
 def format_summary_lines(summary: ClauseEvidenceSummary) -> list[str]:
     """ASCII summary block lines (no Rich markup)."""
-    kind_parts = [f"{kind}={count}" for kind, count in summary.flagged_by_kind]
+    kind_parts = [
+        f"{kind}={count} (model prediction, advisory)"
+        for kind, count in summary.flagged_by_kind
+    ]
     kind_bit = ", ".join(kind_parts) if kind_parts else "none"
     return [
         f"clauses: {summary.clause_count}",
-        (f"flagged: {summary.flagged_count} ({kind_bit}) ({UNREVIEWED_SEMANTIC_VACUOUS_LABEL})"),
+        (
+            f"flagged: {summary.flagged_count} ({kind_bit}) "
+            f"[{summary.flag_evidence_status}] ({summary.exclusion_label})"
+        ),
         (f"scoreable-axis: {summary.scoreable_axis_count} (as of current scorer registry)"),
         f"Constructible coverage: {summary.constructible_count}/{summary.clause_count}",
         INSTANTIATED_COVERAGE_REFUSAL,
@@ -293,6 +323,19 @@ def _measure_row(
             if isinstance(item, Mapping):
                 clauses.append(item)
 
+    source_sha_raw = row.get("source_sha256")
+    source_sha = source_sha_raw if isinstance(source_sha_raw, str) else ""
+    calibration = match_calibration_receipt(instrument)
+    flag_status: FlagEvidenceStatus = (
+        "CALIBRATED_FROZEN_CAPTURE"
+        if calibration is not None
+        else "UNMEASURED_GENERATION_MISMATCH"
+    )
+    excl_label = exclusion_label_for_flag(
+        flag_evidence_status=flag_status,
+        calibration_receipt=calibration,
+    )
+
     evidence_rows: list[ClauseEvidenceRow] = []
     flagged = 0
     kind_counts: dict[str, int] = {}
@@ -312,6 +355,16 @@ def _measure_row(
         kind_s = kind_raw if isinstance(kind_raw, str) else None
         reason_raw = clause.get("vacuity_reason")
         reason_s = reason_raw if isinstance(reason_raw, str) else None
+        text_raw = clause.get("clause_text")
+        text_s = text_raw if isinstance(text_raw, str) else ""
+
+        policy: VacuityPolicyView = derive_vacuity_policy(
+            instrument=instrument,
+            vacuity_flag=flag_s,
+            predicted_vacuity_kind=kind_s,
+            source_sha256=source_sha if len(source_sha) == 64 else ("0" * 64),
+            clause_text=text_s,
+        )
 
         if flag_s != "none":
             flagged += 1
@@ -333,6 +386,10 @@ def _measure_row(
                 vacuity_kind=kind_s,
                 vacuity_reason=reason_s,
                 constructible_fc=constructible,
+                flag_evidence_status=policy.flag_evidence_status,
+                kind_evidence_status=policy.kind_evidence_status,
+                adjudicated_vacuity_kind=policy.adjudicated_vacuity_kind,
+                adjudication_receipt=policy.adjudication_receipt,
             )
         )
 
@@ -343,9 +400,15 @@ def _measure_row(
         flagged_by_kind=flagged_by_kind,
         scoreable_axis_count=scoreable_n,
         constructible_count=constructible_n,
+        flag_evidence_status=flag_status,
+        exclusion_label=excl_label,
+        calibration_receipt_id=(
+            calibration.receipt_id if calibration is not None else None
+        ),
     )
     return ClauseEvidenceMeasured(
         instrument=instrument,
         rows=tuple(evidence_rows),
         summary=summary,
+        calibration_receipt=calibration,
     )
