@@ -274,14 +274,8 @@ class CensusResult:
         if r is None or self.flag_evidence_status != "CALIBRATED_FROZEN_CAPTURE":
             return None
         # Aggregate only beside class split — never a lone overall kind score.
-        nad = (
-            f"{r.kind_precision_not_a_directive_correct}/"
-            f"{r.kind_precision_not_a_directive_n}"
-        )
-        wd = (
-            f"{r.kind_precision_weak_directive_correct}/"
-            f"{r.kind_precision_weak_directive_n}"
-        )
+        nad = f"{r.kind_precision_not_a_directive_correct}/{r.kind_precision_not_a_directive_n}"
+        wd = f"{r.kind_precision_weak_directive_correct}/{r.kind_precision_weak_directive_n}"
         return {
             "aggregate": r.kind_precision_aggregate,
             "not_a_directive": nad,
@@ -669,9 +663,7 @@ def run_census(input_path: Path | str) -> CensusResult:
         flag_cal_n = 0
         flag_unm_n = known_clause_subtotal
 
-    adjudicated_kinds = tuple(
-        sorted(adjudicated_kind_bucket.items(), key=lambda item: item[0])
-    )
+    adjudicated_kinds = tuple(sorted(adjudicated_kind_bucket.items(), key=lambda item: item[0]))
 
     return CensusResult(
         extractor_model=extractor_model,
@@ -707,9 +699,7 @@ def run_census(input_path: Path | str) -> CensusResult:
         kind_evidence_advisory_count=kind_advisory_n,
         kind_evidence_adjudicated_count=kind_adjudicated_n,
         adjudicated_kind_counts=adjudicated_kinds,
-        calibration_receipt_id=(
-            calibration.receipt_id if calibration is not None else None
-        ),
+        calibration_receipt_id=(calibration.receipt_id if calibration is not None else None),
         per_skill=per_skill,
         corpus_figures_status=figures_status,
         corpus_figures_reason=figures_reason,
