@@ -22,6 +22,15 @@ from skill_harness.extractor.models import (
     compare_extractor_generations,
     instrument_from_mapping,
 )
+from skill_harness.extractor.vacuity_policy import (
+    FlagEvidenceStatus,
+    VacuityFlagCalibrationReceipt,
+    assert_kind_precision_render_safe,
+    assert_recall_not_claimed_measured,
+    exclusion_label_for_flag,
+    format_kind_precision_for_render,
+    match_calibration_receipt,
+)
 from skill_harness.oracles.tier1.axis_registry import AxisScoreability, classify_axis
 
 _COMPARATORS_SPECIFIED: Final[frozenset[str]] = frozenset({"increase", "decrease", "preserve"})
@@ -35,11 +44,12 @@ _FC_UNMEASURABLE_REASON: Final[str] = (
     "(boolean-only has_falsifying_case schema or key absent); "
     "structural completeness is unmeasurable for this input"
 )
-# #123: attached to every rendered semantic_vacuous_pending_review count.
-# Honest state: a model thought this, and nobody has checked.
-_UNREVIEWED_SEMANTIC_VACUOUS_LABEL: Final[str] = (
-    "unreviewed model judgement: a model's judgement about model "
-    "instructions, not an adjudicated finding"
+# #188: honest exclusion label is generation-scoped; this constant is the
+# uncalibrated / generation-mismatch form used when no receipt matches.
+# Calibrated corpora substitute the receipt-scoped label at render time.
+_UNREVIEWED_SEMANTIC_VACUOUS_LABEL: Final[str] = exclusion_label_for_flag(
+    flag_evidence_status="UNMEASURED_GENERATION_MISMATCH",
+    calibration_receipt=None,
 )
 # #141: finer conditions under semantic_vacuous_pending_review.
 _VACUITY_KIND_WEAK: Final[str] = "weak_directive"
@@ -130,10 +140,20 @@ class CensusResult:
     vacuity_kind_unspecified_count: int
     vacuity_other: tuple[tuple[str, int], ...]
     axis_distribution: tuple[tuple[str, int], ...]
+    flag_evidence_status: FlagEvidenceStatus | Literal["mixed", "refused"] = (
+        "UNMEASURED_GENERATION_MISMATCH"
+    )
+    flag_evidence_calibrated_count: int = 0
+    flag_evidence_unmeasured_count: int = 0
+    kind_evidence_advisory_count: int = 0
+    kind_evidence_adjudicated_count: int = 0
+    adjudicated_kind_counts: tuple[tuple[str, int], ...] = ()
+    calibration_receipt_id: str | None = None
     per_skill: tuple[SkillCensusRow, ...] = ()
     # Corpus-wide tallies are refused when generations are mixed.
     corpus_figures_status: Literal["measured", "refused"] = "measured"
     corpus_figures_reason: str | None = None
+    _calibration_receipt: VacuityFlagCalibrationReceipt | None = None
 
     def to_receipt(self) -> dict[str, Any]:
         """Build the JSON-serialisable receipt (sorted-key friendly)."""
@@ -197,25 +217,78 @@ class CensusResult:
                             "not_a_directive": {
                                 "count": self.vacuity_not_a_directive_count,
                                 "label": _NOT_A_DIRECTIVE_LABEL,
+                                "kind_status": "ADVISORY",
                             },
                             "unspecified": {
                                 "count": self.vacuity_kind_unspecified_count,
                                 "label": _UNSPECIFIED_KIND_LABEL,
+                                "kind_status": "ADVISORY",
                             },
                             "weak_directive": {
                                 "count": self.vacuity_weak_directive_count,
                                 "label": _WEAK_DIRECTIVE_LABEL,
+                                "kind_status": "ADVISORY",
                             },
                         },
                         "count": self.vacuity_semantic_pending_count,
-                        "label": _UNREVIEWED_SEMANTIC_VACUOUS_LABEL,
+                        "label": self._exclusion_label(),
+                        "flag_evidence_status": self.flag_evidence_status,
                     },
                 },
+            },
+            "vacuity_evidence": {
+                "flag_evidence_status": self.flag_evidence_status,
+                "flag_evidence_calibrated_count": self.flag_evidence_calibrated_count,
+                "flag_evidence_unmeasured_count": self.flag_evidence_unmeasured_count,
+                "kind_evidence_advisory_count": self.kind_evidence_advisory_count,
+                "kind_evidence_adjudicated_count": self.kind_evidence_adjudicated_count,
+                "adjudicated_kind_counts": [
+                    {"kind": k, "count": c} for k, c in self.adjudicated_kind_counts
+                ],
+                "calibration_receipt_id": self.calibration_receipt_id,
+                "recall": "UNMEASURED",
+                "kind_precision": self._kind_precision_receipt_block(),
             },
         }
         if self.corpus_figures_status == "refused":
             receipt["corpus_figures_reason"] = self.corpus_figures_reason
+        # Renderer guards run on the serialised form so poison paths go RED.
+        rendered = json.dumps(receipt, ensure_ascii=True, sort_keys=True)
+        assert_kind_precision_render_safe(rendered, self._calibration_receipt)
+        assert_recall_not_claimed_measured(rendered)
         return receipt
+
+    def _exclusion_label(self) -> str:
+        if (
+            self.flag_evidence_status == "CALIBRATED_FROZEN_CAPTURE"
+            and self._calibration_receipt is not None
+        ):
+            return exclusion_label_for_flag(
+                flag_evidence_status="CALIBRATED_FROZEN_CAPTURE",
+                calibration_receipt=self._calibration_receipt,
+            )
+        return _UNREVIEWED_SEMANTIC_VACUOUS_LABEL
+
+    def _kind_precision_receipt_block(self) -> dict[str, Any] | None:
+        r = self._calibration_receipt
+        if r is None or self.flag_evidence_status != "CALIBRATED_FROZEN_CAPTURE":
+            return None
+        # Aggregate only beside class split — never a lone overall kind score.
+        nad = (
+            f"{r.kind_precision_not_a_directive_correct}/"
+            f"{r.kind_precision_not_a_directive_n}"
+        )
+        wd = (
+            f"{r.kind_precision_weak_directive_correct}/"
+            f"{r.kind_precision_weak_directive_n}"
+        )
+        return {
+            "aggregate": r.kind_precision_aggregate,
+            "not_a_directive": nad,
+            "weak_directive": wd,
+            "status": "ADVISORY",
+            "render": format_kind_precision_for_render(r),
+        }
 
 
 def _percent(count: int, total: int) -> float | None:
@@ -484,6 +557,11 @@ def run_census(input_path: Path | str) -> CensusResult:
     vacuity_kind_unspecified = 0
     vacuity_other_counts: dict[str, int] = {}
     axis_counts: dict[str, int] = {}
+    # #188: evidence-status / adjudicated-kind tallies (adjudicated stays 0 until
+    # real adjudication data is joined; kinds remain ADVISORY).
+    kind_advisory_n = 0
+    kind_adjudicated_n = 0
+    adjudicated_kind_bucket: dict[str, int] = {}
 
     fc_schema_present = _clauses_have_falsifying_case_key(all_clauses)
     fc_applicable = 0
@@ -518,6 +596,8 @@ def run_census(input_path: Path | str) -> CensusResult:
                 vacuity_not_directive += 1
             else:
                 vacuity_kind_unspecified += 1
+            # Raw kind predictions are advisory; no adjudicated join in census.
+            kind_advisory_n += 1
         else:
             flag_key = str(vacuity) if vacuity is not None else ""
             vacuity_other_counts[flag_key] = vacuity_other_counts.get(flag_key, 0) + 1
@@ -549,6 +629,9 @@ def run_census(input_path: Path | str) -> CensusResult:
         vacuity_kind_unspecified = 0
         vacuity_other_counts = {}
         axis_counts = {}
+        kind_advisory_n = 0
+        kind_adjudicated_n = 0
+        adjudicated_kind_bucket = {}
         known_clause_subtotal = len(all_clauses)
     elif fc_schema_present:
         fc_status = "measured"
@@ -567,6 +650,28 @@ def run_census(input_path: Path | str) -> CensusResult:
     # Per-skill figures remain available even when corpus merge is refused —
     # each skill row is a single instrument (or unknown), not a blend.
     per_skill = tuple(sorted((_skill_fc_row(s) for s in ok_skills), key=lambda r: r.slug))
+
+    calibration = (
+        match_calibration_receipt(corpus_instrument)
+        if figures_status == "measured" and corpus_instrument is not None
+        else None
+    )
+    if figures_status == "refused":
+        flag_ev_status: FlagEvidenceStatus | Literal["mixed", "refused"] = "refused"
+        flag_cal_n = 0
+        flag_unm_n = 0
+    elif calibration is not None:
+        flag_ev_status = "CALIBRATED_FROZEN_CAPTURE"
+        flag_cal_n = known_clause_subtotal
+        flag_unm_n = 0
+    else:
+        flag_ev_status = "UNMEASURED_GENERATION_MISMATCH"
+        flag_cal_n = 0
+        flag_unm_n = known_clause_subtotal
+
+    adjudicated_kinds = tuple(
+        sorted(adjudicated_kind_bucket.items(), key=lambda item: item[0])
+    )
 
     return CensusResult(
         extractor_model=extractor_model,
@@ -596,9 +701,19 @@ def run_census(input_path: Path | str) -> CensusResult:
         vacuity_kind_unspecified_count=vacuity_kind_unspecified,
         vacuity_other=vacuity_other,
         axis_distribution=axis_distribution,
+        flag_evidence_status=flag_ev_status,
+        flag_evidence_calibrated_count=flag_cal_n,
+        flag_evidence_unmeasured_count=flag_unm_n,
+        kind_evidence_advisory_count=kind_advisory_n,
+        kind_evidence_adjudicated_count=kind_adjudicated_n,
+        adjudicated_kind_counts=adjudicated_kinds,
+        calibration_receipt_id=(
+            calibration.receipt_id if calibration is not None else None
+        ),
         per_skill=per_skill,
         corpus_figures_status=figures_status,
         corpus_figures_reason=figures_reason,
+        _calibration_receipt=calibration,
     )
 
 
@@ -694,30 +809,52 @@ def format_human_report(result: CensusResult) -> str:
             f"    structurally_incomplete: {result.falsifying_case_incomplete_count}"
             f" ({incomplete_pct}%)"
         )
-    lines.append("  vacuity_flag_tally (queue marker, not detector accuracy):")
+    excl = result._exclusion_label()
+    lines.append("  vacuity_flag_tally (queue marker; flag-based exclusion pending review):")
     lines.append(f"    none: {result.vacuity_none_count}")
     lines.append(
         f"    semantic_vacuous_pending_review: {result.vacuity_semantic_pending_count}"
-        f" ({_UNREVIEWED_SEMANTIC_VACUOUS_LABEL})"
+        f" [{result.flag_evidence_status}] ({excl})"
     )
     lines.append(
-        f"      weak_directive: {result.vacuity_weak_directive_count} ({_WEAK_DIRECTIVE_LABEL})"
+        f"      weak_directive: {result.vacuity_weak_directive_count}"
+        f" (model prediction, ADVISORY; {_WEAK_DIRECTIVE_LABEL})"
     )
     lines.append(
-        f"      not_a_directive: {result.vacuity_not_a_directive_count} ({_NOT_A_DIRECTIVE_LABEL})"
+        f"      not_a_directive: {result.vacuity_not_a_directive_count}"
+        f" (model prediction, ADVISORY; {_NOT_A_DIRECTIVE_LABEL})"
     )
     if result.vacuity_kind_unspecified_count:
         lines.append(
             f"      unspecified_kind: {result.vacuity_kind_unspecified_count}"
             f" ({_UNSPECIFIED_KIND_LABEL})"
         )
+    lines.append(
+        f"    kind_evidence: advisory={result.kind_evidence_advisory_count}"
+        f" adjudicated={result.kind_evidence_adjudicated_count}"
+    )
+    if result.adjudicated_kind_counts:
+        for kind, count in result.adjudicated_kind_counts:
+            lines.append(f"      adjudicated_{kind}: {count}")
+    else:
+        lines.append("      adjudicated_kind: (none)")
     lines.append("    reviewed: (none)")
+    lines.append("    recall: UNMEASURED")
+    if (
+        result._calibration_receipt is not None
+        and result.flag_evidence_status == "CALIBRATED_FROZEN_CAPTURE"
+    ):
+        kp = format_kind_precision_for_render(result._calibration_receipt)
+        lines.append(f"    {kp}")
     for flag, count in result.vacuity_other:
         lines.append(f"    {flag!r}: {count}")
     lines.append("  axis_distribution:")
     for axis, count in result.axis_distribution:
         lines.append(f"    {axis!r}: {count} ({_percent(count, total)}%)")
-    return "\n".join(lines) + "\n"
+    report = "\n".join(lines) + "\n"
+    assert_kind_precision_render_safe(report, result._calibration_receipt)
+    assert_recall_not_claimed_measured(report)
+    return report
 
 
 def write_receipt(result: CensusResult, path: Path | str) -> None:

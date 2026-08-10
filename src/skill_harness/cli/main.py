@@ -409,14 +409,23 @@ def _print_clause_evidence(source_sha256: str, extraction_path: Path | None) -> 
     table.add_column("Axis", style="cyan", min_width=14)
     table.add_column("Scoreable", width=10, justify="center")
     table.add_column("Vacuity", min_width=12)
-    table.add_column("Kind", min_width=16)
-    table.add_column("Reason", min_width=20, max_width=60)
+    table.add_column("Flag evidence", min_width=16)
+    table.add_column("Kind (prediction)", min_width=16)
+    table.add_column("Kind evidence", min_width=12)
+    table.add_column("Adjudicated", min_width=12)
+    table.add_column("Reason", min_width=16, max_width=48)
     table.add_column("FC", width=4, justify="center")
 
     for row in measured.rows:
+        # Raw model prediction only — never decision-ready (#188).
         kind_cell = "-"
         if row.vacuity_kind is not None:
             kind_cell = f"{row.vacuity_kind} (advisory)"
+        adj_cell = (
+            row.adjudicated_vacuity_kind
+            if row.adjudicated_vacuity_kind is not None
+            else "-"
+        )
         reason_cell = "-"
         if row.vacuity_reason is not None:
             reason_cell = _sanitize_clause_text(row.vacuity_reason)
@@ -425,7 +434,10 @@ def _print_clause_evidence(source_sha256: str, extraction_path: Path | None) -> 
             _sanitize_clause_text(row.axis, max_len=40),
             "Y" if row.scoreable else "-",
             row.vacuity_flag,
+            row.flag_evidence_status,
             kind_cell,
+            row.kind_evidence_status,
+            adj_cell,
             reason_cell,
             "Y" if row.constructible_fc else "-",
         )
