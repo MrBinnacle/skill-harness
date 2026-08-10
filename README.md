@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/MrBinnacle/skill-harness/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/skill-harness.svg)](https://pypi.org/project/skill-harness/)
 
-## The question I started with
+## Why this exists
 
 I wanted to know whether a skill was any good.
 
@@ -30,11 +30,22 @@ turned out to be the useful part, and it took me a while to accept it.
 It has first-class support for Claude Code skills and is built to extend to other agent
 ecosystems.
 
+## What does this skill cost you, and which parts of it are worth that cost?
+
+That is the ratified wording, and the phrasing is load-bearing. "Is this skill good" hides two
+different questions inside one word: a skill has a **price** you pay in every conversation
+whether or not it fires, and a **benefit** that may or may not show up when it does. The price
+is arithmetic on text and can be reported for free. The benefit needs a paid comparison, and
+most of the time the honest answer about it is that there isn't enough evidence to say.
+
+Those two are measured differently, refused differently, and reported separately everywhere in
+the output. Collapsing them into a single score is the thing this tool exists not to do.
+
 ## What it has found so far
 
 Plainly, because this is the part a README usually hides:
 
-**No production skill has come back KEEP.** Not one. The full keep lane has fired end to end
+**Zero production-skill KEEPs.** Not one. The full keep lane has fired end to end
 exactly once, on 27 July 2026, and that run was a *declared synthetic positive control* — a
 skill I built to carry an invented fact, so the effect was real by construction. It returned
 KEEP at 8/8 with the skill against 0/8 without, posterior probability of a win 0.99. That
@@ -91,7 +102,20 @@ count only where that judge has been calibrated against that specific axis first
 answer order to cancel position bias, controlling for length, defending against injection, and
 measuring agreement with a human before any judged verdict is allowed to count.
 
-## Try it without spending anything
+The same rule points inward. Two of the instrument's own weak points are measured rather than
+asserted, and both numbers stay on the front page whether they flatter it or not:
+
+**Extraction repeat-variance:** MEASURED for one skill — three repeat extractions of the same
+`SKILL.md` returned 29/33/34 clauses, so clause counts are **not stable** run to run and
+nothing downstream is allowed to key on clause position.
+[#152](https://github.com/MrBinnacle/skill-harness/issues/152).
+
+**Vacuity-flag precision:** MEASURED at 0.972 by blind cross-family adjudication over 102
+estimation rows — but that is **flag-level only**. When the adjudicators also had to agree on
+*which kind* of vacuity, kind-precision 0.835.
+[#153](https://github.com/MrBinnacle/skill-harness/issues/153).
+
+## Try the free offline skill audit
 
 `skill audit` is fully offline. No API key, no database, no network.
 
@@ -145,20 +169,25 @@ dry-run by default; `--execute` is required to spend, and per-run and daily caps
 on top of that. Reproduction scripts:
 [`examples/`](https://github.com/MrBinnacle/skill-harness/tree/main/examples/).
 
-The answer comes back as **KEEP**, **CUT**, or **CAN'T-TELL-YET**. A CUT says why: `subsumed`
-(the model was already doing it), `no_lift` (you needed the help and the skill didn't deliver
-it), or `harmful`.
+## What it measures, and what it refuses to
 
-There's a guard on that. Some skills exist to stop one specific wrong move, and a model that
-passes without the skill hasn't proved the skill is useless — it has proved the trap didn't
-come up. So a CUT for `subsumed` is only allowed for skills registered as
-`transformative-lift`. Everything else routes to CAN'T-TELL-YET, on the grounds that this is
-the wrong instrument for that kind of skill rather than a verdict on it.
+The answer comes back as one of three verdicts: **KEEP**, **CUT**, or **CAN'T-TELL-YET** — and
+which of those you are even eligible for depends on the skill's registered value class, not on
+the numbers alone. A CUT says why: `subsumed` (the model was already doing it), `no_lift` (you
+needed the help and the skill didn't deliver it), or `harmful`.
+
+There's a guard on that, and it is the **value-class guard**. Some skills exist to stop one
+specific wrong move, and a model that passes without the skill hasn't proved the skill is
+useless — it has proved the trap didn't come up. So `subsumed` is a CUT only for skills
+registered as `TRANSFORMATIVE_LIFT`, the class whose entire claim is lift above the bar.
+Everything else reclassifies to CAN'T-TELL-YET, on the grounds that this is the wrong
+instrument for that kind of skill rather than a verdict on it.
 
 Two of my own skills moved that way when the guard landed — `append-only-evidence-design`
-(calibration) and a hardened `git-pull-rebase-trap` (trap-discipline), both of which the model
-had passed without help at a rate of 1.00. Their earlier CUTs are preserved as dated
-historical output rather than quietly edited into agreement.
+(calibration) and a hardened `git-pull-rebase-trap` (trap-discipline). Under the pre-guard rule
+both returned **CUT (subsumed)**, each at a no-skill pass rate of 1.00; the value-class guard
+reclassified both to CAN'T-TELL-YET. Those pre-guard CUTs are preserved as dated historical
+output rather than quietly edited into agreement.
 
 What has still never fired is the other half: a paired run measuring how much a skill actually
 helps, once you know the model needs help. By design, a sized benefit run launches only when a
@@ -183,7 +212,7 @@ visibly non-comparable rather than silently averaged.
 ## What this isn't
 
 It is not the most featureful skill benchmarker available, and I'd rather say so than let you
-find out. If you want breadth today, [adewale's
+find out. If you want the most *featureful* skill benchmarking today, [adewale's
 skill-eval-harness](https://github.com/adewale/skill-eval-harness) is the closest neighbour
 and is further along on several axes; some of its disciplines are on my adoption list, with
 attribution. If you're comparing prompts and configurations rather than skills,
