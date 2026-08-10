@@ -80,21 +80,32 @@ should not read a settled causal story off this document; it isn't one.
 ## Detection wiring
 
 - `tests/test_aggregation_calibration.py::test_coverage_within_binomial_tolerance_per_grid_point`
-  — parametrized over the grid.
+  — parametrized over the legacy posterior grid (characterization retained).
 - Grid points `small` and `large` are marked
-  `@pytest.mark.xfail(strict=True, reason="finding: … this file …")`.
+  `@pytest.mark.xfail(strict=True, reason="finding: … this file …")` on the
+  **legacy posterior only** — never on the production CS.
 - Grid point `null` remains a hard assert (currently inside band).
-- No production module under `src/skill_harness/aggregation/` is modified by the
-  landing of this finding.
+- #164 landing did not change production aggregation math. #187 closed this
+  finding by adding `predictable_plugin_betting_cs_v1`
+  (`src/skill_harness/aggregation/confidence_sequence.py`) beside the
+  posterior interval and leading the public report surface with the CS;
+  locked stopper constants and the posterior decision rule remain unchanged.
+- Production CS dense grid: `tests/test_aggregation_cs_calibration.py`
+  (`pytest -m calibration`).
 
 ---
 
 ## Reproduction
 
 ```bash
+# Legacy posterior characterization (#164 pins; small/large strict-xfail)
 PYTHONHASHSEED=0 python -m pytest tests/test_aggregation_calibration.py -q
+
+# Production CS dense grid (#187; no xfail)
+PYTHONHASHSEED=0 python -m pytest tests/test_aggregation_cs_calibration.py -q -m calibration
 ```
 
-Expected: `null` passes; `small` and `large` xfail (strict). If an xfail
+Expected legacy: `null` passes; `small` and `large` xfail (strict). If an xfail
 unexpectedly passes, pytest fails strict-xfail — re-measure and update this
-finding before touching thresholds.
+finding before touching thresholds. Expected CS: all dense-grid cells green
+(coverage count ≥ lower tolerance; overcoverage OK).
