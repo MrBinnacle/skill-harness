@@ -364,9 +364,7 @@ def _measure_row(
         text_s = text_raw if isinstance(text_raw, str) else ""
 
         effective_sha = source_sha if len(source_sha) == 64 else ("0" * 64)
-        adjudication = _DEFAULT_ADJUDICATIONS.get(
-            (effective_sha, clause_context_sha256(text_s))
-        )
+        adjudication = _DEFAULT_ADJUDICATIONS.get((effective_sha, clause_context_sha256(text_s)))
         policy: VacuityPolicyView = derive_vacuity_policy(
             instrument=instrument,
             vacuity_flag=flag_s,
