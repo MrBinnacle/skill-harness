@@ -51,6 +51,11 @@ study](https://github.com/MrBinnacle/skill-harness/blob/main/docs/case-studies/d
 One paired run before that, in July 2026, cost about $6.17 and returned a pre-registered NO-GO
 — an apparatus check, not a measurement of benefit. I published it as such.
 
+None of that is a scheduling accident. A sized benefit run launches only on the first task
+whose no-skill screen returns a pass rate below 1, and so far every production skill I have
+screened ceilings at 1: the model passes every attempt without it. You cannot measure help
+that isn't needed.
+
 If you came here for a number that says your skill is good, this tool will disappoint you on
 purpose.
 
@@ -135,9 +140,10 @@ skill-harness run ablation <skill_id> --execute       # the with/without compari
 skill-harness run evaluate-skill <skill_id>           # aggregate to a verdict
 ```
 
-Either `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` works. Anything that can spend money is
-dry-run by default — `--execute` is required, and per-run and daily caps are enforced.
-Reproduction scripts: [`examples/`](https://github.com/MrBinnacle/skill-harness/tree/main/examples/).
+Either `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` works. Every command that can spend money is
+dry-run by default; `--execute` is required to spend, and per-run and daily caps are enforced
+on top of that. Reproduction scripts:
+[`examples/`](https://github.com/MrBinnacle/skill-harness/tree/main/examples/).
 
 The answer comes back as **KEEP**, **CUT**, or **CAN'T-TELL-YET**. A CUT says why: `subsumed`
 (the model was already doing it), `no_lift` (you needed the help and the skill didn't deliver
@@ -147,11 +153,16 @@ There's a guard on that. Some skills exist to stop one specific wrong move, and 
 passes without the skill hasn't proved the skill is useless — it has proved the trap didn't
 come up. So a CUT for `subsumed` is only allowed for skills registered as
 `transformative-lift`. Everything else routes to CAN'T-TELL-YET, on the grounds that this is
-the wrong instrument for that kind of skill rather than a verdict on it. Two of my own skills
-moved that way when the guard landed — `append-only-evidence-design` (calibration) and a
-hardened `git-pull-rebase-trap` (trap-discipline), both of which the model had passed without
-help at a rate of 1.00. Their earlier CUTs are preserved as dated historical output rather
-than quietly edited into agreement.
+the wrong instrument for that kind of skill rather than a verdict on it.
+
+Two of my own skills moved that way when the guard landed — `append-only-evidence-design`
+(calibration) and a hardened `git-pull-rebase-trap` (trap-discipline), both of which the model
+had passed without help at a rate of 1.00. Their earlier CUTs are preserved as dated
+historical output rather than quietly edited into agreement.
+
+What has still never fired is the other half: a paired run measuring how much a skill actually
+helps, once you know the model needs help. By design, a sized benefit run launches only when a
+screen returns a sub-1 pass rate, and none has yet.
 
 ## The reporting vocabulary is a published standard
 
