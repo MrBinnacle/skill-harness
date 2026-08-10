@@ -86,6 +86,9 @@ dev = [
   "statsmodels>=0.14",
   "numpy>=2.0",
   "pytest-randomly>=4.1",
+  # #182 — SERS conformance harness (draft 2020-12 validator).
+  # Owner-approved 2026-08-09; python-jsonschema org reference implementation.
+  "jsonschema>=4.26.0",
 ]
 
 [project.scripts]

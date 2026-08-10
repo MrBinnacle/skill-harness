@@ -1,0 +1,284 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/MrBinnacle/skill-harness/main/docs/sers/sers.schema.json",
+  "title": "Skill Efficacy Reporting Standard (SERS)",
+  "description": "Machine-readable receipt for a skill efficacy verdict. A missing number is a typed refusal, never an invented score. The evidence admissibility gate uses that qualified term only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sers_version",
+    "skill_name",
+    "verdict",
+    "cut_sub_reason",
+    "unmeasured_sub_reason",
+    "value_class",
+    "evidence_admissibility",
+    "cost",
+    "instrument_identity",
+    "source",
+    "summary"
+  ],
+  "properties": {
+    "sers_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "SERS vocabulary generation. Receipts from different sers_version values are not comparable."
+    },
+    "skill_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Skill identifier (store/card skill_name when known)."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["KEEP", "CUT", "CANT_TELL_YET"],
+      "description": "Operator-facing keep/cut outcome. KEEP = measurably worth its slot; CUT = remove (see cut_sub_reason); CANT_TELL_YET = evidence does not support a keep/cut call."
+    },
+    "cut_sub_reason": {
+      "type": ["string", "null"],
+      "enum": ["subsumed", "no_lift", "harmful", null],
+      "description": "Qualifies CUT. Required non-null iff verdict is CUT; must be null otherwise. subsumed = model already does the task without the skill; no_lift = measured where help was needed and the skill did not deliver; harmful = skill made outcomes measurably worse."
+    },
+    "unmeasured_sub_reason": {
+      "type": ["string", "null"],
+      "enum": [
+        "no_data",
+        "inadmissible",
+        "underpowered",
+        "falsifying_case_missing",
+        "budget_exhausted",
+        "falsifying_case_stale",
+        "fdr_correction_failed",
+        "mechanical_vacuous",
+        null
+      ],
+      "description": "Qualifies an UNMEASURED / cannot-score path when applicable. Mirrors UnmeasuredSubReason exactly. null when the receipt is not an unmeasured refusal path (e.g. a measured KEEP or CUT)."
+    },
+    "value_class": {
+      "type": ["string", "null"],
+      "enum": ["transformative-lift", "trap-discipline", "calibration", null],
+      "description": "Skill value kind. Screen-path CUT(subsumed) is valid only for transformative-lift; other classes route above-bar p0 to CANT_TELL_YET (wrong instrument). null = unclassified."
+    },
+    "wrong_instrument": {
+      "type": "boolean",
+      "description": "True when a CUT was withheld because value_class is not transformative-lift (wrong instrument for the lift estimand)."
+    },
+    "declared_synthetic_control": {
+      "type": "boolean",
+      "description": "True when the skill/effect is a declared synthetic positive control (effect real by construction). Must never be silently omitted when true."
+    },
+    "evidence_admissibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Evidence admissibility gate outcome for the evidence backing this receipt. Uses the qualified term only.",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["admissible", "inadmissible", "mixed", "not_applicable"],
+          "description": "admissible = all cited evidence cleared the evidence admissibility gate; inadmissible = evidence present but gated out of aggregation; mixed = both; not_applicable = no store-backed evidence (prose-only / mechanical)."
+        },
+        "detail": {
+          "type": "string",
+          "description": "Optional human-readable note on the evidence admissibility ruling."
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cost triple: standing / fired / aux tokens. Each leg is a measured non-negative integer or a typed refusal — never an invented score.",
+      "required": ["standing_tokens", "fired_tokens", "aux_tokens"],
+      "properties": {
+        "standing_tokens": { "$ref": "#/$defs/token_figure" },
+        "fired_tokens": { "$ref": "#/$defs/token_figure" },
+        "aux_tokens": { "$ref": "#/$defs/token_figure" }
+      }
+    },
+    "instrument_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Generation stamp for every figure on this receipt. Figures from different instrument identities are visibly non-comparable.",
+      "required": ["extractor_model", "prompt_fingerprint", "schema_fingerprint"],
+      "properties": {
+        "extractor_model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Extractor (or subject) model pin that produced the figures."
+        },
+        "prompt_fingerprint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Fingerprint (typically SHA-256 hex) of the exact system/prompt bytes used."
+        },
+        "schema_fingerprint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Fingerprint (typically SHA-256 hex) of the tool/schema (or harness pin) used."
+        }
+      }
+    },
+    "measurements": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional numeric figures. Each present key is either a measured value or a typed refusal.",
+      "properties": {
+        "p0": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Null-arm (no-skill) pass rate from a Stage-0 screen."
+        },
+        "full_pass_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Full-arm pass rate from a paired run."
+        },
+        "null_pass_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Null-arm pass rate from a paired run (may equal p0 when only a screen ran)."
+        },
+        "p_win": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Posterior P(rate above threshold) from the paired fit."
+        },
+        "discordance_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Paired per-epoch discordance rate d-hat (and optional CI in detail)."
+        },
+        "go_nogo": {
+          "type": "string",
+          "enum": ["GO", "NO_GO", "NOT_APPLICABLE"],
+          "description": "Pre-stated GO/NO-GO apparatus gate when one was registered."
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Pointer to the prose source this hand-encoded receipt encodes.",
+      "required": ["prose_path"],
+      "properties": {
+        "prose_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative path to the prose source of record."
+        },
+        "date": {
+          "type": "string",
+          "description": "ISO date of the underlying result when known."
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One-paragraph operator-facing summary. Must not invent numbers absent from measurements/cost."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "verdict": { "const": "CUT" } },
+        "required": ["verdict"]
+      },
+      "then": {
+        "properties": {
+          "cut_sub_reason": {
+            "type": "string",
+            "enum": ["subsumed", "no_lift", "harmful"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "verdict": { "enum": ["KEEP", "CANT_TELL_YET"] } },
+        "required": ["verdict"]
+      },
+      "then": {
+        "properties": {
+          "cut_sub_reason": { "type": "null" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "token_figure": {
+      "description": "A non-negative token count, or a typed refusal. Missing number = typed refusal, never an invented score.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tokens"],
+          "properties": {
+            "tokens": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["refusal"],
+          "properties": {
+            "refusal": {
+              "type": "string",
+              "enum": ["unmeasured", "not_applicable", "not_instrumented"]
+            },
+            "detail": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "rate_or_refusal": {
+      "description": "A rate in [0, 1] with optional counts, or a typed refusal drawn from UnmeasuredSubReason (plus not_applicable for non-paths).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "passes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "epochs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "detail": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["refusal"],
+          "properties": {
+            "refusal": {
+              "type": "string",
+              "enum": [
+                "no_data",
+                "inadmissible",
+                "underpowered",
+                "falsifying_case_missing",
+                "budget_exhausted",
+                "falsifying_case_stale",
+                "fdr_correction_failed",
+                "mechanical_vacuous",
+                "not_applicable"
+              ]
+            },
+            "detail": { "type": "string" }
+          }
+        }
+      ]
+    }
+  }
+}

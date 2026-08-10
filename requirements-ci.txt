@@ -20,12 +20,16 @@
 #     && /tmp/ci-clean-venv/bin/pip freeze | grep -v '^-e ' | sort > requirements-ci.txt
 # (then restore this header — freeze doesn't preserve comments).
 #
-# Captured 2026-07-19 from a clean venv running `pip install -e ".[dev]"`.
+# Captured 2026-07-19 from a clean venv running `pip install -e ".[dev]"`;
+# jsonschema 4.26.0 (+ attrs/jsonschema-specifications/referencing/rpds-py)
+# added 2026-08-10 for SERS conformance (#182; owner-approved 2026-08-09;
+# python-jsonschema org reference implementation).
 Pygments==2.20.0
 annotated-types==0.7.0
 anthropic==0.120.2
 anyio==4.14.2
 ast_serialize==0.6.0
+attrs==26.1.0
 certifi==2026.7.22
 charset-normalizer==3.4.9
 click==8.4.2
@@ -41,6 +45,8 @@ hypothesis==6.157.0
 idna==3.18
 iniconfig==2.3.0
 jiter==0.16.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
 librt==0.13.0
 markdown-it-py==4.2.0
 mdurl==0.1.2
@@ -64,9 +70,11 @@ pytest-socket==0.8.0
 pytest-xdist==3.8.0
 pytest==9.1.1
 python-dateutil==2.9.0.post0
+referencing==0.37.0
 regex==2026.7.19
 requests==2.34.2
 rich==15.0.0
+rpds-py==2026.6.3
 ruff==0.16.1
 scipy==1.18.0
 six==1.17.0

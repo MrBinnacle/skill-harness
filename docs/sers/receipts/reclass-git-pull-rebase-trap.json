@@ -1,0 +1,34 @@
+{
+  "sers_version": "1.0.0",
+  "skill_name": "git-pull-rebase-trap",
+  "verdict": "CANT_TELL_YET",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": null,
+  "value_class": "trap-discipline",
+  "wrong_instrument": true,
+  "declared_synthetic_control": false,
+  "evidence_admissibility": {
+    "status": "admissible",
+    "detail": "Hardened live end-to-end screen store-backed; evidence admissibility applied at write time. Historical pre-guard disposition was CUT(subsumed); this receipt is the post-guard reclassification."
+  },
+  "cost": {
+    "standing_tokens": { "refusal": "not_instrumented" },
+    "fired_tokens": { "refusal": "not_instrumented" },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": "anthropic/claude-sonnet-5",
+    "prompt_fingerprint": "claude-code-2.1.197",
+    "schema_fingerprint": "live-screen-git-pull-rebase-trap"
+  },
+  "measurements": {
+    "p0": { "value": 1.0, "passes": 3, "epochs": 3, "detail": "Bare-arm pass rate 1.00 on the hardened live screen." },
+    "go_nogo": "NOT_APPLICABLE"
+  },
+  "source": {
+    "prose_path": "README.md",
+    "date": "2026-07-20",
+    "notes": "Value-class guard reclassification. Pre-guard live screen returned CUT(subsumed) at p0=1.00; skill is registered trap-discipline, so above-bar p0 means the trap did not fire in this screen — not that the model is unaided. CUT withheld."
+  },
+  "summary": "git-pull-rebase-trap reclassified to CANT_TELL_YET (wrong instrument): Null p0=1.00 is above the transformative bar, but value_class=trap-discipline means CUT(subsumed) would be a category error. Verdict withheld; field-evidence lane."
+}

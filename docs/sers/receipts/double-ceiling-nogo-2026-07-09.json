@@ -1,0 +1,44 @@
+{
+  "sers_version": "1.0.0",
+  "skill_name": "sqlite-expert",
+  "verdict": "CANT_TELL_YET",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": "underpowered",
+  "value_class": null,
+  "wrong_instrument": false,
+  "declared_synthetic_control": false,
+  "evidence_admissibility": {
+    "status": "admissible",
+    "detail": "Paired k=8 run ingested through write-time evidence admissibility machinery; all cited numbers verified against raw .eval logs and the evidence store."
+  },
+  "cost": {
+    "standing_tokens": { "refusal": "not_instrumented", "detail": "Case study reports USD spend (~$6.17), not the standing/fired/aux token triple." },
+    "fired_tokens": { "refusal": "not_instrumented", "detail": "Full-arm input tax noted as +28k cache-write tokens per epoch in prose; not a fired-cost triple measurement." },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": "anthropic/claude-sonnet-5",
+    "prompt_fingerprint": "claude-code-2.1.197",
+    "schema_fingerprint": "2f76c933"
+  },
+  "measurements": {
+    "p0": { "value": 1.0, "passes": 6, "epochs": 6, "detail": "Two Stage-0 Null screens at 3/3 each before the paired run." },
+    "full_pass_rate": { "value": 1.0, "passes": 8, "epochs": 8 },
+    "null_pass_rate": { "value": 1.0, "passes": 8, "epochs": 8 },
+    "discordance_rate": {
+      "value": 0.0,
+      "detail": "x=0 discordant epochs; Jeffreys 95% CI [0.00, 0.26] — upper bound still inside the structurally-unmeasured region of the sizing table."
+    },
+    "p_win": {
+      "refusal": "underpowered",
+      "detail": "At d≲0.5 no effect is detectable inside N_max=40; Full-vs-Null is structurally UNMEASURED regardless of budget."
+    },
+    "go_nogo": "NO_GO"
+  },
+  "source": {
+    "prose_path": "docs/case-studies/double-ceiling-structurally-unmeasured.md",
+    "date": "2026-07-09",
+    "notes": "Pre-registered apparatus shakedown + d upper bound as NO-GO datum; not a benefit measurement. Subject skill was a thin SQLite helper (cut-candidate); 14/14 Null epochs at ceiling across screens + paired run."
+  },
+  "summary": "Double-ceiling NO-GO (2026-07-09/10): Null passed 14/14 epochs across two screens and a paired k=8 run; discordance d-hat=0.00 (Jeffreys 95% CI [0.00, 0.26]); pre-stated GO/NO-GO gate returned NO-GO. Full-vs-Null is structurally unmeasured on this task class — published as CANT_TELL_YET, not a fabricated no-benefit CUT."
+}
