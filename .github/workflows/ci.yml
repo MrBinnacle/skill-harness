@@ -194,6 +194,31 @@ jobs:
       - name: Run release gate
         run: python scripts/release_gate.py
 
+  # NON-required (#184): deliberately omitted from all-green / branch-protection
+  # required-check names. Fails the job on dead links in public prose; does not
+  # block merge by required-status configuration.
+  linkcheck:
+    name: Link check (docs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Link check README + docs
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          # Remap same-repo blob/tree/main URLs onto the checked-out tree so a
+          # PR that adds both a doc and a README link to it is not failed for
+          # a main-branch 404 before merge. External URLs still hit the network.
+          args: >-
+            --verbose
+            --no-progress
+            --accept 200,206,429
+            --remap 'https://github.com/MrBinnacle/skill-harness/blob/main/(.*) file://${{ github.workspace }}/$1'
+            --remap 'https://github.com/MrBinnacle/skill-harness/tree/main/(.*) file://${{ github.workspace }}/$1'
+            README.md
+            "docs/**/*.md"
+          fail: true
+
   all-green:
     name: All checks green
     needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate]
