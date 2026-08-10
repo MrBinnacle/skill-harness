@@ -67,7 +67,19 @@ jobs:
     # headroom); #57/#58 add more tests. Headroom, not license - if a cell
     # ever needs >15, thin the slow lane instead (#40's logged even-n
     # thinning clause), never bump blindly.
-    timeout-minutes: 15
+    #
+    # 15 -> 25: NOT blind, and NOT suite growth. The SAME suite ran windows
+    # py3.13 in 12m23s on one PR and 15m08s on another the same day - a ~23%
+    # runner-variance swing that straddles the ceiling and kills passing runs.
+    # The kill presents as conclusion "cancelled", indistinguishable from a
+    # duplicate-run cancel until you read the job annotation ("exceeded the
+    # maximum execution time"); it has now been misdiagnosed that way once.
+    # Thinning the slow lane here would delete real coverage to absorb runner
+    # variance, which is the wrong trade. The thinning clause above still
+    # governs genuine suite growth - measure which it is before bumping again.
+    # Observed windows range at this pin: 10m10s - 15m08s. The sibling
+    # calibration job, which runs shorter cells, already sits at 40.
+    timeout-minutes: 25
     # PYTHONHASHSEED=0 required by tests/oracles/tier1 autouse fixture for
     # A33 mechanical-validity bit-equality discipline.
     env:
