@@ -41,7 +41,7 @@ execnet==2.1.2
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
-hypothesis==6.157.0
+hypothesis==6.165.2
 idna==3.18
 iniconfig==2.3.0
 jiter==0.16.0
