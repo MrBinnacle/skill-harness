@@ -267,8 +267,7 @@ def format_instrument_line(instrument: ExtractorInstrument) -> str:
 def format_summary_lines(summary: ClauseEvidenceSummary) -> list[str]:
     """ASCII summary block lines (no Rich markup)."""
     kind_parts = [
-        f"{kind}={count} (model prediction, advisory)"
-        for kind, count in summary.flagged_by_kind
+        f"{kind}={count} (model prediction, advisory)" for kind, count in summary.flagged_by_kind
     ]
     kind_bit = ", ".join(kind_parts) if kind_parts else "none"
     return [
@@ -327,9 +326,7 @@ def _measure_row(
     source_sha = source_sha_raw if isinstance(source_sha_raw, str) else ""
     calibration = match_calibration_receipt(instrument)
     flag_status: FlagEvidenceStatus = (
-        "CALIBRATED_FROZEN_CAPTURE"
-        if calibration is not None
-        else "UNMEASURED_GENERATION_MISMATCH"
+        "CALIBRATED_FROZEN_CAPTURE" if calibration is not None else "UNMEASURED_GENERATION_MISMATCH"
     )
     excl_label = exclusion_label_for_flag(
         flag_evidence_status=flag_status,
@@ -402,9 +399,7 @@ def _measure_row(
         constructible_count=constructible_n,
         flag_evidence_status=flag_status,
         exclusion_label=excl_label,
-        calibration_receipt_id=(
-            calibration.receipt_id if calibration is not None else None
-        ),
+        calibration_receipt_id=(calibration.receipt_id if calibration is not None else None),
     )
     return ClauseEvidenceMeasured(
         instrument=instrument,

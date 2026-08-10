@@ -421,11 +421,7 @@ def _print_clause_evidence(source_sha256: str, extraction_path: Path | None) -> 
         kind_cell = "-"
         if row.vacuity_kind is not None:
             kind_cell = f"{row.vacuity_kind} (advisory)"
-        adj_cell = (
-            row.adjudicated_vacuity_kind
-            if row.adjudicated_vacuity_kind is not None
-            else "-"
-        )
+        adj_cell = row.adjudicated_vacuity_kind if row.adjudicated_vacuity_kind is not None else "-"
         reason_cell = "-"
         if row.vacuity_reason is not None:
             reason_cell = _sanitize_clause_text(row.vacuity_reason)

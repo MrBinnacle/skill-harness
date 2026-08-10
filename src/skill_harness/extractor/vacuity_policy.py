@@ -278,10 +278,7 @@ def exclusion_label_for_flag(
         "is an unreviewed model judgement about model instructions, not an "
         "adjudicated finding"
     )
-    if (
-        flag_evidence_status == "CALIBRATED_FROZEN_CAPTURE"
-        and calibration_receipt is not None
-    ):
+    if flag_evidence_status == "CALIBRATED_FROZEN_CAPTURE" and calibration_receipt is not None:
         fp = calibration_receipt.flag_precision_weighted_undecided_wrong
         lo = calibration_receipt.wilson_95_fpc_low
         hi = calibration_receipt.wilson_95_fpc_high
@@ -344,8 +341,7 @@ def assert_kind_precision_render_safe(
     )
     if agg in rendered and (nad not in rendered or wd not in rendered):
         raise BareKindPrecisionRenderError(
-            "refusing to render aggregate kind-precision without class split "
-            f"({nad} and {wd})"
+            f"refusing to render aggregate kind-precision without class split ({nad} and {wd})"
         )
 
 
