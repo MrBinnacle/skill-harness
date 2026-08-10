@@ -244,6 +244,10 @@ Same refusal, different end of the pipe.
 
 ## Dig deeper
 
+- [Measurement receipts index](https://github.com/MrBinnacle/skill-harness/blob/main/docs/receipts-index.md) — every case study, finding,
+  observation, assurance report, ratification, SERS instance, and the
+  `skill audit --extraction` join surface: what each claims and what each
+  refuses to claim.
 - [Why this exists](https://github.com/MrBinnacle/skill-harness/blob/main/docs/why-this-exists.md) — how a non-specialist ends up building a
   measurement instrument, and the loop that made it possible.
 - [The double-ceiling case study](https://github.com/MrBinnacle/skill-harness/blob/main/docs/case-studies/double-ceiling-structurally-unmeasured.md)
