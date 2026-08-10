@@ -1,0 +1,199 @@
+# Skill Efficacy Reporting Standard (SERS)
+
+Machine-readable vocabulary for publishing a skill efficacy result so a third
+party can validate the shape, and so this repo's own documented results stay
+tied to the same enums the instrument emits.
+
+- **Schema:** [`sers.schema.json`](sers.schema.json) (JSON Schema draft 2020-12,
+  `additionalProperties: false`)
+- **Conforming instances:** [`receipts/`](receipts/)
+- **Conformance harness:** `tests/test_sers_conformance.py`
+
+## Core rule
+
+**A missing number is a typed refusal, never an invented score.**
+
+Every numeric field on a receipt is either:
+
+1. a measured value (rate in `[0, 1]`, non-negative token count, …), or
+2. an object carrying `refusal` with a closed vocabulary.
+
+There is no third path. Omitting a figure silently, filling it with a
+placeholder like `0.0` "for completeness", or free-typing a reason string is
+non-conforming. The refusal vocabularies are fixed by this schema and drift-
+checked against the code enums in CI.
+
+## Fields
+
+### `sers_version`
+
+Vocabulary generation of the receipt. Receipts that disagree on
+`sers_version` are not comparable. v1 locks `"1.0.0"`.
+
+### `skill_name`
+
+The skill the verdict is about. Prefer the store/card `skill_name` string when
+one exists so the receipt lines up with `value_class_for`.
+
+### `verdict`
+
+One of:
+
+| Value | Meaning |
+| --- | --- |
+| `KEEP` | Measurably worth its slot under the registered estimand. |
+| `CUT` | Remove from the library; see `cut_sub_reason`. |
+| `CANT_TELL_YET` | Evidence does not support a keep/cut call. |
+
+These strings are exactly the members of `KeepCutVerdict` in
+`src/skill_harness/aggregation/verdict.py`.
+
+### `cut_sub_reason`
+
+Qualifies `CUT`. **Non-null if and only if `verdict` is `CUT`.**
+
+| Value | Meaning |
+| --- | --- |
+| `subsumed` | Model already does the task without the skill (screen path; includes total ceiling `p0 = 1`). |
+| `no_lift` | Measured where the model needed help; the skill did not deliver a transformative lift. |
+| `harmful` | Skill made outcomes measurably worse (matched Gate-2 path only). |
+
+Refusal semantics: a `CUT` without a sub-reason is invalid. A non-`CUT`
+verdict with a non-null sub-reason is invalid.
+
+### `unmeasured_sub_reason`
+
+Qualifies an unmeasured / cannot-score path when the receipt is reporting one.
+Members mirror `UnmeasuredSubReason` in
+`src/skill_harness/aggregation/status.py` exactly — do not invent, rename, or
+subset:
+
+- `no_data`
+- `inadmissible`
+- `underpowered`
+- `falsifying_case_missing`
+- `budget_exhausted`
+- `falsifying_case_stale`
+- `fdr_correction_failed`
+- `mechanical_vacuous`
+
+`null` when the receipt is a measured `KEEP`/`CUT` (or a `CANT_TELL_YET` that
+is not an aggregation-UNMEASURED path, e.g. wrong-instrument withhold).
+
+### `value_class`
+
+Skill value kind. Members mirror `ValueClass`:
+
+| Value | Meaning |
+| --- | --- |
+| `transformative-lift` | Skill is meant to let the model succeed where it fails unaided. Screen-path `CUT(subsumed)` is valid only here. |
+| `trap-discipline` | Guards one wrong action; high Null pass-rate does not mean "subsumed". |
+| `calibration` | Makes a measurement trustworthy; same wrong-instrument rule as trap-discipline. |
+| `null` | Unclassified — guard defaults to withhold `CUT`. |
+
+### `wrong_instrument`
+
+Optional boolean. `true` when a path **withheld** a `CUT` because
+`value_class` is not `transformative-lift`. Routes the cell to the
+field-evidence lane. Never `true` on a `KEEP` or `CUT`.
+
+### `declared_synthetic_control`
+
+Optional boolean. Must be `true` when the underlying effect is a declared
+synthetic positive control (effect real by construction). A synthetic-control
+`KEEP` is an instrument validation, not a production-skill KEEP.
+
+### `evidence_admissibility`
+
+**This is the only permitted form of the gate term.** A shorter un-qualified
+form collides with a published framework's action-governance usage; SERS and
+all companion text use the qualified term **evidence admissibility** only.
+
+| `status` | Meaning |
+| --- | --- |
+| `admissible` | Cited evidence cleared the evidence admissibility gate and may enter aggregation. |
+| `inadmissible` | Evidence exists but was gated out of aggregation (kept append-only). |
+| `mixed` | Receipt cites both admissible and inadmissible evidence. |
+| `not_applicable` | No store-backed evidence (prose-only encoding, mechanical audit, etc.). |
+
+Refusal semantics: there is no silent default. A receipt that cannot state an
+evidence admissibility status is non-conforming.
+
+### `cost` (standing / fired / aux)
+
+The cost triple, each leg a `token_figure`:
+
+- **standing** — tokens charged every turn for the skill's listing/router line.
+- **fired** — tokens charged when the skill body is loaded.
+- **aux** — progressive-disclosure / side-doc tokens.
+
+Each leg is either `{ "tokens": <non-negative int> }` or
+`{ "refusal": "unmeasured" | "not_applicable" | "not_instrumented", ... }`.
+A missing leg, a negative count, or a free-typed excuse is non-conforming.
+
+### `instrument_identity`
+
+Generation stamp so any figure carries the generation that produced it.
+Figures from different identities are **visibly non-comparable**.
+
+| Field | Meaning |
+| --- | --- |
+| `extractor_model` | Model pin (extractor or subject) that produced the figures. |
+| `prompt_fingerprint` | Fingerprint of the exact prompt/system bytes (typically SHA-256 hex). |
+| `schema_fingerprint` | Fingerprint of the tool schema or harness pin used. |
+
+Refusal semantics: instrument identity is **required**, not optional. A
+receipt without it cannot be validated. Legacy prose that predates the triple
+must still record the best available pins (subject model + harness fingerprint)
+rather than omit the object.
+
+### `measurements` (optional object)
+
+Optional rates and apparatus gates. Each rate field is a `rate_or_refusal`:
+either `{ "value": 0..1, "passes"?, "epochs"?, "detail"? }` or
+`{ "refusal": <UnmeasuredSubReason \| "not_applicable">, "detail"? }`.
+
+`go_nogo` is the pre-stated apparatus gate when one was registered
+(`GO` / `NO_GO` / `NOT_APPLICABLE`).
+
+### `source`
+
+Pointer at the prose source of record.
+
+| Field | Meaning |
+| --- | --- |
+| `prose_path` | Repo-relative path (required). |
+| `date` | ISO date of the underlying result when known. |
+| `notes` | Free-text lineage note. |
+
+v1 receipts are **hand-encoded** from already-documented results (no DB
+exporter). Revisit when store-backed receipts multiply.
+
+### `summary`
+
+One-paragraph operator-facing summary. Must not invent numbers that are absent
+from `measurements` / `cost`.
+
+## Conformance
+
+```text
+pytest tests/test_sers_conformance.py
+```
+
+The harness asserts:
+
+1. every file in `receipts/` validates against the schema;
+2. schema verdict / cut-sub-reason / unmeasured-sub-reason / value-class enums
+   are **equal** to the code enums (silent drift fails CI);
+3. poisoned fixtures under `tests/fixtures/sers/poison_*.json` **fail**
+   validation (wrong verdict vocabulary, missing instrument identity, bare
+   gate term where the qualified term is required).
+
+## Hand-encoded v1 receipts
+
+| Receipt | Verdict | Prose source |
+| --- | --- | --- |
+| `synthetic-control-keep-2026-07-27.json` | `KEEP` (declared synthetic control) | `README.md` / `docs/FAQ.md` |
+| `double-ceiling-nogo-2026-07-09.json` | `CANT_TELL_YET` (NO-GO / structurally unmeasured) | `docs/case-studies/double-ceiling-structurally-unmeasured.md` |
+| `reclass-append-only-evidence-design.json` | `CANT_TELL_YET` (wrong instrument, calibration) | `README.md` + `docs/observations/OBS-0005-*.md` |
+| `reclass-git-pull-rebase-trap.json` | `CANT_TELL_YET` (wrong instrument, trap-discipline) | `README.md` |

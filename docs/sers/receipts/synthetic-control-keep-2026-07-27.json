@@ -1,0 +1,36 @@
+{
+  "sers_version": "1.0.0",
+  "skill_name": "declared-synthetic-positive-control",
+  "verdict": "KEEP",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": null,
+  "value_class": "transformative-lift",
+  "wrong_instrument": false,
+  "declared_synthetic_control": true,
+  "evidence_admissibility": {
+    "status": "admissible",
+    "detail": "Store-backed paired Full-vs-Null run; evidence cleared the evidence admissibility gate at write time."
+  },
+  "cost": {
+    "standing_tokens": { "refusal": "not_instrumented", "detail": "Synthetic control skill; standing cost not part of the KEEP claim." },
+    "fired_tokens": { "refusal": "not_instrumented" },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": "anthropic/claude-sonnet-5",
+    "prompt_fingerprint": "synthetic-control-paired-2026-07-27",
+    "schema_fingerprint": "subject-file_contains+paired-freeze-binary"
+  },
+  "measurements": {
+    "full_pass_rate": { "value": 1.0, "passes": 8, "epochs": 8 },
+    "null_pass_rate": { "value": 0.0, "passes": 0, "epochs": 8 },
+    "p_win": { "value": 0.99, "detail": "Posterior p_win reported as 0.99 (CHANGELOG r3 positive control also cites 0.9899 pre-freeze)." },
+    "go_nogo": "NOT_APPLICABLE"
+  },
+  "source": {
+    "prose_path": "README.md",
+    "date": "2026-07-27",
+    "notes": "Declared synthetic positive control — a skill carrying an invented fact, so the effect is real by construction. First store-backed KEEP; validates the instrument label, not a production skill. Cross-ref docs/FAQ.md."
+  },
+  "summary": "Declared synthetic positive control KEEP (2026-07-27): Full 8/8 vs Null 0/8, posterior p_win 0.99. Effect exists by construction; this receipt labels the KEEP as synthetic-control instrument validation, not a production-skill KEEP."
+}

@@ -1,0 +1,21 @@
+{
+  "sers_version": "1.0.0",
+  "skill_name": "poison-wrong-verdict",
+  "verdict": "PASS",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": null,
+  "value_class": "transformative-lift",
+  "evidence_admissibility": { "status": "not_applicable" },
+  "cost": {
+    "standing_tokens": { "refusal": "not_applicable" },
+    "fired_tokens": { "refusal": "not_applicable" },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": "test-model",
+    "prompt_fingerprint": "a",
+    "schema_fingerprint": "b"
+  },
+  "source": { "prose_path": "README.md" },
+  "summary": "Poison: verdict vocabulary uses PASS instead of KEEP/CUT/CANT_TELL_YET."
+}
