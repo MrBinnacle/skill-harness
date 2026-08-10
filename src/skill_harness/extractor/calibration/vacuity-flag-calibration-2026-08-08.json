@@ -1,0 +1,35 @@
+{
+  "receipt_id": "vacuity-flag-calibration-2026-08-08",
+  "capture_date": "2026-08-08",
+  "description": "Frozen capture blind cross-family LLM panel; receipt of record for flag-precision of semantic_vacuous_pending_review (#188).",
+  "instrument_triple": {
+    "extractor_model": "claude-opus-5",
+    "system_prompt_sha256": "525ac4445febc96403e139af752d7a17790c2cd3bf54f56b8dcf3c1773eb7054",
+    "tool_schema_sha256": "39c50daa5e2438b45d86b877d2215be3246d7f27bc4e0c29e6062e158a9e0cd3"
+  },
+  "sample": {
+    "flagged_population_size": 282,
+    "adjudicated_rows": 106,
+    "seats": 5,
+    "verdicts_per_seat": 106,
+    "missing_verdicts": 0
+  },
+  "flag_precision": {
+    "weighted_undecided_wrong": 0.972,
+    "weighted_undecided_correct": 0.975,
+    "wilson_95_fpc_low": 0.923,
+    "wilson_95_fpc_high": 0.986,
+    "note": "UNDECIDED counted wrong yields 0.972 (conservative floor); counted correct yields 0.975. Wilson 95% + finite-population band [0.923, 0.986]."
+  },
+  "kind_precision": {
+    "aggregate": 0.835,
+    "not_a_directive_correct": 77,
+    "not_a_directive_n": 78,
+    "weak_directive_correct": 4,
+    "weak_directive_n": 20,
+    "note": "Aggregate 0.835 is population-imbalance dominated (260 predicted not_a_directive vs 22 weak_directive). Kind boundary is NOT reliable; kind is advisory until independently adjudicated. Aggregate must never appear without the class split 77/78 and 4/20."
+  },
+  "recall": "UNMEASURED",
+  "recall_note": "The 1,015 unflagged clauses were never adjudicated (pre-registered exit of the calibration run).",
+  "generation_lock": "All figures die with the instrument triple above. A row from any other triple has NO calibration claim."
+}
