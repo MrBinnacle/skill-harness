@@ -17,11 +17,18 @@ Two independent instances of that shape exist. Both are reproduced here.
     ``_oracle_implementation_hash()`` hashes its own module's bytes; the fail-closed
     re-check compares against a stored ``metric_versions`` row that is append-only.
 
-These tests characterise the CURRENT behaviour. They are expected to pass on the
-tree as it stands -- their job is to make the deadlock a pinned, named fact rather
-than a workspace note, so that any future repair path has a test that changes when
-it lands. The final test in each class is the one that states the absence of an
-exit; those are the assertions a fix must flip.
+**6a is FIXED by #169; 6b is not.** For 6a these tests now do two jobs: the ones
+that characterise the deadlock's trigger condition (the raw digest moves under a
+comment edit, the ledger row cannot be corrected) still hold and still matter --
+they are what the repair had to work around rather than remove -- while the
+requirement test and its companions pin the repaired behaviour. For 6b they
+characterise a deadlock that still stands.
+
+The repair, stated once: a SEMANTIC digest (comments stripped, whitespace
+collapsed) is recorded alongside the raw one, and a mismatch provably confined to
+commentary is cleared by APPENDING a compensating restamp record. Neither
+safeguard is weakened -- a real schema change still locks the store, and the
+ledger row is never rewritten.
 """
 
 from __future__ import annotations
@@ -34,6 +41,8 @@ import pytest
 from skill_harness.storage import migrations as migrations_module
 from skill_harness.storage.errors import MigrationTamperedError
 from skill_harness.storage.migrations import (
+    _semantic_sha256,
+    _semantic_sql,
     apply_pending,
     discover,
     open_db,
@@ -120,8 +129,18 @@ class TestMigrationLedgerDeadlock:
 
         assert before != after, "comment-only edit did not change the recorded sha"
 
-    def test_comment_edit_locks_an_existing_store(self, tmp_path: Path) -> None:
-        """Safeguard A: the store refuses to open after a comment-only edit."""
+    def test_schema_edit_locks_an_existing_store(self, tmp_path: Path) -> None:
+        """Safeguard A: the store refuses to open after a real schema change.
+
+        Re-pointed by #169. This test previously asserted that a COMMENT-ONLY edit
+        raises, which is the direct negation of the requirement the fix had to
+        satisfy -- the two could not both hold. Deleting it instead of re-pointing
+        it would have silently removed the only behavioural coverage of safeguard
+        A, so the assertion is kept and aimed at an edit that must still lock the
+        store: an added column. If this ever stops raising, the semantic digest
+        has stopped distinguishing schema from commentary and the repair has
+        become a bypass.
+        """
         migrations_dir = tmp_path / "migrations"
         shipped = self._seed_migrations(migrations_dir)
         db_path = self._make_store(tmp_path, migrations_dir)
@@ -133,6 +152,125 @@ class TestMigrationLedgerDeadlock:
         finally:
             conn.close()
 
+        original = shipped.read_text(encoding="utf-8")
+        changed = original.replace(
+            "CREATE TABLE thing (id INTEGER PRIMARY KEY);",
+            "CREATE TABLE thing (id INTEGER PRIMARY KEY, smuggled TEXT);",
+        )
+        assert changed != original, "the schema edit did not apply to the fixture"
+        shipped.write_text(changed, encoding="utf-8")
+
+        conn = open_db(db_path, synchronous="FULL")
+        try:
+            with pytest.raises(MigrationTamperedError, match="0001_initial"):
+                apply_pending(conn, discover(migrations_dir))
+        finally:
+            conn.close()
+
+    def test_a_comment_only_edit_is_repaired_rather_than_refused(self, tmp_path: Path) -> None:
+        """The repair is a restamp, and it is idempotent and auditable.
+
+        Companion to the requirement test at module level, which only asserts that
+        the open succeeds. This one pins HOW: exactly one compensating row is
+        appended, it names the digest it supersedes, and a second open appends
+        nothing because the restamped digest is now the one in force.
+        """
+        migrations_dir = tmp_path / "migrations"
+        shipped = self._seed_migrations(migrations_dir)
+        db_path = self._make_store(tmp_path, migrations_dir)
+        before = discover(migrations_dir)[0].sha256
+
+        shipped.write_text(
+            "-- reworded comment, identical schema below\n"
+            + "".join(shipped.read_text(encoding="utf-8").splitlines(keepends=True)[1:]),
+            encoding="utf-8",
+        )
+        after = discover(migrations_dir)[0].sha256
+
+        conn = open_db(db_path, synchronous="FULL")
+        try:
+            apply_pending(conn, discover(migrations_dir))
+            rows = conn.execute(
+                "SELECT migration_id, superseded_sha256, file_sha256, reason "
+                "FROM migration_sha_restamps ORDER BY restamp_id"
+            ).fetchall()
+            assert len(rows) == 1, f"expected exactly one restamp, got {rows}"
+            assert rows[0][0] == "0001_initial"
+            assert rows[0][1] == before, "the restamp does not name the digest it supersedes"
+            assert rows[0][2] == after
+            assert "comments or whitespace only" in rows[0][3]
+
+            # Idempotent: the restamped digest is now in force, so there is no
+            # mismatch left to compensate for.
+            apply_pending(conn, discover(migrations_dir))
+            assert conn.execute("SELECT COUNT(*) FROM migration_sha_restamps").fetchone()[0] == 1, (
+                "a second open appended a duplicate restamp"
+            )
+
+            # The ledger row itself was never touched -- the correction is an
+            # appended record, not a rewrite.
+            ledger = conn.execute(
+                "SELECT file_sha256 FROM schema_migrations WHERE migration_id = ?",
+                ("0001_initial",),
+            ).fetchone()
+            assert ledger[0] == before, "the original ledger row was modified"
+        finally:
+            conn.close()
+
+    def test_a_healthy_store_opens_without_writing(self, tmp_path: Path) -> None:
+        """The repair must not turn every open into a write.
+
+        Before #169 a fully-migrated store was opened with SELECTs only. Bookkeeping
+        that ran unconditionally would take a write lock on every open -- contention
+        between concurrent openers, and outright failure on read-only media. Asserted
+        the only way that cannot be faked: forbid writes at the connection level and
+        require the open to succeed anyway.
+        """
+        migrations_dir = tmp_path / "migrations"
+        self._seed_migrations(migrations_dir)
+        db_path = self._make_store(tmp_path, migrations_dir)
+
+        conn = open_db(db_path, synchronous="FULL")
+        try:
+            conn.execute("PRAGMA query_only = ON")
+            apply_pending(conn, discover(migrations_dir))
+        finally:
+            conn.close()
+
+    def test_a_store_predating_the_repair_is_healed_on_first_open(self, tmp_path: Path) -> None:
+        """The backfill is what actually saves stores created before the fix.
+
+        Simulated by deleting the semantic digests a pre-#169 store would never
+        have had, then opening cleanly BEFORE any edit. That open must re-record
+        them, so the subsequent comment edit is repairable rather than terminal.
+        Without the backfill this store would be bricked by the same edit the test
+        above repairs.
+        """
+        migrations_dir = tmp_path / "migrations"
+        shipped = self._seed_migrations(migrations_dir)
+        db_path = self._make_store(tmp_path, migrations_dir)
+
+        # Regress the store to its pre-repair shape. The bookkeeping table is
+        # append-only, so its own trigger has to be dropped to forge this state --
+        # which is itself evidence that nothing in the product can reach these rows.
+        conn = open_db(db_path, synchronous="FULL")
+        try:
+            conn.execute("DROP TRIGGER migration_semantic_digests_no_delete")
+            conn.execute("DELETE FROM migration_semantic_digests")
+            conn.execute("DROP TABLE migration_sha_restamps")
+        finally:
+            conn.close()
+
+        # The healing open: no edit yet, raw digest still matches.
+        conn = open_db(db_path, synchronous="FULL")
+        try:
+            apply_pending(conn, discover(migrations_dir))
+            assert (
+                conn.execute("SELECT COUNT(*) FROM migration_semantic_digests").fetchone()[0] == 1
+            ), "the clean open did not backfill a semantic digest"
+        finally:
+            conn.close()
+
         shipped.write_text(
             "-- reworded comment, identical schema below\n"
             + "".join(shipped.read_text(encoding="utf-8").splitlines(keepends=True)[1:]),
@@ -141,8 +279,49 @@ class TestMigrationLedgerDeadlock:
 
         conn = open_db(db_path, synchronous="FULL")
         try:
-            with pytest.raises(MigrationTamperedError, match="0001_initial"):
+            apply_pending(conn, discover(migrations_dir))  # healed, so it opens
+        finally:
+            conn.close()
+
+    def test_an_already_bricked_store_is_still_refused(self, tmp_path: Path) -> None:
+        """The repair is not retroactive, and that is deliberate.
+
+        A store whose semantic digests were never recorded and which was edited
+        before it could be healed has no evidence that the edit was harmless. The
+        runner refuses rather than trusting the current file, because trusting it
+        would mean accepting whatever is on disk now -- which is safeguard A
+        deleted, not repaired. The named remedy is to restore the original bytes.
+        """
+        migrations_dir = tmp_path / "migrations"
+        shipped = self._seed_migrations(migrations_dir)
+        db_path = self._make_store(tmp_path, migrations_dir)
+        original = shipped.read_text(encoding="utf-8")
+
+        conn = open_db(db_path, synchronous="FULL")
+        try:
+            conn.execute("DROP TRIGGER migration_semantic_digests_no_delete")
+            conn.execute("DELETE FROM migration_semantic_digests")
+        finally:
+            conn.close()
+
+        shipped.write_text(
+            "-- reworded comment, identical schema below\n"
+            + "".join(original.splitlines(keepends=True)[1:]),
+            encoding="utf-8",
+        )
+
+        conn = open_db(db_path, synchronous="FULL")
+        try:
+            with pytest.raises(MigrationTamperedError, match="predates the #169 repair"):
                 apply_pending(conn, discover(migrations_dir))
+        finally:
+            conn.close()
+
+        # ...and the documented remedy works: restore the bytes, reopen.
+        shipped.write_text(original, encoding="utf-8")
+        conn = open_db(db_path, synchronous="FULL")
+        try:
+            apply_pending(conn, discover(migrations_dir))
         finally:
             conn.close()
 
@@ -166,11 +345,15 @@ class TestMigrationLedgerDeadlock:
             conn.close()
 
     def test_no_restamp_path_exists_in_src(self) -> None:
-        """There is no repair path anywhere in the shipped source.
+        """No code path rewrites or removes a ledger row -- still true after #169.
 
-        The deadlock is not merely "hard to fix from outside" -- the product ships
-        no way to correct a stale sha. A fix for #169 should make this test fail,
-        which is exactly why it is written as an assertion about absence.
+        Written as an assertion about absence, with the stated expectation that
+        #169's fix would make it fail. It does not, and that is a better outcome
+        than the one anticipated: the repair appends a compensating record to a
+        separate table instead of reaching into the ledger, so the append-only
+        guarantee on ``schema_migrations`` is never relaxed. Kept, because it still
+        guards the thing worth guarding -- if a mutating path ever appears here,
+        safeguard B has been traded away rather than worked around.
         """
         offending: list[str] = []
         for py in SRC_ROOT.rglob("*.py"):
@@ -202,14 +385,21 @@ class TestMigrationLedgerDeadlock:
         The observable contract is what matters: after the bricking edit the
         writable open refuses and the read-only open still succeeds, while staying
         unable to write.
+
+        Re-pointed by #169 for the same reason as ``test_schema_edit_locks_an
+        _existing_store``: this test needs a genuinely bricked store to reason
+        about, and a comment-only edit no longer produces one. A real schema change
+        does, so the read-only escape hatch still has something to escape from.
         """
         migrations_dir = tmp_path / "migrations"
         shipped = self._seed_migrations(migrations_dir)
         db_path = self._make_store(tmp_path, migrations_dir)
 
         shipped.write_text(
-            "-- reworded comment, identical schema below\n"
-            + "".join(shipped.read_text(encoding="utf-8").splitlines(keepends=True)[1:]),
+            shipped.read_text(encoding="utf-8").replace(
+                "CREATE TABLE thing (id INTEGER PRIMARY KEY);",
+                "CREATE TABLE thing (id INTEGER PRIMARY KEY, smuggled TEXT);",
+            ),
             encoding="utf-8",
         )
 
@@ -232,23 +422,14 @@ class TestMigrationLedgerDeadlock:
             ro.close()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Store-bricking deadlock (#168 finding, CORRUPTION). A comment-only edit to a "
-        "shipped migration permanently locks every existing evidence store, and the "
-        "product ships no repair path. #169 owns the fix; when it lands this test "
-        "XPASSes and strict=True fails the suite, which is the point -- the regression "
-        "cannot be fixed silently."
-    ),
-)
 def test_a_comment_only_edit_should_not_brick_the_store(tmp_path: Path) -> None:
-    """The behaviour the product SHOULD have, asserted so the fix has a target.
+    """The requirement, now met: a comment-only edit must not cost a store.
 
-    Everything else in this module characterises the deadlock as it currently is.
-    This one states the requirement instead: an edit that changes no schema must
-    not cost an operator their evidence store. It is the assertion #169 has to
-    flip.
+    Was a ``strict=True`` xfail while the deadlock stood, so that the fix could
+    not land silently -- an XPASS would have failed the suite. #169's repair makes
+    it pass, so the marker is gone and this is a plain regression test. The name is
+    deliberately unchanged: it is cited by the finding, the ticket and the PR, and
+    renaming it would break the trail from the reproduction to the fix.
     """
     migrations_dir = tmp_path / "migrations"
     shipped = TestMigrationLedgerDeadlock._seed_migrations(migrations_dir)
@@ -266,6 +447,210 @@ def test_a_comment_only_edit_should_not_brick_the_store(tmp_path: Path) -> None:
         apply_pending(conn, discover(migrations_dir))
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# The semantic digest itself -- the discriminator the whole repair rests on
+# ---------------------------------------------------------------------------
+
+
+class TestSemanticDigest:
+    """If this normalisation is wrong, the repair is either a bypass or useless."""
+
+    def test_comment_and_whitespace_edits_normalise_together(self) -> None:
+        base = "-- header\nCREATE TABLE t (id INTEGER);\n"
+        variants = [
+            "-- a completely different header\nCREATE TABLE t (id INTEGER);\n",
+            "CREATE TABLE t (id INTEGER);\n",  # comment deleted outright
+            "CREATE   TABLE t (id   INTEGER);\n",  # whitespace collapsed
+            "-- header\nCREATE TABLE t (id INTEGER); -- trailing note\n",
+        ]
+        expected = _semantic_sha256(base)
+        for variant in variants:
+            assert _semantic_sha256(variant) == expected, (
+                f"variant should be semantically identical to base: {variant!r}"
+            )
+
+    def test_a_dashdash_inside_a_string_literal_is_not_a_comment(self) -> None:
+        """The reason this is a scanner and not a regex.
+
+        Not hypothetical in this schema: the append-only triggers raise messages
+        like ``'append_only_violation: schema_migrations'``, and a literal is free
+        to contain ``--``. A regex stripping from ``--`` to end-of-line would eat
+        the rest of a trigger body, making two genuinely different triggers
+        normalise to the same digest -- which would authorise a restamp between
+        them. That is the failure mode that turns the repair into a bypass.
+        """
+        keeps_literal = "SELECT RAISE(ABORT, 'boom -- not a comment');\n"
+        assert "-- not a comment" in _semantic_sql(keeps_literal)
+
+        differing = "SELECT RAISE(ABORT, 'boom -- also not a comment');\n"
+        assert _semantic_sha256(keeps_literal) != _semantic_sha256(differing), (
+            "two different string literals collapsed to one semantic digest"
+        )
+
+    def test_an_escaped_quote_does_not_end_the_literal(self) -> None:
+        """``''`` is an escaped quote in SQL, not a terminator.
+
+        Mis-handling it flips the scanner's in-string state for the rest of the
+        file, so every subsequent comment would be preserved and every subsequent
+        literal stripped -- silently, with no error.
+        """
+        sql = "SELECT RAISE(ABORT, 'it''s -- fine'); -- real comment\n"
+        normalised = _semantic_sql(sql)
+        assert "it''s -- fine" in normalised
+        assert "real comment" not in normalised, (
+            f"the scanner lost its place after an escaped quote: {normalised!r}"
+        )
+
+    @pytest.mark.parametrize("which", ["evidence", "runtime"])
+    def test_the_real_shipped_chain_still_applies_after_normalisation(self, which: str) -> None:
+        """The end-to-end guarantee, against the REAL migrations rather than fixtures.
+
+        If the scanner ever ate a string literal or truncated a trigger body, the
+        normalised text would either fail to execute or build a different schema.
+        Comparing the resulting ``sqlite_master`` object identities is the check
+        that cannot be satisfied by accident. ``sqlite_master.sql`` itself is
+        excluded from the comparison because SQLite stores the original text, which
+        differs in exactly the commentary this normalisation removes.
+
+        Run against both chains: the runtime DB carries the same ledger triggers as
+        evidence (migration ``0002_schema_migrations_triggers.sql``), so it is
+        subject to the same deadlock and the same repair.
+        """
+        directory = (
+            migrations_module.EVIDENCE_MIGRATIONS_DIR
+            if which == "evidence"
+            else migrations_module.RUNTIME_MIGRATIONS_DIR
+        )
+        chain = discover(directory)
+        assert chain, f"no {which} migrations discovered"
+
+        def objects(scripts: list[str]) -> set[tuple[str, str]]:
+            # open_db, not raw sqlite3.connect: E1 / A23 §3 bans the raw call
+            # outside migrations.py, and test_structural_bans enforces it.
+            conn = open_db(":memory:", synchronous="FULL")
+            try:
+                for script in scripts:
+                    conn.executescript(script)
+                return {
+                    (row[0], row[1])
+                    for row in conn.execute("SELECT type, name FROM sqlite_master").fetchall()
+                }
+            finally:
+                conn.close()
+
+        raw = objects([m.sql for m in chain])
+        normalised = objects([_semantic_sql(m.sql) for m in chain])
+        assert normalised == raw, (
+            "stripping commentary changed the schema the chain builds: "
+            f"only-raw={sorted(raw - normalised)} only-normalised={sorted(normalised - raw)}"
+        )
+
+    def test_every_shipped_migration_has_a_distinct_semantic_digest(self) -> None:
+        """A collision would make two real files interchangeable to the repair.
+
+        Two migrations sharing a semantic digest would let the runner accept a swap
+        between them as a comment-only edit. Checked across both chains together,
+        since the digest carries no directory scoping.
+        """
+        chain = discover(migrations_module.EVIDENCE_MIGRATIONS_DIR) + discover(
+            migrations_module.RUNTIME_MIGRATIONS_DIR
+        )
+        by_digest: dict[str, list[str]] = {}
+        for m in chain:
+            by_digest.setdefault(m.semantic_sha256, []).append(m.migration_id)
+        collisions = {d: ids for d, ids in by_digest.items() if len(ids) > 1}
+        assert collisions == {}, f"shipped migrations share a semantic digest: {collisions}"
+
+    def test_any_schema_difference_survives_normalisation(self) -> None:
+        pairs = [
+            ("CREATE TABLE t (id INTEGER);\n", "CREATE TABLE t (id TEXT);\n"),
+            ("CREATE TABLE t (id INTEGER);\n", "CREATE TABLE u (id INTEGER);\n"),
+            ("CREATE TABLE t (id INTEGER);\n", "CREATE TABLE t (id INTEGER, x TEXT);\n"),
+        ]
+        for left, right in pairs:
+            assert _semantic_sha256(left) != _semantic_sha256(right), (
+                f"a real schema difference normalised away: {left!r} vs {right!r}"
+            )
+
+    def test_whitespace_inside_a_literal_is_not_collapsed(self) -> None:
+        """The collision that made the first draft of this repair a bypass.
+
+        Whitespace is collapsed OUTSIDE quoted spans and preserved byte-for-byte
+        inside them. A whole-file collapse (the obvious implementation, and the one
+        this repair originally shipped in draft) equated these two CHECK
+        constraints, which admit different values. The runner would then have read a
+        real constraint change as comment-only and restamped it -- safeguard A
+        deleted, not repaired.
+        """
+        one_space = "CREATE TABLE t (k TEXT CHECK (k IN ('a b')));\n"
+        two_spaces = "CREATE TABLE t (k TEXT CHECK (k IN ('a  b')));\n"
+        assert _semantic_sha256(one_space) != _semantic_sha256(two_spaces), (
+            "whitespace inside a string literal was collapsed away"
+        )
+
+    def test_whitespace_around_a_literal_is_still_collapsed(self) -> None:
+        """The other half: reformatting outside literals must stay repairable.
+
+        Preserving literals byte-for-byte must not make the normalisation so strict
+        that ordinary reformatting bricks the store -- that would trade one
+        deadlock for a narrower one.
+        """
+        tight = "CREATE TABLE t (k TEXT DEFAULT ('x'));\n"
+        loose = "CREATE   TABLE t (k TEXT DEFAULT (   'x'   ));\n"
+        assert _semantic_sha256(tight) == _semantic_sha256(loose), (
+            "whitespace outside literals is no longer normalised"
+        )
+
+    def test_an_aliased_literal_is_not_an_escaped_quote(self) -> None:
+        """A pure-whitespace gap between two quoted spans carries meaning.
+
+        SQLite reads ``SELECT 'a' 'b'`` as ``'a'`` aliased to ``b``. Collapsing that
+        gap to nothing would produce ``'a''b'`` -- the single literal ``a'b`` -- so
+        two different statements would share one digest.
+        """
+        aliased = "SELECT 'a' 'b';\n"
+        escaped = "SELECT 'a''b';\n"
+        assert _semantic_sha256(aliased) != _semantic_sha256(escaped), (
+            "an aliased literal collapsed into an escaped-quote literal"
+        )
+
+    def test_a_dashdash_inside_a_quoted_identifier_is_not_a_comment(self) -> None:
+        """Double quotes and backticks quote identifiers in SQLite, and also escape by doubling.
+
+        The shipped migrations happen to use neither in live SQL today -- both
+        appear only inside ``--`` comments as prose punctuation -- so this is
+        forward cover: a future migration quoting an identifier must not have half
+        of it treated as commentary.
+        """
+        for quote in ('"', "`"):
+            kept = f"CREATE TABLE {quote}odd -- name{quote} (id INTEGER);\n"
+            other = f"CREATE TABLE {quote}odd -- other{quote} (id INTEGER);\n"
+            assert "-- name" in _semantic_sql(kept), (
+                f"{quote} did not protect an identifier from comment stripping"
+            )
+            assert _semantic_sha256(kept) != _semantic_sha256(other), (
+                f"two different {quote}-quoted identifiers shared a digest"
+            )
+
+    def test_block_comments_are_stripped_too(self) -> None:
+        """``/* ... */`` is a comment in SQLite, so an edit inside one is repairable.
+
+        No shipped migration uses block comments today (checked across both
+        ``migrations_sql`` directories), so this is forward cover as well. Handling
+        them makes "comments are stripped" true rather than "line comments are
+        stripped"; leaving them unhandled would have been safe but would refuse a
+        genuinely harmless edit.
+        """
+        base = "/* header */ CREATE TABLE t (id INTEGER);\n"
+        reworded = "/* an entirely different header */ CREATE TABLE t (id INTEGER);\n"
+        assert _semantic_sha256(base) == _semantic_sha256(reworded)
+        assert _semantic_sql(base) == "CREATE TABLE t (id INTEGER);"
+
+        # ...but a /* inside a literal is data, not a comment opener.
+        literal = "SELECT RAISE(ABORT, 'not /* a comment */ really');\n"
+        assert "/* a comment */" in _semantic_sql(literal)
 
 
 # ---------------------------------------------------------------------------
