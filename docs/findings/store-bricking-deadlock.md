@@ -2,8 +2,9 @@
 
 **Severity:** `CORRUPTION`
 **Ticket:** #168 (evidence-store stateful machine + deadlock reproduction); fix owned by #169
-**Status:** **half discharged.** Instance 6a is FIXED (#169). Instance 6b stands, tracked as #209.
-The finding stays open until 6b is ruled on — a CORRUPTION finding with one live instance is not closed.
+**Status:** **FULLY DISCHARGED.** Instance 6a fixed by #169; instance 6b fixed by #209.
+Both instances now record a second digest alongside the raw one and clear a
+commentary-only drift by appending a compensating record. Neither safeguard was relaxed.
 **Harness:** `tests/test_store_bricking_deadlock.py` (reproduction) + `tests/test_evidence_store_stateful.py` (`ledger_row_cannot_be_corrected` rule)
 **Reproduction:** deterministic — **no seed required.** See "Seed" below.
 
@@ -140,7 +141,60 @@ that when the fix landed the test would XPASS and `strict=True` would fail the
 suite, and the deadlock could not be closed silently. #169 landed the fix and
 removed the marker; the test is now a plain regression test under the same name.
 
-## Why 6b was not fixed alongside 6a — tracked as #209
+## The repair (6b) — #209
+
+Same shape of repair as 6a, **different discriminator**, and the difference is the
+whole content of the maintainer ruling recorded on #209.
+
+`_oracle_implementation_hash()` is untouched and remains the tamper detector.
+Alongside it the runner records an **AST-shape identity digest** of the oracle
+module, computed by `subject/implementation_identity.py`:
+
+- **Comments and formatting are not identity-bearing.** This is a property of the
+  representation rather than a stripping pass — Python's `ast` discards comments
+  outright, so unlike 6a there is no normalisation logic here that could be got
+  wrong.
+- **Docstrings ARE identity-bearing.** They are ordinary `Expr(Constant(str))`
+  nodes and are simply not special-cased out. This is the point on which 6b's
+  remedy could not be copied from 6a: a docstring is reachable at runtime through
+  `__doc__`, so a threshold, prompt or rubric can live in one, and a
+  docstring-blind digest would report a changed rubric as "no behaviour change".
+- Executable code, constants, annotations, decorators, defaults, **type comments**
+  (`type_comments=True` is load-bearing, not incidental), control flow and imports
+  all remain identity-bearing. Source-location metadata is excluded.
+- Unparseable source, an unreviewed AST node type, or a digest recorded under a
+  different algorithm version all **fail closed**.
+
+On a raw-hash mismatch whose AST digest is unchanged, a restamp row is appended to
+`metric_implementation_restamps`; resolution is *latest restamp wins, else the
+registered row*, which makes acceptance idempotent. `metric_versions` is never
+rewritten. Both drift-check sites are repaired — the ingest path and the
+audit-metric act — and the act's planner keeps its documented **read-only**
+contract because classification performs no writes.
+
+**Two properties that decided the implementation, both measured rather than assumed:**
+
+- **The canonical form must not depend on the interpreter version.** Python 3.13
+  added `default_value` to `TypeVar`/`ParamSpec`/`TypeVarTuple` (PEP 696), so
+  `type Alias[T] = list[T]` digested differently on 3.12 and 3.13 — one commit
+  would have had two measurement identities depending on which CI cell computed
+  it. Fixed by rendering a `None`-valued field as absent, which is sound because
+  `None` means "unset" for every AST field except `Constant.value`, where it is
+  the literal `None` and is carved out. Verified identical across 3.13.1, 3.12.11
+  and 3.12.6 over a 15-case corpus spanning match statements, PEP 695 generics,
+  `except*`, async, comprehensions, f-strings and every constant type.
+- **A golden-digest test only proves agreement over the syntax it contains.** The
+  first version froze three toy cases and would have missed the divergence above,
+  because none of them used a type parameter. The frozen corpus now spans the
+  syntax surface.
+
+The algorithm is versioned (`IDENTITY_DIGEST_ALGO_VERSION`) and every stored digest
+records its version, so a future change cannot silently compare across algorithms.
+
+`tests/test_oracle_implementation_identity.py` maps one-to-one onto the ruling's
+ten required tests.
+
+## Why 6b was not fixed alongside 6a — the S262 split, now closed
 
 The two instances share a shape but not a remedy, and #169 fixed only 6a. Stated
 here so the split is a recorded decision rather than an omission:
@@ -158,8 +212,10 @@ here so the split is a recorded decision rather than an omission:
    identity; the store stays open and writable, and a named — though
    identity-forking — exit exists.
 
-#209 carries the open design question (what a sound implementation-identity digest
-for a Python module is) and is labelled for a maintainer ruling before any code.
+#209 carried that design question. The maintainer ruled: **AST-shape digest with
+docstrings preserved as behaviour**, which is the option reason 2 above points at,
+and which treats a docstring as behaviour rather than as commentary. The split was
+therefore a scoping decision that held up, not a deferral that quietly lapsed.
 
 ## Note on the reproduction's own defects
 

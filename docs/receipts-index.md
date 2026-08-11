@@ -111,8 +111,12 @@ the named receipt directories is absent from this page.
   comment-only mismatch is cleared by an appended restamp record. The absence
   test above **stays green** — the repair adds no mutating path against the
   ledger — and the `strict=True` xfail that guarded the fix is now a plain
-  regression test under the same name. **Instance 6b stands, tracked as #209**,
-  so the finding is half discharged and remains open.
+  regression test under the same name. **Instance 6b is fixed (#209)** by an
+  AST-shape identity digest in which comments and formatting are not
+  identity-bearing but **docstrings are**, since a docstring is reachable at
+  runtime and can hold a threshold or rubric. The finding is **fully
+  discharged**; both instances keep their raw-byte tamper digest and clear a
+  commentary-only drift by appending a compensating record.
 - **Refuses to claim:** Any rate, frequency or probability of the deadlock
   occurring in the field — this is an existence proof on a constructed store,
   not a measurement of incidence. That `ORACLE_METRIC_VERSION` bumping is a
@@ -121,11 +125,18 @@ the named receipt directories is absent from this page.
   escape hatch sets `PRAGMA query_only = ON`, so a store bricked by a real
   schema change is readable and permanently unwritable. That the reproduction
   was seeded or searched — it is deterministic, and **no seed is recorded
-  because none was used.** That 6a's fix generalises to 6b: SQL comments cannot
-  carry behaviour, Python docstrings can, so the normalisation is not
-  transferable without a ruling (#209). That a store **already bricked before**
-  upgrading is healed — it is not; only stores opened cleanly once after the
-  upgrade are, and the remainder keep the restore-the-bytes remedy.
+  because none was used.** That 6a's normalisation generalised to 6b: SQL
+  comments cannot carry behaviour, Python docstrings can, so 6b needed a
+  different discriminator rather than the same one. That a store **already
+  bricked before** upgrading is healed — it is not; only stores opened cleanly
+  once after the upgrade are, and the remainder keep the restore-the-bytes
+  remedy. That either digest is stable across arbitrary Python versions — 3.13
+  moved the AST shape for PEP 695 generics (PEP 696 added `default_value`), which
+  is why the algorithm is **versioned** and its cross-version agreement is
+  asserted over a frozen corpus rather than assumed. That the AST digest is
+  independently correct — the frozen golden values are recorded from a measured
+  run, so they evidence **agreement across cells**, not correctness; the
+  behavioural tests carry that.
 
 ---
 

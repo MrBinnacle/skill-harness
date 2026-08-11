@@ -28,10 +28,16 @@ class MetricAuditPlan(NamedTuple):
     second copy of the refusal conditions exists.
     """
 
-    action: Literal["register", "already_audited"]
+    action: Literal["register", "already_audited", "restamp"]
     metric_id: str
     version: str
     implementation_hash: str
+
+    # "restamp" (#209): the registered hash no longer matches the live module, but
+    # the AST identity digest does -- the edit was commentary or formatting only.
+    # The act appends a compensating record rather than refusing forever. The
+    # append-only row is untouched; see metric_identity for why nothing is
+    # rewritten.
 
 
 def plan_audited_metric_registration(conn: sqlite3.Connection, metric_id: str) -> MetricAuditPlan:
@@ -54,9 +60,13 @@ def plan_audited_metric_registration(conn: sqlite3.Connection, metric_id: str) -
     from skill_harness.storage.repositories.evidence.frozen_cases import (
         PAIRED_FREEZE_BINARY_METRIC_IDS,
     )
+    from skill_harness.storage.repositories.evidence.metric_identity import (
+        classify_implementation_drift,
+    )
     from skill_harness.subject.ingest import (
         ORACLE_METRIC_VERSION,
         _oracle_implementation_hash,
+        _oracle_semantic_digest,
     )
 
     if metric_id not in PAIRED_FREEZE_BINARY_METRIC_IDS:
@@ -79,14 +89,32 @@ def plan_audited_metric_registration(conn: sqlite3.Connection, metric_id: str) -
             "Recovery: run audit-metric --execute against a fresh store FIRST, then "
             "re-ingest the .eval logs into that fresh store (deterministic and offline)."
         )
-    if existing["implementation_hash"] != live_hash:
-        raise ValueError(
-            f"audited row ({metric_id!r}, {ORACLE_METRIC_VERSION!r}) pins implementation_hash "
-            f"{existing['implementation_hash']}, but the live module hashes to {live_hash} — "
-            "implementation drift. Refusing: bump ORACLE_METRIC_VERSION for the changed "
-            "code, or run the code matching the registered hash."
-        )
-    return MetricAuditPlan("already_audited", metric_id, ORACLE_METRIC_VERSION, live_hash)
+    # #209: ask the SECOND question before refusing, exactly as the ingest path
+    # does. classify_implementation_drift performs NO writes, which is what lets
+    # this planner keep its documented read-only contract; the compensating
+    # restamp is appended by the executor.
+    #
+    # Delegated whole rather than gated behind `existing["implementation_hash"]
+    # != live_hash`: that row is append-only and keeps its original hash forever,
+    # so after one restamp the two differ permanently while the identity is
+    # settled, and the gate turned every later call into a refusal.
+    verdict = classify_implementation_drift(
+        conn,
+        metric_id=metric_id,
+        version=ORACLE_METRIC_VERSION,
+        recorded_hash=existing["implementation_hash"],
+        live_hash=live_hash,
+        live_semantic=_oracle_semantic_digest(),
+    )
+    if verdict.is_current:
+        return MetricAuditPlan("already_audited", metric_id, ORACLE_METRIC_VERSION, live_hash)
+    if verdict.restampable:
+        return MetricAuditPlan("restamp", metric_id, ORACLE_METRIC_VERSION, live_hash)
+    raise ValueError(
+        f"audited row ({metric_id!r}, {ORACLE_METRIC_VERSION!r}) pins "
+        f"implementation_hash {existing['implementation_hash']}, but the live module "
+        f"hashes to {live_hash} -- implementation drift. {verdict.reason}"
+    )
 
 
 def register_audited_metric(conn: sqlite3.Connection, metric_id: str) -> dict[str, Any]:
@@ -107,7 +135,12 @@ def register_audited_metric(conn: sqlite3.Connection, metric_id: str) -> dict[st
 
     :raises ValueError: any refusal arm of :func:`plan_audited_metric_registration`.
     """
-    from skill_harness.subject.ingest import _utcnow_iso
+    from skill_harness.storage.repositories.evidence.metric_identity import (
+        append_implementation_restamp,
+        classify_implementation_drift,
+        record_semantic_digest,
+    )
+    from skill_harness.subject.ingest import _oracle_semantic_digest, _utcnow_iso
 
     plan = plan_audited_metric_registration(conn, metric_id)
     if plan.action == "register":
@@ -124,6 +157,34 @@ def register_audited_metric(conn: sqlite3.Connection, metric_id: str) -> dict[st
                     registered_at=_utcnow_iso(),
                 ),
             )
+            # #209: give the identity a digest in the same transaction as the row,
+            # so it is repairable from registration onward rather than only after
+            # a later clean read.
+            record_semantic_digest(
+                conn,
+                metric_id=plan.metric_id,
+                version=plan.version,
+                implementation_hash=plan.implementation_hash,
+                semantic=_oracle_semantic_digest(),
+            )
+    elif plan.action == "restamp":
+        # The planner already established restampability read-only. Re-classify
+        # inside the write transaction rather than trusting the plan: between plan
+        # and execute another writer may have appended a restamp, and
+        # append_implementation_restamp refuses a non-restampable verdict outright.
+        with writer_transaction(conn):
+            existing = get_metric_version(conn, plan.metric_id, plan.version)
+            if existing is not None:
+                verdict = classify_implementation_drift(
+                    conn,
+                    metric_id=plan.metric_id,
+                    version=plan.version,
+                    recorded_hash=existing["implementation_hash"],
+                    live_hash=plan.implementation_hash,
+                    live_semantic=_oracle_semantic_digest(),
+                )
+                if verdict.restampable:
+                    append_implementation_restamp(conn, verdict)
     row = get_metric_version(conn, plan.metric_id, plan.version)
     if row is None:  # pragma: no cover — the row was just inserted or found
         raise ValueError(
