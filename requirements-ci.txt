@@ -57,7 +57,7 @@ numpy==2.5.1
 # pyproject.toml pin now caps at <3 so this constraint can never drift past
 # the audited major without a new audit (S4).
 openai==2.48.0
-packaging==26.2
+packaging==26.3
 pandas==3.0.5
 pathspec==1.1.1
 patsy==1.0.2
