@@ -33,7 +33,7 @@ locked before data collection, plus the registered results of the sizing run. Th
 that forced the redesign: [findings/v0.2-reaim-gate.md](findings/v0.2-reaim-gate.md).
 
 **"I want the full spec / I want to contribute."** → [PRD.md](PRD.md) (evidence model,
-admissibility rules, CLI surface) and [PLAN.md](PLAN.md) (build tracks; internal register),
+evidence admissibility rules, CLI surface) and [PLAN.md](PLAN.md) (build tracks; internal register),
 plus [../CONTRIBUTING.md](../CONTRIBUTING.md).
 
 **"I want to reproduce a result."** → [../examples/](../examples/) — step-by-step, with the
@@ -41,5 +41,5 @@ paid steps clearly marked.
 
 Also here: [RELEASE-NOTES-v0.1.md](RELEASE-NOTES-v0.1.md) ·
 [concepts/why-pythonutf8-on-windows.md](concepts/why-pythonutf8-on-windows.md) (Windows
-terminal fix) · [`INVARIANTS.md`](INVARIANTS.md) (tracked pass-rule / admissibility
+terminal fix) · [`INVARIANTS.md`](INVARIANTS.md) (tracked pass-rule / evidence admissibility
 invariants) · `supply-chain/` (per-dependency audit records).

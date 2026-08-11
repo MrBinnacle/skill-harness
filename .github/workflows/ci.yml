@@ -164,6 +164,8 @@ jobs:
         run: pre-commit run ban-raw-oracle-verdicts --all-files
       - name: timestamp-final ORDER BY ban (deterministic tie-break on append-only tables)
         run: pre-commit run ban-timestamp-final-order-by --all-files
+      - name: public-surface copy bans
+        run: pre-commit run ban-public-surface-copy --all-files
 
   drift-check:
     name: Drift check (locked contracts)

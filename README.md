@@ -112,7 +112,8 @@ nothing downstream is allowed to key on clause position.
 
 **Vacuity-flag precision:** MEASURED at 0.972 by blind cross-family adjudication over 102
 estimation rows — but that is **flag-level only**. When the adjudicators also had to agree on
-*which kind* of vacuity, kind-precision 0.835.
+*which kind* of vacuity, kind-precision 0.835: `not_a_directive` matched 77/78, while
+`weak_directive` matched 4/20.
 [#153](https://github.com/MrBinnacle/skill-harness/issues/153).
 
 ## Try the free offline skill audit

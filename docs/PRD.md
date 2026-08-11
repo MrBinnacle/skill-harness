@@ -68,9 +68,9 @@ Traditional software testing assumes:
 
 Skills possess none of these properties.
 
-The harness's novel and defensible claim is the *evidentiary discipline* — falsifiable directional contracts with write-time admissibility-gated, append-only provenance. This is the P4 signature (zero hits in the eval domain at the time of design). The estimator (Leave-One-Out clause ablation) is deliberately conservative: under-crediting contribution is a safe failure for an adversarial audit (false-negative on contribution, never false-positive on a PASS).
+The harness's novel and defensible claim is the *evidentiary discipline* — falsifiable directional contracts with write-time evidence-admissibility-gated, append-only provenance. This is the P4 signature (zero hits in the eval domain at the time of design). The estimator (Leave-One-Out clause ablation) is deliberately conservative: under-crediting contribution is a safe failure for an adversarial audit (false-negative on contribution, never false-positive on a PASS).
 
-Skill Harness applies clause-level prompt-component ablation — as in Sclar et al. (arXiv:2310.11324, FormatSpread / component ablation), Longpre et al. (arXiv:2301.13688, FLAN component ablations) — to skill artifacts, with three disciplines: directional-only oracles, admissibility gating, and append-only provenance. Redundancy cancellation (JoPA, Chang et al. arXiv:2405.20404) is a documented v0.1 limitation; LOO under-credits contribution when clauses are jointly redundant, never over-credits.
+Skill Harness applies clause-level prompt-component ablation — as in Sclar et al. (arXiv:2310.11324, FormatSpread / component ablation), Longpre et al. (arXiv:2301.13688, FLAN component ablations) — to skill artifacts, with three disciplines: directional-only oracles, evidence admissibility gating, and append-only provenance. Redundancy cancellation (JoPA, Chang et al. arXiv:2405.20404) is a documented v0.1 limitation; LOO under-credits contribution when clauses are jointly redundant, never over-credits.
 
 The system evaluates whether a skill clause produces a measurable directional effect when present versus absent.
 
@@ -141,7 +141,7 @@ Measurements are based on deltas between conditions.
 
 ## 3.3 Admissible Evidence Only
 
-Evidence enters aggregation only if admissibility requirements are satisfied.
+Evidence enters aggregation only if evidence admissibility requirements are satisfied.
 
 No component may self-certify its own reliability.
 
@@ -170,7 +170,7 @@ Every measurement must retain:
 * source
 * oracle
 * version
-* admissibility state
+* evidence admissibility state
 
 Historical evidence is append-only.
 
@@ -265,7 +265,7 @@ Requirements:
 
 * human-labeled calibration set
 * tracked agreement score
-* admissibility enforcement
+* evidence admissibility enforcement
 * pairwise mode only — output one of `{A, B, tie}` for one named axis; numeric/scalar grading forbidden
 * mandatory position swap — every verdict requires both `(A, B)` and `(B, A)` orderings; disagreement on swap → `position_swap_agreement = 0` → `admissibility_state = 'inadmissible'` (reason `position_disagreement`)
 * length-controlled scoring — AlpacaEval-2 length-regression protocol (Dubois et al. arXiv:2404.04475) applied both at prompt-time (max_tokens=80 with "length should not influence" instruction) and observation-time; `length_regression_coefficient` stored separately from `length_controlled_agreement`; both raw and length-adjusted observations persisted at write time
@@ -293,7 +293,7 @@ Highest authority when available.
 
 ---
 
-# 6. Admissibility System
+# 6. Evidence Admissibility System
 
 ## Purpose
 
@@ -307,11 +307,11 @@ Tier-2 verdicts are inadmissible unless ALL of the following hold for the `(judg
 
 * a calibrated record exists with `pairwise_agreement ≥ 0.7`
 * `position_consistency ≥ 0.8`
-* `length_controlled_agreement` recorded; Cohen's κ `≥ 0.40` (observed-marginal, chance-corrected) — hard-gates admissibility at pair-set size N ≥ 100 (see §13)
+* `length_controlled_agreement` recorded; Cohen's κ `≥ 0.40` (observed-marginal, chance-corrected) — hard-gates evidence admissibility at pair-set size N ≥ 100 (see §13)
 * calibration set size `≥ 50` pairs
 * re-calibration cadence ≤ 90 days OR no model-version bump since
 
-See §5 Tier 2 for the seven-layer adversarial defense stack required for any Tier-2 verdict to enter the admissibility pipeline.
+See §5 Tier 2 for the seven-layer adversarial defense stack required for any Tier-2 verdict to enter the evidence admissibility pipeline.
 
 ---
 
@@ -319,7 +319,7 @@ See §5 Tier 2 for the seven-layer adversarial defense stack required for any Ti
 
 Calibration inputs are strict JSONL with eight required fields: `pair_id, axis, prompt, response_a, response_b, human_preference, labeler_id, labeled_at`.
 
-State enum (admissibility classes by pair-set size N):
+State enum (evidence admissibility classes by pair-set size N):
 
 * `rejected` (N < 50) — calibration refused; downstream verdicts inadmissible
 * `conditional` (50 ≤ N < 100) — admissible with size-warning surfaced in reports
@@ -327,7 +327,7 @@ State enum (admissibility classes by pair-set size N):
 
 Cohen's κ on the 3-class outcome (A/B/tie) uses observed marginals, NOT 1/3 uniform.
 
-v0.1: no starter set ships; user-provided JSONL only. Operator-self-label admissibility is rejected (resolved 2026-06-06 by SME verdict on independence-collapse grounds; see Appendix E C2 resolution).
+v0.1: no starter set ships; user-provided JSONL only. Operator-self-label evidence admissibility is rejected (resolved 2026-06-06 by SME verdict on independence-collapse grounds; see Appendix E C2 resolution).
 
 ---
 
@@ -335,7 +335,7 @@ v0.1: no starter set ships; user-provided JSONL only. Operator-self-label admiss
 
 Length control in v0.1 is calibration-time only, not verdict-write-time. `oracle_verdicts` stores a single `observation` column (`{0.0, 0.5, 1.0}`) — there are no `raw_observation` or `length_adjusted_observation` columns in the schema, and no per-verdict length correction is applied or stored (`JudgeVerdict.length_adjusted_observation` is hard-coded `None` on every path through `oracles/tier2/judge.py`).
 
-What ships in v0.1: (a) a prompt-side instruction to the judge that response length should not influence its choice (`oracles/tier2/judge.py::_build_prompt`); (b) a calibration-time length-controlled agreement check — `calibrate()` fits an OLS length-regression coefficient (`β₁`, `oracles/calibration/length_regression.py`) over the calibration pair set, derives `length_controlled_agreement`, and gates the `(judge_id, axis)` calibration state on it whenever a value is computed (`_THRESHOLD_LENGTH_CONTROLLED = 0.65` in `oracles/calibration/command.py::determine_state`). This is a judge-level admissibility gate, not a per-verdict correction.
+What ships in v0.1: (a) a prompt-side instruction to the judge that response length should not influence its choice (`oracles/tier2/judge.py::_build_prompt`); (b) a calibration-time length-controlled agreement check — `calibrate()` fits an OLS length-regression coefficient (`β₁`, `oracles/calibration/length_regression.py`) over the calibration pair set, derives `length_controlled_agreement`, and gates the `(judge_id, axis)` calibration state on it whenever a value is computed (`_THRESHOLD_LENGTH_CONTROLLED = 0.65` in `oracles/calibration/command.py::determine_state`). This is a judge-level evidence admissibility gate, not a per-verdict correction.
 
 Per-verdict, write-time length adjustment (the schema in the previous revision of this section) is not implemented; tracked for v0.2.
 
@@ -343,7 +343,7 @@ Per-verdict, write-time length adjustment (the schema in the previous revision o
 
 ## Storage
 
-Admissibility is recorded at write time.
+Evidence admissibility is recorded at write time.
 It is never recomputed.
 
 ---
@@ -864,7 +864,7 @@ Per-track migration number ranges:
 Raw `SELECT … FROM oracle_verdicts` is enforced (pre-commit hook `ban-raw-oracle-verdicts` + CI job `structural-bans`, see `.pre-commit-config.yaml` / `.github/workflows/ci.yml`) against a documented allowlist, not a bare "audit/-only" ban — none of the allowed call sites read `observation` from the raw table to feed aggregation; they are single-row/metadata reads the VIEW is not shaped to answer:
 
 * `audit/` — cross-reference/inspection (`audit_all_verdicts()` etc.), the module's designed purpose (A29).
-* `aggregation/engine.py` — admissibility-state counts and confound-membership checks for exclusion-rate reporting (bookkeeping about which rows the VIEW dropped, not the dropped rows' values).
+* `aggregation/engine.py` — evidence-admissibility-state counts and confound-membership checks for exclusion-rate reporting (bookkeeping about which rows the VIEW dropped, not the dropped rows' values).
 * `ablation/runner.py` — resume-state rebuild: reloading a SPECIFIC already-persisted verdict by `(run_id, clause_id, sample_index)` to avoid re-recording it.
 * `cli/main.py` — single-verdict operator commands (freeze eligibility check, verdict lookup by id).
 * `storage/repositories/evidence/frozen_cases.py` — single-row provenance copy (`metric_id`/`metric_version`/sample refs) by `verdict_id` at freeze time.
@@ -962,7 +962,7 @@ May optionally mint a `runs.run_kind='evaluate_skill'` envelope as audit-trail m
 
 Both paths: `admissibility_state = 'admissible'` AND `oracle_source = 'mechanical'` (Tier-1 only; Tier-2 freezing deferred to v0.2 D22).
 
-**Normative (A′):** a paired frozen case is the Null half of the winning evidence re-encoded, **not** independent falsification — on the paired path, any threshold-clearing run deterministically contains freezable evidence, so the §3.4 frozen-case gate does no independent inferential work there; anti-vacuity is discharged upstream by the Stage-0 Null screen (`p0 < 1`) and write-time admissibility, and a paired-path PASSED/KEEP must never be read as independently falsified.
+**Normative (A′):** a paired frozen case is the Null half of the winning evidence re-encoded, **not** independent falsification — on the paired path, any threshold-clearing run deterministically contains freezable evidence, so the §3.4 frozen-case gate does no independent inferential work there; anti-vacuity is discharged upstream by the Stage-0 Null screen (`p0 < 1`) and write-time evidence admissibility, and a paired-path PASSED/KEEP must never be read as independently falsified.
 
 **Idempotent:** duplicate freeze of same `(clause_id, axis, failing_input_sha256)` raises UNIQUE → exit 0 with `"already frozen"` stderr (not silent no-op).
 

@@ -30,17 +30,17 @@ Spec: `docs/PRD.md` §18 "CLI" cost discipline.
 
 ## 3. Evidence admissibility model
 
-Admissibility is resolved at verdict-write time and never recomputed. Tier-2
+Evidence admissibility is resolved at verdict-write time and never recomputed. Tier-2
 (LLM-judge) verdicts are inadmissible without a calibrated `(judge_id, axis)` record
 meeting the §6 thresholds; with no admissible evidence, a clause is UNMEASURED — never
 PASSED.
 
 Enforced in:
-- `src/skill_harness/ablation/runner.py` (admissibility resolved at write)
+- `src/skill_harness/ablation/runner.py` (evidence admissibility resolved at write)
 - `src/skill_harness/oracles/tier2/judge.py` (position-swap + injection defenses gate `admissibility_state`)
 - `src/skill_harness/storage/migrations_sql/evidence/0001_initial.sql` (append-only triggers on `oracle_verdicts`)
 
-Spec: `docs/PRD.md` §6 "Admissibility System".
+Spec: `docs/PRD.md` §6 "Evidence Admissibility System".
 
 ## 4. OC enumeration grid (locked)
 

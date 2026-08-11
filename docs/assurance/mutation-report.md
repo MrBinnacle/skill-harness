@@ -186,7 +186,7 @@ No-tests (27): functions with no covering test under the scoped selection
 ### Killer tests
 
 `tests/test_audit_mutation.py` — run filter/order/fields for `audit_all_verdicts`;
-`get_verdict_by_id` hit/miss; clause list + admissibility select.
+`get_verdict_by_id` hit/miss; clause list + evidence-admissibility select.
 
 ### Survivors (12) — all `zip(..., strict=True)` equivalents
 
