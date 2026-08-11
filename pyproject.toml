@@ -123,6 +123,9 @@ markers = [
   "no_network: test must run fully offline (pytest-socket blocks sockets)",
   # #187 dense CS coverage grid — own CI job (do not fold into the 15m matrix cell).
   "calibration: dense sequential coverage calibration (deselect with -m 'not calibration')",
+  # #168 assurance lane — deep stateful/fuzz runs. Own CI job with its own timeout;
+  # do not fold into the 25m test matrix cell (#170 alone specifies >=1h of fuzz).
+  "assurance: long-running assurance search (deselect with -m 'not assurance')",
 ]
 filterwarnings = ["error"]
 
@@ -154,6 +157,13 @@ ignore = [
 # Runtime floor is 3.12 (requires-python + the CI test matrix): the pinned numerical
 # stack (numpy 2.5.x / scipy 1.18.x) ships no cp311 wheels, so 3.11 was unsupportable.
 python_version = "3.12"
+# src-layout resolution. CI installs the package (-e ".[dev]") so `skill_harness`
+# resolves there without this, but the pre-commit mypy hook runs in an isolated
+# venv whose additional_dependencies list cannot contain this package itself --
+# so every test file importing skill_harness failed the hook with import-not-found
+# while passing an installed-env `mypy --strict` run. Adding the search path fixes
+# the hook without changing what CI checks.
+mypy_path = "src"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
