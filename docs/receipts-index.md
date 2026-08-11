@@ -98,6 +98,25 @@ the named receipt directories is absent from this page.
   hide the miss; that the legacy posterior interval is a frequentist 95% CI
   under sequential stopping; that the two misses are equal operator damage.
 
+### [`docs/findings/store-bricking-deadlock.md`](findings/store-bricking-deadlock.md)
+
+- **Claims:** Two independent instances of one deadlock shape, both reproduced
+  deterministically (#168): a comment-only edit to a shipped migration changes
+  its recorded SHA-256, `apply_pending` then refuses to open every existing
+  evidence store, and the `schema_migrations` row that would clear the refusal
+  is append-only — with **no re-stamp path anywhere in `src/`**, asserted as an
+  absence test. The same shape recurs between `subject/ingest.py`'s self-hash
+  and append-only `metric_versions`. Severity `CORRUPTION`; fix owned by #169
+  and pinned as a `strict=True` xfail so it cannot close silently.
+- **Refuses to claim:** Any rate, frequency or probability of the deadlock
+  occurring in the field — this is an existence proof on a constructed store,
+  not a measurement of incidence. That `ORACLE_METRIC_VERSION` bumping is a
+  repair (it mints a **new metric identity**, so evidence before and after is
+  no longer the same measurement). That read-only survival is mitigation: the
+  escape hatch sets `PRAGMA query_only = ON`, so a bricked store is readable
+  and permanently unwritable. That the reproduction was seeded or searched —
+  it is deterministic, and **no seed is recorded because none was used.**
+
 ---
 
 ## Observation records
