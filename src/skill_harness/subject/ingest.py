@@ -58,6 +58,11 @@ from skill_harness.storage.repositories.evidence.clauses import (
     get_clause_by_id,
     insert_clause,
 )
+from skill_harness.storage.repositories.evidence.metric_identity import (
+    append_implementation_restamp,
+    classify_implementation_drift,
+    record_semantic_digest,
+)
 from skill_harness.storage.repositories.evidence.metric_versions import (
     get_metric_version,
     insert_metric_version,
@@ -75,6 +80,7 @@ from skill_harness.storage.repositories.evidence.skills import (
     insert_skill,
 )
 from skill_harness.storage.transaction import writer_transaction
+from skill_harness.subject.implementation_identity import semantic_digest
 from skill_harness.subject.inspect_adapter import SubjectLayerNotInstalledError
 
 # Whole-skill sentinel clause: v0.2's unit of evaluation is the whole skill
@@ -453,13 +459,50 @@ def write_paired_evidence(
             # exactly one time, first insert). Raising here aborts the
             # transaction; nothing is written.
             live_hash = _oracle_implementation_hash()
-            if existing_metric["implementation_hash"] != live_hash:
+            live_semantic = _oracle_semantic_digest()
+            # #209: ask the SECOND question before refusing. A raw-byte mismatch
+            # used to end in an unconditional raise, so editing a comment in this
+            # module locked the identity permanently and the append-only row could
+            # not be corrected. Now a drift whose AST identity digest is unchanged
+            # is cleared by APPENDING a compensating restamp. Safeguard A is not
+            # weakened: a behaviour change still refuses, and so does an identity
+            # holding no digest to compare against.
+            #
+            # The comparison is delegated ENTIRELY to classify_implementation_drift
+            # rather than pre-checked against the row's own hash. That row is
+            # append-only and keeps its original hash forever, so after one restamp
+            # the recorded hash and the live hash differ permanently while the
+            # identity is settled -- pre-checking the recorded hash made every
+            # later ingest refuse.
+            verdict = classify_implementation_drift(
+                conn,
+                metric_id=metric_id,
+                version=ORACLE_METRIC_VERSION,
+                recorded_hash=existing_metric["implementation_hash"],
+                live_hash=live_hash,
+                live_semantic=live_semantic,
+            )
+            if verdict.is_current:
+                # The hash in force matches, so the module on disk provably IS the
+                # registered one and its identity digest is trustworthy. Recording
+                # it here is the backfill that heals identities registered before
+                # this repair existed: the first ingest after upgrading, BEFORE any
+                # edit, gives the identity a digest, so a later comment edit is
+                # repairable rather than terminal.
+                record_semantic_digest(
+                    conn,
+                    metric_id=metric_id,
+                    version=ORACLE_METRIC_VERSION,
+                    implementation_hash=live_hash,
+                    semantic=live_semantic,
+                )
+            elif verdict.restampable:
+                append_implementation_restamp(conn, verdict)
+            else:
                 raise MetricImplementationDriftError(
                     f"metric_versions row ({metric_id!r}, {ORACLE_METRIC_VERSION!r}) pins "
                     f"implementation_hash {existing_metric['implementation_hash']}, but the "
-                    f"live oracle module hashes to {live_hash} — the scoring code changed "
-                    "after registration. Remedy: bump ORACLE_METRIC_VERSION for the changed "
-                    "implementation, or run the code matching the registered hash."
+                    f"live oracle module hashes to {live_hash} -- {verdict.reason}"
                 )
         else:
             insert_metric_version(
@@ -477,6 +520,17 @@ def write_paired_evidence(
                     mechanical_validity_test_passed=1,
                     registered_at=now,
                 ),
+            )
+            # Record the identity digest in the SAME transaction as the row it
+            # describes, so the two can never disagree. A newly registered
+            # identity is therefore repairable from its first ingest onward; the
+            # backfill above exists for identities registered before this code.
+            record_semantic_digest(
+                conn,
+                metric_id=metric_id,
+                version=ORACLE_METRIC_VERSION,
+                implementation_hash=_oracle_implementation_hash(),
+                semantic=_oracle_semantic_digest(),
             )
         insert_run(
             conn,
@@ -757,6 +811,24 @@ def _derived_run_id(full_task_id: str, null_task_id: str) -> str:
 def _oracle_implementation_hash() -> str:
     """SHA-256 over this module's source — pins the oracle decision logic."""
     return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
+
+def _oracle_semantic_digest() -> str:
+    """AST-shape identity digest of this module -- the #209 second question.
+
+    Deliberately NOT a replacement for ``_oracle_implementation_hash``. That stays
+    the tamper detector over raw bytes; this answers *did the behaviour change?*,
+    so that editing a comment no longer refuses every further verdict under an
+    already-registered measurement identity.
+
+    Read as TEXT rather than bytes, which normalises line endings: a Windows
+    checkout must not mint a different measurement identity from a Linux one.
+    Docstrings ARE identity-bearing -- see ``implementation_identity`` for why.
+
+    :raises ImplementationIdentityError: this module does not parse. Callers treat
+        that as a refusal, never as an absent digest.
+    """
+    return semantic_digest(Path(__file__).read_text(encoding="utf-8"))
 
 
 def _utcnow_iso() -> str:
