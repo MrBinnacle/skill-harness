@@ -103,10 +103,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -c requirements-ci.txt -e ".[dev]"
       - name: pytest
-        # `-m "not live and not calibration"` mirrors local gate; live tests require
-        # ANTHROPIC_API_KEY (not provisioned in CI). Dense CS calibration (#187) runs
-        # in the dedicated calibration job below — do not fold it into this 15m cell.
-        run: pytest -q -m "not live and not calibration" --cov=src/skill_harness --cov-report=term-missing
+        # `-m "not live and not calibration and not assurance"` mirrors local gate; live
+        # tests require ANTHROPIC_API_KEY (not provisioned in CI). Dense CS calibration
+        # (#187) runs in the dedicated calibration job below — do not fold it into this
+        # 15m cell. The assurance lane (#168) runs on a schedule in assurance.yml for the
+        # same reason: #170 alone specifies >=1h of fuzz, which no PR cell can absorb.
+        run: pytest -q -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

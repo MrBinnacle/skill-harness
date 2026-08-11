@@ -1,0 +1,60 @@
+name: Assurance lane
+
+# Long-running assurance search (#168). Deliberately NOT on push or
+# pull_request: #170's own acceptance criteria specify at least one hour of fuzz,
+# and one assurance test has been measured at over four hours in Docker. No PR
+# cell can absorb that, and the AFK factory's in-container gate would hang rather
+# than fail on an unmarked long-runner.
+#
+# Trigger is SCHEDULED, ruled on #205. The reasoning is recorded there and is
+# worth restating once: for a lane that buys its evidence in runtime, "nobody ran
+# it" and "it passed" produce the same observable, so workflow_dispatch-only is
+# the LEAST conservative option available, not the most. workflow_dispatch is kept
+# alongside the schedule so the lane can be fired by hand on demand.
+#
+# This job is NOT in ci.yml's `all-green` needs list and must not be added to
+# branch protection's required checks without the owner saying so (#168).
+
+on:
+  schedule:
+    # 04:00 UTC daily, comfortably outside the working window.
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: assurance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  assurance:
+    name: Assurance search (${{ matrix.os }} · py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    # Own timeout, never folded into ci.yml's 25m test cell. Today's marked set
+    # measures ~3m on linux; the ceiling is sized for #170's >=1h fuzz landing here
+    # next, so it does not need raising again when that ticket lands.
+    timeout-minutes: 120
+    env:
+      PYTHONHASHSEED: "0"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements-ci.txt -e ".[dev]"
+      - name: pytest assurance
+        run: pytest -q -m assurance --tb=short
