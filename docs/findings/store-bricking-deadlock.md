@@ -2,7 +2,8 @@
 
 **Severity:** `CORRUPTION`
 **Ticket:** #168 (evidence-store stateful machine + deadlock reproduction); fix owned by #169
-**Status:** open — **reproduced**, characterised, and pinned. No production code changed by this ticket.
+**Status:** **half discharged.** Instance 6a is FIXED (#169). Instance 6b stands, tracked as #209.
+The finding stays open until 6b is ruled on — a CORRUPTION finding with one live instance is not closed.
 **Harness:** `tests/test_store_bricking_deadlock.py` (reproduction) + `tests/test_evidence_store_stateful.py` (`ledger_row_cannot_be_corrected` rule)
 **Reproduction:** deterministic — **no seed required.** See "Seed" below.
 
@@ -23,6 +24,47 @@ The product ships no repair path.
 
 The maintainer's workspace log (2026-07-26) recorded the shape; this ticket
 reproduces it and confirms **two independent instances** rather than one.
+
+## The repair (6a only) — #169
+
+Fixed by adding a **second question** rather than by weakening either safeguard.
+
+`discover()` now computes a **semantic digest** alongside the raw one: the same file
+with `--` comments stripped and whitespace collapsed, by a string-literal-aware
+scanner rather than a regex (the trigger bodies carry literals such as
+`'append_only_violation: schema_migrations'`, and `--` may legally appear inside
+one). On a raw-digest mismatch, `apply_pending()` asks whether the semantic digest
+recorded against the digest in force still matches the file on disk:
+
+- **it matches** → the edit changed no schema. A compensating **restamp** row is
+  appended, recording the superseded digest, the new one and a reason. Resolution
+  is *latest restamp wins, else the ledger row*, which makes acceptance idempotent.
+- **it differs, or was never recorded** → `MigrationTamperedError`, as before.
+
+Nothing is ever rewritten or removed. Both safeguards remain in force: the raw
+digest is still the tamper detector, the ledger row is still immutable, and a real
+schema change still locks the store
+(`tests/test_store_bricking_deadlock.py::TestMigrationLedgerDeadlock::test_schema_edit_locks_an_existing_store`).
+
+Three properties worth stating, because they decided the shape:
+
+- **No shipped `.sql` was edited.** Editing one is the trigger condition for this
+  very bug, so a repair delivered that way would brick every existing store on the
+  way to fixing bricking. The bookkeeping tables are runner-owned
+  (`CREATE TABLE IF NOT EXISTS` inside `apply_pending`), and carry their own
+  append-only triggers.
+- **Stores created before the fix are healed on their first open after upgrading**,
+  before any edit, by a backfill that runs exactly when the raw digest matches — the
+  one moment the current file is provably the recorded one.
+- **A store already bricked before upgrading is still refused**, deliberately: it
+  holds no evidence that the edit was harmless, and trusting the file on disk would
+  delete safeguard A rather than repair it. The remedy is to restore the original
+  bytes, which the raw digest makes exact.
+
+`test_no_restamp_path_exists_in_src` **stays green**, contrary to what #169
+anticipated. The repair adds no mutating path against the ledger at all, so the
+assertion about absence still holds — a better outcome than the one the ticket
+predicted, and the test keeps its value as a guard against trading safeguard B away.
 
 ## Instance 6a — migration sha ledger x `schema_migrations` append-only
 
@@ -91,11 +133,33 @@ evidence is readable and permanently unwritable.
 
 ## What this ticket did NOT do
 
-Per #168's scope, the fix is out of scope and belongs to #169. No storage
-production code changed. The requirement #169 has to satisfy is stated as a
-`strict=True` xfail, `test_a_comment_only_edit_should_not_brick_the_store` —
-when the fix lands, that test XPASSes and `strict=True` fails the suite, so the
-deadlock cannot be closed silently.
+Per #168's scope, the fix was out of scope and belonged to #169. No storage
+production code changed *by #168*. The requirement #169 had to satisfy was stated as
+a `strict=True` xfail, `test_a_comment_only_edit_should_not_brick_the_store` — so
+that when the fix landed the test would XPASS and `strict=True` would fail the
+suite, and the deadlock could not be closed silently. #169 landed the fix and
+removed the marker; the test is now a plain regression test under the same name.
+
+## Why 6b was not fixed alongside 6a — tracked as #209
+
+The two instances share a shape but not a remedy, and #169 fixed only 6a. Stated
+here so the split is a recorded decision rather than an omission:
+
+1. #169's own acceptance criteria require the change to be *"minimal and confined to
+   the storage layer."* `src/skill_harness/subject/ingest.py` is the subject layer.
+2. **The remedies genuinely differ.** 6a's normalisation is sound because SQL `--`
+   comments cannot carry behaviour. Python docstrings can: they are live module data,
+   so a digest that ignored them would report a changed threshold or rubric as "no
+   behaviour change". That is a hole in the tamper detector, not a repair of it — the
+   same error as normalising 6a's raw hash, which
+   `test_sha_covers_comments_not_just_schema` exists to catch.
+3. **The severities differ.** 6a left historical evidence readable and permanently
+   unwritable, with no exit. 6b refuses to mint *new* verdicts under the registered
+   identity; the store stays open and writable, and a named — though
+   identity-forking — exit exists.
+
+#209 carries the open design question (what a sound implementation-identity digest
+for a Python module is) and is labelled for a maintainer ruling before any code.
 
 ## Note on the reproduction's own defects
 

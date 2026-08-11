@@ -101,21 +101,31 @@ the named receipt directories is absent from this page.
 ### [`docs/findings/store-bricking-deadlock.md`](findings/store-bricking-deadlock.md)
 
 - **Claims:** Two independent instances of one deadlock shape, both reproduced
-  deterministically (#168): a comment-only edit to a shipped migration changes
-  its recorded SHA-256, `apply_pending` then refuses to open every existing
+  deterministically (#168): a comment-only edit to a shipped migration changed
+  its recorded SHA-256, `apply_pending` then refused to open every existing
   evidence store, and the `schema_migrations` row that would clear the refusal
   is append-only — with **no re-stamp path anywhere in `src/`**, asserted as an
   absence test. The same shape recurs between `subject/ingest.py`'s self-hash
-  and append-only `metric_versions`. Severity `CORRUPTION`; fix owned by #169
-  and pinned as a `strict=True` xfail so it cannot close silently.
+  and append-only `metric_versions`. Severity `CORRUPTION`. **Instance 6a is
+  fixed (#169)**: a semantic digest separates commentary from schema, and a
+  comment-only mismatch is cleared by an appended restamp record. The absence
+  test above **stays green** — the repair adds no mutating path against the
+  ledger — and the `strict=True` xfail that guarded the fix is now a plain
+  regression test under the same name. **Instance 6b stands, tracked as #209**,
+  so the finding is half discharged and remains open.
 - **Refuses to claim:** Any rate, frequency or probability of the deadlock
   occurring in the field — this is an existence proof on a constructed store,
   not a measurement of incidence. That `ORACLE_METRIC_VERSION` bumping is a
   repair (it mints a **new metric identity**, so evidence before and after is
-  no longer the same measurement). That read-only survival is mitigation: the
-  escape hatch sets `PRAGMA query_only = ON`, so a bricked store is readable
-  and permanently unwritable. That the reproduction was seeded or searched —
-  it is deterministic, and **no seed is recorded because none was used.**
+  no longer the same measurement). That read-only survival was mitigation: the
+  escape hatch sets `PRAGMA query_only = ON`, so a store bricked by a real
+  schema change is readable and permanently unwritable. That the reproduction
+  was seeded or searched — it is deterministic, and **no seed is recorded
+  because none was used.** That 6a's fix generalises to 6b: SQL comments cannot
+  carry behaviour, Python docstrings can, so the normalisation is not
+  transferable without a ruling (#209). That a store **already bricked before**
+  upgrading is healed — it is not; only stores opened cleanly once after the
+  upgrade are, and the remainder keep the restore-the-bytes remedy.
 
 ---
 
