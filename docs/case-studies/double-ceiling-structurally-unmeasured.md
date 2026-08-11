@@ -43,7 +43,7 @@ phrases, implicit-AND, uppercase-OR with precedence, `-` exclusions
 including phrase exclusion, punctuation-splits-words, unbalanced-quote
 recovery, title-weighted frequency ranking with an id tie-break —
 34 oracle asserts, each mapped to a numbered prompt rule. The fresh-context
-reviewer earned its keep during authoring: it caught my prompt naming the
+reviewer proved useful during authoring: it caught my prompt naming the
 exact ranking API (a gift to the Null arm) and a placebo tie-break assert
 whose expected order coincided with insertion order. Both fixed, gold
 re-validated.
@@ -58,7 +58,7 @@ shakedown plus the d upper bound as a pre-stated NO-GO datum.
 ## What the paired run measured
 
 Stage 1, paired k=8, one pin fingerprint on all 16 samples, ingested
-through the evidence store's write-time admissibility machinery:
+through the evidence store's write-time evidence admissibility machinery:
 
 | Field | Value |
 |---|---|

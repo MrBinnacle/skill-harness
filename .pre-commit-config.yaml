@@ -161,6 +161,14 @@ repos:
         # test_timestamp_order_by_exclude_matches_pre_commit_config) can
         # extract and verify it against the (empty) Python-side exempt set.
         exclude: '^$'
+      - id: ban-public-surface-copy
+        name: "public copy uses qualified evidence-admissibility language, avoids earn/earned framing, and reports kind precision with its class split"
+        language: system
+        # Field/node/context-aware and stdlib-only; the module's pytest cases
+        # independently prove poison + nearest-legitimate directions.
+        entry: python tests/test_structural_bans.py
+        pass_filenames: false
+        always_run: true
 
 ci:
   autoupdate_schedule: monthly

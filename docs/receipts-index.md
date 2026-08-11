@@ -81,7 +81,7 @@ the named receipt directories is absent from this page.
 ### [`docs/findings/v0.2-reaim-gate.md`](findings/v0.2-reaim-gate.md)
 
 - **Claims:** Entry-gate discipline for v0.2: unit inversion to skill-level
-  Full-vs-Null first; differentiation is UNMEASURED + admissibility + pin
+  Full-vs-Null first; differentiation is UNMEASURED + evidence admissibility + pin
   gating, not merely paired lift (field already has paired runners).
 - **Refuses to claim:** That the 2026-07-08 lock was prior-art-complete (dated
   correction records the sweep ran after); that v0.2 re-implements an existing
