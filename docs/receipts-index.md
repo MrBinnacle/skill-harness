@@ -241,10 +241,14 @@ the named receipt directories is absent from this page.
 
 - **Claims:** Container-side atheris 3.1.0 fuzz of the SKILL.md parser and
   extractor JSON ingestion models (#170); ≥1h total wall (30m+30m); executions,
-  corpus sizes, and crash count recorded; findings triaged by severity.
+  libFuzzer edge/feature/live-corpus counters, and crash count recorded; findings
+  triaged by severity; every figure re-derivable from `fuzz/artifacts/*.json`.
 - **Refuses to claim:** Host/Windows fuzz coverage; that expected refusals
   (`MalformedSkillError`, pydantic `ValidationError`) are crashes; production
-  fixes for non-trivial findings (findings first).
+  fixes for non-trivial findings (findings first); coverage-guided search over
+  the JSON validation core (`pydantic_core` is a compiled extension atheris
+  cannot instrument — that target's execution count is throughput, not reach);
+  that the corpus file count is the corpus size.
 
 ---
 
