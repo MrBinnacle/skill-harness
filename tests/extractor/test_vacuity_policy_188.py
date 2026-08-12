@@ -348,6 +348,18 @@ def test_kind_precision_render_requires_receipt_and_renders_when_supplied() -> N
     assert_kind_precision_render_safe(rendered, receipt)
 
 
+def test_no_receipt_passes_a_render_that_claims_no_kind_precision() -> None:
+    """UNMEASURED_GENERATION_MISMATCH is legitimate, not a violation.
+
+    A render carrying no kind-precision claim has nothing to validate, so the
+    absent receipt is not itself an error. Only an unverifiable CLAIM is refused.
+    """
+    assert_kind_precision_render_safe(
+        "flag-precision UNMEASURED_GENERATION_MISMATCH "
+        "(no calibration claim for this instrument triple)"
+    )
+
+
 def test_recall_must_not_be_described_as_measured() -> None:
     with pytest.raises(ValueError, match="recall"):
         assert_recall_not_claimed_measured("vacuity recall: measured at 0.5")
