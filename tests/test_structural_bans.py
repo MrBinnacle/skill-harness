@@ -12,10 +12,11 @@ violation shows up in the ordinary `pytest -m "not live"` loop too, without
 waiting on pre-commit/CI.
 
 The public-copy guard is field-aware, so it cannot be expressed as a pygrep
-pattern: only ``project.description`` is public PyPI copy, only SVG ``<text>``
-content is in scope, and the kind-precision rule needs a multi-line context
-window. Its pre-commit hook therefore invokes this module's zero-dependency
-scanner directly instead of maintaining a second, weaker pattern/allowlist.
+pattern: only ``project.description`` is public PyPI copy, SVG copy includes
+rendered text and accessible labels, and the calibration rules need multi-line
+context windows. Its pre-commit hook therefore invokes this module's
+zero-dependency scanner directly instead of maintaining a second, weaker
+pattern/allowlist.
 
 F-8 (S55 hostile review): the by-hand sync above was previously unchecked —
 nothing caught the two allowlists drifting apart. `test_exclude_lists_match_pre_commit_config`
@@ -81,23 +82,42 @@ _PUBLIC_COPY_EXCLUDED = {
     Path("docs/PLAN.md"),
     Path("docs/findings/v0.2-preregistration.md"),
     Path("docs/findings/v0.2-reaim-gate.md"),
-    Path("docs/observations/OBS-0001-fts5-notes-search-v1.md"),
-    Path("docs/observations/OBS-0002-fts5-notes-search-v2.md"),
     Path("docs/observations/OBS-0003-sqlite-tie-break-red-test-trap.md"),
     Path("docs/observations/OBS-0004-bayesian-eval-discipline.md"),
     Path("docs/observations/OBS-0005-append-only-evidence-design.md"),
     Path("docs/observations/OBS-0006-llm-judge-calibration.md"),
 }
 
-_BARE_ADMISSIBILITY_RE = re.compile(r"(?<!evidence )(?<!evidence-)\badmissibility\b", re.IGNORECASE)
+_ADMISSIBILITY_RE = re.compile(r"\badmissibility\b", re.IGNORECASE)
+_QUALIFIED_ADMISSIBILITY_PREFIX_RE = re.compile(r"(?<![\w-])evidence(?:\s+|-)$", re.IGNORECASE)
 _EARN_FAMILY_RE = re.compile(r"\bearn(?:s|ed|ing)?\b", re.IGNORECASE)
 _KIND_PRECISION_AGGREGATE_RE = re.compile(
-    r"\b0\.835\b|\bkind[ -]precision\b[^\n.!?]{0,40}\b83\.5(?:%|\s+percent\b)",
+    r"\b0\.835\b"
+    r"|\bkind[ -]precision\b[^\n.!?]{0,40}\b83\.5\s*(?:%|percent\b)"
+    r"|\b83\.5\s*(?:%|percent\b)[^\n.!?]{0,40}\bkind[ -]precision\b",
     re.IGNORECASE,
 )
-_RECALL_RE = re.compile(r"\brecall\b", re.IGNORECASE)
+_NOT_A_DIRECTIVE_SPLIT_RE = re.compile(
+    r"(?:\bnot_a_directive\b(?:(?!\bweak_directive\b)[^\n.!?]){0,60}\b77/77\b"
+    r"|\b77/77\b(?:(?!\bweak_directive\b)[^\n.!?]){0,60}\bnot_a_directive\b)",
+    re.IGNORECASE,
+)
+_WEAK_DIRECTIVE_SPLIT_RE = re.compile(
+    r"(?:\bweak_directive\b(?:(?!\bnot_a_directive\b)[^\n.!?]){0,60}\b4/20\b"
+    r"|\b4/20\b(?:(?!\bnot_a_directive\b)[^\n.!?]){0,60}\bweak_directive\b)",
+    re.IGNORECASE,
+)
+_VACUITY_RECALL_RE = re.compile(
+    r"(?:\b(?:vacuity[- ](?:flag|detector)|detector)(?:'s)?\b"
+    r"[^\n.!?]{0,80}\brecall\b"
+    r"|\brecall\b[^\n.!?]{0,80}"
+    r"\b(?:vacuity[- ](?:flag|detector)|detector)\b)",
+    re.IGNORECASE,
+)
+_MEASURED_RE = re.compile(r"\bmeasur(?:e|ed|ing)\b", re.IGNORECASE)
 _UNMEASURED_RE = re.compile(r"\bunmeasured\b", re.IGNORECASE)
 _KIND_CONTEXT_LINES = 2
+_RECALL_CONTEXT_LINES = 2
 _SITE_TEMPLATE_SUFFIXES = {
     ".htm",
     ".html",
@@ -115,34 +135,55 @@ def _line_number(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
 
-def _sentence_at(text: str, offset: int) -> str:
-    start = max(text.rfind(mark, 0, offset) for mark in ".!?") + 1
-    endings = [position for mark in ".!?" if (position := text.find(mark, offset)) >= 0]
-    end = min(endings) if endings else len(text)
-    return text[start:end]
+def _line_context(text: str, offset: int, radius: int) -> str:
+    lines = text.splitlines() or [text]
+    lineno = _line_number(text, offset)
+    start = max(0, lineno - 1 - radius)
+    end = min(len(lines), lineno + radius)
+    return "\n".join(lines[start:end])
+
+
+def _measured_recall_has_current_receipt_context(context: str) -> bool:
+    required = (
+        r"\b0\.73(?:31)?\b",
+        r"\b0\.75(?:24)?\b",
+        r"\b0\.66\b",
+        r"\b0\.87(?:4)?\b",
+        r"\b0\.62(?:2)?\b",
+        r"\b0\.91(?:3)?\b",
+        r"\b47\b",
+        r"\bstratified\b",
+        r"\bbootstrap\b",
+        r"\bgeneration\b",
+    )
+    return all(re.search(pattern, context, re.IGNORECASE) for pattern in required)
 
 
 def _public_copy_violations(text: str) -> list[str]:
     violations = [
         f"bare gate term at line {_line_number(text, match.start())}"
-        for match in _BARE_ADMISSIBILITY_RE.finditer(text)
+        for match in _ADMISSIBILITY_RE.finditer(text)
+        if not _QUALIFIED_ADMISSIBILITY_PREFIX_RE.search(text[: match.start()])
     ]
     violations.extend(
         f"earn/earned family at line {_line_number(text, match.start())}"
         for match in _EARN_FAMILY_RE.finditer(text)
     )
 
-    lines = text.splitlines() or [text]
     for match in _KIND_PRECISION_AGGREGATE_RE.finditer(text):
         lineno = _line_number(text, match.start())
-        start = max(0, lineno - 1 - _KIND_CONTEXT_LINES)
-        end = min(len(lines), lineno + _KIND_CONTEXT_LINES)
-        context = "\n".join(lines[start:end])
-        if "77/78" not in context or "4/20" not in context:
+        context = _line_context(text, match.start(), _KIND_CONTEXT_LINES)
+        if not _NOT_A_DIRECTIVE_SPLIT_RE.search(context) or not _WEAK_DIRECTIVE_SPLIT_RE.search(
+            context
+        ):
             violations.append(f"bare kind-precision aggregate at line {lineno}")
 
-    for match in _RECALL_RE.finditer(text):
-        if not _UNMEASURED_RE.search(_sentence_at(text, match.start())):
+    for match in _VACUITY_RECALL_RE.finditer(text):
+        context = _line_context(text, match.start(), _RECALL_CONTEXT_LINES)
+        measured = _MEASURED_RE.search(context)
+        if (measured and not _measured_recall_has_current_receipt_context(context)) or (
+            not measured and not _UNMEASURED_RE.search(context)
+        ):
             violations.append(
                 f"recall not stated as UNMEASURED at line {_line_number(text, match.start())}"
             )
@@ -151,20 +192,14 @@ def _public_copy_violations(text: str) -> list[str]:
 
 def _svg_text(svg: str) -> str:
     root = ET.fromstring(svg)
-    text_nodes: list[str] = []
-
-    def collect(element: ET.Element) -> None:
-        if element.tag.rsplit("}", 1)[-1] in {"script", "style"}:
-            return
-        if element.text:
-            text_nodes.append(element.text)
-        for child in element:
-            collect(child)
-            if child.tail:
-                text_nodes.append(child.tail)
-
-    collect(root)
-    return "".join(text_nodes)
+    public_copy: list[str] = []
+    for element in root.iter():
+        aria_label = element.get("aria-label")
+        if aria_label:
+            public_copy.append(aria_label)
+        if element.tag.rsplit("}", 1)[-1] in {"text", "title", "desc"}:
+            public_copy.append("".join(element.itertext()))
+    return "\n".join(public_copy)
 
 
 def _site_template_files(repo_root: Path) -> list[Path]:
@@ -289,46 +324,78 @@ def test_no_timestamp_final_order_by_without_tiebreak() -> None:
 
 def test_bare_gate_term_poison_and_qualified_phrase() -> None:
     poison = _public_copy_violations("Admissibility is checked before aggregation.")
-    legitimate = _public_copy_violations("Evidence admissibility is checked before aggregation.")
     assert any("bare gate term" in violation for violation in poison)
-    assert legitimate == []
+    assert _public_copy_violations("Evidence admissibility is checked before aggregation.") == []
+    assert _public_copy_violations("Evidence\nadmissibility is checked before aggregation.") == []
+    near_miss = _public_copy_violations("Counterevidence admissibility is not the gate term.")
+    assert any("bare gate term" in violation for violation in near_miss)
 
 
 def test_earn_family_poison_and_nearest_legitimate_phrase() -> None:
-    poison = _public_copy_violations("Does this skill earn its place?")
-    legitimate = _public_copy_violations(
-        "What does this skill cost, and which parts are worth that cost?"
+    for poison in (
+        "Does this skill earn its slot?",
+        "This skill earned its place.",
+        "This skill earns its place.",
+        "This skill is earning its place.",
+    ):
+        violations = _public_copy_violations(poison)
+        assert any("earn/earned family" in violation for violation in violations)
+    assert (
+        _public_copy_violations("What does this skill cost, and which parts are worth that cost?")
+        == []
     )
-    assert any("earn/earned family" in violation for violation in poison)
-    assert legitimate == []
+    assert _public_copy_violations("Learn from earnest comparisons year-round.") == []
 
 
 def test_kind_precision_poison_and_class_split() -> None:
     poison = _public_copy_violations("The detector's kind-precision is 0.835.")
-    prose_poison = _public_copy_violations("The detector's kind precision was 83.5%.")
+    prose_poison = _public_copy_violations("The detector reported 83.5 % kind precision.")
     legitimate = _public_copy_violations(
+        "The detector's kind-precision is 0.835.\n"
+        "not_a_directive matched 77/77; weak_directive matched 4/20."
+    )
+    stale_split = _public_copy_violations(
         "The detector's kind-precision is 0.835.\n"
         "not_a_directive matched 77/78; weak_directive matched 4/20."
     )
+    swapped_split = _public_copy_violations(
+        "The detector's kind-precision is 0.835.\n"
+        "not_a_directive matched 4/20; weak_directive matched 77/77."
+    )
     assert any("bare kind-precision aggregate" in violation for violation in poison)
     assert any("bare kind-precision aggregate" in violation for violation in prose_poison)
+    assert any("bare kind-precision aggregate" in violation for violation in stale_split)
+    assert any("bare kind-precision aggregate" in violation for violation in swapped_split)
     assert legitimate == []
 
 
 def test_measured_recall_poison_and_unmeasured_statement() -> None:
     poison = _public_copy_violations("The detector's recall was measured.")
-    legitimate = _public_copy_violations(
+    contradictory = _public_copy_violations(
+        "The vacuity detector's recall was measured, not UNMEASURED."
+    )
+    historical = _public_copy_violations(
         "The detector's recall is UNMEASURED because 1,015 unflagged clauses were not adjudicated."
     )
+    current = _public_copy_violations(
+        "The vacuity detector's recall was MEASURED at 0.73-0.75 for this generation, with "
+        "stratified-FPC 95% [0.66, 0.87], skill-cluster bootstrap 95% [0.62, 0.91], "
+        "and skill-level n=47."
+    )
     assert any("recall not stated as UNMEASURED" in violation for violation in poison)
-    assert legitimate == []
+    assert any("recall not stated as UNMEASURED" in violation for violation in contradictory)
+    assert historical == []
+    assert current == []
+    assert _public_copy_violations("Recall that evidence is append-only.") == []
 
 
 def test_pyproject_description_is_scanned_in_both_directions(tmp_path: Path) -> None:
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text(
-        '[project]\ndescription = "Does this skill earn its place?"\n'
-        '[tool.example]\nnote = "Evidence admissibility is checked."\n',
+        "[project]\n"
+        'name = "skill-harness"\n'
+        'description = "Evaluation harness for reusable AI agent skills - does a skill earn '
+        "its slot? Returns KEEP / CUT / CAN'T-TELL-YET.\"\n",
         encoding="utf-8",
     )
     assert any(
@@ -337,11 +404,24 @@ def test_pyproject_description_is_scanned_in_both_directions(tmp_path: Path) -> 
     )
 
     pyproject.write_text(
-        '[project]\ndescription = "Reports what changed with and without the skill."\n'
+        "[project]\n"
+        'name = "skill-harness"\n'
+        'description = "Reports what changed with and without the skill."\n'
+        'keywords = ["earn", "admissibility"]\n'
         '[tool.example]\nnote = "Does this skill earn its place?"\n',
         encoding="utf-8",
     )
     assert _repo_public_copy_violations(tmp_path) == []
+
+
+def test_pyproject_description_matches_approved_repo_description() -> None:
+    project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert project["description"] == (
+        "I wanted to know whether a skill was actually any good. This runs the same task with "
+        "the skill and without it, and reports what can honestly be said about the difference "
+        '- often "not enough to call it". A missing figure is a typed refusal, never an '
+        "invented score. First-class Claude Code support."
+    )
 
 
 def test_svg_text_nodes_are_scanned_in_both_directions(tmp_path: Path) -> None:
@@ -349,15 +429,22 @@ def test_svg_text_nodes_are_scanned_in_both_directions(tmp_path: Path) -> None:
     assets.mkdir()
     svg = assets / "preview.svg"
     svg.write_text(
-        '<svg xmlns="http://www.w3.org/2000/svg" aria-label="Does it earn its place?">'
-        "<text>Does this skill earn its place?</text></svg>",
+        '<svg xmlns="http://www.w3.org/2000/svg" aria-label="Does this skill earn its place?">'
+        "<text>Reports the difference with and without the skill.</text></svg>",
         encoding="utf-8",
     )
     assert any("assets/preview.svg:text" in item for item in _repo_public_copy_violations(tmp_path))
 
     svg.write_text(
-        '<svg xmlns="http://www.w3.org/2000/svg" aria-label="Does it earn its place?">'
-        "<text>Reports the difference with and without the skill.</text></svg>",
+        '<svg xmlns="http://www.w3.org/2000/svg" aria-label="Reports the comparison.">'
+        "<text>Does this skill </text><text>earn its place?</text></svg>",
+        encoding="utf-8",
+    )
+    assert any("assets/preview.svg:text" in item for item in _repo_public_copy_violations(tmp_path))
+
+    svg.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" aria-label="Reports the comparison.">'
+        "<text>Reports the <tspan>difference</tspan> with and without the skill.</text></svg>",
         encoding="utf-8",
     )
     assert _repo_public_copy_violations(tmp_path) == []
@@ -372,6 +459,29 @@ def test_site_generator_templates_are_scanned_in_both_directions(tmp_path: Path)
 
     page.write_text("<p>Evidence admissibility is checked.</p>", encoding="utf-8")
     assert _repo_public_copy_violations(tmp_path) == []
+
+
+def test_readme_and_nested_docs_are_scanned_in_both_directions(tmp_path: Path) -> None:
+    readme = tmp_path / "README.md"
+    readme.write_text("Does this skill earn its slot?", encoding="utf-8")
+    assert any("README.md" in item for item in _repo_public_copy_violations(tmp_path))
+    readme.write_text("Reports the comparison.", encoding="utf-8")
+
+    nested = tmp_path / "docs" / "nested" / "page.md"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("Admissibility is checked.", encoding="utf-8")
+    assert any("docs/nested/page.md" in item for item in _repo_public_copy_violations(tmp_path))
+    nested.write_text("Evidence admissibility is checked.", encoding="utf-8")
+    assert _repo_public_copy_violations(tmp_path) == []
+
+
+def test_public_copy_exclusion_list_is_minimal() -> None:
+    unnecessary = [
+        relative.as_posix()
+        for relative in sorted(_PUBLIC_COPY_EXCLUDED)
+        if not _public_copy_violations((REPO_ROOT / relative).read_text(encoding="utf-8"))
+    ]
+    assert unnecessary == [], f"public-copy exclusions hiding no current violation: {unnecessary}"
 
 
 def test_no_banned_copy_on_public_surfaces() -> None:
