@@ -27,7 +27,9 @@ repos:
         exclude: ^fuzz/(corpus|crashes|artifacts)/
       - id: mixed-line-ending
         args: [--fix=lf]
-        exclude: \.(ps1|cmd|bat)$
+        # Same reason as the two hooks above: a corpus/crash unit is bytes, and
+        # --fix=lf rewrites the CRLF inside one as readily as in source.
+        exclude: \.(ps1|cmd|bat)$|^fuzz/(corpus|crashes|artifacts)/
       - id: detect-private-key
 
   # rev tracks the ruff pin in requirements-ci.txt — keep them in lockstep.

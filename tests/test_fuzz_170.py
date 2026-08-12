@@ -7,6 +7,7 @@ without ``requirements-assurance-container.txt``) skip cleanly.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -116,6 +117,80 @@ def test_fuzz_targets_checked_in() -> None:
     assert _JSON_CORPUS.is_dir()
     assert any(_PARSER_CORPUS.iterdir()), "parser seed corpus must be non-empty"
     assert any(_JSON_CORPUS.iterdir()), "json seed corpus must be non-empty"
+
+
+_SHA1_NAME_RE = re.compile(r"^[0-9a-f]{40}$")
+_CRASH_NAME_RE = re.compile(r"^(?:crash|leak|timeout|oom|slow-unit)-([0-9a-f]{40})$")
+
+
+def _misnamed_artifacts(directory: Path) -> list[str]:
+    """libFuzzer-named files in ``directory`` whose bytes no longer match the name.
+
+    libFuzzer names a new corpus unit after the SHA-1 of its content, and a crash
+    reproducer ``<kind>-<sha1>``, so the file name IS a checksum of the artifact.
+    Hand-written seeds are not sha1-named and are not claimed by that convention.
+    """
+    out: list[str] = []
+    if not directory.is_dir():
+        return out
+    for path in sorted(directory.iterdir()):
+        if not path.is_file():
+            continue
+        crash = _CRASH_NAME_RE.match(path.name)
+        if crash is None and not _SHA1_NAME_RE.match(path.name):
+            continue
+        expected = crash.group(1) if crash else path.name
+        actual = hashlib.sha1(path.read_bytes()).hexdigest()
+        if actual != expected:
+            out.append(f"{path.as_posix()} holds the bytes of {actual}")
+    return out
+
+
+def test_corpus_units_match_their_libfuzzer_names() -> None:
+    """Every evolved corpus unit is still the bytes libFuzzer named it after.
+
+    The artifact half of the ticket ("keep the corpus and any crashing inputs as
+    artifacts"). Whitespace/eol normalisation rewrites these files silently —
+    pre-commit's end-of-file-fixer and trailing-whitespace did rewrite 124 of them
+    before they were excluded, and git's own ``* text=auto eol=lf`` would — and a
+    rewritten unit is no longer the input the run found.
+    """
+    mismatched = _misnamed_artifacts(_PARSER_CORPUS) + _misnamed_artifacts(_JSON_CORPUS)
+    assert not mismatched, "corpus units rewritten since the run:\n" + "\n".join(mismatched)
+
+
+def test_crash_reproducers_match_their_libfuzzer_names() -> None:
+    """The same guard over crash inputs, where a rewritten byte loses the repro.
+
+    AC3 pairs a severity with "its input artifact"; that pairing is only worth
+    anything while the artifact still reproduces.
+    """
+    mismatched = _misnamed_artifacts(_PARSER_CRASHES) + _misnamed_artifacts(_JSON_CRASHES)
+    assert not mismatched, "crash inputs rewritten since the run:\n" + "\n".join(mismatched)
+
+
+def test_artifact_name_guard_fires_on_a_rewritten_unit(tmp_path: Path) -> None:
+    """Positive control: the two guards above must not pass by being vacuous.
+
+    ``fuzz/crashes/`` is empty after a clean run, so its guard is only evidence if
+    the check is shown to fire. One appended newline — exactly what
+    end-of-file-fixer does — has to be enough to trip it, while a hand-written
+    seed must stay exempt.
+    """
+    body = b"---\nname: x\n"
+    digest = hashlib.sha1(body).hexdigest()
+    unit = tmp_path / digest
+    unit.write_bytes(body)
+    assert _misnamed_artifacts(tmp_path) == []
+
+    unit.write_bytes(body + b"\n")
+    assert len(_misnamed_artifacts(tmp_path)) == 1
+
+    (tmp_path / "seed_handwritten.md").write_bytes(b"not sha1-named\n")
+    assert len(_misnamed_artifacts(tmp_path)) == 1
+
+    (tmp_path / f"crash-{digest}").write_bytes(body.replace(b"\n", b"\r\n"))
+    assert len(_misnamed_artifacts(tmp_path)) == 2
 
 
 def test_fuzz_dir_outside_default_pytest_collection() -> None:
@@ -576,6 +651,33 @@ def test_fuzz_report_checked_in_with_stats() -> None:
     assert _recorded_minutes(text) >= 60.0
 
 
+_LIBFUZZER_DONE_RE = re.compile(r"Done\s+(\d+)\s+runs\s+in\s+(\d+)\s+second\(s\)")
+
+
+def test_recorded_hour_agrees_with_libfuzzers_own_summary() -> None:
+    """AC (≥1h of fuzz), read off libFuzzer's summary instead of off our own.
+
+    ``elapsed_sec`` and ``stats.executions`` are figures this harness wrote; the
+    ``Done N runs in M second(s)`` line is libFuzzer's, kept verbatim in the same
+    artifact. Holding one to the other means the acceptance floor cannot be met by
+    editing the harness's numbers into the record — only by running the fuzzer.
+    """
+    fuzzer_seconds = 0
+    for stem in ("parser_run", "json_run"):
+        payload = _load_run_payload(_ARTIFACTS / f"{stem}.json")
+        recorded = f"{payload['stats'].get('raw_tail', '')}{payload['stderr_tail']}"
+        match = _LIBFUZZER_DONE_RE.search(recorded)
+        assert match is not None, f"{stem}: no libFuzzer 'Done N runs in M second(s)' line"
+        runs, seconds = int(match.group(1)), int(match.group(2))
+        assert runs == payload["stats"]["executions"], f"{stem}: executions disagree with libFuzzer"
+        # The subprocess wall clock brackets libFuzzer's own: never shorter than
+        # the fuzzing it reports, never inflated far past process startup.
+        wall = payload["elapsed_sec"]
+        assert seconds <= wall < seconds + 60, f"{stem}: wall clock {wall}s is not the run"
+        fuzzer_seconds += seconds
+    assert fuzzer_seconds >= 3600, f"libFuzzer reports {fuzzer_seconds}s of fuzz, floor is 3600s"
+
+
 def test_fuzz_report_matches_checked_in_artifacts() -> None:
     """The report is re-derivable from the checked-in artifacts and crash inputs.
 
@@ -595,6 +697,10 @@ def test_fuzz_report_matches_checked_in_artifacts() -> None:
     # The corpus size of record is libFuzzer's live unit count, not the file count.
     assert parser["stats"]["corpus_size"] <= parser["corpus_files"]
     assert json_run["stats"]["corpus_size"] <= json_run["corpus_files"]
+    # And the corpus the receipt counts is the one in the tree: a deleted unit must
+    # not leave the recorded file count standing behind it.
+    assert parser["corpus_files"] == len(list(_PARSER_CORPUS.iterdir()))
+    assert json_run["corpus_files"] == len(list(_JSON_CORPUS.iterdir()))
 
 
 def test_fuzz_report_triages_every_crash_with_severity_and_input(tmp_path: Path) -> None:

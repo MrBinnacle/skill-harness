@@ -10,3 +10,12 @@
 *.ps1 text eol=crlf
 *.cmd text eol=crlf
 *.bat text eol=crlf
+
+# libFuzzer corpus units and crash reproducers (#170) are opaque bytes whose file
+# NAME is the SHA-1 of their content. `* text=auto eol=lf` above would normalise
+# any of them git guesses is text, which renames the evidence out from under
+# itself: a rewritten unit is not the input the run found, and a rewritten crash
+# file no longer reproduces the crash. Keep them verbatim. Pinned by
+# tests/test_fuzz_170.py::test_corpus_units_match_their_libfuzzer_names.
+fuzz/corpus/** -text
+fuzz/crashes/** -text
