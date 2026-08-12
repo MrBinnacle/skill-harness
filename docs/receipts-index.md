@@ -250,6 +250,24 @@ the named receipt directories is absent from this page.
   cannot instrument — that target's execution count is throughput, not reach);
   that the corpus file count is the corpus size.
 
+### [`docs/assurance/coverage-floors.md`](assurance/coverage-floors.md)
+
+- **Claims:** Per-module **branch** coverage (coverage.py 7.15.2, `--cov-branch`)
+  for `src/skill_harness/aggregation/` and `src/skill_harness/ablation/` under
+  the ordinary CI test selection (#171); three modules named below the 80% floor
+  with figures (`ablation/operator.py` 50.0%, `aggregation/confidence_sequence.py`
+  68.5%, `ablation/runner.py` 79.8%); 2,210 branches measured, 1,909 covered;
+  every figure re-derivable from the single command printed in the report.
+- **Refuses to claim:** That coverage is evidence of correctness — a branch is
+  counted when a test steps on it, whether or not anything asserted on the
+  result, and the #166 mutation score is the instrument that speaks to defect
+  detection; that branches reachable only from the excluded `calibration` and
+  `assurance` lanes are untested (they are unmeasured **by this selection**,
+  which is why `confidence_sequence.py`'s figure is partly a selection artifact);
+  that a module reporting 0 branches and therefore 100% carries any information;
+  that 80% is a gate rather than a place to look; host coverage for the two
+  symlink tests Windows refuses without Developer Mode.
+
 ---
 
 ## Ratifications
