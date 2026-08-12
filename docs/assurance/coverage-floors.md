@@ -152,8 +152,27 @@ An earlier draft of this report stated that the uncovered mass in
 `confidence_sequence.py` was "substantially an artifact" of the excluded
 calibration lane. **That claim was not measured. It was inferred from the
 module's name matching the lane's name, and it is false.** The `missing_branches`
-data needed to check it was in the same JSON the table was generated from. The
-arcs are input-validation guards, which no lane exercises.
+data needed to check it was in the same JSON the table was generated from.
+
+It was then measured, and the size of the error is worth recording. Re-running
+with **both** excluded lanes included (`-m "not live"`, 2,120 tests, 26m37s):
+
+| Module | CI selection | plus calibration + assurance | Delta |
+|--------|-------------:|-----------------------------:|------:|
+| `aggregation/confidence_sequence.py` | 68.5% | 70.4% | +1.9 |
+| every other module in both packages | - | - | +0.0 |
+
+The two excluded lanes account for **one uncovered arc out of seventeen** on the
+one module they touch at all, and for nothing anywhere else in either package.
+The remaining sixteen are the input-validation guards described above, which no
+lane exercises. So the selection is not the explanation, and the earlier claim
+was wrong about the mechanism and wrong about the magnitude by an order of
+magnitude.
+
+That comparison is a useful figure in its own right: **the `calibration` and
+`assurance` lanes buy almost no additional branch reach over the measurement
+path.** They exist to check numerical behaviour, not to cover branches, and this
+report should not be read as an argument for folding them into the PR cell.
 
 The claim is recorded here rather than deleted because a report about what the
 tests do not check should not quietly drop the thing its own author did not
