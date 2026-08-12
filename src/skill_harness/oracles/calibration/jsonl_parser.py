@@ -100,8 +100,8 @@ def parse_pair_set(path: Path) -> list[CalibrationPair]:
     """
     raw = path.read_text(encoding="utf-8")
     pairs: list[CalibrationPair] = []
-    for lineno, line in enumerate(raw.splitlines(), start=1):
-        line = line.strip()
+    for lineno, raw_line in enumerate(raw.splitlines(), start=1):
+        line = raw_line.strip()
         if not line:
             continue
         try:

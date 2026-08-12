@@ -337,9 +337,8 @@ def _bisect_crossing(
                 hi_m = mid
             else:
                 lo_m = mid
+        elif inside:
+            lo_m = mid
         else:
-            if inside:
-                lo_m = mid
-            else:
-                hi_m = mid
+            hi_m = mid
     return hi_m if find_lower else lo_m

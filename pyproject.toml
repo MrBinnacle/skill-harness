@@ -141,16 +141,34 @@ select = [
   "I",             # isort
   "UP",            # pyupgrade
   "B",             # bugbear
+  "PL",            # pylint
   "SIM",           # simplify
   "RUF",           # ruff-specific
   "S",             # bandit (security)
 ]
 ignore = [
   "S101",  # assert is fine in tests
+  "PLC0415",  # Local imports deliberately isolate optional deps and test seams.
+  "PLR0911",  # Explicit early returns keep validation and dispatch readable.
+  "PLR0912",  # Domain state machines are clearer as explicit branches.
+  "PLR0913",  # Public domain APIs carry independently meaningful parameters.
+  "PLR0915",  # Orchestrators remain linear to keep transactional flow visible.
+  "PLR0917",  # Public domain APIs carry independently meaningful parameters.
+  "PLR2004",  # Named protocol and fixture values are clearer inline at assertions.
+  "PLE0704",  # A shared exception cleanup helper deliberately re-raises its caller's error.
+  "PLW0603",  # Module caches require explicit global assignment at narrow seams.
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S", "B"]
+"tests/**" = [
+  "S",
+  "B017",  # Broad exception assertions intentionally cover validator and adapter boundaries.
+  "B905",  # Test-only zips compare fixtures whose equal lengths are asserted separately.
+  "PLR0402",  # Module aliasing is deliberate where tests monkeypatch the module boundary.
+  "PLR1714",  # Separate comparisons preserve distinct identity and exit-code assertions.
+  "PLR5501",  # Nested fixture branches mirror the scenario structure under test.
+  "PLW0108",  # Zero-argument lambdas are concise factories for monkeypatched dependencies.
+]
 "fuzz/**" = ["S", "SIM105"]
 
 [tool.mypy]
