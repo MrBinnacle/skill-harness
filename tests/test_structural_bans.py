@@ -89,7 +89,15 @@ _PUBLIC_COPY_EXCLUDED = {
 }
 
 _ADMISSIBILITY_RE = re.compile(r"\badmissibility\b", re.IGNORECASE)
-_QUALIFIED_ADMISSIBILITY_PREFIX_RE = re.compile(r"(?<![\w-])evidence(?:\s+|-)$", re.IGNORECASE)
+# The qualifier must sit immediately before the bare word: same line, or one
+# line-wrap. A bare ``\s+`` here spanned blank lines, so a paragraph ending in
+# the word "evidence" silently qualified an unrelated "Admissibility ..." that
+# opened the next paragraph -- the substring trap this rule exists to catch.
+# ``\Z``, not ``$``: ``$`` also matches before a trailing newline, which lets
+# exactly one blank line back through.
+_QUALIFIED_ADMISSIBILITY_PREFIX_RE = re.compile(
+    r"(?<![\w-])evidence(?:-|[^\S\n]+|[^\S\n]*\n[^\S\n]*)\Z", re.IGNORECASE
+)
 _EARN_FAMILY_RE = re.compile(r"\bearn(?:s|ed|ing)?\b", re.IGNORECASE)
 _KIND_PRECISION_AGGREGATE_RE = re.compile(
     r"\b0\.835\b"
@@ -331,6 +339,25 @@ def test_bare_gate_term_poison_and_qualified_phrase() -> None:
     assert any("bare gate term" in violation for violation in near_miss)
 
 
+def test_qualifier_must_be_adjacent_not_merely_upstream() -> None:
+    """A paragraph break severs the qualifier from the bare word.
+
+    The lookbehind is the whole rule here: the qualified term contains the
+    bare word, so anything that lets "evidence" qualify from an arbitrary
+    distance turns the rule off wherever the two happen to be neighbours.
+    """
+    for poison in (
+        "The store keeps evidence.\n\nAdmissibility is checked at write time.",
+        "The store keeps evidence\n\nAdmissibility is checked at write time.",
+        "The store keeps evidence\n\n\n\nAdmissibility is resolved at write.",
+    ):
+        assert any(
+            "bare gate term" in violation for violation in _public_copy_violations(poison)
+        ), poison
+    # One line-wrap is still the qualified term.
+    assert _public_copy_violations("... write-time evidence\nadmissibility snapshots.") == []
+
+
 def test_earn_family_poison_and_nearest_legitimate_phrase() -> None:
     for poison in (
         "Does this skill earn its slot?",
@@ -415,12 +442,19 @@ def test_pyproject_description_is_scanned_in_both_directions(tmp_path: Path) -> 
 
 
 def test_historical_pyproject_description_reconstruction_is_rejected(tmp_path: Path) -> None:
-    """Reconstruct the pre-fix PyPI summary that prompted issue #185."""
+    """Reconstruct the pre-fix PyPI summary that prompted issue #185.
+
+    A reconstruction, not a live catch: the line was already rewritten on this
+    branch before the guard existed, so this is the value from git history
+    (``git show 8da8e20:pyproject.toml``, line 8) replayed verbatim -- em dash
+    included. A "reconstruction" that silently normalises a character is a
+    paraphrase, and the poison direction is worth no more than its fidelity.
+    """
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text(
         "[project]\n"
         'name = "skill-harness"\n'
-        'description = "Evaluation harness for reusable AI agent skills - does a skill earn '
+        'description = "Evaluation harness for reusable AI agent skills \u2014 does a skill earn '
         "its slot? Returns KEEP / CUT / CAN'T-TELL-YET, never a manufactured score. "
         'First-class Claude Code support."\n',
         encoding="utf-8",
