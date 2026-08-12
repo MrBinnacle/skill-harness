@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="skill-harness — measures whether a skill earns its slot; the verdict can say no">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="skill-harness — compares the same task with and without a skill and refuses unsupported scores">
   <style>.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}</style>
   <!-- backdrop -->
   <rect width="1280" height="640" fill="#010409"/>

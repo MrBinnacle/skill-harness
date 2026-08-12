@@ -81,6 +81,9 @@ def test_honest_maturity_names_both_gaps_with_tickets() -> None:
     assert "0.972" in text
     assert "flag-level only" in text
     assert "kind-precision 0.835" in text
+    assert "`not_a_directive` matched 77/77" in text
+    assert "`weak_directive` matched 4/20" in text
+    assert "77/78" not in text
     assert "github.com/MrBinnacle/skill-harness/issues/153" in text
 
 
