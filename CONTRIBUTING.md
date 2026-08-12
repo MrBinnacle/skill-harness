@@ -36,6 +36,10 @@ ruff check src tests                       # 0 issues
 ruff format --check src tests              # 0 reformats needed
 ```
 
+CI generates a seed and passes it through `--randomly-seed=<seed>`. `pytest-randomly` prints the seed
+at the start of each run; reproduce that order locally by adding the printed
+value, for example `PYTHONHASHSEED=0 pytest -q --randomly-seed=123456789 -m "not live and not calibration and not assurance"`.
+
 ## The discipline
 
 ### TDD is not optional

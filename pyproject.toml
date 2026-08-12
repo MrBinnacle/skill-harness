@@ -81,7 +81,7 @@ dev = [
   # #161 — test-time numerical-reference + hygiene surface (assurance-pass manifest).
   # scipy/statsmodels already runtime deps; re-declared here so `pip install -e ".[dev]"`
   # alone still lands the full test stack. numpy is the explicit numerical base.
-  # pytest-randomly is installable only — not wired into CI invocations yet.
+  # pytest-randomly drives randomized CI order; its printed seed reproduces failures.
   "scipy>=1.11",
   "statsmodels>=0.14",
   "numpy>=2.0",
