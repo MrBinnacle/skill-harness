@@ -162,7 +162,7 @@ repos:
         # extract and verify it against the (empty) Python-side exempt set.
         exclude: '^$'
       - id: ban-public-surface-copy
-        name: "public copy uses qualified evidence-admissibility language, avoids earn/earned framing, and reports kind precision with its class split"
+        name: "public copy uses qualified evidence-admissibility language, avoids earn/earned framing, reports kind precision with its class split, and never quotes recall without its interval"
         language: system
         # Field/node/context-aware and stdlib-only; the module's pytest cases
         # independently prove poison + nearest-legitimate directions.
