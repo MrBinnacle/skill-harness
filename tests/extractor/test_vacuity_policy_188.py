@@ -348,6 +348,33 @@ def test_kind_precision_render_requires_receipt_and_renders_when_supplied() -> N
     assert_kind_precision_render_safe(rendered, receipt)
 
 
+def test_no_receipt_refuses_the_space_separated_claim_too() -> None:
+    """The separator must not decide whether an unverifiable claim is refused.
+
+    'kind precision' is the form the public-copy ban already recognises
+    (``kind[ -]precision``); a guard that only saw the hyphen left the
+    no-receipt branch — the one where nothing can be checked — the most
+    permissive of the three.
+    """
+    for claim in (
+        "kind precision 0.835",
+        "vacuity kind precision was 0.835 for this run",
+        "Kind Precision: advisory",
+    ):
+        with pytest.raises(BareKindPrecisionRenderError, match="receipt"):
+            assert_kind_precision_render_safe(claim)
+
+
+def test_no_receipt_render_of_the_receipt_block_key_is_not_a_claim() -> None:
+    """``"kind_precision": null`` is the absence of a claim, not a claim.
+
+    The census receipt serialises that key on every path; treating the
+    underscored key as a claim would refuse the legitimate
+    UNMEASURED_GENERATION_MISMATCH receipt.
+    """
+    assert_kind_precision_render_safe('{"kind_precision": null, "recall": "UNMEASURED"}')
+
+
 def test_no_receipt_passes_a_render_that_claims_no_kind_precision() -> None:
     """UNMEASURED_GENERATION_MISMATCH is legitimate, not a violation.
 

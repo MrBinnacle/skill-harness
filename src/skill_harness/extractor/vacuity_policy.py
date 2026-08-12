@@ -383,8 +383,16 @@ def assert_kind_precision_render_safe(
     checked against anything, and an unverifiable claim is refused rather than
     waved through -- this guard previously substituted hardcoded literals here,
     which is the invented-score failure it exists to prevent.
+
+    Claim detection spans both separators the public-copy ban recognises
+    (``kind[ -]precision``): keying on the hyphenated token alone let the
+    no-receipt path wave through 'kind precision 0.835', the one branch where
+    the figure cannot be checked against anything. The underscored
+    ``kind_precision`` JSON *key* is deliberately not a claim -- the receipt
+    block serialises to ``null`` when no receipt is loaded.
     """
-    mentions_kind_precision = "kind-precision" in rendered.lower()
+    lowered = rendered.lower()
+    mentions_kind_precision = "kind-precision" in lowered or "kind precision" in lowered
     if receipt is None:
         if mentions_kind_precision:
             raise BareKindPrecisionRenderError(
