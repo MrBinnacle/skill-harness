@@ -1,0 +1,77 @@
+      <p class="verdict">Verdict: <strong class="verdict-token">$verdict</strong></p>
+      <dl class="qualifiers">
+        <dt>Cut sub-reason</dt>
+        <dd>$cut_sub_reason</dd>
+        <dt>Unmeasured sub-reason</dt>
+        <dd>$unmeasured_sub_reason</dd>
+        <dt>Value class</dt>
+        <dd>$value_class</dd>
+        <dt>Wrong instrument</dt>
+        <dd>$wrong_instrument</dd>
+        <dt>Declared synthetic control</dt>
+        <dd>$declared_synthetic_control</dd>
+      </dl>
+      <p class="summary">$summary</p>
+      <section class="cost-beside-evidence" aria-labelledby="cost-beside-evidence">
+        <h2 id="cost-beside-evidence">Cost beside evidence</h2>
+        <div class="beside">
+          <table class="cost">
+            <caption>Cost triple</caption>
+            <thead>
+              <tr>
+                <th scope="col">Leg</th>
+                <th scope="col">Figure</th>
+                <th scope="col">Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+$cost_rows
+            </tbody>
+          </table>
+          <div class="clause-evidence">
+            <h3>Clause-level evidence grade</h3>
+$clause_evidence
+          </div>
+        </div>
+      </section>
+      <section aria-labelledby="measurements">
+        <h2 id="measurements">Measurements</h2>
+        <p>
+          Keys the standard defines but this receipt does not carry are listed as
+          absent rather than filled in.
+        </p>
+        <table class="measurements">
+          <caption>Measured values and typed refusals</caption>
+          <thead>
+            <tr>
+              <th scope="col">Key</th>
+              <th scope="col">Figure</th>
+              <th scope="col">Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+$measurement_rows
+          </tbody>
+        </table>
+      </section>
+      <section aria-labelledby="evidence-admissibility-gate">
+        <h2 id="evidence-admissibility-gate">Evidence admissibility</h2>
+        <p class="gate-status">Status: <strong>$gate_status</strong></p>
+        <p class="gate-detail">$gate_detail</p>
+      </section>
+      <section aria-labelledby="instrument-identity">
+        <h2 id="instrument-identity">Instrument identity</h2>
+        <p>
+          Figures produced under different instrument identities are not
+          comparable, so the generation stamp travels with the figures.
+        </p>
+        <dl class="instrument">
+$instrument_rows
+        </dl>
+      </section>
+      <section aria-labelledby="source-of-record">
+        <h2 id="source-of-record">Source of record</h2>
+        <dl class="source">
+$source_rows
+        </dl>
+      </section>
