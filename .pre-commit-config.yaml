@@ -20,8 +20,11 @@ repos:
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: end-of-file-fixer
+        # libFuzzer corpus/crash inputs are opaque bytes; do not rewrite them.
+        exclude: ^fuzz/(corpus|crashes|artifacts)/
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
+        exclude: ^fuzz/(corpus|crashes|artifacts)/
       - id: mixed-line-ending
         args: [--fix=lf]
         exclude: \.(ps1|cmd|bat)$
