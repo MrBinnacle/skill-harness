@@ -1,0 +1,1 @@
+{"clause_index": 0, "clause_text": " b","axis":"lse", "comparator": "increase", "oracle_tier": 1, "vacuity_flag":"none","falsifying_case": {"input_population_spec": "pr", "expected_directional_pair": " ", "min_reproducibility":0.8}} 

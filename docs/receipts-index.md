@@ -237,6 +237,15 @@ the named receipt directories is absent from this page.
   assurance harnesses (#163/#164) were inside the mutmut selection; a cosmic-ray
   run (fallback named, not required).
 
+### [`docs/assurance/fuzz-report.md`](assurance/fuzz-report.md)
+
+- **Claims:** Container-side atheris 3.1.0 fuzz of the SKILL.md parser and
+  extractor JSON ingestion models (#170); ≥1h total wall (30m+30m); executions,
+  corpus sizes, and crash count recorded; findings triaged by severity.
+- **Refuses to claim:** Host/Windows fuzz coverage; that expected refusals
+  (`MalformedSkillError`, pydantic `ValidationError`) are crashes; production
+  fixes for non-trivial findings (findings first).
+
 ---
 
 ## Ratifications

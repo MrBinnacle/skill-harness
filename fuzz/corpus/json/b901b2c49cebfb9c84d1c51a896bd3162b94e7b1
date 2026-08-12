@@ -1,0 +1,1 @@
+{"clauses": [{"clause_index": 0, "clause_text": "ws.", "axis": "t_gc", "comparator": "increase", "oracle_tier": 1, "vacuity_flag": "none", "falsifying_case": {"input_population_spec": "pros", "expected_directional_pair": " beB", "min_reproducibility": 0.8}}], "extractor_model":"cs-5", "system_prompt_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbccccccccccc"}
