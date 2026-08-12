@@ -32,7 +32,9 @@ _ARTIFACTS = _FUZZ / "artifacts"
 _REPORT = _REPO / "docs" / "assurance" / "fuzz-report.md"
 
 # Default long-lane budget: 30 minutes per target = 60 minutes total.
-# Overridable for local smoke (FUZZ_MAX_TOTAL_TIME_SEC) without changing AC.
+# Overridable for local smoke (FUZZ_MAX_TOTAL_TIME_SEC). A below-default budget
+# writes its report and stats to tmp, never over the checked-in receipts: the AC
+# floor is what makes those receipts evidence.
 _DEFAULT_PER_TARGET_SEC = 30 * 60
 
 
@@ -149,16 +151,17 @@ def test_fuzz_report_path_reserved() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _scratch_corpus(seeded_from: Path, tmp_path: Path) -> Path:
-    """A throwaway copy of a seed corpus.
+def _scratch_corpus(seeded_from: Path, tmp_path: Path, pattern: str = "seed_*") -> Path:
+    """A throwaway copy of a corpus directory.
 
-    The smoke tests must not point libFuzzer at the checked-in corpus: it writes
-    newly-interesting units into whatever directory it is given, and the default
-    lane may not mutate tracked evidence.
+    Nothing below the ≥1h floor may point libFuzzer at the checked-in corpus: it
+    writes newly-interesting units into whatever directory it is given, and
+    replaces units it can shrink, so a smoke run would otherwise leave tracked
+    evidence modified for the next commit to pick up.
     """
     scratch = tmp_path / seeded_from.name
     scratch.mkdir()
-    for seed in sorted(seeded_from.glob("seed_*")):
+    for seed in sorted(seeded_from.glob(pattern)):
         (scratch / seed.name).write_bytes(seed.read_bytes())
     return scratch
 
@@ -230,9 +233,9 @@ def test_fuzz_skips_cleanly_when_atheris_missing(monkeypatch: pytest.MonkeyPatch
 # ---------------------------------------------------------------------------
 
 
-def _write_stats(name: str, payload: dict[str, object]) -> Path:
-    _ARTIFACTS.mkdir(parents=True, exist_ok=True)
-    path = _ARTIFACTS / f"{name}.json"
+def _write_stats(name: str, payload: dict[str, object], into: Path) -> Path:
+    into.mkdir(parents=True, exist_ok=True)
+    path = into / f"{name}.json"
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
 
@@ -273,6 +276,7 @@ def _run_one_target(
     budget: int,
     *,
     artifact_stem: str,
+    artifacts_dir: Path,
 ) -> _RunPayload:
     t0 = time.monotonic()
     result = _run_target(target, corpus, crashes, max_total_time=budget)
@@ -289,7 +293,7 @@ def _run_one_target(
         "stderr_tail": (result.stderr or "")[-4000:],
         "stdout_tail": (result.stdout or "")[-1000:],
     }
-    _write_stats(artifact_stem, cast(dict[str, object], payload))
+    _write_stats(artifact_stem, cast(dict[str, object], payload), artifacts_dir)
     return payload
 
 
@@ -469,14 +473,20 @@ def _render_fuzz_report(
     return "\n".join(lines)
 
 
-def _write_fuzz_report(parser: _RunPayload, json_run: _RunPayload) -> None:
-    """Synthesize docs/assurance/fuzz-report.md (+ triage any crash artifacts)."""
-    _REPORT.write_text(
+def _write_fuzz_report(
+    parser: _RunPayload,
+    json_run: _RunPayload,
+    report: Path,
+    parser_crashes: Path,
+    json_crashes: Path,
+) -> None:
+    """Synthesize the fuzz report (+ triage any crash artifacts)."""
+    report.write_text(
         _render_fuzz_report(
             parser,
             json_run,
-            _crash_files(_PARSER_CRASHES),
-            _crash_files(_JSON_CRASHES),
+            _crash_files(parser_crashes),
+            _crash_files(json_crashes),
         ),
         encoding="utf-8",
     )
@@ -497,39 +507,58 @@ def _load_run_payload(path: Path) -> _RunPayload:
 
 
 @pytest.mark.assurance
-def test_fuzz_long_lane_one_hour() -> None:
+def test_fuzz_long_lane_one_hour(tmp_path: Path) -> None:
     """Run both atheris targets (30m each) and write the fuzz report.
 
     Single test so pytest-randomly cannot reorder the report ahead of the runs.
+
+    Only a run that meets the ≥1h acceptance floor may touch the evidence of
+    record. A reduced-budget local smoke (``FUZZ_MAX_TOTAL_TIME_SEC``) gets tmp
+    copies of the report, the stats, the corpus and the crash directories:
+    overriding the budget must not be able to replace an hour of recorded evidence
+    with six seconds of it, nor leave the tracked corpus modified.
     """
     _require_atheris()
     budget = _per_target_seconds()
+    full_budget = budget >= _DEFAULT_PER_TARGET_SEC
+    artifacts_dir = _ARTIFACTS if full_budget else tmp_path
+    report = _REPORT if full_budget else tmp_path / _REPORT.name
+    if full_budget:
+        parser_corpus, json_corpus = _PARSER_CORPUS, _JSON_CORPUS
+        parser_crashes, json_crashes = _PARSER_CRASHES, _JSON_CRASHES
+    else:
+        parser_corpus = _scratch_corpus(_PARSER_CORPUS, tmp_path, "*")
+        json_corpus = _scratch_corpus(_JSON_CORPUS, tmp_path, "*")
+        parser_crashes = tmp_path / "crashes-parser"
+        json_crashes = tmp_path / "crashes-json"
     parser = _run_one_target(
         "parser",
         _PARSER_TARGET,
-        _PARSER_CORPUS,
-        _PARSER_CRASHES,
+        parser_corpus,
+        parser_crashes,
         budget,
         artifact_stem="parser_run",
+        artifacts_dir=artifacts_dir,
     )
     json_run = _run_one_target(
         "json_ingestion",
         _JSON_TARGET,
-        _JSON_CORPUS,
-        _JSON_CRASHES,
+        json_corpus,
+        json_crashes,
         budget,
         artifact_stem="json_run",
+        artifacts_dir=artifacts_dir,
     )
-    if budget >= _DEFAULT_PER_TARGET_SEC:
+    if full_budget:
         assert parser["elapsed_sec"] >= budget * 0.9
         assert json_run["elapsed_sec"] >= budget * 0.9
-    _write_fuzz_report(parser, json_run)
-    assert _REPORT.is_file()
-    text = _REPORT.read_text(encoding="utf-8")
+    _write_fuzz_report(parser, json_run, report, parser_crashes, json_crashes)
+    assert report.is_file()
+    text = report.read_text(encoding="utf-8")
     assert "Executions" in text
     assert "corpus" in text.lower()
     assert "crash" in text.lower()
-    if budget >= _DEFAULT_PER_TARGET_SEC:
+    if full_budget:
         assert _recorded_minutes(text) >= 60.0
 
 
