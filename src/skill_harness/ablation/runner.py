@@ -1065,7 +1065,7 @@ class AblationRunner:
                 last_heartbeat=abort_ts,
                 error="budget_exhausted",
             )
-        raise
+        raise  # noqa: PLE0704 - re-raises the caller's BudgetAbortedError; see docstring.
 
     def _check_budget(self, run_id: str, max_usd: float, projected_cost: float) -> None:
         """Pre-call budget gate (A42).
