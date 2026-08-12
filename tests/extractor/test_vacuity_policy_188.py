@@ -339,6 +339,15 @@ def test_bare_kind_precision_render_poison_goes_red() -> None:
     assert_kind_precision_render_safe(safe, receipt)
 
 
+def test_kind_precision_render_requires_receipt_and_renders_when_supplied() -> None:
+    with pytest.raises(BareKindPrecisionRenderError, match="receipt"):
+        assert_kind_precision_render_safe("kind-precision 0.835")
+
+    receipt = load_calibration_receipt(_DOCS_RECEIPT)
+    rendered = format_kind_precision_for_render(receipt)
+    assert_kind_precision_render_safe(rendered, receipt)
+
+
 def test_recall_must_not_be_described_as_measured() -> None:
     with pytest.raises(ValueError, match="recall"):
         assert_recall_not_claimed_measured("vacuity recall: measured at 0.5")

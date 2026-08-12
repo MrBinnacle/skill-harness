@@ -375,27 +375,22 @@ def assert_kind_precision_render_safe(
     """Guard: aggregate kind score must never appear without both class splits.
 
     Poison direction: emitting the bare aggregate (e.g. 'kind-precision 0.835')
-    without '77/78' and '4/20' must raise.
+    without the receipt-backed class split must raise.
     """
-    agg = "0.835" if receipt is None else _fmt_num(receipt.kind_precision_aggregate)
+    if receipt is None:
+        raise BareKindPrecisionRenderError(
+            "refusing to validate kind-precision rendering without a calibration receipt"
+        )
+    agg = _fmt_num(receipt.kind_precision_aggregate)
     if agg not in rendered and "kind-precision" not in rendered.lower():
         return
     # If aggregate appears, both class splits must sit beside it.
     nad = (
-        "77/78"
-        if receipt is None
-        else (
-            f"{receipt.kind_precision_not_a_directive_correct}/"
-            f"{receipt.kind_precision_not_a_directive_n}"
-        )
+        f"{receipt.kind_precision_not_a_directive_correct}/"
+        f"{receipt.kind_precision_not_a_directive_n}"
     )
     wd = (
-        "4/20"
-        if receipt is None
-        else (
-            f"{receipt.kind_precision_weak_directive_correct}/"
-            f"{receipt.kind_precision_weak_directive_n}"
-        )
+        f"{receipt.kind_precision_weak_directive_correct}/{receipt.kind_precision_weak_directive_n}"
     )
     if agg in rendered and (nad not in rendered or wd not in rendered):
         raise BareKindPrecisionRenderError(
