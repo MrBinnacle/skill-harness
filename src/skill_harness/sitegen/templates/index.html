@@ -1,0 +1,27 @@
+      <p class="rule">
+        A missing number is a typed refusal, never an invented score. Every figure
+        on these pages is either a measured value or a refusal drawn from a closed
+        vocabulary, copied from the receipt as published.
+      </p>
+      <p>
+        Each receipt below validated against the
+        <a href="schema.html">reporting standard</a> before this page was written.
+        A receipt that does not validate stops the build, so nothing here was
+        rendered from an unvalidated receipt.
+      </p>
+      <table class="receipts">
+        <caption>Published receipts ($receipt_count)</caption>
+        <thead>
+          <tr>
+            <th scope="col">Skill</th>
+            <th scope="col">Verdict</th>
+            <th scope="col">Refusal qualifier</th>
+            <th scope="col">Evidence admissibility</th>
+            <th scope="col">Source of record</th>
+          </tr>
+        </thead>
+        <tbody>
+$receipt_rows
+        </tbody>
+      </table>
+$unreceipted

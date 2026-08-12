@@ -1,0 +1,102 @@
+# Publish the receipts site to GitHub Pages.
+#
+# Added, not grafted onto CI: every job name in ci.yml is load-bearing for
+# branch protection, so this workflow introduces its own jobs and touches none
+# of them. Neither job here belongs to ci.yml's `all-green` gate, so a Pages
+# outage cannot block a merge.
+#
+# The deploy is not trusted because it is green. `verify` fetches the published
+# URL and fails unless the page it gets back carries this build's own marker --
+# a stale site served from cache, a deploy that silently kept the previous
+# artifact, and a Pages environment pointing somewhere else all present as a
+# green deploy step otherwise.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time, and never cancel one midway: a cancelled deploy can
+# leave the site on the previous artifact while the run reports success.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build receipts site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      marker: ${{ steps.marker.outputs.marker }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements-ci.txt -e ".[dev]"
+      # Commit sha alone is not unique to a build: a re-run of the same commit
+      # would match a marker that was already live before this run started.
+      - name: Mint the build marker
+        id: marker
+        run: |
+          echo "marker=${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: |
+          python -m skill_harness.sitegen \
+            --output site \
+            --marker "${{ steps.marker.outputs.marker }}"
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    name: Deploy and verify the published URL
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+      - name: Verify the published URL serves this build
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          MARKER: ${{ needs.build.outputs.marker }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PAGE_URL}" || -z "${MARKER}" ]]; then
+            echo "no published URL or no marker to check for; refusing to call this a deploy"
+            exit 1
+          fi
+          # Cache-busting query: an edge-cached copy of the previous build would
+          # otherwise answer for the URL we are trying to check.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsSL "${PAGE_URL}?verify=${GITHUB_RUN_ID}-${attempt}" \
+              | grep -qF "${MARKER}"; then
+              echo "attempt ${attempt}: ${PAGE_URL} serves marker ${MARKER}"
+              exit 0
+            fi
+            echo "attempt ${attempt}: ${PAGE_URL} does not carry ${MARKER} yet"
+            sleep 15
+          done
+          echo "the published URL never served this build's marker; the site did not update"
+          exit 1

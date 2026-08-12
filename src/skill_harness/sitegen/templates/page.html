@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>$title</title>
+    <link rel="stylesheet" href="style.css" />
+    <meta name="skill-harness-build" content="$marker" />
+  </head>
+  <body>
+    <header>
+      <p class="wordmark">Skill Harness: published receipts</p>
+      <nav aria-label="Sections">
+        <ul>
+          <li><a href="index.html">Receipts</a></li>
+          <li><a href="schema.html">Reporting standard</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main>
+      <h1>$heading</h1>
+$body
+    </main>
+    <footer>
+      <p>
+        Generated from this repository's own receipt files by
+        <code>python -m skill_harness.sitegen</code>. Build marker
+        <code class="build-marker">$marker</code>.
+      </p>
+    </footer>
+  </body>
+</html>

@@ -54,6 +54,9 @@ Thumbs.db
 *.log
 logs/
 
+# Rendered receipts site (built by `python -m skill_harness.sitegen`, never committed)
+/site/
+
 # Local config / secrets
 .env
 .env.*
