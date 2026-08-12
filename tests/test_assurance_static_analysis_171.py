@@ -48,7 +48,32 @@ def test_coverage_floor_report_has_branch_results_and_honesty_warning() -> None:
     for module_path in module_paths:
         row = next(line for line in report.splitlines() if f"`{module_path}`" in line)
         fields = [field.strip() for field in row.strip("|").split("|")]
+
+        # A module with no branches gets no percentage. Coverage.py calls that
+        # 100%, which is arithmetically true and carries no information, and an
+        # empty 100% is precisely the figure a later reader quotes.
+        if fields[-1] == "no branches":
+            assert fields[-2] == "n/a", f"{module_path}: 0-branch row must print n/a"
+            assert fields[1] == "0", f"{module_path}: 'no branches' row must have 0 branches"
+            continue
+
         percentage = re.fullmatch(r"([0-9.]+)%", fields[-2])
         assert percentage is not None, f"no branch percentage in the row for {module_path}"
         branch_coverage = float(percentage.group(1))
-        assert fields[-1] == ("BELOW 80%" if branch_coverage < 80.0 else "OK")
+
+        # The flag encodes the report's stated attention rule, which reads BOTH
+        # instruments: a module is flagged when either figure is under the floor,
+        # or when mutation never measured it. A row can therefore read BELOW on a
+        # healthy branch percentage, and that is the point of pairing the columns.
+        mutation_field = fields[-3]
+        mutation = re.fullmatch(r"([0-9.]+)%", mutation_field)
+        needs_attention = (
+            branch_coverage < 80.0
+            or mutation_field == "absent"
+            or (mutation is not None and float(mutation.group(1)) < 80.0)
+        )
+        expected = "BELOW 80%" if needs_attention else "OK"
+        assert fields[-1] == expected, (
+            f"{module_path}: floor says {fields[-1]!r}, attention rule says {expected!r} "
+            f"(branch {branch_coverage}%, mutation {mutation_field})"
+        )
