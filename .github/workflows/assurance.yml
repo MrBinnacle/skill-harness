@@ -1,24 +1,16 @@
 name: Assurance lane
 
-# Long-running assurance search (#168). Deliberately NOT on push or
-# pull_request: #170's own acceptance criteria specify at least one hour of fuzz,
-# and one assurance test has been measured at over four hours in Docker. No PR
-# cell can absorb that, and the AFK factory's in-container gate would hang rather
-# than fail on an unmarked long-runner.
+# Long-running assurance search (#168) and atheris fuzz (#170).
 #
-# Trigger is SCHEDULED, ruled on #205. The reasoning is recorded there and is
-# worth restating once: for a lane that buys its evidence in runtime, "nobody ran
-# it" and "it passed" produce the same observable, so workflow_dispatch-only is
-# the LEAST conservative option available, not the most. workflow_dispatch is kept
-# alongside the schedule so the lane can be fired by hand on demand.
+# Trigger is workflow_dispatch ONLY (owner ruling 2026-08-12 on #170):
+# an hour-plus lane on any automatic trigger adds latency to a path someone is
+# waiting on. Manual dispatch adds latency to nothing. Do not add schedule,
+# pull_request, or push triggers without revisiting that ruling.
 #
 # This job is NOT in ci.yml's `all-green` needs list and must not be added to
-# branch protection's required checks without the owner saying so (#168).
+# branch protection's required checks without the owner saying so (#168/#170).
 
 on:
-  schedule:
-    # 04:00 UTC daily, comfortably outside the working window.
-    - cron: "0 4 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -32,10 +24,9 @@ jobs:
   assurance:
     name: Assurance search (${{ matrix.os }} · py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
-    # Own timeout, never folded into ci.yml's 25m test cell. Today's marked set
-    # measures ~3m on linux; the ceiling is sized for #170's >=1h fuzz landing here
-    # next, so it does not need raising again when that ticket lands.
-    timeout-minutes: 120
+    # Own timeout, never folded into ci.yml's 25m test cell. Sized for #170's
+    # >=1h fuzz (30m parser + 30m JSON) plus the #168 deep stateful machine.
+    timeout-minutes: 150
     env:
       PYTHONHASHSEED: "0"
     strategy:
@@ -52,9 +43,24 @@ jobs:
           cache-dependency-path: |
             pyproject.toml
             requirements-ci.txt
+            requirements-assurance-container.txt
       - name: Install
         run: |
           python -m pip install --upgrade pip
           python -m pip install -c requirements-ci.txt -e ".[dev]"
+      - name: Install container-only tools (Linux)
+        if: runner.os == 'Linux'
+        run: python -m pip install -r requirements-assurance-container.txt
       - name: pytest assurance
         run: pytest -q -m assurance --tb=short
+      - name: Upload fuzz artifacts
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-artifacts-py${{ matrix.python-version }}
+          path: |
+            fuzz/artifacts/
+            fuzz/crashes/
+            fuzz/corpus/
+            docs/assurance/fuzz-report.md
+          if-no-files-found: ignore

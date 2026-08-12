@@ -133,6 +133,7 @@ filterwarnings = ["error"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
+extend-exclude = ["fuzz/corpus", "fuzz/crashes", "fuzz/artifacts"]
 
 [tool.ruff.lint]
 select = [
@@ -150,6 +151,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "B"]
+"fuzz/**" = ["S", "SIM105"]
 
 [tool.mypy]
 # Analysis target 3.12: numpy >=2.5 stubs use PEP 695 `type` statements, which mypy
