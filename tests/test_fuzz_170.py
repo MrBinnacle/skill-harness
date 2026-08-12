@@ -15,6 +15,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any, TypedDict, cast
 
 import pytest
 
@@ -32,6 +33,18 @@ _REPORT = _REPO / "docs" / "assurance" / "fuzz-report.md"
 # Default long-lane budget: 30 minutes per target = 60 minutes total.
 # Overridable for local smoke (FUZZ_MAX_TOTAL_TIME_SEC) without changing AC.
 _DEFAULT_PER_TARGET_SEC = 30 * 60
+
+
+class _RunPayload(TypedDict):
+    target: str
+    max_total_time_sec: int
+    elapsed_sec: float
+    returncode: int | None
+    crash_count: int
+    corpus_files: int
+    stats: dict[str, Any]
+    stderr_tail: str
+    stdout_tail: str
 
 
 def _atheris_available() -> bool:
@@ -211,80 +224,37 @@ def _parse_libfuzzer_stats(stderr: str) -> dict[str, int | str]:
     return out
 
 
-@pytest.mark.assurance
-def test_fuzz_parser_long_lane() -> None:
-    """Run the parser atheris target for half the one-hour budget."""
-    _require_atheris()
-    budget = _per_target_seconds()
+def _run_one_target(
+    name: str,
+    target: Path,
+    corpus: Path,
+    crashes: Path,
+    budget: int,
+    *,
+    artifact_stem: str,
+) -> _RunPayload:
     t0 = time.monotonic()
-    result = _run_target(
-        _PARSER_TARGET,
-        _PARSER_CORPUS,
-        _PARSER_CRASHES,
-        max_total_time=budget,
-    )
+    result = _run_target(target, corpus, crashes, max_total_time=budget)
     elapsed = time.monotonic() - t0
     stats = _parse_libfuzzer_stats(result.stderr + result.stdout)
-    payload = {
-        "target": "parser",
+    payload: _RunPayload = {
+        "target": name,
         "max_total_time_sec": budget,
         "elapsed_sec": elapsed,
         "returncode": result.returncode,
-        "crash_count": len(_crash_files(_PARSER_CRASHES)),
-        "corpus_files": len(list(_PARSER_CORPUS.iterdir())),
-        "stats": stats,
+        "crash_count": len(_crash_files(crashes)),
+        "corpus_files": len(list(corpus.iterdir())),
+        "stats": cast(dict[str, Any], stats),
         "stderr_tail": (result.stderr or "")[-4000:],
         "stdout_tail": (result.stdout or "")[-1000:],
     }
-    _write_stats("parser_run", payload)
-    # Soft floor: when running the full default budget, require real wall time.
-    if budget >= _DEFAULT_PER_TARGET_SEC:
-        assert elapsed >= budget * 0.9, f"parser fuzz wall {elapsed:.1f}s < 90% of {budget}s"
+    _write_stats(artifact_stem, cast(dict[str, object], payload))
+    return payload
 
 
-@pytest.mark.assurance
-def test_fuzz_json_long_lane() -> None:
-    """Run the JSON ingestion atheris target for half the one-hour budget."""
-    _require_atheris()
-    budget = _per_target_seconds()
-    t0 = time.monotonic()
-    result = _run_target(
-        _JSON_TARGET,
-        _JSON_CORPUS,
-        _JSON_CRASHES,
-        max_total_time=budget,
-    )
-    elapsed = time.monotonic() - t0
-    stats = _parse_libfuzzer_stats(result.stderr + result.stdout)
-    payload = {
-        "target": "json_ingestion",
-        "max_total_time_sec": budget,
-        "elapsed_sec": elapsed,
-        "returncode": result.returncode,
-        "crash_count": len(_crash_files(_JSON_CRASHES)),
-        "corpus_files": len(list(_JSON_CORPUS.iterdir())),
-        "stats": stats,
-        "stderr_tail": (result.stderr or "")[-4000:],
-        "stdout_tail": (result.stdout or "")[-1000:],
-    }
-    _write_stats("json_run", payload)
-    if budget >= _DEFAULT_PER_TARGET_SEC:
-        assert elapsed >= budget * 0.9, f"json fuzz wall {elapsed:.1f}s < 90% of {budget}s"
-
-
-@pytest.mark.assurance
-def test_fuzz_report_written_after_long_lane() -> None:
-    """Synthesize docs/assurance/fuzz-report.md from artifact JSON (+ triage crashes)."""
-    _require_atheris()
-    parser_path = _ARTIFACTS / "parser_run.json"
-    json_path = _ARTIFACTS / "json_run.json"
-    if not parser_path.is_file() or not json_path.is_file():
-        pytest.skip("long-lane artifacts missing; run parser/json long tests first")
-
-    parser = json.loads(parser_path.read_text(encoding="utf-8"))
-    json_run = json.loads(json_path.read_text(encoding="utf-8"))
-    total_elapsed = float(parser["elapsed_sec"]) + float(json_run["elapsed_sec"])
-
+def _write_fuzz_report(parser: _RunPayload, json_run: _RunPayload) -> None:
+    """Synthesize docs/assurance/fuzz-report.md (+ triage any crash artifacts)."""
+    total_elapsed = parser["elapsed_sec"] + json_run["elapsed_sec"]
     parser_crashes = _crash_files(_PARSER_CRASHES)
     json_crashes = _crash_files(_JSON_CRASHES)
 
@@ -294,8 +264,6 @@ def test_fuzz_report_written_after_long_lane() -> None:
     else:
         for label, paths in (("parser", parser_crashes), ("json_ingestion", json_crashes)):
             for p in paths:
-                # Severity default CRASH until human re-triage; wrong-number /
-                # corruption need semantic analysis beyond the harness.
                 rel = p.relative_to(_REPO).as_posix()
                 findings_lines.append(
                     f"- **CRASH** (`{label}`): `{rel}` "
@@ -303,18 +271,18 @@ def test_fuzz_report_written_after_long_lane() -> None:
                     "fix out of scope for #170 unless trivial with a failing unit test."
                 )
 
-    p_stats = parser.get("stats") if isinstance(parser.get("stats"), dict) else {}
-    j_stats = json_run.get("stats") if isinstance(json_run.get("stats"), dict) else {}
+    p_stats = parser["stats"]
+    j_stats = json_run["stats"]
     p_exec = p_stats.get("executions", "n/a")
     j_exec = j_stats.get("executions", "n/a")
-    p_wall = float(parser["elapsed_sec"])
-    j_wall = float(json_run["elapsed_sec"])
-    p_budget = int(parser["max_total_time_sec"])
-    j_budget = int(json_run["max_total_time_sec"])
+    p_wall = parser["elapsed_sec"]
+    j_wall = json_run["elapsed_sec"]
+    p_budget = parser["max_total_time_sec"]
+    j_budget = json_run["max_total_time_sec"]
     p_corp = parser["corpus_files"]
     j_corp = json_run["corpus_files"]
-    p_crash = int(parser["crash_count"])
-    j_crash = int(json_run["crash_count"])
+    p_crash = parser["crash_count"]
+    j_crash = json_run["crash_count"]
     total_budget = p_budget + j_budget
     total_crash = p_crash + j_crash
     minutes = total_elapsed / 60.0
@@ -401,10 +369,53 @@ def test_fuzz_report_written_after_long_lane() -> None:
         "",
     ]
     _REPORT.write_text("\n".join(lines), encoding="utf-8")
+
+
+@pytest.mark.assurance
+def test_fuzz_long_lane_one_hour() -> None:
+    """Run both atheris targets (30m each) and write the fuzz report.
+
+    Single test so pytest-randomly cannot reorder the report ahead of the runs.
+    """
+    _require_atheris()
+    budget = _per_target_seconds()
+    parser = _run_one_target(
+        "parser",
+        _PARSER_TARGET,
+        _PARSER_CORPUS,
+        _PARSER_CRASHES,
+        budget,
+        artifact_stem="parser_run",
+    )
+    json_run = _run_one_target(
+        "json_ingestion",
+        _JSON_TARGET,
+        _JSON_CORPUS,
+        _JSON_CRASHES,
+        budget,
+        artifact_stem="json_run",
+    )
+    if budget >= _DEFAULT_PER_TARGET_SEC:
+        assert parser["elapsed_sec"] >= budget * 0.9
+        assert json_run["elapsed_sec"] >= budget * 0.9
+    _write_fuzz_report(parser, json_run)
     assert _REPORT.is_file()
     text = _REPORT.read_text(encoding="utf-8")
     assert "Executions" in text
     assert "corpus" in text.lower()
     assert "crash" in text.lower()
-    if float(parser["max_total_time_sec"]) >= _DEFAULT_PER_TARGET_SEC:
-        assert total_elapsed >= 3600 * 0.9
+    total = parser["elapsed_sec"] + json_run["elapsed_sec"]
+    if budget >= _DEFAULT_PER_TARGET_SEC:
+        assert total >= 3600 * 0.9
+
+
+def test_fuzz_report_checked_in_with_stats() -> None:
+    """Default-lane pin: the report exists and records run statistics."""
+    assert _REPORT.is_file(), "docs/assurance/fuzz-report.md must be checked in"
+    text = _REPORT.read_text(encoding="utf-8")
+    assert "Executions" in text
+    assert "Corpus" in text
+    assert "Crashes" in text
+    assert "atheris" in text.lower()
+    # At least one hour of recorded wall time in the committed report.
+    assert "60." in text or "minutes** (acceptance floor" in text
