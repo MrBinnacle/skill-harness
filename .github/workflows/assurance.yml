@@ -2,10 +2,19 @@ name: Assurance lane
 
 # Long-running assurance search (#168) and atheris fuzz (#170).
 #
-# Trigger is workflow_dispatch ONLY (owner ruling 2026-08-12 on #170):
-# an hour-plus lane on any automatic trigger adds latency to a path someone is
-# waiting on. Manual dispatch adds latency to nothing. Do not add schedule,
-# pull_request, or push triggers without revisiting that ruling.
+# Trigger is workflow_dispatch ONLY (owner ruling 2026-08-12, recorded in #170's
+# body and in its acceptance criteria: "carries workflow_dispatch and no other
+# trigger"): an hour-plus lane on any automatic trigger adds latency to a path
+# someone is waiting on. Manual dispatch adds latency to nothing. Do not add
+# schedule, pull_request, or push triggers without revisiting that ruling.
+#
+# That ruling SUPERSEDES the cron schedule this file carried from #205, which had
+# rejected workflow_dispatch-only on the opposite reasoning — for a lane that buys
+# its evidence in runtime, "nobody ran it" and "it passed" produce the same
+# observable. Both statements are the owner's, one day apart; #170's is the later
+# one and is the one in force. Kept here so the reversal is visible to whoever
+# re-opens the question: the cost of manual-only is that this lane's evidence
+# ages silently, and nothing in CI reports that it has.
 #
 # This job is NOT in ci.yml's `all-green` needs list and must not be added to
 # branch protection's required checks without the owner saying so (#168/#170).

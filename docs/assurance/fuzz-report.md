@@ -2,9 +2,11 @@
 
 Parent: assurance-pass spec (#160). Sibling mutation: #166 / `mutation-report.md`.
 
-Container-side **atheris 3.1.0** (`requirements-assurance-container.txt`) coverage-guided
-fuzzing of the SKILL.md parser and the extractor JSON ingestion models. Host/Windows
-is out of scope; targets import-guard via skip when atheris is absent.
+Container-side **atheris 3.1.0** (`requirements-assurance-container.txt`) fuzzing of the
+SKILL.md parser and the extractor JSON ingestion models. The parser target is
+coverage-guided; the JSON target is not guided over the surface it names — see
+[Coverage feedback](#coverage-feedback) before reading its execution count as reach.
+Host/Windows is out of scope; targets import-guard via skip when atheris is absent.
 
 ## How to reproduce
 
@@ -34,13 +36,40 @@ Expected-error paths (`MalformedSkillError`, pydantic `ValidationError`,
 
 ## Run statistics
 
-| Target | Wall (s) | Budget (s) | Executions | Corpus | Crashes |
-|--------|---------:|-----------:|-----------:|-------:|--------:|
-| parser | 1802.6 | 1800 | 10375786 | 167 | 0 |
-| json_ingestion | 1803.6 | 1800 | 140340401 | 165 | 0 |
-| **total** | **3606.2** | **3600** | | | **0** |
+| Target | Wall (s) | Budget (s) | Executions | Crashes |
+|--------|---------:|-----------:|-----------:|--------:|
+| parser | 1802.6 | 1800 | 10375786 | 0 |
+| json_ingestion | 1803.6 | 1800 | 140340401 | 0 |
+| **total** | **3606.2** | **3600** | | **0** |
 
 Total fuzz wall time: **60.1 minutes** (acceptance floor: ≥ 60 minutes at default budget).
+
+## Coverage feedback
+
+libFuzzer's own final counters, parsed from each run's recorded summary line
+(`fuzz/artifacts/*.json` → `stats`). **Live corpus** is the unit count the run
+finished with; **corpus files** is the file count left on disk, which is larger
+because superseded (`REDUCE`d) units are not deleted. The corpus size of record is
+the live unit count.
+
+| Target | Edges (`cov`) | Features (`ft`) | Live corpus (units) | Corpus files |
+|--------|--------------:|----------------:|--------------------:|-------------:|
+| parser | 14 | 42 | 20 | 167 |
+| json_ingestion | 14 | 18 | 5 | 165 |
+
+The parser target is genuinely coverage-guided: `parse_skill_file` and
+`MalformedSkillError` are imported under `atheris.instrument_imports`, so the
+parser's own branches drive the search.
+
+The JSON target is **not** guided over the validation surface it names.
+`model_validate` / `model_validate_json` execute inside `pydantic_core`, a compiled
+Rust extension that atheris's bytecode instrumentation cannot see, so the only
+feedback reaching the mutator comes from the Python-level code around it
+(`instrument_from_mapping` plus the target's own branching). That is why `cov` and
+the live corpus do not move across the run: past the opening seconds this target is
+high-throughput random-input testing, not a coverage-guided search. It still drives
+real bytes through the ingestion path and would still surface an uncaught fault; it
+does not support a coverage claim over the models.
 
 ## Severity vocabulary
 

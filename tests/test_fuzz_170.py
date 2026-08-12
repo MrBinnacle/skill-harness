@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import time
+import tomllib
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
@@ -116,11 +117,14 @@ def test_fuzz_targets_checked_in() -> None:
 
 
 def test_fuzz_dir_outside_default_pytest_collection() -> None:
-    """Harness lives outside testpaths so default collection never loads it."""
-    # pyproject testpaths = ["tests"]; fuzz/ is a sibling, not a child.
-    assert _FUZZ.parent == _REPO
-    assert "tests" not in _FUZZ.parts
-    assert not str(_FUZZ).startswith(str(_REPO / "tests"))
+    """Harness lives outside every configured testpath, so default collection skips it."""
+    config = tomllib.loads((_REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    testpaths = config["tool"]["pytest"]["ini_options"]["testpaths"]
+    assert testpaths, "pyproject must pin testpaths for this guard to mean anything"
+    for entry in testpaths:
+        root = (_REPO / entry).resolve()
+        assert root.is_dir(), entry
+        assert not _FUZZ.is_relative_to(root), f"fuzz/ must not sit under testpath {entry}"
 
 
 def test_fuzz_targets_import_guard_atheris() -> None:
@@ -145,13 +149,37 @@ def test_fuzz_report_path_reserved() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_fuzz_parser_smoke_skips_or_runs() -> None:
+def _scratch_corpus(seeded_from: Path, tmp_path: Path) -> Path:
+    """A throwaway copy of a seed corpus.
+
+    The smoke tests must not point libFuzzer at the checked-in corpus: it writes
+    newly-interesting units into whatever directory it is given, and the default
+    lane may not mutate tracked evidence.
+    """
+    scratch = tmp_path / seeded_from.name
+    scratch.mkdir()
+    for seed in sorted(seeded_from.glob("seed_*")):
+        (scratch / seed.name).write_bytes(seed.read_bytes())
+    return scratch
+
+
+def _dir_fingerprint(directory: Path) -> dict[str, tuple[int, int]]:
+    """Name -> (size, mtime_ns) for every file in ``directory``."""
+    if not directory.is_dir():
+        return {}
+    return {p.name: (p.stat().st_size, p.stat().st_mtime_ns) for p in directory.iterdir()}
+
+
+def test_fuzz_parser_smoke_skips_or_runs(tmp_path: Path) -> None:
     """A few thousand runs through the parser target; skip if no atheris."""
     _require_atheris()
+    tracked_before = _dir_fingerprint(_PARSER_CORPUS)
+    scratch = _scratch_corpus(_PARSER_CORPUS, tmp_path)
+    seeded = len(_dir_fingerprint(scratch))
     result = _run_target(
         _PARSER_TARGET,
-        _PARSER_CORPUS,
-        _PARSER_CRASHES,
+        scratch,
+        tmp_path / "crashes",
         max_total_time=5,
         runs=2000,
     )
@@ -159,21 +187,31 @@ def test_fuzz_parser_smoke_skips_or_runs() -> None:
     assert "Done " in combined or "DONE" in combined or "INITED" in combined, combined[-1500:]
     # Clean budget exhaustion is 0; a found crash is non-zero — both mean the harness ran.
     assert result.returncode is not None
+    # libFuzzer writes newly-interesting units into whatever corpus directory it is
+    # handed — demonstrated by the scratch copy growing in this very run. The default
+    # lane must therefore never be handed the checked-in corpus.
+    assert len(_dir_fingerprint(scratch)) > seeded
+    assert _dir_fingerprint(_PARSER_CORPUS) == tracked_before
 
 
-def test_fuzz_json_smoke_skips_or_runs() -> None:
+def test_fuzz_json_smoke_skips_or_runs(tmp_path: Path) -> None:
     """A few thousand runs through the JSON ingestion target; skip if no atheris."""
     _require_atheris()
+    tracked_before = _dir_fingerprint(_JSON_CORPUS)
+    scratch = _scratch_corpus(_JSON_CORPUS, tmp_path)
+    seeded = len(_dir_fingerprint(scratch))
     result = _run_target(
         _JSON_TARGET,
-        _JSON_CORPUS,
-        _JSON_CRASHES,
+        scratch,
+        tmp_path / "crashes",
         max_total_time=5,
         runs=2000,
     )
     combined = result.stderr + result.stdout
     assert "Done " in combined or "DONE" in combined or "INITED" in combined, combined[-1500:]
     assert result.returncode is not None
+    assert len(_dir_fingerprint(scratch)) > seeded
+    assert _dir_fingerprint(_JSON_CORPUS) == tracked_before
 
 
 def test_fuzz_skips_cleanly_when_atheris_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -200,26 +238,29 @@ def _write_stats(name: str, payload: dict[str, object]) -> Path:
 
 
 def _parse_libfuzzer_stats(stderr: str) -> dict[str, int | str]:
-    """Best-effort extract of exec count / corpus size from libFuzzer summary lines."""
+    """Extract libFuzzer's own final counters from a run's stderr/stdout.
+
+    ``cov`` / ``features`` / ``corpus_size`` are read from the LAST line that
+    carries them (the ``DONE`` line), because those are the counters the run
+    finished with. ``corpus_size`` is libFuzzer's live unit count, which is not
+    the file count left on disk: superseded ``REDUCE`` units stay as files.
+    """
     out: dict[str, int | str] = {}
-    # e.g. "stat::number_of_executed_units: 12345"
+    done = re.search(r"Done\s+(\d+)\s+runs", stderr)
+    if done:
+        out["executions"] = int(done.group(1))
+    else:
+        pulses = re.findall(r"#(\d+)", stderr)
+        if pulses:
+            out["executions"] = int(pulses[-1])
     for key, pat in (
-        ("executions", r"(?:stat::number_of_executed_units|Done\s+(\d+)\s+runs|exec/s)"),
-        ("corpus_size", r"(?:stat::new_units_added|corp:\s*(\d+)|#(\d+))"),
+        ("cov", r"cov:\s*(\d+)"),
+        ("features", r"ft:\s*(\d+)"),
+        ("corpus_size", r"corp:\s*(\d+)"),
     ):
-        m = re.search(pat, stderr)
-        if m:
-            for g in m.groups():
-                if g and g.isdigit():
-                    out[key] = int(g)
-                    break
-    # Final "DONE" style: look for "#12345" last pulse
-    pulses = re.findall(r"#(\d+)", stderr)
-    if pulses:
-        out.setdefault("executions", int(pulses[-1]))
-    corp = re.findall(r"corp:\s*(\d+)", stderr)
-    if corp:
-        out["corpus_size"] = int(corp[-1])
+        found = re.findall(pat, stderr)
+        if found:
+            out[key] = int(found[-1])
     out["raw_tail"] = stderr[-2000:] if stderr else ""
     return out
 
@@ -252,24 +293,47 @@ def _run_one_target(
     return payload
 
 
-def _write_fuzz_report(parser: _RunPayload, json_run: _RunPayload) -> None:
-    """Synthesize docs/assurance/fuzz-report.md (+ triage any crash artifacts)."""
-    total_elapsed = parser["elapsed_sec"] + json_run["elapsed_sec"]
-    parser_crashes = _crash_files(_PARSER_CRASHES)
-    json_crashes = _crash_files(_JSON_CRASHES)
+def _rel(path: Path) -> str:
+    """Repo-relative path when possible; the raw path otherwise.
 
-    findings_lines: list[str] = []
+    ``-artifact_prefix`` is a caller-supplied directory. An hour of fuzz must not
+    be lost to a ``ValueError`` in the report writer because a crash landed
+    outside the repo.
+    """
+    try:
+        return path.relative_to(_REPO).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _findings_block(parser_crashes: list[Path], json_crashes: list[Path]) -> str:
+    """Triage lines: one severity-tagged entry per crashing input artifact (AC3)."""
     if not parser_crashes and not json_crashes:
-        findings_lines.append("None. No uncaught exceptions, hangs, or memory faults observed.")
-    else:
-        for label, paths in (("parser", parser_crashes), ("json_ingestion", json_crashes)):
-            for p in paths:
-                rel = p.relative_to(_REPO).as_posix()
-                findings_lines.append(
-                    f"- **CRASH** (`{label}`): `{rel}` "
-                    f"({p.stat().st_size} bytes). Uncaught fault under atheris; "
-                    "fix out of scope for #170 unless trivial with a failing unit test."
-                )
+        return "None. No uncaught exceptions, hangs, or memory faults observed."
+    lines: list[str] = []
+    for label, paths in (("parser", parser_crashes), ("json_ingestion", json_crashes)):
+        for p in paths:
+            lines.append(
+                f"- **CRASH** (`{label}`): `{_rel(p)}` "
+                f"({p.stat().st_size} bytes). Uncaught fault under atheris; "
+                "fix out of scope for #170 unless trivial with a failing unit test."
+            )
+    return "\n".join(lines)
+
+
+def _render_fuzz_report(
+    parser: _RunPayload,
+    json_run: _RunPayload,
+    parser_crashes: list[Path],
+    json_crashes: list[Path],
+) -> str:
+    """Render docs/assurance/fuzz-report.md from two run payloads.
+
+    Pure function of its arguments: the checked-in report is re-derivable from the
+    checked-in artifacts, and ``test_fuzz_report_matches_checked_in_artifacts``
+    holds it to that.
+    """
+    total_elapsed = parser["elapsed_sec"] + json_run["elapsed_sec"]
 
     p_stats = parser["stats"]
     j_stats = json_run["stats"]
@@ -279,23 +343,30 @@ def _write_fuzz_report(parser: _RunPayload, json_run: _RunPayload) -> None:
     j_wall = json_run["elapsed_sec"]
     p_budget = parser["max_total_time_sec"]
     j_budget = json_run["max_total_time_sec"]
-    p_corp = parser["corpus_files"]
-    j_corp = json_run["corpus_files"]
     p_crash = parser["crash_count"]
     j_crash = json_run["crash_count"]
     total_budget = p_budget + j_budget
     total_crash = p_crash + j_crash
     minutes = total_elapsed / 60.0
-    findings_block = "\n".join(findings_lines)
+    findings_block = _findings_block(parser_crashes, json_crashes)
+
+    def cov_row(name: str, payload: _RunPayload) -> str:
+        stats = payload["stats"]
+        return (
+            f"| {name} | {stats.get('cov', 'n/a')} | {stats.get('features', 'n/a')} "
+            f"| {stats.get('corpus_size', 'n/a')} | {payload['corpus_files']} |"
+        )
 
     lines = [
         "# Fuzzing report (#170)",
         "",
         "Parent: assurance-pass spec (#160). Sibling mutation: #166 / `mutation-report.md`.",
         "",
-        "Container-side **atheris 3.1.0** (`requirements-assurance-container.txt`) coverage-guided",
-        "fuzzing of the SKILL.md parser and the extractor JSON ingestion models. Host/Windows",
-        "is out of scope; targets import-guard via skip when atheris is absent.",
+        "Container-side **atheris 3.1.0** (`requirements-assurance-container.txt`) fuzzing of the",
+        "SKILL.md parser and the extractor JSON ingestion models. The parser target is",
+        "coverage-guided; the JSON target is not guided over the surface it names — see",
+        "[Coverage feedback](#coverage-feedback) before reading its execution count as reach.",
+        "Host/Windows is out of scope; targets import-guard via skip when atheris is absent.",
         "",
         "## How to reproduce",
         "",
@@ -326,14 +397,41 @@ def _write_fuzz_report(parser: _RunPayload, json_run: _RunPayload) -> None:
         "",
         "## Run statistics",
         "",
-        "| Target | Wall (s) | Budget (s) | Executions | Corpus | Crashes |",
-        "|--------|---------:|-----------:|-----------:|-------:|--------:|",
-        f"| parser | {p_wall:.1f} | {p_budget} | {p_exec} | {p_corp} | {p_crash} |",
-        f"| json_ingestion | {j_wall:.1f} | {j_budget} | {j_exec} | {j_corp} | {j_crash} |",
-        f"| **total** | **{total_elapsed:.1f}** | **{total_budget}** | | | **{total_crash}** |",
+        "| Target | Wall (s) | Budget (s) | Executions | Crashes |",
+        "|--------|---------:|-----------:|-----------:|--------:|",
+        f"| parser | {p_wall:.1f} | {p_budget} | {p_exec} | {p_crash} |",
+        f"| json_ingestion | {j_wall:.1f} | {j_budget} | {j_exec} | {j_crash} |",
+        f"| **total** | **{total_elapsed:.1f}** | **{total_budget}** | | **{total_crash}** |",
         "",
         f"Total fuzz wall time: **{minutes:.1f} minutes** "
         "(acceptance floor: ≥ 60 minutes at default budget).",
+        "",
+        "## Coverage feedback",
+        "",
+        "libFuzzer's own final counters, parsed from each run's recorded summary line",
+        "(`fuzz/artifacts/*.json` → `stats`). **Live corpus** is the unit count the run",
+        "finished with; **corpus files** is the file count left on disk, which is larger",
+        "because superseded (`REDUCE`d) units are not deleted. The corpus size of record is",
+        "the live unit count.",
+        "",
+        "| Target | Edges (`cov`) | Features (`ft`) | Live corpus (units) | Corpus files |",
+        "|--------|--------------:|----------------:|--------------------:|-------------:|",
+        cov_row("parser", parser),
+        cov_row("json_ingestion", json_run),
+        "",
+        "The parser target is genuinely coverage-guided: `parse_skill_file` and",
+        "`MalformedSkillError` are imported under `atheris.instrument_imports`, so the",
+        "parser's own branches drive the search.",
+        "",
+        "The JSON target is **not** guided over the validation surface it names.",
+        "`model_validate` / `model_validate_json` execute inside `pydantic_core`, a compiled",
+        "Rust extension that atheris's bytecode instrumentation cannot see, so the only",
+        "feedback reaching the mutator comes from the Python-level code around it",
+        "(`instrument_from_mapping` plus the target's own branching). That is why `cov` and",
+        "the live corpus do not move across the run: past the opening seconds this target is",
+        "high-throughput random-input testing, not a coverage-guided search. It still drives",
+        "real bytes through the ingestion path and would still surface an uncaught fault; it",
+        "does not support a coverage claim over the models.",
         "",
         "## Severity vocabulary",
         "",
@@ -368,7 +466,34 @@ def _write_fuzz_report(parser: _RunPayload, json_run: _RunPayload) -> None:
         "- Long lane workflow: `.github/workflows/assurance.yml` (`workflow_dispatch` only).",
         "",
     ]
-    _REPORT.write_text("\n".join(lines), encoding="utf-8")
+    return "\n".join(lines)
+
+
+def _write_fuzz_report(parser: _RunPayload, json_run: _RunPayload) -> None:
+    """Synthesize docs/assurance/fuzz-report.md (+ triage any crash artifacts)."""
+    _REPORT.write_text(
+        _render_fuzz_report(
+            parser,
+            json_run,
+            _crash_files(_PARSER_CRASHES),
+            _crash_files(_JSON_CRASHES),
+        ),
+        encoding="utf-8",
+    )
+
+
+_MINUTES_RE = re.compile(r"Total fuzz wall time: \*\*([0-9.]+) minutes\*\*")
+
+
+def _recorded_minutes(text: str) -> float:
+    """Total fuzz minutes as stated by the report itself."""
+    match = _MINUTES_RE.search(text)
+    assert match is not None, "report must state 'Total fuzz wall time: **N minutes**'"
+    return float(match.group(1))
+
+
+def _load_run_payload(path: Path) -> _RunPayload:
+    return cast(_RunPayload, json.loads(path.read_text(encoding="utf-8")))
 
 
 @pytest.mark.assurance
@@ -404,9 +529,8 @@ def test_fuzz_long_lane_one_hour() -> None:
     assert "Executions" in text
     assert "corpus" in text.lower()
     assert "crash" in text.lower()
-    total = parser["elapsed_sec"] + json_run["elapsed_sec"]
     if budget >= _DEFAULT_PER_TARGET_SEC:
-        assert total >= 3600 * 0.9
+        assert _recorded_minutes(text) >= 60.0
 
 
 def test_fuzz_report_checked_in_with_stats() -> None:
@@ -414,8 +538,58 @@ def test_fuzz_report_checked_in_with_stats() -> None:
     assert _REPORT.is_file(), "docs/assurance/fuzz-report.md must be checked in"
     text = _REPORT.read_text(encoding="utf-8")
     assert "Executions" in text
-    assert "Corpus" in text
+    assert "Live corpus" in text
     assert "Crashes" in text
     assert "atheris" in text.lower()
-    # At least one hour of recorded wall time in the committed report.
-    assert "60." in text or "minutes** (acceptance floor" in text
+    # At least one hour of recorded wall time in the committed report (AC: >=1h).
+    # Read as a number, never as substring presence: the surrounding sentence is
+    # emitted unconditionally by the template and so cannot witness the hour.
+    assert _recorded_minutes(text) >= 60.0
+
+
+def test_fuzz_report_matches_checked_in_artifacts() -> None:
+    """The report is re-derivable from the checked-in artifacts and crash inputs.
+
+    Drift guard on the receipt: every number in the report has to come from a
+    machine-readable run record in the tree, so the prose cannot claim an hour, a
+    corpus size, or a crash count the artifacts do not carry.
+    """
+    parser = _load_run_payload(_ARTIFACTS / "parser_run.json")
+    json_run = _load_run_payload(_ARTIFACTS / "json_run.json")
+    rendered = _render_fuzz_report(
+        parser,
+        json_run,
+        _crash_files(_PARSER_CRASHES),
+        _crash_files(_JSON_CRASHES),
+    )
+    assert rendered == _REPORT.read_text(encoding="utf-8")
+    # The corpus size of record is libFuzzer's live unit count, not the file count.
+    assert parser["stats"]["corpus_size"] <= parser["corpus_files"]
+    assert json_run["stats"]["corpus_size"] <= json_run["corpus_files"]
+
+
+def test_fuzz_report_triages_every_crash_with_severity_and_input(tmp_path: Path) -> None:
+    """AC: every crash is triaged with a severity AND its input artifact."""
+    parser = _load_run_payload(_ARTIFACTS / "parser_run.json")
+    json_run = _load_run_payload(_ARTIFACTS / "json_run.json")
+    parser_crash = tmp_path / "crash-abc123"
+    parser_crash.write_bytes(b"---\n\x80")
+    json_crash = tmp_path / "crash-def456"
+    json_crash.write_bytes(b"{}{")
+
+    rendered = _render_fuzz_report(parser, json_run, [parser_crash], [json_crash])
+
+    findings = rendered.split("## Findings", 1)[1].split("## Artifacts", 1)[0]
+    assert "No uncaught exceptions" not in findings
+    for label, crash in (("parser", parser_crash), ("json_ingestion", json_crash)):
+        assert f"**CRASH** (`{label}`)" in findings, findings
+        assert crash.as_posix() in findings, findings
+        assert f"({crash.stat().st_size} bytes)" in findings, findings
+
+
+def test_fuzz_report_findings_say_none_only_when_no_crash_input_exists(tmp_path: Path) -> None:
+    """The empty-findings line is reserved for a run with zero crash artifacts."""
+    crash = tmp_path / "crash-000"
+    crash.write_bytes(b"\x00")
+    assert "None." in _findings_block([], [])
+    assert "None." not in _findings_block([crash], [])
