@@ -229,8 +229,8 @@ def aggregate_skill(
         except (json.JSONDecodeError, TypeError):
             config = {}
         op_hash = config.get("ablation_operator_hash") or "unknown"
-        for key in clause_axis_run_ids:
-            if run_id in clause_axis_run_ids[key]:
+        for key, axis_run_ids in clause_axis_run_ids.items():
+            if run_id in axis_run_ids:
                 clause_axis_op_hashes[key].add(op_hash)
 
         # A55: capture subject_model + user_message_sha256 per run
@@ -565,7 +565,7 @@ def aggregate_skill(
         prov = dict(fit_result.aggregation_provenance)
 
     prov["family_size_used"] = family_size
-    prov["pythonhashseed"] = int(os.environ.get("PYTHONHASHSEED", -1))
+    prov["pythonhashseed"] = int(os.environ.get("PYTHONHASHSEED", "-1"))
     agg_method = fit_result.aggregation_method if fit_result is not None else "unpooled"
 
     return SkillReport(
