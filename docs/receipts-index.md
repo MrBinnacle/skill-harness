@@ -254,19 +254,27 @@ the named receipt directories is absent from this page.
 
 - **Claims:** Per-module **branch** coverage (coverage.py 7.15.2, `--cov-branch`)
   for `src/skill_harness/aggregation/` and `src/skill_harness/ablation/` under
-  the ordinary CI test selection (#171); three modules named below the 80% floor
-  with figures (`ablation/operator.py` 50.0%, `aggregation/confidence_sequence.py`
-  68.5%, `ablation/runner.py` 79.8%); 2,210 branches measured, 1,909 covered;
-  every figure re-derivable from the single command printed in the report.
+  the ordinary CI test selection (#171), paired in every row with that module's
+  #166 mutation score; a stated attention rule reading both instruments, which
+  flags **7 of 20 modules** where branch coverage alone flags 3; the four modules
+  where the instruments disagree and mutation is the one under the floor
+  (`aggregation/engine.py` 90.0/67.9, `aggregation/verdict.py` 91.2/71.5,
+  `ablation/subject.py` 90.6/62.4, `ablation/render.py` 83.3/65.9); that
+  `aggregation/confidence_sequence.py` has the worst branch coverage (17
+  uncovered arcs of 54) and **no #166 mutation score at all**, and that its
+  uncovered arcs were read and are input-validation guards; 2,210 branches
+  measured, 1,909 covered.
 - **Refuses to claim:** That coverage is evidence of correctness — a branch is
   counted when a test steps on it, whether or not anything asserted on the
-  result, and the #166 mutation score is the instrument that speaks to defect
-  detection; that branches reachable only from the excluded `calibration` and
-  `assurance` lanes are untested (they are unmeasured **by this selection**,
-  which is why `confidence_sequence.py`'s figure is partly a selection artifact);
-  that a module reporting 0 branches and therefore 100% carries any information;
-  that 80% is a gate rather than a place to look; host coverage for the two
-  symlink tests Windows refuses without Developer Mode.
+  result; that a module reporting 0 branches carries any information, which is
+  why those five rows print `n/a` rather than the arithmetically-true 100%; that
+  a healthy branch percentage is evidence for a module whose mutation score is
+  below the floor; that coverage substitutes for mutation on a module mutation
+  never measured; that 80% is a gate rather than a place to look; host coverage
+  for the two symlink tests Windows refuses without Developer Mode. **Carries a
+  dated retraction:** an earlier draft attributed the `confidence_sequence.py`
+  gap to the excluded calibration lane from name similarity, without opening the
+  `missing_branches` data that refutes it.
 
 ---
 
