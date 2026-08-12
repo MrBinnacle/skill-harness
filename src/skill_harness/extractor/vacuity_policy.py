@@ -376,13 +376,23 @@ def assert_kind_precision_render_safe(
 
     Poison direction: emitting the bare aggregate (e.g. 'kind-precision 0.835')
     without the receipt-backed class split must raise.
+
+    No receipt means no calibration claim exists for this instrument triple
+    (UNMEASURED_GENERATION_MISMATCH). That is a legitimate state, so a render
+    making no kind-precision claim passes. A render that DOES make one cannot be
+    checked against anything, and an unverifiable claim is refused rather than
+    waved through -- this guard previously substituted hardcoded literals here,
+    which is the invented-score failure it exists to prevent.
     """
+    mentions_kind_precision = "kind-precision" in rendered.lower()
     if receipt is None:
-        raise BareKindPrecisionRenderError(
-            "refusing to validate kind-precision rendering without a calibration receipt"
-        )
+        if mentions_kind_precision:
+            raise BareKindPrecisionRenderError(
+                "refusing to validate a kind-precision claim without a calibration receipt"
+            )
+        return
     agg = _fmt_num(receipt.kind_precision_aggregate)
-    if agg not in rendered and "kind-precision" not in rendered.lower():
+    if agg not in rendered and not mentions_kind_precision:
         return
     # If aggregate appears, both class splits must sit beside it.
     nad = (
