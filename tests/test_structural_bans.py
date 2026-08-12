@@ -414,6 +414,26 @@ def test_pyproject_description_is_scanned_in_both_directions(tmp_path: Path) -> 
     assert _repo_public_copy_violations(tmp_path) == []
 
 
+def test_historical_pyproject_description_reconstruction_is_rejected(tmp_path: Path) -> None:
+    """Reconstruct the pre-fix PyPI summary that prompted issue #185."""
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        "[project]\n"
+        'name = "skill-harness"\n'
+        'description = "Evaluation harness for reusable AI agent skills - does a skill earn '
+        "its slot? Returns KEEP / CUT / CAN'T-TELL-YET, never a manufactured score. "
+        'First-class Claude Code support."\n',
+        encoding="utf-8",
+    )
+
+    violations = _repo_public_copy_violations(tmp_path)
+
+    assert any(
+        item.startswith("pyproject.toml:[project].description: earn/earned family")
+        for item in violations
+    )
+
+
 def test_pyproject_description_matches_approved_repo_description() -> None:
     project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     assert project["description"] == (
