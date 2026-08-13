@@ -1332,6 +1332,64 @@ class TestF9RunAblationBudgetAbortSharedHandler:
         assert progress["error"] == "budget_exhausted"
 
 
+class Test221BudgetAbortHelperReRaisesExplicitly:
+    """#221: ``_handle_budget_abort`` used to take no exception and end in a bare
+    ``raise``, so it re-raised whatever happened to be in flight in the caller. That
+    made its correctness depend on a calling convention nothing in the file enforced
+    -- it was valid only inside an active ``except`` block -- and ``mypy --strict``
+    accepted a call from ordinary code regardless.
+
+    Called with no exception in flight, the old form raised ``RuntimeError: No active
+    exception to reraise`` from inside budget-abort cleanup. The helper now takes the
+    exception and re-raises it explicitly, which makes the contract checkable at the
+    call site and lets the ``PLE0704`` suppression be deleted rather than moved.
+
+    The two path-level transitions (``run_ablation`` and ``resume_ablation`` both
+    reaching ``aborted_budget``) are asserted by ``TestF9RunAblationBudgetAbort``
+    ``SharedHandler`` and ``TestA4ResumeBudgetAbortHandling`` above; this class covers
+    the re-raise semantics those two cannot see, because both call the helper from
+    inside a handler where a bare ``raise`` also works.
+    """
+
+    def test_reraises_the_exception_object_it_was_handed(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        run_id = "issue-221-direct-call"
+        exc = BudgetAbortedError(run_id, usd_spent=1.0, usd_cap=0.5)
+
+        # Deliberately called from ordinary code, with nothing in flight: this is the
+        # third-caller shape the issue is about.
+        with pytest.raises(BudgetAbortedError) as caught:
+            runner._handle_budget_abort(exc, run_id, 0)
+
+        assert caught.value is exc, (
+            "#221: the helper must re-raise the exception object it was handed, not "
+            "whatever exception happens to be active in the caller"
+        )
+
+    def test_reraises_the_handed_exception_even_when_another_is_in_flight(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        """The sharper half of the same contract: inside an ``except`` block for a
+        DIFFERENT exception, a bare ``raise`` would propagate the active one. The
+        explicit form must still propagate the one passed in.
+        """
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        run_id = "issue-221-wrong-exception-in-flight"
+        exc = BudgetAbortedError(run_id, usd_spent=2.0, usd_cap=0.25)
+
+        with pytest.raises(BudgetAbortedError) as caught:
+            try:
+                raise ValueError("an unrelated exception is active")
+            except ValueError:
+                runner._handle_budget_abort(exc, run_id, 0)
+
+        assert caught.value is exc
+
+
 # ---------------------------------------------------------------------------
 # 5. Budget cap race test (A42)
 # ---------------------------------------------------------------------------

@@ -155,9 +155,10 @@ ignore = [
   "PLR0915",  # Orchestrators remain linear to keep transactional flow visible.
   "PLR0917",  # Public domain APIs carry independently meaningful parameters.
   "PLR2004",  # Named protocol and fixture values are clearer inline at assertions.
-  # PLE0704 is NOT ignored repo-wide: it has exactly one intended site, suppressed
-  # at the line in ablation/runner.py. Silencing an error-class rule everywhere to
-  # excuse one call site would hide the unintended ones.
+  # PLE0704 is NOT ignored repo-wide and now has ZERO sites (#221). It once had one,
+  # suppressed at the line in ablation/runner.py; that helper was changed to take the
+  # exception and re-raise it explicitly, so the suppression was deleted rather than
+  # moved. Any new hit is a real one -- do not silence an error-class rule globally.
   "PLW0603",  # Module caches require explicit global assignment at narrow seams.
 ]
 
