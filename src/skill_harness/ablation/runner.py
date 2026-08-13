@@ -511,9 +511,9 @@ class AblationRunner:
                         last_heartbeat=self._now(),
                     )
 
-        except BudgetAbortedError:
+        except BudgetAbortedError as exc:
             # Mark run as aborted in runtime
-            self._handle_budget_abort(run_id, samples_collected)
+            self._handle_budget_abort(exc, run_id, samples_collected)
 
         # Stamp completed_at exactly ONCE (A20 carve-out, single-shot per REL-1 spec).
         # "Completed" means the clause loop reached its natural stopping condition for each
@@ -635,8 +635,8 @@ class AblationRunner:
                         samples_collected=samples_collected,
                         last_heartbeat=self._now(),
                     )
-        except BudgetAbortedError:
-            self._handle_budget_abort(run_id, samples_collected)
+        except BudgetAbortedError as exc:
+            self._handle_budget_abort(exc, run_id, samples_collected)
 
         # Stamp completed_at
         completed_ts = self._now()
@@ -1045,14 +1045,22 @@ class AblationRunner:
     # Budget management (A42)
     # ------------------------------------------------------------------
 
-    def _handle_budget_abort(self, run_id: str, samples_collected: int) -> NoReturn:
-        """Mark a run aborted-by-budget in runtime and re-raise (A42, A4).
+    def _handle_budget_abort(
+        self, exc: BudgetAbortedError, run_id: str, samples_collected: int
+    ) -> NoReturn:
+        """Mark a run aborted-by-budget in runtime and re-raise ``exc`` (A42, A4).
 
         F-9 (S55 hostile review): extracted from the verbatim-duplicate
         ``except BudgetAbortedError`` handlers in ``run_ablation`` and
         ``resume_ablation`` -- both must transition ``run_progress.state`` to
         ``'aborted_budget'`` the same way (A4: resume previously skipped this
         entirely, leaving the progress row stuck).
+
+        #221: the extraction left a bare ``raise`` here, which re-raised whatever was
+        in flight in the caller and so imposed a calling convention -- only valid
+        inside an active ``except`` block -- that nothing enforced and ``mypy
+        --strict`` could not see. Taking the exception explicitly makes the contract
+        checkable at the call site.
         """
         abort_ts = self._now()
         with writer_transaction(self._runtime):
@@ -1065,7 +1073,7 @@ class AblationRunner:
                 last_heartbeat=abort_ts,
                 error="budget_exhausted",
             )
-        raise  # noqa: PLE0704 - re-raises the caller's BudgetAbortedError; see docstring.
+        raise exc
 
     def _check_budget(self, run_id: str, max_usd: float, projected_cost: float) -> None:
         """Pre-call budget gate (A42).
