@@ -65,6 +65,10 @@ class BareKindPrecisionRenderError(ValueError):
     """Raised when a renderer would emit aggregate kind-precision without class split."""
 
 
+class RecallRenderError(ValueError):
+    """Raised when a recall claim is not supported by its calibration receipt."""
+
+
 @dataclass(frozen=True, slots=True)
 class MeasuredVacuityRecall:
     """Receipt-declared recall points with both intervals and denominators."""
@@ -429,8 +433,11 @@ def assert_kind_precision_render_safe(
         )
 
 
-def assert_recall_not_claimed_measured(rendered: str) -> None:
-    """Guard: no surface may describe vacuity-flag recall as measured."""
+def assert_recall_not_claimed_measured(
+    rendered: str,
+    receipt: VacuityFlagCalibrationReceipt | None = None,
+) -> None:
+    """Guard measured recall against the receipt generation and its complete evidence."""
     lowered = rendered.lower()
     if "recall" not in lowered:
         return
@@ -441,15 +448,39 @@ def assert_recall_not_claimed_measured(rendered: str) -> None:
         "measured recall",
         "recall:measured",
     )
-    for phrase in forbidden:
-        if phrase in lowered:
-            raise ValueError(f"refusing to claim vacuity recall is measured: found {phrase!r}")
+    measured_claim = next((phrase for phrase in forbidden if phrase in lowered), None)
+    if measured_claim is None:
+        return
+    if receipt is None:
+        raise RecallRenderError("refusing to validate a measured recall claim without a receipt")
+    if receipt.recall == "UNMEASURED":
+        raise RecallRenderError(
+            f"refusing measured recall claim for an UNMEASURED receipt: found {measured_claim!r}"
+        )
+
+    recall = receipt.recall
+    required = (
+        _fmt_num(recall.point_undecided_clean),
+        _fmt_num(recall.point_undecided_vacuous),
+        _fmt_interval(recall.stratified_fpc_95),
+        _fmt_interval(recall.skill_cluster_bootstrap_95),
+        f"n={recall.sample_n}",
+        f"n={recall.skill_n}",
+    )
+    if any(value not in rendered for value in required):
+        raise RecallRenderError(
+            "refusing measured recall point without both receipt intervals and sample/skill n"
+        )
 
 
 def _fmt_num(value: float) -> str:
     # Prefer compact ticket form (0.835 not 0.835000).
     text = f"{value:.6f}".rstrip("0").rstrip(".")
     return text
+
+
+def _fmt_interval(interval: tuple[float, float]) -> str:
+    return f"[{_fmt_num(interval[0])}, {_fmt_num(interval[1])}]"
 
 
 def _receipt_from_mapping(raw: Mapping[str, Any]) -> VacuityFlagCalibrationReceipt:
