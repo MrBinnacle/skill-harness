@@ -527,9 +527,7 @@ def _receipt_from_mapping(raw: Mapping[str, Any]) -> VacuityFlagCalibrationRecei
         adjudicated_rows=int(sample["adjudicated_rows"]),
         seats=int(raw["panel"]["seats"] if newer_schema else sample["seats"]),
         flag_precision_weighted_undecided_wrong=float(
-            fp["flag_precision_undecided_wrong"]
-            if newer_schema
-            else fp["weighted_undecided_wrong"]
+            fp["flag_precision_undecided_wrong"] if newer_schema else fp["weighted_undecided_wrong"]
         ),
         flag_precision_weighted_undecided_correct=float(
             fp["flag_precision_undecided_correct"]
