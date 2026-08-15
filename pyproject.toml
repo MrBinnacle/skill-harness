@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skill-harness"
-version = "0.2.2"
+version = "0.2.3"
 description = "I wanted to know whether a skill was actually any good. This runs the same task with the skill and without it, and reports what can honestly be said about the difference - often \"not enough to call it\". A missing figure is a typed refusal, never an invented score. First-class Claude Code support."
 readme = "README.md"
 keywords = [

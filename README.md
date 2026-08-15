@@ -281,7 +281,7 @@ Same refusal, different end of the pipe.
 - [The observation ledger](https://github.com/MrBinnacle/skill-harness/blob/main/docs/observations/README.md) — per-record screen history, annotated
   rather than rewritten.
 
-Status: v0.2.2 on PyPI. The keep/cut layer is live; store-backed coverage of the older screen
+Status: v0.2.3 on PyPI. The keep/cut layer is live; store-backed coverage of the older screen
 records is partial and being backfilled, and the ledger above says which is which.
 
 MIT licensed. Issues and PRs welcome —
