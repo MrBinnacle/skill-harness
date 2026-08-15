@@ -89,7 +89,11 @@ def test_honest_maturity_names_both_gaps_with_tickets() -> None:
 
 def test_status_block_facts_unchanged() -> None:
     text = _readme()
-    assert "Status: v0.2.2" in text
+    # Derived, not pinned: the banner must track the package version (release
+    # gate G3), so a hardcoded literal here would fail on every release bump.
+    from skill_harness import __version__
+
+    assert f"Status: v{__version__}" in text
     assert "zero production-skill KEEPs" in text or "Zero production-skill KEEPs" in text
     assert "value-class guard" in text
     assert "append-only-evidence-design" in text
