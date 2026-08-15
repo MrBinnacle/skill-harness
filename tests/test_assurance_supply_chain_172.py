@@ -29,3 +29,21 @@ def test_scorecard_workflow_publishes_sarif_with_minimal_permissions() -> None:
     assert "publish_results: true" in text
     for ref in re.findall(r"uses:\s*[^\s@]+@([^\s#]+)", text):
         assert re.fullmatch(r"[0-9a-f]{40}", ref), ref
+
+
+def test_workflow_audit_covers_every_workflow_and_records_required_checks() -> None:
+    workflows = sorted((ROOT / ".github/workflows").glob("*.yml"))
+    audit_path = ROOT / "docs/assurance/workflows-audit.md"
+
+    assert audit_path.is_file()
+    audit = audit_path.read_text(encoding="utf-8")
+    for workflow in workflows:
+        text = workflow.read_text(encoding="utf-8")
+        assert f"`.github/workflows/{workflow.name}`" in audit
+        assert "permissions:" in text, workflow.name
+        assert "pull_request_target" not in text, workflow.name
+        for ref in re.findall(r"uses:\s*[^\s@]+@([^\s#]+)", text):
+            assert re.fullmatch(r"[0-9a-f]{40}", ref), f"{workflow.name}: {ref}"
+
+    assert "No existing job was renamed" in audit
+    assert "No branch-protection setting was changed" in audit
