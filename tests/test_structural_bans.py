@@ -115,6 +115,20 @@ _WEAK_DIRECTIVE_SPLIT_RE = re.compile(
     r"|\b4/20\b(?:(?!\bnot_a_directive\b)[^\n.!?]){0,60}\bweak_directive\b)",
     re.IGNORECASE,
 )
+_GEN2_KIND_PRECISION_AGGREGATE_RE = re.compile(
+    r"\b0\.9667\b|\bkind[ -]precision\b[^\n.!?]{0,40}\b0\.9667\b",
+    re.IGNORECASE,
+)
+_GEN2_NOT_A_DIRECTIVE_SPLIT_RE = re.compile(
+    r"(?:\bnot_a_directive\b(?:(?!\bweak_directive\b)[^\n.!?]){0,60}\b255/255\b"
+    r"|\b255/255\b(?:(?!\bweak_directive\b)[^\n.!?]){0,60}\bnot_a_directive\b)",
+    re.IGNORECASE,
+)
+_GEN2_WEAK_DIRECTIVE_SPLIT_RE = re.compile(
+    r"(?:\bweak_directive\b(?:(?!\bnot_a_directive\b)[^\n.!?]){0,60}\b6/15\b"
+    r"|\b6/15\b(?:(?!\bnot_a_directive\b)[^\n.!?]){0,60}\bweak_directive\b)",
+    re.IGNORECASE,
+)
 _VACUITY_RECALL_RE = re.compile(
     r"(?:\b(?:vacuity[- ](?:flag|detector)|detector)(?:'s)?\b"
     r"[^\n.!?]{0,80}\brecall\b"
@@ -184,6 +198,14 @@ def _public_copy_violations(text: str) -> list[str]:
         if not _NOT_A_DIRECTIVE_SPLIT_RE.search(context) or not _WEAK_DIRECTIVE_SPLIT_RE.search(
             context
         ):
+            violations.append(f"bare kind-precision aggregate at line {lineno}")
+
+    for match in _GEN2_KIND_PRECISION_AGGREGATE_RE.finditer(text):
+        lineno = _line_number(text, match.start())
+        context = _line_context(text, match.start(), _KIND_CONTEXT_LINES)
+        if not _GEN2_NOT_A_DIRECTIVE_SPLIT_RE.search(
+            context
+        ) or not _GEN2_WEAK_DIRECTIVE_SPLIT_RE.search(context):
             violations.append(f"bare kind-precision aggregate at line {lineno}")
 
     for match in _VACUITY_RECALL_RE.finditer(text):
@@ -392,6 +414,23 @@ def test_kind_precision_poison_and_class_split() -> None:
     assert any("bare kind-precision aggregate" in violation for violation in poison)
     assert any("bare kind-precision aggregate" in violation for violation in prose_poison)
     assert any("bare kind-precision aggregate" in violation for violation in stale_split)
+    assert any("bare kind-precision aggregate" in violation for violation in swapped_split)
+    assert legitimate == []
+
+
+def test_gen2_kind_precision_poison_and_class_split() -> None:
+    poison = _public_copy_violations("The detector's kind-precision is 0.9667.")
+    prose_poison = _public_copy_violations("The detector's kind precision is 0.9667.")
+    legitimate = _public_copy_violations(
+        "The detector's kind-precision is 0.9667.\n"
+        "not_a_directive matched 255/255; weak_directive matched 6/15."
+    )
+    swapped_split = _public_copy_violations(
+        "The detector's kind-precision is 0.9667.\n"
+        "not_a_directive matched 6/15; weak_directive matched 255/255."
+    )
+    assert any("bare kind-precision aggregate" in violation for violation in poison)
+    assert any("bare kind-precision aggregate" in violation for violation in prose_poison)
     assert any("bare kind-precision aggregate" in violation for violation in swapped_split)
     assert legitimate == []
 
