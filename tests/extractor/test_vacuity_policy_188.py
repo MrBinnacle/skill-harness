@@ -409,13 +409,24 @@ def test_no_receipt_passes_a_render_that_claims_no_kind_precision() -> None:
     )
 
 
-def test_recall_must_not_be_described_as_measured() -> None:
+def test_recall_claim_is_scoped_to_the_backing_receipt() -> None:
+    unmeasured = load_calibration_receipt(_DOCS_RECEIPT)
+    measured = load_calibration_receipt(_ADJ_RECEIPT)
+    claim = (
+        "vacuity recall measured 0.7331-0.7524; stratified FPC 95% [0.66, 0.874]; "
+        "skill cluster bootstrap 95% [0.622, 0.913] (n=120, skills n=47)"
+    )
+
     with pytest.raises(ValueError, match="recall"):
-        assert_recall_not_claimed_measured("vacuity recall: measured at 0.5")
-    # Honest form is fine.
-    assert_recall_not_claimed_measured("recall: UNMEASURED")
-    receipt = load_calibration_receipt(_DOCS_RECEIPT)
-    assert receipt.recall == "UNMEASURED"
+        assert_recall_not_claimed_measured(claim, unmeasured)
+    assert_recall_not_claimed_measured(claim, measured)
+    with pytest.raises(ValueError, match="interval"):
+        assert_recall_not_claimed_measured("vacuity recall measured 0.7524 (n=120)", measured)
+    assert_recall_not_claimed_measured("recall: UNMEASURED", unmeasured)
+    with pytest.raises(ValueError, match="receipt"):
+        assert_recall_not_claimed_measured(claim)
+
+    assert unmeasured.recall == "UNMEASURED"
     raw = json.loads(_DOCS_RECEIPT.read_text(encoding="utf-8"))
     assert raw["recall"] == "UNMEASURED"
 
