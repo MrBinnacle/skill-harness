@@ -14,7 +14,7 @@
 
 ## Why this exists
 
-I wanted to know whether a skill was any good.
+I wanted to know if you could tell if a skill was any good.
 
 Not "is this file well written" — whether it changes anything. Search for a skill that makes
 AI writing sound less like AI writing and you get a dozen of them. Each one costs you context
