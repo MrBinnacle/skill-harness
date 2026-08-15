@@ -5,6 +5,55 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT_COMMAND = "python -m pip_audit --local"
+WORKFLOW_DIR = ROOT / ".github/workflows"
+
+_USES_RE = re.compile(r"(?m)^\s*-?\s*uses:\s*(\S+)")
+_SHA_PINNED_RE = re.compile(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}")
+_WRITE_SCOPE_RE = re.compile(r"(?m)^\s+([a-z-]+):\s*write\s*(?:#.*)?$")
+
+
+def _workflows() -> list[Path]:
+    """Every workflow file GitHub would run, `.yaml` included.
+
+    Globbing `*.yml` alone would let a `.yaml` workflow escape both the audit's
+    coverage claim and the pinning and permission checks below.
+    """
+    return sorted(path for path in WORKFLOW_DIR.glob("*.y*ml") if path.suffix in {".yml", ".yaml"})
+
+
+def _unpinned_uses(text: str) -> list[str]:
+    """`uses:` references that are not `owner/repo[/path]@<40-hex commit sha>`.
+
+    Every `uses:` value is inspected, not only those that already contain an
+    `@`: `uses: docker://image:tag` and an in-repo composite action carry no
+    `@ref` at all, so a pattern that requires one reports the references it
+    cannot see as pinned. A reference that is legitimately unpinnable is a
+    finding for the audit document to record, not one for this test to skip.
+    """
+    return [ref for ref in _USES_RE.findall(text) if not _SHA_PINNED_RE.fullmatch(ref)]
+
+
+def _workflow_level_permissions(text: str) -> str:
+    """The workflow-level `permissions:` value: inline scalar or indented block.
+
+    Column-0 only. `"permissions:" in text` is satisfied by a job-level block,
+    by a comment, and by `permissions: write-all`, none of which is the
+    least-privilege baseline the audit document claims for every workflow.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not line.startswith("permissions:"):
+            continue
+        inline = line.split(":", 1)[1].strip()
+        if inline:
+            return inline
+        block: list[str] = []
+        for following in lines[index + 1 :]:
+            if following.strip() and not following.startswith((" ", "\t")):
+                break
+            block.append(following)
+        return "\n".join(block).strip()
+    return ""
 
 
 def _dependency_audit_job() -> str:
@@ -78,32 +127,39 @@ def test_pip_audit_fail_ability_is_demonstrated_not_asserted() -> None:
 
 
 def test_scorecard_workflow_publishes_sarif_with_minimal_permissions() -> None:
-    workflow = ROOT / ".github/workflows/scorecard.yml"
+    workflow = WORKFLOW_DIR / "scorecard.yml"
 
     assert workflow.is_file()
     text = workflow.read_text(encoding="utf-8")
     assert "ossf/scorecard-action@" in text
     assert "github/codeql-action/upload-sarif@" in text
-    assert "security-events: write" in text
-    assert "id-token: write" in text
     assert "publish_results: true" in text
-    for ref in re.findall(r"uses:\s*[^\s@]+@([^\s#]+)", text):
-        assert re.fullmatch(r"[0-9a-f]{40}", ref), ref
+    assert not _unpinned_uses(text), _unpinned_uses(text)
+
+    # Minimal, not merely sufficient: exactly the two grants SARIF upload and
+    # result publication consume, and nothing else anywhere in the file.
+    assert set(_WRITE_SCOPE_RE.findall(text)) == {"security-events", "id-token"}
 
 
 def test_workflow_audit_covers_every_workflow_and_records_required_checks() -> None:
-    workflows = sorted((ROOT / ".github/workflows").glob("*.yml"))
     audit_path = ROOT / "docs/assurance/workflows-audit.md"
 
     assert audit_path.is_file()
     audit = audit_path.read_text(encoding="utf-8")
+    workflows = _workflows()
+    assert len(workflows) >= 6, workflows
     for workflow in workflows:
         text = workflow.read_text(encoding="utf-8")
-        assert f"`.github/workflows/{workflow.name}`" in audit
-        assert "permissions:" in text, workflow.name
+        assert f"`.github/workflows/{workflow.name}`" in audit, workflow.name
         assert "pull_request_target" not in text, workflow.name
-        for ref in re.findall(r"uses:\s*[^\s@]+@([^\s#]+)", text):
-            assert re.fullmatch(r"[0-9a-f]{40}", ref), f"{workflow.name}: {ref}"
+        assert not _unpinned_uses(text), f"{workflow.name}: {_unpinned_uses(text)}"
+
+        permissions = _workflow_level_permissions(text)
+        assert permissions, f"{workflow.name}: no workflow-level permissions block"
+        assert "write" not in permissions, (
+            f"{workflow.name}: workflow-level write grant {permissions!r} - the audit "
+            "claims write access exists only on the job that consumes it"
+        )
 
     assert "No existing job was renamed" in audit
     assert "No branch-protection setting was changed" in audit
