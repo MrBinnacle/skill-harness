@@ -114,6 +114,65 @@ def test_receipt_missing_recall_is_refused_not_defaulted(tmp_path: Path) -> None
         load_calibration_receipt(path)
 
 
+def test_recall_interval_is_never_published_as_the_flag_precision_interval() -> None:
+    """A recall band is not a precision band, however similar the field names.
+
+    ``arm_A`` of the 2026-08-09 receipt is a population census: it publishes no
+    sampling interval at all. Filling the flag-precision Wilson95+FPC fields from
+    ``arm_B``'s ``stratified_fpc_95`` puts [0.66, 0.874] on the exclusion label
+    beside a 0.9574 precision point that the band does not even contain -- an
+    interval the receipt never claimed, attached to the wrong quantity.
+    """
+    receipt = load_calibration_receipt(_ADJ_RECEIPT)
+    assert receipt.wilson_95_fpc_low is None
+    assert receipt.wilson_95_fpc_high is None
+
+    label = exclusion_label_for_flag(
+        flag_evidence_status="CALIBRATED_FROZEN_CAPTURE",
+        calibration_receipt=receipt,
+    )
+    assert "flag-based" in label.lower()
+    assert "pending review" in label.lower()
+    assert receipt.receipt_id in label
+    assert "0.9574" in label
+    assert "no flag-precision interval in receipt" in label
+    assert "Wilson" not in label
+    for recall_figure in ("0.66", "0.874", "0.622", "0.913", "0.7524", "0.7331"):
+        assert recall_figure not in label, f"recall figure {recall_figure} leaked into precision"
+
+
+def test_sampled_receipt_must_still_carry_its_own_interval(tmp_path: Path) -> None:
+    """Optional-for-a-census must not become optional-for-everyone."""
+    raw = json.loads(_DOCS_RECEIPT.read_text(encoding="utf-8"))
+    del raw["flag_precision"]["wilson_95_fpc_low"]
+    del raw["flag_precision"]["wilson_95_fpc_high"]
+    path = tmp_path / "no-interval.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="wilson_95_fpc"):
+        load_calibration_receipt(path)
+
+    half = json.loads(_ADJ_RECEIPT.read_text(encoding="utf-8"))
+    half["arm_A_census"]["wilson_95_fpc_low"] = 0.94
+    half_path = tmp_path / "half-interval.json"
+    half_path.write_text(json.dumps(half), encoding="utf-8")
+    with pytest.raises(ValueError, match="both"):
+        load_calibration_receipt(half_path)
+
+
+def test_ambiguous_prose_denominator_is_refused_not_first_wins(tmp_path: Path) -> None:
+    """The sample n is read out of prose, so ambiguity must fail closed.
+
+    ``design`` carrying two ``n=`` figures took the first one, publishing the
+    positives count (11) as the sample size (120) with no error anywhere.
+    """
+    raw = json.loads(_ADJ_RECEIPT.read_text(encoding="utf-8"))
+    raw["arm_B_recall"]["design"] = "positives n=11 inside the n=120 stratified draw, seed 189"
+    path = tmp_path / "ambiguous-n.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="unambiguous"):
+        load_calibration_receipt(path)
+
+
 # ---------------------------------------------------------------------------
 # Instrument triple mismatch → UNMEASURED_GENERATION_MISMATCH
 # ---------------------------------------------------------------------------

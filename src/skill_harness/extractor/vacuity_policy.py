@@ -95,8 +95,10 @@ class VacuityFlagCalibrationReceipt:
     seats: int
     flag_precision_weighted_undecided_wrong: float
     flag_precision_weighted_undecided_correct: float
-    wilson_95_fpc_low: float
-    wilson_95_fpc_high: float
+    # None when the receipt publishes no flag-precision sampling interval (a
+    # full-population census arm has none). Never borrowed from another arm.
+    wilson_95_fpc_low: float | None
+    wilson_95_fpc_high: float | None
     kind_precision_aggregate: float
     kind_precision_not_a_directive_correct: int
     kind_precision_not_a_directive_n: int
@@ -358,11 +360,18 @@ def exclusion_label_for_flag(
         lo = calibration_receipt.wilson_95_fpc_low
         hi = calibration_receipt.wilson_95_fpc_high
         rid = calibration_receipt.receipt_id
-        return (
-            f"{base}; generation-scoped flag-precision {fp} "
-            f"Wilson95+FPC [{lo}, {hi}] "
-            f"(receipt {rid}; CALIBRATED_FROZEN_CAPTURE for matching instrument triple only)"
-        )
+        scope = f"(receipt {rid}; CALIBRATED_FROZEN_CAPTURE for matching instrument triple only)"
+        if lo is None or hi is None:
+            # No sampling interval in this receipt (census arm). Publish the
+            # receipt's own undecided-wrong..undecided-correct range and say the
+            # interval is absent; another arm's interval measures another
+            # quantity and is never a substitute.
+            fp_correct = calibration_receipt.flag_precision_weighted_undecided_correct
+            return (
+                f"{base}; generation-scoped flag-precision {fp}-{fp_correct} "
+                f"(no flag-precision interval in receipt) {scope}"
+            )
+        return f"{base}; generation-scoped flag-precision {fp} Wilson95+FPC [{lo}, {hi}] {scope}"
     return (
         f"{base}; flag-precision UNMEASURED_GENERATION_MISMATCH "
         f"(no calibration claim for this instrument triple)"
@@ -509,6 +518,9 @@ def _receipt_from_mapping(raw: Mapping[str, Any]) -> VacuityFlagCalibrationRecei
         raise ValueError("receipt missing sample")
 
     recall = _recall_from_mapping(raw)
+    # A census arm publishes no sampling interval; the legacy sampled schema must
+    # still carry its own. Neither borrows one from the recall arm.
+    wilson = _flag_precision_interval(fp, required=not newer_schema)
 
     receipt_id = raw.get("receipt_id")
     capture_date = raw.get("capture_date")
@@ -534,16 +546,8 @@ def _receipt_from_mapping(raw: Mapping[str, Any]) -> VacuityFlagCalibrationRecei
             if newer_schema
             else fp["weighted_undecided_correct"]
         ),
-        wilson_95_fpc_low=float(
-            recall.stratified_fpc_95[0]
-            if isinstance(recall, MeasuredVacuityRecall)
-            else fp["wilson_95_fpc_low"]
-        ),
-        wilson_95_fpc_high=float(
-            recall.stratified_fpc_95[1]
-            if isinstance(recall, MeasuredVacuityRecall)
-            else fp["wilson_95_fpc_high"]
-        ),
+        wilson_95_fpc_low=None if wilson is None else wilson[0],
+        wilson_95_fpc_high=None if wilson is None else wilson[1],
         kind_precision_aggregate=float(
             kp["overall_kind_match"] if newer_schema else kp["aggregate"]
         ),
@@ -563,6 +567,30 @@ def _receipt_from_mapping(raw: Mapping[str, Any]) -> VacuityFlagCalibrationRecei
     )
 
 
+def _flag_precision_interval(
+    fp: Mapping[str, Any],
+    *,
+    required: bool,
+) -> tuple[float, float] | None:
+    """The receipt's own flag-precision Wilson95+FPC band, or None if it has none.
+
+    A full-population census arm has no sampling interval. The recall arm's
+    ``stratified_fpc_95`` shares the letters "fpc" and measures a different
+    quantity entirely: publishing it as the flag-precision band manufactures a
+    band the receipt never claimed (and one that need not even contain the
+    flag-precision point). Absent stays absent; the renderer says so.
+    """
+    low = fp.get("wilson_95_fpc_low")
+    high = fp.get("wilson_95_fpc_high")
+    if low is None and high is None:
+        if required:
+            raise ValueError("receipt flag_precision missing wilson_95_fpc bounds")
+        return None
+    if low is None or high is None:
+        raise ValueError("receipt flag_precision needs both wilson_95_fpc bounds or neither")
+    return float(low), float(high)
+
+
 def _recall_from_mapping(raw: Mapping[str, Any]) -> Literal["UNMEASURED"] | MeasuredVacuityRecall:
     recall = raw.get("recall")
     if recall == "UNMEASURED":
@@ -573,10 +601,10 @@ def _recall_from_mapping(raw: Mapping[str, Any]) -> Literal["UNMEASURED"] | Meas
 
     design = measured.get("design")
     note = measured.get("note")
-    sample_match = re.search(r"\bn=(\d+)\b", design) if isinstance(design, str) else None
-    skill_match = re.search(r"skill-level n is (\d+)\b", note) if isinstance(note, str) else None
-    if sample_match is None or skill_match is None:
-        raise ValueError("measured recall requires sample n and skill-level n")
+    sample_n = _sole_int(r"\bn=(\d+)\b", design)
+    skill_n = _sole_int(r"\bskill-level n is (\d+)\b", note)
+    if sample_n is None or skill_n is None:
+        raise ValueError("measured recall requires an unambiguous sample n and skill-level n")
 
     stratified = measured.get("stratified_fpc_95")
     clustered = measured.get("skill_cluster_bootstrap_95")
@@ -590,8 +618,23 @@ def _recall_from_mapping(raw: Mapping[str, Any]) -> Literal["UNMEASURED"] | Meas
             point_undecided_vacuous=float(measured["recall_undecided_vacuous"]),
             stratified_fpc_95=(float(stratified[0]), float(stratified[1])),
             skill_cluster_bootstrap_95=(float(clustered[0]), float(clustered[1])),
-            sample_n=int(sample_match.group(1)),
-            skill_n=int(skill_match.group(1)),
+            sample_n=sample_n,
+            skill_n=skill_n,
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError("measured recall block is incomplete or invalid") from exc
+
+
+def _sole_int(pattern: str, text: object) -> int | None:
+    """The one figure this pattern finds in receipt prose, else None.
+
+    Prose is a weak place to keep a denominator. A second ``n=`` in the same
+    sentence would silently promote the wrong number to a published sample size,
+    so anything other than exactly one match is refused rather than first-wins.
+    """
+    if not isinstance(text, str):
+        return None
+    found = re.findall(pattern, text)
+    if len(found) != 1:
+        return None
+    return int(found[0])
