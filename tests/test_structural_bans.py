@@ -115,8 +115,18 @@ _WEAK_DIRECTIVE_SPLIT_RE = re.compile(
     r"|\b4/20\b(?:(?!\bnot_a_directive\b)[^\n.!?]){0,60}\bweak_directive\b)",
     re.IGNORECASE,
 )
+# The second-generation figures are receipt vacuity-flag-adjudication-2026-08-09
+# arm_C: overall_kind_match 0.9667, not_a_directive 255/255, weak_directive 6/15.
+# Same rule as the 2026-08-08 aggregate above, and deliberately the same surface
+# variants -- the decimal anywhere, plus the percentage rendering on either side
+# of the claim. A rule that only knows the decimal is not a guard: "96.67 % kind
+# precision" is the same bare aggregate spelled the way prose spells it. 96.67
+# and 96.7 are both renderings of 0.9667; the `kind[ -]precision` proximity gate
+# is what keeps those bare numbers from matching unrelated prose.
 _GEN2_KIND_PRECISION_AGGREGATE_RE = re.compile(
-    r"\b0\.9667\b|\bkind[ -]precision\b[^\n.!?]{0,40}\b0\.9667\b",
+    r"\b0\.9667\b"
+    r"|\bkind[ -]precision\b[^\n.!?]{0,40}\b(?:96\.67|96\.7)\s*(?:%|percent\b)"
+    r"|\b(?:96\.67|96\.7)\s*(?:%|percent\b)[^\n.!?]{0,40}\bkind[ -]precision\b",
     re.IGNORECASE,
 )
 _GEN2_NOT_A_DIRECTIVE_SPLIT_RE = re.compile(
@@ -419,11 +429,25 @@ def test_kind_precision_poison_and_class_split() -> None:
 
 
 def test_gen2_kind_precision_poison_and_class_split() -> None:
+    """Mirrors the 2026-08-08 case above, direction for direction.
+
+    `prose_poison` is the percentage rendering, as it is in the Gen-1 test: a
+    decimal spelled with a space instead of a hyphen is already caught by the
+    bare-decimal alternative, so asserting it here would have been a passing
+    assertion that pinned nothing and hid the missing percentage direction.
+    """
     poison = _public_copy_violations("The detector's kind-precision is 0.9667.")
-    prose_poison = _public_copy_violations("The detector's kind precision is 0.9667.")
+    prose_poison = _public_copy_violations("The detector reported 96.67 % kind precision.")
+    term_first_prose_poison = _public_copy_violations(
+        "The detector's kind-precision reached 96.7 percent."
+    )
     legitimate = _public_copy_violations(
         "The detector's kind-precision is 0.9667.\n"
         "not_a_directive matched 255/255; weak_directive matched 6/15."
+    )
+    stale_split = _public_copy_violations(
+        "The detector's kind-precision is 0.9667.\n"
+        "not_a_directive matched 255/256; weak_directive matched 6/15."
     )
     swapped_split = _public_copy_violations(
         "The detector's kind-precision is 0.9667.\n"
@@ -431,6 +455,10 @@ def test_gen2_kind_precision_poison_and_class_split() -> None:
     )
     assert any("bare kind-precision aggregate" in violation for violation in poison)
     assert any("bare kind-precision aggregate" in violation for violation in prose_poison)
+    assert any(
+        "bare kind-precision aggregate" in violation for violation in term_first_prose_poison
+    )
+    assert any("bare kind-precision aggregate" in violation for violation in stale_split)
     assert any("bare kind-precision aggregate" in violation for violation in swapped_split)
     assert legitimate == []
 
@@ -569,6 +597,16 @@ def test_readme_and_nested_docs_are_scanned_in_both_directions(tmp_path: Path) -
 
 
 def test_gen2_receipt_json_is_not_a_public_surface(tmp_path: Path) -> None:
+    """Pins the scanned surface set: docs/*.md is copy, docs/*.json is data.
+
+    Scope, stated exactly, because the name is broader than the fixture: the
+    receipt's `kind_precision` JSON *key* is not a claim (the same distinction
+    `vacuity_policy.assert_kind_precision_render_safe` draws). Its `note` field
+    IS prose, and the real receipt's note carries the bare aggregate beside a
+    split this rule's proximity window cannot see -- so if the surface set ever
+    grows to JSON, that note is flagged and the decision has to be taken
+    deliberately rather than inherited from this test.
+    """
     docs = tmp_path / "docs"
     docs.mkdir()
     public_doc = docs / "summary.md"
@@ -580,7 +618,6 @@ def test_gen2_receipt_json_is_not_a_public_surface(tmp_path: Path) -> None:
     violations = _repo_public_copy_violations(tmp_path)
 
     assert violations == ["docs/summary.md: bare kind-precision aggregate at line 1"]
-    assert all("receipt" not in violation for violation in violations)
 
 
 def test_public_copy_exclusion_list_is_minimal() -> None:
