@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,6 +66,18 @@ class BareKindPrecisionRenderError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class MeasuredVacuityRecall:
+    """Receipt-declared recall points with both intervals and denominators."""
+
+    point_undecided_clean: float
+    point_undecided_vacuous: float
+    stratified_fpc_95: tuple[float, float]
+    skill_cluster_bootstrap_95: tuple[float, float]
+    sample_n: int
+    skill_n: int
+
+
+@dataclass(frozen=True, slots=True)
 class VacuityFlagCalibrationReceipt:
     """One frozen-capture calibration receipt bound to a complete instrument triple."""
 
@@ -85,7 +98,7 @@ class VacuityFlagCalibrationReceipt:
     kind_precision_not_a_directive_n: int
     kind_precision_weak_directive_correct: int
     kind_precision_weak_directive_n: int
-    recall: Literal["UNMEASURED"]
+    recall: Literal["UNMEASURED"] | MeasuredVacuityRecall
 
     def instrument(self) -> ExtractorInstrument:
         return ExtractorInstrument(
@@ -453,17 +466,18 @@ def _receipt_from_mapping(raw: Mapping[str, Any]) -> VacuityFlagCalibrationRecei
     if not isinstance(schema, str) or len(schema) != _SHA_LEN:
         raise ValueError("receipt instrument_triple.tool_schema_sha256 invalid")
 
-    fp = raw.get("flag_precision")
-    kp = raw.get("kind_precision")
-    sample = raw.get("sample")
+    arm_a = raw.get("arm_A_census")
+    arm_c = raw.get("arm_C_kind")
+    newer_schema = isinstance(arm_a, Mapping) and isinstance(arm_c, Mapping)
+    fp = arm_a if newer_schema else raw.get("flag_precision")
+    kp = arm_c if newer_schema else raw.get("kind_precision")
+    sample = arm_a if newer_schema else raw.get("sample")
     if not isinstance(fp, Mapping) or not isinstance(kp, Mapping):
         raise ValueError("receipt missing flag_precision or kind_precision")
     if not isinstance(sample, Mapping):
         raise ValueError("receipt missing sample")
 
-    recall = raw.get("recall")
-    if recall != "UNMEASURED":
-        raise ValueError("receipt recall must be UNMEASURED")
+    recall = _recall_from_mapping(raw)
 
     receipt_id = raw.get("receipt_id")
     capture_date = raw.get("capture_date")
@@ -480,15 +494,75 @@ def _receipt_from_mapping(raw: Mapping[str, Any]) -> VacuityFlagCalibrationRecei
         tool_schema_sha256=schema,
         flagged_population_size=int(sample["flagged_population_size"]),
         adjudicated_rows=int(sample["adjudicated_rows"]),
-        seats=int(sample["seats"]),
-        flag_precision_weighted_undecided_wrong=float(fp["weighted_undecided_wrong"]),
-        flag_precision_weighted_undecided_correct=float(fp["weighted_undecided_correct"]),
-        wilson_95_fpc_low=float(fp["wilson_95_fpc_low"]),
-        wilson_95_fpc_high=float(fp["wilson_95_fpc_high"]),
-        kind_precision_aggregate=float(kp["aggregate"]),
-        kind_precision_not_a_directive_correct=int(kp["not_a_directive_correct"]),
+        seats=int(raw["panel"]["seats"] if newer_schema else sample["seats"]),
+        flag_precision_weighted_undecided_wrong=float(
+            fp["flag_precision_undecided_wrong"]
+            if newer_schema
+            else fp["weighted_undecided_wrong"]
+        ),
+        flag_precision_weighted_undecided_correct=float(
+            fp["flag_precision_undecided_correct"]
+            if newer_schema
+            else fp["weighted_undecided_correct"]
+        ),
+        wilson_95_fpc_low=float(
+            recall.stratified_fpc_95[0]
+            if isinstance(recall, MeasuredVacuityRecall)
+            else fp["wilson_95_fpc_low"]
+        ),
+        wilson_95_fpc_high=float(
+            recall.stratified_fpc_95[1]
+            if isinstance(recall, MeasuredVacuityRecall)
+            else fp["wilson_95_fpc_high"]
+        ),
+        kind_precision_aggregate=float(
+            kp["overall_kind_match"] if newer_schema else kp["aggregate"]
+        ),
+        kind_precision_not_a_directive_correct=int(
+            kp["confusion"]["not_a_directive_predicted"]["not_a_directive"]
+            if newer_schema
+            else kp["not_a_directive_correct"]
+        ),
         kind_precision_not_a_directive_n=int(kp["not_a_directive_n"]),
-        kind_precision_weak_directive_correct=int(kp["weak_directive_correct"]),
+        kind_precision_weak_directive_correct=int(
+            kp["confusion"]["weak_directive_predicted"]["weak_directive"]
+            if newer_schema
+            else kp["weak_directive_correct"]
+        ),
         kind_precision_weak_directive_n=int(kp["weak_directive_n"]),
-        recall="UNMEASURED",
+        recall=recall,
     )
+
+
+def _recall_from_mapping(raw: Mapping[str, Any]) -> Literal["UNMEASURED"] | MeasuredVacuityRecall:
+    recall = raw.get("recall")
+    if recall == "UNMEASURED":
+        return "UNMEASURED"
+    measured = raw.get("arm_B_recall")
+    if not isinstance(measured, Mapping) or measured.get("status") != "MEASURED":
+        raise ValueError("receipt recall must be UNMEASURED or a measured arm_B_recall block")
+
+    design = measured.get("design")
+    note = measured.get("note")
+    sample_match = re.search(r"\bn=(\d+)\b", design) if isinstance(design, str) else None
+    skill_match = re.search(r"skill-level n is (\d+)\b", note) if isinstance(note, str) else None
+    if sample_match is None or skill_match is None:
+        raise ValueError("measured recall requires sample n and skill-level n")
+
+    stratified = measured.get("stratified_fpc_95")
+    clustered = measured.get("skill_cluster_bootstrap_95")
+    if not isinstance(stratified, Sequence) or len(stratified) != 2:
+        raise ValueError("measured recall requires stratified_fpc_95 interval")
+    if not isinstance(clustered, Sequence) or len(clustered) != 2:
+        raise ValueError("measured recall requires skill_cluster_bootstrap_95 interval")
+    try:
+        return MeasuredVacuityRecall(
+            point_undecided_clean=float(measured["recall_undecided_clean"]),
+            point_undecided_vacuous=float(measured["recall_undecided_vacuous"]),
+            stratified_fpc_95=(float(stratified[0]), float(stratified[1])),
+            skill_cluster_bootstrap_95=(float(clustered[0]), float(clustered[1])),
+            sample_n=int(sample_match.group(1)),
+            skill_n=int(skill_match.group(1)),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("measured recall block is incomplete or invalid") from exc

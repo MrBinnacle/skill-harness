@@ -34,6 +34,7 @@ from skill_harness.extractor.vacuity_policy import (
 
 _REPO = Path(__file__).resolve().parent.parent.parent
 _DOCS_RECEIPT = _REPO / "docs" / "calibration" / "vacuity-flag-calibration-2026-08-08.json"
+_ADJ_RECEIPT = _REPO / "docs" / "calibration" / "vacuity-adjudication-receipt-2026-08-09.json"
 
 _CAL_MODEL = "claude-opus-5"
 _CAL_PROMPT = "525ac4445febc96403e139af752d7a17790c2cd3bf54f56b8dcf3c1773eb7054"
@@ -90,6 +91,27 @@ def test_committed_receipt_round_trips_ticket_figures() -> None:
     assert len(default) == 1
     assert default[0].flag_precision_weighted_undecided_wrong == 0.972
     assert default_receipt_path().is_file()
+
+
+def test_adjudication_receipt_loads_measured_recall_with_intervals_and_n() -> None:
+    receipt = load_calibration_receipt(_ADJ_RECEIPT)
+    assert receipt.recall != "UNMEASURED"
+    assert receipt.recall.point_undecided_clean == 0.7524
+    assert receipt.recall.point_undecided_vacuous == 0.7331
+    assert receipt.recall.stratified_fpc_95 == (0.66, 0.874)
+    assert receipt.recall.skill_cluster_bootstrap_95 == (0.622, 0.913)
+    assert receipt.recall.sample_n == 120
+    assert receipt.recall.skill_n == 47
+
+
+def test_receipt_missing_recall_is_refused_not_defaulted(tmp_path: Path) -> None:
+    raw = json.loads(_DOCS_RECEIPT.read_text(encoding="utf-8"))
+    del raw["recall"]
+    path = tmp_path / "missing-recall.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="recall"):
+        load_calibration_receipt(path)
 
 
 # ---------------------------------------------------------------------------
