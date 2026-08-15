@@ -23,6 +23,20 @@ means something? I assumed plenty of people had already asked that and that an a
 sitting somewhere. I went looking for it, didn't find one I trusted, and ended up building
 this instead.
 
+"This" is two public repositories: [MrBinnacle/skills](https://github.com/MrBinnacle/skills)
+holds the skills, and this repository is the instrument built to answer the question about them.
+Measured on 2026-08-15, that stands at **71 commits of collection against 323 commits of machinery
+built to find out whether the collection is worth anything**:
+
+```bash
+git clone https://github.com/MrBinnacle/skills.git        && git -C skills        rev-list --count HEAD
+git clone https://github.com/MrBinnacle/skill-harness.git && git -C skill-harness rev-list --count HEAD
+```
+
+The basis is a fresh clone at `HEAD` — what a plain `git clone` gets you — so those two commands
+are the whole claim, and you can land on the same figures yourself, give or take what has merged
+since.
+
 skill-harness runs the same task with a skill and without it, and reports what can honestly be
 said about the difference. Often what can honestly be said is "not enough to call it." That
 turned out to be the useful part, and it took me a while to accept it.

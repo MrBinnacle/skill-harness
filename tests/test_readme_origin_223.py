@@ -23,3 +23,19 @@ def test_why_this_exists_opens_on_whether_you_can_tell() -> None:
 
     assert opening == "I wanted to know if you could tell if a skill was any good."
     assert "I wanted to know whether a skill was any good." not in section
+
+
+def test_commit_claim_matches_the_public_collection_measurement() -> None:
+    section = _section(_readme(), "Why this exists")
+
+    assert "Measured on 2026-08-15" in section
+    assert "**71 commits of collection against 323 commits of machinery" in section
+    assert (
+        "git clone https://github.com/MrBinnacle/skills.git        "
+        "&& git -C skills        rev-list --count HEAD"
+    ) in section
+    assert (
+        "git clone https://github.com/MrBinnacle/skill-harness.git "
+        "&& git -C skill-harness rev-list --count HEAD"
+    ) in section
+    assert "The basis is a fresh clone at `HEAD`" in section
