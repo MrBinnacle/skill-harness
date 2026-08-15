@@ -191,6 +191,19 @@ the named receipt directories is absent from this page.
 
 ## Assurance reports
 
+### [`docs/assurance/dependency-audit.md`](assurance/dependency-audit.md)
+
+- **Claims:** The command CI runs (`python -m pip_audit --local`, pip-audit 2.10.1,
+  no `continue-on-error:`) exited 1 on a deliberately vulnerable installed pin —
+  `jinja2` 2.11.3, four published advisories — and exited 0 on the dependency set
+  this repo pins today, so the scanner step is fail-able rather than merely green.
+- **Refuses to claim:** That GitHub Actions was observed honouring that exit
+  status; that the demonstration environment reproduces the CI runner's resolution
+  (25 of its 86 distributions are unpinned by `requirements-ci.txt`); that a clean
+  run means the dependency set is free of vulnerabilities rather than free of
+  advisories published to pip-audit's service on the run date; that the advisory
+  IDs or fix versions are stable; anything about this repository's own source.
+
 ### [`docs/assurance/workflows-audit.md`](assurance/workflows-audit.md)
 
 - **Claims:** All six GitHub Actions workflow files present at issue #172 were

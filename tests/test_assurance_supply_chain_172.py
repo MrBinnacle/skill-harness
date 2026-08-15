@@ -4,17 +4,77 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+AUDIT_COMMAND = "python -m pip_audit --local"
 
 
-def test_ci_runs_pip_audit_as_a_failing_gate_on_current_dependencies() -> None:
+def _dependency_audit_job() -> str:
+    """The `dependency-audit` job body from ci.yml, by string (no pyyaml dep).
+
+    Bounded by the next line indented exactly two spaces - the following job key
+    or the comment introducing it - rather than by one particular neighbouring
+    comment, so rewording an unrelated comment cannot silently widen this slice
+    to the rest of the file and make the checks below vacuous.
+    """
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    parts = ci.split("\n  dependency-audit:\n", 1)
+    assert len(parts) == 2, "ci.yml declares no dependency-audit job"
+    return re.split(r"(?m)^  \S", parts[1], maxsplit=1)[0]
+
+
+def _exit_cell(row: str) -> str:
+    """Last cell of a Markdown table row, stripped of emphasis markers."""
+    return [cell.strip().strip("*").strip() for cell in row.strip().strip("|").split("|")][-1]
+
+
+def test_ci_runs_pip_audit_as_a_job_that_can_fail() -> None:
+    requirements = (ROOT / "requirements-ci.txt").read_text(encoding="utf-8")
+    audit_job = _dependency_audit_job()
+
+    assert re.search(r"(?mi)^pip-audit==", requirements)
+    assert AUDIT_COMMAND in audit_job
+    assert "continue-on-error" not in audit_job
+
+
+def test_pip_audit_fail_ability_is_demonstrated_not_asserted() -> None:
+    """#172 makes the demonstration a deliverable: a scanner that cannot fail is
+    indistinguishable from one that found nothing.
+
+    So the receipt must record a run of the SAME command CI runs that exited
+    non-zero *because of a finding* - a non-zero exit alone can come from the
+    scanner crashing on its way to the advisory lookup - plus a zero-exit run on
+    the current dependency set, and it must name the pip-audit version CI pins,
+    so bumping that pin without re-running the demonstration fails here.
+    """
+    receipt = (ROOT / "docs/assurance/dependency-audit.md").read_text(encoding="utf-8")
     requirements = (ROOT / "requirements-ci.txt").read_text(encoding="utf-8")
 
-    assert "pip-audit==" in requirements
-    assert "dependency-audit:" in ci
-    audit_job = ci.split("  dependency-audit:\n", 1)[1].split("\n  # NON-required", 1)[0]
-    assert "python -m pip_audit" in audit_job
-    assert "continue-on-error" not in audit_job
+    pin = re.search(r"(?mi)^pip-audit==([^\s;#]+)", requirements)
+    assert pin is not None, "requirements-ci.txt does not pin pip-audit"
+    version = pin.group(1)
+    assert f"pip-audit {version}" in receipt, f"receipt does not state pip-audit {version}"
+
+    assert AUDIT_COMMAND in receipt, "the demonstration is not of the command CI runs"
+
+    exit_rows = [
+        row
+        for row in receipt.splitlines()
+        if row.startswith("|") and re.fullmatch(r"[0-9]+", _exit_cell(row))
+    ]
+    exits = {int(_exit_cell(row)): row for row in exit_rows}
+    assert 0 in exits, "no zero-exit run recorded for the current dependency set"
+
+    from_finding = [
+        row
+        for code, row in exits.items()
+        if code != 0 and "vulnerabilit" in row.lower() and re.search(r"[\w.-]+==[0-9]", row)
+    ]
+    assert from_finding, (
+        "no non-zero-exit run recorded whose result was a vulnerability finding "
+        "against a named installed pin - 'exit 1' on its own is not the deliverable"
+    )
+    assert re.search(r"\b(?:PYSEC|GHSA|CVE)-[0-9A-Za-z-]+\b", receipt), (
+        "the demonstrated finding carries no advisory identifier"
+    )
 
 
 def test_scorecard_workflow_publishes_sarif_with_minimal_permissions() -> None:
