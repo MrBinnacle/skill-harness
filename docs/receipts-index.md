@@ -191,6 +191,16 @@ the named receipt directories is absent from this page.
 
 ## Assurance reports
 
+### [`docs/assurance/workflows-audit.md`](assurance/workflows-audit.md)
+
+- **Claims:** All six GitHub Actions workflow files present at issue #172 were
+  reviewed for exact commit-SHA action pins, explicit least-privilege permissions,
+  and `pull_request_target`; no violations were found, no existing job was renamed,
+  and neither new check was added to the required-check set.
+- **Refuses to claim:** That shell-installed dependencies are GitHub Actions or
+  therefore covered by action SHA pinning; that repository branch protection was
+  inspected or changed; that a passing configuration audit proves action behavior.
+
 ### [`docs/assurance/falsification-plan.md`](assurance/falsification-plan.md)
 
 - **Claims:** Phase 0 baseline (#162): suite green (1800 passed / 8 skipped at
