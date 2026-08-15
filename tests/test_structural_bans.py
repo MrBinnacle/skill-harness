@@ -568,6 +568,21 @@ def test_readme_and_nested_docs_are_scanned_in_both_directions(tmp_path: Path) -
     assert _repo_public_copy_violations(tmp_path) == []
 
 
+def test_gen2_receipt_json_is_not_a_public_surface(tmp_path: Path) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    public_doc = docs / "summary.md"
+    public_doc.write_text("Kind-precision is 0.9667.", encoding="utf-8")
+    receipt = docs / "calibration" / "vacuity-adjudication-receipt-2026-08-09.json"
+    receipt.parent.mkdir()
+    receipt.write_text('{"kind_precision": 0.9667}\n', encoding="utf-8")
+
+    violations = _repo_public_copy_violations(tmp_path)
+
+    assert violations == ["docs/summary.md: bare kind-precision aggregate at line 1"]
+    assert all("receipt" not in violation for violation in violations)
+
+
 def test_public_copy_exclusion_list_is_minimal() -> None:
     unnecessary = [
         relative.as_posix()
