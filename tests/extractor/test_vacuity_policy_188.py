@@ -524,6 +524,40 @@ def test_census_never_emits_bare_kind_precision_or_measured_recall(tmp_path: Pat
         )
 
 
+def test_census_generation_mismatch_renders_unmeasured_and_passes_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import skill_harness.extractor.corpus_census as census
+
+    guarded_receipts: list[object] = []
+    original_guard = census.assert_recall_not_claimed_measured  # type: ignore[attr-defined]
+
+    def observe_guard(rendered: str, receipt: object = "not supplied") -> None:
+        guarded_receipts.append(receipt)
+        original_guard(rendered, receipt)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(census, "assert_recall_not_claimed_measured", observe_guard)
+
+    path = tmp_path / "mismatch.jsonl"
+    skill = {
+        "slug": "mismatch-skill",
+        "ok": True,
+        "extractor_model": "other-model",
+        "system_prompt_sha256": "1" * 64,
+        "tool_schema_sha256": "2" * 64,
+        "clauses": [],
+    }
+    path.write_text(json.dumps(skill) + "\n", encoding="utf-8")
+
+    result = census.run_census(path)
+    assert result.flag_evidence_status == "UNMEASURED_GENERATION_MISMATCH"
+    assert result.to_receipt()["vacuity_evidence"]["recall"] == "UNMEASURED"
+    report = census.format_human_report(result)
+    assert "UNMEASURED_GENERATION_MISMATCH" in report
+    assert "recall: UNMEASURED" in report
+    assert guarded_receipts == [None, None]
+
+
 def test_clause_evidence_exposes_policy_fields_separately(tmp_path: Path) -> None:
     from skill_harness.extractor.clause_evidence import (
         append_extraction_result,

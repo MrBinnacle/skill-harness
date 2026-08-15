@@ -255,7 +255,7 @@ class CensusResult:
         # Renderer guards run on the serialised form so poison paths go RED.
         rendered = json.dumps(receipt, ensure_ascii=True, sort_keys=True)
         assert_kind_precision_render_safe(rendered, self._calibration_receipt)
-        assert_recall_not_claimed_measured(rendered)
+        assert_recall_not_claimed_measured(rendered, self._calibration_receipt)
         return receipt
 
     def _exclusion_label(self) -> str:
@@ -843,7 +843,7 @@ def format_human_report(result: CensusResult) -> str:
         lines.append(f"    {axis!r}: {count} ({_percent(count, total)}%)")
     report = "\n".join(lines) + "\n"
     assert_kind_precision_render_safe(report, result._calibration_receipt)
-    assert_recall_not_claimed_measured(report)
+    assert_recall_not_claimed_measured(report, result._calibration_receipt)
     return report
 
 
