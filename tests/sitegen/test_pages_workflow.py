@@ -24,6 +24,11 @@ _PAGES = _REPO_ROOT / ".github" / "workflows" / "pages.yml"
 
 # Frozen: these are the names branch protection selects on. A rename here is a
 # silently-unprotected branch, so it must break a test rather than a merge.
+#
+# The list is the full ci.yml inventory in file order, not just the required
+# names, so ADDING a job is also a deliberate edit here. `dependency-audit`
+# (#172) is additive: it is listed here and deliberately absent from
+# _REQUIRED_JOB_IDS below, which is what keeps it out of `all-green`.
 _CI_JOB_IDS = (
     "lint",
     "typecheck",
@@ -32,6 +37,7 @@ _CI_JOB_IDS = (
     "structural-bans",
     "drift-check",
     "release-gate",
+    "dependency-audit",
     "linkcheck",
     "all-green",
 )
