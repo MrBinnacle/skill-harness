@@ -250,8 +250,10 @@ Citations belong in the methods paper I'm writing, not on a front page.
 
 Verdicts that nobody acts on aren't worth producing, so there's a second repo where they land:
 [MrBinnacle/skills](https://github.com/MrBinnacle/skills), a small collection where each skill
-carries a dated evidence record, and where skills are re-screened when a major model ships and
-publicly retired — with the record intact — once the model no longer needs them.
+carries its own dated evidence record and controlled results are read from that skill's record,
+not a front-page roll-up. Skills are re-screened when a major model ships and publicly retired —
+with the record intact — once the model no longer needs them or a platform change meets a
+pre-registered trigger. Each retirement is made against its stated criterion.
 
 The two repos run on one rule, pointed at two different things. This one won't state a number
 the evidence doesn't support. That one won't keep a skill the evidence no longer supports.

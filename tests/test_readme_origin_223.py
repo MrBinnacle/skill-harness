@@ -39,3 +39,14 @@ def test_commit_claim_matches_the_public_collection_measurement() -> None:
         "&& git -C skill-harness rev-list --count HEAD"
     ) in section
     assert "The basis is a fresh clone at `HEAD`" in section
+
+
+def test_other_half_describes_the_rewritten_collection() -> None:
+    section = _section(_readme(), "The other half")
+    rendered = " ".join(section.split())
+
+    assert "each skill carries its own dated evidence record" in rendered
+    assert "controlled results are read from that skill's record" in rendered
+    assert "publicly retired" in rendered
+    assert "against its stated criterion" in rendered
+    assert "each skill carries a dated evidence record" not in rendered
