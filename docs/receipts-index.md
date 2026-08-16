@@ -299,6 +299,25 @@ the named receipt directories is absent from this page.
   gap to the excluded calibration lane from name similarity, without opening the
   `missing_branches` data that refutes it.
 
+### [`docs/ASSURANCE.md`](ASSURANCE.md)
+
+The assurance close-out (#174). Indexed by hand: it sits at the docs root, so
+`tests/test_receipts_index.py` — which gates `docs/assurance/` — does not force
+this entry.
+
+- **Claims:** The figures above, re-quoted from the checked-in reports with each
+  source named (#163 through #172), the residual risks the pass leaves standing,
+  and four PROPOSED, NOT CONFIGURED drift-contract candidates that are absent
+  from `scripts/drift_check.py`; that the requested #173 independent
+  re-derivation report does not exist in this worktree and is recorded missing
+  rather than reconstructed.
+- **Refuses to claim:** That the recorded runs establish absence of defects; that
+  a closed issue substitutes for the missing #173 numerical receipt; that the
+  candidate contract rows are configured or ratified; that the pass covers
+  vacuity-flag recall, which it leaves UNMEASURED by the assurance report set;
+  that it covers records outside `docs/assurance/`, unmutated modules, or the
+  platforms and cores the fuzz and coverage lanes did not reach.
+
 ---
 
 ## Ratifications
