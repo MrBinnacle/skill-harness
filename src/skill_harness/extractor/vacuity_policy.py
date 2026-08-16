@@ -511,12 +511,33 @@ def assert_kind_precision_render_safe(
     Poison direction: emitting the bare aggregate (e.g. 'kind-precision 0.835')
     without the receipt-backed class split must raise.
 
+    Scope, stated rather than implied: this is a document-level co-occurrence
+    backstop over the citable registry. Every registered aggregate appearing
+    anywhere in ``rendered`` must be accompanied somewhere in ``rendered`` by
+    that same receipt's two class splits -- for every registry member, not only
+    the receipt the caller passed. Comparing against the caller's receipt alone
+    is what let a Gen-2 aggregate publish bare while the Gen-1 default was
+    loaded: ``0.9667`` never equalled ``0.835``, so paired disclosure was never
+    evaluated for it (#218). The figures are read from the registered receipts,
+    so a newly registered generation is covered without editing this guard.
+
+    Named residual: there is no prose claim parser here, and an allowlist of
+    known-good figures was rejected on #218. Co-occurrence is therefore all
+    this checks. A mismatched local pairing -- one generation's aggregate set
+    beside another generation's splits -- passes this guard whenever the correct
+    splits appear somewhere else in the same document. That tuple is refused at
+    construction by ``KindPrecisionClaim``, which is the control for anything
+    rendered programmatically; this backstop covers hand-written prose that
+    bypasses the claim object, and the residual closes as prose migrates to it.
+
     No receipt means no calibration claim exists for this instrument triple
     (UNMEASURED_GENERATION_MISMATCH). That is a legitimate state, so a render
     making no kind-precision claim passes. A render that DOES make one cannot be
     checked against anything, and an unverifiable claim is refused rather than
     waved through -- this guard previously substituted hardcoded literals here,
-    which is the invented-score failure it exists to prevent.
+    which is the invented-score failure it exists to prevent. The registry loop
+    also runs on that path, so a figure-only bare aggregate carrying no
+    ``kind-precision`` wording ('the detector scored 0.9667') is refused too.
 
     Claim detection spans both separators the public-copy ban recognises
     (``kind[ -]precision``): keying on the hyphenated token alone let the
@@ -527,16 +548,27 @@ def assert_kind_precision_render_safe(
     """
     lowered = rendered.lower()
     mentions_kind_precision = "kind-precision" in lowered or "kind precision" in lowered
-    if receipt is None:
-        if mentions_kind_precision:
-            raise BareKindPrecisionRenderError(
-                "refusing to validate a kind-precision claim without a calibration receipt"
-            )
-        return
+    if receipt is None and mentions_kind_precision:
+        raise BareKindPrecisionRenderError(
+            "refusing to validate a kind-precision claim without a calibration receipt"
+        )
+    for citable in load_citable_receipts():
+        _assert_aggregate_carries_its_own_split(rendered, citable)
+    if receipt is not None:
+        # An unregistered receipt (a capture generation the registry does not
+        # carry yet) is not in the loop above, and its aggregate is still not
+        # publishable bare.
+        _assert_aggregate_carries_its_own_split(rendered, receipt)
+
+
+def _assert_aggregate_carries_its_own_split(
+    rendered: str,
+    receipt: VacuityFlagCalibrationReceipt,
+) -> None:
+    """Refuse one receipt's aggregate unless both of its own class splits co-occur."""
     agg = _fmt_num(receipt.kind_precision_aggregate)
-    if agg not in rendered and not mentions_kind_precision:
+    if agg not in rendered:
         return
-    # If aggregate appears, both class splits must sit beside it.
     nad = (
         f"{receipt.kind_precision_not_a_directive_correct}/"
         f"{receipt.kind_precision_not_a_directive_n}"
@@ -544,9 +576,10 @@ def assert_kind_precision_render_safe(
     wd = (
         f"{receipt.kind_precision_weak_directive_correct}/{receipt.kind_precision_weak_directive_n}"
     )
-    if agg in rendered and (nad not in rendered or wd not in rendered):
+    if nad not in rendered or wd not in rendered:
         raise BareKindPrecisionRenderError(
-            f"refusing to render aggregate kind-precision without class split ({nad} and {wd})"
+            f"refusing to render aggregate kind-precision {agg} without class split "
+            f"({nad} and {wd}, receipt {receipt.receipt_id})"
         )
 
 

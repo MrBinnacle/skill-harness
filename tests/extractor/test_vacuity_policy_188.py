@@ -22,6 +22,7 @@ from skill_harness.extractor.vacuity_policy import (
     KindPrecisionClaim,
     KindPrecisionClaimError,
     MixedExtractorGenerationsError,
+    VacuityFlagCalibrationReceipt,
     adjudication_identity_key,
     assert_kind_precision_render_safe,
     assert_recall_not_claimed_measured,
@@ -729,6 +730,124 @@ def test_no_receipt_passes_a_render_that_claims_no_kind_precision() -> None:
         "flag-precision UNMEASURED_GENERATION_MISMATCH "
         "(no calibration claim for this instrument triple)"
     )
+
+
+# ---------------------------------------------------------------------------
+# #237: document-level co-occurrence backstop over the citable registry
+# ---------------------------------------------------------------------------
+
+
+def _split_pair(receipt: VacuityFlagCalibrationReceipt) -> tuple[str, str]:
+    return (
+        f"{receipt.kind_precision_not_a_directive_correct}/"
+        f"{receipt.kind_precision_not_a_directive_n}",
+        f"{receipt.kind_precision_weak_directive_correct}/"
+        f"{receipt.kind_precision_weak_directive_n}",
+    )
+
+
+@pytest.mark.parametrize("cited_index", [0, 1])
+def test_backstop_refuses_every_registry_members_bare_aggregate(cited_index: int) -> None:
+    """Paired disclosure is a registry-wide rule, not a default-receipt rule.
+
+    RED before this guard looped the registry: the caller holds one generation's
+    receipt and the document cites the other's aggregate, so the old
+    ``agg in rendered`` comparison never fired and the bare figure published
+    clean (the #218 reproduction, both directions). The refusal names the
+    receipt whose splits are missing, so a pass/fail here cannot be read as
+    incidental substring luck.
+    """
+    registry = load_citable_receipts()
+    cited, held = registry[cited_index], registry[1 - cited_index]
+    document = f"The detector's kind-precision is {cited.kind_precision_aggregate}."
+
+    with pytest.raises(BareKindPrecisionRenderError, match=cited.receipt_id):
+        assert_kind_precision_render_safe(document, held)
+
+
+@pytest.mark.parametrize("cited_index", [0, 1])
+def test_backstop_refuses_a_registered_aggregate_carrying_one_split_only(
+    cited_index: int,
+) -> None:
+    """Both splits, not either: the aggregate means nothing without the pair.
+
+    Same call shape as the row above -- the caller holds the other generation's
+    receipt -- so this is the registry loop being asked whether half a class
+    split satisfies paired disclosure at document scope. It does not.
+    """
+    registry = load_citable_receipts()
+    cited, held = registry[cited_index], registry[1 - cited_index]
+    nad, wd = _split_pair(cited)
+
+    for lone_split in (nad, wd):
+        document = (
+            f"kind-precision {cited.kind_precision_aggregate}, with {lone_split} adjudicated."
+        )
+        with pytest.raises(BareKindPrecisionRenderError, match=cited.receipt_id):
+            assert_kind_precision_render_safe(document, held)
+
+
+def test_backstop_refuses_a_figure_only_aggregate_with_no_receipt() -> None:
+    """A bare aggregate does not need the words 'kind precision' to be a claim.
+
+    Without a receipt the guard used to inspect the wording only, so an
+    aggregate spelled as a plain figure was the one bare form that survived the
+    strictest branch. The registry supplies the figure, so it no longer does.
+    """
+    gen_2 = load_citable_receipts()[1]
+
+    with pytest.raises(BareKindPrecisionRenderError, match=gen_2.receipt_id):
+        assert_kind_precision_render_safe(f"The detector scored {gen_2.kind_precision_aggregate}.")
+
+
+def test_backstop_passes_a_document_carrying_both_complete_generation_pairs() -> None:
+    """The legitimate direction: two coherent citations in one document.
+
+    Each half is built by the canonical serializer, so the document states each
+    aggregate beside the splits its own receipt records.
+    """
+    gen_1, gen_2 = load_citable_receipts()
+    document = (
+        f"Generation 1 (superseded): {format_kind_precision_for_render(gen_1)}\n\n"
+        f"Generation 2 (current): {format_kind_precision_for_render(gen_2)}\n"
+    )
+
+    assert_kind_precision_render_safe(document, gen_1)
+    assert_kind_precision_render_safe(document, gen_2)
+
+
+def test_backstop_passes_the_named_residual_mismatched_local_pairing() -> None:
+    """The residual, pinned as a fact rather than left as a hidden hole.
+
+    Co-occurrence is document-level and there is no prose claim parser (an
+    allowlist of known-good figures was rejected on #218), so a Gen-2 headline
+    wearing Gen-1's splits passes HERE whenever the Gen-2 splits appear anywhere
+    else in the document. The same figure tuple is refused at construction by
+    ``KindPrecisionClaim`` -- see
+    ``test_kind_precision_claim_refuses_backstop_named_residual_pairing`` -- so
+    the residual is scoped to prose that bypasses the claim object, and it
+    closes as prose migrates to it.
+    """
+    gen_1, gen_2 = load_citable_receipts()
+    gen_1_nad, gen_1_wd = _split_pair(gen_1)
+    gen_2_nad, gen_2_wd = _split_pair(gen_2)
+    document = (
+        f"kind-precision {gen_2.kind_precision_aggregate} "
+        f"(not_a_directive {gen_1_nad}; weak_directive {gen_1_wd})\n\n"
+        f"Elsewhere: the {gen_2.receipt_id} receipt records not_a_directive "
+        f"{gen_2_nad} and weak_directive {gen_2_wd}."
+    )
+
+    assert_kind_precision_render_safe(document, gen_1)
+
+
+def test_backstop_leaves_plain_decimals_and_no_claim_documents_alone() -> None:
+    """No claim-detector was introduced: ordinary decimals are ordinary prose."""
+    gen_1 = load_citable_receipts()[0]
+
+    assert_kind_precision_render_safe("The release threshold is 0.99.", gen_1)
+    assert_kind_precision_render_safe("The release threshold is 0.99.")
+    assert_kind_precision_render_safe("This report contains no precision claim.", gen_1)
 
 
 def test_recall_claim_is_scoped_to_the_backing_receipt() -> None:
