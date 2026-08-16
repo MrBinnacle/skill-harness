@@ -531,6 +531,23 @@ def test_kind_precision_claim_direct_construction_accepts_coherence_without_cust
     assert claim.source_receipt == receipt
 
 
+def test_kind_precision_claim_has_one_canonical_serialization() -> None:
+    receipt = load_citable_receipts()[1]
+    claim = KindPrecisionClaim.from_receipt(receipt)
+    assert claim.serialize() == (
+        "kind-precision 0.9667 (not_a_directive 255/255; "
+        "weak_directive 6/15; advisory until adjudicated)"
+    )
+
+
+def test_existing_kind_precision_render_is_a_thin_claim_serializer_wrapper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receipt = load_citable_receipts()[0]
+    monkeypatch.setattr(KindPrecisionClaim, "serialize", lambda self: "canonical sentinel")
+    assert format_kind_precision_for_render(receipt) == "canonical sentinel"
+
+
 # ---------------------------------------------------------------------------
 # Renderer guards: bare kind score RED; recall-not-measured
 # ---------------------------------------------------------------------------

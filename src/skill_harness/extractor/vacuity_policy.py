@@ -197,6 +197,15 @@ class KindPrecisionClaim:
             and self.weak_directive_n == receipt.kind_precision_weak_directive_n
         )
 
+    def serialize(self) -> str:
+        """Return the sole public rendering of this receipt-backed claim."""
+        return (
+            f"kind-precision {self.aggregate} "
+            f"(not_a_directive {self.not_a_directive_correct}/{self.not_a_directive_n}; "
+            f"weak_directive {self.weak_directive_correct}/{self.weak_directive_n}; "
+            "advisory until adjudicated)"
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class AdjudicationRecord:
@@ -477,18 +486,7 @@ def exclusion_label_for_flag(
 
 def format_kind_precision_for_render(receipt: VacuityFlagCalibrationReceipt) -> str:
     """Render kind-precision only with the class split. Bare aggregate is refused."""
-    agg = receipt.kind_precision_aggregate
-    nad_c = receipt.kind_precision_not_a_directive_correct
-    nad_n = receipt.kind_precision_not_a_directive_n
-    wd_c = receipt.kind_precision_weak_directive_correct
-    wd_n = receipt.kind_precision_weak_directive_n
-    text = (
-        f"kind-precision {agg} "
-        f"(not_a_directive {nad_c}/{nad_n}; "
-        f"weak_directive {wd_c}/{wd_n}; advisory until adjudicated)"
-    )
-    assert_kind_precision_render_safe(text, receipt)
-    return text
+    return KindPrecisionClaim.from_receipt(receipt).serialize()
 
 
 def assert_kind_precision_render_safe(
