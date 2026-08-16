@@ -42,14 +42,83 @@ def test_closeout_states_named_residual_risks_and_open_findings() -> None:
     assert all(item in text for item in required)
 
 
-def test_closeout_proposes_drift_rows_without_changing_configuration() -> None:
+_DRIFT_CANDIDATES = ("AC-1", "AC-2", "AC-3", "AC-4")
+
+
+def _row_status_violations(closeout: str, drift_config: str) -> list[str]:
+    """Disagreements between the close-out's per-candidate status word and the
+    rows actually configured in ``scripts/drift_check.py``.
+
+    The close-out text is whitespace-normalized first, so a status word split
+    across a line wrap still reads as the claim it makes (the drift check's
+    registered-text rule, same reason).
+    """
+    flat = " ".join(closeout.split())
+    violations: list[str] = []
+    for candidate in _DRIFT_CANDIDATES:
+        claims_configured = f"{candidate} CONFIGURED" in flat
+        claims_unconfigured = f"{candidate} NOT CONFIGURED" in flat
+        if claims_configured == claims_unconfigured:
+            violations.append(f"{candidate}: close-out states no single status word")
+            continue
+        is_row = f'dc_id="{candidate}"' in drift_config
+        if is_row != claims_configured:
+            stated = "CONFIGURED" if claims_configured else "NOT CONFIGURED"
+            held = "has" if is_row else "has no"
+            violations.append(
+                f"{candidate}: close-out says {stated} but scripts/drift_check.py {held} such row"
+            )
+    return violations
+
+
+def test_closeout_row_status_matches_the_configured_drift_rows() -> None:
+    """The close-out's per-candidate status must equal what the script enforces.
+
+    #174 landed AC-1..AC-4 as candidates only, and this check pinned that
+    nothing had been configured. #248 configures them one at a time, so the
+    fixed "nothing configured" reading expired; keeping it would have gone
+    green only by refusing to look. The contract now compares the two surfaces
+    directly: a candidate the doc calls CONFIGURED must exist as a row in
+    ``scripts/drift_check.py``, and a candidate it calls NOT CONFIGURED must
+    not. Configuring a row while leaving the doc's status word behind — or
+    claiming a status the table never gained — turns this red.
+    """
     text = CLOSEOUT.read_text(encoding="utf-8")
     drift_config = (ROOT / "scripts/drift_check.py").read_text(encoding="utf-8")
 
     assert "## Proposed drift-check candidates" in text
-    assert "PROPOSED, NOT CONFIGURED" in text
-    assert "AC-1" in text and "AC-4" in text
-    assert "AC-1" not in drift_config and "AC-4" not in drift_config
+    assert all(candidate in text for candidate in _DRIFT_CANDIDATES)
+    assert _row_status_violations(text, drift_config) == []
+
+
+def test_row_status_check_rejects_both_directions_of_disagreement() -> None:
+    """Red-phase guard: the comparison above must fail when either surface lies.
+
+    Calls the same helper the contract calls, on synthetic surfaces, so the
+    criterion cannot go quietly vacuous — an always-empty violation list would
+    fail here.
+    """
+    table_with_ac1_only = 'dc_id="AC-1"'
+
+    overclaimed = "AC-1 CONFIGURED. AC-2 CONFIGURED. AC-3 NOT CONFIGURED. AC-4 NOT CONFIGURED."
+    assert any(
+        "AC-2" in violation and "has no such row" in violation
+        for violation in _row_status_violations(overclaimed, table_with_ac1_only)
+    )
+
+    underclaimed = (
+        "AC-1 NOT CONFIGURED. AC-2 NOT CONFIGURED. AC-3 NOT CONFIGURED. AC-4 NOT CONFIGURED."
+    )
+    assert any(
+        "AC-1" in violation and "has such row" in violation
+        for violation in _row_status_violations(underclaimed, table_with_ac1_only)
+    )
+
+    both_words = "AC-1 CONFIGURED. AC-1 NOT CONFIGURED. AC-2 NOT CONFIGURED."
+    assert any(
+        "AC-1: close-out states no single status word" in violation
+        for violation in _row_status_violations(both_words, table_with_ac1_only)
+    )
 
 
 def test_closeout_omits_operator_banned_vocabulary() -> None:
