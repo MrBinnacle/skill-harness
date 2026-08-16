@@ -573,6 +573,16 @@ def test_kind_precision_claim_refuses_backstop_named_residual_pairing() -> None:
         )
 
 
+def test_gen_1_receipt_renders_its_historical_citation_legally() -> None:
+    gen_1 = load_citable_receipts()[0]
+    rendered = format_kind_precision_for_render(gen_1)
+    assert rendered == (
+        "kind-precision 0.835 (not_a_directive 77/78; "
+        "weak_directive 4/20; advisory until adjudicated)"
+    )
+    assert_kind_precision_render_safe(rendered, gen_1)
+
+
 # ---------------------------------------------------------------------------
 # Renderer guards: bare kind score RED; recall-not-measured
 # ---------------------------------------------------------------------------
