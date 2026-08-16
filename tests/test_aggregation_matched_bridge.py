@@ -194,3 +194,33 @@ def test_result_is_immutable_and_binds_effect_identity_and_ids_to_each_cell(
     assert result.observation_ids.both_fail == (("obs-03-full", "obs-03-null"),)
     with pytest.raises(dataclasses.FrozenInstanceError):
         result.task_family_id = "changed"  # type: ignore[misc]
+
+
+def test_result_ids_alone_reproduce_the_four_cell_table_and_decision(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = _store_table(
+        evidence_db,
+        both_pass=5,
+        full_only=5,
+        null_only=1,
+        both_fail=5,
+    )
+    design = Gate2Design(
+        n_pairs=16,
+        gamma=0.90,
+        mme=MMESpec(delta_min=0.20, q_min=0.70),
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, design)
+    ids = result.observation_ids
+    rebuilt_table = (
+        len(ids.both_pass),
+        len(ids.full_only),
+        len(ids.null_only),
+        len(ids.both_fail),
+    )
+
+    assert rebuilt_table == (5, 5, 1, 5)
+    assert sum(rebuilt_table) == design.n_pairs
+    assert gate2_decide(design, rebuilt_table[1], rebuilt_table[2]) is result.decision
