@@ -8,15 +8,20 @@ enforced. This script is that guard, the third instance of the house pattern
 the structural-bans CI job = token bans).
 
 Contract rows are DATA (the tables below): adding a contract is a table row,
-not new code. Twelve live rows ship checked (DC-1..DC-6 from #43/#53; DC-7
+not new code. Thirteen live rows ship checked (DC-1..DC-6 from #43/#53; DC-7
 and DC-8 activated by the PR landing skill_harness/oc; DC-11 activated by
 the PR landing the Gate-2 cross-checks; DC-9 and DC-10 activated by the PR
 landing the frontier-assembly cost layer (#56); DC-12 activated by the PR
 landing the ratification-ledger machinery (#57) — all per the #43 same-PR
-extension rule); one registered PLANNED row (DC-13) prints as PLANNED
+extension rule; AC-1 from the #160 assurance close-out, ratified verbatim in
+docs/ASSURANCE.md § "Proposed drift-check candidates" and landed by #248);
+one registered PLANNED row (DC-13) prints as PLANNED
 until the PR landing its surface activates it (activation happens in that
 same PR, never later). New rows enter only via a ratified decision or a
 locked INVARIANTS entry.
+
+The ratified assurance candidates AC-2, AC-3 and AC-4 are NOT here yet: they are
+ratified but unenforced, and docs/ASSURANCE.md names that coverage hole (#248).
 
 DC-12's reader is deliberately independent of the src parser
 (skill_harness/ratification.py feeds the spend-time gate): the two parsers
@@ -145,7 +150,8 @@ class PlannedRow:
 
 
 # ---------------------------------------------------------------------------
-# The contract table (ratified on #43; DC-12 amendment from #47, DC-13 from #41)
+# The contract table (ratified on #43; DC-12 amendment from #47, DC-13 from #41,
+# AC-1 from the #160 close-out candidates ratified in docs/ASSURANCE.md)
 # ---------------------------------------------------------------------------
 
 _BAN_SCAN_ROOTS = ("src", "tests", "docs", "scripts", "examples")
@@ -453,24 +459,40 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
     LiveRow(
         dc_id="AC-1",
         summary=(
-            "calibrated-interval primacy: production method id fixed and sequential CS "
-            "precedes the legacy posterior interval"
+            "calibrated-interval primacy: production CS method id fixed, and the rendered "
+            "per-clause report leads with the anytime-valid CS ahead of the legacy posterior "
+            "interval"
         ),
         value_sites=(
+            # Replacement leg: the production method id itself.
             ValueSite(
                 "src/skill_harness/aggregation/confidence_sequence.py",
                 r'^INTERVAL_METHOD_V1: str = "([^"]+)"$',
                 ("predictable_plugin_betting_cs_v1",),
             ),
+            # Demotion leg: the order a reader actually sees. The per-clause
+            # table declares the anytime-valid CS column BEFORE the posterior
+            # CrI column (#187); swapping or renaming either column demotes the
+            # calibrated interval on the public surface, so the pattern spans
+            # both declarations in order and matches nothing once they move.
+            # The JSON wire format cannot carry this leg: to_json_bytes emits
+            # sort_keys=True, so the key order in _clause_to_dict is invisible
+            # to every consumer and pinning it would guard nothing.
             ValueSite(
-                "src/skill_harness/aggregation/report.py",
-                r'"(posterior_credible_interval_95)": list\(clause\.'
-                r'posterior_credible_interval_95\),\n\s*'
-                r'"(sequential_confidence_sequence_95)": list\(seq\)',
-                ("posterior_credible_interval_95", "sequential_confidence_sequence_95"),
+                "src/skill_harness/cli/main.py",
+                r'clause_table\.add_column\("(CS 95% \(anytime-valid\))"[^\n]*\n\s*'
+                r'clause_table\.add_column\("(posterior CrI 95%)"',
+                ("CS 95% (anytime-valid)", "posterior CrI 95%"),
             ),
         ),
         registered_texts=(
+            # The report schema's own statement of the same ranking: the legacy
+            # interval is compatibility-only, the CS is the preferred one (one
+            # line, so whitespace normalization keeps the contains-check exact).
+            RegisteredText(
+                "src/skill_harness/aggregation/report.py",
+                "Retained for compatibility; prefer sequential_confidence_sequence_95",
+            ),
             RegisteredText(
                 "docs/assurance/calibration-report.md",
                 "predictable_plugin_betting_cs_v1",
