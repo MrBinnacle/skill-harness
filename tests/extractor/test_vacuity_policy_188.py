@@ -548,6 +548,15 @@ def test_existing_kind_precision_render_is_a_thin_claim_serializer_wrapper(
     assert format_kind_precision_for_render(receipt) == "canonical sentinel"
 
 
+def test_kind_precision_claim_exposes_supersession_only_as_metadata() -> None:
+    receipt = load_citable_receipts()[1]
+    claim = KindPrecisionClaim.from_receipt(receipt)
+    assert claim.supersedes_note == receipt.supersedes_note
+    assert claim.supersedes_note is not None
+    assert claim.supersedes_note not in claim.serialize()
+    assert "supersed" not in claim.serialize().lower()
+
+
 # ---------------------------------------------------------------------------
 # Renderer guards: bare kind score RED; recall-not-measured
 # ---------------------------------------------------------------------------
