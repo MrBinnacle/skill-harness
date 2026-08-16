@@ -16,6 +16,7 @@ def _run_gate(
     version: str,
     issue_states: dict[int, str],
     workflow_runs: list[dict[str, str]] | None = None,
+    gate: Path = GATE,
 ) -> subprocess.CompletedProcess[str]:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -43,7 +44,7 @@ def _run_gate(
     }
     try:
         return subprocess.run(
-            [sys.executable, str(GATE)],
+            [sys.executable, str(gate)],
             cwd=ROOT,
             env=env,
             capture_output=True,
@@ -69,3 +70,18 @@ def test_minor_release_is_blocked_without_a_green_assurance_lane_result() -> Non
 
     assert result.returncode == 1
     assert "no successful assurance.yml workflow run recorded" in result.stdout
+
+
+def test_patch_release_023_stays_unblocked_without_assurance_state(tmp_path: Path) -> None:
+    result = _run_gate("0.2.3", {})
+
+    assert result.returncode == 0
+    assert "RELEASE GATE: PASS" in result.stdout
+
+    source = GATE.read_text(encoding="utf-8")
+    exemption = '    if version.split(".")[:2] != ["0", "3"]:\n        return\n'
+    assert source.count(exemption) == 2
+    mutant = tmp_path / "release_gate.py"
+    mutant.write_text(source.replace(exemption, ""), encoding="utf-8")
+    poisoned = _run_gate("0.2.3", {}, gate=mutant)
+    assert poisoned.returncode == 1
