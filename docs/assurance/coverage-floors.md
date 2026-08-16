@@ -27,9 +27,15 @@ A module needs attention when **either** figure is below 80%.
   Coverage does not substitute for it, and the module is listed as unmeasured
   rather than as passing.
 
-Applying that rule to the tables below flags **7 of the 20 modules**. Reading
-branch coverage alone would have flagged 3, and missed the 4 where coverage looks
-healthy and mutation does not.
+Applying that rule to the tables below flags **7 of the 20 modules** measured on
+2026-08-12. Reading branch coverage alone would have flagged 3, and missed the 4
+where coverage looks healthy and mutation does not.
+
+Modules added to either package after that date are appended to the tables with
+their own measurement date, and are counted in "Later rows" below rather than
+folded into the 7-of-20 census. The census figure is a dated result; it is
+quoted as such in `docs/ASSURANCE.md` and `docs/receipts-index.md` and is not
+silently re-totalled when a row arrives.
 
 ## How to reproduce
 
@@ -71,7 +77,7 @@ actually buys.
 | `src/skill_harness/aggregation/engine.py` | 90 | 9 | 67.9% | 90.0% | BELOW 80% |
 | `src/skill_harness/aggregation/errors.py` | 0 | 0 | 100% | n/a | no branches |
 | `src/skill_harness/aggregation/fit.py` | 20 | 1 | 94.4% | 95.0% | OK |
-| `src/skill_harness/aggregation/matched_bridge.py` | 14 | 3 | absent | 78.6% | BELOW 80% |
+| `src/skill_harness/aggregation/matched_bridge.py` | 10 | 3 | absent | 70.0% | BELOW 80% |
 | `src/skill_harness/aggregation/profile.py` | 22 | 1 | 98.0% | 95.5% | OK |
 | `src/skill_harness/aggregation/report.py` | 0 | 0 | 97.6% | n/a | no branches |
 | `src/skill_harness/aggregation/status.py` | 20 | 0 | 100% | 100.0% | OK |
@@ -125,6 +131,36 @@ the unit bounds, a non-positive cap), degenerate inputs (`n == 0`, `lo > hi`), a
 the log-wealth overflow cap. These are error paths no test exercises. They are
 not paths a wider test selection would reach - a calibration grid drives the
 normal path at many rates and never passes `alpha = 1.5`.
+
+## Later rows, measured after the census
+
+`aggregation/matched_bridge.py` was not in the tree on 2026-08-12. It landed on
+2026-08-16 with #246, the E1 bridge that reads `matched_evidence()`, pairs the raw
+arm-level records into the four-cell table, and routes it through Gate 2. It is in
+the Aggregation table above because the attention rule applies to it, not because
+it was part of the census: **the 7-of-20 figure and the 2,210/1,909 branch totals
+are the 2026-08-12 result and do not include this row.** Counting the later row
+makes it 8 flagged of 21 today.
+
+Its figures - 10 branches, 3 uncovered, 70.0% - were measured on 2026-08-16 with
+coverage.py 7.15.2 and the flags in "How to reproduce", over
+`tests/test_aggregation_matched_bridge.py`. That is a narrower selection than the
+CI cell, and for this module it is the same number: nothing else in `src/` or
+`tests/` calls `aggregate_matched_gate2` (the only other reference is the
+package's re-export in `aggregation/__init__.py`), so no other test can reach an
+arc in it. Re-measure under the full selection once a second caller exists.
+
+Mutation reads `absent` for the same reason `confidence_sequence.py` does: #166
+predates the module. Two of the 21 modules are now unmeasured by the stronger
+instrument, not one.
+
+The 3 uncovered arcs are the three refusal guards - a pair carrying two records
+for the same arm, a pair missing an arm, and an effect that arrives without a
+Gate-2 decision. #246 scopes itself to well-formed evidence and defers the
+malformed-evidence surface (typed refusals, exclusion ledger, determinism under
+shuffle) to #247, so its tests do not enter them. The three raises are reachable
+code with no test on them today; #247 is where they get one, and this row should
+be re-measured when it closes.
 
 ## What a zero in the Branches column means
 
