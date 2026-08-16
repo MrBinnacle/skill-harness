@@ -3,34 +3,17 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass as _dataclass
+from dataclasses import dataclass
 
-from skill_harness.aggregation.profile import (
-    EffectEstimate,
-)
-from skill_harness.aggregation.profile import (
-    effect_from_matched_gate2 as _effect_from_matched_gate2,
-)
-from skill_harness.aggregation.verdict import (
-    VerdictResult,
-)
-from skill_harness.aggregation.verdict import (
-    matched_gate2_verdict as _matched_gate2_verdict,
-)
+from skill_harness.aggregation.profile import EffectEstimate, effect_from_matched_gate2
+from skill_harness.aggregation.verdict import VerdictResult, matched_gate2_verdict
 from skill_harness.oc import Gate2Decision, Gate2Design
-from skill_harness.task_frontier import (
-    Arm,
-    StoredObservation,
-    TaskFamilyManifest,
-)
-from skill_harness.task_frontier import (
-    matched_evidence as _matched_evidence,
-)
+from skill_harness.task_frontier import Arm, StoredObservation, TaskFamilyManifest, matched_evidence
 
 _PairKey = tuple[str, str, str, str]
 
 
-@_dataclass(frozen=True)
+@dataclass(frozen=True)
 class MatchedCellObservationIds:
     """Full/null observation-id pairs assigned to each paired-outcome cell."""
 
@@ -40,7 +23,7 @@ class MatchedCellObservationIds:
     both_fail: tuple[tuple[str, str], ...]
 
 
-@_dataclass(frozen=True)
+@dataclass(frozen=True)
 class MatchedGate2Result:
     """Gate-2 result bound to the frozen family evidence that produced it."""
 
@@ -97,8 +80,8 @@ def aggregate_matched_gate2(
     design: Gate2Design,
 ) -> MatchedGate2Result:
     """Read and aggregate one frozen task family's well-formed matched evidence."""
-    both_pass, full_only, null_only, both_fail = _pair_evidence(_matched_evidence(conn, manifest))
-    effect = _effect_from_matched_gate2(
+    both_pass, full_only, null_only, both_fail = _pair_evidence(matched_evidence(conn, manifest))
+    effect = effect_from_matched_gate2(
         design,
         both_pass=len(both_pass),
         full_only=len(full_only),
@@ -110,7 +93,7 @@ def aggregate_matched_gate2(
     return MatchedGate2Result(
         effect=effect,
         decision=effect.decision,
-        verdict=_matched_gate2_verdict(effect),
+        verdict=matched_gate2_verdict(effect),
         task_family_id=manifest.task_family_id,
         task_family_version=manifest.task_family_version,
         observation_ids=MatchedCellObservationIds(
