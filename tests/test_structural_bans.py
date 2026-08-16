@@ -202,21 +202,29 @@ def _public_copy_violations(text: str) -> list[str]:
         for match in _EARN_FAMILY_RE.finditer(text)
     )
 
-    for match in _KIND_PRECISION_AGGREGATE_RE.finditer(text):
-        lineno = _line_number(text, match.start())
-        context = _line_context(text, match.start(), _KIND_CONTEXT_LINES)
-        if not _NOT_A_DIRECTIVE_SPLIT_RE.search(context) or not _WEAK_DIRECTIVE_SPLIT_RE.search(
-            context
-        ):
-            violations.append(f"bare kind-precision aggregate at line {lineno}")
-
-    for match in _GEN2_KIND_PRECISION_AGGREGATE_RE.finditer(text):
-        lineno = _line_number(text, match.start())
-        context = _line_context(text, match.start(), _KIND_CONTEXT_LINES)
-        if not _GEN2_NOT_A_DIRECTIVE_SPLIT_RE.search(
-            context
-        ) or not _GEN2_WEAK_DIRECTIVE_SPLIT_RE.search(context):
-            violations.append(f"bare kind-precision aggregate at line {lineno}")
+    # Backstop only: each registered aggregate requires its own split pair to
+    # occur somewhere in the document. This deliberately does not parse prose
+    # claims or bind a nearby aggregate to a nearby pair.
+    kind_precision_receipts = (
+        (
+            _KIND_PRECISION_AGGREGATE_RE,
+            _NOT_A_DIRECTIVE_SPLIT_RE,
+            _WEAK_DIRECTIVE_SPLIT_RE,
+        ),
+        (
+            _GEN2_KIND_PRECISION_AGGREGATE_RE,
+            _GEN2_NOT_A_DIRECTIVE_SPLIT_RE,
+            _GEN2_WEAK_DIRECTIVE_SPLIT_RE,
+        ),
+    )
+    for aggregate_re, not_a_directive_re, weak_directive_re in kind_precision_receipts:
+        has_complete_pair = not_a_directive_re.search(text) and weak_directive_re.search(text)
+        if has_complete_pair:
+            continue
+        violations.extend(
+            f"bare kind-precision aggregate at line {_line_number(text, match.start())}"
+            for match in aggregate_re.finditer(text)
+        )
 
     for match in _VACUITY_RECALL_RE.finditer(text):
         context = _line_context(text, match.start(), _RECALL_CONTEXT_LINES)
@@ -461,6 +469,16 @@ def test_gen2_kind_precision_poison_and_class_split() -> None:
     assert any("bare kind-precision aggregate" in violation for violation in stale_split)
     assert any("bare kind-precision aggregate" in violation for violation in swapped_split)
     assert legitimate == []
+
+
+def test_gen2_kind_precision_aggregate_accepts_document_level_class_split() -> None:
+    document = (
+        "The detector's kind-precision is 0.9667.\n\n\n"
+        "The receipt reports not_a_directive matched 255/255 and "
+        "weak_directive matched 6/15."
+    )
+
+    assert _public_copy_violations(document) == []
 
 
 def test_measured_recall_poison_and_unmeasured_statement() -> None:
