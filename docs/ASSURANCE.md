@@ -53,3 +53,36 @@ not the absence of defects.
   there is no recorded run from which to quote a result. Issue #173 is closed,
   but closure is not a numerical receipt. This close-out does not reconstruct or
   invent that figure.
+
+## Residual risks
+
+- There is no recall claim on the vacuity flag in this close-out: recall is
+  UNMEASURED by the assurance report set. The assurance
+  report set named by this ticket contains no recall run, and flag precision does
+  not establish recall. Later calibration records outside `docs/assurance/` do
+  not change the scope of this close-out.
+- Extraction repeat-instability stands: identical runs returned 29/33/34 clauses.
+  This is a documented instrument property, not a bug. Clause position is not a
+  stable identity (`README.md`, #152).
+- The single-maintainer review limits apply. Configuration review, mutation survivor
+  classification, and the report synthesis do not provide independent human
+  replication. The missing #173 re-derivation receipt leaves that limit unresolved.
+- The legacy posterior credible interval still misses the registered frequentist
+  coverage band at p=0.65 and p=0.85. It is retained as Bayesian-only; the public
+  report surface uses the calibrated anytime-valid confidence sequence
+  (`docs/findings/aggregation-ci-coverage-under-sequential-stop.md`).
+- The fuzz run does not support a coverage claim over pydantic_core, and neither
+  fuzz target was run on Windows (`docs/assurance/fuzz-report.md`).
+- Mutation used scoped test selections. It did not mutate the later
+  `aggregation/confidence_sequence.py`; 27 ablation and 14 extractor mutants were
+  classified as no-tests (`docs/assurance/mutation-report.md` and
+  `docs/assurance/coverage-floors.md`).
+- Supply-chain results cover published advisories and the workflow files present
+  on 2026-08-15. They do not establish absence of vulnerabilities, pin shell
+  installs, or observe branch-protection enforcement
+  (`docs/assurance/dependency-audit.md` and
+  `docs/assurance/workflows-audit.md`).
+- Filed open findings: none. The sequential-coverage finding is closed by #187,
+  and the store-bricking finding is fully discharged by #169 and #209
+  (`docs/findings/aggregation-ci-coverage-under-sequential-stop.md` and
+  `docs/findings/store-bricking-deadlock.md`).

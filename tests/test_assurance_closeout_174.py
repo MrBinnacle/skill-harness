@@ -22,3 +22,16 @@ def test_closeout_records_every_named_figure_with_source_receipts() -> None:
     }
     for label, values in expected.items():
         assert all(value in text for value in values), f"{label} figure or receipt missing"
+
+
+def test_closeout_states_named_residual_risks_and_open_findings() -> None:
+    text = CLOSEOUT.read_text(encoding="utf-8")
+
+    required = (
+        "no recall claim",
+        "29/33/34 clauses",
+        "documented instrument property, not a bug",
+        "single-maintainer review limits",
+        "open findings: none",
+    )
+    assert all(item in text for item in required)
