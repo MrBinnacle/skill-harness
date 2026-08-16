@@ -248,8 +248,12 @@ def match_calibration_receipt(
         return None
     pool = load_default_receipts() if receipts is None else receipts
     hits = [r for r in pool if r.matches_instrument(instrument)]
-    if len(hits) != 1:
+    if not hits:
         return None
+    if len(hits) > 1:
+        raise AmbiguousCalibrationReceiptError(
+            f"{len(hits)} calibration receipts match the instrument triple"
+        )
     return hits[0]
 
 
