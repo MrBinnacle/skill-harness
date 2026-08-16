@@ -5,6 +5,7 @@ Coverage:
 - EB-MoM: hand-checked simple case [(5,10),(6,10),(7,10)] + extended to K=10
 - Convergence failure: sample_var < 1e-6 → BH-FDR fallback
 - Convergence failure: alpha_hat <= 0 → BH-FDR fallback
+- Input precondition: a clause with n <= 0 is rejected on BOTH K paths (#231)
 - UNPOOLED fallback: K < 10 → logged warning + unpooled posteriors
 - Pass/fail thresholds correct in posteriors
 - BH-FDR: correct clause IDs pass/fail after adjustment
@@ -105,19 +106,48 @@ class TestEbmom:
 
 
 # ---------------------------------------------------------------------------
-# fit_skill: UNPOOLED path (K < 10)
+# fit_skill: observation-count precondition — must not depend on K (#231)
 # ---------------------------------------------------------------------------
 
 
-class TestFitSkillUnpooled:
+class TestFitSkillObservationCountPrecondition:
+    """#231: the same payload must not get two answers depending on K.
+
+    Adjudicated contract: raise a clear ValueError naming the bad clause on
+    BOTH K paths. Before the fix, K < 10 accepted an n=0 clause as Beta(1,1)
+    (RED: "DID NOT RAISE") while K >= 10 crashed in the EB prelude at
+    ``rates = [cl.w / cl.n ...]`` (RED: ZeroDivisionError) — so the K >= 10
+    parametrization below is the half that carried the crash and must not be
+    filed under a K-specific section.
+    """
+
     @pytest.mark.parametrize("k", [K_MIN_FOR_EB - 1, K_MIN_FOR_EB])
     def test_nonpositive_observation_count_rejected_before_method_selection(self, k: int) -> None:
         clauses = [ClauseObservations(clause_id=f"c{i}", w=3.0, n=10) for i in range(k - 1)]
         clauses.append(ClauseObservations(clause_id="unmeasured", w=0.0, n=0))
 
-        with pytest.raises(ValueError, match="unmeasured"):
+        with pytest.raises(ValueError, match="unmeasured") as exc_info:
             fit_skill(clauses)
+        # "naming the bad clause" — not "naming some clause".
+        assert "c0" not in str(exc_info.value), str(exc_info.value)
 
+    def test_precondition_is_documented_in_the_public_docstring(self) -> None:
+        """The docstring is where a caller reads the contract (``help``/``__doc__``).
+
+        #231 AC — undocumented is how the K-divergence survived: nothing said
+        n >= 1 was required, so both behaviours looked defensible.
+        """
+        doc = fit_skill.__doc__ or ""
+        assert "ValueError" in doc, doc
+        assert any(phrase in doc for phrase in ("n <= 0", "n > 0", "n >= 1")), doc
+
+
+# ---------------------------------------------------------------------------
+# fit_skill: UNPOOLED path (K < 10)
+# ---------------------------------------------------------------------------
+
+
+class TestFitSkillUnpooled:
     def test_k_below_10_returns_unpooled(self, caplog: pytest.LogCaptureFixture) -> None:
         """K=3 → method='unpooled', provenance has reason='k_below_10'."""
         clauses = make_clauses([(5, 10), (6, 10), (7, 10)])
