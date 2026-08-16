@@ -206,6 +206,11 @@ class KindPrecisionClaim:
             "advisory until adjudicated)"
         )
 
+    @property
+    def supersedes_note(self) -> str | None:
+        """Return receipt provenance that is intentionally absent from kind copy."""
+        return self.source_receipt.supersedes_note
+
 
 @dataclass(frozen=True, slots=True)
 class AdjudicationRecord:
