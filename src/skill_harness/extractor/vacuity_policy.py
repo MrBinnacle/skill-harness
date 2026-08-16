@@ -490,8 +490,16 @@ def exclusion_label_for_flag(
 
 
 def format_kind_precision_for_render(receipt: VacuityFlagCalibrationReceipt) -> str:
-    """Render kind-precision only with the class split. Bare aggregate is refused."""
-    return KindPrecisionClaim.from_receipt(receipt).serialize()
+    """Render kind-precision only with the class split. Bare aggregate is refused.
+
+    The claim type establishes that the figures are citable; this guard
+    establishes that the string leaving here carries the class split. They are
+    different checks and the second one is cheap, so the publishing path keeps
+    running both rather than trusting one serialiser to stay correct.
+    """
+    rendered = KindPrecisionClaim.from_receipt(receipt).serialize()
+    assert_kind_precision_render_safe(rendered, receipt)
+    return rendered
 
 
 def assert_kind_precision_render_safe(

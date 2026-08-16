@@ -548,6 +548,23 @@ def test_existing_kind_precision_render_is_a_thin_claim_serializer_wrapper(
     assert format_kind_precision_for_render(receipt) == "canonical sentinel"
 
 
+def test_kind_precision_render_still_refuses_a_bare_aggregate_serialization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The render guard runs on the string the claim hands back, not on trust.
+
+    ``format_kind_precision_for_render`` promises in its own docstring that a
+    bare aggregate is refused. Citability and class-split completeness are two
+    different properties: a claim can be perfectly citable and still serialise
+    to a bare 'kind-precision 0.835'. The renderer checks the string it is about
+    to publish, so the promise does not depend on one serialiser staying correct.
+    """
+    receipt = load_citable_receipts()[0]
+    monkeypatch.setattr(KindPrecisionClaim, "serialize", lambda self: "kind-precision 0.835")
+    with pytest.raises(BareKindPrecisionRenderError, match="class split"):
+        format_kind_precision_for_render(receipt)
+
+
 def test_kind_precision_claim_exposes_supersession_only_as_metadata() -> None:
     receipt = load_citable_receipts()[1]
     claim = KindPrecisionClaim.from_receipt(receipt)
