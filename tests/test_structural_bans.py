@@ -481,6 +481,17 @@ def test_gen2_kind_precision_aggregate_accepts_document_level_class_split() -> N
     assert _public_copy_violations(document) == []
 
 
+def test_both_complete_generation_pairs_pass_in_one_document() -> None:
+    document = (
+        "Gen-1 kind-precision is 0.835: not_a_directive matched 77/77 and "
+        "weak_directive matched 4/20.\n"
+        "Gen-2 kind-precision is 0.9667: not_a_directive matched 255/255 and "
+        "weak_directive matched 6/15."
+    )
+
+    assert _public_copy_violations(document) == []
+
+
 def test_measured_recall_poison_and_unmeasured_statement() -> None:
     poison = _public_copy_violations("The detector's recall was measured.")
     contradictory = _public_copy_violations(
