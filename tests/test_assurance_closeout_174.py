@@ -35,3 +35,13 @@ def test_closeout_states_named_residual_risks_and_open_findings() -> None:
         "open findings: none",
     )
     assert all(item in text for item in required)
+
+
+def test_closeout_proposes_drift_rows_without_changing_configuration() -> None:
+    text = CLOSEOUT.read_text(encoding="utf-8")
+    drift_config = (ROOT / "scripts/drift_check.py").read_text(encoding="utf-8")
+
+    assert "## Proposed drift-check candidates" in text
+    assert "PROPOSED, NOT CONFIGURED" in text
+    assert "AC-1" in text and "AC-4" in text
+    assert "AC-1" not in drift_config and "AC-4" not in drift_config

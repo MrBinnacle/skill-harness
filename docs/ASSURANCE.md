@@ -86,3 +86,16 @@ not the absence of defects.
   and the store-bricking finding is fully discharged by #169 and #209
   (`docs/findings/aggregation-ci-coverage-under-sequential-stop.md` and
   `docs/findings/store-bricking-deadlock.md`).
+
+## Proposed drift-check candidates
+
+**PROPOSED, NOT CONFIGURED.** These are candidate contract rows only. They are
+not in `scripts/drift_check.py`; adding any of them requires maintainer
+ratification.
+
+| Candidate | Invariant | Sites to compare | Why it may be worth pinning |
+| --- | --- | --- | --- |
+| AC-1 | The production confidence sequence method remains `predictable_plugin_betting_cs_v1`, and the public report leads with `sequential_confidence_sequence_95` rather than the legacy posterior interval. | `aggregation/confidence_sequence.py`, report schema, `calibration-report.md` | Prevents a calibrated interval from being silently replaced or demoted. |
+| AC-2 | A/A and calibration harnesses continue to use the production `N_MIN=8`, `N_INC=4`, `N_MAX=40` schedule and 0.60/0.95 decision constants. | `ablation/stopping.py`, `test_aggregation_aa.py`, `test_aggregation_calibration.py`, `test_aggregation_cs_calibration.py` | Prevents the assurance harness from measuring a different procedure. DC-1 and DC-2 cover production and selected prose, but not these harness sites. |
+| AC-3 | Public vacuity-flag precision always carries its instrument generation and kind class split; detector sensitivity is UNMEASURED unless quoted with both registered intervals. | README, calibration registry, public-copy guard | Prevents a flag-precision result from becoming a detector-wide validity claim. |
+| AC-4 | Every workflow keeps exact action SHA pins, a workflow-level read-only permission baseline, and no `pull_request_target`. | `.github/workflows/*.yml` and `.yaml` | Extends the one-date workflow audit into a standing configuration contract. |
