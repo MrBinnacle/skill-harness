@@ -567,7 +567,13 @@ def _assert_aggregate_carries_its_own_split(
 ) -> None:
     """Refuse one receipt's aggregate unless both of its own class splits co-occur."""
     agg = _fmt_num(receipt.kind_precision_aggregate)
-    if agg not in rendered:
+    # The aggregate as a number, not as a digit run inside another number: a
+    # census percentage of 10.835306 contains '0.835' and claims nothing about
+    # kind precision, and this loop runs on the no-receipt path where such a
+    # render used to be waved through. Only the leading direction is bounded --
+    # trailing digits stay inside the match so the trailing-zero spelling
+    # ('0.83500') is still the same figure and still refused.
+    if not re.search(rf"(?<![\d.]){re.escape(agg)}", rendered):
         return
     nad = (
         f"{receipt.kind_precision_not_a_directive_correct}/"
