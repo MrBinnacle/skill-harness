@@ -557,6 +557,22 @@ def test_kind_precision_claim_exposes_supersession_only_as_metadata() -> None:
     assert "supersed" not in claim.serialize().lower()
 
 
+def test_kind_precision_claim_refuses_backstop_named_residual_pairing() -> None:
+    gen_1, gen_2 = load_citable_receipts()
+    with pytest.raises(KindPrecisionClaimError, match="citable receipt"):
+        KindPrecisionClaim(
+            receipt_id=gen_2.receipt_id,
+            extractor_model=gen_2.extractor_model,
+            system_prompt_sha256=gen_2.system_prompt_sha256,
+            tool_schema_sha256=gen_2.tool_schema_sha256,
+            aggregate=gen_2.kind_precision_aggregate,
+            not_a_directive_correct=gen_1.kind_precision_not_a_directive_correct,
+            not_a_directive_n=gen_1.kind_precision_not_a_directive_n,
+            weak_directive_correct=gen_1.kind_precision_weak_directive_correct,
+            weak_directive_n=gen_1.kind_precision_weak_directive_n,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Renderer guards: bare kind score RED; recall-not-measured
 # ---------------------------------------------------------------------------
