@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Release gate blocks the 0.3 line until the assurance phase is closed and
+  its lane has run green** (#206). `scripts/release_gate.py` gained two checks
+  that apply only when the tree declares a `0.3.x` version: G7 requires every
+  assurance-phase issue (#167-#174) closed on GitHub, G8 requires a successful
+  `assurance.yml` workflow run on record. Both read the GitHub REST API and
+  fail closed — an API the gate cannot read blocks the release instead of
+  passing it. The 0.1.x and 0.2.x lines self-skip both checks, so a patch
+  release is unaffected. The gate now also takes `--root <repo-root>`, matching
+  `scripts/drift_check.py`, so its checks can be exercised against a seeded
+  tree; the version checked is always the version that tree declares.
+  Falsification receipt: `docs/assurance/release-gate-red-206.md`.
+
 ## [0.2.3] — 2026-08-15
 
 ### Changed
