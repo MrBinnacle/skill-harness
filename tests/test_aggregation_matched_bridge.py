@@ -8,7 +8,8 @@ from typing import Any
 import pytest
 
 from skill_harness.aggregation import aggregate_matched_gate2
-from skill_harness.oc import Gate2Design, MMESpec, gate2_decide
+from skill_harness.aggregation.verdict import CutSubReason, KeepCutVerdict
+from skill_harness.oc import Gate2Decision, Gate2Design, MMESpec, gate2_decide
 from skill_harness.task_frontier import (
     Arm,
     Observation,
@@ -116,3 +117,50 @@ def test_bridge_decision_reproduces_direct_gate2_for_registered_e1_shapes(
     result = aggregate_matched_gate2(evidence_db, manifest, design)
 
     assert result.decision is gate2_decide(design, full_only, null_only)
+
+
+@pytest.mark.parametrize(
+    (
+        "both_pass",
+        "full_only",
+        "null_only",
+        "both_fail",
+        "expected",
+        "expected_verdict",
+        "expected_cut_reason",
+    ),
+    [
+        (4, 8, 0, 4, Gate2Decision.BENEFIT, KeepCutVerdict.KEEP, None),
+        (4, 0, 8, 4, Gate2Decision.HARM, KeepCutVerdict.CUT, CutSubReason.HARMFUL),
+        (6, 2, 2, 6, Gate2Decision.EQUIVALENT, KeepCutVerdict.CANT_TELL_YET, None),
+        (5, 5, 1, 5, Gate2Decision.UNRESOLVED, KeepCutVerdict.CANT_TELL_YET, None),
+    ],
+)
+def test_every_terminal_decision_is_reached_through_the_store_bridge_path(
+    evidence_db: sqlite3.Connection,
+    both_pass: int,
+    full_only: int,
+    null_only: int,
+    both_fail: int,
+    expected: Gate2Decision,
+    expected_verdict: KeepCutVerdict,
+    expected_cut_reason: CutSubReason | None,
+) -> None:
+    manifest = _store_table(
+        evidence_db,
+        both_pass=both_pass,
+        full_only=full_only,
+        null_only=null_only,
+        both_fail=both_fail,
+    )
+    design = Gate2Design(
+        n_pairs=16,
+        gamma=0.90,
+        mme=MMESpec(delta_min=0.20, q_min=0.70),
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, design)
+
+    assert result.decision is expected
+    assert result.verdict.verdict is expected_verdict
+    assert result.verdict.cut_sub_reason is expected_cut_reason
