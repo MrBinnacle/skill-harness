@@ -90,9 +90,12 @@ not the absence of defects.
 
 ## Proposed drift-check candidates
 
-**PROPOSED, NOT CONFIGURED.** These are candidate contract rows only. They are
-not in `scripts/drift_check.py`; adding any of them requires maintainer
-ratification.
+**Row status.** AC-1 CONFIGURED: it is the `AC-1` row in `scripts/drift_check.py`,
+red-demonstrated in `tests/test_drift_check.py`, landed by #248. AC-2 NOT
+CONFIGURED. AC-3 NOT CONFIGURED. AC-4 NOT CONFIGURED. The #160 close-out ratified
+all four; the three unconfigured candidates carry no mechanical guard, so drift in
+them stays unobserved until each lands as a row with its own red demonstration
+(#248).
 
 | Candidate | Invariant | Sites to compare | Why it may be worth pinning |
 | --- | --- | --- | --- |
