@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 CLOSEOUT = ROOT / "docs/ASSURANCE.md"
 
@@ -73,3 +75,27 @@ def test_banned_vocabulary_check_rejects_poisoned_document(tmp_path: Path) -> No
 
     assert result.returncode == 1
     assert "banned assurance vocabulary" in result.stdout
+
+
+def test_closeout_ends_with_one_paragraph_bottom_line() -> None:
+    text = CLOSEOUT.read_text(encoding="utf-8").rstrip()
+
+    assert "## Bottom line" in text
+    paragraph = text.rsplit("## Bottom line\n\n", 1)[1]
+    assert "\n\n" not in paragraph
+
+
+@pytest.mark.skipif(not (ROOT / ".git").exists(), reason="requires the issue worktree")
+def test_issue_174_has_the_exact_bottom_line_comment() -> None:
+    text = CLOSEOUT.read_text(encoding="utf-8").rstrip()
+    paragraph = text.rsplit("## Bottom line\n\n", 1)[1]
+    result = subprocess.run(
+        ["gh", "issue", "view", "174", "--json", "comments", "--jq", ".comments[].body"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert paragraph in result.stdout
