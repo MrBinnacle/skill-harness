@@ -508,6 +508,31 @@ def test_kind_precision_claim_validation_fails_against_a_poisoned_registry(
         KindPrecisionClaim.from_receipt(receipt)
 
 
+def test_kind_precision_claim_refuses_a_receipt_forged_outside_the_kind_figures() -> None:
+    """Nine matching kind figures do not license the rest of the receipt.
+
+    ``KindPrecisionClaim.supersedes_note`` republishes the source receipt's
+    provenance line, and the line of record for the 2026-08-09 receipt says it
+    EXTENDS the 2026-08-08 receipt rather than replacing it. A receipt whose
+    kind block matches the registry while its note, capture date or recall block
+    does not is a different receipt making a different provenance claim, so
+    ``from_receipt`` refuses it instead of taking the caller's copy.
+    """
+    gen_2 = load_citable_receipts()[1]
+    forged_note = replace(
+        gen_2,
+        supersedes_note="Replaces receipt vacuity-flag-calibration-2026-08-08 in full.",
+    )
+    with pytest.raises(KindPrecisionClaimError, match="source receipt"):
+        KindPrecisionClaim.from_receipt(forged_note)
+
+    with pytest.raises(KindPrecisionClaimError, match="source receipt"):
+        KindPrecisionClaim.from_receipt(replace(gen_2, capture_date="2026-12-31"))
+
+    with pytest.raises(KindPrecisionClaimError, match="source receipt"):
+        KindPrecisionClaim.from_receipt(replace(gen_2, recall="UNMEASURED"))
+
+
 def test_kind_precision_claim_from_receipt_retains_its_source() -> None:
     receipt = load_citable_receipts()[1]
     claim = KindPrecisionClaim.from_receipt(receipt)
@@ -546,6 +571,30 @@ def test_existing_kind_precision_render_is_a_thin_claim_serializer_wrapper(
     receipt = load_citable_receipts()[0]
     monkeypatch.setattr(KindPrecisionClaim, "serialize", lambda self: "canonical sentinel")
     assert format_kind_precision_for_render(receipt) == "canonical sentinel"
+
+
+def test_kind_precision_render_refuses_a_receipt_no_citable_receipt_backs(
+    tmp_path: Path,
+) -> None:
+    """The renderer is the surface that refuses uncitable figures, not just the claim.
+
+    ``corpus_census`` publishes through ``format_kind_precision_for_render``, so
+    the refusal has to hold there. A receipt loaded from any other path carries
+    figures the citable registry cannot confirm -- including the next capture
+    generation, until it is registered -- and an unconfirmable figure is refused
+    rather than rendered.
+    """
+    raw = json.loads(_DOCS_RECEIPT.read_text(encoding="utf-8"))
+    raw["receipt_id"] = "vacuity-flag-calibration-2026-09-01"
+    raw["capture_date"] = "2026-09-01"
+    raw["kind_precision"]["aggregate"] = 0.91
+    raw["kind_precision"]["not_a_directive_correct"] = 90
+    raw["kind_precision"]["not_a_directive_n"] = 95
+    path = tmp_path / "unregistered-capture.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(KindPrecisionClaimError, match="citable receipt"):
+        format_kind_precision_for_render(load_calibration_receipt(path))
 
 
 def test_kind_precision_render_still_refuses_a_bare_aggregate_serialization(
@@ -590,7 +639,23 @@ def test_kind_precision_claim_refuses_backstop_named_residual_pairing() -> None:
         )
 
 
-def test_gen_1_receipt_renders_its_historical_citation_legally() -> None:
+def test_gen_1_citation_renders_the_denominator_its_own_receipt_carries() -> None:
+    """Generation one still renders, and it renders the split its receipt records.
+
+    Two checked-in receipts disagree about this denominator. The 2026-08-08
+    receipt records ``not_a_directive_n = 78`` and its own note repeats the
+    77/78 split. The 2026-08-09 receipt's ``arm_C_kind`` note says "the published
+    77/78 was an off-by-one denominator, reconciled 2026-08-09" and puts the
+    split of record at 77/77 -- which is what README.md carries and what the
+    public-copy ban in ``tests/test_structural_bans.py`` requires beside the
+    0.835 aggregate. So this render passes ``assert_kind_precision_render_safe``,
+    which checks it against the same receipt that carries the off-by-one, and the
+    identical string would be flagged as a stale split on any public surface.
+
+    This test pins today's behaviour. It does not ratify 77/78: which figure the
+    renderer should carry is a decision about a published number, and it belongs
+    to the maintainer who can amend the receipt of record.
+    """
     gen_1 = load_citable_receipts()[0]
     rendered = format_kind_precision_for_render(gen_1)
     assert rendered == (
