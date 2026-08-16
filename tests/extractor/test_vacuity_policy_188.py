@@ -728,3 +728,43 @@ def test_clause_evidence_exposes_policy_fields_separately(tmp_path: Path) -> Non
         clause_text="Prefer elegance.",
     )
     assert decision_ready_vacuity_kind(view) is None
+
+
+def test_clause_evidence_default_pool_calibrates_gen1_and_rejects_foreign(
+    tmp_path: Path,
+) -> None:
+    from skill_harness.extractor.clause_evidence import (
+        append_extraction_result,
+        load_clause_evidence,
+    )
+    from skill_harness.extractor.models import ExtractionResult
+
+    out = tmp_path / "evidence.jsonl"
+    for sha, model in (("e" * 64, _CAL_MODEL), ("f" * 64, "foreign-model")):
+        append_extraction_result(
+            out,
+            ExtractionResult(
+                skill_id=sha,
+                name=model,
+                source_path=f"/tmp/{model}",
+                source_sha256=sha,
+                clauses=[],
+                raw_frontmatter={},
+                extractor_model=model,
+                system_prompt_sha256=_CAL_PROMPT,
+                tool_schema_sha256=_CAL_SCHEMA,
+            ),
+        )
+
+    calibrated = load_clause_evidence(out, "e" * 64)
+    assert calibrated.measured is not None
+    assert calibrated.measured.summary.flag_evidence_status == "CALIBRATED_FROZEN_CAPTURE"
+    assert calibrated.measured.calibration_receipt is not None
+    assert calibrated.measured.calibration_receipt.receipt_id == (
+        "vacuity-flag-calibration-2026-08-08"
+    )
+
+    foreign = load_clause_evidence(out, "f" * 64)
+    assert foreign.measured is not None
+    assert foreign.measured.summary.flag_evidence_status == "UNMEASURED_GENERATION_MISMATCH"
+    assert foreign.measured.calibration_receipt is None
