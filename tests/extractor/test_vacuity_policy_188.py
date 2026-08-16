@@ -508,6 +508,29 @@ def test_kind_precision_claim_validation_fails_against_a_poisoned_registry(
         KindPrecisionClaim.from_receipt(receipt)
 
 
+def test_kind_precision_claim_from_receipt_retains_its_source() -> None:
+    receipt = load_citable_receipts()[1]
+    claim = KindPrecisionClaim.from_receipt(receipt)
+    assert claim.source_receipt is receipt
+
+
+def test_kind_precision_claim_direct_construction_accepts_coherence_without_custody() -> None:
+    """Copied registered values are coherent even without the original object."""
+    receipt = load_citable_receipts()[0]
+    claim = KindPrecisionClaim(
+        receipt_id=receipt.receipt_id,
+        extractor_model=receipt.extractor_model,
+        system_prompt_sha256=receipt.system_prompt_sha256,
+        tool_schema_sha256=receipt.tool_schema_sha256,
+        aggregate=receipt.kind_precision_aggregate,
+        not_a_directive_correct=receipt.kind_precision_not_a_directive_correct,
+        not_a_directive_n=receipt.kind_precision_not_a_directive_n,
+        weak_directive_correct=receipt.kind_precision_weak_directive_correct,
+        weak_directive_n=receipt.kind_precision_weak_directive_n,
+    )
+    assert claim.source_receipt == receipt
+
+
 # ---------------------------------------------------------------------------
 # Renderer guards: bare kind score RED; recall-not-measured
 # ---------------------------------------------------------------------------
