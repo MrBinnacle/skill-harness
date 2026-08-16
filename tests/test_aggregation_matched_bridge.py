@@ -17,6 +17,7 @@ from skill_harness.task_frontier import (
     Observation,
     TaskFamilyManifest,
     admit,
+    audit_observation,
     load_manifest,
 )
 
@@ -200,6 +201,15 @@ def test_result_is_immutable_and_binds_effect_identity_and_ids_to_each_cell(
 def test_result_ids_alone_reproduce_the_four_cell_table_and_decision(
     evidence_db: sqlite3.Connection,
 ) -> None:
+    """Rebuild the table from the ids themselves, not from how many there are.
+
+    Counting each cell's tuples only re-reads a length the same call produced: a
+    bridge that files a concordant pair in the wrong concordant cell keeps every
+    count intact and survives it (swap the both_pass and both_fail cell indices
+    and this test stayed green). So each id is read back out of the store through
+    the by-id audit seam and the cell is re-derived from the two stored ``passed``
+    booleans.
+    """
     manifest = _store_table(
         evidence_db,
         both_pass=5,
@@ -215,14 +225,22 @@ def test_result_ids_alone_reproduce_the_four_cell_table_and_decision(
 
     result = aggregate_matched_gate2(evidence_db, manifest, design)
     ids = result.observation_ids
-    rebuilt_table = (
-        len(ids.both_pass),
-        len(ids.full_only),
-        len(ids.null_only),
-        len(ids.both_fail),
-    )
+    cell_of_outcome = {(True, True): 0, (True, False): 1, (False, True): 2, (False, False): 3}
+    rebuilt_table = [0, 0, 0, 0]
+    for filed_cell, cell in enumerate((ids.both_pass, ids.full_only, ids.null_only, ids.both_fail)):
+        for full_id, null_id in cell:
+            full = audit_observation(evidence_db, full_id)
+            null = audit_observation(evidence_db, null_id)
+            assert full is not None and null is not None
+            assert (full.arm, null.arm) == (Arm.FULL, Arm.NULL)
+            stored_cell = cell_of_outcome[(full.passed, null.passed)]
+            assert stored_cell == filed_cell, (
+                f"{full_id}/{null_id} passed=({full.passed}, {null.passed}) belongs in cell "
+                f"{stored_cell}, filed in {filed_cell}"
+            )
+            rebuilt_table[stored_cell] += 1
 
-    assert rebuilt_table == (5, 5, 1, 5)
+    assert tuple(rebuilt_table) == (5, 5, 1, 5)
     assert sum(rebuilt_table) == design.n_pairs
     assert gate2_decide(design, rebuilt_table[1], rebuilt_table[2]) is result.decision
 
