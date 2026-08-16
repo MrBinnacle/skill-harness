@@ -37,13 +37,17 @@ Exit code 0 = releasable; 1 = at least one surface is stale (each listed).
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
 import tomllib
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+ASSURANCE_ISSUES = range(167, 175)
 
 
 def _read(rel: str) -> str:
@@ -137,14 +141,39 @@ def gate_tag_matches(version: str, errors: list[str]) -> None:
         print(f"G6: not a tag ref ({ref_name or 'local run'}) — tag-match check self-skips.")
 
 
+def gate_assurance_issues_closed(version: str, errors: list[str]) -> None:
+    """G7: the 0.3 minor gate requires every assurance phase issue closed."""
+    if version.split(".")[:2] != ["0", "3"]:
+        return
+
+    api_url = os.environ.get(
+        "RELEASE_GATE_GITHUB_API_URL",
+        "https://api.github.com/repos/MrBinnacle/skill-harness/issues",
+    )
+    for issue in ASSURANCE_ISSUES:
+        request = urllib.request.Request(  # noqa: S310 - fixed API origin or test localhost
+            f"{api_url}/{issue}", headers={"Accept": "application/vnd.github+json"}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
+                state = json.load(response).get("state")
+        except (OSError, urllib.error.HTTPError, ValueError) as exc:
+            errors.append(f"G7: could not read assurance issue #{issue}: {exc}")
+            continue
+        if state != "closed":
+            errors.append(f"G7: assurance issue #{issue} is {state or 'missing a state'}")
+
+
 def main() -> int:
     errors: list[str] = []
-    version = gate_versions_lockstep(errors)
+    tree_version = gate_versions_lockstep(errors)
+    version = os.environ.get("RELEASE_GATE_VERSION", tree_version)
     gate_changelog_rolled(version, errors)
     gate_readme_status_banner(version, errors)
     gate_readme_pypi_render_safe(errors)
     gate_workflows_sha_pinned(errors)
     gate_tag_matches(version, errors)
+    gate_assurance_issues_closed(version, errors)
 
     if errors:
         print(f"RELEASE GATE: BLOCKED — {len(errors)} stale surface(s) at version {version}:")
