@@ -65,8 +65,16 @@ def _seed_tree(root: Path, version: str) -> Path:
 
 
 def _gate_env(api_url: str) -> dict[str, str]:
-    """Gate environment: seeded API base, no inherited tag ref (G6)."""
-    env = os.environ | {"RELEASE_GATE_GITHUB_API_URL": api_url}
+    """Gate environment: seeded API base, no inherited tag ref (G6).
+
+    ``PYTHONIOENCODING`` pins the child's pipe encoding. Without it, a
+    Windows child encodes stdout as cp1252, so the gate's em-dashes
+    (0x97) crash ``_invoke``'s utf-8 decode inside the reader thread.
+    """
+    env = os.environ | {
+        "RELEASE_GATE_GITHUB_API_URL": api_url,
+        "PYTHONIOENCODING": "utf-8",
+    }
     for tag_var in ("GITHUB_REF", "GITHUB_REF_NAME"):
         env.pop(tag_var, None)
     return env
