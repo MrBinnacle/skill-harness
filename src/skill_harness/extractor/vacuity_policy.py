@@ -105,6 +105,7 @@ class VacuityFlagCalibrationReceipt:
     kind_precision_weak_directive_correct: int
     kind_precision_weak_directive_n: int
     recall: Literal["UNMEASURED"] | MeasuredVacuityRecall
+    supersedes_note: str | None
 
     def instrument(self) -> ExtractorInstrument:
         return ExtractorInstrument(
@@ -524,10 +525,13 @@ def _receipt_from_mapping(raw: Mapping[str, Any]) -> VacuityFlagCalibrationRecei
 
     receipt_id = raw.get("receipt_id")
     capture_date = raw.get("capture_date")
+    supersedes_note = raw.get("supersedes_note")
     if not isinstance(receipt_id, str) or not receipt_id:
         raise ValueError("receipt_id required")
     if not isinstance(capture_date, str) or not capture_date:
         raise ValueError("capture_date required")
+    if supersedes_note is not None and not isinstance(supersedes_note, str):
+        raise ValueError("supersedes_note must be a string when present")
 
     return VacuityFlagCalibrationReceipt(
         receipt_id=receipt_id,
@@ -564,6 +568,7 @@ def _receipt_from_mapping(raw: Mapping[str, Any]) -> VacuityFlagCalibrationRecei
         ),
         kind_precision_weak_directive_n=int(kp["weak_directive_n"]),
         recall=recall,
+        supersedes_note=supersedes_note,
     )
 
 

@@ -104,6 +104,17 @@ def test_adjudication_receipt_loads_measured_recall_with_intervals_and_n() -> No
     assert receipt.recall.skill_n == 47
 
 
+def test_receipt_round_trip_preserves_optional_supersedes_note() -> None:
+    gen_1 = load_calibration_receipt(_DOCS_RECEIPT)
+    gen_2 = load_calibration_receipt(_ADJ_RECEIPT)
+
+    assert gen_1.supersedes_note is None
+    assert (
+        gen_2.supersedes_note
+        == json.loads(_ADJ_RECEIPT.read_text(encoding="utf-8"))["supersedes_note"]
+    )
+
+
 def test_receipt_missing_recall_is_refused_not_defaulted(tmp_path: Path) -> None:
     raw = json.loads(_DOCS_RECEIPT.read_text(encoding="utf-8"))
     del raw["recall"]
