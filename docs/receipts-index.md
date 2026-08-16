@@ -318,6 +318,18 @@ this entry.
   that it covers records outside `docs/assurance/`, unmutated modules, or the
   platforms and cores the fuzz and coverage lanes did not reach.
 
+### [`docs/assurance/release-gate-red-206.md`](assurance/release-gate-red-206.md)
+
+The deterministic falsification receipt for the `0.3.0` assurance release gate
+(#206).
+
+- **Claims:** A seeded `0.3.0` release attempt exits 1 when issue #169 is open
+  and no successful assurance workflow run is recorded; the executable
+  demonstration remains in `tests/test_release_gate_206.py`.
+- **Refuses to claim:** That the local HTTP seed is a live GitHub result; that
+  any historical assurance run was green; that patch release `0.2.3` is in
+  scope for the assurance gate.
+
 ---
 
 ## Ratifications
