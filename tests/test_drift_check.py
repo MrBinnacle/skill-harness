@@ -38,6 +38,7 @@ _LIVE_IDS = (
     "DC-10",
     "DC-11",
     "DC-12",
+    "AC-1",
 )
 _PLANNED_IDS = ("DC-13",)
 
@@ -49,6 +50,8 @@ _PLANNED_IDS = ("DC-13",)
 _LIVE_SURFACES = (
     "src/skill_harness/aggregation/fit.py",
     "src/skill_harness/aggregation/status.py",
+    "src/skill_harness/aggregation/confidence_sequence.py",
+    "src/skill_harness/aggregation/report.py",
     "src/skill_harness/ablation/stopping.py",
     "src/skill_harness/semantics.py",
     "src/skill_harness/cli/main.py",
@@ -63,6 +66,7 @@ _LIVE_SURFACES = (
     "docs/INVARIANTS.md",
     "docs/PLAN.md",
     "docs/PRD.md",
+    "docs/assurance/calibration-report.md",
     "docs/ratifications/README.md",
     "README.md",
 )
@@ -500,6 +504,36 @@ def test_missing_value_site_pattern_blocks(tmp_path: Path) -> None:
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-1" in line for line in fail_lines), r.stdout
+
+
+def test_ac1_method_replacement_blocks(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "src/skill_harness/aggregation/confidence_sequence.py",
+        'INTERVAL_METHOD_V1: str = "predictable_plugin_betting_cs_v1"',
+        'INTERVAL_METHOD_V1: str = "legacy_posterior_v1"',
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("AC-1" in line and "confidence_sequence.py" in line for line in fail_lines), r.stdout
+
+
+def test_ac1_public_report_demotion_blocks(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "src/skill_harness/aggregation/report.py",
+        '"posterior_credible_interval_95": list(clause.posterior_credible_interval_95),\n'
+        '        "sequential_confidence_sequence_95": list(seq) if seq is not None else None,',
+        '"sequential_confidence_sequence_95": list(seq) if seq is not None else None,\n'
+        '        "posterior_credible_interval_95": list(clause.posterior_credible_interval_95),',
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("AC-1" in line and "report.py" in line for line in fail_lines), r.stdout
 
 
 # ---------------------------------------------------------------------------

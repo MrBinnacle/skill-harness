@@ -450,6 +450,33 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
             disclosure_line="internally derived, not externally deliberated",
         ),
     ),
+    LiveRow(
+        dc_id="AC-1",
+        summary=(
+            "calibrated-interval primacy: production method id fixed and sequential CS "
+            "precedes the legacy posterior interval"
+        ),
+        value_sites=(
+            ValueSite(
+                "src/skill_harness/aggregation/confidence_sequence.py",
+                r'^INTERVAL_METHOD_V1: str = "([^"]+)"$',
+                ("predictable_plugin_betting_cs_v1",),
+            ),
+            ValueSite(
+                "src/skill_harness/aggregation/report.py",
+                r'"(posterior_credible_interval_95)": list\(clause\.'
+                r'posterior_credible_interval_95\),\n\s*'
+                r'"(sequential_confidence_sequence_95)": list\(seq\)',
+                ("posterior_credible_interval_95", "sequential_confidence_sequence_95"),
+            ),
+        ),
+        registered_texts=(
+            RegisteredText(
+                "docs/assurance/calibration-report.md",
+                "predictable_plugin_betting_cs_v1",
+            ),
+        ),
+    ),
 )
 
 PLANNED_ROWS: tuple[PlannedRow, ...] = (
