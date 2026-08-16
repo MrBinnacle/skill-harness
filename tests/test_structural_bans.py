@@ -503,6 +503,11 @@ def test_mismatched_local_pair_passes_when_correct_splits_occur_elsewhere() -> N
     assert _public_copy_violations(document) == []
 
 
+def test_plain_decimal_and_no_claim_controls_pass() -> None:
+    assert _public_copy_violations("The release threshold is 0.99.") == []
+    assert _public_copy_violations("The detector report contains no precision claim.") == []
+
+
 def test_measured_recall_poison_and_unmeasured_statement() -> None:
     poison = _public_copy_violations("The detector's recall was measured.")
     contradictory = _public_copy_violations(
