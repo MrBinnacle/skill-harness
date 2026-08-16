@@ -492,6 +492,17 @@ def test_both_complete_generation_pairs_pass_in_one_document() -> None:
     assert _public_copy_violations(document) == []
 
 
+def test_mismatched_local_pair_passes_when_correct_splits_occur_elsewhere() -> None:
+    document = (
+        "The detector's kind-precision is 0.9667: not_a_directive matched 77/77 and "
+        "weak_directive matched 4/20.\n\n\n"
+        "The Gen-2 receipt records not_a_directive matched 255/255 and "
+        "weak_directive matched 6/15."
+    )
+
+    assert _public_copy_violations(document) == []
+
+
 def test_measured_recall_poison_and_unmeasured_statement() -> None:
     poison = _public_copy_violations("The detector's recall was measured.")
     contradictory = _public_copy_violations(
