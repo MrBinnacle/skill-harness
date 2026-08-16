@@ -841,6 +841,21 @@ def test_backstop_passes_the_named_residual_mismatched_local_pairing() -> None:
     assert_kind_precision_render_safe(document, gen_1)
 
 
+def test_backstop_still_refuses_the_trailing_zero_spelling_of_an_aggregate() -> None:
+    """'0.83500' is the same figure as '0.835' and is refused as one.
+
+    The digit-boundary rule that keeps a census percentage of 10.835306 out of
+    this check bounds the leading direction only, so a trailing-zero spelling
+    stays inside the match. Held receipt is the other generation, so this is the
+    registry loop being asked, not the caller's own comparison.
+    """
+    gen_1, gen_2 = load_citable_receipts()
+    trailing_zero = f"{gen_1.kind_precision_aggregate}00"
+
+    with pytest.raises(BareKindPrecisionRenderError, match=gen_1.receipt_id):
+        assert_kind_precision_render_safe(f"kind-precision {trailing_zero}", gen_2)
+
+
 def test_backstop_leaves_plain_decimals_and_no_claim_documents_alone() -> None:
     """No claim-detector was introduced: ordinary decimals are ordinary prose."""
     gen_1 = load_citable_receipts()[0]
@@ -848,6 +863,19 @@ def test_backstop_leaves_plain_decimals_and_no_claim_documents_alone() -> None:
     assert_kind_precision_render_safe("The release threshold is 0.99.", gen_1)
     assert_kind_precision_render_safe("The release threshold is 0.99.")
     assert_kind_precision_render_safe("This report contains no precision claim.", gen_1)
+
+
+def test_backstop_does_not_read_an_aggregate_out_of_a_longer_number() -> None:
+    """A percentage that merely contains the aggregate's digits claims nothing.
+
+    Shape taken from the census mismatch path: no receipt, ``kind_precision``
+    null, and a percentage figure whose digits happen to span '0.835'. The loop
+    runs on that path, so without a digit boundary this render would be refused
+    for a figure nobody cited.
+    """
+    assert_kind_precision_render_safe(
+        '{"kind_precision": null, "recall": "UNMEASURED", "vacuity_flag_percent": 10.835306}'
+    )
 
 
 def test_recall_claim_is_scoped_to_the_backing_receipt() -> None:
