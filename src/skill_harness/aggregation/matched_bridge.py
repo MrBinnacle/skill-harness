@@ -71,7 +71,7 @@ def _pair_evidence(
         }[(full.passed, null.passed)]
         cells[cell_index].append((full.observation_id, null.observation_id))
 
-    return tuple(tuple(cell) for cell in cells)  # type: ignore[return-value]
+    return tuple(cells[0]), tuple(cells[1]), tuple(cells[2]), tuple(cells[3])
 
 
 def aggregate_matched_gate2(
