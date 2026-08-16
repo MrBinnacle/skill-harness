@@ -65,6 +65,10 @@ class MixedExtractorGenerationsError(ValueError):
     """Raised when callers attempt to pool rows across instrument generations."""
 
 
+class AmbiguousCalibrationReceiptError(ValueError):
+    """Raised when more than one receipt matches an instrument generation."""
+
+
 class BareKindPrecisionRenderError(ValueError):
     """Raised when a renderer would emit aggregate kind-precision without class split."""
 
@@ -239,13 +243,17 @@ def match_calibration_receipt(
     instrument: ExtractorInstrument | None,
     receipts: Sequence[VacuityFlagCalibrationReceipt] | None = None,
 ) -> VacuityFlagCalibrationReceipt | None:
-    """Return the receipt whose complete triple matches, else None (fail closed)."""
+    """Return the sole matching receipt; no match is None and ambiguity raises."""
     if instrument is None:
         return None
     pool = load_default_receipts() if receipts is None else receipts
     hits = [r for r in pool if r.matches_instrument(instrument)]
-    if len(hits) != 1:
+    if not hits:
         return None
+    if len(hits) > 1:
+        raise AmbiguousCalibrationReceiptError(
+            f"{len(hits)} calibration receipts match the instrument triple"
+        )
     return hits[0]
 
 
