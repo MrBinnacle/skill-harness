@@ -117,6 +117,16 @@ def test_receipt_round_trip_preserves_optional_supersedes_note() -> None:
     )
 
 
+def test_non_string_supersedes_note_is_refused_not_coerced(tmp_path: Path) -> None:
+    """A note is prose or absent; a number there would render as a citation."""
+    raw = json.loads(_ADJ_RECEIPT.read_text(encoding="utf-8"))
+    raw["supersedes_note"] = 189
+    path = tmp_path / "numeric-note.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="supersedes_note"):
+        load_calibration_receipt(path)
+
+
 def test_citable_registry_loads_both_generations_without_expanding_operational_pool() -> None:
     citable = load_citable_receipts()
     assert [receipt.receipt_id for receipt in citable] == [
