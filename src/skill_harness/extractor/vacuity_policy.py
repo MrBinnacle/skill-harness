@@ -34,6 +34,10 @@ PredictedVacuityKind = Literal["weak_directive", "not_a_directive"]
 _SHA_LEN: Final[int] = 64
 
 _DEFAULT_RECEIPT_NAME: Final[str] = "vacuity-flag-calibration-2026-08-08.json"
+_CITABLE_RECEIPT_NAMES: Final[tuple[str, ...]] = (
+    _DEFAULT_RECEIPT_NAME,
+    "vacuity-adjudication-receipt-2026-08-09.json",
+)
 # Repo-checkout path (editable install / worktree). Package-local mirror ships
 # beside this module so installed wheels resolve without the docs/ tree.
 _REPO_RECEIPT_PATH: Final[Path] = (
@@ -167,6 +171,18 @@ def load_calibration_receipt(path: Path | str | None = None) -> VacuityFlagCalib
 def load_default_receipts() -> tuple[VacuityFlagCalibrationReceipt, ...]:
     """All checked-in receipts the policy layer knows about."""
     return (load_calibration_receipt(),)
+
+
+def load_citable_receipts() -> tuple[VacuityFlagCalibrationReceipt, ...]:
+    """All receipt generations available for citation, never operational matching."""
+    package_dir = Path(__file__).resolve().parent / "calibration"
+    repo_dir = Path(__file__).resolve().parents[3] / "docs" / "calibration"
+    return tuple(
+        load_calibration_receipt(
+            package_dir / name if (package_dir / name).is_file() else repo_dir / name
+        )
+        for name in _CITABLE_RECEIPT_NAMES
+    )
 
 
 def default_adjudication_records_path() -> Path:
