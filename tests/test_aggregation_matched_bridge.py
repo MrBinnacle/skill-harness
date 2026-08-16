@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import sqlite3
 from typing import Any
 
@@ -224,3 +225,20 @@ def test_result_ids_alone_reproduce_the_four_cell_table_and_decision(
     assert rebuilt_table == (5, 5, 1, 5)
     assert sum(rebuilt_table) == design.n_pairs
     assert gate2_decide(design, rebuilt_table[1], rebuilt_table[2]) is result.decision
+
+
+def test_bridge_has_one_public_entry_point_with_only_registered_inputs() -> None:
+    import skill_harness.aggregation.matched_bridge as bridge
+
+    assert list(inspect.signature(aggregate_matched_gate2).parameters) == [
+        "conn",
+        "manifest",
+        "design",
+    ]
+    public_callables = {
+        name
+        for name, value in vars(bridge).items()
+        if not name.startswith("_") and inspect.isfunction(value)
+    }
+    assert public_callables == {"aggregate_matched_gate2"}
+    assert not hasattr(bridge, "pair_evidence")
