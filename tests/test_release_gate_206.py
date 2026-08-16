@@ -12,11 +12,19 @@ ROOT = Path(__file__).resolve().parents[1]
 GATE = ROOT / "scripts" / "release_gate.py"
 
 
-def _run_gate(version: str, issue_states: dict[int, str]) -> subprocess.CompletedProcess[str]:
+def _run_gate(
+    version: str,
+    issue_states: dict[int, str],
+    workflow_runs: list[dict[str, str]] | None = None,
+) -> subprocess.CompletedProcess[str]:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
-            issue = int(self.path.rsplit("/", 1)[-1])
-            body = json.dumps({"state": issue_states[issue]}).encode()
+            if self.path.endswith("/actions/workflows/assurance.yml/runs"):
+                payload: object = {"workflow_runs": workflow_runs or []}
+            else:
+                issue = int(self.path.rsplit("/", 1)[-1])
+                payload = {"state": issue_states[issue]}
+            body = json.dumps(payload).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -54,3 +62,10 @@ def test_minor_release_is_blocked_while_an_assurance_issue_is_open() -> None:
 
     assert result.returncode == 1
     assert "#169 is open" in result.stdout
+
+
+def test_minor_release_is_blocked_without_a_green_assurance_lane_result() -> None:
+    result = _run_gate("0.3.0", dict.fromkeys(range(167, 175), "closed"), workflow_runs=[])
+
+    assert result.returncode == 1
+    assert "no successful assurance.yml workflow run recorded" in result.stdout
