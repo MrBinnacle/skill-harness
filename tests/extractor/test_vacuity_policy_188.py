@@ -15,6 +15,7 @@ import pytest
 from skill_harness.extractor.models import ExtractorInstrument
 from skill_harness.extractor.vacuity_policy import (
     AdjudicationRecord,
+    AmbiguousCalibrationReceiptError,
     BareKindPrecisionRenderError,
     MixedExtractorGenerationsError,
     adjudication_identity_key,
@@ -260,6 +261,33 @@ def test_matching_triple_is_calibrated_frozen_capture() -> None:
     assert view.flag_evidence_status == "CALIBRATED_FROZEN_CAPTURE"
     assert view.calibration_receipt is not None
     assert view.calibration_receipt.flag_precision_weighted_undecided_wrong == 0.972
+
+
+def test_injected_duplicate_triple_raises_typed_ambiguity() -> None:
+    receipts = (
+        load_calibration_receipt(_DOCS_RECEIPT),
+        load_calibration_receipt(_ADJ_RECEIPT),
+    )
+    with pytest.raises(AmbiguousCalibrationReceiptError, match="2 calibration receipts"):
+        match_calibration_receipt(_calibrated_instrument(), receipts)
+
+
+def test_default_pool_duplicate_triple_raises_typed_ambiguity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import skill_harness.extractor.vacuity_policy as policy
+
+    receipts = (
+        load_calibration_receipt(_DOCS_RECEIPT),
+        load_calibration_receipt(_ADJ_RECEIPT),
+    )
+    monkeypatch.setattr(policy, "load_default_receipts", lambda: receipts)
+    with pytest.raises(AmbiguousCalibrationReceiptError, match="2 calibration receipts"):
+        match_calibration_receipt(_calibrated_instrument())
+
+
+def test_zero_matching_receipts_remains_none() -> None:
+    assert match_calibration_receipt(_other_instrument(model_id="foreign"), ()) is None
 
 
 # ---------------------------------------------------------------------------
