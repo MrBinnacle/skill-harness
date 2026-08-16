@@ -323,12 +323,15 @@ this entry.
 The deterministic falsification receipt for the `0.3.0` assurance release gate
 (#206).
 
-- **Claims:** A seeded `0.3.0` release attempt exits 1 when issue #169 is open
-  and no successful assurance workflow run is recorded; the executable
-  demonstration remains in `tests/test_release_gate_206.py`.
-- **Refuses to claim:** That the local HTTP seed is a live GitHub result; that
-  any historical assurance run was green; that patch release `0.2.3` is in
-  scope for the assurance gate.
+- **Claims:** A release gate run over a seeded tree that declares `0.3.0` exits
+  1 with exactly two failures — assurance issue #169 open, and no successful
+  `assurance.yml` run on record — while checks G1 through G6 pass on that tree;
+  the recorded transcript is compared line-for-line against the gate's live
+  output by `tests/test_release_gate_206.py`.
+- **Refuses to claim:** That the local HTTP stand-in for the GitHub API is a
+  live GitHub result; that any real assurance lane run has finished green; that
+  the 0.2.x patch line is in scope for the assurance checks; that the gate is
+  tamper-proof rather than blocked-by-default.
 
 ---
 

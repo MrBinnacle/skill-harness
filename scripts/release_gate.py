@@ -30,13 +30,27 @@ Checks (all must pass; failures are listed, not first-fail):
       commit SHA (mutable tag/branch refs are not provenance).
   G6  When running on a tag ref (GITHUB_REF_NAME=vX.Y.Z), the tag matches
       the pyproject version exactly.
+  G7  A 0.3.x release requires every assurance-phase issue (#167-#174)
+      closed on GitHub. Older lines (0.1.x, 0.2.x) self-skip.
+  G8  A 0.3.x release requires a successful ``assurance.yml`` workflow run
+      on record. Older lines self-skip.
 
-Run locally: ``python scripts/release_gate.py`` from the repo root.
+G7 and G8 read the GitHub REST API and fail CLOSED: an unreadable API blocks
+the release rather than passing it. ``RELEASE_GATE_GITHUB_API_URL`` names the
+repository API base (default ``https://api.github.com/repos/MrBinnacle/skill-harness``)
+so tests can seed both answers from a local server instead of the network.
+
+The gated version always comes from the tree under ``--root``: there is no
+version override, because a version the tree does not declare is the exact
+drift this script exists to catch.
+
+Run locally: ``python scripts/release_gate.py [--root <repo-root>]``.
 Exit code 0 = releasable; 1 = at least one surface is stale (each listed).
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -48,18 +62,23 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 ASSURANCE_ISSUES = range(167, 175)
+GITHUB_API_DEFAULT = "https://api.github.com/repos/MrBinnacle/skill-harness"
 
 
-def _read(rel: str) -> str:
-    return (REPO / rel).read_text(encoding="utf-8")
+def _read(root: Path, rel: str) -> str:
+    return (root / rel).read_text(encoding="utf-8")
 
 
-def gate_versions_lockstep(errors: list[str]) -> str:
+def _api_base() -> str:
+    return os.environ.get("RELEASE_GATE_GITHUB_API_URL", GITHUB_API_DEFAULT).rstrip("/")
+
+
+def gate_versions_lockstep(root: Path, errors: list[str]) -> str:
     """G1: pyproject and package __version__ agree; returns the version."""
-    pyproject = tomllib.loads(_read("pyproject.toml"))
+    pyproject = tomllib.loads(_read(root, "pyproject.toml"))
     version: str = pyproject["project"]["version"]
 
-    init_text = _read("src/skill_harness/__init__.py")
+    init_text = _read(root, "src/skill_harness/__init__.py")
     m = re.search(r'^__version__\s*=\s*"([^"]+)"', init_text, re.MULTILINE)
     if m is None:
         errors.append("G1: no __version__ in src/skill_harness/__init__.py")
@@ -72,9 +91,9 @@ def gate_versions_lockstep(errors: list[str]) -> str:
     return version
 
 
-def gate_changelog_rolled(version: str, errors: list[str]) -> None:
+def gate_changelog_rolled(root: Path, version: str, errors: list[str]) -> None:
     """G2: CHANGELOG has a rolled section + compare link for this version."""
-    changelog = _read("CHANGELOG.md")
+    changelog = _read(root, "CHANGELOG.md")
     section = re.compile(
         rf"^## \[{re.escape(version)}\] [-—] \d{{4}}-\d{{2}}-\d{{2}}", re.MULTILINE
     )
@@ -89,18 +108,18 @@ def gate_changelog_rolled(version: str, errors: list[str]) -> None:
         )
 
 
-def gate_readme_status_banner(version: str, errors: list[str]) -> None:
+def gate_readme_status_banner(root: Path, version: str, errors: list[str]) -> None:
     """G3: the README status banner names the released version."""
-    readme = _read("README.md")
+    readme = _read(root, "README.md")
     if f"Status: v{version}" not in readme:
         banner = re.search(r"Status: v[\d.]+[0-9a-z]*", readme)
         found = f" (found {banner.group(0)!r})" if banner else ""
         errors.append(f"G3: README.md status banner does not say 'Status: v{version}'{found}")
 
 
-def gate_readme_pypi_render_safe(errors: list[str]) -> None:
+def gate_readme_pypi_render_safe(root: Path, errors: list[str]) -> None:
     """G4: README carries no relative targets (they 404 on the PyPI page)."""
-    readme = _read("README.md")
+    readme = _read(root, "README.md")
     for lineno, line in enumerate(readme.splitlines(), start=1):
         for m in re.finditer(r"\]\(([^)]+)\)", line):
             target = m.group(1)
@@ -115,10 +134,10 @@ def gate_readme_pypi_render_safe(errors: list[str]) -> None:
                 )
 
 
-def gate_workflows_sha_pinned(errors: list[str]) -> None:
+def gate_workflows_sha_pinned(root: Path, errors: list[str]) -> None:
     """G5: every workflow action is pinned to a full commit SHA."""
     pinned = re.compile(r"^\s*-?\s*uses:\s*\S+@[0-9a-f]{40}(\s+#.*)?$")
-    for wf in sorted((REPO / ".github" / "workflows").glob("*.yml")):
+    for wf in sorted((root / ".github" / "workflows").glob("*.yml")):
         for lineno, line in enumerate(wf.read_text(encoding="utf-8").splitlines(), start=1):
             if re.match(r"^\s*-?\s*uses:", line) and pinned.match(line) is None:
                 errors.append(
@@ -141,63 +160,74 @@ def gate_tag_matches(version: str, errors: list[str]) -> None:
         print(f"G6: not a tag ref ({ref_name or 'local run'}) — tag-match check self-skips.")
 
 
+def _is_zero_three(version: str) -> bool:
+    """True for the 0.3 minor line, which the assurance gates apply to."""
+    return version.split(".")[:2] == ["0", "3"]
+
+
+def _get_json(url: str) -> object:
+    """GET a JSON document. Raises OSError/ValueError on any failure."""
+    request = urllib.request.Request(  # noqa: S310 - fixed API origin or test localhost
+        url, headers={"Accept": "application/vnd.github+json"}
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
+        return json.load(response)
+
+
 def gate_assurance_issues_closed(version: str, errors: list[str]) -> None:
     """G7: the 0.3 minor gate requires every assurance phase issue closed."""
-    if version.split(".")[:2] != ["0", "3"]:
+    if not _is_zero_three(version):
         return
 
-    api_url = os.environ.get(
-        "RELEASE_GATE_GITHUB_API_URL",
-        "https://api.github.com/repos/MrBinnacle/skill-harness/issues",
-    )
     for issue in ASSURANCE_ISSUES:
-        request = urllib.request.Request(  # noqa: S310 - fixed API origin or test localhost
-            f"{api_url}/{issue}", headers={"Accept": "application/vnd.github+json"}
-        )
         try:
-            with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
-                state = json.load(response).get("state")
+            document = _get_json(f"{_api_base()}/issues/{issue}")
         except (OSError, urllib.error.HTTPError, ValueError) as exc:
             errors.append(f"G7: could not read assurance issue #{issue}: {exc}")
             continue
+        state = document.get("state") if isinstance(document, dict) else None
         if state != "closed":
             errors.append(f"G7: assurance issue #{issue} is {state or 'missing a state'}")
 
 
 def gate_assurance_lane_green(version: str, errors: list[str]) -> None:
     """G8: the 0.3 minor gate requires a recorded green assurance lane run."""
-    if version.split(".")[:2] != ["0", "3"]:
+    if not _is_zero_three(version):
         return
 
-    api_url = os.environ.get(
-        "RELEASE_GATE_GITHUB_API_URL",
-        "https://api.github.com/repos/MrBinnacle/skill-harness",
-    )
-    request = urllib.request.Request(  # noqa: S310 - fixed API origin or test localhost
-        f"{api_url}/actions/workflows/assurance.yml/runs",
-        headers={"Accept": "application/vnd.github+json"},
-    )
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
-            runs = json.load(response).get("workflow_runs", [])
+        document = _get_json(f"{_api_base()}/actions/workflows/assurance.yml/runs")
     except (OSError, urllib.error.HTTPError, ValueError) as exc:
         errors.append(f"G8: could not read assurance workflow runs: {exc}")
         return
+    runs = document.get("workflow_runs", []) if isinstance(document, dict) else []
     green = any(
-        run.get("status") == "completed" and run.get("conclusion") == "success" for run in runs
+        isinstance(run, dict)
+        and run.get("status") == "completed"
+        and run.get("conclusion") == "success"
+        for run in runs
     )
     if not green:
         errors.append("G8: no successful assurance.yml workflow run recorded")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Release gate — public-surface lockstep checks.")
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=REPO,
+        help="repo root to check (default: this script's repo)",
+    )
+    args = parser.parse_args(argv)
+    root: Path = args.root.resolve()
+
     errors: list[str] = []
-    tree_version = gate_versions_lockstep(errors)
-    version = os.environ.get("RELEASE_GATE_VERSION", tree_version)
-    gate_changelog_rolled(version, errors)
-    gate_readme_status_banner(version, errors)
-    gate_readme_pypi_render_safe(errors)
-    gate_workflows_sha_pinned(errors)
+    version = gate_versions_lockstep(root, errors)
+    gate_changelog_rolled(root, version, errors)
+    gate_readme_status_banner(root, version, errors)
+    gate_readme_pypi_render_safe(root, errors)
+    gate_workflows_sha_pinned(root, errors)
     gate_tag_matches(version, errors)
     gate_assurance_issues_closed(version, errors)
     gate_assurance_lane_green(version, errors)
