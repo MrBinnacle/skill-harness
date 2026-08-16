@@ -14,6 +14,16 @@ _PairKey = tuple[str, str, str, str]
 
 
 @dataclass(frozen=True)
+class MatchedCellObservationIds:
+    """Full/null observation-id pairs assigned to each paired-outcome cell."""
+
+    both_pass: tuple[tuple[str, str], ...]
+    full_only: tuple[tuple[str, str], ...]
+    null_only: tuple[tuple[str, str], ...]
+    both_fail: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
 class MatchedGate2Result:
     """Gate-2 result bound to the frozen family evidence that produced it."""
 
@@ -22,10 +32,7 @@ class MatchedGate2Result:
     verdict: VerdictResult
     task_family_id: str
     task_family_version: str
-    both_pass_observation_ids: tuple[tuple[str, str], ...]
-    full_only_observation_ids: tuple[tuple[str, str], ...]
-    null_only_observation_ids: tuple[tuple[str, str], ...]
-    both_fail_observation_ids: tuple[tuple[str, str], ...]
+    observation_ids: MatchedCellObservationIds
 
 
 def _pair_evidence(
@@ -89,8 +96,10 @@ def aggregate_matched_gate2(
         verdict=matched_gate2_verdict(effect),
         task_family_id=manifest.task_family_id,
         task_family_version=manifest.task_family_version,
-        both_pass_observation_ids=both_pass,
-        full_only_observation_ids=full_only,
-        null_only_observation_ids=null_only,
-        both_fail_observation_ids=both_fail,
+        observation_ids=MatchedCellObservationIds(
+            both_pass=both_pass,
+            full_only=full_only,
+            null_only=null_only,
+            both_fail=both_fail,
+        ),
     )

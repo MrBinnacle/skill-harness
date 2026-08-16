@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import sqlite3
 from typing import Any
 
@@ -164,3 +165,32 @@ def test_every_terminal_decision_is_reached_through_the_store_bridge_path(
     assert result.decision is expected
     assert result.verdict.verdict is expected_verdict
     assert result.verdict.cut_sub_reason is expected_cut_reason
+
+
+def test_result_is_immutable_and_binds_effect_identity_and_ids_to_each_cell(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = _store_table(
+        evidence_db,
+        both_pass=1,
+        full_only=1,
+        null_only=1,
+        both_fail=1,
+    )
+    design = Gate2Design(
+        n_pairs=4,
+        gamma=0.90,
+        mme=MMESpec(delta_min=0.20, q_min=0.70),
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, design)
+
+    assert result.effect.decision is result.decision
+    assert result.task_family_id == "synthetic-e1-family"
+    assert result.task_family_version == "1"
+    assert result.observation_ids.both_pass == (("obs-00-full", "obs-00-null"),)
+    assert result.observation_ids.full_only == (("obs-01-full", "obs-01-null"),)
+    assert result.observation_ids.null_only == (("obs-02-full", "obs-02-null"),)
+    assert result.observation_ids.both_fail == (("obs-03-full", "obs-03-null"),)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        result.task_family_id = "changed"  # type: ignore[misc]
