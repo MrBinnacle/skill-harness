@@ -506,36 +506,6 @@ def test_missing_value_site_pattern_blocks(tmp_path: Path) -> None:
     assert any("DC-1" in line for line in fail_lines), r.stdout
 
 
-def test_ac1_method_replacement_blocks(tmp_path: Path) -> None:
-    root = _make_tree(tmp_path)
-    _mutate(
-        root,
-        "src/skill_harness/aggregation/confidence_sequence.py",
-        'INTERVAL_METHOD_V1: str = "predictable_plugin_betting_cs_v1"',
-        'INTERVAL_METHOD_V1: str = "legacy_posterior_v1"',
-    )
-    r = _run(root)
-    assert r.returncode == 1
-    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
-    assert any("AC-1" in line and "confidence_sequence.py" in line for line in fail_lines), r.stdout
-
-
-def test_ac1_public_report_demotion_blocks(tmp_path: Path) -> None:
-    root = _make_tree(tmp_path)
-    _mutate(
-        root,
-        "src/skill_harness/aggregation/report.py",
-        '"posterior_credible_interval_95": list(clause.posterior_credible_interval_95),\n'
-        '        "sequential_confidence_sequence_95": list(seq) if seq is not None else None,',
-        '"sequential_confidence_sequence_95": list(seq) if seq is not None else None,\n'
-        '        "posterior_credible_interval_95": list(clause.posterior_credible_interval_95),',
-    )
-    r = _run(root)
-    assert r.returncode == 1
-    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
-    assert any("AC-1" in line and "report.py" in line for line in fail_lines), r.stdout
-
-
 # ---------------------------------------------------------------------------
 # DC-12: ratification-ledger internal consistency (#47; activated by #57)
 # ---------------------------------------------------------------------------
@@ -647,3 +617,112 @@ def test_rat_unparseable_record_blocks(tmp_path: Path) -> None:
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-12" in line and "RAT-0002" in line for line in fail_lines), r.stdout
+
+
+# ---------------------------------------------------------------------------
+# AC-1: calibrated-interval primacy (#160 close-out candidate, ratified in
+# docs/ASSURANCE.md; activated by #248)
+# ---------------------------------------------------------------------------
+
+
+def test_ac1_method_replacement_blocks(tmp_path: Path) -> None:
+    """AC-1 replacement leg: swapping the production confidence-sequence method
+    id for anything else must block, naming the definition site."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "src/skill_harness/aggregation/confidence_sequence.py",
+        'INTERVAL_METHOD_V1: str = "predictable_plugin_betting_cs_v1"',
+        'INTERVAL_METHOD_V1: str = "legacy_posterior_v1"',
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("AC-1" in line and "confidence_sequence.py" in line for line in fail_lines), r.stdout
+
+
+def test_ac1_public_report_demotion_blocks(tmp_path: Path) -> None:
+    """AC-1 demotion leg: the rendered per-clause report leads with the
+    anytime-valid CS column (#187). Moving the legacy posterior CrI column in
+    front of it demotes the calibrated interval on the surface a reader sees,
+    so the row must block."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "src/skill_harness/cli/main.py",
+        '    clause_table.add_column("CS 95% (anytime-valid)", min_width=18, justify="right")\n'
+        '    clause_table.add_column("posterior CrI 95%", min_width=16, justify="right")',
+        '    clause_table.add_column("posterior CrI 95%", min_width=16, justify="right")\n'
+        '    clause_table.add_column("CS 95% (anytime-valid)", min_width=18, justify="right")',
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("AC-1" in line and "main.py" in line for line in fail_lines), r.stdout
+
+
+def test_ac1_cs_column_rename_blocks(tmp_path: Path) -> None:
+    """AC-1 demotion leg: renaming the CS column so it no longer announces the
+    anytime-valid interval is drift too — the reader loses the same claim the
+    column order carries."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "src/skill_harness/cli/main.py",
+        '"CS 95% (anytime-valid)"',
+        '"CI 95%"',
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("AC-1" in line and "main.py" in line for line in fail_lines), r.stdout
+
+
+def test_ac1_schema_preference_reversal_blocks(tmp_path: Path) -> None:
+    """AC-1 schema leg: the report schema states which interval is preferred and
+    which is compatibility-only. Reversing that statement must block."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "src/skill_harness/aggregation/report.py",
+        "Retained for compatibility; prefer sequential_confidence_sequence_95",
+        "Preferred interval; sequential_confidence_sequence_95 is supplementary",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("AC-1" in line and "report.py" in line for line in fail_lines), r.stdout
+
+
+def test_ac1_published_method_id_removal_blocks(tmp_path: Path) -> None:
+    """AC-1 publication leg: the calibration report names the production method
+    id. Losing that quote must block — an unpublished method is unauditable."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "docs/assurance/calibration-report.md",
+        "predictable_plugin_betting_cs_v1",
+        "some_other_cs",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("AC-1" in line and "calibration-report.md" in line for line in fail_lines), r.stdout
+
+
+def test_ac1_does_not_fire_on_promoting_the_cs_in_the_json_dict(tmp_path: Path) -> None:
+    """AC-1 must never punish compliance. The JSON wire order is alphabetical
+    (to_json_bytes uses sort_keys=True), so the key order inside
+    _clause_to_dict carries no claim; reordering those two keys is not drift and
+    must stay green."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "src/skill_harness/aggregation/report.py",
+        '"posterior_credible_interval_95": list(clause.posterior_credible_interval_95),\n'
+        '        "sequential_confidence_sequence_95": list(seq) if seq is not None else None,',
+        '"sequential_confidence_sequence_95": list(seq) if seq is not None else None,\n'
+        '        "posterior_credible_interval_95": list(clause.posterior_credible_interval_95),',
+    )
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
