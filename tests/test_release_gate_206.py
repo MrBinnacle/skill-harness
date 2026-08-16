@@ -10,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GATE = ROOT / "scripts" / "release_gate.py"
+RED_RECEIPT = ROOT / "docs" / "assurance" / "release-gate-red-206.md"
 
 
 def _run_gate(
@@ -85,3 +86,12 @@ def test_patch_release_023_stays_unblocked_without_assurance_state(tmp_path: Pat
     mutant.write_text(source.replace(exemption, ""), encoding="utf-8")
     poisoned = _run_gate("0.2.3", {}, gate=mutant)
     assert poisoned.returncode == 1
+
+
+def test_seeded_red_demonstration_is_recorded_for_review() -> None:
+    text = RED_RECEIPT.read_text(encoding="utf-8")
+
+    assert "RELEASE_GATE_VERSION=0.3.0 python scripts/release_gate.py" in text
+    assert "Exit code: `1`" in text
+    assert "G7: assurance issue #169 is open" in text
+    assert "G8: no successful assurance.yml workflow run recorded" in text
