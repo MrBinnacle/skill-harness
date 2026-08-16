@@ -110,6 +110,14 @@ class TestEbmom:
 
 
 class TestFitSkillUnpooled:
+    @pytest.mark.parametrize("k", [K_MIN_FOR_EB - 1, K_MIN_FOR_EB])
+    def test_nonpositive_observation_count_rejected_before_method_selection(self, k: int) -> None:
+        clauses = [ClauseObservations(clause_id=f"c{i}", w=3.0, n=10) for i in range(k - 1)]
+        clauses.append(ClauseObservations(clause_id="unmeasured", w=0.0, n=0))
+
+        with pytest.raises(ValueError, match="unmeasured"):
+            fit_skill(clauses)
+
     def test_k_below_10_returns_unpooled(self, caplog: pytest.LogCaptureFixture) -> None:
         """K=3 → method='unpooled', provenance has reason='k_below_10'."""
         clauses = make_clauses([(5, 10), (6, 10), (7, 10)])

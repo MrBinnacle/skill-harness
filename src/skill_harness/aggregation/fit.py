@@ -187,8 +187,14 @@ def fit_skill(
       2. EB-MoM hierarchical when convergence succeeds.
       3. BH-FDR fallback when EB-MoM fails to converge.
 
+    Raises ValueError naming the clause when any clause has n <= 0.
+
     The function is deterministic (no random sampling — EB-MoM is closed-form).
     """
+    for clause in clauses:
+        if clause.n <= 0:
+            raise ValueError(f"Clause {clause.clause_id!r} must have n > 0")
+
     k = len(clauses)
 
     # -------------------------------------------------------------------
