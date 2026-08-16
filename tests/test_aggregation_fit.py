@@ -182,8 +182,9 @@ class TestFitSkillUnpooled:
 
     def test_k_exactly_10_uses_ebmom_or_fallback(self) -> None:
         """K=10 attempts EB-MoM (not UNPOOLED)."""
-        # Use rates with enough variance to converge
-        clauses = make_clauses([(i + 2, 10) for i in range(10)])  # rates 0.2..0.9+
+        # Use rates with enough variance to converge. w <= n on every clause:
+        # w > n is inadmissible (#232), so it cannot be the source of variance.
+        clauses = make_clauses([(i + 1, 10) for i in range(10)])  # rates 0.1 .. 1.0
         result = fit_skill(clauses)
         # Should NOT be unpooled (K=10 >= K_MIN_FOR_EB=10)
         assert result.aggregation_method != "unpooled"
@@ -196,11 +197,18 @@ class TestFitSkillUnpooled:
 
 class TestFitSkillEbmom:
     def _make_k10_clauses_with_variance(self) -> list[ClauseObservations]:
-        """K=10 clauses with meaningful rate variance."""
-        # rates vary from 0.3 to 0.9 in steps
-        pairs = [(3 + i, 10) for i in range(10)]  # rates: 0.3, 0.4, ..., 0.9, 1.0
-        # Clip last to avoid rate=1.0 (degenerate); use (8,10) twice
-        pairs[-1] = (8, 10)
+        """K=10 clauses with meaningful rate variance.
+
+        Every clause satisfies w <= n: ``(3 + i, 10)`` over ``range(10)`` used to
+        run to (11, 10) and (12, 10), i.e. rates 1.1 and 1.2. Those are not
+        observations (#232) and the shrunken fit answered them with a negative
+        Beta parameter, posterior_mean 1.025 and a nan credible interval, which
+        every assertion in this class was green on.
+        """
+        # rates 0.3 .. 0.9, then padded to the K=10 EB floor at 0.8 — no rate
+        # above 1.0, and no degenerate rate == 1.0.
+        pairs: list[tuple[float, int]] = [(3.0 + i, 10) for i in range(7)]
+        pairs += [(8.0, 10)] * 3
         return make_clauses(pairs)
 
     def test_ebmom_method_returned(self) -> None:
