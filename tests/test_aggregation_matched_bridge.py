@@ -228,6 +228,19 @@ def test_result_ids_alone_reproduce_the_four_cell_table_and_decision(
 
 
 def test_bridge_has_one_public_entry_point_with_only_registered_inputs() -> None:
+    """Pin the entry point the bridge DEFINES, not how it spells its imports.
+
+    The set is scoped by ``__module__`` on purpose. A namespace query alone
+    (``vars(bridge)`` filtered on the leading underscore) also matches every
+    function the module imported — ``matched_evidence``, ``effect_from_matched_gate2``,
+    ``matched_gate2_verdict``, ``dataclass`` — none of which is an entry point the
+    bridge exposes; Python has no module-private import. Under that query the
+    criterion is satisfiable by renaming the imports to ``_matched_evidence`` and
+    friends, which changes no interface and was how this assertion was first made
+    to pass. Scoping to functions defined here cannot be satisfied that way: it
+    goes red when the module grows a second public function and stays green
+    however the imports are spelled.
+    """
     import skill_harness.aggregation.matched_bridge as bridge
 
     assert list(inspect.signature(aggregate_matched_gate2).parameters) == [
@@ -235,10 +248,13 @@ def test_bridge_has_one_public_entry_point_with_only_registered_inputs() -> None
         "manifest",
         "design",
     ]
-    public_callables = {
+    defined_public_callables = {
         name
         for name, value in vars(bridge).items()
-        if not name.startswith("_") and inspect.isfunction(value)
+        if not name.startswith("_")
+        and inspect.isfunction(value)
+        and value.__module__ == bridge.__name__
     }
-    assert public_callables == {"aggregate_matched_gate2"}
-    assert not hasattr(bridge, "pair_evidence")
+    assert defined_public_callables == {"aggregate_matched_gate2"}
+    # The seam callers reach through the package is the seam these tests drive.
+    assert bridge.aggregate_matched_gate2 is aggregate_matched_gate2
