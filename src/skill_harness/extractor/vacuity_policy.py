@@ -73,6 +73,10 @@ class BareKindPrecisionRenderError(ValueError):
     """Raised when a renderer would emit aggregate kind-precision without class split."""
 
 
+class KindPrecisionClaimError(ValueError):
+    """Raised when kind-precision figures do not match one citable receipt."""
+
+
 class RecallRenderError(ValueError):
     """Raised when a recall claim is not supported by its calibration receipt."""
 
@@ -124,6 +128,56 @@ class VacuityFlagCalibrationReceipt:
 
     def matches_instrument(self, instrument: ExtractorInstrument) -> bool:
         return self.instrument().same_generation_as(instrument)
+
+
+@dataclass(frozen=True, slots=True)
+class KindPrecisionClaim:
+    """A coherent kind-precision citation validated against the citable registry."""
+
+    receipt_id: str
+    extractor_model: str
+    system_prompt_sha256: str
+    tool_schema_sha256: str
+    aggregate: float
+    not_a_directive_correct: int
+    not_a_directive_n: int
+    weak_directive_correct: int
+    weak_directive_n: int
+
+    def __post_init__(self) -> None:
+        matches = [receipt for receipt in load_citable_receipts() if self._matches(receipt)]
+        if len(matches) != 1:
+            raise KindPrecisionClaimError(
+                "kind-precision claim must exactly match one citable receipt"
+            )
+
+    @classmethod
+    def from_receipt(cls, receipt: VacuityFlagCalibrationReceipt) -> KindPrecisionClaim:
+        """Construct a claim from a receipt; registry coherence is still enforced."""
+        return cls(
+            receipt_id=receipt.receipt_id,
+            extractor_model=receipt.extractor_model,
+            system_prompt_sha256=receipt.system_prompt_sha256,
+            tool_schema_sha256=receipt.tool_schema_sha256,
+            aggregate=receipt.kind_precision_aggregate,
+            not_a_directive_correct=receipt.kind_precision_not_a_directive_correct,
+            not_a_directive_n=receipt.kind_precision_not_a_directive_n,
+            weak_directive_correct=receipt.kind_precision_weak_directive_correct,
+            weak_directive_n=receipt.kind_precision_weak_directive_n,
+        )
+
+    def _matches(self, receipt: VacuityFlagCalibrationReceipt) -> bool:
+        return (
+            self.receipt_id == receipt.receipt_id
+            and self.extractor_model == receipt.extractor_model
+            and self.system_prompt_sha256 == receipt.system_prompt_sha256
+            and self.tool_schema_sha256 == receipt.tool_schema_sha256
+            and self.aggregate == receipt.kind_precision_aggregate
+            and self.not_a_directive_correct == receipt.kind_precision_not_a_directive_correct
+            and self.not_a_directive_n == receipt.kind_precision_not_a_directive_n
+            and self.weak_directive_correct == receipt.kind_precision_weak_directive_correct
+            and self.weak_directive_n == receipt.kind_precision_weak_directive_n
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,7 +8,9 @@ renderers cannot emit bare kind-precision or claim recall measured.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -17,6 +19,8 @@ from skill_harness.extractor.vacuity_policy import (
     AdjudicationRecord,
     AmbiguousCalibrationReceiptError,
     BareKindPrecisionRenderError,
+    KindPrecisionClaim,
+    KindPrecisionClaimError,
     MixedExtractorGenerationsError,
     adjudication_identity_key,
     assert_kind_precision_render_safe,
@@ -465,6 +469,43 @@ def test_policy_derivation_is_pure_and_deterministic() -> None:
     assert a.flag_evidence_status == b.flag_evidence_status
     assert a.kind_evidence_status == b.kind_evidence_status
     assert a.clause_context_sha256 == b.clause_context_sha256
+
+
+@pytest.mark.parametrize(
+    ("receipt_index", "changes"),
+    [
+        (0, {"kind_precision_aggregate": 0.99}),
+        (1, {"kind_precision_aggregate": 0.9667001}),
+        (0, {"receipt_id": "invented-receipt"}),
+        (0, {"extractor_model": "invented-model"}),
+        (0, {"system_prompt_sha256": "1" * 64}),
+        (0, {"tool_schema_sha256": "2" * 64}),
+        (0, {"kind_precision_not_a_directive_correct": 76}),
+        (0, {"kind_precision_not_a_directive_n": 79}),
+        (0, {"kind_precision_weak_directive_correct": 5}),
+        (0, {"kind_precision_weak_directive_n": 21}),
+    ],
+)
+def test_kind_precision_claim_refuses_invented_and_near_miss_figures(
+    receipt_index: int, changes: dict[str, Any]
+) -> None:
+    receipt = replace(load_citable_receipts()[receipt_index], **changes)
+    with pytest.raises(KindPrecisionClaimError, match="citable receipt"):
+        KindPrecisionClaim.from_receipt(receipt)
+
+
+def test_kind_precision_claim_validation_fails_against_a_poisoned_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The claim must consult the registry, not trust a receipt-shaped source."""
+    import skill_harness.extractor.vacuity_policy as policy
+
+    receipt = load_citable_receipts()[0]
+    poisoned = replace(receipt, kind_precision_aggregate=0.99)
+    monkeypatch.setattr(policy, "load_citable_receipts", lambda: (poisoned,))
+
+    with pytest.raises(KindPrecisionClaimError, match="citable receipt"):
+        KindPrecisionClaim.from_receipt(receipt)
 
 
 # ---------------------------------------------------------------------------
