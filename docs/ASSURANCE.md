@@ -59,8 +59,9 @@ not the absence of defects.
 - There is no recall claim on the vacuity flag in this close-out: recall is
   UNMEASURED by the assurance report set. The assurance
   report set named by this ticket contains no recall run, and flag precision does
-  not establish recall. Later calibration records outside `docs/assurance/` do
-  not change the scope of this close-out.
+  not establish recall. Calibration records outside `docs/assurance/` — including
+  the #189 adjudication receipt, in the tree since 2026-08-09 — are out of this
+  close-out's scope rather than later than it.
 - Extraction repeat-instability stands: identical runs returned 29/33/34 clauses.
   This is a documented instrument property, not a bug. Clause position is not a
   stable identity (`README.md`, #152).
@@ -96,8 +97,8 @@ ratification.
 | Candidate | Invariant | Sites to compare | Why it may be worth pinning |
 | --- | --- | --- | --- |
 | AC-1 | The production confidence sequence method remains `predictable_plugin_betting_cs_v1`, and the public report leads with `sequential_confidence_sequence_95` rather than the legacy posterior interval. | `aggregation/confidence_sequence.py`, report schema, `calibration-report.md` | Prevents a calibrated interval from being silently replaced or demoted. |
-| AC-2 | A/A and calibration harnesses continue to use the production `N_MIN=8`, `N_INC=4`, `N_MAX=40` schedule and 0.60/0.95 decision constants. | `ablation/stopping.py`, `test_aggregation_aa.py`, `test_aggregation_calibration.py`, `test_aggregation_cs_calibration.py` | Prevents the assurance harness from measuring a different procedure. DC-1 and DC-2 cover production and selected prose, but not these harness sites. |
-| AC-3 | Public vacuity-flag precision always carries its instrument generation and kind class split; detector sensitivity is UNMEASURED unless quoted with both registered intervals. | README, calibration registry, public-copy guard | Prevents a flag-precision result from becoming a detector-wide validity claim. |
+| AC-2 | A/A and calibration harnesses continue to use the production `N_MIN=8`, `N_INC=4`, `N_MAX=40` schedule and 0.60/0.95 decision constants. | `ablation/stopping.py`, `test_aggregation_aa.py`, `test_aggregation_calibration.py`, `test_aggregation_cs_calibration.py` | Prevents the assurance harness from exercising a different procedure. DC-1 and DC-2 cover production and selected prose, but not these harness sites. |
+| AC-3 | Public vacuity-flag precision always carries its instrument generation and kind class split; detector recall is UNMEASURED unless quoted with both registered intervals and their sample and skill denominators. | README, calibration registry, public-copy guard | Prevents a flag-precision result from becoming a detector-wide validity claim. |
 | AC-4 | Every workflow keeps exact action SHA pins, a workflow-level read-only permission baseline, and no `pull_request_target`. | `.github/workflows/*.yml` and `.yaml` | Extends the one-date workflow audit into a standing configuration contract. |
 
 ## Bottom line
