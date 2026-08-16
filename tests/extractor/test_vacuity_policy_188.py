@@ -27,6 +27,7 @@ from skill_harness.extractor.vacuity_policy import (
     exclusion_label_for_flag,
     format_kind_precision_for_render,
     load_calibration_receipt,
+    load_citable_receipts,
     load_default_receipts,
     match_calibration_receipt,
     require_single_generation,
@@ -113,6 +114,21 @@ def test_receipt_round_trip_preserves_optional_supersedes_note() -> None:
         gen_2.supersedes_note
         == json.loads(_ADJ_RECEIPT.read_text(encoding="utf-8"))["supersedes_note"]
     )
+
+
+def test_citable_registry_loads_both_generations_without_expanding_operational_pool() -> None:
+    citable = load_citable_receipts()
+    assert [receipt.receipt_id for receipt in citable] == [
+        "vacuity-flag-calibration-2026-08-08",
+        "vacuity-flag-adjudication-2026-08-09",
+    ]
+    assert citable[0].supersedes_note is None
+    assert citable[1].supersedes_note is not None
+
+    operational = load_default_receipts()
+    assert [receipt.receipt_id for receipt in operational] == [
+        "vacuity-flag-calibration-2026-08-08"
+    ]
 
 
 def test_receipt_missing_recall_is_refused_not_defaulted(tmp_path: Path) -> None:
