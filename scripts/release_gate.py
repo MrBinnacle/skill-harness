@@ -164,6 +164,32 @@ def gate_assurance_issues_closed(version: str, errors: list[str]) -> None:
             errors.append(f"G7: assurance issue #{issue} is {state or 'missing a state'}")
 
 
+def gate_assurance_lane_green(version: str, errors: list[str]) -> None:
+    """G8: the 0.3 minor gate requires a recorded green assurance lane run."""
+    if version.split(".")[:2] != ["0", "3"]:
+        return
+
+    api_url = os.environ.get(
+        "RELEASE_GATE_GITHUB_API_URL",
+        "https://api.github.com/repos/MrBinnacle/skill-harness",
+    )
+    request = urllib.request.Request(  # noqa: S310 - fixed API origin or test localhost
+        f"{api_url}/actions/workflows/assurance.yml/runs",
+        headers={"Accept": "application/vnd.github+json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
+            runs = json.load(response).get("workflow_runs", [])
+    except (OSError, urllib.error.HTTPError, ValueError) as exc:
+        errors.append(f"G8: could not read assurance workflow runs: {exc}")
+        return
+    green = any(
+        run.get("status") == "completed" and run.get("conclusion") == "success" for run in runs
+    )
+    if not green:
+        errors.append("G8: no successful assurance.yml workflow run recorded")
+
+
 def main() -> int:
     errors: list[str] = []
     tree_version = gate_versions_lockstep(errors)
@@ -174,6 +200,7 @@ def main() -> int:
     gate_workflows_sha_pinned(errors)
     gate_tag_matches(version, errors)
     gate_assurance_issues_closed(version, errors)
+    gate_assurance_lane_green(version, errors)
 
     if errors:
         print(f"RELEASE GATE: BLOCKED — {len(errors)} stale surface(s) at version {version}:")
