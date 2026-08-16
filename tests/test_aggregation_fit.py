@@ -131,6 +131,11 @@ class TestFitSkillObservationCountPrecondition:
         # "naming the bad clause" — not "naming some clause".
         assert "c0" not in str(exc_info.value), str(exc_info.value)
 
+    def test_fit_skill_rejects_w_gt_n(self) -> None:
+        clauses = [ClauseObservations(clause_id="bad", w=5.0, n=2)]
+        with pytest.raises(ValueError, match="w"):
+            fit_skill(clauses)
+
     def test_precondition_is_documented_in_the_public_docstring(self) -> None:
         """The docstring is where a caller reads the contract (``help``/``__doc__``).
 
