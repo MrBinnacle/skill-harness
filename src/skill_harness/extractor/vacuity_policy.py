@@ -15,7 +15,7 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final, Literal
 
@@ -132,7 +132,12 @@ class VacuityFlagCalibrationReceipt:
 
 @dataclass(frozen=True, slots=True)
 class KindPrecisionClaim:
-    """A coherent kind-precision citation validated against the citable registry."""
+    """A coherent kind-precision citation validated against the citable registry.
+
+    ``from_receipt`` is the intended construction path. Direct construction is
+    also valid when every copied value matches one registered receipt exactly;
+    validation establishes coherence rather than object custody.
+    """
 
     receipt_id: str
     extractor_model: str
@@ -143,6 +148,10 @@ class KindPrecisionClaim:
     not_a_directive_n: int
     weak_directive_correct: int
     weak_directive_n: int
+    source_receipt: VacuityFlagCalibrationReceipt = field(init=False, repr=False)
+    _provided_receipt: VacuityFlagCalibrationReceipt | None = field(
+        default=None, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         matches = [receipt for receipt in load_citable_receipts() if self._matches(receipt)]
@@ -150,6 +159,14 @@ class KindPrecisionClaim:
             raise KindPrecisionClaimError(
                 "kind-precision claim must exactly match one citable receipt"
             )
+        source = matches[0]
+        if self._provided_receipt is not None:
+            if self._provided_receipt != source:
+                raise KindPrecisionClaimError(
+                    "kind-precision source receipt must match the citable receipt"
+                )
+            source = self._provided_receipt
+        object.__setattr__(self, "source_receipt", source)
 
     @classmethod
     def from_receipt(cls, receipt: VacuityFlagCalibrationReceipt) -> KindPrecisionClaim:
@@ -164,6 +181,7 @@ class KindPrecisionClaim:
             not_a_directive_n=receipt.kind_precision_not_a_directive_n,
             weak_directive_correct=receipt.kind_precision_weak_directive_correct,
             weak_directive_n=receipt.kind_precision_weak_directive_n,
+            _provided_receipt=receipt,
         )
 
     def _matches(self, receipt: VacuityFlagCalibrationReceipt) -> bool:
