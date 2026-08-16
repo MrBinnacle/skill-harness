@@ -6,6 +6,7 @@ Coverage:
 - Convergence failure: sample_var < 1e-6 → BH-FDR fallback
 - Convergence failure: alpha_hat <= 0 → BH-FDR fallback
 - Input precondition: a clause with n <= 0 is rejected on BOTH K paths (#231)
+- Input precondition: a clause with w outside [0, n] is rejected on BOTH K paths (#232)
 - UNPOOLED fallback: K < 10 → logged warning + unpooled posteriors
 - Pass/fail thresholds correct in posteriors
 - BH-FDR: correct clause IDs pass/fail after adjustment
@@ -131,11 +132,6 @@ class TestFitSkillObservationCountPrecondition:
         # "naming the bad clause" — not "naming some clause".
         assert "c0" not in str(exc_info.value), str(exc_info.value)
 
-    def test_fit_skill_rejects_w_gt_n(self) -> None:
-        clauses = [ClauseObservations(clause_id="bad", w=5.0, n=2)]
-        with pytest.raises(ValueError, match="w"):
-            fit_skill(clauses)
-
     def test_precondition_is_documented_in_the_public_docstring(self) -> None:
         """The docstring is where a caller reads the contract (``help``/``__doc__``).
 
@@ -145,6 +141,64 @@ class TestFitSkillObservationCountPrecondition:
         doc = fit_skill.__doc__ or ""
         assert "ValueError" in doc, doc
         assert any(phrase in doc for phrase in ("n <= 0", "n > 0", "n >= 1")), doc
+
+
+# ---------------------------------------------------------------------------
+# fit_skill: win-weight precondition — must not depend on K (#232)
+# ---------------------------------------------------------------------------
+
+
+class TestFitSkillWinWeightPrecondition:
+    """#232: w is a win-weight sum over n observations, so w > n is not data.
+
+    Unguarded it is silent on BOTH K paths, and differently silent, which is why
+    this sits in its own K-neutral section (the #231 lesson):
+      - K < 10: unpooled Beta(1 + w, 1 + n - w) takes a non-positive second
+        parameter, so scipy answers nan for the interval and the pass
+        probability while posterior_mean walks above 1.0;
+      - K >= 10: the empirical rate w / n exceeds 1, so the hyperprior is fit to
+        a mean outside the support and every clause's shrinkage moves with it.
+    Neither raises, and a nan pass probability reads as "not passing" rather
+    than as "inadmissible input" downstream.
+    """
+
+    @pytest.mark.parametrize("k", [K_MIN_FOR_EB - 1, K_MIN_FOR_EB])
+    def test_wins_above_observations_rejected_before_method_selection(self, k: int) -> None:
+        clauses = [ClauseObservations(clause_id=f"c{i}", w=3.0, n=10) for i in range(k - 1)]
+        clauses.append(ClauseObservations(clause_id="overcounted", w=11.0, n=10))
+
+        with pytest.raises(ValueError, match="overcounted") as exc_info:
+            fit_skill(clauses)
+        message = str(exc_info.value)
+        # "naming the bad clause" — not "naming some clause".
+        assert "c0" not in message, message
+        # Names the violated bound, so the caller is not sent looking at n.
+        assert "w" in message, message
+
+    def test_negative_win_weight_rejected(self) -> None:
+        """The lower bound too: w sums weights in {0, 0.5, 1}, so w < 0 is not data.
+
+        Left unguarded it is the same failure mode from the other side —
+        Beta(1 + w, ...) takes a non-positive FIRST parameter.
+        """
+        with pytest.raises(ValueError, match="undercounted"):
+            fit_skill([ClauseObservations(clause_id="undercounted", w=-1.0, n=10)])
+
+    def test_every_observation_a_win_is_admissible(self) -> None:
+        """w == n is the boundary that must NOT raise: every observation a win.
+
+        Guards the fix against over-rejection (``w < n``) — a real skill that
+        wins every comparison must still be fittable.
+        """
+        result = fit_skill([ClauseObservations(clause_id="perfect", w=10.0, n=10)])
+        assert result.posteriors[0].w == 10.0
+        assert result.posteriors[0].posterior_beta > 0.0
+
+    def test_precondition_is_documented_in_the_public_docstring(self) -> None:
+        """#232 mirrors #231 AC 2: the contract a caller reads must state it."""
+        doc = fit_skill.__doc__ or ""
+        assert "ValueError" in doc, doc
+        assert "[0, n]" in doc, doc
 
 
 # ---------------------------------------------------------------------------
