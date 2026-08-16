@@ -1,5 +1,7 @@
 """External contract checks for the issue #174 assurance close-out."""
 
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,3 +47,29 @@ def test_closeout_proposes_drift_rows_without_changing_configuration() -> None:
     assert "PROPOSED, NOT CONFIGURED" in text
     assert "AC-1" in text and "AC-4" in text
     assert "AC-1" not in drift_config and "AC-4" not in drift_config
+
+
+def test_closeout_omits_operator_banned_vocabulary() -> None:
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/check_assurance_copy.py"), str(CLOSEOUT)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout
+
+
+def test_banned_vocabulary_check_rejects_poisoned_document(tmp_path: Path) -> None:
+    poisoned = tmp_path / "ASSURANCE.md"
+    poisoned.write_text("This result earned confidence.\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/check_assurance_copy.py"), str(poisoned)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "banned assurance vocabulary" in result.stdout
