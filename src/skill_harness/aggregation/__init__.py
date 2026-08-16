@@ -18,7 +18,11 @@ from skill_harness.aggregation.errors import (
     MalformedRunConfig,
     PreconditionError,
 )
-from skill_harness.aggregation.matched_bridge import MatchedGate2Result, aggregate_matched_gate2
+from skill_harness.aggregation.matched_bridge import (
+    MatchedCellObservationIds,
+    MatchedGate2Result,
+    aggregate_matched_gate2,
+)
 from skill_harness.aggregation.report import (
     ClauseReport,
     ContributionSummary,
@@ -35,6 +39,7 @@ __all__ = [
     "ContributionSummary",
     "ConvergenceFailure",
     "MalformedRunConfig",
+    "MatchedCellObservationIds",
     "MatchedGate2Result",
     "PreconditionError",
     "SkillReport",
