@@ -26,7 +26,7 @@ PRIMARY verdict-bearing binary = "(a) vs not-(a)" (`primary_pass`): True for
 b/c/d, False for a. The 4-way category is the SECONDARY descriptive DV; an
 (a)->(b) shift is reported there, never as a primary win.
 
-K9 admissibility: an epoch whose transcript shows the evidence file was never
+K9 evidence admissibility: an epoch whose transcript shows the evidence file was never
 opened is INADMISSIBLE — excluded from scoring entirely (category None), not
 binned as (b).
 

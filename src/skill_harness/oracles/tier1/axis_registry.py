@@ -72,7 +72,7 @@ TIER1_AXES: Final[tuple[Tier1Axis, ...]] = (
 ``end_state_categorical.py`` is deliberately absent, and the absence is a shape
 mismatch rather than an oversight: ``score_end_state`` is not a ``MetricFn``. It
 takes an ``EpochEndState`` of sandbox facts and returns a 4-way category plus an
-admissibility flag, so it cannot enter ablation's Full-vs-Ablated text-delta
+evidence-admissibility flag, so it cannot enter ablation's Full-vs-Ablated text-delta
 path. Listing it would advertise an axis to the extractor with nothing behind it
 to score.
 """

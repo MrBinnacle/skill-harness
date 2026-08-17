@@ -33,7 +33,7 @@ Also in this package, deliberately NOT a registered axis:
   end_state_categorical.py — Categorical end-state scorer for instruction-
       conflict screens (DIF K5/K9). Not a ``(text) -> float`` metric: it
       consumes an ``EpochEndState`` of mechanical sandbox facts and returns a
-      4-way category plus an admissibility flag, so it cannot enter ablation's
+      4-way category plus an evidence-admissibility flag, so it cannot enter ablation's
       Full-vs-Ablated text-delta path. See ``axis_registry.TIER1_AXES``.
 
 ``axis_registry.py`` is not a revival of the deleted ``registry.py`` described

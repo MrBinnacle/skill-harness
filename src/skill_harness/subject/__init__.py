@@ -2,7 +2,7 @@
 
 skill-harness does not run agents itself; it delegates the agentic subject to
 Inspect (`inspect_ai`) + `inspect_swe.claude_code()` and keeps what it is
-actually for: pairing, admissibility, and evidence. Install the subject layer
+actually for: pairing, evidence admissibility, and evidence. Install the subject layer
 with the optional extra:
 
     pip install "skill-harness[inspect]"

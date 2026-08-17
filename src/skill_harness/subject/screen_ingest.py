@@ -13,7 +13,7 @@ This module is the screen sibling of ``ingest.py``:
 - Parsing reuses ``parse_eval_log`` (needs the optional ``[inspect]`` extra) —
   a screen log IS a Null-condition Inspect log.
 - Writing (``write_screen_evidence``) is pure stdlib + the storage layer.
-- Admissibility is passed IN, not inferred. The outcome oracle scores INCORRECT
+- Evidence admissibility is passed IN, not inferred. The outcome oracle scores INCORRECT
   for ANY non-zero exit and stores no field distinguishing "subject failed" from
   "oracle harness crashed" (e.g. exit=1 with no structured ORACLE-PASS). That
   distinction was a documented human judgment (see the batch-1 backfill

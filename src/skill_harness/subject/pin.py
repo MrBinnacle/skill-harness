@@ -1,4 +1,4 @@
-"""Harness pin — the subject-harness configuration as an admissibility field.
+"""Harness pin — the subject-harness configuration as an evidence-admissibility field.
 
 Published agentic-benchmark experience puts harness-induced variance at 10-20
 percentage points on identical model weights — larger than most skill effects.

@@ -763,7 +763,7 @@ class TaskFrontierObservationWrite(BaseModel):
     row is refused by whichever fires first.
 
     Refusal over coercion (the `two_arm_gate` / `oc` convention): an unknown
-    phase, arm or admissibility state raises rather than being normalised.
+    phase, arm or evidence-admissibility state raises rather than being normalised.
     """
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)

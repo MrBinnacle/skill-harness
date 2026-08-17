@@ -16,7 +16,7 @@ Every backfilled screen ceilings (p0 = 1) → CUT(subsumed); the store-backed
 result matches the pre-reg, and the pipeline is the durable asset — it is the
 path by which a FUTURE real-workload screen with p0 < 1 becomes auditable.
 
-ADMISSIBILITY is the one human judgment, localized here and cited. The outcome
+EVIDENCE ADMISSIBILITY is the one human judgment, localized here and cited. The outcome
 oracle scores INCORRECT for ANY non-zero exit and stores no field distinguishing
 "subject failed" from "oracle-harness crashed", so the void decisions the
 operator made in the pre-reg cannot be re-derived mechanically — they are
@@ -36,7 +36,7 @@ FOUR partial logs over the pre-reg's credit-exhaustion incident (2 admissible
 epochs in one log, a third in a later log, ``None``-scored voided epochs in
 between). That requires per-trial cross-log assembly, a harder capability than
 this log-level manifest supports; the result is a known ceiling (CUT). Tracked
-for a follow-up; do NOT hand-assemble it into a single admissible screen here.
+for a follow-up; do NOT hand-assemble it into a single evidence-admissible screen here.
 """
 
 from __future__ import annotations
@@ -58,9 +58,10 @@ from skill_harness.subject.screen_ingest import (
 
 @dataclass(frozen=True)
 class ScreenManifestEntry:
-    """One curated backfill decision: a source log + its admissibility ruling.
+    """One curated backfill decision: a source log + its evidence-admissibility ruling.
 
-    ``rel_path`` is relative to the screens root (the local, gitignored
+    The evidence-state field records the evidence-admissibility ruling. ``rel_path`` is
+    relative to the screens root (the local, gitignored
     ``.private/microrun`` tree). ``expected_skill`` / ``expected_pass`` are
     self-checks: the apply step surfaces any disagreement with the stored
     evidence rather than trusting the manifest blindly.
