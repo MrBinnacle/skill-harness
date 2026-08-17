@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import sqlite3
 from dataclasses import FrozenInstanceError
 from typing import Any
 
@@ -14,8 +15,16 @@ from skill_harness.aggregation import binding
 from skill_harness.aggregation.binding import (
     BINDING_ALGO_VERSION,
     BindingRecord,
+    BindingVerificationDivergence,
+    BindingVerificationMatch,
+    BindingVerificationRefusal,
+    BindingVerificationRefusalReason,
+    DivergenceReason,
+    UnverifiableAxis,
     compile_binding,
+    verify_binding,
 )
+from skill_harness.aggregation.matched_bridge import MatchedGate2Decision, aggregate_matched_gate2
 from skill_harness.oc import FrontierRow, Gate2Design, Gate2NullErrorBound, MMESpec
 from skill_harness.semantics import (
     HAND_INVOKED_NULL_ARM_SEMANTIC,
@@ -24,7 +33,16 @@ from skill_harness.semantics import (
     RegisteredScope,
 )
 from skill_harness.subject import HarnessPin
-from skill_harness.task_frontier import FrozenHashes, load_manifest
+from skill_harness.task_frontier import (
+    Arm,
+    FrozenHashes,
+    Observation,
+    Phase,
+    StoredObservation,
+    admit,
+    load_manifest,
+    matched_evidence,
+)
 
 
 def _compile_minimal() -> BindingRecord:
@@ -82,6 +100,204 @@ def _compile_minimal() -> BindingRecord:
             env={"A": "first"},
             disallowed_tools=("WebSearch",),
         ),
+    )
+
+
+def _stored(
+    observation_id: str,
+    *,
+    task_family_id: str = "family",
+    task_family_version: str = "v1",
+    phase: Phase = Phase.MATCHED,
+    generator_fingerprint: str = "g",
+    oracle_fingerprint: str = "o",
+    admissibility_state: str = "admissible",
+    inadmissibility_reason: str | None = None,
+) -> StoredObservation:
+    return StoredObservation(
+        observation_id=observation_id,
+        task_family_id=task_family_id,
+        task_family_version=task_family_version,
+        semantic_lineage_id="lineage",
+        phase=phase,
+        instance_id="instance",
+        arm=Arm.FULL,
+        passed=True,
+        generator_fingerprint=generator_fingerprint,
+        oracle_fingerprint=oracle_fingerprint,
+        admissibility_state=admissibility_state,
+        inadmissibility_reason=inadmissibility_reason,
+        observed_at="2026-08-17T12:00:00Z",
+        ingested_at="2026-08-17T12:00:01Z",
+    )
+
+
+def test_verify_binding_ledgers_every_evidence_divergence_without_raising() -> None:
+    record = _compile_minimal()
+    evidence = (
+        _stored("obs-family", task_family_id="other-family"),
+        _stored("obs-version", task_family_version="v2"),
+        _stored("obs-oracle", oracle_fingerprint="other-oracle"),
+        _stored("obs-generator", generator_fingerprint="other-generator"),
+        _stored("obs-phase", phase=Phase.CONFIRMATION),
+        _stored(
+            "obs-inadmissible",
+            admissibility_state="inadmissible",
+            inadmissibility_reason="fixture-refused-at-write-time",
+        ),
+    )
+
+    result = verify_binding(record, evidence)
+
+    assert isinstance(result, BindingVerificationDivergence)
+    assert result.binding_digest == record.digest
+    assert result.task_family_id == record.task_family_id
+    assert result.task_family_version == record.task_family_version
+    assert result.observation_ids == tuple(sorted(item.observation_id for item in evidence))
+    assert tuple(entry.reason for entry in result.ledger.entries[:6]) == (
+        DivergenceReason.TASK_FAMILY_MISMATCH,
+        DivergenceReason.GENERATOR_FINGERPRINT_DRIFT,
+        DivergenceReason.INADMISSIBLE_EVIDENCE,
+        DivergenceReason.ORACLE_FINGERPRINT_DRIFT,
+        DivergenceReason.PHASE_VIOLATION,
+        DivergenceReason.TASK_FAMILY_VERSION_MISMATCH,
+    )
+    assert tuple(entry.observation_ids for entry in result.ledger.entries[:6]) == (
+        ("obs-family",),
+        ("obs-generator",),
+        ("obs-inadmissible",),
+        ("obs-oracle",),
+        ("obs-phase",),
+        ("obs-version",),
+    )
+    assert result.ledger.entries[2].stored_reason == "fixture-refused-at-write-time"
+    assert {
+        entry.axis
+        for entry in result.ledger.entries
+        if entry.reason is DivergenceReason.UNVERIFIABLE_AXIS
+    } == set(UnverifiableAxis)
+    assert set(UnverifiableAxis) == {
+        UnverifiableAxis.ESTIMAND,
+        UnverifiableAxis.SKILL_ID,
+        UnverifiableAxis.DESIGN_IDENTITY,
+        UnverifiableAxis.DELIVERY_MECHANISM,
+        UnverifiableAxis.ADMISSIBILITY_POLICY,
+    }
+    assert all(
+        isinstance(value, tuple) for value in (result.observation_ids, result.ledger.entries)
+    )
+
+
+def test_verify_binding_returns_typed_whole_verification_refusals() -> None:
+    record = _compile_minimal()
+
+    malformed = verify_binding(object(), (_stored("obs"),))  # type: ignore[arg-type]
+    empty = verify_binding(record, ())
+
+    assert isinstance(malformed, BindingVerificationRefusal)
+    assert malformed.refusal is BindingVerificationRefusalReason.MALFORMED_BINDING
+    assert malformed.binding_digest == ""
+    assert malformed.task_family_id == ""
+    assert malformed.task_family_version == ""
+    assert malformed.observation_ids == ()
+    assert malformed.ledger.entries == ()
+    assert isinstance(empty, BindingVerificationRefusal)
+    assert empty.refusal is BindingVerificationRefusalReason.EMPTY_EVIDENCE
+    assert empty.binding_digest == record.digest
+    assert empty.task_family_id == record.task_family_id
+    assert empty.task_family_version == record.task_family_version
+    assert empty.observation_ids == ()
+    assert empty.ledger.entries == ()
+
+
+def test_verify_binding_is_deterministic_for_match_and_divergence() -> None:
+    record = _compile_minimal()
+    matching = (_stored("obs-z"), _stored("obs-a"))
+    diverging = (
+        _stored("obs-z", oracle_fingerprint="other-oracle"),
+        _stored("obs-a", task_family_version="v2"),
+    )
+
+    match_forward = verify_binding(record, matching)
+    match_reverse = verify_binding(record, tuple(reversed(matching)))
+    divergence_forward = verify_binding(record, diverging)
+    divergence_reverse = verify_binding(record, tuple(reversed(diverging)))
+
+    assert isinstance(match_forward, BindingVerificationMatch)
+    assert match_forward == match_reverse
+    assert match_forward.observation_ids == ("obs-a", "obs-z")
+    assert tuple(entry.axis for entry in match_forward.ledger.entries) == tuple(
+        sorted(UnverifiableAxis, key=lambda axis: axis.value)
+    )
+    assert isinstance(divergence_forward, BindingVerificationDivergence)
+    assert divergence_forward == divergence_reverse
+    assert divergence_forward.observation_ids == ("obs-a", "obs-z")
+    assert tuple(entry.observation_ids for entry in divergence_forward.ledger.entries[:2]) == (
+        ("obs-a",),
+        ("obs-z",),
+    )
+
+
+def test_oracle_drift_is_invisible_to_e1_but_refused_by_binding(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = load_manifest(
+        {
+            "task_family_id": "family",
+            "task_family_version": "v1",
+            "frozen_hashes": {
+                "generator": "g",
+                "fixture": "f",
+                "oracle": "stored-oracle",
+                "harness": "h",
+                "code": "c",
+            },
+            "phase_partition": {
+                "calibration": [],
+                "confirmation": [],
+                "matched": ["lineage"],
+            },
+            "confirmation_attempt_budget": 0,
+        }
+    )
+    for arm, passed in ((Arm.FULL, True), (Arm.NULL, False)):
+        admission = admit(
+            evidence_db,
+            manifest,
+            Observation(
+                observation_id=f"obs-{arm.value}",
+                semantic_lineage_id="lineage",
+                instance_id="instance",
+                arm=arm,
+                passed=passed,
+                generator_fingerprint="g",
+                oracle_fingerprint="stored-oracle",
+                observed_at="2026-08-17T12:00:00Z",
+            ),
+        )
+        assert admission.admissible
+    binding_record = _compile_minimal()
+    evidence = matched_evidence(evidence_db, manifest)
+
+    bridge_design = Gate2Design(
+        n_pairs=1,
+        gamma=binding_record.gate2_design.gamma,
+        mme=binding_record.gate2_design.mme,
+    )
+    bridge_result = aggregate_matched_gate2(evidence_db, manifest, bridge_design)
+    binding_result = verify_binding(binding_record, evidence)
+
+    assert isinstance(bridge_result, MatchedGate2Decision)
+    assert bridge_result.decision is not None
+    assert isinstance(binding_result, BindingVerificationDivergence)
+    oracle_entries = tuple(
+        entry
+        for entry in binding_result.ledger.entries
+        if entry.reason is DivergenceReason.ORACLE_FINGERPRINT_DRIFT
+    )
+    assert tuple(entry.observation_ids for entry in oracle_entries) == (
+        ("obs-full",),
+        ("obs-null",),
     )
 
 
@@ -314,7 +530,7 @@ def test_binding_canonical_recipe_is_versioned_and_byte_stable() -> None:
     assert first.registered_scope is scope or first.registered_scope == scope
 
 
-def test_binding_module_public_functions_are_compile_only() -> None:
+def test_binding_module_public_functions_are_compile_and_verify_only() -> None:
     """Pin entry points this module DEFINES, not how it spells its imports.
 
     A bare ``vars`` + leading-underscore filter also matches imported callables
@@ -331,7 +547,7 @@ def test_binding_module_public_functions_are_compile_only() -> None:
         and value.__module__ == binding.__name__
     }
 
-    assert defined_public_callables == {"compile_binding"}
+    assert defined_public_callables == {"compile_binding", "verify_binding"}
     assert list(inspect.signature(compile_binding).parameters) == [
         "scope",
         "manifest",
@@ -341,4 +557,7 @@ def test_binding_module_public_functions_are_compile_only() -> None:
         "harness_pin",
     ]
     for parameter in inspect.signature(compile_binding).parameters.values():
+        assert parameter.default is inspect.Parameter.empty
+    assert list(inspect.signature(verify_binding).parameters) == ["binding", "evidence"]
+    for parameter in inspect.signature(verify_binding).parameters.values():
         assert parameter.default is inspect.Parameter.empty

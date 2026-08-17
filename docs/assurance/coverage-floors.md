@@ -73,7 +73,7 @@ actually buys.
 | Module | Branches | Uncovered | Mutation #166 | Branch coverage | Floor |
 |--------|---------:|----------:|--------------:|----------------:|-------|
 | `src/skill_harness/aggregation/__init__.py` | 0 | 0 | not mutated | n/a | no branches |
-| `src/skill_harness/aggregation/binding.py` | 0 | 0 | absent | n/a | no branches |
+| `src/skill_harness/aggregation/binding.py` | 14 | 0 | absent | 100.0% | BELOW 80% |
 | `src/skill_harness/aggregation/confidence_sequence.py` | 54 | 17 | absent | 68.5% | BELOW 80% |
 | `src/skill_harness/aggregation/engine.py` | 90 | 9 | 67.9% | 90.0% | BELOW 80% |
 | `src/skill_harness/aggregation/errors.py` | 0 | 0 | 100% | n/a | no branches |
@@ -195,22 +195,17 @@ attached. Until that is settled the row reports 93.8% and names why the
 remainder is not reachable.
 
 `aggregation/binding.py` was not in the tree on 2026-08-12 either. It landed on
-2026-08-17 with #263, the E2 binding compiler: `compile_binding` assembles a
-frozen, canonical, hash-addressed `BindingRecord` from existing component
-objects. Its figures - **0 branches, 0 uncovered, n/a** - were measured on
-2026-08-17 with coverage.py 7.15.2 and the flags in "How to reproduce", over
-`tests/test_aggregation_binding.py`. That is a narrower selection than the CI
-cell, and for this module it is the same number by the matched_bridge argument:
-nothing else in `src/` or `tests/` references `compile_binding` (there is no
-re-export in `aggregation/__init__.py`), so no other test can reach it.
-Re-measure under the full selection once a second caller exists. The zero is
-structural, not thin testing: the module is declarations and straight-line
-canonical serialization with no conditional flow, the same class as the five
-census modules described under "What a zero in the Branches column means".
-Mutation reads `absent` because #166 predates the module; a 0-branch row is
-listed as `no branches` rather than flagged, per the census convention for that
-class. The census figures above remain the 2026-08-12 result and do not include
-this row.
+2026-08-17 with #263, the E2 binding compiler. #264 added `verify_binding`, which
+compares stored evidence with that pre-spend identity and returns every failed
+or unavailable check in a typed ledger. Its figures - **14 branches, 0
+uncovered, 100.0%** - were measured on 2026-08-17 with coverage.py 7.15.2 and the
+flags in "How to reproduce", under the full ordinary CI selection. The verifier
+accounts for all 14 branches. Tests exercise both whole-verification refusals,
+all six evidence divergence classes, the five unverifiable axes, and both result
+branches. Mutation reads `absent` because #166 predates the module. The attention
+rule therefore flags this row despite complete branch reach; coverage does not
+substitute for the missing mutation measurement. The census figures above remain
+the 2026-08-12 result and do not include this row.
 
 ## What a zero in the Branches column means
 
