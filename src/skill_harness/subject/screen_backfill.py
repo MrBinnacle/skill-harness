@@ -60,8 +60,7 @@ from skill_harness.subject.screen_ingest import (
 class ScreenManifestEntry:
     """One curated backfill decision: a source log + its evidence-admissibility ruling.
 
-    The evidence-state field records the evidence-admissibility ruling. ``rel_path`` is
-    relative to the screens root (the local, gitignored
+    ``rel_path`` is relative to the screens root (the local, gitignored
     ``.private/microrun`` tree). ``expected_skill`` / ``expected_pass`` are
     self-checks: the apply step surfaces any disagreement with the stored
     evidence rather than trusting the manifest blindly.
