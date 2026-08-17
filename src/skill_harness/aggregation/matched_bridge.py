@@ -205,15 +205,17 @@ def aggregate_matched_gate2(
     full_only = observation_ids.full_only
     null_only = observation_ids.null_only
     both_fail = observation_ids.both_fail
+    complete_pair_count = sum(map(len, (both_pass, full_only, null_only, both_fail)))
     refusal_reason: MatchedRefusalReason | None = None
     pair_reasons = {pair.reason for pair in ledger.refused_pairs}
     if RefusedPairReason.DUPLICATE_ARM in pair_reasons:
         refusal_reason = MatchedRefusalReason.DUPLICATE_ARM
-    elif RefusedPairReason.MISSING_ARM in pair_reasons:
-        refusal_reason = MatchedRefusalReason.MISSING_ARM
-    elif not any((both_pass, full_only, null_only, both_fail)):
-        refusal_reason = MatchedRefusalReason.NO_EVIDENCE
-    elif sum(map(len, (both_pass, full_only, null_only, both_fail))) != design.n_pairs:
+    elif complete_pair_count == 0:
+        if RefusedPairReason.MISSING_ARM in pair_reasons:
+            refusal_reason = MatchedRefusalReason.MISSING_ARM
+        else:
+            refusal_reason = MatchedRefusalReason.NO_EVIDENCE
+    elif complete_pair_count != design.n_pairs:
         refusal_reason = MatchedRefusalReason.COUNT_MISMATCH
     if refusal_reason is not None:
         return MatchedGate2Refusal(
