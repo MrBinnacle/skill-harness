@@ -304,23 +304,38 @@ def test_shuffled_insertion_order_produces_identical_result_objects(
     tmp_path: Path,
     refused: bool,
 ) -> None:
-    manifest = load_manifest(_manifest_data(2))
+    """Shuffle the physical rows and compare the whole result, ledger included.
+
+    Every ordered field this call produces must carry at least TWO entries whose
+    id order differs from their insertion order, or the comparison cannot fail.
+    A single excluded observation and a single refused pair are order-invariant
+    whatever the bridge does with them: a one-element tuple has one arrangement.
+    An earlier form of this test carried one excluded observation in one
+    parameter case and none in the other, and stayed green when the bridge's
+    ordering guarantee was deleted outright — two stores holding the same rows
+    in opposite physical order then returned different
+    ``ledger.excluded_observations`` and this assertion did not see it.
+
+    So the fixture below pins two inadmissible observations and two
+    incomplete pairs in BOTH parameter cases, inserted in the reverse of their
+    id order, and the counts are asserted before the equality is: a later
+    refactor that collapses the ledger back to one entry per kind fails here
+    rather than quietly making the equality vacuous again.
+    """
+    manifest = load_manifest(_manifest_data(6))
     rows: list[tuple[str, str, str, Arm, str, str | None]] = [
-        ("obs-z-full", "lineage-0", "instance-0", Arm.FULL, "admissible", None),
-        ("obs-a-null", "lineage-0", "instance-0", Arm.NULL, "admissible", None),
-        ("obs-m-full", "lineage-1", "instance-1", Arm.FULL, "admissible", None),
+        ("obs-pair-z-full", "lineage-0", "instance-0", Arm.FULL, "admissible", None),
+        ("obs-pair-a-null", "lineage-0", "instance-0", Arm.NULL, "admissible", None),
+        # Inserted z-then-a so insertion order is the reverse of id order in one
+        # store and matches it in the other. Only an id-ordered ledger agrees.
+        ("obs-drop-z", "lineage-1", "instance-1", Arm.FULL, "inadmissible", "synthetic-drift-z"),
+        ("obs-drop-a", "lineage-2", "instance-2", Arm.NULL, "inadmissible", "synthetic-drift-a"),
+        ("obs-lonely-z", "lineage-3", "instance-3", Arm.FULL, "admissible", None),
+        ("obs-lonely-a", "lineage-4", "instance-4", Arm.NULL, "admissible", None),
     ]
     if refused:
-        rows.append(("obs-b-full", "lineage-1", "instance-1", Arm.FULL, "admissible", None))
-    else:
-        rows[-1] = (
-            "obs-m-inadmissible",
-            "lineage-1",
-            "instance-1",
-            Arm.FULL,
-            "inadmissible",
-            "synthetic-drift",
-        )
+        rows.append(("obs-dup-z", "lineage-5", "instance-5", Arm.FULL, "admissible", None))
+        rows.append(("obs-dup-a", "lineage-5", "instance-5", Arm.FULL, "admissible", None))
 
     results = []
     table_orders = []
@@ -352,6 +367,11 @@ def test_shuffled_insertion_order_produces_identical_result_objects(
             conn.close()
 
     assert table_orders[0] == tuple(reversed(table_orders[1]))
+    # The equality below is only load-bearing while both ordered ledger fields
+    # hold more than one entry in every parameter case.
+    for result in results:
+        assert len(result.ledger.excluded_observations) == 2
+        assert len(result.ledger.refused_pairs) == (3 if refused else 2)
     assert results[0] == results[1]
     assert (results[0].decision is None) is refused
 
