@@ -356,6 +356,49 @@ def test_shuffled_insertion_order_produces_identical_result_objects(
     assert (results[0].decision is None) is refused
 
 
+def test_mixed_exclusions_reproduce_direct_gate2_from_surviving_pairs(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = _store_table(
+        evidence_db,
+        both_pass=0,
+        full_only=5,
+        null_only=1,
+        both_fail=2,
+    )
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-extra-inadmissible",
+        lineage="lineage-8",
+        instance="instance-8",
+        arm=Arm.FULL,
+        passed=False,
+        admissibility_state="inadmissible",
+        inadmissibility_reason="synthetic-generator-drift",
+    )
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-extra-incomplete",
+        lineage="lineage-9",
+        instance="instance-9",
+        arm=Arm.NULL,
+        passed=True,
+    )
+    design = _design(8)
+
+    result = aggregate_matched_gate2(evidence_db, manifest, design)
+
+    assert result.refusal is None
+    assert result.ledger.excluded_observations
+    assert result.ledger.refused_pairs
+    full_only = len(result.observation_ids.full_only)
+    null_only = len(result.observation_ids.null_only)
+    assert (full_only, null_only) == (5, 1)
+    assert result.decision is gate2_decide(design, full_only, null_only)
+
+
 @pytest.mark.parametrize(
     ("both_pass", "full_only", "null_only", "both_fail"),
     [
