@@ -47,11 +47,9 @@ def test_delta_report_measures_gains_and_named_residuals() -> None:
     report = measure_kind_precision_guard_delta()
 
     # Per-generation coverage: each generation's aggregate is now refused with the
-    # other generation's receipt held, and with no receipt at all. Five rows per
-    # generation, none of which the pre-change guard refused -- the fifth is the
-    # percent spelling this branch added to the backstop, a gain it created and
-    # never a refusal replayed from the old guard.
-    assert report.per_generation_gained_refusal_counts == ((_GEN_1, 5), (_GEN_2, 5))
+    # other generation's receipt held, and with no receipt at all. Four rows per
+    # generation, none of which the pre-change guard refused.
+    assert report.per_generation_gained_refusal_counts == ((_GEN_1, 4), (_GEN_2, 4))
     assert report.gained_refusal_count == sum(
         count for _, count in report.per_generation_gained_refusal_counts
     )
@@ -67,9 +65,13 @@ def test_delta_report_measures_gains_and_named_residuals() -> None:
     # layer, so the hole is confined to prose that bypasses the claim object.
     assert report.backstop_document_scope_residual_count == 2
     assert report.prose_bypassing_claim_object_residual_count == 2
-    # Nothing in the corpus escapes both revisions while the backstop carries the
-    # percent matcher.
-    assert report.refused_by_neither_guard == ()
+    # The percent spelling, refused by neither revision. The backstop reads
+    # decimals (#234 fences a prose claim detector out of it) and hand-written
+    # percent copy stays with the #215 static scanner.
+    assert report.refused_by_neither_guard == (
+        f"percent-spelling:{_GEN_1}",
+        f"percent-spelling:{_GEN_2}",
+    )
 
 
 def test_coverage_statement_reads_the_report_it_is_given() -> None:
@@ -111,9 +113,9 @@ def test_measured_coverage_statement_is_the_text_posted_to_218() -> None:
         "Measured differential coverage, pre-change guard 5f82a57 against the claim layer plus "
         "document-level backstop. Replay: the current stack refuses 12 of the 13 corpus rows "
         "the pre-change guard refused. Lost refusals: 0. Retracted false refusals: 1 "
-        f"(census-digit-run:{_GEN_1}). Gains: 10 refusals the pre-change guard did not produce, "
-        f"per generation {_GEN_1}=5, {_GEN_2}=5; claim-layer franken tuple refusals 2; "
+        f"(census-digit-run:{_GEN_1}). Gains: 8 refusals the pre-change guard did not produce, "
+        f"per generation {_GEN_1}=4, {_GEN_2}=4; claim-layer franken tuple refusals 2; "
         "canonical serializer outputs enumerated 2, of which bare or percent-spelled 0. Named "
         "residuals: backstop document-level scope 2; prose bypassing the claim object 2. "
-        "Refused by neither revision: 0."
+        f"Refused by neither revision: 2 (percent-spelling:{_GEN_1}, percent-spelling:{_GEN_2})."
     )
