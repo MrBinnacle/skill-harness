@@ -14,7 +14,9 @@ Default five-role vocabulary — `needs-triage`, `needs-info`, `ready-for-agent`
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, created lazily by `/domain-modeling`. See `docs/agents/domain.md`.
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, maintained by `/domain-modeling`. See `docs/agents/domain.md`.
+
+`CONTEXT.md` is the vocabulary of record: use its terms in prose and identifiers, respect its Avoid-notes, and when code and glossary disagree, the code is the primary source — fix the glossary, then decide whether the code's term deserves a rename of its own.
 
 ## Prose voice — literal-humanist register
 
