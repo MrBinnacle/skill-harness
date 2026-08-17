@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from enum import StrEnum
+from typing import Literal
 
 from skill_harness.aggregation.profile import EffectEstimate, effect_from_matched_gate2
 from skill_harness.aggregation.verdict import VerdictResult, matched_gate2_verdict
 from skill_harness.oc import Gate2Decision, Gate2Design
-from skill_harness.task_frontier import Arm, StoredObservation, TaskFamilyManifest, matched_evidence
+from skill_harness.task_frontier import (
+    Arm,
+    StoredObservation,
+    TaskFamilyManifest,
+    audit_observation,
+    matched_evidence,
+)
 
 _PairKey = tuple[str, str, str, str]
 
@@ -23,9 +31,64 @@ class MatchedCellObservationIds:
     both_fail: tuple[tuple[str, str], ...]
 
 
+class MatchedRefusalReason(StrEnum):
+    """Named reasons that prevent matched evidence from producing a decision."""
+
+    NO_EVIDENCE = "no-evidence"
+    DUPLICATE_ARM = "duplicate-arm"
+    MISSING_ARM = "missing-arm"
+    COUNT_MISMATCH = "count-mismatch"
+
+
+class ExcludedObservationReason(StrEnum):
+    """Named reasons that prevent one stored observation from entering a pair."""
+
+    INADMISSIBLE = "inadmissible"
+
+
+class RefusedPairReason(StrEnum):
+    """Named reasons that prevent one pairing key from entering a decision."""
+
+    DUPLICATE_ARM = "duplicate-arm"
+    MISSING_ARM = "missing-arm"
+
+
 @dataclass(frozen=True)
-class MatchedGate2Result:
-    """Gate-2 result bound to the frozen family evidence that produced it."""
+class ExcludedObservation:
+    """One observation excluded before pair construction."""
+
+    observation_id: str
+    reason: ExcludedObservationReason
+    stored_reason: str | None
+
+
+@dataclass(frozen=True)
+class RefusedPair:
+    """One malformed pairing key and every observation filed under it."""
+
+    pairing_key: _PairKey
+    observation_ids: tuple[str, ...]
+    reason: RefusedPairReason
+
+
+@dataclass(frozen=True)
+class ExclusionLedger:
+    """Every stored observation or pair omitted from a Gate-2 decision."""
+
+    excluded_observations: tuple[ExcludedObservation, ...]
+    refused_pairs: tuple[RefusedPair, ...]
+
+
+@dataclass(frozen=True)
+class MatchedRefusal:
+    """A typed explanation for a bridge result with no decision."""
+
+    reason: MatchedRefusalReason
+
+
+@dataclass(frozen=True)
+class MatchedGate2Decision:
+    """Gate-2 decision bound to the frozen family evidence that produced it."""
 
     effect: EffectEstimate
     decision: Gate2Decision
@@ -33,36 +96,85 @@ class MatchedGate2Result:
     task_family_id: str
     task_family_version: str
     observation_ids: MatchedCellObservationIds
+    ledger: ExclusionLedger
+    refusal: Literal[None] = None
+
+
+@dataclass(frozen=True)
+class MatchedGate2Refusal:
+    """Typed refusal bound to the frozen family evidence that prevented a decision."""
+
+    effect: Literal[None]
+    decision: Literal[None]
+    verdict: Literal[None]
+    task_family_id: str
+    task_family_version: str
+    observation_ids: MatchedCellObservationIds
+    ledger: ExclusionLedger
+    refusal: MatchedRefusal
+
+
+type MatchedGate2Result = MatchedGate2Decision | MatchedGate2Refusal
+
+
+def _all_matched_evidence(
+    conn: sqlite3.Connection, manifest: TaskFamilyManifest
+) -> tuple[StoredObservation, ...]:
+    records = {record.observation_id: record for record in matched_evidence(conn, manifest)}
+    rows = conn.execute(
+        """
+        SELECT observation_id
+        FROM task_frontier_matched_obs
+        WHERE task_family_id = ? AND task_family_version = ?
+        """,
+        (manifest.task_family_id, manifest.task_family_version),
+    ).fetchall()
+    for (observation_id,) in rows:
+        stored = audit_observation(conn, str(observation_id))
+        if stored is not None:
+            records[stored.observation_id] = stored
+    return tuple(records[observation_id] for observation_id in sorted(records))
 
 
 def _pair_evidence(
     records: tuple[StoredObservation, ...],
-) -> tuple[
-    tuple[tuple[str, str], ...],
-    tuple[tuple[str, str], ...],
-    tuple[tuple[str, str], ...],
-    tuple[tuple[str, str], ...],
-]:
-    pairs: dict[_PairKey, dict[Arm, StoredObservation]] = {}
+) -> tuple[MatchedCellObservationIds, ExclusionLedger]:
+    pairs: dict[_PairKey, list[StoredObservation]] = {}
+    excluded: list[ExcludedObservation] = []
     for record in records:
+        if record.admissibility_state != "admissible":
+            excluded.append(
+                ExcludedObservation(
+                    observation_id=record.observation_id,
+                    reason=ExcludedObservationReason.INADMISSIBLE,
+                    stored_reason=record.inadmissibility_reason,
+                )
+            )
+            continue
         key = (
             record.task_family_id,
             record.task_family_version,
             record.semantic_lineage_id,
             record.instance_id,
         )
-        by_arm = pairs.setdefault(key, {})
-        if record.arm in by_arm:
-            raise ValueError(f"matched pair {key!r} contains duplicate {record.arm.value!r} arms")
-        by_arm[record.arm] = record
+        pairs.setdefault(key, []).append(record)
 
     cells: list[list[tuple[str, str]]] = [[], [], [], []]
+    refused: list[RefusedPair] = []
     for key in sorted(pairs):
-        by_arm = pairs[key]
-        if set(by_arm) != {Arm.FULL, Arm.NULL}:
-            raise ValueError(f"matched pair {key!r} must contain one full arm and one null arm")
-        full = by_arm[Arm.FULL]
-        null = by_arm[Arm.NULL]
+        records_for_key = sorted(pairs[key], key=lambda record: record.observation_id)
+        by_arm: dict[Arm, list[StoredObservation]] = {Arm.FULL: [], Arm.NULL: []}
+        for record in records_for_key:
+            by_arm[record.arm].append(record)
+        ids = tuple(record.observation_id for record in records_for_key)
+        if any(len(arm_records) > 1 for arm_records in by_arm.values()):
+            refused.append(RefusedPair(key, ids, RefusedPairReason.DUPLICATE_ARM))
+            continue
+        if any(not arm_records for arm_records in by_arm.values()):
+            refused.append(RefusedPair(key, ids, RefusedPairReason.MISSING_ARM))
+            continue
+        full = by_arm[Arm.FULL][0]
+        null = by_arm[Arm.NULL][0]
         cell_index = {
             (True, True): 0,
             (True, False): 1,
@@ -71,7 +183,15 @@ def _pair_evidence(
         }[(full.passed, null.passed)]
         cells[cell_index].append((full.observation_id, null.observation_id))
 
-    return tuple(cells[0]), tuple(cells[1]), tuple(cells[2]), tuple(cells[3])
+    return (
+        MatchedCellObservationIds(
+            both_pass=tuple(cells[0]),
+            full_only=tuple(cells[1]),
+            null_only=tuple(cells[2]),
+            both_fail=tuple(cells[3]),
+        ),
+        ExclusionLedger(excluded_observations=tuple(excluded), refused_pairs=tuple(refused)),
+    )
 
 
 def aggregate_matched_gate2(
@@ -80,7 +200,32 @@ def aggregate_matched_gate2(
     design: Gate2Design,
 ) -> MatchedGate2Result:
     """Read and aggregate one frozen task family's well-formed matched evidence."""
-    both_pass, full_only, null_only, both_fail = _pair_evidence(matched_evidence(conn, manifest))
+    observation_ids, ledger = _pair_evidence(_all_matched_evidence(conn, manifest))
+    both_pass = observation_ids.both_pass
+    full_only = observation_ids.full_only
+    null_only = observation_ids.null_only
+    both_fail = observation_ids.both_fail
+    refusal_reason: MatchedRefusalReason | None = None
+    pair_reasons = {pair.reason for pair in ledger.refused_pairs}
+    if RefusedPairReason.DUPLICATE_ARM in pair_reasons:
+        refusal_reason = MatchedRefusalReason.DUPLICATE_ARM
+    elif RefusedPairReason.MISSING_ARM in pair_reasons:
+        refusal_reason = MatchedRefusalReason.MISSING_ARM
+    elif not any((both_pass, full_only, null_only, both_fail)):
+        refusal_reason = MatchedRefusalReason.NO_EVIDENCE
+    elif sum(map(len, (both_pass, full_only, null_only, both_fail))) != design.n_pairs:
+        refusal_reason = MatchedRefusalReason.COUNT_MISMATCH
+    if refusal_reason is not None:
+        return MatchedGate2Refusal(
+            effect=None,
+            decision=None,
+            verdict=None,
+            task_family_id=manifest.task_family_id,
+            task_family_version=manifest.task_family_version,
+            observation_ids=observation_ids,
+            ledger=ledger,
+            refusal=MatchedRefusal(refusal_reason),
+        )
     effect = effect_from_matched_gate2(
         design,
         both_pass=len(both_pass),
@@ -90,16 +235,13 @@ def aggregate_matched_gate2(
     )
     if effect.decision is None:
         raise ValueError("matched Gate-2 effect must carry a decision")
-    return MatchedGate2Result(
+    return MatchedGate2Decision(
         effect=effect,
         decision=effect.decision,
         verdict=matched_gate2_verdict(effect),
         task_family_id=manifest.task_family_id,
         task_family_version=manifest.task_family_version,
-        observation_ids=MatchedCellObservationIds(
-            both_pass=both_pass,
-            full_only=full_only,
-            null_only=null_only,
-            both_fail=both_fail,
-        ),
+        observation_ids=observation_ids,
+        ledger=ledger,
+        refusal=None,
     )

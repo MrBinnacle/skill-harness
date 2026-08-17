@@ -9,7 +9,12 @@ from typing import Any
 
 import pytest
 
-from skill_harness.aggregation import aggregate_matched_gate2
+from skill_harness.aggregation import (
+    ExcludedObservationReason,
+    MatchedRefusalReason,
+    RefusedPairReason,
+    aggregate_matched_gate2,
+)
 from skill_harness.aggregation.verdict import CutSubReason, KeepCutVerdict
 from skill_harness.oc import Gate2Decision, Gate2Design, MMESpec, gate2_decide
 from skill_harness.task_frontier import (
@@ -77,6 +82,173 @@ def _store_table(
             )
             assert admission.admissible is True
     return manifest
+
+
+def _design(n_pairs: int) -> Gate2Design:
+    return Gate2Design(
+        n_pairs=n_pairs,
+        gamma=0.90,
+        mme=MMESpec(delta_min=0.20, q_min=0.70),
+    )
+
+
+def _insert_matched_row(
+    conn: sqlite3.Connection,
+    manifest: TaskFamilyManifest,
+    *,
+    observation_id: str,
+    lineage: str,
+    instance: str,
+    arm: Arm,
+    passed: bool,
+    admissibility_state: str = "admissible",
+    inadmissibility_reason: str | None = None,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO task_frontier_matched_obs (
+            observation_id, task_family_id, task_family_version,
+            semantic_lineage_id, phase, instance_id, arm, passed,
+            generator_fingerprint, oracle_fingerprint, admissibility_state,
+            inadmissibility_reason, observed_at, ingested_at
+        ) VALUES (?, ?, ?, ?, 'matched', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            observation_id,
+            manifest.task_family_id,
+            manifest.task_family_version,
+            lineage,
+            instance,
+            arm.value,
+            int(passed),
+            "gen-sha-e1",
+            "ora-sha-e1",
+            admissibility_state,
+            inadmissibility_reason,
+            "2026-08-16T12:00:00+00:00",
+            "2026-08-16T12:00:01Z",
+        ),
+    )
+
+
+def test_empty_store_returns_typed_no_evidence_refusal(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = load_manifest(_manifest_data(1))
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.NO_EVIDENCE
+    assert result.ledger.excluded_observations == ()
+    assert result.ledger.refused_pairs == ()
+
+
+def test_duplicate_arm_returns_typed_refusal_with_complete_pair_ledger(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = load_manifest(_manifest_data(1))
+    for observation_id, arm in (
+        ("obs-full-a", Arm.FULL),
+        ("obs-full-b", Arm.FULL),
+        ("obs-null", Arm.NULL),
+    ):
+        _insert_matched_row(
+            evidence_db,
+            manifest,
+            observation_id=observation_id,
+            lineage="lineage-0",
+            instance="instance-0",
+            arm=arm,
+            passed=True,
+        )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.DUPLICATE_ARM
+    assert result.ledger.excluded_observations == ()
+    assert len(result.ledger.refused_pairs) == 1
+    refused = result.ledger.refused_pairs[0]
+    assert refused.reason is RefusedPairReason.DUPLICATE_ARM
+    assert refused.observation_ids == ("obs-full-a", "obs-full-b", "obs-null")
+
+
+def test_missing_arm_returns_typed_refusal_with_pair_ledger(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = load_manifest(_manifest_data(1))
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-full",
+        lineage="lineage-0",
+        instance="instance-0",
+        arm=Arm.FULL,
+        passed=True,
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.MISSING_ARM
+    assert result.ledger.excluded_observations == ()
+    assert len(result.ledger.refused_pairs) == 1
+    refused = result.ledger.refused_pairs[0]
+    assert refused.reason is RefusedPairReason.MISSING_ARM
+    assert refused.observation_ids == ("obs-full",)
+
+
+def test_inadmissible_only_returns_typed_no_evidence_refusal_with_observation_ledger(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = load_manifest(_manifest_data(1))
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-inadmissible",
+        lineage="lineage-0",
+        instance="instance-0",
+        arm=Arm.FULL,
+        passed=True,
+        admissibility_state="inadmissible",
+        inadmissibility_reason="synthetic-fingerprint-drift",
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.NO_EVIDENCE
+    assert result.ledger.refused_pairs == ()
+    assert len(result.ledger.excluded_observations) == 1
+    excluded = result.ledger.excluded_observations[0]
+    assert excluded.observation_id == "obs-inadmissible"
+    assert excluded.reason is ExcludedObservationReason.INADMISSIBLE
+
+
+def test_surviving_pair_count_mismatch_returns_typed_refusal_without_exception(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = _store_table(
+        evidence_db,
+        both_pass=0,
+        full_only=1,
+        null_only=0,
+        both_fail=0,
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(2))
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.COUNT_MISMATCH
+    assert result.observation_ids.full_only == (("obs-00-full", "obs-00-null"),)
+    assert result.ledger.excluded_observations == ()
+    assert result.ledger.refused_pairs == ()
 
 
 @pytest.mark.parametrize(
@@ -187,6 +359,7 @@ def test_result_is_immutable_and_binds_effect_identity_and_ids_to_each_cell(
 
     result = aggregate_matched_gate2(evidence_db, manifest, design)
 
+    assert result.effect is not None
     assert result.effect.decision is result.decision
     assert result.task_family_id == "synthetic-e1-family"
     assert result.task_family_version == "1"
