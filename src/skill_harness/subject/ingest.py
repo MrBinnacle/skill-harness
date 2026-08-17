@@ -3,14 +3,14 @@
 Bridges the agentic subject layer to the append-only evidence store: parse a
 Full/Null pair of Inspect eval logs, then write run + samples + Tier-1 outcome
 verdicts through the existing repository machinery, with the harness-pin
-admissibility check applied AT WRITE TIME (locked evidence model — the
+evidence-admissibility check applied AT WRITE TIME (locked evidence model — the
 ``admissibility_state`` column is a snapshot, never recomputed at read time).
 
 Design constraints:
 
 - Parsing (``parse_eval_log``) needs the optional ``[inspect]`` extra and is
   lazily imported. Writing (``write_paired_evidence``) is pure stdlib + the
-  storage layer, so the entire admissibility/pairing logic is testable in the
+  storage layer, so the entire evidence-admissibility/pairing logic is testable in the
   default dev/CI environment (same split as ``inspect_adapter``).
 - Pin rule (pre-reg "Harness pin" row): recorded per trial, identical across
   arms, or the trial is INADMISSIBLE. A missing or mismatched fingerprint
@@ -196,7 +196,7 @@ class ParsedEvalLog(BaseModel):
 
 
 class IngestResult(BaseModel):
-    """What one paired ingest wrote, including the write-time admissibility."""
+    """What one paired ingest wrote, including write-time evidence admissibility."""
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
@@ -354,7 +354,7 @@ def write_paired_evidence(
     skill_dir: Path,
     conn: sqlite3.Connection,
 ) -> IngestResult:
-    """Write one parsed Full/Null pair through the admissibility machinery.
+    """Write one parsed Full/Null pair through the evidence-admissibility machinery.
 
     Writes (single ``BEGIN IMMEDIATE`` transaction): the skill row (idempotent,
     ``skill_id`` = SHA-256 of SKILL.md bytes, extractor convention), the

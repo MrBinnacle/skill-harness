@@ -30,6 +30,7 @@ authoritative by this test — it only fails loudly on divergence.
 
 from __future__ import annotations
 
+import ast
 import re
 import tomllib
 import xml.etree.ElementTree as ET
@@ -191,12 +192,16 @@ def _measured_recall_has_current_receipt_context(context: str) -> bool:
     return all(re.search(pattern, context, re.IGNORECASE) for pattern in required)
 
 
-def _public_copy_violations(text: str) -> list[str]:
-    violations = [
+def _evidence_admissibility_violations(text: str) -> list[str]:
+    return [
         f"bare gate term at line {_line_number(text, match.start())}"
         for match in _ADMISSIBILITY_RE.finditer(text)
         if not _QUALIFIED_ADMISSIBILITY_PREFIX_RE.search(text[: match.start()])
     ]
+
+
+def _public_copy_violations(text: str) -> list[str]:
+    violations = _evidence_admissibility_violations(text)
     violations.extend(
         f"earn/earned family at line {_line_number(text, match.start())}"
         for match in _EARN_FAMILY_RE.finditer(text)
@@ -259,6 +264,30 @@ def _site_template_files(repo_root: Path) -> list[Path]:
     )
 
 
+def _python_public_copy(source: str) -> str:
+    tree = ast.parse(source)
+    copy: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            docstring = ast.get_docstring(node, clean=False)
+            if docstring:
+                copy.append(docstring)
+        if not isinstance(node, ast.Call):
+            continue
+        for keyword in node.keywords:
+            if (
+                keyword.arg in {"help", "epilog", "short_help"}
+                and isinstance(keyword.value, ast.Constant)
+                and isinstance(keyword.value.value, str)
+            ):
+                copy.append(keyword.value.value)
+    return "\n".join(copy)
+
+
+def _python_evidence_admissibility_violations(text: str) -> list[str]:
+    return _evidence_admissibility_violations(text)
+
+
 def _public_surface_texts(repo_root: Path) -> list[tuple[str, str]]:
     surfaces: list[tuple[str, str]] = []
     readme = repo_root / "README.md"
@@ -289,6 +318,14 @@ def _public_surface_texts(repo_root: Path) -> list[tuple[str, str]]:
     for path in _site_template_files(repo_root):
         relative_template = path.relative_to(repo_root).as_posix()
         surfaces.append((relative_template, path.read_text(encoding="utf-8")))
+
+    source_root = repo_root / "src"
+    if source_root.is_dir():
+        for path in sorted(source_root.rglob("*.py")):
+            relative_source = path.relative_to(repo_root).as_posix()
+            public_copy = _python_public_copy(path.read_text(encoding="utf-8"))
+            if public_copy:
+                surfaces.append((f"python:{relative_source}", public_copy))
     return surfaces
 
 
@@ -296,7 +333,11 @@ def _repo_public_copy_violations(repo_root: Path) -> list[str]:
     return [
         f"{surface}: {violation}"
         for surface, text in _public_surface_texts(repo_root)
-        for violation in _public_copy_violations(text)
+        for violation in (
+            _python_evidence_admissibility_violations(text)
+            if surface.startswith("python:src/") and surface.endswith(".py")
+            else _public_copy_violations(text)
+        )
     ]
 
 
@@ -579,6 +620,32 @@ def test_site_generator_templates_are_scanned_in_both_directions(tmp_path: Path)
     assert any("receipt.html" in item for item in _repo_public_copy_violations(tmp_path))
 
     page.write_text("<p>Evidence admissibility is checked.</p>", encoding="utf-8")
+    assert _repo_public_copy_violations(tmp_path) == []
+
+
+def test_python_docstrings_and_cli_help_are_scanned_in_both_directions(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "skill_harness" / "command.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        '"""Admissibility is checked here."""\n'
+        "import click\n\n"
+        '@click.option("--mode", help="Admissibility policy.")\n'
+        "def command() -> None:\n"
+        '    """Evidence admissibility is documented here."""\n',
+        encoding="utf-8",
+    )
+    violations = _repo_public_copy_violations(tmp_path)
+    assert len(violations) == 2
+    assert all("src/skill_harness/command.py" in item for item in violations)
+
+    source.write_text(
+        '"""Evidence admissibility is checked here."""\n'
+        "import click\n\n"
+        '@click.option("--mode", help="Evidence-admissibility policy.")\n'
+        "def command(admissibility_state: str = 'admissible') -> None:\n"
+        '    """Identifier-adjacent admissibility_state shorthand is not prose."""\n',
+        encoding="utf-8",
+    )
     assert _repo_public_copy_violations(tmp_path) == []
 
 

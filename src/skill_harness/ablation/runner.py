@@ -1191,7 +1191,7 @@ class AblationRunner:
 
         A46: primary_clause_id == ablated_clause_id -- enforced by caller assertion.
         A49: verdict carries (run_id, clause_id, axis, comparison).
-        Admissibility is a write-time snapshot supplied by the caller (root insight) —
+        Evidence admissibility is a write-time snapshot supplied by the caller (root insight) —
         never a hardcoded constant, never recomputed at read time.
 
         BLOCKER-2.1: ``full_sample_id``/``abl_sample_id`` MUST be real sample ids (the
@@ -1272,9 +1272,10 @@ class AblationRunner:
     def _snapshot_admissibility(
         *, confounded: bool, null_floor_met: bool, scorer_crashed: bool = False
     ) -> tuple[str, str | None]:
-        """Compute the write-time admissibility snapshot for a comparison.
+        """Compute the write-time evidence-admissibility snapshot for a comparison.
 
-        Root insight: ``admissibility_state`` is a real write-time snapshot of the
+        Root insight: the evidence state field is a real write-time evidence-admissible
+        snapshot of the
         comparison's state, NOT a hardcoded constant. Never recomputed at read time
         (see docs/INVARIANTS.md #3 — locked invariant).
 
@@ -1287,7 +1288,7 @@ class AblationRunner:
         scored at all, which takes priority over (and is orthogonal to) whatever the
         confound/null-floor state happens to be.
 
-        :returns: (admissibility_state, inadmissibility_reason)
+        :returns: (evidence state field, reason field)
         """
         if scorer_crashed:
             return "inadmissible", "scorer_error"
@@ -1305,7 +1306,7 @@ class AblationRunner:
         is estimated from >= the configured floor (default N_NULL_FLOOR=30). Below the
         floor, the comparison is UNMEASURED(underpowered) — evidence admissibility reflects that
         (MAJOR-3). Uses the accumulator's own floor so a test-lowered floor stays
-        consistent between sigma estimation and the admissibility snapshot.
+        consistent between sigma estimation and the evidence-admissibility snapshot.
         """
         return null_acc.axis_n(axis) >= null_acc.null_floor
 
@@ -1494,7 +1495,8 @@ class AblationRunner:
         C2 fix: on resume, comparison indexes that already have a verdict must have
         their posterior contribution rebuilt from the PERSISTED observation and
         admissibility_state — never recomputed from fresh confound/null-floor state
-        (see docs/INVARIANTS.md #3: admissibility recorded at write time, never recomputed).
+        (see docs/INVARIANTS.md #3: evidence admissibility is recorded at write
+        time and never recomputed).
 
         CF-E3-1: also returns verdict_id so the resume path can populate
         ClauseResult.verdict_id with the last written verdict UUID.

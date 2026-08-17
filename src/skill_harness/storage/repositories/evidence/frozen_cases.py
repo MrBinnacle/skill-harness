@@ -116,7 +116,7 @@ def freeze_verdict(
 
     A paired frozen case is the Null half of the winning evidence re-encoded,
     NOT independent falsification; anti-vacuity on the paired path is
-    discharged by Stage-0 + admissibility (normative — PRD §18 `freeze`).
+    discharged by Stage-0 + evidence admissibility (normative — PRD §18 `freeze`).
 
     Idempotent: duplicate freeze (same clause_id, axis, failing_input_sha256) raises
     sqlite3.IntegrityError; the caller (CLI) MAY catch + report 'already frozen'

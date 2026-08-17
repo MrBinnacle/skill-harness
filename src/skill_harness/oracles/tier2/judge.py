@@ -6,7 +6,7 @@
 - Adversarial injection short-circuit (A38 layer 4) — inject detection before API
 - Length truncation at 8KB UTF-8 boundary (A38 layer 2)
 - XML-delimited sandboxing in system prompt (A38 layer 3)
-- Admissibility resolved at write time, never recomputed (see docs/INVARIANTS.md #3)
+- Evidence admissibility resolved at write time, never recomputed (see docs/INVARIANTS.md #3)
 
 Model default: ``claude-sonnet-4-6`` (model-pinning convention for execution work).
 
@@ -95,7 +95,7 @@ class JudgeVerdict(BaseModel):
         Winner from the AB perspective (first call). "A" means output_a won.
     position_swap_agreement : 0 | 1
         1 if verdict_AB == flip(verdict_BA), 0 otherwise.
-    admissibility_state : "admissible" | "inadmissible"
+    evidence-state field : "admissible" | "inadmissible"
         Resolved at write time per the evidence admissibility model, never
         recomputed (see docs/INVARIANTS.md #3).
     inadmissibility_reason : str | None
@@ -280,7 +280,7 @@ class JudgeClient:
         :param output_b: Second candidate output (will appear as B in AB call).
         :param axis_name: Short name of the evaluation axis.
         :param axis_rubric: Rubric text passed to the judge.
-        :returns: ``JudgeVerdict`` with admissibility resolved at write time.
+        :returns: ``JudgeVerdict`` with evidence admissibility resolved at write time.
         :raises OracleAPIError: If the Anthropic API call fails.
 
         Algorithm per A32:
@@ -289,7 +289,7 @@ class JudgeClient:
         2. Call AB (output_a first) → verdict_AB.
         3. Call BA (output_b first) → verdict_BA.
         4. Compute position_swap_agreement = (verdict_AB == flip(verdict_BA)).
-        5. Resolve admissibility at write time (never recomputed).
+        5. Resolve evidence admissibility at write time (never recomputed).
         """
         # ------------------------------------------------------------------
         # A38 layer 4: injection short-circuit (cost-zero, before any API call)
