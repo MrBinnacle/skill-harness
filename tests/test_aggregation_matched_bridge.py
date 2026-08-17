@@ -252,6 +252,51 @@ def test_surviving_pair_count_mismatch_returns_typed_refusal_without_exception(
     assert result.ledger.refused_pairs == ()
 
 
+def test_decided_result_ledgers_inadmissible_observation_and_incomplete_pair(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = load_manifest(_manifest_data(3))
+    for observation_id, lineage, instance, arm, state, stored_reason in (
+        ("obs-valid-full", "lineage-0", "instance-0", Arm.FULL, "admissible", None),
+        ("obs-valid-null", "lineage-0", "instance-0", Arm.NULL, "admissible", None),
+        (
+            "obs-inadmissible",
+            "lineage-1",
+            "instance-1",
+            Arm.FULL,
+            "inadmissible",
+            "synthetic-oracle-drift",
+        ),
+        ("obs-incomplete", "lineage-2", "instance-2", Arm.NULL, "admissible", None),
+    ):
+        _insert_matched_row(
+            evidence_db,
+            manifest,
+            observation_id=observation_id,
+            lineage=lineage,
+            instance=instance,
+            arm=arm,
+            passed=True,
+            admissibility_state=state,
+            inadmissibility_reason=stored_reason,
+        )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+
+    assert result.decision is Gate2Decision.UNRESOLVED
+    assert result.refusal is None
+    assert result.observation_ids.both_pass == (("obs-valid-full", "obs-valid-null"),)
+    assert tuple(item.observation_id for item in result.ledger.excluded_observations) == (
+        "obs-inadmissible",
+    )
+    assert tuple(item.stored_reason for item in result.ledger.excluded_observations) == (
+        "synthetic-oracle-drift",
+    )
+    assert len(result.ledger.refused_pairs) == 1
+    assert result.ledger.refused_pairs[0].reason is RefusedPairReason.MISSING_ARM
+    assert result.ledger.refused_pairs[0].observation_ids == ("obs-incomplete",)
+
+
 @pytest.mark.parametrize(
     ("both_pass", "full_only", "null_only", "both_fail"),
     [
