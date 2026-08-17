@@ -12,6 +12,7 @@ from skill_harness.aggregation.verdict import VerdictResult, matched_gate2_verdi
 from skill_harness.oc import Gate2Decision, Gate2Design
 from skill_harness.task_frontier import (
     Arm,
+    Phase,
     StoredObservation,
     TaskFamilyManifest,
     audit_observation,
@@ -158,6 +159,20 @@ def _all_matched_evidence(
     the pair, not on either alone — and, since it asserts the ledger's id order
     rather than only the two stores' agreement, it also fails on an ordering that
     is deterministic but not by observation_id.
+
+    ``audit_observation`` reads by id across ALL THREE partitions and returns the
+    first hit, so its answer is only the row this query named while no other
+    partition holds the same id. `admit` refuses that write; a store written
+    around `admit` can hold it, and then the by-id read answers with the
+    calibration row and the effect estimate acquires rung-selection data — the
+    leak INVARIANTS #7 walls off. The phase stamp settles it: each partition
+    CHECKs its own phase column (migration 0700), so a record stamped `matched`
+    came out of the matched table, and that table's PRIMARY KEY makes it the row
+    the query named. A record stamped anything else is a store that contradicts
+    itself about one id, which is not an evidence judgment and does not get a
+    typed refusal — `admit` raises on the same condition, and
+    ``get_task_frontier_observation_by_id`` already says an ambiguous audit read
+    is worse than a refused write.
     """
     records = {record.observation_id: record for record in matched_evidence(conn, manifest)}
     rows = conn.execute(
@@ -173,8 +188,17 @@ def _all_matched_evidence(
     ).fetchall()
     for (observation_id,) in rows:
         stored = audit_observation(conn, str(observation_id))
-        if stored is not None:
-            records[stored.observation_id] = stored
+        if stored is None:
+            continue
+        if stored.phase is not Phase.MATCHED:
+            raise ValueError(
+                f"observation_id {stored.observation_id!r} names a matched row in this "
+                f"family version and comes back from the by-id audit read stamped "
+                f"{stored.phase.value!r} — the same id is stored in two partitions, so the "
+                "matched row cannot be resolved and a walled-off row would enter the "
+                "effect path in its place"
+            )
+        records[stored.observation_id] = stored
     return tuple(records[observation_id] for observation_id in sorted(records))
 
 
