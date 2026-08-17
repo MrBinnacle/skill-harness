@@ -2,11 +2,11 @@
 
 When you run `skill-harness run evaluate-skill` and see `unmeasured: 17`, the natural
 reading is that 17 things went wrong. That reading is incorrect. UNMEASURED is a
-recorded state, not a failure. It maps to the `CANT_TELL_YET` verdict and means the test that would discriminate between "this clause
-is load-bearing" and "this clause is decoration" was not run, because the necessary
-instrument does not exist in this version of the framework. Producing a number anyway
-— by handing the question to an LLM judge and asking for an estimated score — would be
-lying about what was measured.
+recorded state, not a failure. It maps to the `CANT_TELL_YET` verdict and means the
+test that would discriminate between "this clause is load-bearing" and "this clause is
+decoration" was not run, because the necessary instrument does not exist in this version
+of the framework. Producing a number anyway — by handing the question to an LLM judge
+and asking for an estimated score — would be lying about what was measured.
 
 The distinction the field habitually erases is between "we cannot prove it works" and
 "it does not work." UNMEASURED preserves that distinction. A framework that collapses
