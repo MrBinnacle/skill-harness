@@ -88,6 +88,11 @@ class KindPrecisionGuardDelta:
     old_refusal_count: int
     replayed_refusal_count: int
     lost_refusals: tuple[str, ...]
+    per_generation_refusal_counts: dict[str, int]
+    claim_layer_franken_tuple_refusal_count: int
+    serializer_format_variant_refusal_count: int
+    backstop_document_scope_residual_count: int
+    prose_bypassing_claim_object_residual_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -611,7 +616,10 @@ def measure_kind_precision_guard_delta() -> KindPrecisionGuardDelta:
     refusals: list[str] = []
     lost: list[str] = []
     replayed = 0
-    for receipt in load_citable_receipts():
+    per_generation: dict[str, int] = {}
+    serializer_variants = 0
+    receipts = load_citable_receipts()
+    for receipt in receipts:
         aggregate = _fmt_num(receipt.kind_precision_aggregate)
         percent = f"{receipt.kind_precision_aggregate * 100:g}"
         nad = (
@@ -640,12 +648,68 @@ def measure_kind_precision_guard_delta() -> KindPrecisionGuardDelta:
                 assert_kind_precision_render_safe(rendered, receipt)
             except BareKindPrecisionRenderError:
                 replayed += 1
+                per_generation[receipt.receipt_id] = per_generation.get(receipt.receipt_id, 0) + 1
+                if case_id.startswith(("decimal:", "percent:")):
+                    serializer_variants += 1
             else:
                 lost.append(case_id)
+
+    franken_refusals = 0
+    document_scope_residuals = 0
+    prose_bypass_residuals = 0
+    for source, splits in ((receipts[0], receipts[1]), (receipts[1], receipts[0])):
+        try:
+            KindPrecisionClaim(
+                receipt_id=source.receipt_id,
+                extractor_model=source.extractor_model,
+                system_prompt_sha256=source.system_prompt_sha256,
+                tool_schema_sha256=source.tool_schema_sha256,
+                aggregate=source.kind_precision_aggregate,
+                not_a_directive_correct=splits.kind_precision_not_a_directive_correct,
+                not_a_directive_n=splits.kind_precision_not_a_directive_n,
+                weak_directive_correct=splits.kind_precision_weak_directive_correct,
+                weak_directive_n=splits.kind_precision_weak_directive_n,
+            )
+        except KindPrecisionClaimError:
+            franken_refusals += 1
+
+        source_nad = (
+            f"{source.kind_precision_not_a_directive_correct}/"
+            f"{source.kind_precision_not_a_directive_n}"
+        )
+        source_wd = (
+            f"{source.kind_precision_weak_directive_correct}/"
+            f"{source.kind_precision_weak_directive_n}"
+        )
+        split_nad = (
+            f"{splits.kind_precision_not_a_directive_correct}/"
+            f"{splits.kind_precision_not_a_directive_n}"
+        )
+        split_wd = (
+            f"{splits.kind_precision_weak_directive_correct}/"
+            f"{splits.kind_precision_weak_directive_n}"
+        )
+        document = (
+            f"kind-precision {_fmt_num(source.kind_precision_aggregate)} "
+            f"(not_a_directive {split_nad}; weak_directive {split_wd})\n\n"
+            f"Elsewhere: not_a_directive {source_nad}; weak_directive {source_wd}."
+        )
+        try:
+            assert_kind_precision_render_safe(document, source)
+        except BareKindPrecisionRenderError:
+            pass
+        else:
+            document_scope_residuals += 1
+            prose_bypass_residuals += 1
     return KindPrecisionGuardDelta(
         old_refusal_count=len(refusals),
         replayed_refusal_count=replayed,
         lost_refusals=tuple(lost),
+        per_generation_refusal_counts=per_generation,
+        claim_layer_franken_tuple_refusal_count=franken_refusals,
+        serializer_format_variant_refusal_count=serializer_variants,
+        backstop_document_scope_residual_count=document_scope_residuals,
+        prose_bypassing_claim_object_residual_count=prose_bypass_residuals,
     )
 
 
