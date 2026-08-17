@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import FrozenInstanceError
+from typing import Any
 
 import pytest
 
-from skill_harness.aggregation.binding import BindingRecord, compile_binding
+from skill_harness.aggregation.binding import (
+    BINDING_ALGO_VERSION,
+    BindingRecord,
+    compile_binding,
+)
 from skill_harness.oc import FrontierRow, Gate2Design, Gate2NullErrorBound, MMESpec
 from skill_harness.semantics import (
     HAND_INVOKED_NULL_ARM_SEMANTIC,
@@ -113,3 +120,79 @@ def test_binding_record_is_a_frozen_value() -> None:
     record = object.__new__(BindingRecord)
     with pytest.raises(FrozenInstanceError):
         record.__setattr__("digest", "replacement")
+
+
+def test_binding_canonical_recipe_is_versioned_and_byte_stable() -> None:
+    manifest_fields = {
+        "task_family_id": "family",
+        "task_family_version": "v1",
+        "frozen_hashes": {
+            "generator": "g",
+            "fixture": "f",
+            "oracle": "o",
+            "harness": "h",
+            "code": "c",
+        },
+        "phase_partition": {"calibration": [], "confirmation": [], "matched": []},
+        "confirmation_attempt_budget": 0,
+    }
+    manifest = load_manifest(manifest_fields)
+    permuted_manifest = load_manifest(dict(reversed(manifest_fields.items())))
+    scope = RegisteredScope(
+        skill="skill",
+        task_family="family",
+        estimand=Estimand.HYPOTHETICAL,
+        delivery_mechanism=DeliveryMechanism.MODEL_PULL,
+    )
+    design = Gate2Design(n_pairs=6, gamma=0.9, mme=MMESpec(delta_min=0.2, q_min=0.7))
+    row = FrontierRow(
+        n_pairs=6,
+        in_band=False,
+        alpha_null=Gate2NullErrorBound(grid_max=0.03, certified_upper_bound=0.04),
+        power_h1_min=0.8,
+        power_h1_argmin=(0.5, 0.7),
+        expected_n_null_max=5.0,
+        expected_n_h1_max=4.0,
+        worst_case_cost_usd=6.0,
+        meets_candidate_alpha=True,
+        meets_power_floor=True,
+        feasible=True,
+        ratifiable=True,
+    )
+    pin_fields: dict[str, Any] = {
+        "inspect_ai_version": "a",
+        "inspect_swe_version": "s",
+        "agent_version": "1",
+        "model": "m",
+        "sandbox": "docker",
+        "sandbox_image": "image@sha256:" + "a" * 64,
+        "cwd": "/workspace",
+        "env": {"Z": "last", "A": "first"},
+        "disallowed_tools": ("WebSearch",),
+    }
+    pin = HarnessPin(**pin_fields)
+    permuted_pin = HarnessPin(**dict(reversed(pin_fields.items())))
+
+    first = compile_binding(
+        scope=scope,
+        manifest=manifest,
+        design=design,
+        frontier_row=row,
+        budget_cap_cents=600,
+        harness_pin=pin,
+    )
+    second = compile_binding(
+        scope=scope,
+        manifest=permuted_manifest,
+        design=design,
+        frontier_row=row,
+        budget_cap_cents=600,
+        harness_pin=permuted_pin,
+    )
+
+    decoded = json.loads(first.canonical_bytes)
+    expected = json.dumps(decoded, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    assert BINDING_ALGO_VERSION == "1"
+    assert decoded["binding_algo_version"] == BINDING_ALGO_VERSION
+    assert first.canonical_bytes == expected == second.canonical_bytes
+    assert first.digest == hashlib.sha256(expected).hexdigest() == second.digest
