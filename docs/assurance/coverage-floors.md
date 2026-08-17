@@ -140,12 +140,13 @@ normal path at many rates and never passes `alpha = 1.5`.
 arm-level records into the four-cell table, and routes it through Gate 2. It is in
 the Aggregation table above because the attention rule applies to it, not because
 it was part of the census: **the 7-of-20 figure and the 2,210/1,909 branch totals
-are the 2026-08-12 result and do not include this row.** Counting the later row
-leaves it 8 flagged of 21 today: #247 moved the branch figure over the floor, but
-the attention rule reads both instruments, and mutation still reads `absent` for
-this module — so the row stays flagged on the mutation arm of the rule until
-#166's instrument measures it. Branch coverage alone does not clear a flag; that
-is the point of pairing the columns.
+are the 2026-08-12 result and do not include later rows.** Counting both later
+flagged rows (this module and `binding.py`) leaves it 9 flagged of 22 today:
+#247 moved this module's branch figure over the floor, but the attention rule
+reads both instruments, and mutation still reads `absent` for this module — so
+the row stays flagged on the mutation arm of the rule until #166's instrument
+measures it. Branch coverage alone does not clear a flag; that is the point of
+pairing the columns.
 
 Its figures - 32 branches, 2 uncovered, 93.8% - were re-measured on 2026-08-17
 with coverage.py 7.15.2 and the flags in "How to reproduce", over
@@ -167,8 +168,8 @@ cross-partition id collision instead of pairing a calibration row into the
 effect (INVARIANTS #7).
 
 Mutation reads `absent` for the same reason `confidence_sequence.py` does: #166
-predates the module. Two of the 21 modules are now unmeasured by the stronger
-instrument, not one.
+predates the module. Three of the 22 modules are now unmeasured by the stronger
+instrument (`confidence_sequence.py`, this module, and `binding.py`).
 
 **The 2 arcs still uncovered are both unreachable, and neither is suppressed.**
 The earlier draft of this row named three uncovered refusal guards - a pair
