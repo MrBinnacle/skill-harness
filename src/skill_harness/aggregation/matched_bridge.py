@@ -35,6 +35,22 @@ class MatchedRefusalReason(StrEnum):
     """Named reasons that prevent matched evidence from producing a decision."""
 
     NO_EVIDENCE = "no-evidence"
+    """The store holds no matched row for this family version at all.
+
+    Reserved for an empty read. It must not be returned when rows were stored
+    and then rejected: `no-evidence` says the collection never happened, which
+    implies collecting again would resolve the family. `INADMISSIBLE` is the
+    reason for rows that exist and cannot be used.
+    """
+    INADMISSIBLE = "inadmissible"
+    """Matched rows exist for this family version and every one is inadmissible.
+
+    The distinction from `NO_EVIDENCE` is the one `UnmeasuredSubReason.NO_DATA`
+    and `UnmeasuredSubReason.INADMISSIBLE` draw at the clause layer, and it is
+    drawn for the same reason: the family has data and no admissible data, so
+    re-running the family is not the fix. The term is the ratified one
+    (`docs/concepts/why-unmeasured.md`), spelled as that vocabulary spells it.
+    """
     DUPLICATE_ARM = "duplicate-arm"
     MISSING_ARM = "missing-arm"
     COUNT_MISMATCH = "count-mismatch"
@@ -128,6 +144,9 @@ def _all_matched_evidence(
     inadmissible tail, which the ledger has to name and which no seam exposes
     today — widening it to every row would make the estimator feed a dead call
     and put the decision path on a raw read.
+    ``test_admissible_rows_reach_a_decision_only_through_the_registered_feed``
+    stubs the feed empty and requires the eight admissible rows in the store to
+    stay out of the result; before it existed, that widening was green.
 
     ``ORDER BY observation_id`` matches the feed's own rule (a unique key, never
     a timestamp), and the returned tuple is sorted again over the merged keys —
@@ -136,7 +155,9 @@ def _all_matched_evidence(
     id order, delete both and two stores holding the same rows in opposite
     physical order return different ledgers.
     ``test_shuffled_insertion_order_produces_identical_result_objects`` fails on
-    the pair, not on either alone.
+    the pair, not on either alone — and, since it asserts the ledger's id order
+    rather than only the two stores' agreement, it also fails on an ordering that
+    is deterministic but not by observation_id.
     """
     records = {record.observation_id: record for record in matched_evidence(conn, manifest)}
     rows = conn.execute(
@@ -226,6 +247,14 @@ def aggregate_matched_gate2(
     that cannot be completed is filed in the returned ``ledger`` and named
     there; a family that cannot produce a decision at all comes back as a
     ``MatchedGate2Refusal`` carrying the reason. Nothing is dropped silently.
+
+    Reason precedence when no decision is possible: a duplicate arm first (the
+    store contradicts itself about one instance, so no count from it is
+    trustworthy), then — with no pair surviving — a pair that lost an arm, then
+    rows that were all inadmissible, then an empty read. The last two are
+    separated deliberately: `NO_EVIDENCE` means nothing was collected and
+    `INADMISSIBLE` means what was collected cannot be used, and the ratified
+    sub-reason vocabulary refuses to spend one word on both conditions.
     """
     observation_ids, ledger = _pair_evidence(_all_matched_evidence(conn, manifest))
     both_pass = observation_ids.both_pass
@@ -240,6 +269,8 @@ def aggregate_matched_gate2(
     elif complete_pair_count == 0:
         if RefusedPairReason.MISSING_ARM in pair_reasons:
             refusal_reason = MatchedRefusalReason.MISSING_ARM
+        elif ledger.excluded_observations:
+            refusal_reason = MatchedRefusalReason.INADMISSIBLE
         else:
             refusal_reason = MatchedRefusalReason.NO_EVIDENCE
     elif complete_pair_count != design.n_pairs:

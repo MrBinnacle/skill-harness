@@ -136,6 +136,13 @@ def _insert_matched_row(
 def test_empty_store_returns_typed_no_evidence_refusal(
     evidence_db: sqlite3.Connection,
 ) -> None:
+    """`no-evidence` belongs to the empty read, and to nothing else.
+
+    Its contrast is
+    `test_inadmissible_only_returns_typed_inadmissible_refusal_with_observation_ledger`:
+    same absence of a decision, different cause, different reason. The empty
+    ledger asserted below is what makes this fixture the empty-read case.
+    """
     manifest = load_manifest(_manifest_data(1))
 
     result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
@@ -204,9 +211,18 @@ def test_missing_arm_returns_typed_refusal_with_pair_ledger(
     assert refused.observation_ids == ("obs-full",)
 
 
-def test_inadmissible_only_returns_typed_no_evidence_refusal_with_observation_ledger(
+def test_inadmissible_only_returns_typed_inadmissible_refusal_with_observation_ledger(
     evidence_db: sqlite3.Connection,
 ) -> None:
+    """Rows that were stored and rejected are not the same fact as no rows.
+
+    `no-evidence` says the collection never happened, so the fix is to collect;
+    this family collected and every row failed admission, so the fix is not to
+    collect again. `docs/concepts/why-unmeasured.md` draws exactly that line
+    between `no_data` and `inadmissible` and calls the collapsed form a false
+    explanation, and `tests/test_aggregation_status.py` pins it at the clause
+    layer. This is the same distinction one unit up.
+    """
     manifest = load_manifest(_manifest_data(1))
     _insert_matched_row(
         evidence_db,
@@ -224,7 +240,7 @@ def test_inadmissible_only_returns_typed_no_evidence_refusal_with_observation_le
 
     assert result.decision is None
     assert result.refusal is not None
-    assert result.refusal.reason is MatchedRefusalReason.NO_EVIDENCE
+    assert result.refusal.reason is MatchedRefusalReason.INADMISSIBLE
     assert result.ledger.refused_pairs == ()
     assert len(result.ledger.excluded_observations) == 1
     excluded = result.ledger.excluded_observations[0]
@@ -250,6 +266,36 @@ def test_surviving_pair_count_mismatch_returns_typed_refusal_without_exception(
     assert result.refusal is not None
     assert result.refusal.reason is MatchedRefusalReason.COUNT_MISMATCH
     assert result.observation_ids.full_only == (("obs-00-full", "obs-00-null"),)
+    assert result.ledger.excluded_observations == ()
+    assert result.ledger.refused_pairs == ()
+
+
+def test_more_surviving_pairs_than_the_design_refuses_instead_of_raising(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    """The over-count direction must refuse too, and it is a separate branch.
+
+    ``effect_from_matched_gate2`` raises on either direction of a count
+    disagreement, so the bridge's guard is the only thing standing between an
+    over-supplied store and a ValueError out of the estimator. Narrowing that
+    guard to ``complete_pair_count < design.n_pairs`` left every other test in
+    this file green while this call raised, which is the exception #247 exists
+    to replace.
+    """
+    manifest = _store_table(
+        evidence_db,
+        both_pass=1,
+        full_only=1,
+        null_only=0,
+        both_fail=0,
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.COUNT_MISMATCH
+    assert len(result.observation_ids.both_pass) + len(result.observation_ids.full_only) == 2
     assert result.ledger.excluded_observations == ()
     assert result.ledger.refused_pairs == ()
 
@@ -299,6 +345,53 @@ def test_decided_result_ledgers_inadmissible_observation_and_incomplete_pair(
     assert result.ledger.refused_pairs[0].observation_ids == ("obs-incomplete",)
 
 
+def test_admissible_rows_reach_a_decision_only_through_the_registered_feed(
+    evidence_db: sqlite3.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stub the estimator feed empty; no admissible row may arrive anyway.
+
+    The bridge reads admissible rows through ``matched_evidence()`` and reads
+    `task_frontier_matched_obs` directly ONLY for the inadmissible tail that
+    feed cannot return. Nothing checked that split: widening the raw query to
+    every row and deleting the feed call produced byte-identical results, and
+    the whole suite stayed green - so the module docstring's claim that no
+    admissible row reaches a Gate-2 decision around the registered feed rested
+    on nothing, and the feed could become a dead call in a later refactor
+    without a red test.
+
+    The claim has no externally observable consequence to assert - both reads
+    return the same rows from the same table - so this drives the seam instead,
+    the way `tests/task_frontier/test_tracer.py` drives the phase firewall. With
+    the feed returning nothing, four complete pairs are in the store and none
+    may reach the decision. If one does, it came from the raw read.
+    """
+    import skill_harness.aggregation.matched_bridge as bridge
+
+    manifest = _store_table(
+        evidence_db,
+        both_pass=1,
+        full_only=1,
+        null_only=1,
+        both_fail=1,
+    )
+    monkeypatch.setattr(bridge, "matched_evidence", lambda conn, manifest: ())
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(4))
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.NO_EVIDENCE
+    assert result.observation_ids.both_pass == ()
+    assert result.observation_ids.full_only == ()
+    assert result.observation_ids.null_only == ()
+    assert result.observation_ids.both_fail == ()
+    # The supplementary read is scoped to the inadmissible tail, and there is
+    # none here: it must not have picked the eight admissible rows up either.
+    assert result.ledger.excluded_observations == ()
+    assert result.ledger.refused_pairs == ()
+
+
 @pytest.mark.parametrize("refused", [False, True])
 def test_shuffled_insertion_order_produces_identical_result_objects(
     tmp_path: Path,
@@ -321,6 +414,14 @@ def test_shuffled_insertion_order_produces_identical_result_objects(
     id order, and the counts are asserted before the equality is: a later
     refactor that collapses the ledger back to one entry per kind fails here
     rather than quietly making the equality vacuous again.
+
+    The two lonely rows carry ASCENDING lineages against ascending ids
+    (``obs-lonely-a`` on ``lineage-3``, ``obs-lonely-z`` on ``lineage-4``) and
+    that pairing is load-bearing. Under the reverse assignment, walking the
+    pairing keys backwards happens to walk them in ascending key order, and
+    replacing ``sorted(pairs)`` with ``reversed(list(pairs))`` left the whole
+    file green. Keep id order and key order agreeing here, or the key-order
+    assertion below stops discriminating.
     """
     manifest = load_manifest(_manifest_data(6))
     rows: list[tuple[str, str, str, Arm, str, str | None]] = [
@@ -330,8 +431,8 @@ def test_shuffled_insertion_order_produces_identical_result_objects(
         # store and matches it in the other. Only an id-ordered ledger agrees.
         ("obs-drop-z", "lineage-1", "instance-1", Arm.FULL, "inadmissible", "synthetic-drift-z"),
         ("obs-drop-a", "lineage-2", "instance-2", Arm.NULL, "inadmissible", "synthetic-drift-a"),
-        ("obs-lonely-z", "lineage-3", "instance-3", Arm.FULL, "admissible", None),
-        ("obs-lonely-a", "lineage-4", "instance-4", Arm.NULL, "admissible", None),
+        ("obs-lonely-z", "lineage-4", "instance-4", Arm.FULL, "admissible", None),
+        ("obs-lonely-a", "lineage-3", "instance-3", Arm.NULL, "admissible", None),
     ]
     if refused:
         rows.append(("obs-dup-z", "lineage-5", "instance-5", Arm.FULL, "admissible", None))
@@ -372,6 +473,18 @@ def test_shuffled_insertion_order_produces_identical_result_objects(
     for result in results:
         assert len(result.ledger.excluded_observations) == 2
         assert len(result.ledger.refused_pairs) == (3 if refused else 2)
+        # Insertion-order independence is not the whole guarantee, and the
+        # equality below cannot see the rest of it. Every read on this path is
+        # SQL-ordered, so an order that is deterministic but NOT observation_id
+        # order agrees between the two stores and survives: reversing the
+        # exclusion query to `ORDER BY observation_id DESC`, or replacing
+        # `sorted(pairs)` with `reversed(list(pairs))`, both left this test
+        # green. The registered guarantee is observation_id order - a unique
+        # key, never a timestamp (E3) - so assert that order directly.
+        excluded_ids = [item.observation_id for item in result.ledger.excluded_observations]
+        assert excluded_ids == sorted(excluded_ids), excluded_ids
+        refused_keys = [pair.pairing_key for pair in result.ledger.refused_pairs]
+        assert refused_keys == sorted(refused_keys), refused_keys
     assert results[0] == results[1]
     assert (results[0].decision is None) is refused
 
