@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -17,6 +18,7 @@ from skill_harness.aggregation import (
 )
 from skill_harness.aggregation.verdict import CutSubReason, KeepCutVerdict
 from skill_harness.oc import Gate2Decision, Gate2Design, MMESpec, gate2_decide
+from skill_harness.storage.migrations import open_evidence
 from skill_harness.task_frontier import (
     Arm,
     Observation,
@@ -295,6 +297,63 @@ def test_decided_result_ledgers_inadmissible_observation_and_incomplete_pair(
     assert len(result.ledger.refused_pairs) == 1
     assert result.ledger.refused_pairs[0].reason is RefusedPairReason.MISSING_ARM
     assert result.ledger.refused_pairs[0].observation_ids == ("obs-incomplete",)
+
+
+@pytest.mark.parametrize("refused", [False, True])
+def test_shuffled_insertion_order_produces_identical_result_objects(
+    tmp_path: Path,
+    refused: bool,
+) -> None:
+    manifest = load_manifest(_manifest_data(2))
+    rows: list[tuple[str, str, str, Arm, str, str | None]] = [
+        ("obs-z-full", "lineage-0", "instance-0", Arm.FULL, "admissible", None),
+        ("obs-a-null", "lineage-0", "instance-0", Arm.NULL, "admissible", None),
+        ("obs-m-full", "lineage-1", "instance-1", Arm.FULL, "admissible", None),
+    ]
+    if refused:
+        rows.append(("obs-b-full", "lineage-1", "instance-1", Arm.FULL, "admissible", None))
+    else:
+        rows[-1] = (
+            "obs-m-inadmissible",
+            "lineage-1",
+            "instance-1",
+            Arm.FULL,
+            "inadmissible",
+            "synthetic-drift",
+        )
+
+    results = []
+    table_orders = []
+    for db_index, ordered_rows in enumerate((rows, list(reversed(rows)))):
+        conn = open_evidence(tmp_path / f"determinism-{db_index}.db")
+        try:
+            for observation_id, lineage, instance, arm, state, stored_reason in ordered_rows:
+                _insert_matched_row(
+                    conn,
+                    manifest,
+                    observation_id=observation_id,
+                    lineage=lineage,
+                    instance=instance,
+                    arm=arm,
+                    passed=True,
+                    admissibility_state=state,
+                    inadmissibility_reason=stored_reason,
+                )
+            results.append(aggregate_matched_gate2(conn, manifest, _design(1)))
+            table_orders.append(
+                tuple(
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT observation_id FROM task_frontier_matched_obs ORDER BY rowid"
+                    ).fetchall()
+                )
+            )
+        finally:
+            conn.close()
+
+    assert table_orders[0] == tuple(reversed(table_orders[1]))
+    assert results[0] == results[1]
+    assert (results[0].decision is None) is refused
 
 
 @pytest.mark.parametrize(
