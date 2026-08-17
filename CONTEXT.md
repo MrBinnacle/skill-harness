@@ -49,6 +49,9 @@ A synthetic positive result run through the full apparatus to prove the instrume
 **Matched-evidence bridge**:
 The pure-function seam from stored matched evidence to a Gate-2 verdict on well-formed evidence, or a typed refusal with an exclusion ledger on malformed evidence. No writes, no defaults; same records in, same result out.
 
+**Evidence grade**:
+The strength label attached to a published finding — `MEASURED` (pre-registered/audited conditions), `MECHANISM` (argument at mechanism level plus independent expert concurrence), `DIRECTIONAL` (trust the direction, not the magnitude), `EXPLORATORY` (from a construct-invalid instrument; illustrates, never decides). Distinct from **evidence admissibility** (whether an observation may feed aggregation) and from an **Oracle** grading an arm.
+
 **Admission state vs measurement state**:
 Two separate facts about a skill: whether the collection admits it (the library's decision) and what the instrument has measured about it (this repo's decision). A kept skill is not thereby empirically proven; the two states never collapse into one label.
 
