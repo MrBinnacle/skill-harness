@@ -77,7 +77,7 @@ actually buys.
 | `src/skill_harness/aggregation/engine.py` | 90 | 9 | 67.9% | 90.0% | BELOW 80% |
 | `src/skill_harness/aggregation/errors.py` | 0 | 0 | 100% | n/a | no branches |
 | `src/skill_harness/aggregation/fit.py` | 20 | 1 | 94.4% | 95.0% | OK |
-| `src/skill_harness/aggregation/matched_bridge.py` | 30 | 2 | absent | 93.3% | BELOW 80% |
+| `src/skill_harness/aggregation/matched_bridge.py` | 32 | 2 | absent | 93.8% | BELOW 80% |
 | `src/skill_harness/aggregation/profile.py` | 22 | 1 | 98.0% | 95.5% | OK |
 | `src/skill_harness/aggregation/report.py` | 0 | 0 | 97.6% | n/a | no branches |
 | `src/skill_harness/aggregation/status.py` | 20 | 0 | 100% | 100.0% | OK |
@@ -146,7 +146,7 @@ this module — so the row stays flagged on the mutation arm of the rule until
 #166's instrument measures it. Branch coverage alone does not clear a flag; that
 is the point of pairing the columns.
 
-Its figures - 30 branches, 2 uncovered, 93.3% - were re-measured on 2026-08-17
+Its figures - 32 branches, 2 uncovered, 93.8% - were re-measured on 2026-08-17
 with coverage.py 7.15.2 and the flags in "How to reproduce", over
 `tests/test_aggregation_matched_bridge.py`. That is a narrower selection than the
 CI cell, and for this module it is the same number: nothing else in `src/` or
@@ -158,7 +158,12 @@ The row read 10 branches, 3 uncovered, 70.0% and BELOW 80% when #246 landed it o
 2026-08-16. #247 replaced the two evidence-shaped raises with typed refusals and
 an exclusion ledger, and put tests on them, which is what moved the module over
 the floor. The branch count tripled because the refusal and ledger branches are
-new code, not because the old branches were removed.
+new code, not because the old branches were removed. Review of #247 added two
+more, both covered: the exclusion read resolves each id through
+`audit_observation`, which answers from whichever of the three partitions holds
+that id first, so the bridge now checks the returned phase stamp and refuses a
+cross-partition id collision instead of pairing a calibration row into the
+effect (INVARIANTS #7).
 
 Mutation reads `absent` for the same reason `confidence_sequence.py` does: #166
 predates the module. Two of the 21 modules are now unmeasured by the stronger
@@ -170,24 +175,23 @@ carrying two records for the same arm, a pair missing an arm, and an effect that
 arrives without a Gate-2 decision - and said #247 would put a test on each. Two
 of the three are gone: a duplicate arm and a missing arm are now ledgered
 refusals, tested directly. The third raise survives at
-`matched_bridge.py:297` and cannot be tested, because it cannot fire:
+`matched_bridge.py:321` and cannot be tested, because it cannot fire:
 `gate2_decide` returns a non-optional `Gate2Decision`, and
 `effect_from_matched_gate2` raises on a count disagreement rather than returning
 an effect without one, so `effect.decision is None` is false on every path that
 reaches it. It exists to satisfy the type checker, `EffectEstimate.decision`
 being `Gate2Decision | None`. The second arc, the audit-miss exit in
-`_all_matched_evidence`, is unreachable for the same class of reason: the
-observation id was read from `task_frontier_matched_obs` on the same connection
-one statement earlier, so the by-id read cannot miss.
+`_all_matched_evidence` (`matched_bridge.py:192`), is unreachable for the same
+class of reason: the observation id was read from `task_frontier_matched_obs` on
+the same connection one statement earlier, so the by-id read cannot miss.
 
 Neither carries a `# pragma: no cover`. Excluding them would lift the row to
 100.0% by shrinking the denominator, and a percentage moved by the exclusion
 list rather than by a test is the figure this report exists to refuse. **Decision
 owed:** either delete the two dead guards and let the type checker be satisfied
 another way, or keep them and register the exclusion here with this reasoning
-attached. Until that is settled the row reports 93.3% and names why the
+attached. Until that is settled the row reports 93.8% and names why the
 remainder is not reachable.
-
 
 ## What a zero in the Branches column means
 

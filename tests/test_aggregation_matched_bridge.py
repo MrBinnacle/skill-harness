@@ -392,6 +392,65 @@ def test_admissible_rows_reach_a_decision_only_through_the_registered_feed(
     assert result.ledger.refused_pairs == ()
 
 
+def test_an_id_held_by_two_partitions_refuses_the_read_instead_of_pairing_the_walled_off_row(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    """A calibration row must not enter the effect path through the by-id read.
+
+    The exclusion query names ids in the matched partition; `audit_observation`
+    then resolves each one, and it searches all three partitions in name order
+    and answers with the first hit. So an id held by both the calibration and
+    the matched table resolves to the CALIBRATION row. Without the phase check
+    the bridge filed that row under the matched id: it arrived stamped
+    `admissible`, was paired against a matched row, and reached a Gate-2
+    decision while the ledger stayed empty - rung-selection data inside the
+    effect estimate, which is the row-leakage class INVARIANTS #7 walls off.
+
+    `admit` refuses to write an id that already exists in another partition, so
+    only a writer that goes around `admit` can build this store. This test is
+    that writer. The read refuses rather than picking a partition, on the same
+    ground `admit` refuses the write.
+    """
+    manifest = load_manifest(_manifest_data(1))
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-collides",
+        lineage="lineage-0",
+        instance="instance-0",
+        arm=Arm.FULL,
+        passed=True,
+        admissibility_state="inadmissible",
+        inadmissibility_reason="synthetic-fingerprint-drift",
+    )
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-matched-null",
+        lineage="lineage-0",
+        instance="instance-0",
+        arm=Arm.NULL,
+        passed=False,
+    )
+    evidence_db.execute(
+        """
+        INSERT INTO task_frontier_calibration_obs (
+            observation_id, task_family_id, task_family_version,
+            semantic_lineage_id, phase, instance_id, arm, passed,
+            generator_fingerprint, oracle_fingerprint, admissibility_state,
+            inadmissibility_reason, observed_at, ingested_at
+        ) VALUES (
+            'obs-collides', 'synthetic-e1-family', '1', 'lineage-calibration',
+            'calibration', 'instance-0', 'full', 1, 'gen-sha-e1', 'ora-sha-e1',
+            'admissible', NULL, '2026-08-16T12:00:00+00:00', '2026-08-16T12:00:01Z'
+        )
+        """
+    )
+
+    with pytest.raises(ValueError, match="stored in two partitions"):
+        aggregate_matched_gate2(evidence_db, manifest, _design(1))
+
+
 @pytest.mark.parametrize("refused", [False, True])
 def test_shuffled_insertion_order_produces_identical_result_objects(
     tmp_path: Path,
