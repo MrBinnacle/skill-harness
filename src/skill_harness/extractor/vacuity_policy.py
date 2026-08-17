@@ -16,6 +16,7 @@ import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from itertools import permutations
 from pathlib import Path
 from typing import Any, Final, Literal
 
@@ -60,6 +61,13 @@ _ADJUDICATED_KINDS: Final[frozenset[str]] = frozenset(
 )
 _PREDICTED_KINDS: Final[frozenset[str]] = frozenset({"weak_directive", "not_a_directive"})
 
+# The revision the differential replay baselines against: the #218 guard as it
+# stood before the #234 build (claim layer #236, registry backstop #237).
+_PRE_CHANGE_GUARD_REVISION: Final[str] = "5f82a57"
+# A pre-change refusal the #237 narrowing retracted on purpose, kept as a named
+# row rather than dropped from the corpus. Prefix, so the row names its receipt.
+_RETRACTED_FALSE_REFUSAL_PREFIX: Final[str] = "census-digit-run:"
+
 
 class MixedExtractorGenerationsError(ValueError):
     """Raised when callers attempt to pool rows across instrument generations."""
@@ -83,16 +91,41 @@ class RecallRenderError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class KindPrecisionGuardDelta:
-    """Measured refusal coverage of the claim layer and render backstop."""
+    """Differential refusal coverage: pre-change guard vs claim layer + backstop.
+
+    Every field is produced by running one corpus through two predicates -- the
+    guard pinned at ``_PRE_CHANGE_GUARD_REVISION`` and the current stack. No
+    field is a figure entered by hand, and no row is dropped: each row lands in
+    exactly one of replayed, lost, retracted, gained, or refused-by-neither.
+    """
 
     old_refusal_count: int
     replayed_refusal_count: int
     lost_refusals: tuple[str, ...]
-    per_generation_refusal_counts: dict[str, int]
+    retracted_false_refusals: tuple[str, ...]
+    gained_refusal_count: int
+    per_generation_gained_refusal_counts: tuple[tuple[str, int], ...]
+    refused_by_neither_guard: tuple[str, ...]
     claim_layer_franken_tuple_refusal_count: int
-    serializer_format_variant_refusal_count: int
+    serializer_enumerated_output_count: int
+    serializer_bare_or_percent_output_count: int
     backstop_document_scope_residual_count: int
     prose_bypassing_claim_object_residual_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class _ReplayRow:
+    """One corpus row: the render, the receipt the caller holds, the figure cited.
+
+    ``cited_receipt_id`` is the registry member whose aggregate the row spells,
+    so a gained refusal can be attributed to a generation. It is None for the
+    figure-free wording rows, which cite no aggregate at all.
+    """
+
+    case_id: str
+    rendered: str
+    held_receipt: VacuityFlagCalibrationReceipt | None
+    cited_receipt_id: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -611,123 +644,317 @@ def _assert_aggregate_carries_its_own_split(
         )
 
 
-def measure_kind_precision_guard_delta() -> KindPrecisionGuardDelta:
-    """Replay the pre-change public-copy refusal corpus through the new stack."""
-    refusals: list[str] = []
-    lost: list[str] = []
-    replayed = 0
-    per_generation: dict[str, int] = {}
-    serializer_variants = 0
-    receipts = load_citable_receipts()
-    for receipt in receipts:
-        aggregate = _fmt_num(receipt.kind_precision_aggregate)
-        percent = f"{receipt.kind_precision_aggregate * 100:g}"
-        nad = (
-            f"{receipt.kind_precision_not_a_directive_correct}/"
-            f"{receipt.kind_precision_not_a_directive_n}"
-        )
-        wd = (
-            f"{receipt.kind_precision_weak_directive_correct}/"
-            f"{receipt.kind_precision_weak_directive_n}"
-        )
-        cases = (
-            (f"decimal:{receipt.receipt_id}", f"kind-precision {aggregate}"),
-            (f"percent:{receipt.receipt_id}", f"kind precision {percent} percent"),
-            (
-                f"missing-not-a-directive:{receipt.receipt_id}",
-                f"kind-precision {aggregate}; weak_directive {wd}",
-            ),
-            (
-                f"missing-weak-directive:{receipt.receipt_id}",
-                f"kind-precision {aggregate}; not_a_directive {nad}",
-            ),
-        )
-        for case_id, rendered in cases:
-            refusals.append(case_id)
-            try:
-                assert_kind_precision_render_safe(rendered, receipt)
-            except BareKindPrecisionRenderError:
-                replayed += 1
-                per_generation[receipt.receipt_id] = per_generation.get(receipt.receipt_id, 0) + 1
-                if case_id.startswith(("decimal:", "percent:")):
-                    serializer_variants += 1
-            else:
-                lost.append(case_id)
+def _split_strings(receipt: VacuityFlagCalibrationReceipt) -> tuple[str, str]:
+    """The two class-split strings paired disclosure requires, in render form."""
+    nad = (
+        f"{receipt.kind_precision_not_a_directive_correct}/"
+        f"{receipt.kind_precision_not_a_directive_n}"
+    )
+    wd = (
+        f"{receipt.kind_precision_weak_directive_correct}/{receipt.kind_precision_weak_directive_n}"
+    )
+    return nad, wd
 
-    franken_refusals = 0
-    document_scope_residuals = 0
-    prose_bypass_residuals = 0
-    for source, splits in ((receipts[0], receipts[1]), (receipts[1], receipts[0])):
-        try:
-            KindPrecisionClaim(
-                receipt_id=source.receipt_id,
-                extractor_model=source.extractor_model,
-                system_prompt_sha256=source.system_prompt_sha256,
-                tool_schema_sha256=source.tool_schema_sha256,
-                aggregate=source.kind_precision_aggregate,
-                not_a_directive_correct=splits.kind_precision_not_a_directive_correct,
-                not_a_directive_n=splits.kind_precision_not_a_directive_n,
-                weak_directive_correct=splits.kind_precision_weak_directive_correct,
-                weak_directive_n=splits.kind_precision_weak_directive_n,
+
+def _pre_change_guard_refuses(
+    rendered: str,
+    receipt: VacuityFlagCalibrationReceipt | None,
+) -> bool:
+    """The #218 guard as it stood at 5f82a57, kept as the replay baseline.
+
+    One receipt, one canonical decimal spelling, substring comparison: that was
+    the whole of it. The baseline is executed rather than remembered, so a row
+    counts as a pre-change refusal only when this predicate refuses it. A row the
+    old guard never refused cannot be reported as a replayed refusal.
+
+    Equivalence is reproducible, not asserted: replay ``_replay_corpus`` through
+    ``git show 5f82a57:src/skill_harness/extractor/vacuity_policy.py`` and the two
+    verdicts agree on every row. Re-run that replay if this predicate is edited --
+    editing it moves the baseline, which moves every count downstream.
+    """
+    lowered = rendered.lower()
+    mentions_kind_precision = "kind-precision" in lowered or "kind precision" in lowered
+    if receipt is None:
+        return mentions_kind_precision
+    agg = _fmt_num(receipt.kind_precision_aggregate)
+    nad, wd = _split_strings(receipt)
+    return agg in rendered and (nad not in rendered or wd not in rendered)
+
+
+def _current_stack_refuses(
+    rendered: str,
+    receipt: VacuityFlagCalibrationReceipt | None,
+) -> bool:
+    """Whether the claim layer's backstop refuses this render as it stands today."""
+    try:
+        assert_kind_precision_render_safe(rendered, receipt)
+    except BareKindPrecisionRenderError:
+        return True
+    return False
+
+
+def _claim_layer_refuses(
+    source: VacuityFlagCalibrationReceipt,
+    splits: VacuityFlagCalibrationReceipt,
+) -> bool:
+    """Whether construction refuses one generation's headline on another's splits."""
+    try:
+        KindPrecisionClaim(
+            receipt_id=source.receipt_id,
+            extractor_model=source.extractor_model,
+            system_prompt_sha256=source.system_prompt_sha256,
+            tool_schema_sha256=source.tool_schema_sha256,
+            aggregate=source.kind_precision_aggregate,
+            not_a_directive_correct=splits.kind_precision_not_a_directive_correct,
+            not_a_directive_n=splits.kind_precision_not_a_directive_n,
+            weak_directive_correct=splits.kind_precision_weak_directive_correct,
+            weak_directive_n=splits.kind_precision_weak_directive_n,
+        )
+    except KindPrecisionClaimError:
+        return True
+    return False
+
+
+def _replay_corpus(
+    registry: Sequence[VacuityFlagCalibrationReceipt],
+) -> tuple[_ReplayRow, ...]:
+    """Every render shape either guard has an opinion about, figures from the registry.
+
+    The shapes come from the guard's own history: the #185 no-receipt rows, the
+    #218 reproduction (the caller holds the other generation's receipt), the #237
+    trailing-zero and census-digit-run rows, and the percent spelling the #215
+    static scanner owns. Which bucket each row lands in is left to the two
+    predicates -- this function chooses inputs, never outcomes.
+    """
+    row = _ReplayRow
+    rows: list[_ReplayRow] = []
+    for index, cited in enumerate(registry):
+        cid = cited.receipt_id
+        agg = _fmt_num(cited.kind_precision_aggregate)
+        nad, wd = _split_strings(cited)
+        percent = _fmt_num(cited.kind_precision_aggregate * 100)
+        held = registry[(index + 1) % len(registry)]
+        rows.extend(
+            (
+                # The caller holds the cited receipt: the pre-change guard's one
+                # comparison fired on these, so they are the corpus to replay.
+                row(f"bare:{cid}", f"kind-precision {agg}", cited, cid),
+                row(
+                    f"missing-weak-directive:{cid}",
+                    f"kind-precision {agg} (not_a_directive {nad})",
+                    cited,
+                    cid,
+                ),
+                row(
+                    f"missing-not-a-directive:{cid}",
+                    f"kind-precision {agg} (weak_directive {wd})",
+                    cited,
+                    cid,
+                ),
+                row(f"trailing-zero:{cid}", f"kind-precision {agg}00", cited, cid),
+                # The #218 reproduction: the caller holds the other generation, so
+                # the pre-change guard compared against a figure not in the render.
+                row(f"cross-generation-bare:{cid}", f"kind-precision {agg}", held, cid),
+                row(
+                    f"cross-generation-not-a-directive-only:{cid}",
+                    f"kind-precision {agg}, with {nad} adjudicated.",
+                    held,
+                    cid,
+                ),
+                row(
+                    f"cross-generation-weak-directive-only:{cid}",
+                    f"kind-precision {agg}, with {wd} adjudicated.",
+                    held,
+                    cid,
+                ),
+                row(f"figure-only-no-receipt:{cid}", f"The detector scored {agg}.", None, cid),
+                # The percent spelling: no decimal to match, so the backstop reads
+                # nothing here in either revision. #215's scanner owns this surface.
+                row(f"percent-spelling:{cid}", f"kind precision {percent} percent", cited, cid),
             )
-        except KindPrecisionClaimError:
-            franken_refusals += 1
+        )
 
-        source_nad = (
-            f"{source.kind_precision_not_a_directive_correct}/"
-            f"{source.kind_precision_not_a_directive_n}"
+    gen_1 = registry[0]
+    gen_1_agg = _fmt_num(gen_1.kind_precision_aggregate)
+    rows.extend(
+        (
+            row("no-receipt-hyphen", f"kind-precision {gen_1_agg}", None, gen_1.receipt_id),
+            row("no-receipt-space", f"kind precision {gen_1_agg}", None, gen_1.receipt_id),
+            row(
+                "no-receipt-prose",
+                f"vacuity kind precision was {gen_1_agg} for this run",
+                None,
+                gen_1.receipt_id,
+            ),
+            # Wording with no figure at all: cites no aggregate, so no generation.
+            row("no-receipt-wording-only", "Kind Precision: advisory", None, None),
+            # A census percentage whose digit run spans the aggregate ('10.835306'
+            # contains '0.835'). The pre-change substring comparison refused it for
+            # a figure nobody cited; #237's digit boundary retracted that refusal
+            # on purpose, and the retraction is named rather than dropped.
+            row(
+                f"{_RETRACTED_FALSE_REFUSAL_PREFIX}{gen_1.receipt_id}",
+                '{"kind_precision": null, "recall": "UNMEASURED", '
+                f'"vacuity_flag_percent": 1{gen_1_agg}306}}',
+                gen_1,
+                None,
+            ),
         )
-        source_wd = (
-            f"{source.kind_precision_weak_directive_correct}/"
-            f"{source.kind_precision_weak_directive_n}"
+    )
+    return tuple(rows)
+
+
+def _measure_serializer_outputs(
+    registry: Sequence[VacuityFlagCalibrationReceipt],
+) -> tuple[int, int]:
+    """Enumerate what the canonical serializer can emit, and count bare variants.
+
+    A claim is constructible only from a tuple matching one registered receipt,
+    and the serializer is the sole formatter, so the output set is one string per
+    registered receipt: it can be enumerated instead of argued about. An output
+    counts as a variant when it drops either class split or spells the aggregate
+    as a percentage.
+    """
+    outputs = tuple(KindPrecisionClaim.from_receipt(receipt).serialize() for receipt in registry)
+    variants = 0
+    for receipt, rendered in zip(registry, outputs, strict=True):
+        nad, wd = _split_strings(receipt)
+        percent = _fmt_num(receipt.kind_precision_aggregate * 100)
+        percent_spelled = re.search(
+            rf"{re.escape(percent)}\s*(?:%|percent\b)", rendered, re.IGNORECASE
         )
-        split_nad = (
-            f"{splits.kind_precision_not_a_directive_correct}/"
-            f"{splits.kind_precision_not_a_directive_n}"
-        )
-        split_wd = (
-            f"{splits.kind_precision_weak_directive_correct}/"
-            f"{splits.kind_precision_weak_directive_n}"
-        )
+        if nad not in rendered or wd not in rendered or percent_spelled is not None:
+            variants += 1
+    return len(outputs), variants
+
+
+def _measure_named_residuals(
+    registry: Sequence[VacuityFlagCalibrationReceipt],
+) -> tuple[int, int]:
+    """The two residuals #234 names, each measured on its own condition.
+
+    Document-level scope: a mismatched local pairing passes the backstop whenever
+    the correct splits appear anywhere else in the same document. Prose bypassing
+    the claim object: that same tuple is refused at construction, so the hole is
+    confined to copy the claim object never sees. The second count is the
+    conjunction of both facts, not a second name for the first.
+    """
+    document_scope = 0
+    bypassing_claim = 0
+    for cited, held in permutations(registry, 2):
+        cited_nad, cited_wd = _split_strings(cited)
+        held_nad, held_wd = _split_strings(held)
         document = (
-            f"kind-precision {_fmt_num(source.kind_precision_aggregate)} "
-            f"(not_a_directive {split_nad}; weak_directive {split_wd})\n\n"
-            f"Elsewhere: not_a_directive {source_nad}; weak_directive {source_wd}."
+            f"kind-precision {_fmt_num(cited.kind_precision_aggregate)} "
+            f"(not_a_directive {held_nad}; weak_directive {held_wd})\n\n"
+            f"Elsewhere: the {cited.receipt_id} receipt records not_a_directive "
+            f"{cited_nad} and weak_directive {cited_wd}."
         )
-        try:
-            assert_kind_precision_render_safe(document, source)
-        except BareKindPrecisionRenderError:
-            pass
+        if _current_stack_refuses(document, held):
+            continue
+        document_scope += 1
+        if _claim_layer_refuses(cited, held):
+            bypassing_claim += 1
+    return document_scope, bypassing_claim
+
+
+def measure_kind_precision_guard_delta() -> KindPrecisionGuardDelta:
+    """Replay the pre-change guard's refusal corpus through the current stack.
+
+    Both predicates run on every row: the guard pinned at
+    ``_PRE_CHANGE_GUARD_REVISION`` and ``assert_kind_precision_render_safe`` as it
+    stands. "Nothing lost" is an outcome of that replay, never an input to it -- a
+    row the old guard did not refuse lands in the gained or refused-by-neither
+    bucket and cannot pad the replayed count.
+
+    The percent spelling is in the corpus and neither revision refuses it. The
+    backstop reads decimals only, because #234 fences a prose claim detector out
+    of it and leaves hand-written percent copy to the #215 static scanner. What
+    closes that surface for rendered output is the serializer gain below: the
+    sole formatter cannot emit a percent form at all.
+
+    Figures come from the citable registry, so registering another generation
+    changes these counts. That is a measurement moving with its inputs, and the
+    pinned expectations in the #238 test are meant to fail loudly when it does.
+    """
+    registry = load_citable_receipts()
+    old_refusals = 0
+    replayed = 0
+    lost: list[str] = []
+    retracted: list[str] = []
+    gained = 0
+    per_generation = {receipt.receipt_id: 0 for receipt in registry}
+    refused_by_neither: list[str] = []
+    for case in _replay_corpus(registry):
+        refused_before = _pre_change_guard_refuses(case.rendered, case.held_receipt)
+        refused_now = _current_stack_refuses(case.rendered, case.held_receipt)
+        if refused_before:
+            old_refusals += 1
+            if refused_now:
+                replayed += 1
+            elif case.case_id.startswith(_RETRACTED_FALSE_REFUSAL_PREFIX):
+                retracted.append(case.case_id)
+            else:
+                lost.append(case.case_id)
+        elif refused_now:
+            gained += 1
+            # Rows citing no aggregate are all pre-change refusals, so they never
+            # reach this branch. The gained total is published beside the
+            # per-generation counts, so an unattributed gain shows up as a gap
+            # between the two rather than disappearing.
+            if case.cited_receipt_id is not None:
+                per_generation[case.cited_receipt_id] += 1
         else:
-            document_scope_residuals += 1
-            prose_bypass_residuals += 1
+            refused_by_neither.append(case.case_id)
+
+    franken = sum(
+        1 for source, splits in permutations(registry, 2) if _claim_layer_refuses(source, splits)
+    )
+    outputs, bare_or_percent = _measure_serializer_outputs(registry)
+    document_scope, bypassing_claim = _measure_named_residuals(registry)
     return KindPrecisionGuardDelta(
-        old_refusal_count=len(refusals),
+        old_refusal_count=old_refusals,
         replayed_refusal_count=replayed,
         lost_refusals=tuple(lost),
-        per_generation_refusal_counts=per_generation,
-        claim_layer_franken_tuple_refusal_count=franken_refusals,
-        serializer_format_variant_refusal_count=serializer_variants,
-        backstop_document_scope_residual_count=document_scope_residuals,
-        prose_bypassing_claim_object_residual_count=prose_bypass_residuals,
+        retracted_false_refusals=tuple(retracted),
+        gained_refusal_count=gained,
+        per_generation_gained_refusal_counts=tuple(per_generation.items()),
+        refused_by_neither_guard=tuple(refused_by_neither),
+        claim_layer_franken_tuple_refusal_count=franken,
+        serializer_enumerated_output_count=outputs,
+        serializer_bare_or_percent_output_count=bare_or_percent,
+        backstop_document_scope_residual_count=document_scope,
+        prose_bypassing_claim_object_residual_count=bypassing_claim,
     )
+
+
+def _count_with_ids(ids: tuple[str, ...]) -> str:
+    """A count that names its members, so a nonzero bucket is never just a number."""
+    if not ids:
+        return "0"
+    return f"{len(ids)} ({', '.join(ids)})"
 
 
 def format_kind_precision_guard_delta(report: KindPrecisionGuardDelta) -> str:
-    """Render the measured coverage statement for the #218 decision record."""
+    """Render the measured coverage statement the #218 decision record asks for."""
     per_generation = ", ".join(
-        f"{receipt_id}={count}"
-        for receipt_id, count in report.per_generation_refusal_counts.items()
+        f"{receipt_id}={count}" for receipt_id, count in report.per_generation_gained_refusal_counts
     )
     return (
-        "Measured differential coverage: the new stack replayed "
-        f"{report.replayed_refusal_count}/{report.old_refusal_count} pre-change refusals; "
-        f"lost refusals: {len(report.lost_refusals)}. Per-generation refusals: "
-        f"{per_generation}. Gains measured: claim-layer franken tuple refusals="
-        f"{report.claim_layer_franken_tuple_refusal_count}; serializer format-variant refusals="
-        f"{report.serializer_format_variant_refusal_count}. Named residuals measured: backstop "
-        f"document-level scope={report.backstop_document_scope_residual_count}; prose bypassing "
-        f"the claim object={report.prose_bypassing_claim_object_residual_count}."
+        f"Measured differential coverage, pre-change guard {_PRE_CHANGE_GUARD_REVISION} against "
+        "the claim layer plus document-level backstop. Replay: the current stack refuses "
+        f"{report.replayed_refusal_count} of the {report.old_refusal_count} corpus rows the "
+        f"pre-change guard refused. Lost refusals: {_count_with_ids(report.lost_refusals)}. "
+        "Retracted false refusals: "
+        f"{_count_with_ids(report.retracted_false_refusals)}. Gains: "
+        f"{report.gained_refusal_count} refusals the pre-change guard did not produce, per "
+        f"generation {per_generation}; claim-layer franken tuple refusals "
+        f"{report.claim_layer_franken_tuple_refusal_count}; canonical serializer outputs "
+        f"enumerated {report.serializer_enumerated_output_count}, of which bare or "
+        f"percent-spelled {report.serializer_bare_or_percent_output_count}. Named residuals: "
+        f"backstop document-level scope {report.backstop_document_scope_residual_count}; prose "
+        f"bypassing the claim object {report.prose_bypassing_claim_object_residual_count}. "
+        f"Refused by neither revision: {_count_with_ids(report.refused_by_neither_guard)}."
     )
 
 
