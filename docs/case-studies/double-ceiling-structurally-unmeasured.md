@@ -92,7 +92,8 @@ Two consequences, both registered:
    demonstrably fails (p0 < 1 on a Stage-0 screen) — in practice,
    real-workload tasks with the ecological context, underspecification, or
    scale that a self-contained synthetic cannot carry.
-2. **UNMEASURED is a first-class verdict.** A skill whose home domain only
+2. **UNMEASURED is a recorded state, not a failure.** It maps to the
+   **CANT_TELL_YET** verdict. A skill whose home domain only
    presents ceiling-class tasks gets UNMEASURED, published as such — not a
    fabricated win on a task the model didn't need help with.
 

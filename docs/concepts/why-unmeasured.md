@@ -2,7 +2,7 @@
 
 When you run `skill-harness run evaluate-skill` and see `unmeasured: 17`, the natural
 reading is that 17 things went wrong. That reading is incorrect. UNMEASURED is a
-first-class verdict that means: the test that would discriminate between "this clause
+recorded state, not a failure. It maps to the `CANT_TELL_YET` verdict and means the test that would discriminate between "this clause
 is load-bearing" and "this clause is decoration" was not run, because the necessary
 instrument does not exist in this version of the framework. Producing a number anyway
 — by handing the question to an LLM judge and asking for an estimated score — would be
@@ -136,7 +136,7 @@ They are not evidence that the clause is load-bearing; they are evidence that th
 output looks plausible to the judge with this rubric.
 
 Skill Harness is built around the refusal to conflate those two questions. The
-`UNMEASURED` verdict is the concrete artifact of that refusal — a result that says
+recorded `UNMEASURED` state is the concrete artifact of that refusal — a result that says
 "the instrument for this measurement does not exist in this version of the framework,
 and we will not pretend otherwise."
 

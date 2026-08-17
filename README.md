@@ -162,7 +162,7 @@ OFFLINE AUDIT — no API calls, no cost
   Fired cost (mechanical):    raw … tokens · calibrated … tokens
   Aux cost (mechanical):      raw … tokens · calibrated … tokens
 
-Summary: 2 pass · 0 warn — UNMEASURED is a verdict, not a failure.
+Summary: 2 pass · 0 warn — UNMEASURED is a recorded state, not a failure.
 ```
 
 Note what it does in the middle there. It couldn't parse the description, so it says so and
