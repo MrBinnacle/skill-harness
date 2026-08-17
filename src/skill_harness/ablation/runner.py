@@ -1274,8 +1274,7 @@ class AblationRunner:
     ) -> tuple[str, str | None]:
         """Compute the write-time evidence-admissibility snapshot for a comparison.
 
-        Root insight: the evidence state field is a real write-time evidence-admissible
-        snapshot of the
+        Root insight: ``admissibility_state`` is a real write-time snapshot of the
         comparison's state, NOT a hardcoded constant. Never recomputed at read time
         (see docs/INVARIANTS.md #3 — locked invariant).
 
@@ -1288,7 +1287,7 @@ class AblationRunner:
         scored at all, which takes priority over (and is orthogonal to) whatever the
         confound/null-floor state happens to be.
 
-        :returns: (evidence state field, reason field)
+        :returns: (admissibility_state, inadmissibility_reason)
         """
         if scorer_crashed:
             return "inadmissible", "scorer_error"

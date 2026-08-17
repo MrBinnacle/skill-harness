@@ -95,7 +95,7 @@ class JudgeVerdict(BaseModel):
         Winner from the AB perspective (first call). "A" means output_a won.
     position_swap_agreement : 0 | 1
         1 if verdict_AB == flip(verdict_BA), 0 otherwise.
-    evidence-state field : "admissible" | "inadmissible"
+    admissibility_state : "admissible" | "inadmissible"
         Resolved at write time per the evidence admissibility model, never
         recomputed (see docs/INVARIANTS.md #3).
     inadmissibility_reason : str | None
