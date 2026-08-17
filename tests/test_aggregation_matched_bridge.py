@@ -228,6 +228,7 @@ def test_inadmissible_only_returns_typed_no_evidence_refusal_with_observation_le
     excluded = result.ledger.excluded_observations[0]
     assert excluded.observation_id == "obs-inadmissible"
     assert excluded.reason is ExcludedObservationReason.INADMISSIBLE
+    assert excluded.stored_reason == "synthetic-fingerprint-drift"
 
 
 def test_surviving_pair_count_mismatch_returns_typed_refusal_without_exception(
