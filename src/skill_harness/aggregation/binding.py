@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict as _asdict
+from dataclasses import dataclass as _dataclass
 from typing import Any, Final
 
 from skill_harness.oc import FrontierRow, Gate2Design
@@ -23,7 +24,7 @@ def _sha256(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
-@dataclass(frozen=True)
+@_dataclass(frozen=True)
 class BindingRecord:
     """Frozen, hash-addressed identity fixed before measurement spend."""
 
@@ -51,7 +52,7 @@ def compile_binding(
     harness_pin: HarnessPin,
 ) -> BindingRecord:
     """Compose existing identity carriers into one canonical binding."""
-    frontier_row_hash = _sha256(_canonical_bytes(asdict(frontier_row)))
+    frontier_row_hash = _sha256(_canonical_bytes(_asdict(frontier_row)))
     payload: dict[str, Any] = {
         "binding_algo_version": BINDING_ALGO_VERSION,
         "registered_scope": {
@@ -64,9 +65,9 @@ def compile_binding(
         "task_family": {
             "id": manifest.task_family_id,
             "version": manifest.task_family_version,
-            "frozen_hashes": asdict(manifest.frozen_hashes),
+            "frozen_hashes": _asdict(manifest.frozen_hashes),
         },
-        "gate2_design": asdict(design),
+        "gate2_design": _asdict(design),
         "frontier_row_hash": frontier_row_hash,
         "budget_cap_cents": budget_cap_cents,
         "harness_pin_fingerprint": harness_pin.fingerprint(),

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from dataclasses import FrozenInstanceError
 from typing import Any
 
 import pytest
 
+from skill_harness.aggregation import binding
 from skill_harness.aggregation.binding import (
     BINDING_ALGO_VERSION,
     BindingRecord,
@@ -196,3 +198,13 @@ def test_binding_canonical_recipe_is_versioned_and_byte_stable() -> None:
     assert decoded["binding_algo_version"] == BINDING_ALGO_VERSION
     assert first.canonical_bytes == expected == second.canonical_bytes
     assert first.digest == hashlib.sha256(expected).hexdigest() == second.digest
+
+
+def test_binding_module_public_functions_are_compile_only() -> None:
+    public_functions = {
+        name
+        for name, value in vars(binding).items()
+        if not name.startswith("_") and inspect.isfunction(value)
+    }
+
+    assert public_functions == {"compile_binding"}
