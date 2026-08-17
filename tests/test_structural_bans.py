@@ -607,6 +607,29 @@ def test_dated_unmeasured_verdict_reasoning_keeps_inline_correction() -> None:
     ) in case_study
 
 
+def test_named_source_prose_qualifies_evidence_admissibility() -> None:
+    expected_by_path = {
+        "src/skill_harness/cli/main.py": (
+            "Three-tier evidence admissibility (A34)",
+            "curated\n    evidence-admissibility decisions",
+        ),
+        "src/skill_harness/oracles/calibration/command.py": (
+            "three-tier evidence-admissibility logic",
+            "Three-tier evidence admissibility",
+            "calibration evidence-admissibility state",
+            "Three-tier evidence-admissibility outcome",
+            "judge.py evidence-admissibility resolution",
+        ),
+        "src/skill_harness/audit/__init__.py": ("regardless of evidence admissibility",),
+        "src/skill_harness/aggregation/status.py": ("before evidence-admissibility filter",),
+        "src/skill_harness/ablation/runner.py": ("evidence admissibility reflects that",),
+    }
+    for relative, phrases in expected_by_path.items():
+        text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        for phrase in phrases:
+            assert phrase in text, f"{relative} is missing {phrase!r}"
+
+
 def test_gen2_receipt_json_is_not_a_public_surface(tmp_path: Path) -> None:
     """Pins the scanned surface set: docs/*.md is copy, docs/*.json is data.
 

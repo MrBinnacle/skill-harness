@@ -1303,7 +1303,7 @@ class AblationRunner:
 
         Confound detection on ``axis`` is only meaningful when sigma(Null) for that axis
         is estimated from >= the configured floor (default N_NULL_FLOOR=30). Below the
-        floor, the comparison is UNMEASURED(underpowered) — admissibility reflects that
+        floor, the comparison is UNMEASURED(underpowered) — evidence admissibility reflects that
         (MAJOR-3). Uses the accumulator's own floor so a test-lowered floor stays
         consistent between sigma estimation and the admissibility snapshot.
         """
