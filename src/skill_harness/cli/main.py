@@ -1404,7 +1404,12 @@ def _cmd_execute(
 
 
 def _is_unmeasured(result: Any) -> bool:
-    """Return True iff the clause result maps to the CANT_TELL_YET verdict.
+    """Return True iff the clause result is UNMEASURED.
+
+    UNMEASURED is a recorded state, not a verdict: aggregation maps it to the
+    CANT_TELL_YET verdict (aggregation/verdict.py, rule B3). The mapping is not
+    injective — CONFOUNDED reaches CANT_TELL_YET too — so this predicate answers
+    "is this result UNMEASURED", not "does this result reach CANT_TELL_YET".
 
     UNMEASURED covers:
     - StoppingReason.UNDERPOWERED_NMAX (hit N_MAX without decisive posterior)
