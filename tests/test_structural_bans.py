@@ -264,14 +264,29 @@ def _site_template_files(repo_root: Path) -> list[Path]:
     )
 
 
+def _mark_copy_lines(keep: list[bool], node: ast.expr) -> None:
+    for lineno in range(node.lineno, (node.end_lineno or node.lineno) + 1):
+        keep[lineno - 1] = True
+
+
 def _python_public_copy(source: str) -> str:
-    tree = ast.parse(source)
-    copy: list[str] = []
-    for node in ast.walk(tree):
+    """Return ``source`` with every non-public-copy line blanked out.
+
+    Blanked in place rather than concatenated so ``_line_number`` keeps
+    reporting a real line of the real file. The hook prints one line number per
+    violation; concatenating the docstrings first makes that number an offset
+    into a blob that exists nowhere on disk, and the operator reads the wrong
+    line. The blanks also stop ``_QUALIFIED_ADMISSIBILITY_PREFIX_RE`` carrying a
+    qualifier across the gap between two unrelated copy blocks -- the same
+    paragraph-boundary rule the prose surfaces get.
+    """
+    lines = source.splitlines()
+    keep = [False] * len(lines)
+    for node in ast.walk(ast.parse(source)):
         if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            docstring = ast.get_docstring(node, clean=False)
-            if docstring:
-                copy.append(docstring)
+            first = node.body[0] if node.body else None
+            if ast.get_docstring(node, clean=False) is not None and isinstance(first, ast.Expr):
+                _mark_copy_lines(keep, first.value)
         if not isinstance(node, ast.Call):
             continue
         for keyword in node.keywords:
@@ -280,12 +295,27 @@ def _python_public_copy(source: str) -> str:
                 and isinstance(keyword.value, ast.Constant)
                 and isinstance(keyword.value.value, str)
             ):
-                copy.append(keyword.value.value)
-    return "\n".join(copy)
+                _mark_copy_lines(keep, keyword.value)
+    return "\n".join(line if kept else "" for line, kept in zip(lines, keep, strict=True))
 
 
-def _python_evidence_admissibility_violations(text: str) -> list[str]:
-    return _evidence_admissibility_violations(text)
+def _surface_violations(surface: str, text: str) -> list[str]:
+    """Route one surface to its rule set.
+
+    ``python:`` surfaces carry the evidence-admissibility rule only, not the
+    full public-copy set (ticket #259 sanctioned "an equivalent targeted rule").
+    The other three rules quote their own poison examples inside the module that
+    implements them: ``extractor/vacuity_policy.py`` docstrings say
+    'kind-precision 0.835' and '0.9667' precisely because those are the renders
+    its guard refuses. Running the aggregate and recall rules over ``src/`` today
+    flags five such lines -- the guard cited for describing itself. Widening this
+    to ``_public_copy_violations`` therefore means excluding
+    ``vacuity_policy.py`` by name first, and proving that exclusion minimal the
+    way ``test_public_copy_exclusion_list_is_minimal`` does for the doc set.
+    """
+    if surface.startswith("python:"):
+        return _evidence_admissibility_violations(text)
+    return _public_copy_violations(text)
 
 
 def _public_surface_texts(repo_root: Path) -> list[tuple[str, str]]:
@@ -324,7 +354,7 @@ def _public_surface_texts(repo_root: Path) -> list[tuple[str, str]]:
         for path in sorted(source_root.rglob("*.py")):
             relative_source = path.relative_to(repo_root).as_posix()
             public_copy = _python_public_copy(path.read_text(encoding="utf-8"))
-            if public_copy:
+            if public_copy.strip():
                 surfaces.append((f"python:{relative_source}", public_copy))
     return surfaces
 
@@ -333,11 +363,7 @@ def _repo_public_copy_violations(repo_root: Path) -> list[str]:
     return [
         f"{surface}: {violation}"
         for surface, text in _public_surface_texts(repo_root)
-        for violation in (
-            _python_evidence_admissibility_violations(text)
-            if surface.startswith("python:src/") and surface.endswith(".py")
-            else _public_copy_violations(text)
-        )
+        for violation in _surface_violations(surface, text)
     ]
 
 
@@ -624,26 +650,45 @@ def test_site_generator_templates_are_scanned_in_both_directions(tmp_path: Path)
 
 
 def test_python_docstrings_and_cli_help_are_scanned_in_both_directions(tmp_path: Path) -> None:
+    """Poison and nearest-legitimate for the ``src/`` surface, line numbers included.
+
+    The reported line must be the line in the module, not an offset into a
+    concatenation of its docstrings. Lines 5 and 9 below are the discriminator:
+    a scanner that joined the copy first would call them 2 and 5.
+    """
     source = tmp_path / "src" / "skill_harness" / "command.py"
     source.parent.mkdir(parents=True)
     source.write_text(
         '"""Admissibility is checked here."""\n'
-        "import click\n\n"
+        "\n"
+        "import click\n"
+        "\n"
         '@click.option("--mode", help="Admissibility policy.")\n'
         "def command() -> None:\n"
-        '    """Evidence admissibility is documented here."""\n',
+        '    """Summary line.\n'
+        "\n"
+        "    Admissibility is documented here.\n"
+        '    """\n',
         encoding="utf-8",
     )
-    violations = _repo_public_copy_violations(tmp_path)
-    assert len(violations) == 2
-    assert all("src/skill_harness/command.py" in item for item in violations)
+    assert _repo_public_copy_violations(tmp_path) == [
+        "python:src/skill_harness/command.py: bare gate term at line 1",
+        "python:src/skill_harness/command.py: bare gate term at line 5",
+        "python:src/skill_harness/command.py: bare gate term at line 9",
+    ]
 
     source.write_text(
         '"""Evidence admissibility is checked here."""\n'
-        "import click\n\n"
+        "\n"
+        "import click\n"
+        "\n"
         '@click.option("--mode", help="Evidence-admissibility policy.")\n'
         "def command(admissibility_state: str = 'admissible') -> None:\n"
-        '    """Identifier-adjacent admissibility_state shorthand is not prose."""\n',
+        '    """Identifier-adjacent admissibility_state shorthand is not prose.\n'
+        "\n"
+        "    A qualifier that wraps across one line still reads as evidence\n"
+        "    admissibility, not a bare gate term.\n"
+        '    """\n',
         encoding="utf-8",
     )
     assert _repo_public_copy_violations(tmp_path) == []
@@ -664,6 +709,11 @@ def test_readme_and_nested_docs_are_scanned_in_both_directions(tmp_path: Path) -
 
 
 def test_dated_unmeasured_verdict_reasoning_keeps_inline_correction() -> None:
+    """The 2026 case study must show the struck original beside its correction.
+
+    Whitespace-normalised before matching: the file is hard-wrapped, so pinning
+    the physical line would make a rewrap look like a deleted correction.
+    """
     case_study = (
         REPO_ROOT / "docs" / "case-studies" / "ai-slop-sentinel-under-ablation.md"
     ).read_text(encoding="utf-8")
@@ -671,7 +721,7 @@ def test_dated_unmeasured_verdict_reasoning_keeps_inline_correction() -> None:
         "~~the UNMEASURED verdict arises from framework state, not subject behavior~~ "
         "the recorded UNMEASURED state arises from framework state, not subject behavior "
         "and maps to the `CANT_TELL_YET` verdict"
-    ) in case_study
+    ) in " ".join(case_study.split())
 
 
 def test_named_source_prose_qualifies_evidence_admissibility() -> None:
