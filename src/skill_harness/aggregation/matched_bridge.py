@@ -120,12 +120,33 @@ type MatchedGate2Result = MatchedGate2Decision | MatchedGate2Refusal
 def _all_matched_evidence(
     conn: sqlite3.Connection, manifest: TaskFamilyManifest
 ) -> tuple[StoredObservation, ...]:
+    """Every stored matched row for this family version, admissible or not.
+
+    The admissible rows come from ``matched_evidence()`` and only from there: it
+    is the registered estimator feed, so nothing that can reach a Gate-2
+    decision is read around it. The supplementary query is scoped to the
+    inadmissible tail, which the ledger has to name and which no seam exposes
+    today — widening it to every row would make the estimator feed a dead call
+    and put the decision path on a raw read.
+
+    ``ORDER BY observation_id`` matches the feed's own rule (a unique key, never
+    a timestamp), and the returned tuple is sorted again over the merged keys —
+    concatenating two sorted feeds does not produce a sorted sequence. The two
+    overlap today: delete either one and the exclusion ledger still comes back in
+    id order, delete both and two stores holding the same rows in opposite
+    physical order return different ledgers.
+    ``test_shuffled_insertion_order_produces_identical_result_objects`` fails on
+    the pair, not on either alone.
+    """
     records = {record.observation_id: record for record in matched_evidence(conn, manifest)}
     rows = conn.execute(
         """
         SELECT observation_id
         FROM task_frontier_matched_obs
-        WHERE task_family_id = ? AND task_family_version = ?
+        WHERE task_family_id = ?
+          AND task_family_version = ?
+          AND admissibility_state != 'admissible'
+        ORDER BY observation_id
         """,
         (manifest.task_family_id, manifest.task_family_version),
     ).fetchall()
@@ -199,7 +220,13 @@ def aggregate_matched_gate2(
     manifest: TaskFamilyManifest,
     design: Gate2Design,
 ) -> MatchedGate2Result:
-    """Read and aggregate one frozen task family's well-formed matched evidence."""
+    """Read and aggregate one frozen task family's stored matched evidence.
+
+    Malformed evidence no longer raises. An inadmissible observation or a pair
+    that cannot be completed is filed in the returned ``ledger`` and named
+    there; a family that cannot produce a decision at all comes back as a
+    ``MatchedGate2Refusal`` carrying the reason. Nothing is dropped silently.
+    """
     observation_ids, ledger = _pair_evidence(_all_matched_evidence(conn, manifest))
     both_pass = observation_ids.both_pass
     full_only = observation_ids.full_only
