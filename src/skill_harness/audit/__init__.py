@@ -32,7 +32,7 @@ def audit_all_verdicts(conn: sqlite3.Connection, run_id: str) -> list[dict[str, 
     Use for:
       - Skill audit / cross-reference checks (D7)
       - Provenance walks
-      - Test-time inspection of all verdicts regardless of admissibility
+      - Test-time inspection of all verdicts regardless of evidence admissibility
 
     NEVER use for aggregation — use get_admissible_verdicts() in
     skill_harness.storage.repositories.evidence.oracle_verdicts instead.

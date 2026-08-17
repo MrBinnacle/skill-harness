@@ -2574,7 +2574,7 @@ def calibrate_cmd(
 
     Defaults to dry-run (no DB writes). Use --execute to persist.
 
-    Three-tier admissibility (A34):
+    Three-tier evidence admissibility (A34):
       N < 50    → rejected  (no write; exits with error)
       50-99     → conditional (write with credible-interval penalty)
       N ≥ 100   → calibrated (if all four thresholds pass)
@@ -3106,7 +3106,7 @@ def screen_backfill_cmd(
     Ingests the batch-1 Stage-0 ``.eval`` logs (parsing needs the ``[inspect]``
     extra). Voided logs are stored INADMISSIBLE per the manifest's cited rulings;
     p0 excludes them. Without --execute, prints the manifest (the curated
-    admissibility decisions) without touching any DB.
+    evidence-admissibility decisions) without touching any DB.
     """
     from skill_harness.subject.screen_backfill import BATCH1_MANIFEST, apply_manifest
 

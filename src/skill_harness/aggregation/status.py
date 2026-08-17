@@ -104,7 +104,7 @@ class ClauseStatusInput:
     admissible_verdict_count : int
         Count of rows from admissible_verdicts VIEW for this clause/axis.
     total_verdict_count : int
-        Count of ALL oracle_verdicts rows for this clause (before admissibility filter).
+        Count of ALL oracle_verdicts rows for this clause (before evidence-admissibility filter).
     confounded_verdict_count : int
         Count of verdicts that have confound_events with delta_kind='confound_flagged'.
     n_verdicts : int

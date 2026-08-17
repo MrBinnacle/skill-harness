@@ -2,7 +2,7 @@
 
 Implements:
 - ``cohen_kappa_observed_marginals`` — κ formula with observed marginals (A34)
-- ``determine_state`` — three-tier admissibility logic (A34)
+- ``determine_state`` — three-tier evidence-admissibility logic (A34)
 - ``_warmup_first_call`` — serialize first judge call to populate cache (A36)
 - ``calibrate`` — full calibration orchestration: parse JSONL, run judge,
   compute metrics, determine state, write to DB if calibrated/conditional.
@@ -146,7 +146,7 @@ def cohen_kappa_observed_marginals(
 
 
 # ---------------------------------------------------------------------------
-# Three-tier admissibility
+# Three-tier evidence admissibility
 # ---------------------------------------------------------------------------
 
 
@@ -157,7 +157,7 @@ def determine_state(
     length_controlled_agreement: float | None,
     cohen_kappa: float,
 ) -> tuple[str, str | None]:
-    """Determine three-tier calibration admissibility state (A34).
+    """Determine three-tier calibration evidence-admissibility state (A34).
 
     Returns
     -------
@@ -238,7 +238,7 @@ class CalibrationResult:
     Fields
     ------
     state : str
-        Three-tier admissibility outcome: "rejected" | "conditional" | "calibrated".
+        Three-tier evidence-admissibility outcome: "rejected" | "conditional" | "calibrated".
     reason : str | None
         Machine-readable rejection reason; None if state == "calibrated".
     n_pairs : int
@@ -431,7 +431,7 @@ def calibrate(
     # 7. Aggregate verdicts
     # C2 fix: sentinel/inadmissible verdicts (choice/raw_observation are
     # hardcoded placeholders — no real judge call completed, or the call was
-    # truncated/malformed; see judge.py admissibility resolution) must not
+    # truncated/malformed; see judge.py evidence-admissibility resolution) must not
     # enter human-judge agreement, κ marginals, or judge choice counts. This
     # mirrors the repo-wide admissible_verdicts VIEW convention (A29,
     # 0003_admissible_verdicts_view.sql / aggregation/engine.py): the
