@@ -365,7 +365,7 @@ def skill_audit(
         )
     _console.print(
         f"\nSummary: {report.pass_count} pass · {report.warn_count} warn — "
-        "UNMEASURED is a verdict, not a failure (docs/concepts/why-unmeasured.md)."
+        "UNMEASURED is a recorded state, not a failure (docs/concepts/why-unmeasured.md)."
     )
     _print_clause_evidence(report.source_sha256, extraction_path)
     if strict and report.warn_count > 0:
@@ -1403,7 +1403,7 @@ def _cmd_execute(
 
 
 def _is_unmeasured(result: Any) -> bool:
-    """Return True iff the clause result maps to UNMEASURED verdict.
+    """Return True iff the clause result maps to the CANT_TELL_YET verdict.
 
     UNMEASURED covers:
     - StoppingReason.UNDERPOWERED_NMAX (hit N_MAX without decisive posterior)

@@ -4,7 +4,7 @@ Short answers to the questions this tool provokes. Depth links point into the re
 
 ## It said `UNMEASURED`. Did it fail?
 
-No. `UNMEASURED` is a verdict, not an error. It means the evidence on the table doesn't support a keep/cut call — the task was too easy to separate the arms, the run was too noisy, or the judge for that axis isn't calibrated. The tool stores that state and reports it plainly instead of rounding noise up into a finding. A benchmark that always prints a number can't tell you when it doesn't actually know. See [concepts/why-unmeasured.md](concepts/why-unmeasured.md).
+No. `UNMEASURED` is a recorded state, not a failure. It maps to the `CANT_TELL_YET` verdict. It means the evidence on the table doesn't support a keep/cut call — the task was too easy to separate the arms, the run was too noisy, or the judge for that axis isn't calibrated. The tool stores that state and reports it plainly instead of rounding noise up into a finding. A benchmark that always prints a number can't tell you when it doesn't actually know. See [concepts/why-unmeasured.md](concepts/why-unmeasured.md).
 
 ## Zero production-skill KEEPs so far — is the tool broken?
 
