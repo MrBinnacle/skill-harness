@@ -596,6 +596,17 @@ def test_readme_and_nested_docs_are_scanned_in_both_directions(tmp_path: Path) -
     assert _repo_public_copy_violations(tmp_path) == []
 
 
+def test_dated_unmeasured_verdict_reasoning_keeps_inline_correction() -> None:
+    case_study = (
+        REPO_ROOT / "docs" / "case-studies" / "ai-slop-sentinel-under-ablation.md"
+    ).read_text(encoding="utf-8")
+    assert (
+        "~~the UNMEASURED verdict arises from framework state, not subject behavior~~ "
+        "the recorded UNMEASURED state arises from framework state, not subject behavior "
+        "and maps to the `CANT_TELL_YET` verdict"
+    ) in case_study
+
+
 def test_gen2_receipt_json_is_not_a_public_surface(tmp_path: Path) -> None:
     """Pins the scanned surface set: docs/*.md is copy, docs/*.json is data.
 

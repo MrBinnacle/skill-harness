@@ -34,8 +34,7 @@ so the discipline refused to fabricate a contribution metric. Cost: $0.00.
 
 I wanted to confirm that result was subject-invariant: that running the
 same skill against a different vendor's model (`openai/gpt-5.5` via
-OpenRouter) would produce the same vector, because the UNMEASURED verdict
-arises from framework state, not subject behavior. Pre-registered the
+OpenRouter) would produce the same vector, because ~~the UNMEASURED verdict arises from framework state, not subject behavior~~ the recorded UNMEASURED state arises from framework state, not subject behavior and maps to the `CANT_TELL_YET` verdict. Pre-registered the
 prediction with peeking-immunization, committed the prediction before
 any subject call, hardened the audit trail. Standard
 `bayesian-eval-discipline` pattern.
