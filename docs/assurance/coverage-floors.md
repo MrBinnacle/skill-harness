@@ -77,7 +77,7 @@ actually buys.
 | `src/skill_harness/aggregation/engine.py` | 90 | 9 | 67.9% | 90.0% | BELOW 80% |
 | `src/skill_harness/aggregation/errors.py` | 0 | 0 | 100% | n/a | no branches |
 | `src/skill_harness/aggregation/fit.py` | 20 | 1 | 94.4% | 95.0% | OK |
-| `src/skill_harness/aggregation/matched_bridge.py` | 28 | 2 | absent | 92.9% | OK |
+| `src/skill_harness/aggregation/matched_bridge.py` | 28 | 2 | absent | 92.9% | BELOW 80% |
 | `src/skill_harness/aggregation/profile.py` | 22 | 1 | 98.0% | 95.5% | OK |
 | `src/skill_harness/aggregation/report.py` | 0 | 0 | 97.6% | n/a | no branches |
 | `src/skill_harness/aggregation/status.py` | 20 | 0 | 100% | 100.0% | OK |
@@ -140,9 +140,11 @@ arm-level records into the four-cell table, and routes it through Gate 2. It is 
 the Aggregation table above because the attention rule applies to it, not because
 it was part of the census: **the 7-of-20 figure and the 2,210/1,909 branch totals
 are the 2026-08-12 result and do not include this row.** Counting the later row
-leaves it 7 flagged of 21 today: the row was flagged when #246 landed it and is
-not flagged now, so the count of flagged modules is unchanged and the count of
-measured modules is one higher.
+leaves it 8 flagged of 21 today: #247 moved the branch figure over the floor, but
+the attention rule reads both instruments, and mutation still reads `absent` for
+this module — so the row stays flagged on the mutation arm of the rule until
+#166's instrument measures it. Branch coverage alone does not clear a flag; that
+is the point of pairing the columns.
 
 Its figures - 28 branches, 2 uncovered, 92.9% - were re-measured on 2026-08-17
 with coverage.py 7.15.2 and the flags in "How to reproduce", over
