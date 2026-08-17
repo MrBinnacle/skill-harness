@@ -313,7 +313,8 @@ def skill_audit(
     )
     _console.print(
         "  Behavior-shaped claims (correctness, tool use, outcomes): no mechanical"
-        " instrument in v0.1 → verdict would be [bold]UNMEASURED[/], not an estimate."
+        " instrument in v0.1 → the recorded state would be [bold]UNMEASURED[/], not an"
+        " estimate."
     )
     _console.print(
         "  Judge-graded axes: require a calibrated (judge, axis) pair — none exists"
