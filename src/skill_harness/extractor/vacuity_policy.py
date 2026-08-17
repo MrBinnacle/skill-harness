@@ -713,6 +713,24 @@ def measure_kind_precision_guard_delta() -> KindPrecisionGuardDelta:
     )
 
 
+def format_kind_precision_guard_delta(report: KindPrecisionGuardDelta) -> str:
+    """Render the measured coverage statement for the #218 decision record."""
+    per_generation = ", ".join(
+        f"{receipt_id}={count}"
+        for receipt_id, count in report.per_generation_refusal_counts.items()
+    )
+    return (
+        "Measured differential coverage: the new stack replayed "
+        f"{report.replayed_refusal_count}/{report.old_refusal_count} pre-change refusals; "
+        f"lost refusals: {len(report.lost_refusals)}. Per-generation refusals: "
+        f"{per_generation}. Gains measured: claim-layer franken tuple refusals="
+        f"{report.claim_layer_franken_tuple_refusal_count}; serializer format-variant refusals="
+        f"{report.serializer_format_variant_refusal_count}. Named residuals measured: backstop "
+        f"document-level scope={report.backstop_document_scope_residual_count}; prose bypassing "
+        f"the claim object={report.prose_bypassing_claim_object_residual_count}."
+    )
+
+
 def assert_recall_not_claimed_measured(
     rendered: str,
     receipt: VacuityFlagCalibrationReceipt | None = None,
