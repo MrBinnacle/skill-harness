@@ -86,11 +86,13 @@ purpose.
 
 ## Why it refuses
 
-Comparing a skill against nothing is noisier than it looks. In a 60-trial arc on agentic tasks
-I measured run-to-run swings of ±17.6% with everything held constant. An effect smaller than
-that is invisible at three runs a side, which is roughly what most published skill comparisons
-do. Hand-picked tasks tilt the result before anything runs. Pass/fail test banks price what a
-skill *costs* and quietly skip what it *does*. The write-up, with the evidence grade attached
+Comparing a skill against nothing is noisier than it looks. In a 60-trial arc on identical
+agentic coding tasks, run-to-run output-token variation measured CV ≈ 17.6% (RMS across cells;
+mean-of-cells 14.6%, median 10.4%) on an Opus-class model. At that coefficient of variation, a
+three-runs-a-side comparison cannot separate differences under roughly 30–40% from noise — and
+three runs a side is roughly what most published skill comparisons do. Hand-picked tasks tilt
+the result before anything runs. Pass/fail test banks price what a skill *costs* and quietly
+skip what it *does*. The write-up, with the evidence grade attached
 to each finding, is [here](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/why-naive-skill-benchmarks-mislead.md).
 
 So the design rule is the one I'd want from anyone reporting a number to me: **a figure that
