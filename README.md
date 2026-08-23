@@ -25,17 +25,8 @@ this instead.
 
 "This" is two public repositories: [MrBinnacle/skills](https://github.com/MrBinnacle/skills)
 holds the skills, and this repository is the instrument built to answer the question about them.
-Measured on 2026-08-15, that stands at **71 commits of collection against 323 commits of machinery
-built to find out whether the collection is worth anything**:
-
-```bash
-git clone https://github.com/MrBinnacle/skills.git        && git -C skills        rev-list --count HEAD
-git clone https://github.com/MrBinnacle/skill-harness.git && git -C skill-harness rev-list --count HEAD
-```
-
-The basis is a fresh clone at `HEAD` — what a plain `git clone` gets you — so those two commands
-are the whole claim, and you can land on the same figures yourself, give or take what has merged
-since.
+How lopsided that split got, and the two commands that re-derive it from a fresh clone,
+are in [why this exists](https://github.com/MrBinnacle/skill-harness/blob/main/docs/why-this-exists.md).
 
 skill-harness runs the same task with a skill and without it, and reports what can honestly be
 said about the difference. Often what can honestly be said is "not enough to call it." That
@@ -54,6 +45,47 @@ most of the time the honest answer about it is that there isn't enough evidence 
 
 Those two are measured differently, refused differently, and reported separately everywhere in
 the output. Collapsing them into a single score is the thing this tool exists not to do.
+
+## Try the free offline skill audit
+
+`skill audit` is fully offline. No API key, no database, no network.
+
+```bash
+pip install skill-harness
+skill-harness skill audit path/to/your/SKILL.md
+```
+
+It reports three things: the **cost triple** (what the skill costs you standing, when it
+fires, and in its side docs — plain arithmetic on text, not a claim about effect), a set of
+**structural checks** against [Anthropic's authoring
+spec](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), and
+an **evaluability preflight** telling you what a paid run could and could not measure about
+this skill today.
+
+```text
+OFFLINE AUDIT — no API calls, no cost
+  skill:  caveman
+  body:   41 lines / 233 words
+
+  PASS  name            name 'caveman' meets spec
+  PASS  body-length     body 41 lines (budget 500)
+  INFO  description-unparsed-block-scalar
+        description uses a multi-line YAML block scalar, which this audit's
+        minimal frontmatter parser cannot read — checks skipped
+        (UNMEASURED, not passed)
+
+  Standing cost (mechanical): raw … tokens · calibrated … tokens
+  Fired cost (mechanical):    raw … tokens · calibrated … tokens
+  Aux cost (mechanical):      raw … tokens · calibrated … tokens
+
+Summary: 2 pass · 0 warn — UNMEASURED is a recorded state, not a failure.
+```
+
+Note what it does in the middle there. It couldn't parse the description, so it says so and
+skips the check rather than passing something it never read. That behaviour is the whole
+design, repeated at every layer.
+
+`--strict` exits 1 on warnings, for CI. On Windows terminals, set `PYTHONUTF8=1` first.
 
 ## What it has found so far
 
@@ -132,60 +164,6 @@ estimation rows — but that is **flag-level only**. When the adjudicators also 
 `weak_directive` matched 4/20.
 [#153](https://github.com/MrBinnacle/skill-harness/issues/153).
 
-## Try the free offline skill audit
-
-`skill audit` is fully offline. No API key, no database, no network.
-
-```bash
-pip install skill-harness
-skill-harness skill audit path/to/your/SKILL.md
-```
-
-It reports three things: the **cost triple** (what the skill costs you standing, when it
-fires, and in its side docs — plain arithmetic on text, not a claim about effect), a set of
-**structural checks** against [Anthropic's authoring
-spec](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), and
-an **evaluability preflight** telling you what a paid run could and could not measure about
-this skill today.
-
-```text
-OFFLINE AUDIT — no API calls, no cost
-  skill:  caveman
-  body:   41 lines / 233 words
-
-  PASS  name            name 'caveman' meets spec
-  PASS  body-length     body 41 lines (budget 500)
-  INFO  description-unparsed-block-scalar
-        description uses a multi-line YAML block scalar, which this audit's
-        minimal frontmatter parser cannot read — checks skipped
-        (UNMEASURED, not passed)
-
-  Standing cost (mechanical): raw … tokens · calibrated … tokens
-  Fired cost (mechanical):    raw … tokens · calibrated … tokens
-  Aux cost (mechanical):      raw … tokens · calibrated … tokens
-
-Summary: 2 pass · 0 warn — UNMEASURED is a recorded state, not a failure.
-```
-
-Note what it does in the middle there. It couldn't parse the description, so it says so and
-skips the check rather than passing something it never read. That behaviour is the whole
-design, repeated at every layer.
-
-`--strict` exits 1 on warnings, for CI. On Windows terminals, set `PYTHONUTF8=1` first.
-
-## Measuring for real
-
-```bash
-skill-harness skill init path/to/SKILL.md --execute   # extract testable claims
-skill-harness run ablation <skill_id> --execute       # the with/without comparison
-skill-harness run evaluate-skill <skill_id>           # aggregate to a verdict
-```
-
-Either `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` works. Every command that can spend money is
-dry-run by default; `--execute` is required to spend, and per-run and daily caps are enforced
-on top of that. Reproduction scripts:
-[`examples/`](https://github.com/MrBinnacle/skill-harness/tree/main/examples/).
-
 ## What it measures, and what it refuses to
 
 The answer comes back as one of three verdicts: **KEEP**, **CUT**, or **CAN'T-TELL-YET** — and
@@ -209,6 +187,19 @@ output rather than quietly edited into agreement.
 What has still never fired is the other half: a paired run measuring how much a skill actually
 helps, once you know the model needs help. By design, a sized benefit run launches only when a
 screen returns a sub-1 pass rate, and none has yet.
+
+## Measuring for real
+
+```bash
+skill-harness skill init path/to/SKILL.md --execute   # extract testable claims
+skill-harness run ablation <skill_id> --execute       # the with/without comparison
+skill-harness run evaluate-skill <skill_id>           # aggregate to a verdict
+```
+
+Either `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` works. Every command that can spend money is
+dry-run by default; `--execute` is required to spend, and per-run and daily caps are enforced
+on top of that. Reproduction scripts:
+[`examples/`](https://github.com/MrBinnacle/skill-harness/tree/main/examples/).
 
 ## The reporting vocabulary is a published standard
 
