@@ -102,7 +102,7 @@ Per-run and daily limits are enforced.
 
 `ANTHROPIC_API_KEY` and `OPENROUTER_API_KEY` are supported.
 
-Reproduction material is available in [`examples/`](examples/).
+Reproduction material is available in [`examples/`](https://github.com/MrBinnacle/skill-harness/tree/main/examples/).
 
 On Windows terminals, set `PYTHONUTF8=1` when required:
 
@@ -124,7 +124,7 @@ On two deliberately hardened tasks, a frontier agent passed every no-skill attem
 
 One paired run in July 2026 cost about $6.17 and returned a pre-registered `NO-GO`. It was an apparatus check, not a benefit measurement.
 
-The current measurement record is indexed in the [measurement receipts index](docs/receipts-index.md).
+The current measurement record is indexed in the [measurement receipts index](https://github.com/MrBinnacle/skill-harness/blob/main/docs/receipts-index.md).
 
 ## Some results changed the instrument
 
@@ -136,7 +136,7 @@ In a 60-trial agentic-task arc, run-to-run variation reached ±17.6% with the ot
 
 A small difference between two runs is therefore not automatically an effect.
 
-See [Why naive skill benchmarks mislead](docs/findings/why-naive-skill-benchmarks-mislead.md).
+See [Why naive skill benchmarks mislead](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/why-naive-skill-benchmarks-mislead.md).
 
 ### Repeatability does not establish validity
 
@@ -166,7 +166,7 @@ The reporting vocabulary is defined in the **Skill Efficacy Reporting Standard (
 
 SERS defines the report structure, verdict vocabulary, refusal states, cost representation, and instrumentation metadata used to identify the model and prompt generation associated with a result.
 
-The schema and documentation are in [`docs/sers/`](docs/sers/).
+The schema and documentation are in [`docs/sers/`](https://github.com/MrBinnacle/skill-harness/tree/main/docs/sers/).
 
 The harness validates its own receipts against the schema.
 
@@ -226,16 +226,20 @@ These links are here to help locate adjacent work, not to establish a ranking.
 
 ## Documentation
 
-* [Documentation map](docs/README.md)
-* [Why this exists](docs/why-this-exists.md)
-* [Measurement receipts index](docs/receipts-index.md)
-* [Assurance](docs/ASSURANCE.md)
-* [Invariants](docs/INVARIANTS.md)
-* [Case studies](docs/case-studies/)
-* [Findings](docs/findings/)
-* [Concepts](docs/concepts/)
-* [SERS](docs/sers/)
-* [Examples](examples/)
+* [Documentation map](https://github.com/MrBinnacle/skill-harness/blob/main/docs/README.md)
+* [Why this exists](https://github.com/MrBinnacle/skill-harness/blob/main/docs/why-this-exists.md)
+* [Measurement receipts index](https://github.com/MrBinnacle/skill-harness/blob/main/docs/receipts-index.md)
+* [Assurance](https://github.com/MrBinnacle/skill-harness/blob/main/docs/ASSURANCE.md)
+* [Invariants](https://github.com/MrBinnacle/skill-harness/blob/main/docs/INVARIANTS.md)
+* [Case studies](https://github.com/MrBinnacle/skill-harness/tree/main/docs/case-studies/)
+* [Findings](https://github.com/MrBinnacle/skill-harness/tree/main/docs/findings/)
+* [Concepts](https://github.com/MrBinnacle/skill-harness/tree/main/docs/concepts/)
+* [SERS](https://github.com/MrBinnacle/skill-harness/tree/main/docs/sers/)
+* [Examples](https://github.com/MrBinnacle/skill-harness/tree/main/examples/)
+
+## Status
+
+Status: v0.2.3
 
 ## License
 
