@@ -1447,6 +1447,7 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
     - "Absence of delta is not absence of contribution."
     """
     from skill_harness.ablation.stopping import StoppingReason
+    from skill_harness.aggregation.status import UnmeasuredSubReason
 
     table = Table(title="Ablation Results", show_lines=True)
     table.add_column("clause_id", style="dim", min_width=12)
@@ -1469,7 +1470,16 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
 
         if _is_unmeasured(result):
             has_any_unmeasured = True
-            subreason = result.unmeasured_reason or "underpowered"
+            # Which flavour of not-knowing occurred is the reportable content of
+            # UNMEASURED. Derive it from the stopping reason when the runner did
+            # not supply one; do NOT fall back to a single default, which would
+            # report a budget-exhausted clause as underpowered.
+            if result.unmeasured_reason is not None:
+                subreason = result.unmeasured_reason
+            elif stopping_reason == StoppingReason.BUDGET_EXHAUSTED:
+                subreason = UnmeasuredSubReason.BUDGET_EXHAUSTED.value
+            else:
+                subreason = UnmeasuredSubReason.UNDERPOWERED.value
             verdict_str = f"[yellow]UNMEASURED({subreason})[/]"
             contrib_str = "[dim]—[/]"
         elif stopping_reason == StoppingReason.PASSED:

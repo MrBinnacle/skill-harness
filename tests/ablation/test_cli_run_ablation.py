@@ -270,6 +270,46 @@ class TestUnmeasuredVsFailedRender:
         cr.clause_id = "clause-unmeasured"
         return cr
 
+    def _make_budget_exhausted(self) -> MagicMock:
+        """A clause whose sampling aborted because the run ran out of budget.
+
+        unmeasured_reason stays None: the runner sets that field only on the two
+        pre-sampling gates (tier-2 / length tolerance). Budget exhaustion is
+        carried by stopping_reason alone.
+        """
+        from skill_harness.ablation.stopping import StoppingReason
+
+        cr = MagicMock()
+        cr.stopping_reason = StoppingReason.BUDGET_EXHAUSTED
+        cr.unmeasured_reason = None
+        cr.length_confounded = False
+        cr.samples_collected = 12
+        cr.stop_decision = MagicMock()
+        cr.stop_decision.p_win_rate_exceeds_threshold = 0.5
+        cr.stop_decision.n_samples = 12
+        cr.clause_id = "clause-budget"
+        return cr
+
+    def test_budget_exhausted_reports_its_own_subreason(self) -> None:
+        """A budget-exhausted clause must report budget_exhausted, not underpowered.
+
+        Which flavour of not-knowing occurred is the reportable content of an
+        UNMEASURED state. `budget_exhausted` and `underpowered` are distinct
+        members of the published SERS vocabulary
+        (docs/sers/sers.schema.json, properties.unmeasured_sub_reason.enum);
+        the expected value is taken from that standard, not from the code under
+        test. Reporting one as the other destroys the distinction at the only
+        place a user sees it.
+        """
+        result = self._run_with_results([self._make_budget_exhausted()])
+        output = result.output
+        assert "budget_exhausted" in output, (
+            f"budget-exhausted clause must name its own sub-reason:\n{output}"
+        )
+        assert "underpowered" not in output, (
+            f"budget-exhausted clause must not be reported as underpowered:\n{output}"
+        )
+
     def test_failed_renders_failed_label_not_unmeasured(self) -> None:
         """FAILED clause must render 'FAILED' label (never 'UNMEASURED')."""
         result = self._run_with_results([self._make_failed()])
