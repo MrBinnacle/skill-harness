@@ -60,6 +60,29 @@ making; stripping the jargon out is what kept the calls mine.
 Compressed: know who knows, check them anyway, decide in advance what failure looks like, turn
 every break into a standing rule, and then build the same honesty into the tool.
 
+## The size of the detour
+
+Measured on 2026-08-15: **71 commits of collection against 323 commits of machinery built
+to find out whether the collection is worth anything.**
+
+The basis is a fresh clone at `HEAD` — what a plain `git clone` gets you —
+so you can land on the same figures yourself, give or take what has merged since:
+
+```bash
+git clone https://github.com/MrBinnacle/skills.git        && git -C skills        rev-list --count HEAD
+git clone https://github.com/MrBinnacle/skill-harness.git && git -C skill-harness rev-list --count HEAD
+```
+
+This used to be on the front page. It came off on 2026-08-23, and the reason is worth
+stating rather than hiding: the figures are checkable, but the inference they invite is
+not supported. A four-to-one ratio does not establish that the instrument was worth
+building, that the collection is small, or that either number is the right size. It
+establishes one thing, which is where the time went.
+
+Moving a claim to a quieter page does not fix an inference. So it is stated here with the
+inference refused, rather than restated somewhere it would be read the same way with fewer
+people watching.
+
 ## The instrument is that loop turned inward
 
 `CAN'T-TELL-YET`, and `UNMEASURED` with a typed reason attached, are "I don't actually know"
