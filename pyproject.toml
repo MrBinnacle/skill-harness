@@ -37,7 +37,7 @@ dependencies = [
   # a 3.x major; an open-ended lower bound would let a future 3.x resolve here
   # unaudited, which is exactly the drift the audit's own floor was meant to
   # anchor against. Re-audit before raising this cap.
-  "openai>=2.41,<3",
+  "openai>=2.41,<4",
   "click>=8.1",
   "pydantic>=2.6",
   # rich is solo-maintainer (willmcgugan / Textualize). Use for terminal output only.
