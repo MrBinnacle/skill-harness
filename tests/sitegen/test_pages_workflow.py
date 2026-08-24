@@ -65,6 +65,19 @@ def _job_ids(workflow: Path) -> list[str]:
     return ids
 
 
+def _linkcheck_job() -> str:
+    """The ``linkcheck`` job's text, from its id to the next job at the same indent."""
+    lines = _CI.read_text(encoding="utf-8").splitlines()
+    first = next(index for index, line in enumerate(lines) if line == "  linkcheck:")
+    body: list[str] = []
+    for line in lines[first + 1 :]:
+        if re.match(r"^ {2}([a-z][a-z0-9-]*):\s*$", line) is not None:
+            break
+        body.append(line)
+    assert body, "ci.yml declares an empty linkcheck job"
+    return "\n".join(body)
+
+
 def _all_green_needs() -> list[str]:
     text = _CI.read_text(encoding="utf-8")
     match = re.search(r"^  all-green:\n(?:.*\n)*?    needs: \[([^\]]+)\]", text, re.MULTILINE)
@@ -104,3 +117,26 @@ def test_pages_jobs_are_not_required_checks() -> None:
     assert pages_jobs, "pages.yml declares no jobs"
     assert pages_jobs.isdisjoint(_all_green_needs())
     assert pages_jobs.isdisjoint(_CI_JOB_IDS)
+
+
+def test_linkcheck_covers_the_generated_site() -> None:
+    """#288: the link checker reads the built site, not only the hand-written prose.
+
+    #184 shipped the checker over ``README.md`` and ``docs/**/*.md``. Spec #181
+    had named three surfaces. The third went missing without breaking anything,
+    which is why it is pinned here: dropping it again fails a test rather than
+    quietly narrowing coverage.
+    """
+    job = _linkcheck_job()
+    assert "python -m skill_harness.sitegen" in job, "linkcheck does not build the site"
+    assert "--output site" in job
+    assert '"site/**/*.html"' in job, "the built site is not passed to the link checker"
+    # The two original surfaces are additions to, not replacements of, each other.
+    assert "README.md" in job
+    assert '"docs/**/*.md"' in job
+    assert "fail: true" in job
+
+
+def test_linkcheck_stays_outside_the_required_check_set() -> None:
+    """#288 widened the job's coverage; it must not widen what blocks a merge."""
+    assert "linkcheck" not in _all_green_needs()
