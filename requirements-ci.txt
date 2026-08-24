@@ -64,7 +64,7 @@ patsy==1.0.2
 pip-audit==2.10.1
 pluggy==1.6.0
 pydantic==2.13.4
-pydantic_core==2.46.4
+pydantic_core==2.48.0
 pytest-cov==7.1.0
 pytest-randomly==4.1.0
 pytest-socket==0.8.0
