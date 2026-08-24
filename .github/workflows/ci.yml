@@ -221,13 +221,45 @@ jobs:
   # NON-required (#184): deliberately omitted from all-green / branch-protection
   # required-check names. Fails the job on dead links in public prose; does not
   # block merge by required-status configuration.
+  #
+  # The job name stays "Link check (docs)" although #288 widened its coverage to
+  # the generated site. Renaming a check is a branch-protection edit, and #288
+  # ruled that edit out of scope.
   linkcheck:
     name: Link check (docs)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Link check README + docs
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      # The same install pages.yml runs before building the published site. The
+      # site generator validates every receipt through jsonschema, which is a
+      # dev extra, so a bare `-e .` cannot build the site at all.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements-ci.txt -e ".[dev]"
+      # #288: the site's links were unchecked. They are template output rather
+      # than hand-written prose, so the argument for skipping them was that they
+      # cannot rot -- an argument, not a check. This builds the same artifact
+      # pages.yml publishes and hands it to the same link checker.
+      #
+      # The marker is deliberately not a bare commit sha. This build is never
+      # deployed, and pages.yml's verify step greps the published page for its
+      # own marker; a colliding value here would be a marker that matches a page
+      # this job never published.
+      - name: Build the receipts site
+        run: |
+          python -m skill_harness.sitegen \
+            --output site \
+            --marker "linkcheck-${{ github.sha }}-${{ github.run_id }}"
+      - name: Link check README + docs + generated site
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           # Remap same-repo blob/tree/main URLs onto the checked-out tree so a
@@ -241,6 +273,7 @@ jobs:
             --remap 'https://github.com/MrBinnacle/skill-harness/tree/main/(.*) file://${{ github.workspace }}/$1'
             README.md
             "docs/**/*.md"
+            "site/**/*.html"
           fail: true
 
   all-green:
