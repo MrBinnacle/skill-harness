@@ -254,6 +254,9 @@ Same refusal, different end of the pipe.
 
 ## Dig deeper
 
+- [The receipts, rendered](https://mrbinnacle.github.io/skill-harness/) — the SERS receipts as a
+  browsable site, one page per screened skill, cost triple beside the evidence grade. It renders
+  the SERS instances only; the Markdown index below is the citable surface for every kind.
 - [Measurement receipts index](https://github.com/MrBinnacle/skill-harness/blob/main/docs/receipts-index.md) — every case study, finding,
   observation, assurance report, ratification, SERS instance, and the
   `skill audit --extraction` join surface: what each claims and what each
