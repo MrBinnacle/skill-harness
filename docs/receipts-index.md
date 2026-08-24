@@ -7,6 +7,11 @@ is a typed refusal, never an invented score.
 Completeness is CI-gated: `tests/test_receipts_index.py` fails if any file in
 the named receipt directories is absent from this page.
 
+A rendered view of the SERS instances below is published at
+[mrbinnacle.github.io/skill-harness](https://mrbinnacle.github.io/skill-harness/).
+It is generated from `docs/sers/receipts/` by `python -m skill_harness.sitegen`
+and covers that section only. This page stays the citable surface for every kind.
+
 | Kind | Directory / surface |
 | --- | --- |
 | Case studies | [`docs/case-studies/`](case-studies/) |
