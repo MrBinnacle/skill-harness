@@ -52,7 +52,7 @@ markdown-it-py==4.2.0
 mdurl==0.1.2
 mypy==2.3.0
 mypy_extensions==1.1.0
-numpy==2.5.1
+numpy==2.5.2
 # openai audited at 2.41.0 (docs/supply-chain/openai-audit-2026-06-08.md); the
 # pyproject.toml pin now caps at <3 so this constraint can never drift past
 # the audited major without a new audit (S4).
