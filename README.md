@@ -14,16 +14,12 @@
 
 ## Why this exists
 
-I wanted to know if you could tell if a skill was any good.
+Search for a skill that makes AI writing sound less like AI writing and you get a dozen of
+them. Each one costs context in every conversation, whether or not it fires. Which of them
+changes an outcome is a different question from which of them reads well, and no amount of
+reading the file answers it.
 
-Not "is this file well written" — whether it changes anything. Search for a skill that makes
-AI writing sound less like AI writing and you get a dozen of them. Each one costs you context
-in every conversation you have. So how do you tell one from another in a way that actually
-means something? I assumed plenty of people had already asked that and that an answer was
-sitting somewhere. I went looking for it, didn't find one I trusted, and ended up building
-this instead.
-
-"This" is two public repositories: [MrBinnacle/skills](https://github.com/MrBinnacle/skills)
+Two public repositories: [MrBinnacle/skills](https://github.com/MrBinnacle/skills)
 holds the skills, and this repository is the instrument built to answer the question about them.
 How lopsided that split got, and the two commands that re-derive it from a fresh clone,
 are in [why this exists](https://github.com/MrBinnacle/skill-harness/blob/main/docs/why-this-exists.md).
@@ -119,9 +115,9 @@ the result before anything runs. Pass/fail test banks price what a skill *costs*
 skip what it *does*. The write-up, with the evidence grade attached
 to each finding, is [here](https://github.com/MrBinnacle/skill-harness/blob/main/docs/findings/why-naive-skill-benchmarks-mislead.md).
 
-So the design rule is the one I'd want from anyone reporting a number to me: **a figure that
-isn't there is stated as a typed refusal, never filled in.** There is no third option — no
-placeholder zero, no free-typed excuse, no estimate standing in for a measurement.
+So the design rule is this: **a figure that isn't there is stated as a typed refusal, never
+filled in.** There is no third option — no placeholder zero, no free-typed excuse, no estimate
+standing in for a measurement.
 
 Three things follow from that.
 
@@ -227,8 +223,6 @@ them. The two claims carrying the most weight — the pre-spend eligibility gate
 that thresholds are ratified from enumerated tables rather than authored by hand — are
 labelled as scheduled for external review until that review has actually happened. They'll be
 upgraded or downgraded by a dated amendment, never silently.
-
-Citations belong in the methods paper I'm writing, not on a front page.
 
 ## The other half
 
