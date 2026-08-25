@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-25T22:10:00Z",
+  "title": "Design System: skill-harness",
+  "extensions": {
+    "colorMeta": {
+      "bench-void": { "role": "neutral", "displayName": "Void", "canonical": "#010409" },
+      "bench-surface": { "role": "neutral", "displayName": "Surface", "canonical": "#0d1117" },
+      "bench-hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "#30363d" },
+      "bench-hairline-quiet": { "role": "neutral", "displayName": "Quiet Hairline", "canonical": "#21262d" },
+      "bench-hairline-inverse": { "role": "neutral", "displayName": "Inverse Hairline", "canonical": "#d0d7de" },
+      "bench-ink": { "role": "neutral", "displayName": "Ink", "canonical": "#e6edf3" },
+      "bench-ink-soft": { "role": "neutral", "displayName": "Soft Ink", "canonical": "#c9d1d9" },
+      "bench-muted": { "role": "neutral", "displayName": "Muted", "canonical": "#8b949e" },
+      "bench-muted-deep": { "role": "neutral", "displayName": "Deep Muted", "canonical": "#6e7681" },
+      "bench-prompt": { "role": "primary", "displayName": "Prompt Green", "canonical": "#3fb950" },
+      "bench-flagged": { "role": "secondary", "displayName": "Flagged Amber", "canonical": "#d29922" },
+      "chrome-close": { "role": "tertiary", "displayName": "Chrome Close", "canonical": "#ff5f56" },
+      "chrome-minimise": { "role": "tertiary", "displayName": "Chrome Minimise", "canonical": "#ffbd2e" },
+      "chrome-zoom": { "role": "tertiary", "displayName": "Chrome Zoom", "canonical": "#27c93f" },
+      "receipt-ink": { "role": "neutral", "displayName": "Document Ink", "canonical": "#16181d" },
+      "receipt-paper": { "role": "neutral", "displayName": "Paper", "canonical": "#fbfbf9" },
+      "receipt-rule": { "role": "neutral", "displayName": "Rule", "canonical": "#c8c9c4" },
+      "receipt-thead": { "role": "neutral", "displayName": "Table Head", "canonical": "#eeeee9" },
+      "receipt-accent": { "role": "primary", "displayName": "Certificate Navy", "canonical": "#1f4f82" },
+      "receipt-refusal-edge": { "role": "secondary", "displayName": "Refusal Ochre", "canonical": "#8a5a00" }
+    },
+    "typographyMeta": {
+      "bench-command": { "displayName": "Command", "purpose": "The invocation demonstrated on a bench asset." },
+      "bench-verdict": { "displayName": "Verdict", "purpose": "The largest text on any asset. Leads with an arrow." },
+      "receipt-body": { "displayName": "Body", "purpose": "Serif prose on the published receipts site, 62rem measure." },
+      "receipt-h1": { "displayName": "Page Title", "purpose": "One per page, names the page's subject." },
+      "receipt-h2": { "displayName": "Section", "purpose": "Section heading. Carries the page's only 1px underline." },
+      "receipt-figure": { "displayName": "Figure", "purpose": "Every number, identifier and claim-state token. Monospace, always." }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Refusal Block",
+      "kind": "custom",
+      "refersTo": "refusal-block",
+      "description": "The signature component. Renders a refusal as primary content, never as a degraded or missing state.",
+      "html": "<p class=\"ds-refusal\">No comparable pool. The instrument declines to report a figure here.</p>",
+      "css": ".ds-refusal { border-left: 4px solid #8a5a00; padding: 0.25rem 0 0.25rem 0.6rem; font-weight: 600; font-family: Georgia, \"Times New Roman\", serif; color: #16181d; background: #fbfbf9; margin: 1rem 0; border-radius: 0; }"
+    },
+    {
+      "name": "Rule Block",
+      "kind": "custom",
+      "refersTo": "rule-block",
+      "description": "A quoted governing rule or clause. Structurally identical to the Refusal Block, differing only in edge colour and weight.",
+      "html": "<div class=\"ds-rule\">A missing figure is a typed refusal, never an invented score.</div>",
+      "css": ".ds-rule { border-left: 4px solid #16181d; margin: 1rem 0; padding: 0.25rem 0 0.25rem 0.85rem; font-family: Georgia, \"Times New Roman\", serif; color: #16181d; background: #fbfbf9; border-radius: 0; }"
+    },
+    {
+      "name": "Absent Marker",
+      "kind": "custom",
+      "refersTo": "absent-marker",
+      "description": "Marks a genuinely absent value, as distinct from a refused one. Quiet and italic where a refusal is bordered and bold.",
+      "html": "<span class=\"ds-absent\">not recorded</span>",
+      "css": ".ds-absent { font-style: italic; font-family: Georgia, \"Times New Roman\", serif; color: #16181d; }"
+    },
+    {
+      "name": "Data Table",
+      "kind": "custom",
+      "refersTo": "data-table",
+      "description": "Collapsed 1px-ruled table. The head fill is the only fill in the entire stylesheet.",
+      "html": "<table class=\"ds-table\"><caption>Cost beside evidence</caption><thead><tr><th>Clause</th><th>Status</th></tr></thead><tbody><tr><td>C1</td><td><span class=\"ds-figure\">UNMEASURED</span></td></tr></tbody></table>",
+      "css": ".ds-table { border-collapse: collapse; margin: 0.75rem 0 1rem; width: 100%; font-family: Georgia, \"Times New Roman\", serif; color: #16181d; background: #fbfbf9; } .ds-table caption { text-align: left; font-weight: 700; padding-bottom: 0.3rem; } .ds-table th, .ds-table td { border: 1px solid #c8c9c4; padding: 0.35rem 0.5rem; text-align: left; vertical-align: top; } .ds-table thead th { background: #eeeee9; } .ds-figure { font-family: ui-monospace, \"SFMono-Regular\", Menlo, Consolas, monospace; font-size: 0.92em; }"
+    },
+    {
+      "name": "Definition Grid",
+      "kind": "custom",
+      "refersTo": "definition-grid",
+      "description": "Two-column grid pairing a term with its value. The workhorse for cost-beside-evidence.",
+      "html": "<dl class=\"ds-dl\"><dt>Verdict</dt><dd><span class=\"ds-figure\">CANT_TELL_YET</span></dd><dt>Trials</dt><dd><span class=\"ds-figure\">26</span></dd></dl>",
+      "css": ".ds-dl { display: grid; grid-template-columns: minmax(10rem, max-content) 1fr; gap: 0.2rem 1rem; margin: 0.75rem 0 1.25rem; font-family: Georgia, \"Times New Roman\", serif; color: #16181d; } .ds-dl dt { font-weight: 700; } .ds-dl dd { margin: 0; } .ds-figure { font-family: ui-monospace, \"SFMono-Regular\", Menlo, Consolas, monospace; font-size: 0.92em; }"
+    },
+    {
+      "name": "Site Header",
+      "kind": "nav",
+      "refersTo": "site-header",
+      "description": "Wordmark plus horizontal nav, separated from content by the heaviest line on the page.",
+      "html": "<header class=\"ds-header\"><p class=\"ds-wordmark\">skill-harness: published receipts</p><nav><ul><li><a href=\"#\">Schema</a></li><li><a href=\"#\">Receipts</a></li></ul></nav></header>",
+      "css": ".ds-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1.5rem; border-bottom: 2px solid #16181d; padding: 1.25rem 0 0.5rem; background: #fbfbf9; font-family: Georgia, \"Times New Roman\", serif; color: #16181d; } .ds-wordmark { margin: 0; font-weight: 700; letter-spacing: 0.02em; } .ds-header nav ul { display: flex; gap: 1rem; margin: 0; padding: 0; list-style: none; } .ds-header a { color: #1f4f82; }"
+    },
+    {
+      "name": "Terminal Frame",
+      "kind": "card",
+      "refersTo": "terminal-frame",
+      "description": "The bench-surface container. A depicted window, which is the only place radius is permitted in this system.",
+      "html": "<div class=\"ds-terminal\"><div class=\"ds-titlebar\"><span class=\"ds-dot ds-dot-a\"></span><span class=\"ds-dot ds-dot-b\"></span><span class=\"ds-dot ds-dot-c\"></span><span class=\"ds-winlabel\">skill-harness</span></div><div class=\"ds-termbody\"><span class=\"ds-prompt\">$ </span><span class=\"ds-cmd\">skill-harness run ablation </span><span class=\"ds-arg\">SKILL.md</span><div class=\"ds-verdict\"><span class=\"ds-flagged\">&#8594; UNMEASURED</span><span class=\"ds-tag\"> — the skill eval that refuses to invent a score</span></div></div></div>",
+      "css": ".ds-terminal { background: #0d1117; border: 2px solid #30363d; border-radius: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace; overflow: hidden; } .ds-titlebar { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; border-bottom: 1.5px solid #21262d; } .ds-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; } .ds-dot-a { background: #ff5f56; } .ds-dot-b { background: #ffbd2e; } .ds-dot-c { background: #27c93f; } .ds-winlabel { color: #6e7681; font-size: 15px; margin-left: 0.5rem; } .ds-termbody { padding: 1.25rem 1rem; font-size: 21px; } .ds-prompt { color: #3fb950; font-weight: 700; } .ds-cmd { color: #e6edf3; } .ds-arg { color: #6e7681; } .ds-verdict { margin-top: 1.25rem; font-size: 19px; } .ds-flagged { color: #d29922; font-weight: 700; } .ds-tag { color: #8b949e; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Test Bench",
+    "overview": "This is a measurement instrument, and its surfaces are built to look like one. The governing commitment is legible in the code before it is legible in any brand document: the one hand-written stylesheet opens by declaring that refusals are styled as ordinary primary content, never dimmed, collapsed, or pushed into a footnote, because a refusal is a result here, not an absence. That sentence is the design system. Everything else is its consequence.\n\nThe instrument's job is to say what can honestly be said about a difference, and often the honest answer is that there is not enough to call it. A system whose product is sometimes a refusal cannot style refusal as failure. So there is no dimmed state, no collapsed empty state, no grey placeholder anywhere in this repository. A refusal gets a heavier left edge than a measured figure gets.\n\nThis project currently runs two distinct visual systems — dark monospace terminal assets and a warm serif receipts site — and DESIGN.md records both rather than merging them. Which one governs is an open owner decision tracked in issue #216.",
+    "keyCharacteristics": [
+      "Refusal is primary content, never a degraded state.",
+      "Flat by construction — no shadow token exists anywhere in the repository.",
+      "Monospace carries every figure, token, command and identifier.",
+      "Rules and borders build hierarchy; nothing floats.",
+      "Numbers appear only where a receipt supplies them."
+    ],
+    "rules": [
+      { "name": "The Refusal-Is-Louder Rule", "body": "A refusal gets a 4px left edge and font-weight 600. A measured figure gets neither. When a refusal and a measurement sit side by side, the refusal is the heavier element on the page. This inverts the usual treatment on purpose and it is the single most important rule in this system.", "section": "colors" },
+      { "name": "The Two-Greens Rule", "body": "#3fb950 means a prompt or a confirmed success. #27c93f means a window control. They are never interchangeable despite being nearly the same colour.", "section": "colors" },
+      { "name": "The Borrowed-Ground Rule", "body": "The bench neutrals are GitHub Primer's own values. They are used so the assets sit native in the environment that renders them, not as an independent palette choice. Changing the ground means leaving that environment.", "section": "colors" },
+      { "name": "The Mono-Carries-The-Claim Rule", "body": "Every figure, token, command, identifier and evidence value is monospace on both surfaces. Serif is for prose only. If a reader could copy it into a terminal or cite it as a number, it is mono.", "section": "typography" },
+      { "name": "The No-Display-Face Rule", "body": "There is no display typeface and none is authorised. Scale and weight carry emphasis. A 52px mono verdict is this system's equivalent of a headline.", "section": "typography" },
+      { "name": "The One-Column Rule", "body": "The published site is a single column at every width. Evidence is read top to bottom in the order the generator emitted it. No layout may reorder or parallelise it.", "section": "layout" },
+      { "name": "The No-Shadow Rule", "body": "No shadow token exists and none may be added. If an element needs separation, give it a rule or a left edge. This is not a stylistic preference — a shadow implies a floating object, and nothing on an evidence surface floats.", "section": "elevation" },
+      { "name": "The Square-Unless-Quoting Rule", "body": "Radius is permitted only where the asset is depicting a window. Content surfaces are square.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do give every refusal the 4px Refusal Ochre edge and font-weight 600. The Refusal-Is-Louder Rule is the system's defining commitment.",
+      "Do keep .absent italic and unbordered, distinct from .refusal. The two states mean different things.",
+      "Do set every figure, token, command and identifier in monospace at 0.92em on receipt surfaces.",
+      "Do build separation from 1px rules, the 2px header border, and 4px left edges.",
+      "Do keep the published site a single column at every width.",
+      "Do keep Prompt Green to the $ prompt and confirmed success only."
+    ],
+    "donts": [
+      "Don't add a box-shadow, gradient, blur, glow or opacity layer. None exists today and the No-Shadow Rule forbids introducing one.",
+      "Don't add border-radius to a content surface. Radius exists only where an asset depicts a window.",
+      "Don't dim, collapse, abbreviate or footnote a refusal. The stylesheet's opening comment forbids it and the site's purpose depends on it.",
+      "Don't reuse the window-chrome greens (#27c93f) as a success colour. They mean window.",
+      "Don't introduce a display typeface. Scale and weight carry emphasis.",
+      "Don't render a number that no receipt supplies. The generator refuses rather than interpolates; the visual layer must not reintroduce what the generator declined to emit.",
+      "Don't treat the frontmatter spacing tokens as a designed ramp. They describe current practice and the current practice is irregular.",
+      "Don't use the prose form Skill Harness for a command, URL, package identifier or evidence label. Those are always skill-harness, lowercase and hyphenated. The two forms are a deliberate convention, not drift."
+    ]
+  }
+}
