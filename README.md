@@ -14,6 +14,8 @@
 
 ## Why this exists
 
+I wanted to know if you could tell if a skill was any good.
+
 Search for a skill that makes AI writing sound less like AI writing and you get a dozen of
 them. Each one costs context in every conversation, whether or not it fires. Which of them
 changes an outcome is a different question from which of them reads well, and no amount of
