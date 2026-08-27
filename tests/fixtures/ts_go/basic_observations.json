@@ -1,0 +1,10 @@
+{
+  "go_declarations": [
+    {"kind": "func", "name": "Greet"},
+    {"kind": "type", "name": "User"}
+  ],
+  "structural_mappings": [
+    {"source": "interface User", "target": "type User struct"},
+    {"source": "function greet", "target": "func Greet"}
+  ]
+}
