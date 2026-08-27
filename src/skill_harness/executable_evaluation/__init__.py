@@ -12,6 +12,7 @@ from .contracts import (
     PropertyType,
     Status,
     aggregate_criterion,
+    make_receipt,
     observation_hash,
 )
 from .ts_go import declaration_evaluator, structural_mapping_evaluator
@@ -28,6 +29,7 @@ __all__ = [
     "PropertyType",
     "Status",
     "aggregate_criterion",
+    "make_receipt",
     "observation_hash",
     "declaration_evaluator",
     "structural_mapping_evaluator",
