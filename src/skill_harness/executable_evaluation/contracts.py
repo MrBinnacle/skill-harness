@@ -148,10 +148,43 @@ class PropertyRegistry:
             return self
         return PropertyRegistry(self.properties, self.evaluators + (item,))
 
+    def bind(self, property_id: str, evaluator_id: str) -> Property:
+        """Validate that an evaluator cannot exceed the property's ceiling."""
+        prop = self.property(property_id)
+        evaluator = self.evaluator(evaluator_id)
+        if not set(evaluator.ceiling.establishes).issubset(prop.ceiling.establishes):
+            raise ValueError("evaluator establishes claims outside the property's ceiling")
+        return prop
+
 
 def aggregate_criterion(receipts: Sequence[EvaluationReceipt]) -> CriterionResult:
     """Preserve atomic results; deterministic FAIL remains final at that property."""
     return CriterionResult(tuple(receipts))
+
+
+def make_receipt(
+    property: Property,
+    evaluator: EvaluatorSpec,
+    observation_set: Mapping[str, Any],
+    result: Status,
+    evidence: Mapping[str, Any],
+    *,
+    run_id: str | None = None,
+    timestamp: str | None = None,
+) -> EvaluationReceipt:
+    """Create a receipt only when evaluator authority fits property authority."""
+    if not set(evaluator.ceiling.establishes).issubset(property.ceiling.establishes):
+        raise ValueError("evaluator establishes claims outside the property's ceiling")
+    return EvaluationReceipt(
+        property_id=property.id,
+        evaluator_id=evaluator.id,
+        observation_hash=observation_hash(observation_set),
+        result=result,
+        evidence=evidence,
+        ceiling=evaluator.ceiling,
+        run_id=run_id,
+        timestamp=timestamp,
+    )
 
 
 def observation_hash(observation_set: Mapping[str, Any]) -> str:
