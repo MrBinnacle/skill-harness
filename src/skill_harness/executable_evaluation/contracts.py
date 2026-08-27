@@ -1,16 +1,13 @@
-"""Immutable, content-addressed contracts for deterministic evaluation.
-
-The registry is the authority surface. Evaluators supply evidence and may not
-expand the claims declared by a registered property.
-"""
+"""Immutable, content-addressed contracts for deterministic evaluation."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Protocol
 
 
 class Status(StrEnum):
@@ -36,10 +33,7 @@ class Ceiling:
     does_not_establish: tuple[str, ...]
 
     def canonical(self) -> dict[str, list[str]]:
-        return {
-            "establishes": list(self.establishes),
-            "does_not_establish": list(self.does_not_establish),
-        }
+        return {"establishes": list(self.establishes), "does_not_establish": list(self.does_not_establish)}
 
 
 @dataclass(frozen=True)
@@ -72,23 +66,13 @@ class EvaluatorSpec:
     version: str
     input_schema: str
     ceiling: Ceiling
-    guarantees: tuple[str, ...] = (
-        "pure",
-        "deterministic",
-        "golden-tested",
-        "independently-runnable",
-    )
+    guarantees: tuple[str, ...] = ("pure", "deterministic", "golden-tested", "independently-runnable")
     code_hash: str = ""
     dependency_hash: str = ""
 
     @property
     def id(self) -> str:
-        payload = {
-            "code": self.code_hash,
-            "version": self.version,
-            "deps": self.dependency_hash,
-        }
-        return _hash_json(payload)
+        return _hash_json({"code": self.code_hash, "version": self.version, "deps": self.dependency_hash})
 
 
 @dataclass(frozen=True)
@@ -115,19 +99,29 @@ class EvaluationReceipt:
         }
 
 
+@dataclass(frozen=True)
+class CriterionResult:
+    """Structured aggregation of atomic property states; never a score."""
+
+    properties: tuple[EvaluationReceipt, ...]
+
+    @property
+    def has_failure(self) -> bool:
+        return any(receipt.result is Status.FAIL for receipt in self.properties)
+
+    def statuses(self) -> tuple[Status, ...]:
+        return tuple(receipt.result for receipt in self.properties)
+
+
 class ExecutableEvaluator(Protocol):
     spec: EvaluatorSpec
 
-    def evaluate(
-        self,
-        artifact: Any,
-        observation_set: Mapping[str, Any],
-    ) -> tuple[Status, Mapping[str, Any]]: ...
+    def evaluate(self, artifact: Any, observation_set: Mapping[str, Any]) -> tuple[Status, Mapping[str, Any]]: ...
 
 
 @dataclass(frozen=True)
 class PropertyRegistry:
-    """In-memory immutable registry; persistence is deliberately out of scope."""
+    """Immutable registry; persistence is deliberately out of scope here."""
 
     properties: tuple[Property, ...] = ()
     evaluators: tuple[EvaluatorSpec, ...] = ()
@@ -155,13 +149,9 @@ class PropertyRegistry:
         return PropertyRegistry(self.properties, self.evaluators + (item,))
 
 
-def aggregate_criterion(receipts: Sequence[EvaluationReceipt]) -> tuple[Status, ...]:
-    """Aggregate atomic property states without collapsing them to a score.
-
-    Any deterministic FAIL remains FAIL. The function returns one status per
-    atomic property and therefore preserves the evidence surface.
-    """
-    return tuple(receipt.result for receipt in receipts)
+def aggregate_criterion(receipts: Sequence[EvaluationReceipt]) -> CriterionResult:
+    """Preserve atomic results; deterministic FAIL remains final at that property."""
+    return CriterionResult(tuple(receipts))
 
 
 def observation_hash(observation_set: Mapping[str, Any]) -> str:
@@ -179,10 +169,5 @@ def _canonicalize(value: Any) -> Any:
 
 
 def _hash_json(value: Any) -> str:
-    encoded = json.dumps(
-        _canonicalize(value),
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
+    encoded = json.dumps(_canonicalize(value), ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
