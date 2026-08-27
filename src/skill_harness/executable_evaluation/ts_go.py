@@ -2,17 +2,9 @@
 
 The runner supplies normalized observations rather than allowing evaluators to
 perform I/O. This keeps the evaluator pure while still exercising the TS→Go
-property surface. The observation schema is intentionally small and explicit:
-
-    {
-      "go_declarations": [{"kind": "type", "name": "User"}, ...],
-      "structural_mappings": [
-        {"source": "interface User", "target": "type User struct"}, ...
-      ]
-    }
-
-A future runner can populate these facts with a real TypeScript and Go AST
-walk. The evaluator does not make claims about how those facts were obtained.
+property surface. A future runner can populate these facts from real
+TypeScript and Go AST walks; the evaluator does not claim how they were
+obtained.
 """
 
 from __future__ import annotations
@@ -21,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .contracts import Ceiling, EvaluatorSpec, Status
+from .contracts import Ceiling, EvaluatorSpec, ExecutableEvaluator, Status
 
 
 _DECLARATION_CEILING = Ceiling(
@@ -56,48 +48,61 @@ def structural_mapping_evaluator_spec(code_hash: str = "fixture-v1") -> Evaluato
 
 
 @dataclass(frozen=True)
-class _Evaluator:
+class _DeclarationEvaluator:
     spec: EvaluatorSpec
-    expected: tuple[Any, ...]
-
-    def evaluate(
-        self,
-        artifact: Any,
-        observation_set: Mapping[str, Any],
-    ) -> tuple[Status, Mapping[str, Any]]:
-        raise NotImplementedError
-
-
-@dataclass(frozen=True)
-class _DeclarationEvaluator(_Evaluator):
     expected: tuple[tuple[str, str], ...]
 
     def evaluate(self, artifact: Any, observation_set: Mapping[str, Any]) -> tuple[Status, Mapping[str, Any]]:
-        actual = tuple(
+        del artifact
+        if "go_declarations" not in observation_set:
+            return Status.UNSUPPORTED, {"reason": "go_declarations observation is absent"}
+
+        actual = {
             (str(item["kind"]), str(item["name"]))
-            for item in observation_set.get("go_declarations", ())
-        )
-        expected = tuple(sorted(self.expected))
-        actual_sorted = tuple(sorted(actual))
-        if actual_sorted == expected:
-            return Status.PASS, {"expected": expected, "observed": actual_sorted}
-        return Status.FAIL, {"expected": expected, "observed": actual_sorted}
+            for item in observation_set["go_declarations"]
+        }
+        expected = set(self.expected)
+        forbidden = {
+            (str(item["kind"]), str(item["name"]))
+            for item in observation_set.get("forbidden_go_declarations", ())
+        }
+        missing = sorted(expected - actual)
+        present_forbidden = sorted(forbidden & actual)
+        evidence = {
+            "expected": sorted(expected),
+            "observed": sorted(actual),
+            "missing": missing,
+            "forbidden_present": present_forbidden,
+        }
+        if missing or present_forbidden:
+            return Status.FAIL, evidence
+        return Status.PASS, evidence
 
 
 @dataclass(frozen=True)
-class _StructuralMappingEvaluator(_Evaluator):
+class _StructuralMappingEvaluator:
+    spec: EvaluatorSpec
     expected: tuple[tuple[str, str], ...]
 
     def evaluate(self, artifact: Any, observation_set: Mapping[str, Any]) -> tuple[Status, Mapping[str, Any]]:
-        actual = tuple(
+        del artifact
+        if "structural_mappings" not in observation_set:
+            return Status.UNSUPPORTED, {"reason": "structural_mappings observation is absent"}
+
+        actual = {
             (str(item["source"]), str(item["target"]))
-            for item in observation_set.get("structural_mappings", ())
-        )
-        expected = tuple(sorted(self.expected))
-        actual_sorted = tuple(sorted(actual))
-        if actual_sorted == expected:
-            return Status.PASS, {"expected": expected, "observed": actual_sorted}
-        return Status.FAIL, {"expected": expected, "observed": actual_sorted}
+            for item in observation_set["structural_mappings"]
+        }
+        expected = set(self.expected)
+        missing = sorted(expected - actual)
+        evidence = {
+            "expected": sorted(expected),
+            "observed": sorted(actual),
+            "missing": missing,
+        }
+        if missing:
+            return Status.FAIL, evidence
+        return Status.PASS, evidence
 
 
 def declaration_evaluator(
