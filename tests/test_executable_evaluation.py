@@ -1,3 +1,5 @@
+import pytest
+
 from skill_harness.executable_evaluation import (
     Authority,
     Ceiling,
@@ -6,6 +8,7 @@ from skill_harness.executable_evaluation import (
     PropertyType,
     Status,
     declaration_evaluator,
+    make_receipt,
     observation_hash,
     structural_mapping_evaluator,
 )
@@ -72,3 +75,38 @@ def test_observation_hash_is_stable_across_mapping_order():
     left = {"a": 1, "b": [2, 3]}
     right = {"b": [2, 3], "a": 1}
     assert observation_hash(left) == observation_hash(right)
+
+
+def test_registry_rejects_evaluator_that_exceeds_property_ceiling():
+    property = Property(
+        statement="declarations exist",
+        type=PropertyType.MECHANICALLY_DECIDABLE,
+        deterministic_authority=Authority.AUTHORITATIVE,
+        judgment_authority=Authority.PROHIBITED,
+        ceiling=Ceiling(("declarations exist",), ("semantics",)),
+    )
+    evaluator = declaration_evaluator((("type", "User"),))
+    registry = PropertyRegistry().register_property(property).register_evaluator(evaluator.spec)
+    with pytest.raises(ValueError):
+        registry.bind(property.id, evaluator.spec.id)
+
+
+def test_receipt_points_to_hashes_only():
+    property = Property(
+        statement="declarations exist",
+        type=PropertyType.MECHANICALLY_DECIDABLE,
+        deterministic_authority=Authority.AUTHORITATIVE,
+        judgment_authority=Authority.PROHIBITED,
+        ceiling=Ceiling(("required declarations are present",), ("semantics",)),
+    )
+    evaluator = declaration_evaluator((("type", "User"),))
+    receipt = make_receipt(
+        property,
+        evaluator.spec,
+        {"go_declarations": [{"kind": "type", "name": "User"}]},
+        Status.PASS,
+        {"observed": (("type", "User"),)},
+    )
+    assert receipt.property_id == property.id
+    assert receipt.evaluator_id == evaluator.spec.id
+    assert receipt.observation_hash.startswith("sha256:")
