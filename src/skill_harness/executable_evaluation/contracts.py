@@ -11,7 +11,7 @@ from typing import Any, Protocol
 
 
 class Status(StrEnum):
-    PASS = "PASS"
+    PASS = "PASS"  # noqa: S105 - an evaluator verdict, not a credential
     FAIL = "FAIL"
     UNSUPPORTED = "UNSUPPORTED"
 
@@ -33,7 +33,10 @@ class Ceiling:
     does_not_establish: tuple[str, ...]
 
     def canonical(self) -> dict[str, list[str]]:
-        return {"establishes": list(self.establishes), "does_not_establish": list(self.does_not_establish)}
+        return {
+            "establishes": list(self.establishes),
+            "does_not_establish": list(self.does_not_establish),
+        }
 
 
 @dataclass(frozen=True)
@@ -66,13 +69,20 @@ class EvaluatorSpec:
     version: str
     input_schema: str
     ceiling: Ceiling
-    guarantees: tuple[str, ...] = ("pure", "deterministic", "golden-tested", "independently-runnable")
+    guarantees: tuple[str, ...] = (
+        "pure",
+        "deterministic",
+        "golden-tested",
+        "independently-runnable",
+    )
     code_hash: str = ""
     dependency_hash: str = ""
 
     @property
     def id(self) -> str:
-        return _hash_json({"code": self.code_hash, "version": self.version, "deps": self.dependency_hash})
+        return _hash_json(
+            {"code": self.code_hash, "version": self.version, "deps": self.dependency_hash}
+        )
 
 
 @dataclass(frozen=True)
@@ -114,9 +124,19 @@ class CriterionResult:
 
 
 class ExecutableEvaluator(Protocol):
-    spec: EvaluatorSpec
+    @property
+    def spec(self) -> EvaluatorSpec:
+        """Read-only: an evaluator's spec is fixed at construction.
 
-    def evaluate(self, artifact: Any, observation_set: Mapping[str, Any]) -> tuple[Status, Mapping[str, Any]]: ...
+        Declared as a property rather than a mutable attribute so frozen
+        dataclass implementations satisfy the protocol. A settable `spec`
+        would let a caller swap an evaluator's identity after a receipt
+        already cited it.
+        """
+
+    def evaluate(
+        self, artifact: Any, observation_set: Mapping[str, Any]
+    ) -> tuple[Status, Mapping[str, Any]]: ...
 
 
 @dataclass(frozen=True)
@@ -141,12 +161,12 @@ class PropertyRegistry:
     def register_property(self, item: Property) -> PropertyRegistry:
         if any(existing.id == item.id for existing in self.properties):
             return self
-        return PropertyRegistry(self.properties + (item,), self.evaluators)
+        return PropertyRegistry((*self.properties, item), self.evaluators)
 
     def register_evaluator(self, item: EvaluatorSpec) -> PropertyRegistry:
         if any(existing.id == item.id for existing in self.evaluators):
             return self
-        return PropertyRegistry(self.properties, self.evaluators + (item,))
+        return PropertyRegistry(self.properties, (*self.evaluators, item))
 
     def bind(self, property_id: str, evaluator_id: str) -> Property:
         """Validate that an evaluator cannot exceed the property's ceiling."""
@@ -202,5 +222,7 @@ def _canonicalize(value: Any) -> Any:
 
 
 def _hash_json(value: Any) -> str:
-    encoded = json.dumps(_canonicalize(value), ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    encoded = json.dumps(
+        _canonicalize(value), ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
     return "sha256:" + hashlib.sha256(encoded).hexdigest()

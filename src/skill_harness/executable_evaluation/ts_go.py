@@ -1,7 +1,7 @@
-"""Deterministic evaluators for a TS→Go structural translation fixture.
+"""Deterministic evaluators for a TS-to-Go structural translation fixture.
 
 The runner supplies normalized observations rather than allowing evaluators to
-perform I/O. This keeps the evaluator pure while still exercising the TS→Go
+perform I/O. This keeps the evaluator pure while still exercising the TS-to-Go
 property surface. A future runner can populate these facts from real
 TypeScript and Go AST walks; the evaluator does not claim how they were
 obtained.
@@ -15,14 +15,17 @@ from typing import Any
 
 from .contracts import Ceiling, EvaluatorSpec, ExecutableEvaluator, Status
 
-
 _DECLARATION_CEILING = Ceiling(
     establishes=("required declarations are present", "forbidden declarations are absent"),
-    does_not_establish=("semantic equivalence", "runtime behavior", "type soundness beyond the observed declarations"),
+    does_not_establish=(
+        "semantic equivalence",
+        "runtime behavior",
+        "type soundness beyond the observed declarations",
+    ),
 )
 
 _MAPPING_CEILING = Ceiling(
-    establishes=("declared TS→Go structural mappings match the fixed mapping table",),
+    establishes=("declared TS-to-Go structural mappings match the fixed mapping table",),
     does_not_establish=("semantic equivalence", "runtime behavior", "unlisted language constructs"),
 )
 
@@ -52,14 +55,15 @@ class _DeclarationEvaluator:
     spec: EvaluatorSpec
     expected: tuple[tuple[str, str], ...]
 
-    def evaluate(self, artifact: Any, observation_set: Mapping[str, Any]) -> tuple[Status, Mapping[str, Any]]:
+    def evaluate(
+        self, artifact: Any, observation_set: Mapping[str, Any]
+    ) -> tuple[Status, Mapping[str, Any]]:
         del artifact
         if "go_declarations" not in observation_set:
             return Status.UNSUPPORTED, {"reason": "go_declarations observation is absent"}
 
         actual = {
-            (str(item["kind"]), str(item["name"]))
-            for item in observation_set["go_declarations"]
+            (str(item["kind"]), str(item["name"])) for item in observation_set["go_declarations"]
         }
         expected = set(self.expected)
         forbidden = {
@@ -84,7 +88,9 @@ class _StructuralMappingEvaluator:
     spec: EvaluatorSpec
     expected: tuple[tuple[str, str], ...]
 
-    def evaluate(self, artifact: Any, observation_set: Mapping[str, Any]) -> tuple[Status, Mapping[str, Any]]:
+    def evaluate(
+        self, artifact: Any, observation_set: Mapping[str, Any]
+    ) -> tuple[Status, Mapping[str, Any]]:
         del artifact
         if "structural_mappings" not in observation_set:
             return Status.UNSUPPORTED, {"reason": "structural_mappings observation is absent"}
