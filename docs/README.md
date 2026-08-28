@@ -39,6 +39,12 @@ plus [../CONTRIBUTING.md](../CONTRIBUTING.md).
 **"I want to reproduce a result."** → [../examples/](../examples/) — step-by-step, with the
 paid steps clearly marked.
 
+**"Why is the architecture shaped this way?"** → [adr/](adr/) — architectural decision
+records. [ADR 0001](adr/0001-architecture-admitted-on-demonstrated-decision-requirement.md)
+states the rule the others are judged against: a state, field, registry or distinction is
+admitted only once a downstream decision is shown to require it. It also carries the three
+decisions ratified under that rule, with their provenance marked.
+
 Also here: [RELEASE-NOTES-v0.1.md](RELEASE-NOTES-v0.1.md) ·
 [concepts/why-pythonutf8-on-windows.md](concepts/why-pythonutf8-on-windows.md) (Windows
 terminal fix) · [`INVARIANTS.md`](INVARIANTS.md) (tracked pass-rule / evidence admissibility
