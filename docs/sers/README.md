@@ -4,6 +4,7 @@ Machine-readable vocabulary for publishing a skill efficacy result so a third
 party can validate the shape, and so this repo's own documented results stay
 tied to the same enums the instrument emits.
 
+- **What SERS is, and where the three artifacts disagree:** [`what-sers-is.md`](what-sers-is.md)
 - **Schema:** [`sers.schema.json`](sers.schema.json) (JSON Schema draft 2020-12,
   `additionalProperties: false`)
 - **Conforming instances:** [`receipts/`](receipts/)
