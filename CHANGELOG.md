@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Repo description sync check** verifies the live GitHub repository "About"
+  text against `pyproject.toml`'s `[project].description`, byte for byte.
+  `tests/test_structural_bans.py` already pinned the `pyproject.toml` side of
+  this pair to a fixed literal, but nothing read the live public surface, so
+  the claimed lockstep was one-sided. `scripts/repo_description_check.py`
+  closes the other half: exit 0 on a match, exit 1 on drift (both strings
+  printed in full), exit 2 when the live description cannot be read at all -
+  a refusal, never a silent pass. Runs on a daily schedule and on any push to
+  `pyproject.toml` (`.github/workflows/repo-description-sync.yml`), not as a
+  per-PR gate: the drift it watches for is introduced out-of-band through the
+  GitHub web UI, so no pull request can cause it. Deliberately kept out of
+  `scripts/drift_check.py`, which is hermetic by design.
 - **Release gate blocks the 0.3 line until the assurance phase is closed and
   its lane has run green** (#206). `scripts/release_gate.py` gained two checks
   that apply only when the tree declares a `0.3.x` version: G7 requires every
