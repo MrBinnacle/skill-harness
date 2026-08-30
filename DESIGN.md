@@ -2,11 +2,10 @@
 name: skill-harness
 description: The skill eval that refuses to invent a score.
 # Declared system: Test Bench. Every `bench-*` token is declared for every surface.
-# Every `receipt-*` token is RETIRING: still drawn on the tree today (the conformance check
-# must stay green on main), removed by the surface ticket named beside it. A new surface uses
-# a `bench-*` token. The `chrome-*` colours and the `rounded` radii were retiring tokens and
-# are gone: #310 took the social preview's window chrome, #309 the banner pair's, and nothing
-# draws them.
+# NOTHING IS RETIRING ANY MORE. The three surface tickets each removed the tokens only they
+# drew: #310 the social preview's window chrome, #309 the banner pair's, #308 the paper receipt
+# body and the three off-ramp site sizes. What is declared below is what the tree draws.
+# A new surface uses a `bench-*` token, because there is no other kind left.
 colors:
   bench-void: "#010409"
   bench-surface: "#0d1117"
@@ -19,13 +18,7 @@ colors:
   bench-muted-deep: "#6e7681"
   bench-prompt: "#3fb950"
   bench-flagged: "#d29922"
-  bench-cant-tell: "#58a6ff"        # declared, unused on the tree today; the refusal edge takes it at #308
-  receipt-ink: "#16181d"            # retiring at #308
-  receipt-paper: "#fbfbf9"          # retiring at #308
-  receipt-rule: "#c8c9c4"           # retiring at #308
-  receipt-accent: "#1f4f82"         # retiring at #308
-  receipt-refusal-edge: "#8a5a00"   # retiring at #308
-  receipt-thead: "#eeeee9"          # retiring at #308
+  bench-cant-tell: "#58a6ff"        # the refusal edge on the site (#308)
 typography:
   bench-command:
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace"
@@ -35,53 +28,28 @@ typography:
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace"
     fontSize: "52px"
     fontWeight: 700
-  bench-prose:                      # declared for the site at #308; not on the tree today
+  bench-prose:                      # the site's prose (#308)
     fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif"
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.55
-  bench-h1:                         # declared for the site at #308
+  bench-h1:                         # on the site (#308)
     fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif"
     fontSize: "1.75rem"
     fontWeight: 700
     lineHeight: 1.2
-  bench-h2:                         # declared for the site at #308
+  bench-h2:                         # on the site (#308)
     fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif"
     fontSize: "1.25rem"
     fontWeight: 600
-  bench-figure:                     # declared for the site at #308
+  bench-figure:                     # on the site (#308)
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace"
     fontSize: "0.92em"
     fontWeight: 400
-  receipt-body:                     # retiring at #308
-    fontFamily: "Georgia, \"Times New Roman\", serif"
-    fontSize: "1rem"
-    fontWeight: 400
-    lineHeight: 1.55
-  receipt-h1:                       # retiring at #308
-    fontFamily: "Georgia, \"Times New Roman\", serif"
-    fontSize: "1.75rem"
-    fontWeight: 700
-    lineHeight: 1.2
-  receipt-h2:                       # retiring at #308
-    fontFamily: "Georgia, \"Times New Roman\", serif"
-    fontSize: "1.25rem"
-    fontWeight: 700
-  receipt-figure:                   # retiring at #308 (bench-figure replaces it)
-    fontFamily: "ui-monospace, \"SFMono-Regular\", Menlo, Consolas, monospace"
-    fontSize: "0.92em"
-    fontWeight: 400
-  # Retiring sizes: on the tree today, removed by the ticket named; declared so the fence is green on main.
-  retiring-site-h3:                 # retiring at #308
-    fontSize: "1.05rem"
-  retiring-site-verdict:            # retiring at #308
-    fontSize: "1.15rem"
-  retiring-site-footer:             # retiring at #308
-    fontSize: "0.85rem"
 rounded:
   none: "0"
 spacing:
-  # Extracted values, still on the tree; #308 moves the stylesheet onto the declared scale below.
+  # Extracted values from the pre-#308 stylesheet, kept as declared names; the stylesheet now sits on the scale below.
   hairline: "0.2rem"
   tight: "0.35rem"
   snug: "0.5rem"
@@ -476,14 +444,18 @@ Measured defects and open questions, recorded so a future pass does not rediscov
    and none was observed.
 
 2. **Resolved 2026-08-30.** The two systems are reconciled by declaration above: one system,
-   paper retired. The window chrome is gone from every asset: #310 took the social preview's and
-   #309 the banner pair's. #310 removed the 20px/22px/24px/30px preview sizes and
-   `rounded.preview`; #309 removed the 15px banner label and `rounded.banner`; this merge removes
-   what only the two together made dead - the three `chrome-*` colours and the 19px readout size -
-   because a declared token that nothing draws is a cache of a retired decision. The `receipt-*` colours and the `retiring-site-*`
-   sizes stay declared until #308 removes the paper stylesheet that still draws them. The fence is
-   one-directional by design: it turns red on an undeclared literal, never on a declared token
-   nothing uses, so over-declaring hides a retirement instead of failing on it.
+   paper retired, and as of #308 the reconciliation is COMPLETE on the tree rather than only in
+   the declaration. Each ticket removed exactly the tokens it stopped drawing: #310 the social
+   preview's window chrome and the five preview sizes, #309 the banner pair's chrome and the
+   banner label size, #308 the paper stylesheet, every `receipt-*` token and the three off-ramp
+   site sizes. The `chrome-*` colours, both `rounded` radii and the 19px readout went with the
+   last surface that drew them.
+
+   The declaration now holds only what the tree draws, which is the state this fence was built
+   to reach. That matters because the fence is one-directional by design: it turns red on an
+   undeclared literal and stays silent on a declared token nothing uses. Over-declaring
+   therefore hides a completed retirement instead of failing on it, and the only defence is
+   removing a token in the same change that stops drawing it.
 
 3. **The dark banner's verdict token draws from a different enum than the social preview's.**
    `banner-dark.svg:10` renders `→ UNMEASURED` (a clause status, `aggregation/status.py:52`);
@@ -500,8 +472,13 @@ Measured defects and open questions, recorded so a future pass does not rediscov
    the README's `<picture>` element selects a file per colour scheme and a single file would
    change the README's structure outside #309's blast radius.
 
-5. **`bench-cant-tell` is declared and unused.** `grep -ri 58a6ff` over the tree returns
-   nothing on 2026-08-30. It becomes live when #308 moves the refusal edge onto it.
+5. **`bench-cant-tell` went live at #308** as the refusal edge (`.refusal`, `.refused`) and the
+   focus ring on the site. It has no use on the assets.
+
+7. **The nav carries no current-page marker.** `templates/page.html` is one shell for every
+   page and `render_page` passes no page identity into it, so `aria-current="page"` cannot be
+   set from the template or the stylesheet alone. Setting it means a `render.py` change, which
+   #308's blast radius excluded. Open; the Site Header rule above still asks for it.
 
 6. **Resolved in part at #310.** The social preview's window chrome (traffic-light dots, title
    divider, `rx="18"`) is gone and the composition sits on the 96px safe area with two declared
