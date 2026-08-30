@@ -20,12 +20,14 @@ on:
     types: [opened]
 
 permissions:
-  issues: write
+  contents: read
 
 jobs:
   add-needs-triage:
     if: ${{ github.event.issue.labels[0] == null }}
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
     steps:
       - name: Add needs-triage to an unlabeled issue
         env:
