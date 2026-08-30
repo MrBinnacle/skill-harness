@@ -112,6 +112,36 @@ def test_pages_workflow_renames_no_existing_ci_job() -> None:
     assert _job_ids(_CI) == list(_CI_JOB_IDS)
 
 
+def _all_green_checked_results() -> list[str]:
+    """The job results the all-green STEP actually tests, read from its script.
+
+    ``_all_green_needs`` reads the dependency list; this reads the condition that
+    consumes it. They are two hand-maintained lists of the same thing.
+    """
+    text = _CI.read_text(encoding="utf-8")
+    match = re.search(
+        r"^  all-green:\n(?:.*\n)*?          echo \"All checks passed", text, re.MULTILINE
+    )
+    assert match is not None, "ci.yml all-green job has no verification step"
+    return sorted(set(re.findall(r"needs\.([a-z-]+)\.result", match.group(0))))
+
+
+def test_all_green_checks_exactly_the_jobs_it_depends_on() -> None:
+    """The needs list and the condition that reads it cannot drift apart.
+
+    They did. `vale` was removed from `needs:` and left in the condition. A result
+    for a job that is not a dependency is the EMPTY STRING, so
+    ``[[ "" != "success" ]]`` is always true and all-green failed on every run,
+    including runs where all twenty real checks passed. The failure names no job,
+    so it reads as an infrastructure flake rather than as a one-line edit.
+
+    The inverse is worse and this test catches it too: a job added to ``needs``
+    but never tested in the condition is a required check that can fail while
+    all-green stays green.
+    """
+    assert _all_green_checked_results() == sorted(_all_green_needs())
+
+
 def test_pages_jobs_are_not_required_checks() -> None:
     assert _all_green_needs() == list(_REQUIRED_JOB_IDS)
     pages_jobs = set(_job_ids(_PAGES))
