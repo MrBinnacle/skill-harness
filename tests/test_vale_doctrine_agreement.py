@@ -8,6 +8,7 @@ Fixture-only: no network, no model calls.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -59,6 +60,15 @@ def _run_vale(file_path: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _count_findings(result: subprocess.CompletedProcess[str]) -> int:
+    """Count warnings from Vale output summary line."""
+    for line in result.stdout.strip().splitlines():
+        m = re.search(r"(\d+) warning", line)
+        if m:
+            return int(m.group(1))
+    return 0
+
+
 class TestDoctrineToRuleAgreement:
     """Test that doctrine rows and rule files agree."""
 
@@ -79,6 +89,13 @@ class TestDoctrineToRuleAgreement:
                 f"which is not in the expected rows"
             )
 
+    def test_no_landing_rule(self) -> None:
+        """No rule file or fixture is named 'Landing'."""
+        rule_files = {f.stem for f in _get_rule_files()}
+        assert "Landing" not in rule_files, "A rule file named 'Landing' exists"
+        fixture_files = {f.stem for f in _FIXTURES_DIR.glob("*.md")}
+        assert "Landing" not in fixture_files, "A fixture named 'Landing' exists"
+
     def test_all_fixtures_are_parseable(self) -> None:
         """Every fixture file can be parsed by Vale without errors."""
         for fixture in _FIXTURES_DIR.glob("*.md"):
@@ -95,8 +112,8 @@ class TestDoctrineToRuleAgreement:
                 f"expected 0. Output: {result.stdout}"
             )
 
-    def test_fail_fixtures_have_findings(self) -> None:
-        """Fail fixtures have at least one warning.
+    def test_fail_fixtures_have_exactly_one_finding(self) -> None:
+        """Fail fixtures trigger exactly one warning.
 
         Note: Dressing-fail.md is excluded because Vale's tokenizer strips
         emoji characters, making the existence-based rule unable to fire.
@@ -107,19 +124,10 @@ class TestDoctrineToRuleAgreement:
             if fixture.name in excluded:
                 continue
             result = _run_vale(fixture)
-            # Parse the output to count actual findings
-            # The summary line is like "0 errors, 2 warnings and 0 suggestions in 1 file."
-            lines = result.stdout.strip().splitlines()
-            has_findings = False
-            for line in lines:
-                if "warning" in line.lower() and "0 warnings" not in line:
-                    has_findings = True
-                    break
-                if "error" in line.lower() and "0 errors" not in line:
-                    has_findings = True
-                    break
-            assert has_findings, (
-                f"Fail fixture {fixture.name} has no warnings in output: {result.stdout}"
+            finding_count = _count_findings(result)
+            assert finding_count == 1, (
+                f"Fail fixture {fixture.name} has {finding_count} warnings, "
+                f"expected exactly 1. Output: {result.stdout}"
             )
 
     def test_poison_control_passes(self) -> None:
