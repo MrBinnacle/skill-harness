@@ -118,24 +118,33 @@ jobs:
             Linux)
               curl -sL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
                 | tar xz -C /usr/local/bin vale
+              VALE_DIR=/usr/local/bin
               ;;
             Windows)
               curl -sL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Windows_64-bit.zip" \
-                -o "$RUNNER_TEMP/vale.zip"
+                -o vale.zip
               mkdir -p "$HOME/bin"
-              # bsdtar ships with windows-latest and reads zip. `unzip` is not
-              # guaranteed to be on PATH in the bash shell on that image, and an
-              # install that fails here now fails the job loudly rather than
-              # skipping, because this job sets SKILL_HARNESS_REQUIRE_VALE=1.
-              tar -xf "$RUNNER_TEMP/vale.zip" -C "$HOME/bin" vale.exe
-              echo "$HOME/bin" >> "$GITHUB_PATH"
+              # $RUNNER_TEMP holds a WINDOWS path such as D:\a\_temp, and GNU tar reads a
+              # leading "D:" as a remote host, failing with "tar: Cannot connect to
+              # D: resolve failed" - observed on both windows cells. Nothing with a
+              # drive letter is handed to tar. bsdtar ships with windows-latest and
+              # reads zip; `unzip` is not guaranteed to be on PATH in bash there.
+              tar -xf vale.zip -C "$HOME/bin" vale.exe
+              rm -f vale.zip
+              VALE_DIR="$HOME/bin"
+              # Later steps need not run under bash, so GITHUB_PATH takes the
+              # Windows form rather than the MSYS /c/... form bash reports.
+              cygpath -w "$VALE_DIR" >> "$GITHUB_PATH"
               ;;
             *)
               echo "Unsupported runner OS: ${{ runner.os }}"
               exit 1
               ;;
           esac
-          vale --version
+          # GITHUB_PATH applies to LATER steps only. Asserting through the bare
+          # name here would fail on Windows even after a good extract, which is the
+          # second defect this step carried.
+          PATH="$VALE_DIR:$PATH" vale --version
       - name: pytest
         # `-m "not live and not calibration and not assurance"` mirrors local gate; live
         # tests require ANTHROPIC_API_KEY (not provisioned in CI). Dense CS calibration
