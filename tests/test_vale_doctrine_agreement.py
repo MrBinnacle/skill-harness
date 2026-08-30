@@ -59,11 +59,18 @@ except FileNotFoundError:
     # module. The repo's idiom for an absent tool is a skip that names what to
     # install (tests/test_fuzz_170.py does this for atheris).
     #
-    # CI is the deliberate exception and stays loud: ci.yml installs Vale into
-    # the test job, so an absent binary there means that install step regressed.
-    # Skipping in CI would convert lost coverage into a green run, which is the
-    # silent pass this suite exists to prevent.
-    if os.environ.get("CI"):
+    # One job installs Vale and must fail loudly if it is missing there, because
+    # a skip would convert a regressed install step into a green run. Every other
+    # job legitimately has no Vale and must skip.
+    #
+    # The signal is an explicit opt-in, NOT the generic CI variable. GitHub sets
+    # CI=true in every job, including `calibration`, which never installs Vale
+    # and whose `pytest -m calibration` still IMPORTS this module during
+    # collection. Keying on CI therefore reddened four calibration cells that
+    # were never meant to need the binary. The env var below is set only by the
+    # job whose own steps install it, so the invariant it asserts is true by
+    # construction.
+    if os.environ.get("SKILL_HARNESS_REQUIRE_VALE") == "1":
         raise
     _RESOLVED_VALE_BIN = None
 

@@ -82,8 +82,15 @@ jobs:
     timeout-minutes: 25
     # PYTHONHASHSEED=0 required by tests/oracles/tier1 autouse fixture for
     # A33 mechanical-validity bit-equality discipline.
+    #
+    # SKILL_HARNESS_REQUIRE_VALE=1: this job installs Vale in a step below, so a
+    # missing binary here is a regressed install and must fail rather than skip.
+    # Jobs that do not install Vale leave this unset and skip those tests. It
+    # belongs in THIS block: a second `env:` key on the same job is not a merge,
+    # it silently replaces the first, so the variable would never have been set.
     env:
       PYTHONHASHSEED: "0"
+      SKILL_HARNESS_REQUIRE_VALE: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -116,7 +123,11 @@ jobs:
               curl -sL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Windows_64-bit.zip" \
                 -o "$RUNNER_TEMP/vale.zip"
               mkdir -p "$HOME/bin"
-              unzip -o "$RUNNER_TEMP/vale.zip" vale.exe -d "$HOME/bin"
+              # bsdtar ships with windows-latest and reads zip. `unzip` is not
+              # guaranteed to be on PATH in the bash shell on that image, and an
+              # install that fails here now fails the job loudly rather than
+              # skipping, because this job sets SKILL_HARNESS_REQUIRE_VALE=1.
+              tar -xf "$RUNNER_TEMP/vale.zip" -C "$HOME/bin" vale.exe
               echo "$HOME/bin" >> "$GITHUB_PATH"
               ;;
             *)
