@@ -4,27 +4,37 @@
  * verbatim into the output directory. Refusals are styled as ordinary primary
  * content -- never dimmed, collapsed, or pushed into a footnote -- because a
  * refusal is a result here, not an absence.
+ *
+ * Every colour, font-family and font-size literal below is a value declared in
+ * DESIGN.md's token block (the Test Bench); the conformance test reads that
+ * block and fails on any literal it does not find.
  */
 
 :root {
-  --ink: #16181d;
-  --paper: #fbfbf9;
-  --rule: #c8c9c4;
-  --accent: #1f4f82;
-  --refusal-edge: #8a5a00;
+  --bench-void: #010409;
+  --bench-surface: #0d1117;
+  --bench-hairline: #30363d;
+  --bench-ink: #e6edf3;
+  --bench-ink-soft: #c9d1d9;
+  --bench-muted: #8b949e;
+  --bench-cant-tell: #58a6ff;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  background: var(--bench-void);
+}
+
 body {
   margin: 0 auto;
   max-width: 62rem;
-  padding: 0 1.25rem 3rem;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: Georgia, "Times New Roman", serif;
+  padding: 0 1rem 3rem;
+  background: var(--bench-surface);
+  color: var(--bench-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   font-size: 1rem;
   line-height: 1.55;
 }
@@ -35,8 +45,8 @@ header {
   align-items: baseline;
   justify-content: space-between;
   gap: 0.5rem 1.5rem;
-  border-bottom: 2px solid var(--ink);
-  padding: 1.25rem 0 0.5rem;
+  border-bottom: 2px solid var(--bench-ink);
+  padding: 1.5rem 0 0.5rem;
 }
 
 .wordmark {
@@ -53,44 +63,75 @@ nav ul {
   list-style: none;
 }
 
+/* Links carry no chromatic accent: the underline is the affordance. */
 a {
-  color: var(--accent);
+  color: inherit;
+  text-decoration: underline;
+}
+
+a:hover {
+  color: var(--bench-ink-soft);
+}
+
+a:focus-visible {
+  outline: 2px solid var(--bench-cant-tell);
+  outline-offset: 0.25rem;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
 }
 
 h1 {
   font-size: 1.75rem;
+  font-weight: 700;
   line-height: 1.2;
-  margin: 1.5rem 0 0.75rem;
+  letter-spacing: -0.01em;
+  margin: 1.5rem 0 1rem;
 }
 
 h2 {
   font-size: 1.25rem;
+  font-weight: 600;
   margin: 2rem 0 0.5rem;
-  border-bottom: 1px solid var(--rule);
-  padding-bottom: 0.2rem;
+  border-bottom: 1px solid var(--bench-hairline);
+  padding-bottom: 0.25rem;
 }
 
+/* Hierarchy by weight, not by a fifth size. */
 h3 {
-  font-size: 1.05rem;
-  margin: 1.25rem 0 0.4rem;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
 }
 
+p {
+  max-width: 65ch;
+}
+
+/* Anything a reader could copy into a terminal or cite as a number is mono. */
 code,
 .figure,
 .verdict-token {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
 }
 
 .rule {
-  border-left: 4px solid var(--ink);
+  border-left: 4px solid var(--bench-ink);
   margin: 1rem 0;
   padding: 0.25rem 0 0.25rem 0.85rem;
 }
 
+/* A verdict is a claim token: mono, at the h2 step. */
 .verdict {
-  font-size: 1.15rem;
-  margin: 0.75rem 0 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 1rem 0 0.25rem;
 }
 
 .summary {
@@ -99,33 +140,33 @@ code,
 
 table {
   border-collapse: collapse;
-  margin: 0.75rem 0 1rem;
+  margin: 1rem 0;
   width: 100%;
 }
 
 caption {
   text-align: left;
   font-weight: 700;
-  padding-bottom: 0.3rem;
+  padding-bottom: 0.25rem;
 }
 
 th,
 td {
-  border: 1px solid var(--rule);
+  border: 1px solid var(--bench-hairline);
   padding: 0.35rem 0.5rem;
   text-align: left;
   vertical-align: top;
 }
 
 thead th {
-  background: #eeeee9;
+  background: var(--bench-void);
 }
 
 dl {
   display: grid;
   grid-template-columns: minmax(10rem, max-content) 1fr;
-  gap: 0.2rem 1rem;
-  margin: 0.75rem 0 1.25rem;
+  gap: 0.25rem 1rem;
+  margin: 1rem 0 1.5rem;
 }
 
 dt {
@@ -149,10 +190,11 @@ dd {
 }
 
 /* A refusal is primary content: same weight as a measured figure, boxed so it
- * cannot be mistaken for a missing value. */
+ * cannot be mistaken for a missing value. The edge is the can't-tell colour,
+ * whose one declared role is the refused state. */
 .refusal,
 .refused {
-  border-left: 4px solid var(--refusal-edge);
+  border-left: 4px solid var(--bench-cant-tell);
   padding: 0.25rem 0 0.25rem 0.6rem;
   font-weight: 600;
 }
@@ -162,12 +204,13 @@ dd {
 }
 
 .clause-evidence ul {
-  padding-left: 1.1rem;
+  padding-left: 1rem;
 }
 
+/* Colour carries the demotion, not size. */
 footer {
-  border-top: 1px solid var(--rule);
-  margin-top: 2.5rem;
-  padding-top: 0.75rem;
-  font-size: 0.85rem;
+  border-top: 1px solid var(--bench-hairline);
+  margin-top: 3rem;
+  padding-top: 1rem;
+  color: var(--bench-muted);
 }
