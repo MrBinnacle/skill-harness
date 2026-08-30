@@ -2,9 +2,11 @@
 name: skill-harness
 description: The skill eval that refuses to invent a score.
 # Declared system: Test Bench. Every `bench-*` token is declared for every surface.
-# Every `receipt-*` token and every `chrome-*` token is RETIRING: still on the tree today
-# (the conformance check must stay green on main), removed by the surface ticket named
-# beside it. Do not use a retiring token on a new surface.
+# Every `receipt-*` token is RETIRING: still drawn on the tree today (the conformance check
+# must stay green on main), removed by the surface ticket named beside it. A new surface uses
+# a `bench-*` token. The `chrome-*` colours and the `rounded` radii were retiring tokens and
+# are gone: #310 took the social preview's window chrome, #309 the banner pair's, and nothing
+# draws them.
 colors:
   bench-void: "#010409"
   bench-surface: "#0d1117"
@@ -18,9 +20,6 @@ colors:
   bench-prompt: "#3fb950"
   bench-flagged: "#d29922"
   bench-cant-tell: "#58a6ff"        # declared, unused on the tree today; the refusal edge takes it at #308
-  chrome-close: "#ff5f56"           # retiring at #309 (gone from the social preview at #310; the banners still carry it)
-  chrome-minimise: "#ffbd2e"        # retiring at #309 (gone from the social preview at #310; the banners still carry it)
-  chrome-zoom: "#27c93f"            # retiring at #309 (gone from the social preview at #310; the banners still carry it)
   receipt-ink: "#16181d"            # retiring at #308
   receipt-paper: "#fbfbf9"          # retiring at #308
   receipt-rule: "#c8c9c4"           # retiring at #308
@@ -79,13 +78,8 @@ typography:
     fontSize: "1.15rem"
   retiring-site-footer:             # retiring at #308
     fontSize: "0.85rem"
-  retiring-banner-label:            # retiring at #309
-    fontSize: "15px"
-  retiring-banner-readout:          # retiring at #309
-    fontSize: "19px"
 rounded:
   none: "0"
-  banner: "12px"                    # retiring at #309 with the window chrome
 spacing:
   # Extracted values, still on the tree; #308 moves the stylesheet onto the declared scale below.
   hairline: "0.2rem"
@@ -292,7 +286,9 @@ Four sizes and three weights. Nothing off the ramp.
 
 ### The ramp (assets)
 
-Mono at every size. Social preview (#310): **Verdict** 52px/700; every other line 21px, weight carried by tone (Ink, Soft Ink, Muted, Deep Muted), not by size. Banners, until #309: **Command** 21-30px · **Readout** 19px Muted · **Label** 15-20px Deep Muted.
+Mono at every size, two sizes on the whole asset set: **Verdict** 52px/700 (the social preview's
+readout) and **21px** for every other line on every asset. Weight is carried by tone (Ink, Soft
+Ink, Muted, Deep Muted), never by size. [#310 for the social preview, #309 for the banner pair]
 
 ### Named Rules
 
@@ -359,9 +355,10 @@ texture behind small text, code and measurements, and the whole surface is measu
 **Radius is zero everywhere.** One radius system for the whole repository.
 [design-taste-frontend §4.4 shape-consistency lock; primer 0-4px]
 
-The `rx="12"` / `rx="18"` on the terminal frames retires with the window chrome at #309 and
-#310; the Square-Unless-Quoting exception dies with the thing it was quoting. The form language
-is rectangles, 1px rules, 4px left edges and a 2px header underline.
+The `rx="12"` on the banner frames retired with their window chrome at #309 and the `rx="18"`
+on the social preview at #310. `grep -o 'rx="[^"]*"' assets/*.svg` returns nothing on
+2026-08-30; the Square-Unless-Quoting exception died with the thing it was quoting. The form
+language is rectangles, 1px rules, 4px left edges and a 2px header underline.
 
 ## Components
 
@@ -479,21 +476,29 @@ Measured defects and open questions, recorded so a future pass does not rediscov
    and none was observed.
 
 2. **Resolved 2026-08-30.** The two systems are reconciled by declaration above: one system,
-   paper retired. The tree still carries the paper stylesheet and the banners' window chrome until #308
-   and #309 land (#310 removed the social preview's); the retiring tokens stay declared so the conformance check is green on
-   `main` and turns red the day a retired literal is reintroduced after its ticket merges.
+   paper retired. The window chrome is gone from every asset: #310 took the social preview's and
+   #309 the banner pair's. #310 removed the 20px/22px/24px/30px preview sizes and
+   `rounded.preview`; #309 removed the 15px banner label and `rounded.banner`; this merge removes
+   what only the two together made dead - the three `chrome-*` colours and the 19px readout size -
+   because a declared token that nothing draws is a cache of a retired decision. The `receipt-*` colours and the `retiring-site-*`
+   sizes stay declared until #308 removes the paper stylesheet that still draws them. The fence is
+   one-directional by design: it turns red on an undeclared literal, never on a declared token
+   nothing uses, so over-declaring hides a retirement instead of failing on it.
 
 3. **The dark banner's verdict token draws from a different enum than the social preview's.**
-   `banner-dark.svg:14` renders `→ UNMEASURED` (a clause status, `aggregation/status.py:52`);
-   `social-preview.svg:18` renders `→ CUT` (a verdict, `aggregation/verdict.py:119`). Both are
-   current. Which state the readout line shows is a copy decision for #309 and #310, and any
-   new line is a labelled candidate the owner selects.
+   `banner-dark.svg:10` renders `→ UNMEASURED` (a clause status, `aggregation/status.py:52`);
+   `social-preview.svg:14` renders `→ CUT` (a verdict, `aggregation/verdict.py:119`). Both are
+   current, and both survived #309 and #310 unchanged: the two tickets restyled the assets and
+   held every string, so the divergence is now purely a copy decision. It is an owner rung, and
+   the labelled candidates sit on #309 and #310.
 
 4. **The light/dark banner pair differs by one stroke attribute** (`#d0d7de` vs `#30363d`);
    both keep the dark interior, by the file's own comment. The naming does not carry the
-   intent. With the window chrome retiring at #309, the pair reduces to one composition with
-   two frame strokes; whether one file with a `currentColor` stroke replaces two is #309's
-   call.
+   intent. Since #309 the pair is one composition (wordmark, command, readout; three `<text>`
+   nodes; 21px `bench-command` size; radius 0) with two frame strokes. The #309 ticket
+   carries the one-file `currentColor` proposal as a candidate; it was not applied, because
+   the README's `<picture>` element selects a file per colour scheme and a single file would
+   change the README's structure outside #309's blast radius.
 
 5. **`bench-cant-tell` is declared and unused.** `grep -ri 58a6ff` over the tree returns
    nothing on 2026-08-30. It becomes live when #308 moves the refusal edge onto it.
