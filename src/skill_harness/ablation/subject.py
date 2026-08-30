@@ -253,6 +253,14 @@ PRICE_PER_MTOK: dict[str, dict[str, float]] = {
         "cache_write": 0.0,
         "cache_read": 0.075,
     },
+    # Claude Sonnet 5: $2/$10 per MTok (in/out). Cache: $2.50 write / $0.20 read.
+    # Per https://platform.claude.com/docs/about-claude/pricing (2026-08).
+    "claude-sonnet-5": {
+        "input": 2.00,
+        "output": 10.00,
+        "cache_write": 2.50,
+        "cache_read": 0.20,
+    },
     # Default fallback (uses Anthropic Sonnet rates — adjust when other models are used).
     "_default": {
         "input": 3.00,

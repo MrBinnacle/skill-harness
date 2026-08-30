@@ -482,3 +482,21 @@ class TestPairAndTrialProjections:
             project_trial_usd(
                 "claude-sonnet-4-6", input_tokens_per_trial=100, output_tokens_per_trial=-1
             )
+
+    def test_pair_literal_sonnet_5(self) -> None:
+        # 486212.75 in x $2/M + 54777.625 out x $10/M = 0.9724255 + 0.54777625
+        usd = project_pair_usd(
+            "claude-sonnet-5",
+            input_tokens_per_pair=486212.75,
+            output_tokens_per_pair=54777.625,
+        )
+        assert usd == pytest.approx(1.52020175)
+
+    def test_trial_literal_sonnet_5(self) -> None:
+        # 249623.25 in x $2/M + 29456 out x $10/M = 0.4992465 + 0.29456
+        usd = project_trial_usd(
+            "claude-sonnet-5",
+            input_tokens_per_trial=249623.25,
+            output_tokens_per_trial=29456,
+        )
+        assert usd == pytest.approx(0.7938065)
