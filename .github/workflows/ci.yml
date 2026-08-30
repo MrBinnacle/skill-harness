@@ -276,9 +276,25 @@ jobs:
             "site/**/*.html"
           fail: true
 
+  vale:
+    name: Vale (prose lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Vale
+        run: |
+          curl -sL https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz | tar xz -C /usr/local/bin
+      - name: Run Vale on fixtures
+        run: |
+          vale --config .vale.ini fixtures/vale/
+      - name: Run Vale on prose
+        run: |
+          vale --config .vale.ini README.md docs/
+
   all-green:
     name: All checks green
-    needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate]
+    needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate, vale]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -290,7 +306,8 @@ jobs:
              [[ "${{ needs.calibration.result }}" != "success" ]] || \
              [[ "${{ needs.structural-bans.result }}" != "success" ]] || \
              [[ "${{ needs.drift-check.result }}" != "success" ]] || \
-             [[ "${{ needs.release-gate.result }}" != "success" ]]; then
+             [[ "${{ needs.release-gate.result }}" != "success" ]] || \
+             [[ "${{ needs.vale.result }}" != "success" ]]; then
             echo "One or more required checks failed."
             exit 1
           fi

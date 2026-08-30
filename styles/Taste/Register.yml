@@ -1,0 +1,10 @@
+extends: substitution
+message: "Register: avoid '%s'."
+level: warning
+ignorecase: true
+swap:
+  '\bperhaps\b': likely
+  '\bpossibly\b': certainly
+  '\barguably\b': demonstrably
+  '\bcould possibly\b': could
+  'readers may conclude': the finding is

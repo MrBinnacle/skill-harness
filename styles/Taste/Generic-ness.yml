@@ -1,0 +1,11 @@
+extends: substitution
+message: "Generic-ness: '%s' is too vague."
+level: warning
+ignorecase: true
+swap:
+  '\bvarious\b': specific
+  '\bseveral\b': specific
+  '\bmultiple\b': specific
+  '\bsome\b': specific
+  '\bthings\b': specifics
+  '\bstuff\b': specifics

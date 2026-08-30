@@ -1,0 +1,9 @@
+extends: substitution
+message: "Voice: use active voice, not '%s'."
+level: warning
+ignorecase: true
+swap:
+  'it was decided': we decided
+  'there were issues': we found issues
+  'it was found': we found
+  'it was observed': we observed
