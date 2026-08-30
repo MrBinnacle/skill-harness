@@ -102,6 +102,29 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -c requirements-ci.txt -e ".[dev]"
+      - name: Install Vale
+        # Pinned to the same version as the vale job; doctrine-agreement tests shell out to it.
+        shell: bash
+        run: |
+          VALE_VERSION=3.9.1
+          case "${{ runner.os }}" in
+            Linux)
+              curl -sL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
+                | tar xz -C /usr/local/bin vale
+              ;;
+            Windows)
+              curl -sL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Windows_64-bit.zip" \
+                -o "$RUNNER_TEMP/vale.zip"
+              mkdir -p "$HOME/bin"
+              unzip -o "$RUNNER_TEMP/vale.zip" vale.exe -d "$HOME/bin"
+              echo "$HOME/bin" >> "$GITHUB_PATH"
+              ;;
+            *)
+              echo "Unsupported runner OS: ${{ runner.os }}"
+              exit 1
+              ;;
+          esac
+          vale --version
       - name: pytest
         # `-m "not live and not calibration and not assurance"` mirrors local gate; live
         # tests require ANTHROPIC_API_KEY (not provisioned in CI). Dense CS calibration

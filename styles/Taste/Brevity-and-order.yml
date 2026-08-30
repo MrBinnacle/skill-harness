@@ -1,12 +1,12 @@
-extends: substitution
+extends: existence
 message: "Brevity-and-order: '%s' is verbose."
 level: warning
 ignorecase: true
-swap:
-  'in order to': to
-  'due to the fact that': because
-  'at this point in time': now
-  'for the purpose of': to
-  'in the event that': if
-  'a number of': several
-  'the fact that': that
+tokens:
+  - 'in order to'
+  - 'due to the fact that'
+  - 'at this point in time'
+  - 'for the purpose of'
+  - 'in the event that'
+  - 'a number of'
+  - 'the fact that'

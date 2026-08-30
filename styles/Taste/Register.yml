@@ -1,10 +1,10 @@
-extends: substitution
+extends: existence
 message: "Register: avoid '%s'."
 level: warning
 ignorecase: true
-swap:
-  '\bperhaps\b': likely
-  '\bpossibly\b': certainly
-  '\barguably\b': demonstrably
-  '\bcould possibly\b': could
-  'readers may conclude': the finding is
+tokens:
+  - '\bperhaps\b'
+  - '\bpossibly\b'
+  - '\barguably\b'
+  - '\bcould possibly\b'
+  - 'readers may conclude'

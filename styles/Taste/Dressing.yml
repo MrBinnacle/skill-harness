@@ -2,6 +2,7 @@ extends: existence
 message: "Dressing: '%s' is not allowed in prose."
 level: warning
 ignorecase: false
+nonword: true
 tokens:
   - '[\x{1F300}-\x{1F9FF}]'
   - '[\x{2600}-\x{26FF}]'

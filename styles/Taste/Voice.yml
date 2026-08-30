@@ -1,9 +1,9 @@
-extends: substitution
+extends: existence
 message: "Voice: use active voice, not '%s'."
 level: warning
 ignorecase: true
-swap:
-  'it was decided': we decided
-  'there were issues': we found issues
-  'it was found': we found
-  'it was observed': we observed
+tokens:
+  - 'it was decided'
+  - 'there were issues'
+  - 'it was found'
+  - 'it was observed'

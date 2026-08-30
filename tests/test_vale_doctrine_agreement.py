@@ -1,25 +1,25 @@
 """Vale doctrine-to-rule agreement tests (#304).
 
 Proves that every Taste rule file's message names an existing doctrine row,
-every fixture is parseable by Vale, and the poison control fixture passes.
+every fixture is parseable by Vale, fail fixtures report exactly one finding
+for the named row, pass fixtures report none, and the poison control passes.
 
-Fixture-only: no network, no model calls.
+Fixture-only: no network, no model calls. Requires the Vale binary on PATH
+(or at ~/.local/bin/vale), pinned to the same version the CI workflow installs.
 """
 
 from __future__ import annotations
 
-import re
+import json
+import os
+import shutil
 import subprocess
 from pathlib import Path
-
-import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _STYLES_DIR = _REPO_ROOT / "styles" / "Taste"
 _FIXTURES_DIR = _REPO_ROOT / "fixtures" / "vale"
-_VALE_BIN = Path.home() / ".local" / "bin" / "vale"
 
-# The expected doctrine rows (rule names)
 _EXPECTED_ROWS = {
     "Dressing",
     "Evidence",
@@ -30,8 +30,24 @@ _EXPECTED_ROWS = {
 }
 
 
+def _resolve_vale_bin() -> Path:
+    """Locate the Vale binary: PATH first, then the local install path used in docs."""
+    found = shutil.which("vale")
+    if found:
+        return Path(found)
+    local = Path.home() / ".local" / "bin" / "vale"
+    if local.is_file() and os.access(local, os.X_OK):
+        return local
+    raise FileNotFoundError(
+        "Vale binary not found on PATH or at ~/.local/bin/vale. "
+        "Install the version pinned in .github/workflows/ci.yml before running these tests."
+    )
+
+
+_VALE_BIN = _resolve_vale_bin()
+
+
 def _get_rule_files() -> list[Path]:
-    """Return all YAML rule files in the Taste style directory."""
     return list(_STYLES_DIR.glob("*.yml"))
 
 
@@ -42,31 +58,44 @@ def _extract_row_name_from_message(content: str) -> str | None:
     """
     for line in content.splitlines():
         if line.startswith("message:"):
-            # Extract the part before the colon and space
             msg = line.split("message:", 1)[1].strip()
             if ":" in msg:
                 return msg.split(":")[0].strip().strip("'\"")
     return None
 
 
-def _run_vale(file_path: Path) -> subprocess.CompletedProcess[str]:
-    """Run Vale on a file and return the result."""
-    return subprocess.run(
-        [_VALE_BIN, "--config", str(_REPO_ROOT / ".vale.ini"), str(file_path)],
+def _run_vale_json(file_path: Path) -> dict[str, list[dict[str, object]]]:
+    """Run Vale with JSON output and return the parsed alert map."""
+    result = subprocess.run(
+        [
+            str(_VALE_BIN),
+            "--config",
+            str(_REPO_ROOT / ".vale.ini"),
+            "--output=JSON",
+            str(file_path),
+        ],
         capture_output=True,
         text=True,
         cwd=_REPO_ROOT,
         check=False,
     )
+    assert result.returncode in (0, 1), (
+        f"Vale failed on {file_path.name}: rc={result.returncode} stderr={result.stderr}"
+    )
+    if not result.stdout.strip():
+        return {}
+    data = json.loads(result.stdout)
+    assert isinstance(data, dict)
+    return data
 
 
-def _count_findings(result: subprocess.CompletedProcess[str]) -> int:
-    """Count warnings from Vale output summary line."""
-    for line in result.stdout.strip().splitlines():
-        m = re.search(r"(\d+) warning", line)
-        if m:
-            return int(m.group(1))
-    return 0
+def _alerts_for(file_path: Path) -> list[dict[str, object]]:
+    data = _run_vale_json(file_path)
+    alerts: list[dict[str, object]] = []
+    for items in data.values():
+        assert isinstance(items, list)
+        alerts.extend(items)
+    return alerts
 
 
 class TestDoctrineToRuleAgreement:
@@ -99,44 +128,39 @@ class TestDoctrineToRuleAgreement:
     def test_all_fixtures_are_parseable(self) -> None:
         """Every fixture file can be parsed by Vale without errors."""
         for fixture in _FIXTURES_DIR.glob("*.md"):
-            result = _run_vale(fixture)
-            # Vale returns 0 for no findings, 1 for findings, 2 for errors
-            assert result.returncode in (0, 1), f"Vale failed on {fixture.name}: {result.stderr}"
+            _run_vale_json(fixture)
 
-    def test_pass_fixtures_exit_zero(self) -> None:
-        """Pass fixtures exit 0 (no warnings)."""
-        for fixture in _FIXTURES_DIR.glob("*-pass.md"):
-            result = _run_vale(fixture)
-            assert result.returncode == 0, (
-                f"Pass fixture {fixture.name} exited {result.returncode}, "
-                f"expected 0. Output: {result.stdout}"
+    def test_pass_fixtures_have_zero_findings(self) -> None:
+        """Pass fixtures produce zero Vale findings."""
+        for fixture in sorted(_FIXTURES_DIR.glob("*-pass.md")):
+            alerts = _alerts_for(fixture)
+            assert alerts == [], (
+                f"Pass fixture {fixture.name} has {len(alerts)} finding(s): {alerts}"
             )
 
-    def test_fail_fixtures_have_exactly_one_finding(self) -> None:
-        """Fail fixtures trigger exactly one warning.
-
-        Note: Dressing-fail.md is excluded because Vale's tokenizer strips
-        emoji characters, making the existence-based rule unable to fire.
-        This is a pre-existing limitation of the Dressing rule design.
-        """
-        excluded = {"Dressing-fail.md"}
-        for fixture in _FIXTURES_DIR.glob("*-fail.md"):
-            if fixture.name in excluded:
-                continue
-            result = _run_vale(fixture)
-            finding_count = _count_findings(result)
-            assert finding_count == 1, (
-                f"Fail fixture {fixture.name} has {finding_count} warnings, "
-                f"expected exactly 1. Output: {result.stdout}"
+    def test_fail_fixtures_have_exactly_one_finding_for_named_row(self) -> None:
+        """Each fail fixture yields exactly one finding for its doctrine row."""
+        for fixture in sorted(_FIXTURES_DIR.glob("*-fail.md")):
+            row = fixture.stem.removesuffix("-fail")
+            assert row in _EXPECTED_ROWS, f"Unexpected fail fixture row: {row}"
+            alerts = _alerts_for(fixture)
+            assert len(alerts) == 1, (
+                f"Fail fixture {fixture.name} has {len(alerts)} finding(s), "
+                f"expected exactly 1. Alerts: {alerts}"
+            )
+            check = str(alerts[0].get("Check", ""))
+            message = str(alerts[0].get("Message", ""))
+            expected_check = f"Taste.{row}"
+            assert check == expected_check, (
+                f"Fail fixture {fixture.name} reported Check={check!r}, expected {expected_check!r}"
+            )
+            assert message.startswith(f"{row}:"), (
+                f"Fail fixture {fixture.name} message {message!r} does not name row {row!r}"
             )
 
-    def test_poison_control_passes(self) -> None:
-        """The poison control fixture passes Vale (exit 0)."""
+    def test_poison_control_has_zero_findings(self) -> None:
+        """The poison control fixture produces zero Vale findings."""
         poison_fixture = _FIXTURES_DIR / "poison-empty.md"
-        if not poison_fixture.exists():
-            pytest.skip("poison-empty.md not found")
-        result = _run_vale(poison_fixture)
-        assert result.returncode == 0, (
-            f"Poison control fixture exited {result.returncode}, "
-            f"expected 0. Output: {result.stdout}"
-        )
+        assert poison_fixture.is_file(), "poison-empty.md is required"
+        alerts = _alerts_for(poison_fixture)
+        assert alerts == [], f"Poison control fixture has {len(alerts)} finding(s): {alerts}"
