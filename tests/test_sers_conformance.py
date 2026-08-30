@@ -20,12 +20,17 @@ from jsonschema.exceptions import ValidationError  # type: ignore[import-untyped
 
 from skill_harness.aggregation.status import UnmeasuredSubReason
 from skill_harness.aggregation.verdict import CutSubReason, KeepCutVerdict, ValueClass
+from skill_harness.cli.main import _resolve_harness_version
+from skill_harness.sers import build_subject_identity
+from skill_harness.subject.ingest import ORACLE_METRIC_VERSION, _oracle_implementation_hash
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SERS_DIR = _REPO_ROOT / "docs" / "sers"
 _SCHEMA_PATH = _SERS_DIR / "sers.schema.json"
 _RECEIPTS_DIR = _SERS_DIR / "receipts"
 _POISON_DIR = _REPO_ROOT / "tests" / "fixtures" / "sers"
+_CONTROL_SKILL_MD = _POISON_DIR / "declared-synthetic-positive-control" / "SKILL.md"
+_V11_MINTED = _POISON_DIR / "minted_synthetic_control_v1_1_0.json"
 
 
 def _load_json(path: Path) -> Any:
@@ -185,3 +190,47 @@ def test_poison_bare_gate_term_is_red(sers_validator: Draft202012Validator) -> N
     assert "evidence_admissibility" not in instance
     with pytest.raises(ValidationError):
         sers_validator.validate(instance)
+
+
+def test_poison_missing_skill_id_is_red(sers_validator: Draft202012Validator) -> None:
+    """1.1.0 subject_identity without skill_id must fail on that field (#298)."""
+    path = _POISON_DIR / "poison_missing_skill_id.json"
+    assert path.is_file()
+    instance = _load_json(path)
+    assert "skill_id" not in instance.get("subject_identity", {})
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "skill_id" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# subject_identity mint (#298): harness-populated, not hand-typed
+# ---------------------------------------------------------------------------
+
+
+def test_build_subject_identity_uses_live_harness_sources() -> None:
+    """Every field comes from the harness path named in the ticket, not a literal."""
+    assert _CONTROL_SKILL_MD.is_file()
+    block = build_subject_identity(skill_md=_CONTROL_SKILL_MD, arms=["null", "full"])
+    assert block["harness_version"] == _resolve_harness_version()
+    assert block["metric_version"] == ORACLE_METRIC_VERSION
+    assert block["implementation_hash"] == _oracle_implementation_hash()
+    assert block["arms"] == ["null", "full"]
+    assert len(block["skill_id"]) == 64
+    assert set(block["skill_id"]) <= set("0123456789abcdef")
+
+
+def test_v11_receipt_subject_identity_matches_harness_mint(
+    sers_validator: Draft202012Validator,
+) -> None:
+    """1.1.0 mint of the real synthetic-control run: harness block, not hand-typed."""
+    assert _V11_MINTED.is_file()
+    instance = _load_json(_V11_MINTED)
+    sers_validator.validate(instance)
+    assert instance["sers_version"] == "1.1.0"
+    expected = build_subject_identity(skill_md=_CONTROL_SKILL_MD, arms=["null", "full"])
+    assert instance["subject_identity"] == expected
+    # Measurements stay the documented real run — not an invented KEEP.
+    assert instance["declared_synthetic_control"] is True
+    assert instance["measurements"]["full_pass_rate"]["passes"] == 8
+    assert instance["measurements"]["null_pass_rate"]["passes"] == 0

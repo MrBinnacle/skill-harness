@@ -29,7 +29,7 @@ checked against the code enums in CI.
 ### `sers_version`
 
 Vocabulary generation of the receipt. Receipts that disagree on
-`sers_version` are not comparable. v1 locks `"1.0.0"`.
+`sers_version` are not comparable. Supported values: `"1.0.0"`, `"1.1.0"`.
 
 ### `skill_name`
 
@@ -175,6 +175,20 @@ exporter). Revisit when store-backed receipts multiply.
 One-paragraph operator-facing summary. Must not invent numbers that are absent
 from `measurements` / `cost`.
 
+### `subject_identity` (required from `sers_version` 1.1.0)
+
+Provenance block identifying the subject under test. Absent on 1.0.0
+hand-encoded receipts; required when `sers_version` is `1.1.0`. Populate via
+`skill_harness.sers.build_subject_identity` — do not free-type the fields.
+
+| Field | Meaning |
+| --- | --- |
+| `skill_id` | SHA-256 hex of the exact `SKILL.md` bytes measured. |
+| `harness_version` | Harness version that produced the receipt. |
+| `metric_version` | Oracle metric version (e.g. `0.3.0`). |
+| `implementation_hash` | SHA-256 hex of the oracle module source at mint/ingest time. |
+| `arms` | Which arms ran: `null`, `full`, or both as an array. |
+
 ## Conformance
 
 ```text
@@ -198,3 +212,10 @@ The harness asserts:
 | `double-ceiling-nogo-2026-07-09.json` | `CANT_TELL_YET` (NO-GO / structurally unmeasured) | `docs/case-studies/double-ceiling-structurally-unmeasured.md` |
 | `reclass-append-only-evidence-design.json` | `CANT_TELL_YET` (wrong instrument, calibration) | `README.md` + `docs/observations/OBS-0005-*.md` |
 | `reclass-git-pull-rebase-trap.json` | `CANT_TELL_YET` (wrong instrument, trap-discipline) | `README.md` |
+
+A 1.1.0 mint of the synthetic-control KEEP (same measurements, harness-populated
+`subject_identity`) lives at
+`tests/fixtures/sers/minted_synthetic_control_v1_1_0.json` and is pinned by
+`tests/test_sers_conformance.py`. It is not published under `receipts/` because
+the site generator keys pages by `skill_name` and refuses two receipts for one
+skill; the 1.0.0 instance remains the published card.

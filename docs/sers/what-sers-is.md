@@ -115,6 +115,7 @@ Read off the schema, which is the operative artifact.
 `value_class` are required *keys* that may hold `null`; presence is mandatory, a value is not.
 
 **Optional:** `wrong_instrument`, `declared_synthetic_control`, `measurements`.
+`subject_identity` is optional on `1.0.0` and required on `1.1.0`.
 
 **Closed vocabularies**, each checked for equality against the code enum in CI:
 
@@ -126,9 +127,10 @@ Read off the schema, which is the operative artifact.
 - `value_class`: `transformative-lift`, `trap-discipline`, `calibration`, `null`
 - `evidence_admissibility.status`: `admissible`, `inadmissible`, `mixed`, `not_applicable`
 
-**The single conditional the schema enforces:** `cut_sub_reason` is a non-null member when
-`verdict` is `CUT`, and is `null` when `verdict` is `KEEP` or `CANT_TELL_YET`. Every other
-cross-field rule in the README is prose only.
+**Conditionals the schema enforces:** `cut_sub_reason` is a non-null member when
+`verdict` is `CUT`, and is `null` when `verdict` is `KEEP` or `CANT_TELL_YET`. When
+`sers_version` is `1.1.0`, `subject_identity` is required. Every other cross-field rule in
+the README is prose only.
 
 **The refusal shape.** Every numeric leg is one of two closed object forms -- a measured value,
 or an object carrying `refusal` from a fixed vocabulary. There is no third form. Omitting the
@@ -137,8 +139,8 @@ figure, substituting a placeholder, or free-typing a reason string is non-confor
 **The gate term.** `evidence_admissibility` is the only permitted spelling. The bare form is
 rejected, and a poison fixture holds that line in CI.
 
-**Version semantics.** `sers_version` is pinned to `"1.0.0"` by a `const`. Receipts carrying
-different values are declared non-comparable.
+**Version semantics.** `sers_version` is one of `"1.0.0"` or `"1.1.0"`. Receipts carrying
+different values are declared non-comparable. From `1.1.0`, `subject_identity` is required.
 
 ## What this document does not settle
 

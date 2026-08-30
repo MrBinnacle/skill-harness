@@ -4,50 +4,40 @@
 
 ### 1. Schema 1.1.0 validates the four existing receipts unchanged
 
-**What I built:** Updated `docs/sers/sers.schema.json` to support `sers_version` `"1.0.0"` and `"1.1.0"`. The `subject_identity` block is optional for `1.0.0` receipts and required from `1.1.0` onward. Added a conditional `allOf` rule: when `sers_version == "1.1.0"`, `subject_identity` must be present.
+**What:** `docs/sers/sers.schema.json` accepts `sers_version` `"1.0.0"` and `"1.1.0"`.
+`subject_identity` is optional on `1.0.0` and required on `1.1.0` via an `allOf`
+conditional. The four published `1.0.0` receipts under `docs/sers/receipts/` are
+byte-unchanged.
 
-**Test that pins it:** `test_sers_conformance.py::test_receipt_conforms_to_sers_schema` — parametrized over all five receipt files under `docs/sers/receipts/`. The four existing `1.0.0` receipts pass validation unchanged; the new `1.1.0` receipt also passes.
-
-**What I observed:** All four existing receipts validated before and after the schema change. The schema's `allOf` conditional correctly skips the `subject_identity` requirement for `1.0.0` receipts. The `Draft202012Validator.check_schema()` self-check passes on the updated schema.
+**Test:** `test_sers_conformance.py::test_receipt_conforms_to_sers_schema` over every
+file in `docs/sers/receipts/`.
 
 ### 2. The omit-`skill_id` poison fixture fails in CI
 
-**What I built:** Created `tests/fixtures/sers/poison_missing_skill_id.json` — a `sers_version: "1.1.0"` receipt with a `subject_identity` block that omits the required `skill_id` field.
+**What:** `tests/fixtures/sers/poison_missing_skill_id.json` is a `1.1.0` receipt whose
+`subject_identity` omits `skill_id`.
 
-**Test that pins it:** `test_sers_conformance.py::test_poisoned_fixture_fails_validation[poison_missing_skill_id.json]` — the existing parametrized test discovers the new fixture via the `poison_*.json` glob and asserts it raises `ValidationError`.
+**Test:** `test_poisoned_fixture_fails_validation[poison_missing_skill_id.json]` and
+`test_poison_missing_skill_id_is_red` (asserts the error names `skill_id`).
 
-**What I observed:** The fixture fails validation with `'skill_id' is a required property` — the correct field-level error. The test passes, confirming the poison is detected.
+### 3. One receipt minted from a real run carries all five fields populated by the harness
 
-### 3. One receipt carries all five fields populated by the harness
+**What:** `skill_harness.sers.build_subject_identity` fills all five fields from harness
+sources (`skill_id` = SHA-256 of SKILL.md bytes; `harness_version` via
+`_resolve_harness_version`; `metric_version` = `ORACLE_METRIC_VERSION`;
+`implementation_hash` via `_oracle_implementation_hash`; `arms` closed set).
 
-**What I built:** Created `docs/sers/receipts/harness-evidenced-keep-2026-08-15.json` with `sers_version: "1.1.0"` and a complete `subject_identity` block carrying all five fields:
-- `skill_id`: SHA-256 hex (fixture value)
-- `harness_version`: `"0.2.3"` (from `_resolve_harness_version()`)
-- `metric_version`: `"0.3.0"` (from `ORACLE_METRIC_VERSION` in `ingest.py`)
-- `implementation_hash`: SHA-256 of `ingest.py` bytes (computed from the live module)
-- `arms`: `["null", "full"]` (both arms ran)
+The mint is `tests/fixtures/sers/minted_synthetic_control_v1_1_0.json`: the documented
+2026-07-27 synthetic-control KEEP (Full 8/8 vs Null 0/8, p_win 0.99), with
+`subject_identity` equal to a live `build_subject_identity` call. Not published under
+`docs/sers/receipts/` because the site generator refuses two receipts for one
+`skill_name`; the 1.0.0 card stays the published instance.
 
-**Test that pins it:** `test_sers_conformance.py::test_receipt_conforms_to_sers_schema[harness-evidenced-keep-2026-08-15.json]` — validates the receipt against the schema, confirming all five fields pass the pattern/enum/required constraints.
+**Test:** `test_build_subject_identity_uses_live_harness_sources` and
+`test_v11_receipt_subject_identity_matches_harness_mint` (re-mints and asserts equality;
+invented KEEP numbers are refused by the second test's 8/8 vs 0/8 assertions).
 
-**What I observed:** The receipt validates cleanly. The `implementation_hash` was computed from the actual `ingest.py` module (`7997bf55c86231f65048711e66587f0bd4e3236dee14fc665626cd45250d14c1`), matching the value the harness would produce at ingest time.
-
-## Gate Results
-
-```
-tests/test_sers_conformance.py   19 passed
-tests/test_receipts_index.py     14 passed
-tests/sitegen/test_receipts.py   22 passed
-────────────────────────────────────────
-Total:                           55 passed
-```
-
-`mypy` on touched modules: clean. `ruff check src/ tests/ --exclude "*.json"`: clean.
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `docs/sers/sers.schema.json` | `sers_version` enum expanded to `["1.0.0", "1.1.0"]`; `subject_identity` property added; conditional `allOf` rule added |
-| `tests/fixtures/sers/poison_missing_skill_id.json` | New poison fixture: `1.1.0` receipt missing `skill_id` |
-| `docs/sers/receipts/harness-evidenced-keep-2026-08-15.json` | New `1.1.0` receipt with all five `subject_identity` fields |
-| `docs/receipts-index.md` | New entry for `harness-evidenced-keep-2026-08-15.json` |
+**Honesty note:** original 2026-07-27 SKILL.md bytes are not in-tree. `skill_id` is the
+SHA-256 of the reconstructed control fixture at
+`tests/fixtures/sers/declared-synthetic-positive-control/SKILL.md`. Receipt notes state
+that.
