@@ -79,7 +79,7 @@ OFFLINE AUDIT — no API calls, no cost
   Fired cost (mechanical):    raw 68 tokens · calibrated 77 tokens
   Aux cost (mechanical):      raw 0 tokens · calibrated 0 tokens
 
-Summary: 2 pass · 1 warn — UNMEASURED is a recorded state, not a failure
+Summary: 2 pass · 1 warn — UNMEASURED is a recorded state, not a failure.
 ```
 
 The parser could not read the description, so the audit says so and skips the check. It does

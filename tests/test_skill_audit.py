@@ -171,6 +171,12 @@ def test_cli_audit_summary_matches_readme_and_names_unmeasured_as_state(tmp_path
     readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
 
     readme_summary = next(line for line in readme.splitlines() if line.startswith("Summary:"))
+    # The whole line, not just the tail after the em-dash. The tail-only
+    # comparison let the counts drift: main carried "0 pass · 0 warn" wording
+    # while the CLI printed a warn, and nothing failed, because the counts sit
+    # on the half this assertion never read. The README renders the CLI's own
+    # line plus a sentence period, so that is exactly what is compared.
+    assert summary + "." == readme_summary
     assert summary.split(" — ", 1)[1] + "." == readme_summary.split(" — ", 1)[1]
     assert "UNMEASURED is a recorded state, not a failure" in summary
 
