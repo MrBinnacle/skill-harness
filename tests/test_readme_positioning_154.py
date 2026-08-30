@@ -75,10 +75,20 @@ def test_honest_maturity_names_both_gaps_with_tickets() -> None:
     assert "29/33/34" in text
     assert "not stable" in text
     assert "github.com/MrBinnacle/skill-harness/issues/152" in text
-    # #153 resolved 2026-08-08 (blind cross-family adjudication, n=102 estimation
-    # rows), so the precision line pins the measured figure, not an UNMEASURED gap.
+    # #153 resolved 2026-08-08 (blind cross-family adjudication over the receipt's
+    # adjudicated_rows = 106), so the precision line pins the measured figure, not an
+    # UNMEASURED gap. The class split of record is 77/77, NOT 77/78: receipt
+    # docs/calibration/vacuity-adjudication-receipt-2026-08-09.json, arm_C_kind.note --
+    # "Historical S211 class split of record is 77/77 + 4/20 = 81/97; the published 77/78
+    # was an off-by-one denominator, reconciled 2026-08-09." The aggregate agrees: 0.835 is
+    # 81/97, not 81/98. The `"77/78" not in text` assertion below is therefore a live guard
+    # against reintroducing the retired figure, not a stale pin.
     assert "**Vacuity-flag precision:** MEASURED" in text
     assert "0.972" in text
+    # Pinned because it was NOT: 102 stood here unsupported from 63395ba until it was traced
+    # to no source of record. Any row count on this line must match the receipt.
+    assert "106" in text
+    assert "102" not in text
     assert "flag-level only" in text
     assert "kind-precision 0.835" in text
     assert "`not_a_directive` matched 77/77" in text
