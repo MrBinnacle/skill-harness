@@ -1,0 +1,6 @@
+/* Poison: 1.3rem is off the declared ramp. Everything else is declared. */
+.verdict {
+  color: #e6edf3;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.3rem;
+}

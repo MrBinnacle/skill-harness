@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10">
+  <!-- Must-pass fixture: every literal below is declared in DESIGN.md. -->
+  <style>.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}</style>
+  <rect width="10" height="10" fill="#010409" stroke="#30363d"/>
+  <text class="mono" font-size="21" fill="#e6edf3">ok</text>
+</svg>

@@ -1,0 +1,7 @@
+/* Poison: #ff0000 is not a declared colour. Everything else is declared. */
+body {
+  background: #0d1117;
+  color: #ff0000;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1rem;
+}
