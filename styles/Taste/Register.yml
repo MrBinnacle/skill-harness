@@ -1,0 +1,10 @@
+extends: existence
+message: "Register: avoid '%s'."
+level: warning
+ignorecase: true
+tokens:
+  - '\bperhaps\b'
+  - '\bpossibly\b'
+  - '\barguably\b'
+  - '\bcould possibly\b'
+  - 'readers may conclude'

@@ -1,0 +1,9 @@
+extends: existence
+message: "Voice: use active voice, not '%s'."
+level: warning
+ignorecase: true
+tokens:
+  - 'it was decided'
+  - 'there were issues'
+  - 'it was found'
+  - 'it was observed'

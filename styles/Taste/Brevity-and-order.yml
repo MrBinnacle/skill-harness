@@ -1,0 +1,12 @@
+extends: existence
+message: "Brevity-and-order: '%s' is verbose."
+level: warning
+ignorecase: true
+tokens:
+  - 'in order to'
+  - 'due to the fact that'
+  - 'at this point in time'
+  - 'for the purpose of'
+  - 'in the event that'
+  - 'a number of'
+  - 'the fact that'

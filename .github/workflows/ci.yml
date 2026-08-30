@@ -82,8 +82,15 @@ jobs:
     timeout-minutes: 25
     # PYTHONHASHSEED=0 required by tests/oracles/tier1 autouse fixture for
     # A33 mechanical-validity bit-equality discipline.
+    #
+    # SKILL_HARNESS_REQUIRE_VALE=1: this job installs Vale in a step below, so a
+    # missing binary here is a regressed install and must fail rather than skip.
+    # Jobs that do not install Vale leave this unset and skip those tests. It
+    # belongs in THIS block: a second `env:` key on the same job is not a merge,
+    # it silently replaces the first, so the variable would never have been set.
     env:
       PYTHONHASHSEED: "0"
+      SKILL_HARNESS_REQUIRE_VALE: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -102,6 +109,52 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -c requirements-ci.txt -e ".[dev]"
+      - name: Install Vale
+        # Pinned to the same version as the vale job; doctrine-agreement tests shell out to it.
+        shell: bash
+        run: |
+          VALE_VERSION=3.9.1
+          case "${{ runner.os }}" in
+            Linux)
+              curl -sL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
+                | tar xz -C /usr/local/bin vale
+              VALE_DIR=/usr/local/bin
+              ;;
+            Windows)
+              curl -sL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Windows_64-bit.zip" \
+                -o vale.zip
+              mkdir -p "$HOME/bin"
+              # Extract with Python, not a shell archiver. Two Windows traps, both
+              # observed on this PR rather than anticipated:
+              #
+              # 1. $RUNNER_TEMP holds a WINDOWS path (D:\a\_temp). GNU tar reads the
+              #    leading "D:" as a remote host: "tar: Cannot connect to D: resolve
+              #    failed". Nothing with a drive letter is handed to an archiver.
+              # 2. In the bash shell `tar` resolves to MSYS GNU tar, which cannot read
+              #    zip at all: "tar: This does not look like a tar archive". The bsdtar
+              #    that ships with the image is shadowed. `unzip` is not guaranteed to
+              #    be present either.
+              #
+              # setup-python already ran, so Python and its stdlib zipfile are present
+              # and are not a new dependency. The destination is converted with cygpath
+              # because Python on Windows reads an MSYS /c/... path as relative to the
+              # current drive root. Verified on Windows/Git Bash before this landed.
+              VALE_DIR="$HOME/bin"
+              python -c "import zipfile,sys; zipfile.ZipFile('vale.zip').extract('vale.exe', sys.argv[1])" "$(cygpath -w "$VALE_DIR")"
+              rm -f vale.zip
+              # Later steps need not run under bash, so GITHUB_PATH takes the
+              # Windows form rather than the MSYS /c/... form bash reports.
+              cygpath -w "$VALE_DIR" >> "$GITHUB_PATH"
+              ;;
+            *)
+              echo "Unsupported runner OS: ${{ runner.os }}"
+              exit 1
+              ;;
+          esac
+          # GITHUB_PATH applies to LATER steps only. Asserting through the bare
+          # name here would fail on Windows even after a good extract, which is the
+          # second defect this step carried.
+          PATH="$VALE_DIR:$PATH" vale --version
       - name: pytest
         # `-m "not live and not calibration and not assurance"` mirrors local gate; live
         # tests require ANTHROPIC_API_KEY (not provisioned in CI). Dense CS calibration
@@ -276,6 +329,29 @@ jobs:
             "site/**/*.html"
           fail: true
 
+  vale:
+    name: Vale (prose lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Warning-level by ticket #304: this job reports prose findings and never
+    # gates a merge. It is deliberately absent from all-green.needs, and
+    # continue-on-error keeps a finding from reddening the run. Promoting it to
+    # a gate is a decision about who the style rules bind, not a config tweak:
+    # add it to _REQUIRED_JOB_IDS in tests/sitegen/test_pages_workflow.py and to
+    # all-green.needs in the same change, so the pin and the workflow move together.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Vale
+        run: |
+          curl -sL https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz | tar xz -C /usr/local/bin
+      - name: Run Vale on fixtures
+        run: |
+          vale --config .vale.ini fixtures/vale/
+      - name: Run Vale on prose
+        run: |
+          vale --config .vale.ini README.md docs/
+
   all-green:
     name: All checks green
     needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate]
@@ -290,7 +366,8 @@ jobs:
              [[ "${{ needs.calibration.result }}" != "success" ]] || \
              [[ "${{ needs.structural-bans.result }}" != "success" ]] || \
              [[ "${{ needs.drift-check.result }}" != "success" ]] || \
-             [[ "${{ needs.release-gate.result }}" != "success" ]]; then
+             [[ "${{ needs.release-gate.result }}" != "success" ]] || \
+             [[ "${{ needs.vale.result }}" != "success" ]]; then
             echo "One or more required checks failed."
             exit 1
           fi

@@ -1,0 +1,9 @@
+extends: existence
+message: "Evidence: '%s' needs backing."
+level: warning
+ignorecase: true
+tokens:
+  - 'clearly \w+'
+  - 'obviously \w+'
+  - 'undeniably \w+'
+  - 'certainly \w+'

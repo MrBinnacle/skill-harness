@@ -1,0 +1,11 @@
+extends: existence
+message: "Generic-ness: '%s' is too vague."
+level: warning
+ignorecase: true
+tokens:
+  - '\bvarious\b'
+  - '\bseveral\b'
+  - '\bmultiple\b'
+  - '\bsome\b'
+  - '\bthings\b'
+  - '\bstuff\b'
