@@ -16,6 +16,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _STYLES_DIR = _REPO_ROOT / "styles" / "Taste"
 _FIXTURES_DIR = _REPO_ROOT / "fixtures" / "vale"
@@ -44,7 +46,32 @@ def _resolve_vale_bin() -> Path:
     )
 
 
-_VALE_BIN = _resolve_vale_bin()
+_MISSING_VALE_REASON = (
+    "Vale binary not found on PATH or at ~/.local/bin/vale; install the version "
+    "pinned in .github/workflows/ci.yml"
+)
+
+try:
+    _RESOLVED_VALE_BIN: Path | None = _resolve_vale_bin()
+except FileNotFoundError:
+    # Raising here would abort pytest during COLLECTION, so a contributor without
+    # the binary could not run ANY test in this repository, not merely this
+    # module. The repo's idiom for an absent tool is a skip that names what to
+    # install (tests/test_fuzz_170.py does this for atheris).
+    #
+    # CI is the deliberate exception and stays loud: ci.yml installs Vale into
+    # the test job, so an absent binary there means that install step regressed.
+    # Skipping in CI would convert lost coverage into a green run, which is the
+    # silent pass this suite exists to prevent.
+    if os.environ.get("CI"):
+        raise
+    _RESOLVED_VALE_BIN = None
+
+pytestmark = pytest.mark.skipif(_RESOLVED_VALE_BIN is None, reason=_MISSING_VALE_REASON)
+
+# Every test in this module is skipped when the binary is absent, so this value
+# is only ever read on a path where the resolution succeeded.
+_VALE_BIN = _RESOLVED_VALE_BIN if _RESOLVED_VALE_BIN is not None else Path("vale")
 
 
 def _get_rule_files() -> list[Path]:

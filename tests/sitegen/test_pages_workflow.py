@@ -39,6 +39,7 @@ _CI_JOB_IDS = (
     "release-gate",
     "dependency-audit",
     "linkcheck",
+    "vale",
     "all-green",
 )
 _REQUIRED_JOB_IDS = (

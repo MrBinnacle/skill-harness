@@ -303,6 +303,13 @@ jobs:
     name: Vale (prose lint)
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Warning-level by ticket #304: this job reports prose findings and never
+    # gates a merge. It is deliberately absent from all-green.needs, and
+    # continue-on-error keeps a finding from reddening the run. Promoting it to
+    # a gate is a decision about who the style rules bind, not a config tweak:
+    # add it to _REQUIRED_JOB_IDS in tests/sitegen/test_pages_workflow.py and to
+    # all-green.needs in the same change, so the pin and the workflow move together.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Vale
@@ -317,7 +324,7 @@ jobs:
 
   all-green:
     name: All checks green
-    needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate, vale]
+    needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate]
     runs-on: ubuntu-latest
     if: always()
     steps:
