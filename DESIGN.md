@@ -18,9 +18,9 @@ colors:
   bench-prompt: "#3fb950"
   bench-flagged: "#d29922"
   bench-cant-tell: "#58a6ff"        # declared, unused on the tree today; the refusal edge takes it at #308
-  chrome-close: "#ff5f56"           # retiring at #309/#310
-  chrome-minimise: "#ffbd2e"        # retiring at #309/#310
-  chrome-zoom: "#27c93f"            # retiring at #309/#310
+  chrome-close: "#ff5f56"           # retiring at #309 (gone from the social preview at #310; the banners still carry it)
+  chrome-minimise: "#ffbd2e"        # retiring at #309 (gone from the social preview at #310; the banners still carry it)
+  chrome-zoom: "#27c93f"            # retiring at #309 (gone from the social preview at #310; the banners still carry it)
   receipt-ink: "#16181d"            # retiring at #308
   receipt-paper: "#fbfbf9"          # retiring at #308
   receipt-rule: "#c8c9c4"           # retiring at #308
@@ -83,20 +83,9 @@ typography:
     fontSize: "15px"
   retiring-banner-readout:          # retiring at #309
     fontSize: "19px"
-  retiring-preview-label:           # retiring at #310
-    fontSize: "20px"
-  retiring-preview-command:         # retiring at #310
-    fontSize: "30px"
-  retiring-preview-subtitle:        # retiring at #310
-    fontSize: "22px"
-  retiring-preview-qualifier:       # retiring at #310
-    fontSize: "34px"
-  retiring-preview-explanation:     # retiring at #310
-    fontSize: "24px"
 rounded:
   none: "0"
   banner: "12px"                    # retiring at #309 with the window chrome
-  preview: "18px"                   # retiring at #310 with the window chrome
 spacing:
   # Extracted values, still on the tree; #308 moves the stylesheet onto the declared scale below.
   hairline: "0.2rem"
@@ -303,9 +292,7 @@ Four sizes and three weights. Nothing off the ramp.
 
 ### The ramp (assets)
 
-Unchanged and mono at every size: **Verdict** 52px/700 · **Command** 21-30px ·
-**Explanation** 24px Soft Ink · **Subtitle / footer** 19-22px Muted · **Label** 15-20px Deep
-Muted.
+Mono at every size. Social preview (#310): **Verdict** 52px/700; every other line 21px, weight carried by tone (Ink, Soft Ink, Muted, Deep Muted), not by size. Banners, until #309: **Command** 21-30px · **Readout** 19px Muted · **Label** 15-20px Deep Muted.
 
 ### Named Rules
 
@@ -492,8 +479,8 @@ Measured defects and open questions, recorded so a future pass does not rediscov
    and none was observed.
 
 2. **Resolved 2026-08-30.** The two systems are reconciled by declaration above: one system,
-   paper retired. The tree still carries the paper stylesheet and the window chrome until #308,
-   #309 and #310 land; the retiring tokens stay declared so the conformance check is green on
+   paper retired. The tree still carries the paper stylesheet and the banners' window chrome until #308
+   and #309 land (#310 removed the social preview's); the retiring tokens stay declared so the conformance check is green on
    `main` and turns red the day a retired literal is reintroduced after its ticket merges.
 
 3. **The dark banner's verdict token draws from a different enum than the social preview's.**
@@ -511,11 +498,13 @@ Measured defects and open questions, recorded so a future pass does not rediscov
 5. **`bench-cant-tell` is declared and unused.** `grep -ri 58a6ff` over the tree returns
    nothing on 2026-08-30. It becomes live when #308 moves the refusal edge onto it.
 
-6. **The social preview carries a sample verdict for a skill that does not exist**
-   (`my-skill`, `→ CUT (subsumed)`) and a verdict legend. Both are invented terminal output
-   under the primer and a fake-product tell under design-taste-frontend §9.F. #310 replaces
-   them with the primer's composition (one readout line, one footer, no legend). Any new
-   visible line is an owner-selected candidate; the aria-label stays byte-identical until then.
+6. **Resolved in part at #310.** The social preview's window chrome (traffic-light dots, title
+   divider, `rx="18"`) is gone and the composition sits on the 96px safe area with two declared
+   sizes (`bench-command` 21px, `bench-verdict` 52px). The sample verdict for a skill that does
+   not exist (`my-skill`, `→ CUT (subsumed)`) and the verdict legend line are still on the
+   asset: removing them deletes text nodes and visible strings, and #310's acceptance criteria
+   pin all nine text nodes live with the aria-label byte-identical. They leave in the PR where
+   the owner selects a readout line and a footer line from the labelled candidates on #310.
 
 ## Provenance
 

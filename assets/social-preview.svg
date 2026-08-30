@@ -1,27 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="skill-harness — compares the same task with and without a skill and refuses unsupported scores">
   <style>.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}</style>
-  <!-- backdrop -->
+  <!-- field: bench-void -->
   <rect width="1280" height="640" fill="#010409"/>
-  <!-- terminal window -->
-  <rect x="80" y="96" width="1120" height="448" rx="18" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
-  <!-- title bar -->
-  <circle cx="120" cy="136" r="8" fill="#ff5f56"/>
-  <circle cx="150" cy="136" r="8" fill="#ffbd2e"/>
-  <circle cx="180" cy="136" r="8" fill="#27c93f"/>
-  <text x="214" y="142" class="mono" font-size="20" fill="#6e7681">skill-harness</text>
-  <line x1="80" y1="168" x2="1200" y2="168" stroke="#21262d" stroke-width="1.5"/>
-  <!-- command -->
-  <text x="128" y="244" class="mono" font-size="30"><tspan fill="#3fb950" font-weight="700">$ </tspan><tspan fill="#e6edf3">skill-harness run ablation </tspan><tspan fill="#6e7681">my-skill</tspan><tspan fill="#e6edf3"> --execute</tspan></text>
-  <!-- subtitle -->
-  <text x="128" y="296" class="mono" font-size="22" fill="#8b949e">with skill vs without — same task, one variable</text>
-  <!-- verdict -->
-  <text x="128" y="384" class="mono" font-size="52" font-weight="700"><tspan fill="#d29922">&#8594; CUT</tspan><tspan fill="#8b949e" font-size="34" font-weight="400"> (subsumed)</tspan></text>
-  <!-- explanation -->
-  <text x="128" y="440" class="mono" font-size="24" fill="#c9d1d9">the model already does this fine without the skill.</text>
-  <text x="128" y="476" class="mono" font-size="24" fill="#c9d1d9">nothing to add — and we won't invent a number.</text>
-  <!-- verdict legend -->
-  <text x="128" y="512" class="mono" font-size="19" fill="#6e7681">KEEP · CUT · CAN'T-TELL-YET — a verdict that's allowed to say "no"</text>
-  <!-- footer -->
-  <text x="80" y="586" class="mono" font-size="22" fill="#8b949e">Most benchmarks print a number no matter what. This one refuses.</text>
-  <text x="80" y="620" class="mono" font-size="20" fill="#3fb950" font-weight="700">github.com/MrBinnacle/skill-harness</text>
+  <!-- readout frame on the 96px safe area: bench-surface, 2px bench-hairline stroke, radius 0 -->
+  <rect x="96" y="96" width="1088" height="448" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
+  <!-- wordmark: bench-muted-deep, bench-command size -->
+  <text x="128" y="144" class="mono" font-size="21" fill="#6e7681">skill-harness</text>
+  <!-- command line: bench-command -->
+  <text x="128" y="200" class="mono" font-size="21" font-weight="700"><tspan fill="#3fb950">$ </tspan><tspan fill="#e6edf3">skill-harness run ablation </tspan><tspan fill="#6e7681">my-skill</tspan><tspan fill="#e6edf3"> --execute</tspan></text>
+  <!-- subtitle: bench-muted -->
+  <text x="128" y="240" class="mono" font-size="21" fill="#8b949e">with skill vs without — same task, one variable</text>
+  <!-- readout line: bench-verdict, led by the arrow in bench-flagged -->
+  <text x="128" y="320" class="mono" font-size="52" font-weight="700"><tspan fill="#d29922">&#8594; CUT</tspan><tspan fill="#8b949e" font-size="21" font-weight="400"> (subsumed)</tspan></text>
+  <!-- explanation: bench-ink-soft -->
+  <text x="128" y="368" class="mono" font-size="21" fill="#c9d1d9">the model already does this fine without the skill.</text>
+  <text x="128" y="400" class="mono" font-size="21" fill="#c9d1d9">nothing to add — and we won't invent a number.</text>
+  <!-- verdict legend: bench-muted-deep (text pinned until the owner selects a line) -->
+  <text x="128" y="440" class="mono" font-size="21" fill="#6e7681">KEEP · CUT · CAN'T-TELL-YET — a verdict that's allowed to say "no"</text>
+  <!-- footer: bench-muted, then the URL in bench-prompt -->
+  <text x="128" y="488" class="mono" font-size="21" fill="#8b949e">Most benchmarks print a number no matter what. This one refuses.</text>
+  <text x="128" y="520" class="mono" font-size="21" fill="#3fb950" font-weight="700">github.com/MrBinnacle/skill-harness</text>
 </svg>
