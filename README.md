@@ -184,8 +184,8 @@ reclassified both to CAN'T-TELL-YET
 pre-guard CUTs stay in the record as dated output, not edited into agreement.
 
 The other half has never fired: a paired run sizing how much a skill helps once the model is
-known to need help. That run launches only when a screen returns a pass rate below 1, and none
-has.
+known to need help. By design, a sized benefit run launches only when a screen returns a
+sub-1 pass rate, and none has.
 
 ## Measuring for real
 
@@ -195,8 +195,9 @@ skill-harness run ablation <skill_id> --execute       # the with/without compari
 skill-harness run evaluate-skill <skill_id>           # aggregate to a verdict
 ```
 
-`ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`. Every command that can spend money is dry-run by
-default; `--execute` is required to spend, and a per-run cap and a daily cap sit on top.
+`ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`. Every command that can spend money is
+dry-run by default; `--execute` is required to spend, and a per-run cap and a daily
+cap sit on top.
 Reproduction scripts:
 [`examples/`](https://github.com/MrBinnacle/skill-harness/tree/main/examples/).
 
