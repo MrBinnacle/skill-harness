@@ -1,0 +1,35 @@
+# Passive triage net (steering-head ticket 98, private tracker, 2026-08-30).
+#
+# An issue that opens with no label is invisible to every selector that keys on a triage
+# role. The local PreToolUse guard catches `gh issue create` from a session on the operator's
+# host and nothing else: the web UI, `gh` on another machine, the factory runner and a
+# subagent without the hook all reach this tracker unguarded. This job adds `needs-triage`
+# to an issue that opens with zero labels. It never removes or replaces a label, so an issue
+# filed with a role is untouched. `needs-triage` is the default because it is the honest
+# state at creation: a default of `ready-for-agent` would let the factory grab an
+# unevaluated issue.
+#
+# Passive by design: it needs nobody to remember it (the steering head's operating rules,
+# section Scope: the load-bearing property is passive expiry). The label must exist in the
+# repository; `gh issue edit --add-label` fails on a missing label, and that failure is
+# visible in the Actions tab rather than silent.
+name: triage-label-on-open
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  add-needs-triage:
+    if: ${{ github.event.issue.labels[0] == null }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add needs-triage to an unlabeled issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: gh issue edit "$NUMBER" --repo "$REPO" --add-label needs-triage
