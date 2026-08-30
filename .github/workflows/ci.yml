@@ -124,14 +124,24 @@ jobs:
               curl -sL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Windows_64-bit.zip" \
                 -o vale.zip
               mkdir -p "$HOME/bin"
-              # $RUNNER_TEMP holds a WINDOWS path such as D:\a\_temp, and GNU tar reads a
-              # leading "D:" as a remote host, failing with "tar: Cannot connect to
-              # D: resolve failed" - observed on both windows cells. Nothing with a
-              # drive letter is handed to tar. bsdtar ships with windows-latest and
-              # reads zip; `unzip` is not guaranteed to be on PATH in bash there.
-              tar -xf vale.zip -C "$HOME/bin" vale.exe
-              rm -f vale.zip
+              # Extract with Python, not a shell archiver. Two Windows traps, both
+              # observed on this PR rather than anticipated:
+              #
+              # 1. $RUNNER_TEMP holds a WINDOWS path (D:\a\_temp). GNU tar reads the
+              #    leading "D:" as a remote host: "tar: Cannot connect to D: resolve
+              #    failed". Nothing with a drive letter is handed to an archiver.
+              # 2. In the bash shell `tar` resolves to MSYS GNU tar, which cannot read
+              #    zip at all: "tar: This does not look like a tar archive". The bsdtar
+              #    that ships with the image is shadowed. `unzip` is not guaranteed to
+              #    be present either.
+              #
+              # setup-python already ran, so Python and its stdlib zipfile are present
+              # and are not a new dependency. The destination is converted with cygpath
+              # because Python on Windows reads an MSYS /c/... path as relative to the
+              # current drive root. Verified on Windows/Git Bash before this landed.
               VALE_DIR="$HOME/bin"
+              python -c "import zipfile,sys; zipfile.ZipFile('vale.zip').extract('vale.exe', sys.argv[1])" "$(cygpath -w "$VALE_DIR")"
+              rm -f vale.zip
               # Later steps need not run under bash, so GITHUB_PATH takes the
               # Windows form rather than the MSYS /c/... form bash reports.
               cygpath -w "$VALE_DIR" >> "$GITHUB_PATH"
