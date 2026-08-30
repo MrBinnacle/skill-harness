@@ -1,0 +1,43 @@
+{
+  "sers_version": "1.1.0",
+  "skill_name": "harness-evidenced-keep",
+  "verdict": "KEEP",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": null,
+  "value_class": "transformative-lift",
+  "wrong_instrument": false,
+  "declared_synthetic_control": false,
+  "evidence_admissibility": {
+    "status": "admissible",
+    "detail": "Store-backed paired Full-vs-Null run ingested through write-time evidence admissibility machinery; all cited numbers verified against raw .eval logs."
+  },
+  "cost": {
+    "standing_tokens": { "tokens": 1200 },
+    "fired_tokens": { "tokens": 3400 },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": "anthropic/claude-sonnet-5",
+    "prompt_fingerprint": "claude-code-2.1.197",
+    "schema_fingerprint": "2f76c933"
+  },
+  "measurements": {
+    "full_pass_rate": { "value": 0.85, "passes": 17, "epochs": 20 },
+    "null_pass_rate": { "value": 0.45, "passes": 9, "epochs": 20 },
+    "p_win": { "value": 0.97, "detail": "Posterior P(rate above threshold) from paired fit." },
+    "go_nogo": "NOT_APPLICABLE"
+  },
+  "source": {
+    "prose_path": "README.md",
+    "date": "2026-08-15",
+    "notes": "First harness-evidenced receipt carrying subject_identity block (sers_version 1.1.0)."
+  },
+  "summary": "Harness-evidenced KEEP: Full 17/20 vs Null 9/20, posterior p_win 0.97. Effect measured by the harness; subject_identity block carries provenance.",
+  "subject_identity": {
+    "skill_id": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "harness_version": "0.2.3",
+    "metric_version": "0.3.0",
+    "implementation_hash": "7997bf55c86231f65048711e66587f0bd4e3236dee14fc665626cd45250d14c1",
+    "arms": ["null", "full"]
+  }
+}

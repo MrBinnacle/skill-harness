@@ -1,0 +1,27 @@
+{
+  "sers_version": "1.1.0",
+  "skill_name": "poison-missing-skill-id",
+  "verdict": "CANT_TELL_YET",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": "no_data",
+  "value_class": null,
+  "evidence_admissibility": { "status": "not_applicable" },
+  "cost": {
+    "standing_tokens": { "refusal": "not_applicable" },
+    "fired_tokens": { "refusal": "not_applicable" },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": "test-model",
+    "prompt_fingerprint": "a",
+    "schema_fingerprint": "b"
+  },
+  "source": { "prose_path": "README.md" },
+  "summary": "Poison: sers_version 1.1.0 but subject_identity omits required skill_id.",
+  "subject_identity": {
+    "harness_version": "0.2.3",
+    "metric_version": "0.3.0",
+    "implementation_hash": "aabbccddee0011223344556677889900aabbccddee0011223344556677889900",
+    "arms": "null"
+  }
+}

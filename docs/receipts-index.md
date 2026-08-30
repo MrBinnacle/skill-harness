@@ -393,6 +393,17 @@ Verdict and sub-reason strings use the
   cleared the full keep lane; standing cost as part of the KEEP claim
   (not_instrumented).
 
+### [`docs/sers/receipts/harness-evidenced-keep-2026-08-15.json`](sers/receipts/harness-evidenced-keep-2026-08-15.json)
+
+- **Claims:** `verdict=KEEP`, `cut_sub_reason=null`,
+  `unmeasured_sub_reason=null`; `value_class=transformative-lift`;
+  Full 17/20 vs Null 9/20; `p_win=0.97`; `sers_version=1.1.0` with
+  `subject_identity` block carrying `skill_id`, `harness_version`,
+  `metric_version`, `implementation_hash`, `arms`.
+- **Refuses to claim:** That this is a production-skill measurement (fixture
+  receipt); standing/fired token costs as part of the KEEP claim beyond the
+  figures shown.
+
 ---
 
 ## Cost-beside-evidence join surface (`skill audit --extraction`)

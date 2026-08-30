@@ -21,7 +21,7 @@
   "properties": {
     "sers_version": {
       "type": "string",
-      "const": "1.0.0",
+      "enum": ["1.0.0", "1.1.0"],
       "description": "SERS vocabulary generation. Receipts from different sers_version values are not comparable."
     },
     "skill_name": {
@@ -174,6 +174,47 @@
       "type": "string",
       "minLength": 1,
       "description": "One-paragraph operator-facing summary. Must not invent numbers absent from measurements/cost."
+    },
+    "subject_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Provenance block identifying the subject under test. Required from sers_version 1.1.0 onward; absent on 1.0.0 hand-encoded receipts.",
+      "required": ["skill_id", "harness_version", "metric_version", "implementation_hash", "arms"],
+      "properties": {
+        "skill_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hex of the exact SKILL.md bytes measured."
+        },
+        "harness_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Harness version used to produce this receipt."
+        },
+        "metric_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Oracle metric version (e.g. '0.3.0')."
+        },
+        "implementation_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hex of the oracle module source at ingest time."
+        },
+        "arms": {
+          "oneOf": [
+            { "type": "string", "enum": ["null", "full"] },
+            {
+              "type": "array",
+              "items": { "type": "string", "enum": ["null", "full"] },
+              "minItems": 1,
+              "maxItems": 2,
+              "uniqueItems": true
+            }
+          ],
+          "description": "Which arms ran: 'null', 'full', or both."
+        }
+      }
     }
   },
   "allOf": [
@@ -200,6 +241,15 @@
         "properties": {
           "cut_sub_reason": { "type": "null" }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.1.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity"]
       }
     }
   ],
