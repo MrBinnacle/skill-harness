@@ -1,6 +1,10 @@
 ---
 name: skill-harness
 description: The skill eval that refuses to invent a score.
+# Declared system: Test Bench. Every `bench-*` token is declared for every surface.
+# Every `receipt-*` token and every `chrome-*` token is RETIRING: still on the tree today
+# (the conformance check must stay green on main), removed by the surface ticket named
+# beside it. Do not use a retiring token on a new surface.
 colors:
   bench-void: "#010409"
   bench-surface: "#0d1117"
@@ -13,15 +17,16 @@ colors:
   bench-muted-deep: "#6e7681"
   bench-prompt: "#3fb950"
   bench-flagged: "#d29922"
-  chrome-close: "#ff5f56"
-  chrome-minimise: "#ffbd2e"
-  chrome-zoom: "#27c93f"
-  receipt-ink: "#16181d"
-  receipt-paper: "#fbfbf9"
-  receipt-rule: "#c8c9c4"
-  receipt-accent: "#1f4f82"
-  receipt-refusal-edge: "#8a5a00"
-  receipt-thead: "#eeeee9"
+  bench-cant-tell: "#58a6ff"        # declared, unused on the tree today; the refusal edge takes it at #308
+  chrome-close: "#ff5f56"           # retiring at #309/#310
+  chrome-minimise: "#ffbd2e"        # retiring at #309/#310
+  chrome-zoom: "#27c93f"            # retiring at #309/#310
+  receipt-ink: "#16181d"            # retiring at #308
+  receipt-paper: "#fbfbf9"          # retiring at #308
+  receipt-rule: "#c8c9c4"           # retiring at #308
+  receipt-accent: "#1f4f82"         # retiring at #308
+  receipt-refusal-edge: "#8a5a00"   # retiring at #308
+  receipt-thead: "#eeeee9"          # retiring at #308
 typography:
   bench-command:
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace"
@@ -31,29 +36,69 @@ typography:
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace"
     fontSize: "52px"
     fontWeight: 700
-  receipt-body:
+  bench-prose:                      # declared for the site at #308; not on the tree today
+    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 400
+    lineHeight: 1.55
+  bench-h1:                         # declared for the site at #308
+    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif"
+    fontSize: "1.75rem"
+    fontWeight: 700
+    lineHeight: 1.2
+  bench-h2:                         # declared for the site at #308
+    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif"
+    fontSize: "1.25rem"
+    fontWeight: 600
+  bench-figure:                     # declared for the site at #308
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace"
+    fontSize: "0.92em"
+    fontWeight: 400
+  receipt-body:                     # retiring at #308
     fontFamily: "Georgia, \"Times New Roman\", serif"
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.55
-  receipt-h1:
+  receipt-h1:                       # retiring at #308
     fontFamily: "Georgia, \"Times New Roman\", serif"
     fontSize: "1.75rem"
     fontWeight: 700
     lineHeight: 1.2
-  receipt-h2:
+  receipt-h2:                       # retiring at #308
     fontFamily: "Georgia, \"Times New Roman\", serif"
     fontSize: "1.25rem"
     fontWeight: 700
-  receipt-figure:
+  receipt-figure:                   # retiring at #308 (bench-figure replaces it)
     fontFamily: "ui-monospace, \"SFMono-Regular\", Menlo, Consolas, monospace"
     fontSize: "0.92em"
     fontWeight: 400
+  # Retiring sizes: on the tree today, removed by the ticket named; declared so the fence is green on main.
+  retiring-site-h3:                 # retiring at #308
+    fontSize: "1.05rem"
+  retiring-site-verdict:            # retiring at #308
+    fontSize: "1.15rem"
+  retiring-site-footer:             # retiring at #308
+    fontSize: "0.85rem"
+  retiring-banner-label:            # retiring at #309
+    fontSize: "15px"
+  retiring-banner-readout:          # retiring at #309
+    fontSize: "19px"
+  retiring-preview-label:           # retiring at #310
+    fontSize: "20px"
+  retiring-preview-command:         # retiring at #310
+    fontSize: "30px"
+  retiring-preview-subtitle:        # retiring at #310
+    fontSize: "22px"
+  retiring-preview-qualifier:       # retiring at #310
+    fontSize: "34px"
+  retiring-preview-explanation:     # retiring at #310
+    fontSize: "24px"
 rounded:
   none: "0"
-  banner: "12px"
-  preview: "18px"
+  banner: "12px"                    # retiring at #309 with the window chrome
+  preview: "18px"                   # retiring at #310 with the window chrome
 spacing:
+  # Extracted values, still on the tree; #308 moves the stylesheet onto the declared scale below.
   hairline: "0.2rem"
   tight: "0.35rem"
   snug: "0.5rem"
@@ -63,39 +108,52 @@ spacing:
   section: "1.5rem"
   major: "2rem"
   footer: "2.5rem"
+  # Declared scale (primer input, unopposed by every SME fired): 4 8 16 24 32 48 96 px.
+  scale-1: "4px"
+  scale-2: "8px"
+  scale-3: "16px"
+  scale-4: "24px"
+  scale-5: "32px"
+  scale-6: "48px"
+  scale-section: "96px"
 components:
   refusal-block:
-    textColor: "{colors.receipt-ink}"
-    typography: "{receipt-body}"
+    textColor: "{colors.bench-ink}"
+    edgeColor: "{colors.bench-cant-tell}"
+    typography: "{bench-prose}"
     padding: "0.25rem 0 0.25rem 0.6rem"
     rounded: "{rounded.none}"
   rule-block:
-    textColor: "{colors.receipt-ink}"
+    textColor: "{colors.bench-ink}"
+    edgeColor: "{colors.bench-ink}"
     padding: "0.25rem 0 0.25rem 0.85rem"
     rounded: "{rounded.none}"
   data-table:
-    backgroundColor: "{colors.receipt-paper}"
-    textColor: "{colors.receipt-ink}"
+    backgroundColor: "{colors.bench-surface}"
+    textColor: "{colors.bench-ink}"
     padding: "0.35rem 0.5rem"
     rounded: "{rounded.none}"
   table-head:
-    backgroundColor: "{colors.receipt-thead}"
-    textColor: "{colors.receipt-ink}"
+    backgroundColor: "{colors.bench-void}"
+    textColor: "{colors.bench-ink}"
     padding: "0.35rem 0.5rem"
-  terminal-frame:
+  readout-frame:
     backgroundColor: "{colors.bench-surface}"
     textColor: "{colors.bench-ink}"
-    rounded: "{rounded.banner}"
+    strokeColor: "{colors.bench-hairline}"
+    rounded: "{rounded.none}"
 ---
 
 # Design System: skill-harness
 
 <!--
-EXTRACTED, NOT AUTHORED. Every value in this file was read out of the repository on
-2026-08-25. Nothing here was invented to fill a section, and no divergence was harmonised
-away. Where two surfaces disagree, this file records the disagreement rather than picking a
-winner — see "The Two Systems" below. That choice is deliberate: a design document that
-resolves an open question by fiat is worse than one that names it.
+DECLARED 2026-08-30 (skill-harness#307, spec #306, parent #216) by the Direction seat of the
+owner's private research repository (the design head). The values were extracted from the repository on 2026-08-25; the
+rules were produced by the installed taste SMEs, fired in order, with the S370 context pack and
+the Brand Kit primer v0.1 as inputs. Every rule names the skill that produced it in brackets. A
+live repository fact outranks every SME; the facts that bound this pass are listed under
+"What the harness must never do". Owner rulings in force: harvest the installed taste skills;
+do not hand-roll taste; the Notion primer is an input, the SMEs decide.
 -->
 
 ## Overview
@@ -115,356 +173,391 @@ refusal cannot style refusal as failure. So there is no dimmed state, no collaps
 state, no grey "no data" placeholder anywhere in this repository. A refusal gets a heavier
 left edge than a measured figure gets.
 
-⚠ **This project currently runs two distinct visual systems**, and this document records both
-rather than merging them. See the section immediately below. The North Star above is common to
-both; the surface treatment is not.
-
 **Key Characteristics:**
 
 - Refusal is primary content, never a degraded state.
-- Flat by construction — no shadow token exists anywhere in the repository.
+- Flat by construction: no shadow token exists anywhere in the repository.
 - Monospace carries every figure, token, command and identifier.
 - Rules and borders build hierarchy; nothing floats.
 - Numbers appear only where a receipt supplies them.
+- One system, dark-locked, on every surface.
 
-## The Two Systems
+## The One System
 
-⛔ **This section is a finding, not a specification.** It is recorded here because a
-`DESIGN.md` that describes only one of two live systems would be false.
+**Declared: the Test Bench governs every public surface of this repository.** Ground is
+Primer dark (`bench-void` behind `bench-surface`), separation is hairlines, claims are system
+mono, radius is zero, and nothing sits behind a measurement. The receipt body's paper system
+(Georgia, cream `#fbfbf9`, navy `#1f4f82`) is **retired**, not kept as an exception. It leaves
+the stylesheet at #308.
 
-| | **Bench surfaces** — `assets/*.svg` | **Receipt surfaces** — `sitegen/style.css` |
-|---|---|---|
-| Where | `banner-dark.svg`, `banner-light.svg`, `social-preview.svg` | the published site at `mrbinnacle.github.io/skill-harness` |
-| Ground | near-black (`#010409` / `#0d1117`) | warm paper (`#fbfbf9`) |
-| Body face | monospace only | **Georgia serif** |
-| Accent | prompt green `#3fb950` | navy `#1f4f82` |
-| Warning / refusal | flagged amber `#d29922` | ochre edge `#8a5a00` |
-| Corner | 12–18px radius on the terminal frame | no radius declared anywhere |
-| Metaphor | a terminal window | a printed calibration certificate |
+Why retired and not excepted, in the SMEs' own terms:
 
-**What the two agree on.** Both express the same doctrine, and they arrived at it separately.
-Both give refusal its own dedicated visual channel. Both reserve monospace for figures and
-tokens. Both build hierarchy from rules rather than shadows. Both are flat. The semantic
-*roles* are the same set on each side — ground, ink, hairline, accent, refusal-edge — and only
-the *values* differ.
+- One theme per page, locked; a light section inside a dark page reads as a different website
+  mid-scroll. A bench shell around a paper body is that sandwich. [design-taste-frontend §4.11;
+  redesign-existing-projects, "Random dark sections in a light mode page"]
+- One design system per project. For a GitHub-native developer tool the system is Primer, and
+  the bench neutrals are already Primer's values. [design-taste-frontend §2.A]
+- Georgia is a generic serif and serif is banned in software UI; the receipts site is a table
+  and readout surface. [stitch-design-taste §3; design-taste-frontend §4.1]
+- One palette per project; warm and cool greys do not mix. The paper greys are warm, the
+  bench greys are cool. [design-taste-frontend §4.2; redesign-existing-projects, "Mixing warm
+  and cool grays"]
 
-**What they disagree on.** Ground polarity, body typeface, and accent hue. Those are surface
-choices, and they are separable from the doctrine both surfaces already implement correctly.
+What the paper system was carrying, and where it goes: the refusal edge. A refusal must stay
+louder than a measurement (a live fact, `style.css:1-7`). On the bench the edge takes
+`bench-cant-tell` `#58a6ff`, the third semantic colour, whose role is "can't-tell, unmeasured,
+or refused state". Ochre `#8a5a00` retires with the paper because it fails contrast on
+`bench-surface` and because it was never one of the three colours that carry claim-state
+meaning. [fact: the semantic three carry claim-state meaning; design-taste-frontend §4.2
+colour-consistency lock leaves no room for a fourth state colour]
 
-**Status: unresolved, and deliberately left so.** The bench surfaces match the token set used
-across the owner's two repositories. The receipt surfaces do not, and were built while the
-shared brand document was unread. Which system governs is an owner decision recorded in
-`MrBinnacle/skill-harness#216`. This file does not pre-empt it.
+The spec's candidate (bench chrome, paper body as one recorded exception) was put to the SMEs
+and refused by three of them on the theme-lock, one-system and one-palette rules above. No SME
+argued for it. The owner's deferral to `#216` is closed by this declaration.
+
+*Revisit if:* the owner reads this page and rules for a light scheme; the fix is a second
+Primer token set under `prefers-color-scheme: light`, not a return of paper.
 
 ## Colors
 
-Two palettes, grouped by the surface each governs. Neither is a subset of the other.
+One palette. Every value is a `bench-*` token.
 
-### Primary — bench
+### Semantic three
 
-- **Prompt Green** (`#3fb950`): the `$` on a command line, and confirmed success. Nothing
-  else. It appears exactly twice per banner and once in the social preview's footer URL.
-- **Flagged Amber** (`#d29922`): warning-class verdict tokens. Carries `→ CUT` on the social
-  preview and `→ UNMEASURED` on the dark banner.
+These carry claim-state meaning and nothing else. They are never decorative, never an accent,
+never a brand colour.
 
-### Primary — receipt
+- **Prompt Green** (`#3fb950`, `bench-prompt`): the `$` on a command line, and confirmed
+  success. Nothing else.
+- **Flagged Amber** (`#d29922`, `bench-flagged`): warning-class state. Carries `→ CUT` on the
+  social preview and `→ UNMEASURED` on the banner today.
+- **Can't-Tell Blue** (`#58a6ff`, `bench-cant-tell`): can't-tell, unmeasured or refused state.
+  The refusal edge on the site. Declared here for the first time; no surface uses it on the
+  tree today.
 
-- **Certificate Navy** (`#1f4f82`): every link on the published site. The site's only chromatic
-  accent, and it is used for navigation, not emphasis.
-- **Refusal Ochre** (`#8a5a00`): the 4px left edge on `.refusal` and `.refused`. This is the
-  most semantically loaded colour in the repository — it marks the thing the instrument exists
-  to be able to say.
+### Neutrals
 
-### Neutral — bench
-
-- **Void** (`#010409`): the social preview's outer field, behind the terminal frame.
-- **Surface** (`#0d1117`): the terminal window itself.
-- **Hairline** (`#30363d`) and **Quiet Hairline** (`#21262d`): the frame stroke and the title-bar
-  divider respectively. Two weights of the same idea.
-- **Inverse Hairline** (`#d0d7de`): the frame stroke on `banner-light.svg` only. ⭐ The "light"
-  banner is not a light-mode banner — its interior is the same `#0d1117` Surface as the dark one.
-  Only the outer stroke changes, and the file says why: *"dark interior; light border so it sits
-  well on a light README."* The terminal is always dark; the frame adapts to what surrounds it.
+- **Void** (`#010409`): the outer field and the table head.
+- **Surface** (`#0d1117`): the page ground and the readout frame.
+- **Hairline** (`#30363d`) and **Quiet Hairline** (`#21262d`): every rule, border and divider.
+  Two weights of the same idea.
+- **Inverse Hairline** (`#d0d7de`): the frame stroke where the asset sits on a light README.
 - **Ink** (`#e6edf3`), **Soft Ink** (`#c9d1d9`), **Muted** (`#8b949e`), **Deep Muted**
-  (`#6e7681`): a four-step text ramp, brightest for the command being run, dimmest for the
-  window's own label.
+  (`#6e7681`): a four-step text ramp, brightest for the claim, dimmest for the label.
 
-### Neutral — receipt
+### Retiring
 
-- **Document Ink** (`#16181d`): body text. Near-black, not black.
-- **Paper** (`#fbfbf9`): the page ground. Warm off-white.
-- **Rule** (`#c8c9c4`): every table border, every `h2` underline, the footer divider.
-- **Table Head** (`#eeeee9`): the only fill in the entire stylesheet.
-
-### Window Chrome
-
-- **`#ff5f56` / `#ffbd2e` / `#27c93f`**: macOS traffic-light dots in the banner title bars.
-
-⚠ These three are borrowed platform chrome, not brand colours. `#27c93f` sits 8 hue-degrees
-from Prompt Green `#3fb950` and does not mean success — it means "this is a window." Do not
-consolidate them into the semantic palette and do not reuse them outside a title bar.
+- **`receipt-*`** (paper, document ink, rule, navy, ochre, table head): leave at #308.
+- **`chrome-*`** (`#ff5f56` / `#ffbd2e` / `#27c93f`, the macOS traffic lights): leave at #309
+  and #310. They are decorative status dots on a fake window; both are named tells.
+  [design-taste-frontend §9.F "decorative status dots", "fake terminal"]
 
 ### Named Rules
 
-**The Refusal-Is-Louder Rule.** A refusal gets a 4px left edge and `font-weight: 600`. A
-measured figure gets neither. When a refusal and a measurement sit side by side, the refusal is
-the heavier element on the page. This inverts the usual treatment on purpose and it is the
-single most important rule in this system.
+**The Refusal-Is-Louder Rule.** A refusal gets a 4px left edge in Can't-Tell Blue and
+`font-weight: 600`. A measured figure gets neither. When a refusal and a measurement sit side
+by side, the refusal is the heavier element on the page. [fact, `style.css:1-7`; unchanged]
 
-**The Two-Greens Rule.** `#3fb950` means a prompt or a confirmed success. `#27c93f` means a
-window control. They are never interchangeable despite being nearly the same colour.
+**The Semantic-Only-Chroma Rule.** No colour outside the semantic three appears on any surface.
+Links carry no chromatic accent; the underline is the affordance, in Ink, and the hover state
+is Soft Ink. [design-taste-frontend §4.2, max one accent, and the accent here is spent on
+state; stitch-design-taste §2]
 
-**The Borrowed-Ground Rule.** The bench neutrals are GitHub Primer's own values. They are used
-so the assets sit native in the environment that renders them, not as an independent palette
-choice. Changing the ground means leaving that environment.
+**The Borrowed-Ground Rule.** The neutrals are GitHub Primer's own values, used so the assets
+sit native in the environment that renders them. Changing the ground means leaving that
+environment. [design-taste-frontend §2.A; primer, "Shared structural neutrals"]
 
 ## Typography
 
-**Display Font:** none. This system has no display face.
-**Body Font (receipt surfaces):** Georgia, with Times New Roman and generic serif as fallbacks.
-**Label/Mono Font:** `ui-monospace`, with SFMono-Regular, Menlo, Consolas and Liberation Mono as
-fallbacks. This is the only face used on bench surfaces.
+**Display Font:** none. **Prose:** the system sans stack, `bench-prose`, no web font, no
+`Inter` named. **Claims:** `ui-monospace` stack, `bench-figure` / `bench-command` /
+`bench-verdict`. Every figure, token, command, identifier, verdict and evidence value is mono;
+prose is sans.
 
-**Character:** the receipt surfaces read as a printed document — a serif body, a 62rem measure,
-1.55 line-height. The bench surfaces read as a terminal — mono at every size, weight 700 for
-anything the instrument asserts. The pairing is not a designed pairing; it is two surfaces built
-at different times.
+Why this pairing and not another: every SME that named a face (Geist, Satoshi, Cabinet
+Grotesk, PP Editorial New) named a web font, and the repository loads none and adds no
+dependency, so those rulings are refused by fact. The same SMEs ban `Inter` as a default, so
+the primer's `Inter, ...` stack is adopted with `Inter` dropped; the surviving stack is what
+the SMEs' "dashboard constraint" allows: sans for prose, mono for numbers.
+[stitch-design-taste §3 "Dashboard Constraint"; design-taste-frontend §4.1; fact: no new
+dependency, no web font]
 
-### Hierarchy — receipt surfaces
+### The ramp (site)
 
-- **H1** (700, `1.75rem`, line-height 1.2): one per page, the page's subject.
-- **H2** (700, `1.25rem`, `border-bottom: 1px solid` Rule): section headings. The underline is
-  structural, not decorative — it is the only separator the page has.
-- **H3** (700, `1.05rem`): subsection headings. No rule.
-- **Body** (400, `1rem`, line-height 1.55, max-width 62rem): prose.
-- **Verdict** (`1.15rem`): larger than body, smaller than H2. A verdict is not a heading and is
-  not body text; it gets its own step.
-- **Figure / code / verdict-token** (mono, `0.92em`): every number, identifier and claim-state
-  token. Slightly smaller than the surrounding serif so the x-heights match.
-- **Footer** (`0.85rem`).
+Four sizes and three weights. Nothing off the ramp.
 
-### Hierarchy — bench surfaces
+- **H1** `bench-h1`: 1.75rem, 700, line-height 1.2, `letter-spacing: -0.01em`.
+- **H2** `bench-h2`: 1.25rem, 600, `border-bottom: 1px solid` Hairline. The underline is the
+  only section separator.
+- **H3**: 1rem, 600. Hierarchy by weight, not by a fifth size. [redesign-existing-projects,
+  "introduce 500/600 for subtler hierarchy"]
+- **Prose** `bench-prose`: 1rem, 400, line-height 1.55, `max-width: 65ch`.
+  [redesign-existing-projects, "body text too wide"; primer 65-75ch]
+- **Verdict**: 1.25rem, 700, mono. A verdict is a claim token, so it sits on the mono stack at
+  the H2 step, not on its own step. [fact: Mono-Carries-The-Claim; the 1.15rem literal was one
+  of the three off-ramp sizes the detector found real]
+- **Figure / code / verdict-token** `bench-figure`: mono, 0.92em, `font-variant-numeric:
+  tabular-nums`. [redesign-existing-projects, "numbers in proportional font"]
+- **Footer**: 1rem, Muted. Colour carries the demotion, not size. [redesign-existing-projects,
+  "hierarchy through weight and colour"; retires the 0.85rem literal]
 
-- **Verdict** (mono 700, up to `52px`): the largest text on any asset. `→ CUT`, `→ UNMEASURED`.
-- **Command** (mono, `21–30px`): the invocation being demonstrated.
-- **Explanation** (mono, `24px`, Soft Ink).
-- **Subtitle / legend / footer** (mono, `19–22px`, Muted).
-- **Window label** (mono, `15–20px`, Deep Muted): the dimmest text on the asset.
+### The ramp (assets)
+
+Unchanged and mono at every size: **Verdict** 52px/700 · **Command** 21-30px ·
+**Explanation** 24px Soft Ink · **Subtitle / footer** 19-22px Muted · **Label** 15-20px Deep
+Muted.
 
 ### Named Rules
 
-**The Mono-Carries-The-Claim Rule.** Every figure, token, command, identifier and evidence value
-is monospace on both surfaces. Serif is for prose only. If a reader could copy it into a
-terminal or cite it as a number, it is mono.
+**The Mono-Carries-The-Claim Rule.** If a reader could copy it into a terminal or cite it as a
+number, it is mono. [fact; unchanged]
 
-**The No-Display-Face Rule.** There is no display typeface and none is authorised. Scale and
-weight carry emphasis. A `52px` mono verdict is this system's equivalent of a headline.
+**The No-Display-Face Rule.** Scale and weight carry emphasis; a 52px mono verdict is this
+system's headline. [design-taste-frontend §9.B "no oversized H1s; hierarchy by weight and
+colour"]
+
+**The Balanced-Heading Rule.** Headings set `text-wrap: balance`. [redesign-existing-projects,
+"orphaned words"]
 
 ## Layout
 
-**Receipt surfaces.** A single centred column, `max-width: 62rem`, `padding: 0 1.25rem 3rem`.
-No grid framework, no sidebar, no multi-column body. The header is a flex row with
-`justify-content: space-between` and `align-items: baseline`, wrapping at narrow widths. Two
-layout primitives exist beyond the column:
+**Site.** A single centred column, `max-width: 62rem`, on the declared spacing scale. The
+header is a flex row, baseline-aligned, wrapping at narrow widths; the current page is marked
+in the nav. Two primitives beyond the column: `dl` (the cost-beside-evidence grid) and
+`.beside` (two related blocks side by side, stacking below roughly 40rem). Tables are
+`width: 100%`, `border-collapse: collapse`, left- and top-aligned.
+[redesign-existing-projects, "no indication of current page"; "no max-width container" already
+met]
 
-- `dl` — a two-column definition grid, `minmax(10rem, max-content) 1fr`. This is the workhorse
-  for cost-beside-evidence pairs.
-- `.beside` — a wrapping flex row whose children are `flex: 1 1 20rem`. Used to place two
-  related blocks side by side, collapsing to stacked below roughly 40rem.
+**Assets.** Fixed viewBox compositions, `780x176` for banners and `1280x640` for the social
+preview with a 96px safe area. Composition: flat Primer-dark field, wordmark, one readout
+line, one footer. No verdict legend, no decorative data, no window chrome.
+[design-taste-frontend §9.F "fake terminal", "decorative status dots", "middle-dot rationed";
+primer social-preview concept]
 
-Tables are `width: 100%` with `border-collapse: collapse` and left-aligned, top-aligned cells.
-
-**Bench surfaces.** Fixed viewBox compositions: `780×176` for banners, `1280×640` for the social
-preview. The preview insets its terminal frame `80px` from a `1280×640` field, giving a safe
-area consistent with GitHub's crop behaviour.
-
-**Spacing.** ⚠ The receipt stylesheet uses roughly sixteen distinct rem values and does not
-follow a regular scale. The `spacing` tokens in this file's frontmatter name the values that
-actually recur; they are a description of current practice, not a scale the code was built
-against. Do not treat them as a ramp.
+**Spacing.** The declared scale is 4 · 8 · 16 · 24 · 32 · 48 · 96 px. The stylesheet's sixteen
+irregular rem values move onto it at #308. The primer supplied the scale; no SME fired
+contradicted it and every SME demanded a consistent one.
+[stitch-design-taste §6; redesign-existing-projects, "consistent padding"]
 
 ### Named Rules
 
-**The One-Column Rule.** The published site is a single column at every width. Evidence is read
-top to bottom in the order the generator emitted it. No layout may reorder or parallelise it.
+**The One-Column Rule.** Evidence is read top to bottom in the order the generator emitted it.
+No layout may reorder or parallelise it. [fact; unchanged]
 
 ## Elevation & Depth
 
-**This system is flat, and the flatness is total.** There is no `box-shadow` anywhere in the
-repository's stylesheet. There is no gradient, no blur, no glow, no opacity layering. Depth is
-conveyed by exactly three devices:
+**Flat, and the flatness is total.** No `box-shadow`, no gradient, no blur, no glow, no
+opacity layering, no grain. Depth is exactly three devices:
 
-1. **1px rules** in Rule (`#c8c9c4`) — table borders, `h2` underlines, the footer divider.
-2. **A 2px bottom border** in Document Ink under the site header — the single heaviest line on
-   the page, and the only thing that separates chrome from content.
-3. **4px left edges** — Document Ink for `.rule`, Refusal Ochre for `.refusal`. These are the
-   system's emphasis mechanism, replacing the callout boxes and tinted panels a conventional
-   system would use.
+1. **1px rules** in Hairline: table borders, `h2` underlines, the footer divider.
+2. **A 2px bottom border** in Ink under the site header: the heaviest line on the page.
+3. **4px left edges**: Ink for `.rule`, Can't-Tell Blue for `.refusal`.
 
-On bench surfaces, the terminal frame is a 2px Hairline stroke over Surface fill on a Void
-field. That two-tone separation is the only depth cue, and it is a border, not a shadow.
+On assets, the readout frame is a 2px Hairline stroke over Surface on a Void field. That is a
+border, not a shadow.
 
 ### Named Rules
 
-**The No-Shadow Rule.** No shadow token exists and none may be added. If an element needs
-separation, give it a rule or a left edge. This is not a stylistic preference — a shadow implies
-a floating object, and nothing on an evidence surface floats.
+**The No-Shadow Rule.** A shadow implies a floating object, and nothing on an evidence surface
+floats. [fact; primer "1px rules rather than shadows"; design-taste-frontend §4.4]
+
+**The No-Texture Rule.** Two SMEs asked for grain or noise to "break digital flatness"
+(redesign-existing-projects; high-end-visual-design). Both are refused: the primer bans
+texture behind small text, code and measurements, and the whole surface is measurement.
+[fact: measurements, tables and receipts stay on flat digital surfaces]
 
 ## Shapes
 
-**Receipt surfaces have no radius at all.** `border-radius` does not appear in the stylesheet.
-Every table cell, every refusal block, every header is a hard rectangle.
+**Radius is zero everywhere.** One radius system for the whole repository.
+[design-taste-frontend §4.4 shape-consistency lock; primer 0-4px]
 
-**Bench surfaces round only the terminal frame** — `rx="12"` on banners, `rx="18"` on the social
-preview — because that shape is quoting a window chrome, not expressing a form language. The
-circles in the title bar are `r="6"` (banner) and `r="8"` (preview).
-
-The form language is otherwise entirely orthogonal: rectangles, 1px rules, 4px left edges, and a
-2px header underline.
-
-### Named Rules
-
-**The Square-Unless-Quoting Rule.** Radius is permitted only where the asset is depicting a
-window. Content surfaces are square.
+The `rx="12"` / `rx="18"` on the terminal frames retires with the window chrome at #309 and
+#310; the Square-Unless-Quoting exception dies with the thing it was quoting. The form language
+is rectangles, 1px rules, 4px left edges and a 2px header underline.
 
 ## Components
 
-### Refusal Block — the signature component
+### Refusal Block (the signature component)
 
-- **Character:** the thing this instrument exists to be able to render. Never a degraded state.
-- **Shape:** 4px left border in Refusal Ochre (`#8a5a00`), no radius.
-- **Padding:** `0.25rem 0 0.25rem 0.6rem`.
-- **Weight:** `font-weight: 600` — heavier than surrounding body text.
+- **Shape:** 4px left border in Can't-Tell Blue, no radius.
+- **Padding:** `0.25rem 0 0.25rem 0.6rem`. **Weight:** 600.
 - **Selectors:** `.refusal`, `.refused`.
-- **Behaviour:** styled identically whether the refusal is a whole verdict or a single missing
-  figure. The stylesheet's own comment states the requirement: *"boxed so it cannot be mistaken
-  for a missing value."*
+- **Behaviour:** identical whether the refusal is a whole verdict or one missing figure;
+  *"boxed so it cannot be mistaken for a missing value."* [fact]
 
 ### Rule Block
 
-- **Character:** a quoted rule or governing clause.
-- **Shape:** 4px left border in Document Ink, no radius.
-- **Padding:** `0.25rem 0 0.25rem 0.85rem`.
-- **Relationship to Refusal Block:** structurally identical, differing only in edge colour and
-  weight. The pair is the system's entire callout vocabulary.
+- 4px left border in Ink, no radius, padding `0.25rem 0 0.25rem 0.85rem`. Structurally the
+  refusal block with a different edge; the pair is the whole callout vocabulary.
 
 ### Absent Marker
 
-- **Style:** `font-style: italic`, no border, no colour change.
-- **Purpose:** marks a genuinely absent value, as distinct from a refused one.
-
-⭐ **The distinction between `.absent` and `.refusal` is load-bearing.** An absence is quiet and
-italic. A refusal is bordered and bold. A system that rendered them the same way would be
-claiming the instrument had no answer when in fact it declined to give one.
+- `font-style: italic`, no border, no colour. An absence is quiet; a refusal is bordered and
+  bold. Rendering them alike would claim the instrument had no answer when it declined to give
+  one. [fact]
 
 ### Data Table
 
-- **Border:** 1px Rule on every cell; `border-collapse: collapse`.
-- **Head:** Table Head fill (`#eeeee9`), the only fill in the stylesheet.
-- **Caption:** left-aligned, `font-weight: 700`, `padding-bottom: 0.3rem`.
-- **Cells:** `0.35rem 0.5rem` padding, `text-align: left`, `vertical-align: top`.
-- **Width:** always 100%.
+- 1px Hairline on every cell, `border-collapse: collapse`; head fill Void; caption
+  left-aligned, 700; cells `0.35rem 0.5rem`, left, top; width 100%; figures tabular mono.
 
 ### Definition Grid
 
-- **Style:** CSS grid, `minmax(10rem, max-content) 1fr`, gap `0.2rem 1rem`.
-- **Terms:** `font-weight: 700`. **Definitions:** no margin.
-- **Purpose:** the cost-beside-evidence pairing.
+- CSS grid `minmax(10rem, max-content) 1fr`, gap on the scale; terms 700.
 
 ### Site Header
 
-- **Style:** flex row, `space-between`, baseline-aligned, wrapping with `gap: 0.5rem 1.5rem`.
-- **Border:** 2px solid Document Ink underneath — the page's heaviest line.
-- **Wordmark:** `font-weight: 700`, `letter-spacing: 0.02em`.
-- **Nav:** horizontal `ul`, `gap: 1rem`, no list markers, links in Certificate Navy.
+- Flex row, baseline, wrapping; 2px Ink border beneath; wordmark 700 with
+  `letter-spacing: 0.02em`; nav links in Ink, underlined, current page marked; a visible focus
+  ring in Can't-Tell Blue on every link. [redesign-existing-projects, "missing focus ring",
+  "no indication of current page"]
 
-### Terminal Frame (bench surfaces)
+### Readout Frame (assets)
 
-- **Style:** Surface fill, 2px Hairline stroke, `rx` 12–18.
-- **Title bar:** three chrome circles, then the repository name in Deep Muted, then a 1.5px
-  Quiet Hairline divider.
-- **Body:** a `$` prompt in Prompt Green, the command in Ink, arguments in Deep Muted, then a
-  verdict line led by `→` in Flagged Amber at the largest size on the asset.
+- Surface fill, 2px Hairline stroke, radius 0. Inside: the wordmark in Deep Muted, one command
+  line (`$` in Prompt Green, command in Ink, argument in Deep Muted), one readout line led by
+  `→` in the semantic colour its state names, one footer in Muted. No title bar, no dots, no
+  legend.
 
 ## Do's and Don'ts
 
-### Do:
+### Do
 
-- **Do** give every refusal the 4px Refusal Ochre edge and `font-weight: 600`. The Refusal-Is-
-  Louder Rule is the system's defining commitment.
-- **Do** keep `.absent` italic and unbordered, distinct from `.refusal`. The two states mean
-  different things.
-- **Do** set every figure, token, command and identifier in monospace at `0.92em` on receipt
-  surfaces.
-- **Do** build separation from 1px rules, the 2px header border, and 4px left edges.
-- **Do** keep the published site a single column at every width.
-- **Do** keep Prompt Green to the `$` prompt and confirmed success only.
+- Give every refusal the 4px Can't-Tell Blue edge and weight 600.
+- Keep `.absent` italic and unbordered.
+- Set every figure, token, command and identifier in mono with tabular figures.
+- Build separation from 1px rules, the 2px header border and 4px left edges.
+- Keep the site one column at every width, and the page dark-locked.
+- Keep Prompt Green to the `$` and confirmed success only.
+- Mark the current page in the nav and give every link a visible focus ring.
 
-### Don't:
+### Don't
 
-- **Don't** add a `box-shadow`, gradient, blur, glow or opacity layer. None exists today and the
-  No-Shadow Rule forbids introducing one.
-- **Don't** add `border-radius` to a content surface. Radius exists only where an asset depicts a
-  window.
-- **Don't** dim, collapse, abbreviate or footnote a refusal. The stylesheet's opening comment
-  forbids it and the site's purpose depends on it.
-- **Don't** reuse the window-chrome greens (`#27c93f`) as a success colour. They mean "window."
-- **Don't** introduce a display typeface. Scale and weight carry emphasis.
-- **Don't** render a number that no receipt supplies. The generator refuses rather than
-  interpolates; the visual layer must not reintroduce what the generator declined to emit.
-- **Don't** treat the frontmatter `spacing` tokens as a designed ramp. They describe current
-  practice and the current practice is irregular.
-- **Don't** use the prose form `Skill Harness` for a command, URL, package identifier or
-  evidence label. Those are always `skill-harness`, lowercase and hyphenated. The two forms are
-  a deliberate convention, not drift — see Known Divergences.
+- Add a shadow, gradient, blur, glow, grain or opacity layer.
+- Add `border-radius` anywhere.
+- Dim, collapse, abbreviate or footnote a refusal.
+- Use any chromatic colour outside the semantic three, on anything.
+- Introduce a web font, a display face, or `Inter` by name.
+- Render a number that no receipt supplies.
+- Draw a window: no title bar, no traffic-light dots, no fake terminal.
+- Use the prose form `Skill Harness` for a command, URL, package identifier or evidence label.
+
+## What the harness must never do
+
+Each rule is one sentence and names the skill that produced it. The four the spec required
+come first; the rest are what the SMEs added. A live repository fact outranks every rule here.
+
+1. Nothing sits behind a measurement: no texture, gradient, glow, blur or grain under a
+   figure, a table, a readout or a receipt. [design-taste-frontend §4.4, §9.A; fact]
+2. No colour reads as a verdict or a state outside the semantic three, and no decorative
+   colour appears at all. [design-taste-frontend §4.2; stitch-design-taste §2]
+3. No count, star, user number or live figure appears in a static graphic. [fact: owner ruling
+   #253 §8; design-taste-frontend §4.9 "fake-precise numbers"]
+4. A refusal is displayed as primary content at full weight, never dimmed, collapsed or
+   footnoted. [fact, `style.css:1-7`; design-taste-frontend §4.5 "empty states composed"]
+5. No page flips theme mid-scroll; the whole repository is one dark-locked theme.
+   [design-taste-frontend §4.11]
+6. No serif face and no generic system serif appears on any software surface.
+   [stitch-design-taste §3]
+7. No fake terminal, fake window chrome, or invented terminal output appears in any asset.
+   [design-taste-frontend §9.F; primer "real terminal snippets are copied from committed
+   output"]
+8. No decorative status dot, no version stamp, no section-number eyebrow, no scroll cue.
+   [design-taste-frontend §9.F]
+9. No motion of any kind on any surface; a static instrument has nothing to animate.
+   [design-taste-frontend §5 "motion must be motivated"; primer "no decorative motion"]
+10. No middle-dot separator chain; at most one `·` per line. [design-taste-frontend §9.F]
+11. No em-dash in new visible copy; existing SVG text nodes keep theirs until the owner selects
+    a replacement line, because a visible-text change is a new public line and the aria-label
+    is byte-pinned. [design-taste-frontend §9.G, bounded by fact]
+12. No mixed grey families: every neutral is a Primer cool grey. [redesign-existing-projects;
+    design-taste-frontend §4.2]
+13. No radius anywhere, and no second radius system. [design-taste-frontend §4.4]
+14. No card, panel, pill, badge or floating element builds hierarchy; rules and edges do.
+    [design-taste-frontend §4.4; stitch-design-taste §5]
+15. No emoji, sparkle, robot, brain, circuit, wand, neural mesh or AI-signifier icon.
+    [stitch-design-taste §9; primer banned-graphics list]
 
 ## Known Divergences
 
-⛔ **These are measured defects and open questions, recorded so a future pass does not have to
-rediscover them. None is resolved here.**
+Measured defects and open questions, recorded so a future pass does not rediscover them.
 
-1. **The display name renders two ways, and on the evidence this is a convention rather than a
-   defect.** ⚠ An earlier reading of this file called the title-cased form an outlier. That was
-   wrong, and the correction is recorded here rather than silently applied.
+1. **The display name renders two ways, and this is a convention rather than a defect.**
+   `skill-harness` is the identifier form (`pyproject.toml:6`, `README.md:8`, the SVGs, the
+   repository name, the CLI). `Skill Harness` is the prose form (`CONTRIBUTING.md:1`,
+   `CLAUDE.md:52`, `docs/case-studies/`, `sitegen/templates/page.html:11`). The shared brand
+   document bans the rename only "inside commands, URLs, package identifiers, or evidence
+   labels"; a page wordmark is none of the four. What is worth checking is the inverse leak,
+   and none was observed.
 
-   - **`skill-harness`** — the identifier form. `pyproject.toml:6`, `README.md:8`, both banner
-     SVGs, the social preview, the GitHub repository name, the CLI invocation.
-   - **`Skill Harness`** — the prose form, used as a proper noun. `CONTRIBUTING.md:1`
-     ("Contributing to Skill Harness"), `CLAUDE.md:52`, `docs/case-studies/`, and
-     `src/skill_harness/sitegen/templates/page.html:11`
-     (`<p class="wordmark">Skill Harness: published receipts</p>`).
-
-   The site wordmark is prose, and it matches how the repository already writes the name in
-   prose everywhere else. It is **consistent**, not divergent.
-
-   ⭐ The shared brand document bans the rename in four named contexts — *"inside commands, URLs,
-   package identifiers, or evidence labels."* A page wordmark is none of the four, so the ban
-   does not reach it. Anyone acting on a "make the name render one way" instruction should read
-   that scope before changing anything: collapsing the two forms would break the prose register
-   across `CONTRIBUTING.md`, `CLAUDE.md` and the case studies to fix a wordmark that is not
-   broken.
-
-   **What IS worth checking** is the inverse: whether the identifier form leaks into prose, or
-   the prose form leaks into a command, URL, package identifier or evidence label. Neither was
-   observed during this extraction. `src/skill_harness/` is PEP 8 module naming and is not a
-   display rendering at all.
-
-2. **The two systems described above are unreconciled**, and the receipt surfaces were built
-   while the shared brand document was unread. Tracked in `#216`.
+2. **Resolved 2026-08-30.** The two systems are reconciled by declaration above: one system,
+   paper retired. The tree still carries the paper stylesheet and the window chrome until #308,
+   #309 and #310 land; the retiring tokens stay declared so the conformance check is green on
+   `main` and turns red the day a retired literal is reintroduced after its ticket merges.
 
 3. **The dark banner's verdict token draws from a different enum than the social preview's.**
-   `banner-dark.svg:14` renders `→ UNMEASURED`; `social-preview.svg:18` renders `→ CUT`.
-   `UNMEASURED` is a live clause status (`src/skill_harness/aggregation/status.py:52`,
-   `aggregation/profile.py:54`); `CUT` and `CANT_TELL_YET` are verdicts
-   (`aggregation/verdict.py:119`). Both tokens are current. Whether presenting a status token in
-   the verdict position is intended is **not established by this document** — it is flagged for
-   the owner, not asserted as an error.
+   `banner-dark.svg:14` renders `→ UNMEASURED` (a clause status, `aggregation/status.py:52`);
+   `social-preview.svg:18` renders `→ CUT` (a verdict, `aggregation/verdict.py:119`). Both are
+   current. Which state the readout line shows is a copy decision for #309 and #310, and any
+   new line is a labelled candidate the owner selects.
 
-4. **The light/dark banner pair does not do what its filenames imply, and this may be a defect.**
-   `banner-light.svg` and `banner-dark.svg` are byte-identical except for one attribute: the
-   frame stroke, `#d0d7de` versus `#30363d`. Both keep the `#0d1117` dark interior. A reader
-   expecting a light-mode asset gets a dark terminal with a pale outline. The file's own comment
-   says this is intentional — *"dark interior; light border so it sits well on a light README"* —
-   so it is recorded here as a documented decision rather than an error. ⚠ It is flagged because
-   the naming does not carry the intent, and a future pass restyling "the light banner" would
-   likely change the wrong thing.
+4. **The light/dark banner pair differs by one stroke attribute** (`#d0d7de` vs `#30363d`);
+   both keep the dark interior, by the file's own comment. The naming does not carry the
+   intent. With the window chrome retiring at #309, the pair reduces to one composition with
+   two frame strokes; whether one file with a `currentColor` stroke replaces two is #309's
+   call.
+
+5. **`bench-cant-tell` is declared and unused.** `grep -ri 58a6ff` over the tree returns
+   nothing on 2026-08-30. It becomes live when #308 moves the refusal edge onto it.
+
+6. **The social preview carries a sample verdict for a skill that does not exist**
+   (`my-skill`, `→ CUT (subsumed)`) and a verdict legend. Both are invented terminal output
+   under the primer and a fake-product tell under design-taste-frontend §9.F. #310 replaces
+   them with the primer's composition (one readout line, one footer, no legend). Any new
+   visible line is an owner-selected candidate; the aria-label stays byte-identical until then.
+
+## Provenance
+
+Fired in this order on 2026-08-30 by the Direction seat, each with the S370 context pack and
+the Brand Kit primer v0.1 as the brief. One line per skill: what it ruled.
+
+- **`mattpocock-skills:writing-for-agents`** (fired first; DESIGN.md is a governed basename):
+  governed the writing of this file; no design rule.
+- **`design-taste-frontend`** (v2): ruled one design system per project, Primer for a
+  GitHub-native devtool; one theme per page, locked; serif unjustified with no brand serif
+  named; one accent, spent here on state; the terminal window, traffic-light dots, legend and
+  middle-dot chains are named tells; em-dash banned in new copy. Its own §13 puts data tables
+  out of its scope, so its rulings bind the chrome and assets directly and the receipt body by
+  the theme lock only.
+- **`stitch-design-taste`**: produced the candidate rule set (atmosphere, palette roles,
+  typography, components, layout, anti-patterns); ruled Georgia banned and serif banned in
+  software UI; mono for numbers at this density; no pure black. Its §8 motion philosophy
+  (perpetual micro-loops, spring physics) was refused: the surfaces are static and the primer
+  bans decorative motion.
+- **`redesign-existing-projects`** (audit only): found the generic serif, the two-weight
+  hierarchy, proportional numerals, no `text-wrap: balance`, no focus ring, no current-page
+  marker, warm-and-cool grey mixing, and the light-in-dark sandwich; its "add grain or
+  background imagery to flat sections" was refused by the no-texture fact.
+- **`high-end-visual-design`**: fired for the craft floor and **produced no rule this file
+  carries.** Every instruction it gives (premium web fonts with `Inter` and system faces
+  banned, double-bezel nested cards at 2rem radius, backdrop blur, pill buttons, eyebrow
+  badges, 800ms scroll reveals, "1px solid gray borders" banned) is refused by a live fact
+  (no dependency, no web font, flat evidence field, hairlines are the separator) or by the
+  primer's banned-graphics list. Recorded as a refusal, not a partial adoption.
+- **`minimalist-ui`, `industrial-brutalist-ui`, `gpt-taste`, `impeccable`, image
+  generation**: not fired. Neither b nor c named minimalism or brutalism as the world; the
+  system named was Primer.
+
+Conflicts and how each was settled (both positions kept):
+
+- **Dark-only vs both modes.** design-taste-frontend §6.C requires both modes; the primer and
+  the three SVGs are dark, and the same skill's §4.11 locks one theme per page. This file
+  carries dark-locked, on the owner's primer as explicit instruction. Revisit-if above.
+- **Motion.** stitch-design-taste §8 asks for perpetual micro-interactions; design-taste-frontend
+  §5 requires every animation to be motivated. This file carries no motion: there is no
+  interaction to motivate, and the primer bans decorative motion.
+- **Texture.** redesign-existing-projects and high-end-visual-design ask for grain; the primer
+  and the flat-evidence fact refuse it. This file carries no texture.
+- **Fonts.** Every SME named a web font; the no-dependency fact refuses all of them. This file
+  carries the system stacks.
