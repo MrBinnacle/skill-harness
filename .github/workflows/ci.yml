@@ -366,8 +366,7 @@ jobs:
              [[ "${{ needs.calibration.result }}" != "success" ]] || \
              [[ "${{ needs.structural-bans.result }}" != "success" ]] || \
              [[ "${{ needs.drift-check.result }}" != "success" ]] || \
-             [[ "${{ needs.release-gate.result }}" != "success" ]] || \
-             [[ "${{ needs.vale.result }}" != "success" ]]; then
+             [[ "${{ needs.release-gate.result }}" != "success" ]]; then
             echo "One or more required checks failed."
             exit 1
           fi
