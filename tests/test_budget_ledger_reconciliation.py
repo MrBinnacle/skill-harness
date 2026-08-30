@@ -66,8 +66,18 @@ def _seed_evidence_prereqs(conn: sqlite3.Connection) -> None:
         "INSERT INTO clauses (clause_id, skill_id, clause_index, rendering_index,"
         " clause_text, axis, comparator, oracle_tier, vacuity_flag, created_at)"
         " VALUES (?,?,?,?,?,?,?,?,?,?)",
-        ("clause-1", "skill-1", 0, 0, "Test clause", "citation_support",
-         "increase", 1, "none", _TS),
+        (
+            "clause-1",
+            "skill-1",
+            0,
+            0,
+            "Test clause",
+            "citation_support",
+            "increase",
+            1,
+            "none",
+            _TS,
+        ),
     )
     runs_repo.insert_run(
         conn,
@@ -122,9 +132,7 @@ class TestPricingTableCoversEvidenceModels:
 
         models = {
             row[0]
-            for row in evidence_db.execute(
-                "SELECT DISTINCT subject_model FROM samples"
-            ).fetchall()
+            for row in evidence_db.execute("SELECT DISTINCT subject_model FROM samples").fetchall()
         }
         assert "claude-sonnet-5" in models
 
@@ -159,9 +167,7 @@ class TestPricingTableCoversEvidenceModels:
 
         evidence_models = {
             row[0]
-            for row in evidence_db.execute(
-                "SELECT DISTINCT subject_model FROM samples"
-            ).fetchall()
+            for row in evidence_db.execute("SELECT DISTINCT subject_model FROM samples").fetchall()
         }
 
         missing = evidence_models - set(PRICE_PER_MTOK.keys())
