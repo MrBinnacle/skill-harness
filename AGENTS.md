@@ -20,6 +20,8 @@ Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, maintained by `/dom
 
 ## Prose voice — literal-humanist register
 
+Instance of the **Register** row of the taste doctrine, class 2 (public prose in `skill-harness`). It lives in `TASTE.md` in the owner's private research repository. The test is stated there once; this section is its application to this repository.
+
 Default register for every substantive prose artifact in this repo: README, docs, ADRs,
 issues, pull requests, release notes, review comments, commit bodies, diagnostics. It does
 not restyle source code.
