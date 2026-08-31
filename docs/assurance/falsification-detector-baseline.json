@@ -1,0 +1,65 @@
+{
+  "_comment": [
+    "Ratchet baseline for tests/test_falsification_plan_detectors_exist.py.",
+    "Each row of docs/assurance/falsification-plan.md ends in a **Detection:** line naming a",
+    "test module. Nine of the ten named modules did not exist when this baseline was written.",
+    "",
+    "This file records that debt by name so the existence check can run green today without",
+    "hiding the debt. It is a ratchet, not a threshold: a detector that lands must be removed",
+    "from not_yet_built in the same change, and the guard fails if a row listed here now exists.",
+    "The list therefore shrinks to empty and cannot be edited to silence a red run.",
+    "",
+    "Do not add a row to this file. A new Detection line naming a file that does not exist is",
+    "the defect the guard was built to catch."
+  ],
+  "measured_at_commit": "ffb59592931a146b92405bd1b3469b9293a0ca99",
+  "measured_at": "2026-08-31",
+  "parent_issue": 341,
+  "not_yet_built": [
+    {
+      "item": 1,
+      "detector": "tests/test_aggregation_fit_fdr_calibration.py",
+      "issue": 343
+    },
+    {
+      "item": 2,
+      "detector": "tests/test_aggregation_fit_ebmom_recovery.py",
+      "issue": 344
+    },
+    {
+      "item": 3,
+      "detector": "tests/test_paired_halfupdate_vs_gate2_lattice.py",
+      "issue": 345
+    },
+    {
+      "item": 4,
+      "detector": "tests/test_oc_exact_scipy_grid.py",
+      "issue": 346
+    },
+    {
+      "item": 5,
+      "detector": "tests/test_halfupdate_tie_sensitivity.py",
+      "issue": 347
+    },
+    {
+      "item": 6,
+      "detector": "tests/test_confound_status_e2e.py",
+      "issue": 348
+    },
+    {
+      "item": 8,
+      "detector": "tests/test_paired_arm_epoch_adversarial.py",
+      "issue": 350
+    },
+    {
+      "item": 9,
+      "detector": "tests/test_value_class_call_sites_static.py",
+      "issue": 351
+    },
+    {
+      "item": 10,
+      "detector": "tests/test_mint_path_allowlist.py",
+      "issue": 352
+    }
+  ]
+}
