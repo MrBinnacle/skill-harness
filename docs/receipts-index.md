@@ -60,6 +60,19 @@ and covers that section only. This page stays the citable surface for every kind
 
 ## Findings
 
+### [`docs/findings/ebmom-missing-sampling-variance-peel.md`](findings/ebmom-missing-sampling-variance-peel.md)
+
+- **Claims:** EB-MoM inverts the Beta moment map with no binomial
+  sampling-variance peel, so recovered concentration deflates by ~`n/(n+c+1)`;
+  measured against known hyperpriors (K=200, R=50, seed 20260902): relative
+  error 0.690 at (mu*=0.65, c*=20, n=10) and 0.806 at (c*=100, n=25), with
+  decision flip rates 0.1186 and 0.0816 against the locked 0.95/0.05
+  thresholds; the benign regime (c*=10, n=100) recovers inside the
+  pre-registered 0.25 tolerance.
+- **Refuses to claim:** That any historical KEEP/CUT verdict flipped (no
+  production run was re-scored here); a corrected estimator (that is repair
+  ticket #360); flip rates at designs other than the three measured.
+
 ### [`docs/findings/why-naive-skill-benchmarks-mislead.md`](findings/why-naive-skill-benchmarks-mislead.md)
 
 - **Claims:** On a 60-trial 4-arm config ablation, run-to-run output-token CV
