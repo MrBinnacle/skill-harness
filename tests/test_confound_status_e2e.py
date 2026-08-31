@@ -1,15 +1,17 @@
-"""E2E test for confound status: runner → VIEW → engine → status.
+"""E2E test for confound status: runner-shaped write → VIEW → engine → status.
 
-When confound events exist for a clause, the status must be CONFOUNDED — not
-a silent NO_DATA or INADMISSIBLE.  The runner's _snapshot_admissibility writes
-verdicts as inadmissible/confounded; the engine's confound-counting query JOINs
-on admissibility_state = 'admissible', which is mutually exclusive with the
-runner's write.  All_confounded_flag is therefore always false, and
-derive_clause_status never returns CONFOUNDED.
+When confound events exist for a clause, the status must be CONFOUNDED — not a
+silent understatement as UNMEASURED(inadmissible) or UNMEASURED(no_data).  The
+runner's _snapshot_admissibility writes verdicts as inadmissible/confounded; the
+engine's confound-counting query JOINs on admissibility_state = 'admissible',
+which is mutually exclusive with the runner's write.  all_confounded_flag is
+therefore always false, and derive_clause_status never returns CONFOUNDED.
 
 This test registers that structural defect.  It asserts the end-to-end
 property the falsification plan (item 6) names: when confound events exist,
-the status is CONFOUNDED and not a silent NO_DATA.
+the status is CONFOUNDED and not a silent understatement, and aggregation
+never sees primary-tainted rows.  affected_clause_id VIEW filtering remains
+an open research question (migration 0003); this ticket does not settle it.
 
 Severity: WRONG_NUMBER
 Finding: docs/findings/confound-status-silent-understatement.md
@@ -26,6 +28,7 @@ import pytest
 from skill_harness.aggregation import (
     aggregate_skill,
 )
+from skill_harness.aggregation.report import SkillReport
 from skill_harness.aggregation.status import (
     ClauseStatus,
 )
@@ -192,13 +195,28 @@ def _seed_confound_scenario(
     )
 
 
+def _aggregate(
+    evidence_db: sqlite3.Connection, tmp_path: Path
+) -> tuple[SkillReport, sqlite3.Connection]:
+    rt = open_runtime(tmp_path / "runtime.db")
+    _seed_confound_scenario(evidence_db, rt)
+    report = aggregate_skill(
+        SKILL_ID,
+        evidence_conn_ro=evidence_db,
+        runtime_conn=rt,
+        harness_version=_HARNESS_VER,
+        generated_at_utc=_GEN_AT,
+    )
+    return report, rt
+
+
 # ---------------------------------------------------------------------------
 # E2E detector: confound status
 # ---------------------------------------------------------------------------
 
 
 class TestConfoundStatusE2E:
-    """End-to-end: confound events → CONFOUNDED status (not silent NO_DATA).
+    """End-to-end: confound events → CONFOUNDED status (not silent understatement).
 
     The runner writes verdicts as inadmissible/confounded.  The engine's
     confound-counting query JOINs on admissibility_state='admissible', which
@@ -207,15 +225,51 @@ class TestConfoundStatusE2E:
 
     This test asserts the property the falsification plan (item 6) requires:
     when confound events exist, the status is CONFOUNDED and not a silent
-    NO_DATA.
+    understatement, and aggregation never sees primary-tainted rows.
     """
+
+    def test_primary_confounded_rows_do_not_enter_aggregation(
+        self, evidence_db: sqlite3.Connection, tmp_path: Path
+    ) -> None:
+        """Primary-tainted rows stay out of the admissible VIEW and the fit.
+
+        Pins the half of the plan property that holds on main today: the VIEW
+        excludes primary_clause_id matches, so n_verdicts stays 0 and no
+        observation mass enters the posterior.
+        """
+        rt: sqlite3.Connection | None = None
+        try:
+            report, rt = _aggregate(evidence_db, tmp_path)
+            assert len(report.clauses) == 1
+            clause = report.clauses[0]
+
+            view_n = evidence_db.execute(
+                "SELECT COUNT(*) FROM admissible_verdicts WHERE run_id = ? AND clause_id = ?",
+                (RUN_ID, CLAUSE_ID),
+            ).fetchone()[0]
+            assert view_n == 0, (
+                f"admissible_verdicts leaked {view_n} primary-tainted row(s) "
+                f"for clause {CLAUSE_ID!r}; aggregation must not see them."
+            )
+            assert clause.n_verdicts == 0, (
+                f"aggregate_skill fit saw n_verdicts={clause.n_verdicts} for "
+                f"primary-confounded clause {CLAUSE_ID!r}; expected 0."
+            )
+            assert clause.w_observation_sum == 0.0, (
+                f"aggregate_skill fit saw w_observation_sum={clause.w_observation_sum} "
+                f"for primary-confounded clause {CLAUSE_ID!r}; expected 0."
+            )
+        finally:
+            if rt is not None:
+                rt.close()
 
     @pytest.mark.xfail(
         strict=True,
         reason=(
             "finding: docs/findings/confound-status-silent-understatement.md "
             "(engine all_confounded_flag always false; derive_clause_status "
-            "never returns CONFOUNDED; confounded work understates as NO_DATA)"
+            "never returns CONFOUNDED; confounded work understates as "
+            "UNMEASURED(inadmissible))"
         ),
     )
     def test_confound_events_produce_confounded_status(
@@ -223,38 +277,35 @@ class TestConfoundStatusE2E:
     ) -> None:
         """When confound events exist for a clause, status is CONFOUNDED.
 
-        Asserts the end-to-end property: runner writes verdicts as
+        Asserts the end-to-end property: runner-shaped writes mark verdicts
         inadmissible/confounded, confound_events rows exist, and
-        aggregate_skill returns CONFOUNDED status — not NO_DATA or
-        INADMISSIBLE.
+        aggregate_skill returns CONFOUNDED — not UNMEASURED(inadmissible)
+        or UNMEASURED(no_data).
         """
-        rt = open_runtime(tmp_path / "runtime.db")
+        rt: sqlite3.Connection | None = None
         try:
-            _seed_confound_scenario(evidence_db, rt)
-
-            report = aggregate_skill(
-                SKILL_ID,
-                evidence_conn_ro=evidence_db,
-                runtime_conn=rt,
-                harness_version=_HARNESS_VER,
-                generated_at_utc=_GEN_AT,
-            )
+            report, rt = _aggregate(evidence_db, tmp_path)
 
             assert len(report.clauses) == 1
             clause = report.clauses[0]
 
-            # The status must be CONFOUNDED — this is the property under test.
-            # On main, the engine's all_confounded_flag is always false because
-            # the runner writes verdicts as inadmissible (never admissible), and
-            # the engine's confound query requires admissibility_state='admissible'.
-            # So derive_clause_status is called instead, returning UNMEASURED(NO_DATA).
+            # On main the engine never counts confounds (query requires
+            # admissibility_state='admissible' while the runner wrote
+            # 'inadmissible'), so all_confounded_flag is false and
+            # derive_clause_status returns UNMEASURED(inadmissible).
             assert clause.status == ClauseStatus.CONFOUNDED, (
                 f"confound events exist for clause {CLAUSE_ID!r} but status is "
-                f"{clause.status!r} (expected CONFOUNDED). The runner writes "
-                f"verdicts as inadmissible/confounded, the engine's confound query "
-                f"requires admissibility_state='admissible' (mutually exclusive), "
-                f"all_confounded_flag is always false, and derive_clause_status "
+                f"{clause.status!r} sub_reason={clause.sub_reason!r} "
+                f"(expected CONFOUNDED). The runner writes verdicts as "
+                f"inadmissible/confounded; the engine's confound query requires "
+                f"admissibility_state='admissible' (mutually exclusive); "
+                f"all_confounded_flag is always false; derive_clause_status "
                 f"never returns CONFOUNDED."
             )
+            assert clause.sub_reason is None, (
+                f"CONFOUNDED status must carry no unmeasured sub_reason; "
+                f"got sub_reason={clause.sub_reason!r}."
+            )
         finally:
-            rt.close()
+            if rt is not None:
+                rt.close()
