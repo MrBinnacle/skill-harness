@@ -894,6 +894,69 @@ def test_public_copy_hook_invokes_field_aware_scanner() -> None:
     assert re.search(r"^\s*pass_filenames: false\s*$", hook.group(1), re.MULTILINE)
 
 
+def test_rendered_gen_1_citation_passes_the_public_copy_scanner() -> None:
+    """The renderer's own output must survive this module's scanner. Issue #315.
+
+    These two sides were on opposite sides of one number from 2026-08-09 until
+    2026-08-30. ``format_kind_precision_for_render`` built its citation from the
+    2026-08-08 receipt, which carried an off-by-one denominator, so it emitted
+    ``not_a_directive 77/78`` -- a string ``_NOT_A_DIRECTIVE_SPLIT_RE`` is
+    written to reject. Nothing was red, because no generated citation had yet
+    reached a surface ``_repo_public_copy_violations`` reads. The first one to
+    land would have turned this file red and pointed the reader at the guard
+    rather than at the receipt.
+
+    Asserting the guard's REGEX against a hand-written string cannot catch that:
+    both sides were individually self-consistent and only disagreed with each
+    other. So this test feeds the renderer's real output to the real scanner. It
+    is the join, and it is the only assertion here that fails if either side
+    moves alone.
+
+    The import is function-local on purpose. This module doubles as a
+    zero-dependency script -- pre-commit invokes ``_main()`` directly -- and a
+    module-level ``skill_harness`` import would put the package on that path.
+    """
+    from skill_harness.extractor.vacuity_policy import (
+        format_kind_precision_for_render,
+        load_citable_receipts,
+    )
+
+    gen_1 = load_citable_receipts()[0]
+    rendered = format_kind_precision_for_render(gen_1)
+
+    assert _public_copy_violations(rendered) == [], (
+        f"the generation-1 renderer emits a citation this repository's own "
+        f"public-copy guard rejects: {rendered!r}. The receipt and the guard "
+        f"have drifted apart -- see issue #315 and the receipt's amendment_note."
+    )
+
+
+def test_gen_1_receipt_mirror_copies_are_byte_identical() -> None:
+    """The docs receipt and its package mirror must not drift. Issue #315.
+
+    ``default_receipt_path()`` prefers the PACKAGE copy, so the renderer reads
+    ``src/skill_harness/extractor/calibration/`` while a human reads
+    ``docs/calibration/``. Amending one and not the other would leave the two
+    figures disagreeing again with nothing to notice it -- and would do so in
+    the direction that is hardest to see, because the file a reviewer opens
+    would be the one the code does not use.
+    """
+    docs_copy = REPO_ROOT / "docs" / "calibration" / "vacuity-flag-calibration-2026-08-08.json"
+    package_copy = (
+        REPO_ROOT
+        / "src"
+        / "skill_harness"
+        / "extractor"
+        / "calibration"
+        / "vacuity-flag-calibration-2026-08-08.json"
+    )
+    assert docs_copy.is_file() and package_copy.is_file()
+    assert docs_copy.read_bytes() == package_copy.read_bytes(), (
+        "the generation-1 receipt and its package mirror have diverged. The "
+        "renderer reads the package copy; a reviewer reads the docs copy."
+    )
+
+
 def _main() -> int:
     violations = _repo_public_copy_violations(REPO_ROOT)
     if violations:
