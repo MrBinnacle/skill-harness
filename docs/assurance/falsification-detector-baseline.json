@@ -27,11 +27,6 @@
       "issue": 344
     },
     {
-      "item": 3,
-      "detector": "tests/test_paired_halfupdate_vs_gate2_lattice.py",
-      "issue": 345
-    },
-    {
       "item": 5,
       "detector": "tests/test_halfupdate_tie_sensitivity.py",
       "issue": 347
