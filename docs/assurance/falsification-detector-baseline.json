@@ -17,11 +17,6 @@
   "parent_issue": 341,
   "not_yet_built": [
     {
-      "item": 1,
-      "detector": "tests/test_aggregation_fit_fdr_calibration.py",
-      "issue": 343
-    },
-    {
       "item": 2,
       "detector": "tests/test_aggregation_fit_ebmom_recovery.py",
       "issue": 344
