@@ -8,7 +8,11 @@ from enum import StrEnum
 from typing import Literal
 
 from skill_harness.aggregation.profile import EffectEstimate, effect_from_matched_gate2
-from skill_harness.aggregation.verdict import VerdictResult, matched_gate2_verdict
+from skill_harness.aggregation.verdict import (
+    ValueClass,
+    VerdictResult,
+    matched_gate2_verdict,
+)
 from skill_harness.oc import Gate2Decision, Gate2Design
 from skill_harness.task_frontier import (
     Arm,
@@ -264,8 +268,18 @@ def aggregate_matched_gate2(
     conn: sqlite3.Connection,
     manifest: TaskFamilyManifest,
     design: Gate2Design,
+    *,
+    value_class: ValueClass | None,
 ) -> MatchedGate2Result:
     """Read and aggregate one frozen task family's stored matched evidence.
+
+    `value_class` is required and has no default. The verdict layer withholds
+    `CUT(subsumed)` and `CUT(no_lift)` for every class except
+    `TRANSFORMATIVE_LIFT`, and it treats an unset class the same way, so a
+    default would let a caller skip the decision while looking correct. This
+    manifest carries a task family, not a skill name, so Path C cannot look the
+    class up for itself: whoever knows the subject supplies it, and a caller
+    that genuinely does not know one passes `None` in writing.
 
     Malformed evidence no longer raises. An inadmissible observation or a pair
     that cannot be completed is filed in the returned ``ledger`` and named
@@ -322,7 +336,7 @@ def aggregate_matched_gate2(
     return MatchedGate2Decision(
         effect=effect,
         decision=effect.decision,
-        verdict=matched_gate2_verdict(effect),
+        verdict=matched_gate2_verdict(effect, value_class=value_class),
         task_family_id=manifest.task_family_id,
         task_family_version=manifest.task_family_version,
         observation_ids=observation_ids,

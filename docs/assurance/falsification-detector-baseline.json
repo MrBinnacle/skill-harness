@@ -32,11 +32,6 @@
       "issue": 345
     },
     {
-      "item": 4,
-      "detector": "tests/test_oc_exact_scipy_grid.py",
-      "issue": 346
-    },
-    {
       "item": 5,
       "detector": "tests/test_halfupdate_tie_sensitivity.py",
       "issue": 347
@@ -50,11 +45,6 @@
       "item": 8,
       "detector": "tests/test_paired_arm_epoch_adversarial.py",
       "issue": 350
-    },
-    {
-      "item": 9,
-      "detector": "tests/test_value_class_call_sites_static.py",
-      "issue": 351
     },
     {
       "item": 10,
