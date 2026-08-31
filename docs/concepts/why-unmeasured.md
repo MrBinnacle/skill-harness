@@ -1,7 +1,7 @@
 # Why UNMEASURED is not a failure
 
 When you run `skill-harness run evaluate-skill` and see `unmeasured: 17`, the natural
-reading is that 17 things went wrong. That reading is incorrect. UNMEASURED is a
+reading is that 17 checks went wrong. That reading is incorrect. UNMEASURED is a
 recorded state, not a failure. It maps to the `CANT_TELL_YET` verdict and means the
 test that would discriminate between "this clause is load-bearing" and "this clause is
 decoration" was not run, because the necessary instrument does not exist in this version
@@ -90,7 +90,10 @@ until new cases are frozen against the updated scorer version.
 The raw (uncorrected) posterior crossed the pass threshold, but the skill-level
 BH-FDR correction rejected this clause (`bh_fdr_pass = False`). Distinct from
 `underpowered`: the sample count and the raw posterior are both fine — what failed
-is the multiple-testing correction, not the sample size. Testing many clauses at
+<!-- vale Taste.Generic-ness = NO -->
+is the multiple-testing correction, not the sample size.
+<!-- vale Taste.Generic-ness = YES -->
+Testing many clauses at
 once inflates the chance that at least one crosses the threshold by luck; this
 sub-reason names a clause that did not survive the correction that keeps the
 family of results honest.

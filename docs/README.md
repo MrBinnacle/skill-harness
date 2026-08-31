@@ -37,7 +37,7 @@ evidence admissibility rules, CLI surface) and [PLAN.md](PLAN.md) (build tracks;
 plus [../CONTRIBUTING.md](../CONTRIBUTING.md).
 
 **"I want to reproduce a result."** → [../examples/](../examples/) — step-by-step, with the
-paid steps clearly marked.
+paid steps marked.
 
 **"Why is the architecture shaped this way?"** → [adr/](adr/) — architectural decision
 records. [ADR 0001](adr/0001-architecture-admitted-on-demonstrated-decision-requirement.md)

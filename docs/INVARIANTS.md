@@ -1,6 +1,6 @@
 # Invariants
 
-Source comments across this codebase cite "CLAUDE.md" as the authority for several
+Source comments across this codebase cite "CLAUDE.md" as the authority for a set of
 locked, load-bearing thresholds and rules. `/CLAUDE.md` is a local, gitignored file
 (`.gitignore`, `/CLAUDE.md` entry) — it is not tracked, so those citations point at
 nothing a reader of this repo can open. This file is the tracked anchor for the

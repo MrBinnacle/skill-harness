@@ -171,8 +171,8 @@ That is the artifact.
 
 You are reading what the discipline produces when it has nothing honest
 to say. Anyone running the same discipline against their own AI agents
-would catch a different set of mistakes. They would catch some, because
-most setups have some.
+would catch a different set of mistakes. They would catch a subset of them,
+because most setups carry flaws of their own.
 
 ## The category I am claiming
 

@@ -7,7 +7,7 @@ Short answer: none, at the start.
 
 ## The question came first
 
-I wanted to know if a skill was any good. There are several skills out there that all claim to
+I wanted to know if a skill was any good. Plenty of skills out there claim to
 make AI writing sound less like AI writing — how do you tell them apart in a way that means
 something? I figured other people had asked the same thing and that the answer existed
 somewhere. I went looking for it. What I found was mostly with-and-without comparisons at
@@ -22,7 +22,7 @@ If you have the training, you can look at a result and know from experience whet
 right. I can't do that. Every claim had to carry something I could check, because the
 alternative was trusting an intuition I hadn't yet had time to develop. That constraint is why
 the harness refuses to emit a number the evidence doesn't support: I built the thing I needed
-in order to not fool myself, and then found out the discipline was worth more than the score.
+to not fool myself, and then found out the discipline was worth more than the score.
 
 That is also why "the model already does this fine" kept coming back as the answer. I had no
 prior investment in skills being valuable. I only wanted to know.
@@ -33,7 +33,7 @@ The one part I'd claim was clever: I got reasonably good at asking *who actually
 they're talking about here, right now* — the same instinct any NCO relies on, where you don't
 memorize the manual, you know where to find the answer and how to apply it.
 
-That's the start of the loop, not the end of it. Four things made it work:
+That's the start of the loop, not the end of it. Four elements made it work:
 
 **Experts get verified too.** Knowing who knows doesn't get you out of checking. When I
 started running strong reviewers against claims I could verify at source, roughly one in five
@@ -42,7 +42,7 @@ and it's exactly why every answer that came back was treated as an input that st
 survive verification rather than a conclusion. Inspect what you expect.
 
 **Failure gets defined before you act.** Kill-criteria and revisit conditions written down in
-advance, so a result can't be read backwards into whatever I was hoping for. Several of them
+advance, so a result can't be read backwards into whatever I was hoping for. More than one of them
 fired. One of them killed a whole line of work that had already been built.
 
 **Every break becomes a rule that fires without anyone remembering it.** When something broke,
@@ -52,7 +52,7 @@ incident at a time. The record keeps the mistakes visible instead of tidying the
 is why this repo publishes its own null results and its own reversals.
 
 **Every concept had to survive plain language before I'd decide on it.** I deliberately had
-things explained to me the way you'd brief a senior stakeholder — plain terms, no performed
+each concept explained to me the way you'd brief a senior stakeholder — plain terms, no performed
 jargon — so I could sit with the actual concept and make an informed call. This wasn't a
 concession. A decision wrapped in vocabulary you can't unpack is a decision you aren't really
 making; stripping the jargon out is what kept the calls mine.

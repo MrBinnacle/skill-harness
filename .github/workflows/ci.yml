@@ -333,28 +333,35 @@ jobs:
     name: Vale (prose lint)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Warning-level by ticket #304: this job reports prose findings and never
-    # gates a merge. It is deliberately absent from all-green.needs, and
-    # continue-on-error keeps a finding from reddening the run. Promoting it to
-    # a gate is a decision about who the style rules bind, not a config tweak:
-    # add it to _REQUIRED_JOB_IDS in tests/sitegen/test_pages_workflow.py and to
-    # all-green.needs in the same change, so the pin and the workflow move together.
-    continue-on-error: true
+    # Promoted by ticket #108 (the cross-repo Taste-promotion ticket): five of the six Taste rows are
+    # ERROR level now (see .vale.ini per-row overrides), and this job gates on them --
+    # it is in all-green.needs and _REQUIRED_JOB_IDS below. Generic-ness stays warning
+    # (two hits sit in an ADR this pass's canonical-document guard would not let it
+    # touch; see .vale.ini for the full reason), so it reports without failing the job.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Vale
         run: |
           curl -sL https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz | tar xz -C /usr/local/bin
       - name: Run Vale on fixtures
+        # Poison/fail fixtures are DESIGNED to trigger a finding; a nonzero exit here
+        # is proof the rule fires, not a build defect, so this step never gates.
+        continue-on-error: true
         run: |
           vale --config .vale.ini fixtures/vale/
-      - name: Run Vale on prose
+      - name: Run Vale on prose (report, all rows)
+        # Warning-level rows (currently Generic-ness) are visible here without gating.
+        # The error-level gate is the step below.
+        continue-on-error: true
         run: |
           vale --config .vale.ini README.md docs/
+      - name: Run Vale on prose (gate, error-level rows only)
+        run: |
+          vale --config .vale.ini --minAlertLevel=error README.md docs/
 
   all-green:
     name: All checks green
-    needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate]
+    needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate, vale]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -366,7 +373,8 @@ jobs:
              [[ "${{ needs.calibration.result }}" != "success" ]] || \
              [[ "${{ needs.structural-bans.result }}" != "success" ]] || \
              [[ "${{ needs.drift-check.result }}" != "success" ]] || \
-             [[ "${{ needs.release-gate.result }}" != "success" ]]; then
+             [[ "${{ needs.release-gate.result }}" != "success" ]] || \
+             [[ "${{ needs.vale.result }}" != "success" ]]; then
             echo "One or more required checks failed."
             exit 1
           fi
