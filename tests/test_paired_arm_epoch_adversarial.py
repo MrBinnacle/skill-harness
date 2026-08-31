@@ -154,6 +154,12 @@ def _assert_refused(
     except EvalLogIngestError as exc:
         refused = True
         message = str(exc)
+    except sqlite3.OperationalError as exc:
+        # Inside the per-example SAVEPOINT, production's BEGIN IMMEDIATE cannot
+        # start; reaching it at all means every refusal gate ACCEPTED the pair
+        # and the write began. Attribute that as acceptance, not as noise.
+        if "within a transaction" not in str(exc):
+            raise
     assert refused, (
         f"{accepted_name}: write_paired_evidence ACCEPTED an adversarial pair"
         f" it must refuse; the corrupted table is now mintable evidence."
