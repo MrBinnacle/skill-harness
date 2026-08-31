@@ -34,6 +34,29 @@ _console = Console()
 # Calibrate command is imported inline to avoid heavy imports at module level
 
 
+def _ensure_utf8_streams() -> None:
+    """Reconfigure stdout/stderr to UTF-8 at CLI entry (#321).
+
+    On Windows, a default console (cp1252 or another ANSI code page) leaves
+    sys.stdout/sys.stderr unable to encode the non-ASCII characters this
+    module's reports use (e.g. U+2192 RIGHTWARDS ARROW), and Rich's write
+    raises an unhandled UnicodeEncodeError mid-report. Reconfiguring the
+    streams here -- once, at the group callback that is every subcommand's
+    entry point -- fixes every print site across the CLI package (non-ASCII
+    report text is not confined to one file) rather than one Console
+    construction.
+
+    errors="replace" substitutes rather than raising on any residual gap; no
+    report vocabulary changes. Guarded with getattr because a stream without
+    .reconfigure (e.g. a plain non-TextIOWrapper test double) is left alone
+    rather than raising a new error while fixing this one.
+    """
+    for _stream in (sys.stdout, sys.stderr):
+        _reconfigure = getattr(_stream, "reconfigure", None)
+        if _reconfigure is not None:
+            _reconfigure(encoding="utf-8", errors="replace")
+
+
 def _resolve_harness_version() -> str:
     """Resolve the harness version used to stamp reports (A54 spec).
 
@@ -88,6 +111,8 @@ class _IncompleteRunWarning(Exception):
 @click.version_option(package_name="skill-harness")
 def cli() -> None:
     """Skill Harness — clause-ablation differential testing."""
+
+    _ensure_utf8_streams()
 
 
 @cli.group()
