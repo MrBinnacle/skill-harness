@@ -41,8 +41,15 @@ jobs:
 """
 
 
-def _seed_tree(root: Path, version: str) -> Path:
-    """Write the minimal tree that satisfies G1-G5 at ``version``."""
+def _seed_tree(root: Path, version: str, banner_version: str | None = None) -> Path:
+    """Write the minimal tree that satisfies G1-G5 at ``version``.
+
+    ``banner_version`` names the version the README status banner claims. It
+    defaults to ``version``, which is the lockstep G3 requires. Passing a
+    different value is the G3 mutant: one surface of the tree names a version
+    the tree does not declare.
+    """
+    banner = banner_version if banner_version is not None else version
     files = {
         "pyproject.toml": f'[project]\nname = "skill-harness-seed"\nversion = "{version}"\n',
         "src/skill_harness/__init__.py": f'__version__ = "{version}"\n',
@@ -52,7 +59,7 @@ def _seed_tree(root: Path, version: str) -> Path:
             f"[{version}]: https://github.com/MrBinnacle/skill-harness/releases\n"
         ),
         "README.md": (
-            f"# Seed\n\nStatus: v{version} on PyPI. "
+            f"# Seed\n\nStatus: v{banner} on PyPI. "
             "[PyPI](https://pypi.org/project/skill-harness/)\n"
         ),
         ".github/workflows/ci.yml": _PINNED_WORKFLOW,
@@ -222,6 +229,58 @@ def test_patch_release_is_exempt_from_the_assurance_gate(tmp_path: Path) -> None
     assert result.returncode == 0, result.stdout + result.stderr
     assert "RELEASE GATE: PASS" in result.stdout
     assert _failures(result) == []
+
+
+G3_STALE_BANNER = (
+    "G3: README.md status banner does not say 'Status: v0.2.4' "
+    "(found 'Status: v0.2.3') - repository-internal check against "
+    "pyproject.toml; it cannot observe the published package"
+)
+
+
+def test_release_is_blocked_when_the_readme_banner_names_another_version(
+    tmp_path: Path,
+) -> None:
+    """The G3 red control: a stale README banner blocks the release.
+
+    Differential pair. Both arms seed the identical tree at 0.2.4 with the
+    identical GitHub state; the arms differ only in the version the README
+    status banner names. The green arm proves the fixture reaches the gate
+    without tripping anything, so the red arm's single failure is
+    attributable to G3 and to nothing else.
+
+    The assertion compares the whole failure list to the exact G3 line. A
+    return code of 1 alone would not distinguish G3 from any other gate.
+    """
+    matched = _seed_tree(tmp_path / "matched", "0.2.4")
+    green = _run_gate(matched, _closed(), [GREEN_RUN])
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert _failures(green) == []
+
+    stale = _seed_tree(tmp_path / "stale", "0.2.4", banner_version="0.2.3")
+    red = _run_gate(stale, _closed(), [GREEN_RUN])
+
+    assert _failures(red) == [G3_STALE_BANNER], (
+        "G3 did not report the stale banner. The gate printed:\n" + red.stdout + red.stderr
+    )
+    assert red.returncode == 1, red.stdout + red.stderr
+    assert "RELEASE GATE: PASS" not in red.stdout
+
+
+def test_the_g3_failure_states_the_scope_it_actually_checks(tmp_path: Path) -> None:
+    """G3 names its limit in the message a maintainer reads.
+
+    G3 compares two surfaces of one tree and makes no network call, so it
+    cannot show that the published package carries this version. The message
+    has to say that; a gate whose name implies more than it checks is the
+    defect this control exists to prevent.
+    """
+    stale = _seed_tree(tmp_path / "stale", "0.2.4", banner_version="0.2.3")
+    result = _run_gate(stale, _closed(), [GREEN_RUN])
+
+    (failure,) = _failures(result)
+    assert "repository-internal check against pyproject.toml" in failure
+    assert "it cannot observe the published package" in failure
 
 
 def _recorded_transcript() -> list[str]:
