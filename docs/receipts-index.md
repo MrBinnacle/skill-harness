@@ -60,6 +60,28 @@ and covers that section only. This page stays the citable surface for every kind
 
 ## Findings
 
+### [`docs/findings/paired-ingest-nan-score-silent-tie.md`](findings/paired-ingest-nan-score-silent-tie.md)
+
+- **Claims:** A NaN `score_value` flows through `_score_to_float` and
+  `_observation` scores it 0.5, recording a missing measurement as a tie;
+  reproduced deterministically (a beneficial pair with one NaN epoch writes
+  observations [0.5, 1.0, 1.0]); repair is #363.
+- **Refuses to claim:** That any production `.eval` log has carried a NaN
+  score (no historical re-scan was run); that any minted verdict was diluted
+  in practice.
+
+### [`docs/findings/paired-ingest-boundary-undetectables.md`](findings/paired-ingest-boundary-undetectables.md)
+
+- **Claims:** The arm-swap surface of `write_paired_evidence` is fully
+  refused (role/condition check, contamination check, dead-treated-arm
+  check — the third refuting the detector's own pre-registered
+  invisibility prediction); a within-set epoch permutation in one arm is
+  structurally invisible, pinned by a characterisation test, with damage
+  bounded by within-arm score variance.
+- **Refuses to claim:** That the permutation risk is repairable at the
+  ingest boundary (it needs out-of-band pairing evidence from the log
+  producer); that fabricated invocation traces are in scope.
+
 ### [`docs/findings/ebmom-missing-sampling-variance-peel.md`](findings/ebmom-missing-sampling-variance-peel.md)
 
 - **Claims:** EB-MoM inverts the Beta moment map with no binomial
