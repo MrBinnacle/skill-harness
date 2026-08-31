@@ -17,11 +17,6 @@
   "parent_issue": 341,
   "not_yet_built": [
     {
-      "item": 5,
-      "detector": "tests/test_halfupdate_tie_sensitivity.py",
-      "issue": 347
-    },
-    {
       "item": 6,
       "detector": "tests/test_confound_status_e2e.py",
       "issue": 348
