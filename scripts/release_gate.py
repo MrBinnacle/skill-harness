@@ -22,7 +22,15 @@ Checks (all must pass; failures are listed, not first-fail):
   G2  CHANGELOG.md has a rolled ``## [X.Y.Z] - `` section for the current
       version (an entry under [Unreleased] alone does not count) and a
       ``[X.Y.Z]:`` compare-link reference.
-  G3  README.md status banner names the current version (``Status: vX.Y.Z``).
+  G3  README.md status banner names the version this tree declares
+      (Status: vX.Y.Z). Scope is repository-internal by design: both halves
+      of the comparison live in this tree and move together, so G3 cannot
+      observe the published package and is not evidence that PyPI serves
+      this version. Reading the published index here would also measure the
+      wrong thing: in publish.yml the gate runs before the build and upload
+      jobs, so the index still serves the previous release at the moment G3
+      runs. The published surface is guarded by G6 (the tag matches the
+      tree) and by the publish pipeline's own ordering.
   G4  README.md is PyPI-render-safe: no relative Markdown link targets and
       no relative ``src=``/``srcset=`` attributes (PyPI renders the README
       verbatim as the project description; relative targets 404 there).
@@ -109,12 +117,20 @@ def gate_changelog_rolled(root: Path, version: str, errors: list[str]) -> None:
 
 
 def gate_readme_status_banner(root: Path, version: str, errors: list[str]) -> None:
-    """G3: the README status banner names the released version."""
+    """G3: the README status banner names the version this tree declares.
+
+    Repository-internal check. It compares README.md against pyproject.toml
+    and makes no network call, so it cannot observe the published package.
+    """
     readme = _read(root, "README.md")
     if f"Status: v{version}" not in readme:
         banner = re.search(r"Status: v[\d.]+[0-9a-z]*", readme)
         found = f" (found {banner.group(0)!r})" if banner else ""
-        errors.append(f"G3: README.md status banner does not say 'Status: v{version}'{found}")
+        errors.append(
+            f"G3: README.md status banner does not say 'Status: v{version}'{found} - "
+            "repository-internal check against pyproject.toml; "
+            "it cannot observe the published package"
+        )
 
 
 def gate_readme_pypi_render_safe(root: Path, errors: list[str]) -> None:
