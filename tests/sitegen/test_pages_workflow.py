@@ -5,8 +5,9 @@ pinned here:
 
 - a deploy is not evidence of a publish: the workflow must fetch the published
   URL and check it for this build's own marker;
-- no existing CI job may be renamed and no new job may join the required-check
-  set, because branch protection matches on those names.
+- no existing CI job may be renamed, and a job joins the required-check set only
+  through a deliberate, coordinated edit here, because branch protection matches
+  on those names.
 
 Parsed by string, deliberately: pyyaml is not a declared dependency of this
 project (see ``tests/test_structural_bans.py`` for the same reasoning), and the
@@ -50,6 +51,7 @@ _REQUIRED_JOB_IDS = (
     "structural-bans",
     "drift-check",
     "release-gate",
+    "vale",
 )
 
 

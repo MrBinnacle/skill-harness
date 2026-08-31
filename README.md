@@ -51,7 +51,7 @@ pip install skill-harness
 skill-harness skill audit path/to/your/SKILL.md
 ```
 
-It reports three things. The **cost triple**: what the skill costs standing, fired, and in its
+It reports three properties. The **cost triple**: what the skill costs standing, fired, and in its
 side docs (aux), as arithmetic on text. A set of **structural checks** against
 [Anthropic's authoring spec](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices).
 An **evaluability preflight**: what a paid run could and could not measure about this skill
@@ -129,7 +129,7 @@ The design rule follows from that. **A figure that is not there is stated as a t
 never filled in.** No placeholder zero, no free-typed excuse, no estimate standing in for a
 measurement.
 
-Three things follow from the rule.
+Three consequences follow from the rule.
 
 **One.** Every paid comparison has a control arm. With and without, never a score in a vacuum,
 because a score in a vacuum cannot show that the model did not need the skill.
@@ -169,7 +169,7 @@ Which of those a skill is eligible for depends on its registered value class, no
 numbers alone. A CUT says why: `subsumed` (the model was already doing it), `no_lift` (the
 model needed help and the skill did not deliver it), or `harmful`.
 
-The **value-class guard** sits on that. Some skills exist to stop one specific wrong move. A
+The **value-class guard** sits on that. A skill can exist to stop one specific wrong move. A
 model that passes without such a skill has not shown the skill is useless; it has shown the
 trap did not come up. So `subsumed` is a CUT only for skills registered as
 `TRANSFORMATIVE_LIFT`, the class whose whole claim is lift above the bar. Every other class
@@ -223,7 +223,7 @@ averaged.
 It is not the most featureful skill benchmarker available.
 If you want the most *featureful* skill benchmarking today,
 [adewale's skill-eval-harness](https://github.com/adewale/skill-eval-harness) is the closest
-neighbour and is further along on several axes. Some of its disciplines are on the adoption
+neighbour and is further along on more axes. A few of its disciplines are on the adoption
 list, with attribution. For comparing prompts and configurations rather than skills,
 [promptfoo](https://github.com/promptfoo/promptfoo) is the mature choice. For evaluating models
 and agents, [Inspect](https://github.com/UKGovernmentBEIS/inspect_ai) is the institutional one.
@@ -247,7 +247,7 @@ not a front-page roll-up. Skills are re-screened when a major model ships and pu
 with the record intact, once the model no longer needs them or a platform change meets a
 pre-registered trigger. Each retirement is made against its stated criterion.
 
-The two repositories run on one rule, pointed at two different things. This one does not state
+The two repositories run on one rule, pointed at two different targets. This one does not state
 a number the evidence does not support. That one does not keep a skill the evidence no longer
 supports.
 
@@ -273,7 +273,7 @@ supports.
 - [The observation ledger](https://github.com/MrBinnacle/skill-harness/blob/main/docs/observations/README.md)
   — per-record screen history, annotated rather than rewritten.
 
-Status: v0.2.3 on PyPI. Some older screen records are not yet in the evidence store; the
+Status: v0.2.3 on PyPI. Not every older screen record is yet in the evidence store; the
 observation ledger shows the evidence behind each record.
 
 MIT licensed. Issues and PRs welcome:

@@ -14,7 +14,7 @@ candidate representation under test rather than a settled contract.**
 
 ## Why this is not a freeze
 
-An external proposal's Phase 0 lists "current SERS contract" among the things to freeze before
+An external proposal's Phase 0 lists "current SERS contract" among the items to freeze before
 further work. That line is **not adopted**. The operator ruled on 2026-08-28:
 
 > *"Do not proceed with downstream implementation until the contract conflict is resolved... treat
@@ -42,7 +42,7 @@ not equivalent.
 
 **The schema is the operative contract.** It is the artifact that mechanically decides whether a
 receipt conforms, and it is the artifact the conformance harness runs. The README is
-authoritative on *intent* and is the only place several rules are written down at all. The
+authoritative on *intent* and is the only place the rules are written down at all. The
 harness is authoritative on *drift*: it is what makes a silent divergence between schema and code
 enums fail CI.
 

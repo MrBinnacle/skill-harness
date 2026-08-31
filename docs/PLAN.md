@@ -2,7 +2,7 @@
 
 **Status**: LOCKED — exit criteria are testable, no open questions.
 **Input**: `PRD.md` (v1.0) + internal 5-seat council synthesis (2026-06-03)
-**Owner**: this plan executes across multiple sessions; per-session checkpoint kept internally.
+**Owner**: this plan executes across more than one session; per-session checkpoint kept internally.
 
 > **Note (2026-07-08):** internal process records cited below (`docs/council-fires/`,
 > `docs/session-log/`, `docs/dispatch/`, the internal council findings log (not published), `.claude/`) are
@@ -11,7 +11,7 @@
 
 ---
 
-## Phase 0 — Bootstrap ✅ COMPLETE (session 1, 2026-06-03)
+## Phase 0 — Bootstrap COMPLETE (session 1, 2026-06-03)
 
 `git init` · `pyproject.toml` · `src/skill_harness/` package · `tests/` · `.gitignore` · `.gitattributes` · `pyrightconfig.json` · two-DB migration runner · `migrations/evidence/0001_initial.sql` · `migrations/runtime/0001_initial.sql` · 7 smoke tests (including append-only enforcement + runs.completed_at single-shot).
 
@@ -63,7 +63,7 @@ Append to `CLAUDE.md` (project-local):
 - Model pinning: Opus 4.7 for synthesis, council fires, plan-locking; Sonnet 4.6 for per-track TDD execution.
 - Skill kit reference: `bayesian-eval-discipline`, `llm-judge-calibration`, `append-only-evidence-design`, `ai-slop-sentinel` — invoke at the relevant track per below.
 
-### 1.5 · Pre-Track-A storage council fire ✅ FIRED 2026-06-04
+### 1.5 · Pre-Track-A storage council fire FIRED 2026-06-04
 
 Storage-touching-change template (TEST-ARCH + SCHEMA + RELIABILITY + SECURITY) dispositioned four audit-context fragility clusters before Track A code lands. All seats returned BLOCKER-FOUND. Adopted A18–A23; deferred D5–D8. Raw outputs + synthesis at `docs/council-fires/2026-06-04-pre-track-a-storage/`. Outcome creates 1.5a (code) and 1.5b (docs) gates below.
 
@@ -87,7 +87,7 @@ Documentation-only; can land in parallel with 1.5a.
 
 **Gate**: documentation review — no acceptance criteria beyond "all three clauses present and accurate."
 
-### 1.5c · Pre-Track-A implementation council fire ✅ FIRED 2026-06-04
+### 1.5c · Pre-Track-A implementation council fire FIRED 2026-06-04
 
 Storage-touching-change template (SCHEMA + RELIABILITY + SECURITY + TEST-ARCH) dispositioned 7 Track A implementation design questions BEFORE Phase 2 dispatch. All seats returned BLOCKER-FOUND across the 7 Qs. Synthesis: 5 BLOCKERs (Q2, Q3, Q4, Q6, Q7), 2 MAJORs (Q1, Q5). Adopted A24–A30; deferred D10–D14. Raw outputs + synthesis at `docs/council-fires/2026-06-04-pre-track-a-impl/`. Outcome expands Track A scope below (no separate gate beyond Track A's own exit criteria).
 
@@ -281,10 +281,10 @@ Every track below has a council fire point declared up-front. These are not opti
 
 | When | Template | Seats | Why |
 |---|---|---|---|
-| Phase 1.5 (before any Track A code lands) ✅ FIRED 2026-06-04 | Custom (Storage-touching) | TEST-ARCH + SCHEMA + SECURITY + RELIABILITY | Archive: `docs/council-fires/2026-06-04-pre-track-a-storage/`. Adopted A18–A23; deferred D5–D8. Phase 1.5a + 1.5b are the resulting blockers. |
-| Phase 1.5c — Pre-Track A implementation council ✅ FIRED 2026-06-04 | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Archive: `docs/council-fires/2026-06-04-pre-track-a-impl/`. Adopted A24–A30; deferred D10–D14. Track A scope expanded; exit criteria expanded. Substantive disagreement on dual-DB ordering resolved 3-vs-1 (evidence-first) with SECURITY's runtime-first framing recorded as load-bearing dissent. |
+| Phase 1.5 (before any Track A code lands) FIRED 2026-06-04 | Custom (Storage-touching) | TEST-ARCH + SCHEMA + SECURITY + RELIABILITY | Archive: `docs/council-fires/2026-06-04-pre-track-a-storage/`. Adopted A18–A23; deferred D5–D8. Phase 1.5a + 1.5b are the resulting blockers. |
+| Phase 1.5c — Pre-Track A implementation council FIRED 2026-06-04 | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Archive: `docs/council-fires/2026-06-04-pre-track-a-impl/`. Adopted A24–A30; deferred D10–D14. Track A scope expanded; exit criteria expanded. Substantive disagreement on dual-DB ordering resolved 3-vs-1 (evidence-first) with SECURITY's runtime-first framing recorded as load-bearing dissent. |
 | Pre-Track C start | Custom | EVAL-RESEARCH + SECURITY + COST + STAT | Judge module is where prompt-injection-by-adversarial-skill-output enters; STAT owns the verdict aggregation that downstream Track E depends on |
-| Pre-Track D start ✅ FIRED 2026-06-06 | Custom | STAT + COST + RELIABILITY + OPERATOR-DX **+ EVAL-RESEARCH** | Archive: `docs/council-fires/2026-06-06-pre-track-d/`. EVAL-RESEARCH added (landscape sweep injected eval-methodology Qs). Adopted A39–A52; C2 resolved REFUSE; A29 confirmed; 3 citation corrections; PRD §1 reframe queued. Track D scope + exit criteria expanded above. No unresolved BLOCKER. |
+| Pre-Track D start FIRED 2026-06-06 | Custom | STAT + COST + RELIABILITY + OPERATOR-DX **+ EVAL-RESEARCH** | Archive: `docs/council-fires/2026-06-06-pre-track-d/`. EVAL-RESEARCH added (landscape sweep injected eval-methodology Qs). Adopted A39–A52; C2 resolved REFUSE; A29 confirmed; 3 citation corrections; PRD §1 reframe queued. Track D scope + exit criteria expanded above. No unresolved BLOCKER. |
 | Pre-merge for any PR touching `migrations/` | Storage-touching change | SCHEMA + RELIABILITY + SECURITY + TEST-ARCH | Schema changes can silently break the append-only invariant; gate at PR time |
 | Pre-v0.1 tag | Pre-tag launch council | All 9 seats | Last-look before public-facing release; full coverage |
 

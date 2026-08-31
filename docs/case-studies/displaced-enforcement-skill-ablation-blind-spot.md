@@ -18,7 +18,7 @@ the model's context or not. That is exactly the right instrument for a
 it and behaves better." If the text helps, the arms diverge; if it doesn't,
 they don't, and UNMEASURED or a null is the honest answer.
 
-But not every skill fires that way. Some disciplines are things an author
+But not every skill fires that way. Certain disciplines are actions an author
 *requires* to happen, and the model reading a paragraph about them is the
 unreliable path — the same retrieval-is-unreliable problem the skill was
 written to defend against. For those, the author does not lean on the skill
