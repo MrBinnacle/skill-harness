@@ -29,9 +29,9 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-  # anthropic >=0.87 enforces post-patch for GHSA-q5f5-3gjm-7mfm + GHSA-w828-4qhx-vxx3
+  # anthropic >=1.2.0 enforces post-patch for GHSA-q5f5-3gjm-7mfm + GHSA-w828-4qhx-vxx3
   # (Memory Tool CVEs, 2026-03-31; patched in 0.87.0). Memory Tool surface is not used.
-  "anthropic>=0.87",
+  "anthropic>=1.2.0",
   # T3 tracer adapter; supply-chain audit at docs/supply-chain/openai-audit-2026-06-08.md.
   # Capped <3 (S4): the audit anchored 2.41.0 as known-good but never reviewed
   # a 3.x major; an open-ended lower bound would let a future 3.x resolve here
