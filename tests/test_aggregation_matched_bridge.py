@@ -145,7 +145,7 @@ def test_empty_store_returns_typed_no_evidence_refusal(
     """
     manifest = load_manifest(_manifest_data(1))
 
-    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
 
     assert result.decision is None
     assert result.refusal is not None
@@ -173,7 +173,7 @@ def test_duplicate_arm_returns_typed_refusal_with_complete_pair_ledger(
             passed=True,
         )
 
-    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
 
     assert result.decision is None
     assert result.refusal is not None
@@ -199,7 +199,7 @@ def test_missing_arm_returns_typed_refusal_with_pair_ledger(
         passed=True,
     )
 
-    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
 
     assert result.decision is None
     assert result.refusal is not None
@@ -236,7 +236,7 @@ def test_inadmissible_only_returns_typed_inadmissible_refusal_with_observation_l
         inadmissibility_reason="synthetic-fingerprint-drift",
     )
 
-    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
 
     assert result.decision is None
     assert result.refusal is not None
@@ -260,7 +260,7 @@ def test_surviving_pair_count_mismatch_returns_typed_refusal_without_exception(
         both_fail=0,
     )
 
-    result = aggregate_matched_gate2(evidence_db, manifest, _design(2))
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(2), value_class=None)
 
     assert result.decision is None
     assert result.refusal is not None
@@ -290,7 +290,7 @@ def test_more_surviving_pairs_than_the_design_refuses_instead_of_raising(
         both_fail=0,
     )
 
-    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
 
     assert result.decision is None
     assert result.refusal is not None
@@ -329,7 +329,7 @@ def test_decided_result_ledgers_inadmissible_observation_and_incomplete_pair(
             inadmissibility_reason=stored_reason,
         )
 
-    result = aggregate_matched_gate2(evidence_db, manifest, _design(1))
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
 
     assert result.decision is Gate2Decision.UNRESOLVED
     assert result.refusal is None
@@ -377,7 +377,7 @@ def test_admissible_rows_reach_a_decision_only_through_the_registered_feed(
     )
     monkeypatch.setattr(bridge, "matched_evidence", lambda conn, manifest: ())
 
-    result = aggregate_matched_gate2(evidence_db, manifest, _design(4))
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(4), value_class=None)
 
     assert result.decision is None
     assert result.refusal is not None
@@ -448,7 +448,7 @@ def test_an_id_held_by_two_partitions_refuses_the_read_instead_of_pairing_the_wa
     )
 
     with pytest.raises(ValueError, match="stored in two partitions"):
-        aggregate_matched_gate2(evidence_db, manifest, _design(1))
+        aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
 
 
 @pytest.mark.parametrize("refused", [False, True])
@@ -514,7 +514,7 @@ def test_shuffled_insertion_order_produces_identical_result_objects(
                     admissibility_state=state,
                     inadmissibility_reason=stored_reason,
                 )
-            results.append(aggregate_matched_gate2(conn, manifest, _design(1)))
+            results.append(aggregate_matched_gate2(conn, manifest, _design(1), value_class=None))
             table_orders.append(
                 tuple(
                     row[0]
@@ -580,7 +580,7 @@ def test_mixed_exclusions_reproduce_direct_gate2_from_surviving_pairs(
     )
     design = _design(8)
 
-    result = aggregate_matched_gate2(evidence_db, manifest, design)
+    result = aggregate_matched_gate2(evidence_db, manifest, design, value_class=None)
 
     assert result.refusal is None
     assert result.ledger.excluded_observations
@@ -629,7 +629,7 @@ def test_bridge_decision_reproduces_direct_gate2_for_registered_e1_shapes(
         mme=MMESpec(delta_min=delta_min, q_min=q_min),
     )
 
-    result = aggregate_matched_gate2(evidence_db, manifest, design)
+    result = aggregate_matched_gate2(evidence_db, manifest, design, value_class=None)
 
     assert result.decision is gate2_decide(design, full_only, null_only)
 
@@ -674,7 +674,7 @@ def test_every_terminal_decision_is_reached_through_the_store_bridge_path(
         mme=MMESpec(delta_min=0.20, q_min=0.70),
     )
 
-    result = aggregate_matched_gate2(evidence_db, manifest, design)
+    result = aggregate_matched_gate2(evidence_db, manifest, design, value_class=None)
 
     assert result.decision is expected
     assert result.verdict.verdict is expected_verdict
@@ -697,7 +697,7 @@ def test_result_is_immutable_and_binds_effect_identity_and_ids_to_each_cell(
         mme=MMESpec(delta_min=0.20, q_min=0.70),
     )
 
-    result = aggregate_matched_gate2(evidence_db, manifest, design)
+    result = aggregate_matched_gate2(evidence_db, manifest, design, value_class=None)
 
     assert result.effect is not None
     assert result.effect.decision is result.decision
@@ -736,7 +736,7 @@ def test_result_ids_alone_reproduce_the_four_cell_table_and_decision(
         mme=MMESpec(delta_min=0.20, q_min=0.70),
     )
 
-    result = aggregate_matched_gate2(evidence_db, manifest, design)
+    result = aggregate_matched_gate2(evidence_db, manifest, design, value_class=None)
     ids = result.observation_ids
     cell_of_outcome = {(True, True): 0, (True, False): 1, (False, True): 2, (False, False): 3}
     rebuilt_table = [0, 0, 0, 0]
@@ -774,11 +774,21 @@ def test_bridge_has_one_public_entry_point_with_only_registered_inputs() -> None
     """
     import skill_harness.aggregation.matched_bridge as bridge
 
-    assert list(inspect.signature(aggregate_matched_gate2).parameters) == [
+    signature = inspect.signature(aggregate_matched_gate2)
+    assert list(signature.parameters) == [
         "conn",
         "manifest",
         "design",
+        "value_class",
     ]
+    # `value_class` is keyword-only and has no default, and both halves are load-bearing
+    # (falsification-plan item 9). The verdict layer withholds CUT for an unset class
+    # exactly as it does for a non-transformative one, so a default would let a caller
+    # skip the decision while the call still read as correct. Keyword-only stops it being
+    # supplied by position and going unread at the call site.
+    value_class_parameter = signature.parameters["value_class"]
+    assert value_class_parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert value_class_parameter.default is inspect.Parameter.empty
     defined_public_callables = {
         name
         for name, value in vars(bridge).items()

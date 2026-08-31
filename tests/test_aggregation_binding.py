@@ -284,7 +284,7 @@ def test_oracle_drift_is_invisible_to_e1_but_refused_by_binding(
         gamma=binding_record.gate2_design.gamma,
         mme=binding_record.gate2_design.mme,
     )
-    bridge_result = aggregate_matched_gate2(evidence_db, manifest, bridge_design)
+    bridge_result = aggregate_matched_gate2(evidence_db, manifest, bridge_design, value_class=None)
     binding_result = verify_binding(binding_record, evidence)
 
     assert isinstance(bridge_result, MatchedGate2Decision)

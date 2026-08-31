@@ -52,11 +52,6 @@
       "issue": 350
     },
     {
-      "item": 9,
-      "detector": "tests/test_value_class_call_sites_static.py",
-      "issue": 351
-    },
-    {
       "item": 10,
       "detector": "tests/test_mint_path_allowlist.py",
       "issue": 352
