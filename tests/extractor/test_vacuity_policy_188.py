@@ -89,7 +89,7 @@ def test_committed_receipt_round_trips_ticket_figures() -> None:
     assert receipt.wilson_95_fpc_high == 0.986
     assert receipt.kind_precision_aggregate == 0.835
     assert receipt.kind_precision_not_a_directive_correct == 77
-    assert receipt.kind_precision_not_a_directive_n == 78
+    assert receipt.kind_precision_not_a_directive_n == 77
     assert receipt.kind_precision_weak_directive_correct == 4
     assert receipt.kind_precision_weak_directive_n == 20
     assert receipt.recall == "UNMEASURED"
@@ -643,24 +643,39 @@ def test_kind_precision_claim_refuses_backstop_named_residual_pairing() -> None:
 def test_gen_1_citation_renders_the_denominator_its_own_receipt_carries() -> None:
     """Generation one still renders, and it renders the split its receipt records.
 
-    Two checked-in receipts disagree about this denominator. The 2026-08-08
-    receipt records ``not_a_directive_n = 78`` and its own note repeats the
-    77/78 split. The 2026-08-09 receipt's ``arm_C_kind`` note says "the published
-    77/78 was an off-by-one denominator, reconciled 2026-08-09" and puts the
-    split of record at 77/77 -- which is what README.md carries and what the
-    public-copy ban in ``tests/test_structural_bans.py`` requires beside the
-    0.835 aggregate. So this render passes ``assert_kind_precision_render_safe``,
-    which checks it against the same receipt that carries the off-by-one, and the
-    identical string would be flagged as a stale split on any public surface.
+    RESOLVED 2026-08-30, issue #315, ROUTE 1: the 2026-08-08 receipt was amended
+    rather than corrected downstream. ``not_a_directive_n`` now reads 77 in both
+    live copies, and this test asserts 77/77.
 
-    This test pins today's behaviour. It does not ratify 77/78: which figure the
-    renderer should carry is a decision about a published number, and it belongs
-    to the maintainer who can amend the receipt of record.
+    The two receipts used to disagree. The 08-08 receipt recorded
+    ``not_a_directive_n = 78``; the 08-09 receipt's ``arm_C_kind`` note called
+    that "an off-by-one denominator, reconciled 2026-08-09" and put the split of
+    record at 77/77. The arithmetic settles it rather than taste: 81/97 = 0.8351
+    matches the published aggregate 0.835, and 81/98 = 0.8265 does not. The
+    denominator is 97 = 77 + 20, so 77/77 is right.
+
+    WHY ROUTE 1 AND NOT A RENDER-TIME MAP. ``generation_lock`` binds PROVENANCE,
+    not bytes -- it says which instrument a figure may be claimed for, and no
+    clause in the receipt forbids correcting an arithmetic error in the record.
+    Mapping the retired denominator at citation time would have kept the file
+    byte-stable at the cost of a permanent gap between a receipt and its own
+    citation, which is the defect class this repository builds controls against.
+    Amending the record with an audit trail is also what high-reliability
+    practice does with a transcription error: never erase, amend and say why.
+    The receipt's ``amendment_note`` carries that trail and states that the
+    capture was CORRECTED rather than re-run -- no clause re-scored, no
+    adjudication repeated, the instrument triple untouched.
+
+    Before the amendment the renderer emitted ``77/78``, a string this
+    repository's own public-copy guard rejects.
+    ``test_rendered_gen_1_citation_passes_the_public_copy_scanner`` in
+    ``tests/test_structural_bans.py`` now binds the two sides directly, so they
+    cannot drift apart again unobserved.
     """
     gen_1 = load_citable_receipts()[0]
     rendered = format_kind_precision_for_render(gen_1)
     assert rendered == (
-        "kind-precision 0.835 (not_a_directive 77/78; "
+        "kind-precision 0.835 (not_a_directive 77/77; "
         "weak_directive 4/20; advisory until adjudicated)"
     )
     assert_kind_precision_render_safe(rendered, gen_1)
@@ -679,7 +694,7 @@ def test_bare_kind_precision_render_poison_goes_red() -> None:
     # Safe form includes both class splits.
     safe = format_kind_precision_for_render(receipt)
     assert "0.835" in safe
-    assert "77/78" in safe
+    assert "77/77" in safe
     assert "4/20" in safe
     assert_kind_precision_render_safe(safe, receipt)
 
@@ -975,7 +990,7 @@ def test_census_never_emits_bare_kind_precision_or_measured_recall(tmp_path: Pat
     assert result.vacuity_weak_directive_count == 1
     human = format_human_report(result)
     assert "0.835" in human
-    assert "77/78" in human
+    assert "77/77" in human
     assert "4/20" in human
     assert "recall: UNMEASURED" in human
     assert "ADVISORY" in human
@@ -983,7 +998,7 @@ def test_census_never_emits_bare_kind_precision_or_measured_recall(tmp_path: Pat
     assert receipt["vacuity_evidence"]["recall"] == "UNMEASURED"
     kp = receipt["vacuity_evidence"]["kind_precision"]
     assert kp is not None
-    assert "77/78" in kp["not_a_directive"]
+    assert "77/77" in kp["not_a_directive"]
     assert "4/20" in kp["weak_directive"]
     # Poison: bare aggregate without class split must go RED.
     with pytest.raises(BareKindPrecisionRenderError):

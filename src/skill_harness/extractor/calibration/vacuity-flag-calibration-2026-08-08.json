@@ -24,12 +24,13 @@
   "kind_precision": {
     "aggregate": 0.835,
     "not_a_directive_correct": 77,
-    "not_a_directive_n": 78,
+    "not_a_directive_n": 77,
     "weak_directive_correct": 4,
     "weak_directive_n": 20,
-    "note": "Aggregate 0.835 is population-imbalance dominated (260 predicted not_a_directive vs 22 weak_directive). Kind boundary is NOT reliable; kind is advisory until independently adjudicated. Aggregate must never appear without the class split 77/78 and 4/20."
+    "note": "Aggregate 0.835 is population-imbalance dominated (260 predicted not_a_directive vs 22 weak_directive). Kind boundary is NOT reliable; kind is advisory until independently adjudicated. Aggregate must never appear without the class split 77/77 and 4/20."
   },
   "recall": "UNMEASURED",
   "recall_note": "The 1,015 unflagged clauses were never adjudicated (pre-registered exit of the calibration run).",
-  "generation_lock": "All figures die with the instrument triple above. A row from any other triple has NO calibration claim."
+  "generation_lock": "All figures die with the instrument triple above. A row from any other triple has NO calibration claim. This lock binds PROVENANCE, not bytes: it says which instrument a figure may be claimed for, and it does not forbid correcting an arithmetic error in the record. An amendment must leave the instrument triple untouched, state what changed and why, and cite the receipt that reconciled it - see amendment_note.",
+  "amendment_note": "2026-08-30 (issue #315): kind_precision.not_a_directive_n corrected 78 -> 77. The published 77/78 carried an off-by-one denominator; the reconciled class split of record is 77/77 + 4/20 = 81/97, per vacuity-adjudication-receipt-2026-08-09 arm_C_kind. The arithmetic settles it: 81/97 = 0.8351 matches the published aggregate 0.835, while 81/98 = 0.8265 does not. THE FROZEN CAPTURE IS CORRECTED, NOT RE-RUN: no adjudication was repeated, no clause was re-scored, and the instrument triple is unchanged. Before this amendment the renderer emitted a citation that this repository's own public-copy guard rejects."
 }
