@@ -84,7 +84,7 @@ sortedcontainers==2.4.0
 statsmodels==0.14.6
 tiktoken==0.13.0
 tqdm==4.70.0
-typing-inspection==0.4.2
+typing-inspection==0.4.4
 typing_extensions==4.16.0
 tzdata==2026.3
 urllib3==2.7.0
