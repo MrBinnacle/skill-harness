@@ -32,11 +32,6 @@
       "issue": 345
     },
     {
-      "item": 4,
-      "detector": "tests/test_oc_exact_scipy_grid.py",
-      "issue": 346
-    },
-    {
       "item": 5,
       "detector": "tests/test_halfupdate_tie_sensitivity.py",
       "issue": 347
