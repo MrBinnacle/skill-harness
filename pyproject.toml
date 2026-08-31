@@ -74,7 +74,7 @@ dev = [
   "hypothesis>=6.100",
   # C.1 — Tier-1 mechanical-validity gate (A33)
   # pytest-socket blocks network calls in offline Tier-1 tests; module-level autouse fixture.
-  "pytest-socket>=0.7",
+  "pytest-socket>=0.8.1",
   # CONTRIBUTING.md's setup says `pre-commit install` right after `pip install -e ".[dev]"`;
   # ship the tool that command needs.
   "pre-commit>=4",
