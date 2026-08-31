@@ -300,6 +300,42 @@ def resolve_price_key(model: str) -> str:
     return bare if separator else model
 
 
+def lookup_price_row(model: str) -> dict[str, float]:
+    """Return the PRICE_PER_MTOK row for a subject model, or refuse (#333).
+
+    Two behaviours, both required by the receipt discipline:
+
+    1. A provider-routed identifier is normalised through ``resolve_price_key``
+       before the lookup, so ``anthropic/claude-sonnet-5`` finds the
+       ``claude-sonnet-5`` row instead of missing it.
+    2. A model with no row raises ``KeyError`` naming the identifier the caller
+       passed. It does NOT fall back to ``_default``. ``_default`` carries
+       Sonnet-4.6's rates, so a silent fallback prices an unpriced model at
+       $3/$15 per MTok and writes that figure to the append-only evidence store
+       as if it were measured. A missing price is a typed refusal here, the
+       same call ``cost_projection`` makes pre-call.
+
+    The refusal costs at most one API call: the raised KeyError propagates out
+    of ``AnthropicSubjectClient.call`` and aborts the run at its first sample,
+    before a second call is paid for.
+
+    :param model: Subject-model identifier as recorded or supplied.
+    :returns: The per-million-token rate row for that model.
+    :raises KeyError: If the resolved key has no row in PRICE_PER_MTOK.
+    """
+    key = resolve_price_key(model)
+    row = PRICE_PER_MTOK.get(key)
+    if row is None:
+        raise KeyError(
+            f"No PRICE_PER_MTOK row for subject model {model!r} "
+            f"(resolved to price key {key!r}). Add the vendor's published rates to "
+            "skill_harness.ablation.subject.PRICE_PER_MTOK. The harness refuses to "
+            "record a cost it cannot price rather than apply the '_default' rate, "
+            "which is Sonnet-4.6's and would be wrong for any other model."
+        )
+    return row
+
+
 def _estimate_usd(
     model: str,
     input_tokens: int,
@@ -307,8 +343,13 @@ def _estimate_usd(
     cache_creation_input_tokens: int,
     output_tokens: int,
 ) -> float:
-    """Estimate USD cost from token counts and model pricing (Anthropic-style)."""
-    rates = PRICE_PER_MTOK.get(model, PRICE_PER_MTOK["_default"])
+    """Estimate USD cost from token counts and model pricing (Anthropic-style).
+
+    :raises KeyError: If ``model`` has no PRICE_PER_MTOK row (#333). The
+        pre-#333 behaviour silently priced such a model at the ``_default``
+        (Sonnet-4.6) rate.
+    """
+    rates = lookup_price_row(model)
     mtok = 1_000_000.0
     # Non-cache input = total input minus cache components
     plain_input = max(0, input_tokens - cache_read_input_tokens - cache_creation_input_tokens)
