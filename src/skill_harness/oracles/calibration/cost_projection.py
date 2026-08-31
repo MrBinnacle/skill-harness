@@ -31,7 +31,7 @@ import os
 
 from pydantic import BaseModel, ConfigDict
 
-from skill_harness.ablation.subject import PRICE_PER_MTOK
+from skill_harness.ablation.subject import PRICE_PER_MTOK, resolve_price_key
 
 # ---------------------------------------------------------------------------
 # Pricing dict — only the 3 judge models we actually use (claude-api verified)
@@ -274,12 +274,24 @@ def _project_tokens_usd(model_id: str, input_tokens: float, output_tokens: float
     come from the canonical PRICE_PER_MTOK table (F3 single source of truth);
     an unknown model raises KeyError rather than default-pricing - a cap
     projection must never silently price the wrong model.
+
+    The model identifier is mapped to its pricing key by
+    :func:`skill_harness.ablation.subject.resolve_price_key`, which strips a
+    ``provider/`` route prefix (#302). The evidence store records the routed
+    identifier - ``anthropic/claude-sonnet-5`` on the runs that anchor the
+    collection's cost projections - and the route does not change the vendor
+    price. The KeyError raised for an unknown model names the identifier the
+    caller passed, not the stripped key.
     """
     if input_tokens < 0 or output_tokens < 0:
         raise ValueError(
             f"token counts must be >= 0; got input={input_tokens}, output={output_tokens}"
         )
-    rates = PRICE_PER_MTOK[model_id]
+    price_key = resolve_price_key(model_id)
+    try:
+        rates = PRICE_PER_MTOK[price_key]
+    except KeyError:
+        raise KeyError(model_id) from None
     return round((input_tokens * rates["input"] + output_tokens * rates["output"]) / 1e6, 8)
 
 

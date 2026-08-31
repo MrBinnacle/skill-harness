@@ -29,7 +29,10 @@ def test_pythonhashseed_set() -> None:
 # Import the module under test
 # ---------------------------------------------------------------------------
 
-from skill_harness.ablation.subject import PRICE_PER_MTOK  # noqa: E402
+from skill_harness.ablation.subject import (  # noqa: E402
+    PRICE_PER_MTOK,
+    resolve_price_key,
+)
 from skill_harness.oracles.calibration.cost_projection import (  # noqa: E402
     project_pair_usd,
     project_trial_usd,
@@ -151,16 +154,78 @@ class TestPricingTableCoversEvidenceModels:
         )
         assert usd_trial > 0
 
+    def test_provider_prefixed_sonnet_5_is_priceable(self, evidence_db: sqlite3.Connection) -> None:
+        """The routed form the production store records must price (#302).
+
+        Both runs that anchor the collection's cost projections were made
+        through the OpenRouter fallback, so ``samples.subject_model`` holds
+        ``anthropic/claude-sonnet-5``, not ``claude-sonnet-5``. Seeding the
+        bare name (the #299 guard) never exercises that string.
+        """
+        prefixed = "anthropic/claude-sonnet-5"
+
+        _seed_evidence_prereqs(evidence_db)
+        _insert_sample(evidence_db, subject_model=prefixed)
+
+        models = {
+            row[0]
+            for row in evidence_db.execute("SELECT DISTINCT subject_model FROM samples").fetchall()
+        }
+        assert prefixed in models
+        assert prefixed not in PRICE_PER_MTOK, (
+            "The canonical pricing key is the bare vendor name; a provider-prefixed "
+            "row would defeat the normalisation this test guards."
+        )
+
+        usd_pair = project_pair_usd(
+            prefixed,
+            input_tokens_per_pair=486212.75,
+            output_tokens_per_pair=54777.625,
+        )
+        assert usd_pair > 0
+
+        usd_trial = project_trial_usd(
+            prefixed,
+            input_tokens_per_trial=249623.25,
+            output_tokens_per_trial=29456,
+        )
+        assert usd_trial > 0
+
+        # Canonical form (a): the route does not change the price, so the
+        # prefixed identifier must project the same USD as the bare one.
+        assert usd_pair == project_pair_usd(
+            "claude-sonnet-5",
+            input_tokens_per_pair=486212.75,
+            output_tokens_per_pair=54777.625,
+        )
+        assert usd_trial == project_trial_usd(
+            "claude-sonnet-5",
+            input_tokens_per_trial=249623.25,
+            output_tokens_per_trial=29456,
+        )
+
+    def test_unknown_model_behind_provider_prefix_raises_keyerror(self) -> None:
+        """Stripping the route must not widen the lookup: the model still has to exist."""
+        with pytest.raises(KeyError):
+            project_pair_usd(
+                "anthropic/claude-nonexistent-model",
+                input_tokens_per_pair=1000,
+                output_tokens_per_pair=100,
+            )
+
     def test_all_evidence_models_are_priceable(self, evidence_db: sqlite3.Connection) -> None:
         """Every model in the evidence store must have a PRICE_PER_MTOK row."""
         _seed_evidence_prereqs(evidence_db)
 
-        # Seed evidence with the models used across the test suite.
+        # Seed evidence with the models used across the test suite, in both
+        # forms the production store actually carries: the bare vendor name,
+        # and the routed 'provider/model' form the OpenRouter fallback writes.
         known_models = [
             "claude-sonnet-4-6",
             "claude-opus-4-7",
             "claude-sonnet-5",
             "gpt-5.5",
+            "anthropic/claude-sonnet-5",
         ]
         for i, model in enumerate(known_models):
             _insert_sample(evidence_db, subject_model=model, sample_id=f"s{i}", sample_index=i)
@@ -170,7 +235,9 @@ class TestPricingTableCoversEvidenceModels:
             for row in evidence_db.execute("SELECT DISTINCT subject_model FROM samples").fetchall()
         }
 
-        missing = evidence_models - set(PRICE_PER_MTOK.keys())
+        missing = {
+            model for model in evidence_models if resolve_price_key(model) not in PRICE_PER_MTOK
+        }
         assert not missing, (
             f"Models in evidence store without a PRICE_PER_MTOK row: {missing}. "
             f"Add rows to skill_harness.ablation.subject.PRICE_PER_MTOK before merging."

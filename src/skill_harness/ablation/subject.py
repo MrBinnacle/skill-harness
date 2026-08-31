@@ -271,6 +271,35 @@ PRICE_PER_MTOK: dict[str, dict[str, float]] = {
 }
 
 
+def resolve_price_key(model: str) -> str:
+    """Map a subject-model identifier to its PRICE_PER_MTOK key (#302).
+
+    PRICE_PER_MTOK is keyed on the bare vendor model name
+    (``claude-sonnet-5``). The evidence store records whatever identifier the
+    call was actually routed with, and that is not always the bare name: when
+    ANTHROPIC_API_KEY is absent and OPENROUTER_API_KEY is present, the CLI
+    rewrites ``claude-sonnet-5`` to ``anthropic/claude-sonnet-5``
+    (``cli/main.py::_resolve_subject_model_with_fallback``) and the run is made
+    under that routed identifier. Both forms are present in the production
+    store's ``samples.subject_model`` today.
+
+    The bare name is the canonical pricing key. The provider segment names the
+    route, not the model, and vendor prices do not differ by route, so the
+    prefix is stripped here at lookup rather than at ingest: the store is
+    append-only, and rewriting the recorded identifier would erase which route
+    a run was actually made under.
+
+    Lookup stays exact after the strip. An unrecognised model still raises
+    KeyError at the call site rather than falling back to ``_default`` - a cap
+    projection must never silently price the wrong model.
+
+    :param model: Subject-model identifier as recorded or supplied.
+    :returns: The key to look up in PRICE_PER_MTOK.
+    """
+    _, separator, bare = model.partition("/")
+    return bare if separator else model
+
+
 def _estimate_usd(
     model: str,
     input_tokens: int,
