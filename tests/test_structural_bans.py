@@ -605,7 +605,7 @@ def test_historical_pyproject_description_reconstruction_is_rejected(tmp_path: P
 def test_pyproject_description_matches_approved_repo_description() -> None:
     project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     assert project["description"] == (
-        "I wanted to know whether a skill was actually any good. This runs the same task with "
+        "I wanted to know if you could tell if a skill was any good. This runs the same task with "
         "the skill and without it, and reports what can honestly be said about the difference "
         '- often "not enough to call it". A missing figure is a typed refusal, never an '
         "invented score. First-class Claude Code support."
