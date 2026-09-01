@@ -1,6 +1,8 @@
 # Amended pre-registration: EB-MoM sampling-variance peel and heterogeneity admission (#360)
 
 **Status:** FROZEN on authoring. No confirmatory simulation has been run against it.
+**BLOCKED:** two frozen clauses disagree about the null's estimand; see the open question
+before section 8. A confirmatory root seed must not be spent until that is ruled on.
 **Amends:** the pre-registration in the module docstring of
 `tests/test_aggregation_fit_ebmom_recovery.py` (falsification plan item 2, #344).
 **Supersedes:** that registration's acceptance statistic only. Its regimes, its generative
@@ -613,6 +615,81 @@ Rollback state is `main`. `agent/issue-360` stays unmerged and is the developmen
   `p_boot = (1 + count)/(B + 1)`, `admit iff p_boot <= 0.05`; the full seed-derivation procedure;
   `R = 1000`; the 10 percent bias bound; the exact-binomial calibration rule at level 0.01;
   identical synthetic worlds for `main` and candidate; and removal of the interval-coverage row.
+
+---
+
+## OPEN, AND IT BLOCKS THE CONFIRMATORY RUN: two frozen clauses disagree
+
+**Found by the registered `tie_heavy_null` regime on a development smoke, before any
+confirmatory run. Not fixed here, because fixing it means choosing an estimand, and that is
+adjudication.**
+
+Measured, root seed `SMOKE_NOT_CONFIRMATORY`, R=40:
+
+| homogeneous world | admission rate | acceptance row 1 |
+|---|---|---|
+| tie-free, common rate 0.65 | 0.025 (1/40) | calibrated |
+| `tie_heavy_null` as registered | **0.400 (16/40)** | **FAILS**, exact binomial p = 3.0e-11 |
+
+The defect is tie-specific and it is not Monte Carlo noise.
+
+### Mechanism
+
+`tie_heavy_null` is registered as a **common decisive win probability** `q = 0.75` with a tie
+probability of 0.40. Tie counts are therefore random. Conditional on a clause's REALISED tie
+fraction `q_k`, its expected observation is
+
+```
+E[X_k | q_k] = 0.5 q_k + (1 - q_k) * 0.75 = 0.75 - 0.25 q_k
+```
+
+which VARIES with `q_k`. With `n = 25` and `t = 0.40`, `sd(q_k) = 0.098`, so the conditional
+means carry variance `0.25^2 * 0.0096 = 6.0e-04`. The regime is homogeneous **marginally** and
+heterogeneous **conditionally on the realised tie counts**.
+
+Section 3's null holds tie counts FIXED and gives every clause the same ENCODED mean. So the
+null reproduces no conditional variation, while the data carry `6.0e-04` of it. The observed
+statistic therefore exceeds the null quantile far more often than `alpha`, and the gate
+over-admits by roughly eightfold.
+
+### The inconsistency, stated plainly
+
+Two frozen clauses describe different hypotheses:
+
+- **Section 4** registers `tie_heavy_null` with a common **decisive** rate.
+- **Section 3** specifies a null holding the common **encoded** mean.
+
+Those are not the same null, and the 40 percent is exactly that disagreement. Each clause is
+defensible on its own terms:
+
+- If the estimand is heterogeneity in the **decisive** rate, tie counts are an ancillary
+  nuisance, the regime is right, and the null must hold the decisive rate common.
+- If the estimand is heterogeneity in the **encoded** mean, the null is right, and the regime
+  does not generate a null world at all: it generates conditionally heterogeneous data.
+
+Note that the second reading makes the `tie_heavy_null` label wrong rather than the code wrong.
+
+### Why this session is not deciding it
+
+Choosing between them decides **what the hierarchical lane measures heterogeneity IN**, which is
+an estimand question, not an implementation one. It also interacts with the lane-authority
+correction above: the diagnostic clause-aggregation lane consumes encoded `{0, 0.5, 1}`
+observations, while the production efficacy lane consumes discordant counts.
+
+Tuning either clause after seeing a 40 percent admission rate is exactly the move this
+amendment exists to prevent. **No threshold, regime, or kill criterion has been changed in
+response to this measurement.**
+
+### What must happen before a confirmatory root seed is spent
+
+1. The maintainer rules on the estimand: decisive rate, or encoded mean.
+2. Whichever clause loses is amended openly, superseding this text rather than overwriting it.
+3. Row 1 is re-measured on a development smoke to confirm the two clauses now agree.
+4. Only then is the root seed generated and the single confirmatory run performed.
+
+Running the confirmatory matrix now would burn the seed on a contract that contradicts itself,
+and its row-1 failure would be uninterpretable: it could not distinguish a mis-calibrated gate
+from a mis-specified regime.
 
 ---
 
