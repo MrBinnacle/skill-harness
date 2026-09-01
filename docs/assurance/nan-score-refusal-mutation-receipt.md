@@ -5,10 +5,17 @@
 **Generator:** `scripts/mutation_receipt.py`. **Machine-readable record:**
 `docs/assurance/nan-score-refusal-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/subject/ingest.py` at
-`sha256:abf32c6e64273d4301a32011817809dc59bf44e5581d40cbaa016c23dee816e9`.
-**Commit at generation:** `210ac93c8e17512119cbc8bd39e5cc8ded7b5b96` — informational only. A rebase rewrites it and later
+`sha256:b03887aac47d679d1ce1dfdd4b488ab9c0e816984151001d45c6678b678194fa`.
+**Commit at generation:** `4d68fe12cc16125ade0778d4b26a09aa97973970` — informational only. A rebase rewrites it and later
 commits move HEAD past it, so currency is checked against the digest above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
+
+**Regenerated 2026-09-01 for #387.** The first generation (commit `210ac93`, digest
+`abf32c6e6427`) attested to the ingest module before #387 rewrote it (treatment = exposure,
+invocation = stratifier). The currency gate turned red on that digest in the #387 factory
+gate, as designed. The three mutants were re-run by the same generator against the rewritten
+module; all three anchors were still present and all three kills held. The results table
+below is unchanged in substance and was re-measured, not carried.
 
 Each case runs in its **own git worktree** at a fixed commit. Production is never mutated in
 place. `PYTHONPATH` pins every case to its own sources, because the editable install would
