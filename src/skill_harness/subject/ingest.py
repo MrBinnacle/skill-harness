@@ -35,14 +35,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sqlite3
 import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import Annotated, Literal, NamedTuple
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from scipy.stats import beta as beta_dist  # type: ignore[import-untyped]
 
 from skill_harness.storage.article_fingerprint import ArticleFingerprint
@@ -170,7 +171,13 @@ class ParsedSample(BaseModel):
     skill_name: str
     epoch: int
     scorer_name: str
-    score_value: float  # 1.0 pass | 0.0 fail (outcome oracle)
+    # Non-finite refused at the MODEL layer, not only in the parse helper (#363).
+    # `_observation(nan, x)` returns 0.5 because both ordered comparisons are
+    # False, so a NaN would be recorded as a genuine tie and would dilute every
+    # Gate-2 table built from the pair. PR #364's M4 survivor measured that a
+    # guard in `_score_to_float` alone does not close this: callers that build
+    # `ParsedSample` directly never reach the helper.
+    score_value: Annotated[float, Field(allow_inf_nan=False)]  # 1.0 pass | 0.0 fail
     invoked_skill: bool  # v1 π_c detector verdict for this trial (#46/#52)
     output_text: str
     subject_model: str
@@ -753,7 +760,14 @@ def _score_to_float(value: object, path: Path) -> float:
     if isinstance(value, bool):
         return 1.0 if value else 0.0
     if isinstance(value, int | float):
-        return float(value)
+        score = float(value)
+        if not math.isfinite(score):
+            raise EvalLogIngestError(
+                f"{path}: non-finite score value {value!r}. An absent measurement is not"
+                " a tie: _observation scores it 0.5, which records no-effect evidence"
+                " the trial never produced (#363)."
+            )
+        return score
     raise EvalLogIngestError(f"{path}: unmappable score value {value!r}")
 
 

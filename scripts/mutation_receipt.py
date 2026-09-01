@@ -1,0 +1,342 @@
+"""Mechanized mutation receipt generator, per the #341 standard. ASCII only.
+
+Every case runs in its OWN git worktree checked out at a fixed commit. The
+production tree is never mutated in place, so a failed restore cannot leave a
+mutant behind or make a clean run report a mutant's numbers. That failure mode
+is not hypothetical: an earlier hand-run pass restored production through a
+path the interpreter could not see, and a "clean" comparison silently reported
+the mutant's result.
+
+For each mutant the receipt asserts, and records:
+
+  repository HEAD of both worktrees
+  module.__file__ actually imported in each
+  digest of the clean source file
+  digest of the mutant source file
+  the two digests differ
+  the clean baseline PASSES the targeted selection first
+  the targeted test collected a nonzero number of tests
+  the named assertion FAILS under the mutant
+  the production tree is unchanged after the receipt is generated
+
+Each mutant names its own target file, module and test selection, so one
+generator serves every repair that owes a receipt. Add cases to MUTANTS.
+
+Usage:
+    python scripts/mutation_receipt.py --out docs/assurance/<name>.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass, field
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+
+
+@dataclass(frozen=True)
+class Mutant:
+    mutant_id: str
+    obligation: str
+    description: str
+    target: str  # repository-relative path of the file to mutate
+    module: str  # importable module for the isolation and compile assertions
+    old: str
+    new: str
+    selection: str  # one or more pytest node ids, space separated
+
+
+_INGEST = "src/skill_harness/subject/ingest.py"
+_INGEST_MODULE = "skill_harness.subject.ingest"
+_PAIRED_DETECTOR = (
+    "tests/test_paired_arm_epoch_adversarial.py::test_nan_score_is_refused_or_fails_closed"
+)
+_HELPER_DETECTOR = "tests/test_subject_ingest.py::test_score_to_float_refuses_non_finite_scores"
+_MODEL_DETECTOR = (
+    "tests/test_subject_ingest.py::test_parsed_sample_refuses_non_finite_score_at_the_model_layer"
+)
+
+MUTANTS: tuple[Mutant, ...] = (
+    Mutant(
+        "M-N1",
+        "363-model-layer",
+        "remove the model-layer constraint: ParsedSample.score_value accepts NaN again",
+        _INGEST,
+        _INGEST_MODULE,
+        "    score_value: Annotated[float, Field(allow_inf_nan=False)]  # 1.0 pass | 0.0 fail",
+        "    score_value: float  # 1.0 pass | 0.0 fail",
+        f"{_PAIRED_DETECTOR} {_MODEL_DETECTOR}",
+    ),
+    Mutant(
+        "M-N2",
+        "363-parse-path",
+        "disable the parse-path finite guard in _score_to_float",
+        _INGEST,
+        _INGEST_MODULE,
+        "        if not math.isfinite(score):",
+        "        if False:",
+        _HELPER_DETECTOR,
+    ),
+    Mutant(
+        "M-N3",
+        "363-parse-path",
+        "narrow the parse-path guard to NaN only, letting an infinite score through",
+        _INGEST,
+        _INGEST_MODULE,
+        "        if not math.isfinite(score):",
+        "        if math.isnan(score):",
+        _HELPER_DETECTOR,
+    ),
+)
+
+
+def _digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _env(root: Path | None = None) -> dict[str, str]:
+    """Environment for a subprocess, pinned to a worktree's own sources.
+
+    Without PYTHONPATH the editable install resolves skill_harness to the MAIN
+    repository, so a worktree would run its own tests against production code
+    from somewhere else and every mutant would appear to survive. Each case
+    asserts module.__file__ actually resolves inside its worktree, so a silent
+    reversion to the editable install invalidates the receipt instead of
+    quietly passing.
+    """
+    env = {**os.environ, "PYTHONHASHSEED": "0", "PYTHONUTF8": "1"}
+    if root is not None:
+        env["PYTHONPATH"] = str(root / "src")
+    return env
+
+
+def _run_pytest(root: Path, selection: str) -> tuple[int, str]:
+    proc = subprocess.run(  # noqa: S603 -- argv is literal, built in this file
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            *selection.split(),
+            "-p",
+            "no:randomly",
+            "-q",
+            "--tb=line",
+        ],
+        cwd=root,
+        capture_output=True,
+        env=_env(root),
+        check=False,
+    )
+    return proc.returncode, proc.stdout.decode("utf-8", "replace")
+
+
+def _module_file(root: Path, module: str) -> str:
+    proc = subprocess.run(  # noqa: S603 -- module names come from MUTANTS in this file
+        [sys.executable, "-c", f"import {module} as m; print(m.__file__)"],
+        cwd=root,
+        capture_output=True,
+        env=_env(root),
+        check=False,
+    )
+    return proc.stdout.decode("utf-8", "replace").strip()
+
+
+def _collected(output: str) -> int:
+    counts = [int(n) for n in re.findall(r"(\d+) (?:passed|failed)", output)]
+    return sum(counts)
+
+
+@dataclass
+class CaseResult:
+    mutant_id: str
+    obligation: str
+    description: str
+    selection: str
+    verdict: str
+    clean: dict[str, object] = field(default_factory=dict)
+    mutant: dict[str, object] = field(default_factory=dict)
+    killing_assertions: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+def run_case(mutant: Mutant, commit: str, workroot: Path) -> CaseResult:
+    result = CaseResult(
+        mutant.mutant_id, mutant.obligation, mutant.description, mutant.selection, "UNKNOWN"
+    )
+    tree = workroot / mutant.mutant_id
+    subprocess.run(  # noqa: S603
+        ["git", "worktree", "add", "--detach", str(tree), commit],  # noqa: S607
+        cwd=REPO,
+        capture_output=True,
+        check=True,
+    )
+    try:
+        target = tree / mutant.target
+        head = (
+            subprocess.run(["git", "rev-parse", "HEAD"], cwd=tree, capture_output=True, check=True)  # noqa: S607
+            .stdout.decode()
+            .strip()
+        )
+
+        clean_digest = _digest(target)
+        clean_module = _module_file(tree, mutant.module)
+        code, out = _run_pytest(tree, mutant.selection)
+        result.clean = {
+            "worktree_head": head,
+            "module_file": clean_module,
+            "source_digest": clean_digest,
+            "exit_code": code,
+            "tests_collected": _collected(out),
+            "baseline_passes": code == 0,
+        }
+        if not clean_module.startswith(str(tree)):
+            result.verdict = "INVALID_ISOLATION"
+            result.notes.append(
+                f"module resolved to {clean_module!r}, outside the worktree {str(tree)!r}; "
+                "the case would have tested another tree's code"
+            )
+            return result
+        if code != 0 or _collected(out) == 0:
+            result.verdict = "INVALID_BASELINE"
+            result.notes.append(
+                "clean baseline did not pass with nonzero collection; no kill can be "
+                "attributed against it"
+            )
+            return result
+
+        source = target.read_text(encoding="utf-8")
+        if mutant.old not in source:
+            result.verdict = "ANCHOR_ABSENT"
+            return result
+        target.write_bytes(source.replace(mutant.old, mutant.new, 1).encode("utf-8"))
+
+        mutant_digest = _digest(target)
+        compiles = subprocess.run(  # noqa: S603 -- module name is literal, from MUTANTS
+            [sys.executable, "-c", f"import {mutant.module}"],
+            cwd=tree,
+            capture_output=True,
+            env=_env(tree),
+            check=False,
+        )
+        code, out = _run_pytest(tree, mutant.selection)
+        failed = re.findall(r"^FAILED (\S+)", out, re.M)
+        result.mutant = {
+            "worktree_head": head,
+            "module_file": _module_file(tree, mutant.module),
+            "source_digest": mutant_digest,
+            "digests_differ": mutant_digest != clean_digest,
+            "compiles": compiles.returncode == 0,
+            "exit_code": code,
+            "tests_collected": _collected(out),
+        }
+        result.killing_assertions = failed
+
+        if compiles.returncode != 0:
+            result.verdict = "STILLBORN"
+            result.notes.append("mutant does not import; a stillborn mutant is not a kill")
+        elif mutant_digest == clean_digest:
+            result.verdict = "NO_OP"
+            result.notes.append("mutation did not change the file")
+        elif failed:
+            result.verdict = "KILLED"
+        else:
+            result.verdict = "SURVIVED"
+        return result
+    finally:
+        subprocess.run(  # noqa: S603
+            ["git", "worktree", "remove", "--force", str(tree)],  # noqa: S607
+            cwd=REPO,
+            capture_output=True,
+            check=False,
+        )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", default="-")
+    args = parser.parse_args(argv)
+
+    dirty = (
+        subprocess.run(["git", "status", "--porcelain"], cwd=REPO, capture_output=True, check=True)  # noqa: S607
+        .stdout.decode()
+        .strip()
+    )
+    if dirty:
+        print(
+            "REFUSE: production tree is dirty. The receipt must attest to a committed "
+            "tree, or its digests name nothing a reader can fetch.\n" + dirty,
+            file=sys.stderr,
+        )
+        return 1
+
+    commit = (
+        subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, check=True)  # noqa: S607
+        .stdout.decode()
+        .strip()
+    )
+    targets = sorted({m.target for m in MUTANTS})
+    digests_before = {t: _digest(REPO / t) for t in targets}
+
+    workroot = Path(tempfile.mkdtemp(prefix="mutation-receipt-"))
+    try:
+        cases = [run_case(m, commit, workroot) for m in MUTANTS]
+    finally:
+        shutil.rmtree(workroot, ignore_errors=True)
+
+    digests_after = {t: _digest(REPO / t) for t in targets}
+    still_clean = (
+        subprocess.run(["git", "status", "--porcelain"], cwd=REPO, capture_output=True, check=True)  # noqa: S607
+        .stdout.decode()
+        .strip()
+    )
+
+    report = {
+        "commit_under_test": commit,
+        "target_files": targets,
+        "production_tree_digest_before": digests_before,
+        "production_tree_digest_after": digests_after,
+        "production_tree_unchanged": digests_before == digests_after and still_clean == "",
+        "python": sys.version.split()[0],
+        "cases": [
+            {
+                "mutant_id": c.mutant_id,
+                "obligation": c.obligation,
+                "description": c.description,
+                "selection": c.selection,
+                "verdict": c.verdict,
+                "clean": c.clean,
+                "mutant": c.mutant,
+                "killing_assertions": c.killing_assertions,
+                "notes": c.notes,
+            }
+            for c in cases
+        ],
+    }
+    payload = json.dumps(report, indent=2, sort_keys=True)
+    if args.out == "-":
+        print(payload)
+    else:
+        Path(args.out).write_text(payload + "\n", encoding="utf-8", newline="\n")
+        print(f"wrote {args.out}")
+
+    for c in cases:
+        print(
+            f"{c.mutant_id} [{c.obligation}] {c.verdict}: {'; '.join(c.killing_assertions) or '-'}"
+        )
+    if not report["production_tree_unchanged"]:
+        print("REFUSE: production tree changed during receipt generation", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

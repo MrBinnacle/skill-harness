@@ -71,6 +71,7 @@ from pathlib import Path
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+from pydantic import ValidationError
 
 from skill_harness.subject.ingest import (
     EvalLogIngestError,
@@ -320,37 +321,49 @@ def test_duplicate_epoch_refused(
         conn.execute("RELEASE hyp_example")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "finding: docs/findings/paired-ingest-nan-score-silent-tie.md "
-        "(severity WRONG_NUMBER; a NaN score_value flows through "
-        "_score_to_float and _observation scores it 0.5, so a missing "
-        "measurement is recorded as a tie)"
-    ),
-)
 def test_nan_score_is_refused_or_fails_closed(
     evidence_db: sqlite3.Connection, skill_dir: Path
 ) -> None:
     """Property 5: an absent measurement arriving as NaN must not become a tie.
 
     Registered prediction: RED on current code, confirmed on first run
-    (observations=[0.5, 1.0, 1.0]). NaN passes _score_to_float, and
-    _observation(nan, x) returns 0.5 because both orderings are False, so a
-    missing score silently dilutes the paired effect toward no-effect. Strict
-    xfail per the registered outcome protocol; the repair un-marks this.
+    (observations=[0.5, 1.0, 1.0]). NaN passed ``_score_to_float``, and
+    ``_observation(nan, x)`` returned 0.5 because both orderings are False, so
+    a missing score silently diluted the paired effect toward no-effect.
+
+    Repaired by #363 at the MODEL layer: ``ParsedSample.score_value`` carries
+    ``allow_inf_nan=False``, so the refusal fires when the sample is
+    constructed. PR #364's M4 survivor is the evidence for that placement --
+    this detector builds ``ParsedSample`` directly, so the write path never
+    calls ``_score_to_float`` and a guard there alone leaves the property red.
+
+    Two mechanical consequences, stated because they change what this test
+    proves rather than how loudly it says it:
+
+    - Sample construction moved INSIDE the try. The refusal now precedes the
+      write instead of happening during it, which is earlier than the
+      registered requirement, not weaker than it -- nothing is written either
+      way, and the fail-closed bound below is unchanged.
+    - The accepted refusal widens to ``ValidationError``. The model layer is
+      the enforcing surface and pydantic wraps ``EvalLogIngestError`` (a
+      ``ValueError`` subclass) into ``ValidationError``, so the typed refusal
+      cannot escape a field constraint. ``_score_to_float`` still raises
+      ``EvalLogIngestError`` on the parse path, which this detector does not
+      exercise.
+
+    The registered bound is unchanged: no observation may be 0.5.
     """
     conn = evidence_db
     epochs = [1, 2, 3]
-    full = _log(
-        "full",
-        tuple(_sample("full", e, math.nan if e == 2 else 1.0, invoked=True) for e in epochs),
-    )
-    null = _log("null", tuple(_sample("null", e, 0.0, invoked=False) for e in epochs))
     try:
+        full = _log(
+            "full",
+            tuple(_sample("full", e, math.nan if e == 2 else 1.0, invoked=True) for e in epochs),
+        )
+        null = _log("null", tuple(_sample("null", e, 0.0, invoked=False) for e in epochs))
         result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
-    except EvalLogIngestError:
-        return  # refused at write time: the acceptable outcome
+    except (EvalLogIngestError, ValidationError):
+        return  # refused before any verdict row exists: the acceptable outcome
     observations = [
         row[0]
         for row in conn.execute(
