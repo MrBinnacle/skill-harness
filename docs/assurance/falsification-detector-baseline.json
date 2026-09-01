@@ -25,11 +25,6 @@
       "item": 6,
       "detector": "tests/test_confound_status_e2e.py",
       "issue": 348
-    },
-    {
-      "item": 10,
-      "detector": "tests/test_mint_path_allowlist.py",
-      "issue": 352
     }
   ]
 }

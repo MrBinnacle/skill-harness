@@ -190,18 +190,25 @@ scan: every production call to `screen_verdict` /
 
 **Silent wrongness.** `mint_oracle_verdict` requires `ArticleFingerprint`;
 `insert_oracle_verdict` remains open for fixtures, historical dual-write,
-and reconcilers. `is_stale_vs_fleet` is false when drift fingerprint is
-NULL (no badge). PASSED still requires a current frozen case count ≥ 1.
-A path that inserts without pin, or a currency VIEW that treats unpinned /
-NULL-drift rows as current, lets threshold-clearing evidence look
-fleet-current when it is not — false PASSED/KEEP, or the inverse silent
-UNMEASURED. Append-only and mint tests can both pass while the allowlist
-hole remains.
+and reconcilers. PASSED still requires a current frozen case count ≥ 1,
+and the gate that decides "current" is `frozen_cases_with_currency`
+(A57/0401): a case is `current` only when its `metric_version` AND
+`implementation_hash` both match the current audited metric version. A
+path that inserts without pin, or a currency VIEW change that promotes a
+stale / hash-mismatched / never-audited case to `current`, lets
+threshold-clearing evidence look current when it is not — false
+PASSED/KEEP, or the inverse silent UNMEASURED. Append-only and mint tests
+can both pass while the allowlist hole remains. *(Corrected 2026-08-31 by
+#352: this row originally pointed at `is_stale_vs_fleet`, which has no
+production caller — nothing downstream reads it; a detector written
+against that function would exercise code the PASSED gate never calls.)*
 
 **Detection:** `tests/test_mint_path_allowlist.py` — static + behavioral
 ban: production modules outside an explicit allowlist must not call
-`insert_oracle_verdict`; currency VIEW cases with NULL drift fingerprint
-must not count as current for the PASSED frozen-case gate.
+`insert_oracle_verdict` (pre-commit mirror `ban-unpinned-verdict-insert`
++ F-8 drift cross-check); a frozen case whose currency state is not
+`current` must not satisfy the PASSED frozen-case gate, and the currency
+VIEW must never promote a stale, hash-mismatched, or never-audited case.
 
 ---
 
