@@ -81,3 +81,10 @@ setup.cfg
 mutmut-stats.json
 *.meta
 *.spans
+
+# GitNexus index store: machine-local, never shipped.
+.gitnexus/
+
+# Local pre-change store snapshots (S387: evidence.db.bak-preS387). Machine-local safety copies.
+evidence.db.bak-*
+runtime.db.bak-*
