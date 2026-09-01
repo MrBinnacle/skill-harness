@@ -114,6 +114,25 @@ and covers that section only. This page stays the citable surface for every kind
   against `tests/`; that the 4 CLEAN fixtures are free of D1/D2/D3, which this
   audit did not re-judge.
 
+### [`docs/findings/pi-c-detector-blind-to-description-channel.md`](findings/pi-c-detector-blind-to-description-channel.md)
+
+- **Claims:** Paired k=8 on `git-pull-rebase-trap`, one pin both arms
+  (`5324feef...`), de-leaked prompt: discordant epochs x=6 of 8, d-hat 0.75,
+  Jeffreys 95% interval [0.408, 0.944], GO at the pre-stated x >= 5; Null arm
+  0/8. The write-time gate refused the pair with `ZeroInvocationError`: zero
+  Skill tool calls across the Full arm under detector `v1-skill-tool-call`. The
+  trajectories show no Skill call and no `SKILL.md` read in either arm, and a
+  Full arm that merged in 6 of 8 epochs where every Null epoch rebased. The
+  mounted skill acted through its frontmatter description in the skill listing,
+  a channel the detector does not observe. The refusal is correct under the #46
+  contract; the contract does not cover the channel.
+- **Refuses to claim:** That `git-pull-rebase-trap` is KEEP (no admissible
+  store row, no direction field in the registered micro-run template, no sized
+  run); that the subject is the registered direct-Anthropic one (the run used
+  OpenRouter, declared before launch, same route and pin in both arms); that
+  6/8 is the skill's ceiling (two epochs rebased with the description present);
+  that a description-only effect is detectable from a transcript.
+
 ### [`docs/findings/paired-ingest-nan-score-silent-tie.md`](findings/paired-ingest-nan-score-silent-tie.md)
 
 - **Claims:** A NaN `score_value` flowed through `_score_to_float` and
@@ -546,6 +565,20 @@ Verdict and sub-reason strings use the
 - **Refuses to claim:** A production-skill KEEP; that any real library skill has
   cleared the full keep lane; standing cost as part of the KEEP claim
   (not_instrumented).
+
+### [`docs/sers/receipts/gitpull-paired-k8-2026-09-01.json`](sers/receipts/gitpull-paired-k8-2026-09-01.json)
+
+- **Claims:** `verdict=CANT_TELL_YET`, `cut_sub_reason=null`,
+  `unmeasured_sub_reason=inadmissible`; `value_class=trap-discipline`;
+  `wrong_instrument=true`; `sers_version=1.1.0` with a live-minted
+  `subject_identity`; `null_pass_rate` 0/8, `discordance_rate` 6/8 with the
+  Jeffreys interval in `detail`, `go_nogo=GO`; evidence admissibility
+  `inadmissible` on `ZeroInvocationError` (zero detected invocations, detector
+  v1). Source prose: the description-channel finding above.
+- **Refuses to claim:** `KEEP`; a win direction (withheld per the registered
+  micro-run template); the registered direct-Anthropic subject (ran on
+  OpenRouter); standing or fired token costs (not_instrumented /
+  not_applicable, the body never loaded).
 
 ---
 
