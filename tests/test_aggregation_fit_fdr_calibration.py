@@ -123,7 +123,7 @@ def _empirical_null_fdr(k_clauses: int, n_trials: int, rng: np.random.Generator)
     for _ in range(N_SIMS):
         wins = rng.binomial(n_trials, NULL_RATE, size=k_clauses)
         clauses = [
-            ClauseObservations(clause_id=f"c{i}", w=float(w), n=n_trials)
+            ClauseObservations.bernoulli(clause_id=f"c{i}", w=float(w), n=n_trials)
             for i, w in enumerate(wins)
         ]
         result = fit_skill(clauses)

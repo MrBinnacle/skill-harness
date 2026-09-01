@@ -290,6 +290,11 @@ def aggregate_skill(
             clause_id=k[0],
             w=sum(clause_axis_observations[k]),
             n=len(clause_axis_observations[k]),
+            # Sufficient statistic for within-clause variance. Observations are
+            # {0, 0.5, 1}, and (w, n) cannot tell one win plus one loss from two
+            # ties, so the sampling-variance peel needs this to be exact under
+            # ties rather than guessing. Tie-free data gives sum_sq == w.
+            sum_sq=sum(o * o for o in clause_axis_observations[k]),
         )
         for k in keys_with_data
     ]

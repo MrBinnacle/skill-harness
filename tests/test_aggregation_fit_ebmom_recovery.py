@@ -160,7 +160,7 @@ def _measure_regime(regime: Regime) -> RegimeMeasurement:
         p_k = rng.beta(a_true, b_true, size=K_CLAUSES)
         w_k = rng.binomial(regime.n_trials, p_k)
         clauses = [
-            ClauseObservations(clause_id=f"c{i}", w=float(w), n=regime.n_trials)
+            ClauseObservations.bernoulli(clause_id=f"c{i}", w=float(w), n=regime.n_trials)
             for i, w in enumerate(w_k)
         ]
         result = fit_skill(clauses)

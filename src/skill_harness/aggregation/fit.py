@@ -12,11 +12,22 @@ Pass rule (LOCKED — see docs/INVARIANTS.md #1): clause PASSES when
   P(rate > 0.60) >= 0.95 on the shrunken posterior.
 
 K < 10: EB hyperprior estimate is noisy (BDA3 §5) — fall back to UNPOOLED.
-Convergence failure (alpha_hat <= 0 or beta_hat <= 0 or sample_var < 1e-6):
-  fall back to BH-FDR at q=0.05.
+The hyperprior is fit to the LATENT variance: the across-clause variance of
+observed rates carries within-clause sampling noise as well as true
+heterogeneity, and the noise is peeled off before the moment map is inverted.
+Without the peel the recovered concentration deflates by roughly n/(n+c+1).
 
-Determinism: no random sampling (EB-MoM is closed-form). PYTHONHASHSEED=0
-already pinned by caller environment.
+Admission: a hierarchical fit is attempted only when the peeled latent variance
+  is distinguishable from zero by a one-sided bootstrap test (see
+  HETEROGENEITY_TEST_ALPHA). Otherwise it is refused as
+  latent_variance_not_identified and BH-FDR runs instead.
+Convergence failure (alpha_hat <= 0 or beta_hat <= 0, or the admission test
+  refuses): fall back to BH-FDR at q=0.05.
+
+Determinism: the admission bootstrap is seeded from a digest of the
+observations themselves, so identical input yields an identical verdict on
+every host and every run. PYTHONHASHSEED=0 already pinned by caller
+environment.
 
 scipy.stats.beta.sf is the probability evaluation primitive (mirror of
 ablation/stopping.py pattern).
@@ -24,7 +35,10 @@ ablation/stopping.py pattern).
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import math
+import random
 from dataclasses import dataclass
 
 from scipy.stats import beta as beta_dist  # type: ignore[import-untyped]
@@ -42,8 +56,23 @@ WIN_RATE_THRESHOLD: float = 0.60
 # BDA3 §5 — K floor for EB hyperprior reliability.
 K_MIN_FOR_EB: int = 10
 
-# Minimum sample variance to attempt EB-MoM (below this → degenerate).
+# Arithmetic-safety epsilon ONLY. This is NOT the admission rule: it guards the
+# division in the moment inversion against a latent variance of exactly zero.
+# Admission is decided by the heterogeneity test below, never by this magnitude.
 VAR_FLOOR: float = 1e-6
+
+# Level of the one-sided heterogeneity test that admits a hierarchical fit.
+# Ruled by the maintainer 2026-08-31 against its power cost, NOT inherited from
+# BH_FDR_Q: that controls false discoveries among clause verdicts, this controls
+# whether a hyperprior is fitted at all. See
+# docs/assurance/ebmom-peel-preregistration-amendment.md section 3.
+HETEROGENEITY_TEST_ALPHA: float = 0.05
+
+# Bootstrap replicates for the admission test. A bootstrap rather than a normal
+# quantile because the null sits on the boundary of the parameter space, where
+# the sampling distribution of a variance component is skewed and partly atomic
+# at zero, which is exactly the regime the test operates in.
+HETEROGENEITY_BOOTSTRAP_B: int = 999
 
 # BH-FDR significance level (A9).
 BH_FDR_Q: float = 0.05
@@ -58,13 +87,36 @@ BH_FDR_Q: float = 0.05
 class ClauseObservations:
     """Aggregated observations for one clause.
 
-    w  = sum of observations (Win=1, Tie=0.5, Loss=0).
-    n  = total observation count (integer).
+    w      = sum of observations (Win=1, Tie=0.5, Loss=0).
+    n      = total observation count (integer).
+    sum_sq = sum of SQUARED observations.
+
+    sum_sq is the sufficient statistic that identifies within-clause variance.
+    (w, n) alone does not: (w=1, n=2) is produced both by one win and one loss,
+    whose within-clause sum of squares is 0.5, and by two ties, whose sum of
+    squares is 0.0. A peel computed from (w, n) guesses on tie-carrying data
+    and over-peels tie-heavy clauses. See
+    docs/assurance/ebmom-peel-preregistration-amendment.md section 4.
+
+    For tie-free observations sum_sq == w, because 0^2 = 0 and 1^2 = 1.
     """
 
     clause_id: str
     w: float
     n: int
+    sum_sq: float
+
+    @classmethod
+    def bernoulli(cls, clause_id: str, w: float, n: int) -> ClauseObservations:
+        """Build from tie-free observations, where sum_sq == w.
+
+        Squaring leaves 0 and 1 unchanged, so a clause with no ties has
+        sum_sq == w exactly. This constructor exists so a caller must SAY it
+        has tie-free data rather than getting that assumption from a default.
+        Production data can contain ties and must not use it; see
+        aggregation/engine.py, which computes sum_sq from the observations.
+        """
+        return cls(clause_id=clause_id, w=w, n=n, sum_sq=w)
 
 
 @dataclass(frozen=True)
@@ -222,17 +274,44 @@ def fit_skill(
     # -------------------------------------------------------------------
     rates = [cl.w / cl.n for cl in clauses]
     sample_mean = sum(rates) / k
-    sample_var = sum((r - sample_mean) ** 2 for r in rates) / k  # population var
+    # UNBIASED total variance: /(k-1), not /k. The population form has
+    # expectation (k-1)/k of the true total variance, so subtracting the full
+    # sampling term under-peels by -(V_latent + V_sampling)/k.
+    sample_var = sum((r - sample_mean) ** 2 for r in rates) / (k - 1)
 
     # The across-clause variance of observed rates is true heterogeneity PLUS
-    # binomial sampling noise. Peel the noise before inverting the moment map;
-    # feeding the raw variance to _ebmom attributes sampling noise to the
+    # within-clause sampling noise. Peel the noise before inverting the moment
+    # map; feeding the raw variance to _ebmom attributes sampling noise to the
     # hyperprior and deflates the recovered concentration by ~n/(n+c+1).
     sampling_var = _mean_sampling_variance(clauses)
-    latent_var = max(sample_var - sampling_var, 0.0)
+    # RETAINED UNCLIPPED. latent_var_raw may be negative, and the admission test
+    # and every bias assertion read it as-is: clipping first would map the whole
+    # negative tail onto zero and induce a positive bias in the retained value.
+    latent_var_raw = sample_var - sampling_var
+
+    critical_value = _heterogeneity_critical_value(clauses)
+    heterogeneity_test = {
+        "statistic": latent_var_raw,
+        "critical_value": critical_value,
+        "alpha": HETEROGENEITY_TEST_ALPHA,
+        "bootstrap_b": HETEROGENEITY_BOOTSTRAP_B,
+        "bootstrap_seed": _bootstrap_seed(clauses),
+    }
 
     try:
-        alpha_hat, beta_hat = _ebmom(sample_mean, latent_var)
+        if latent_var_raw <= critical_value:
+            raise ConvergenceFailure(
+                reason="latent_variance_not_identified",
+                alpha_hat=None,
+                beta_hat=None,
+                sample_mean=sample_mean,
+                sample_var=latent_var_raw,
+            )
+        # Clip ONLY here, after admission. An admitted fit has
+        # latent_var_raw > critical_value >= 0 in every realistic case, so this
+        # is a no-op on the admitted path; it exists to keep the arithmetic
+        # total, never to repair the estimate.
+        alpha_hat, beta_hat = _ebmom(sample_mean, max(latent_var_raw, 0.0))
     except ConvergenceFailure as exc:
         # -------------------------------------------------------------------
         # BH-FDR FALLBACK
@@ -248,6 +327,8 @@ def fit_skill(
             "sample_var": exc.sample_var,
             "sample_var_raw": sample_var,
             "sampling_var": sampling_var,
+            "latent_var_raw": latent_var_raw,
+            "heterogeneity_test": heterogeneity_test,
         }
         logger.warning(
             "EB-MoM convergence failure (%s): falling back to BH-FDR at q=%.2f.",
@@ -288,7 +369,8 @@ def fit_skill(
             "sample_mean": sample_mean,
             "sample_var": sample_var,
             "sampling_var": sampling_var,
-            "latent_var": latent_var,
+            "latent_var_raw": latent_var_raw,
+            "heterogeneity_test": heterogeneity_test,
             "k_clauses": k,
         },
         posteriors=posteriors,
@@ -296,29 +378,146 @@ def fit_skill(
 
 
 def _mean_sampling_variance(clauses: list[ClauseObservations]) -> float:
-    """Mean per-clause binomial sampling variance of the observed rate w/n.
+    """Mean per-clause sampling variance of the observed rate w/n.
 
-    Each observed rate r_k = w_k / n_k estimates the clause's true rate p_k
-    with variance p_k (1 - p_k) / n_k. Since p_k is unknown, estimate
-    p_k (1 - p_k) from the observation itself. E[r(1-r)] equals
-    p(1-p)(n-1)/n, so r(1-r) / (n-1) is unbiased for the sampling variance
-    p(1-p)/n. That is why the denominator is n-1 and not n: using n
-    under-peels by a factor (n-1)/n and leaves a residual concentration
-    deflation that bites hardest at small n, which is exactly the regime
-    this correction exists to fix.
+    Computed from the sufficient statistic sum_sq, so it is exact under ties:
 
-    n_k == 1 carries no within-clause information about p_k, so the
-    denominator is clamped at 1. Such a clause contributes r(1-r), which is
-    zero for an untied observation; it cannot be peeled and is not guessed at.
+        within_ss_k    = sum_sq_k - n_k * r_k^2
+        sampling_var_k = within_ss_k / ((n_k - 1) * n_k)
 
-    Returns the mean over clauses, matching the population variance in
+    within_ss_k is the within-clause sum of squares. Dividing by (n_k - 1)
+    gives the unbiased per-observation variance, and dividing again by n_k
+    gives the variance of the clause MEAN, which is the quantity the
+    across-clause variance in fit_skill carries.
+
+    Reduces exactly to the Bernoulli form when no ties are present: with
+    observations in {0, 1}, sum_sq == w, so within_ss = n r - n r^2 and
+    sampling_var = r(1-r)/(n-1). Generalising therefore costs nothing on
+    tie-free data and cannot silently change a tie-free result.
+
+    n_k == 1 carries no within-clause information, so the (n_k - 1) factor is
+    clamped at 1. within_ss is then 0 by construction for a single
+    observation, so such a clause contributes nothing rather than a guess.
+
+    Returns the mean over clauses, matching the across-clause variance in
     fit_skill that it is subtracted from.
     """
     total = 0.0
     for clause in clauses:
         rate = clause.w / clause.n
-        total += rate * (1.0 - rate) / max(clause.n - 1.0, 1.0)
+        within_ss = clause.sum_sq - clause.n * rate * rate
+        # Floating-point error can push an exactly-zero within_ss slightly
+        # negative; a genuine negative is impossible for a sum of squares.
+        total += max(within_ss, 0.0) / (max(clause.n - 1.0, 1.0) * clause.n)
     return total / len(clauses)
+
+
+def _bootstrap_seed(clauses: list[ClauseObservations]) -> int:
+    """Derive the bootstrap seed from the observations themselves.
+
+    fit_skill is documented as deterministic. The admission test resamples, so
+    its seed MUST be a function of the input: the same clauses give the same
+    admission verdict on every host and every run. A wall-clock or global-RNG
+    seed would make a published verdict irreproducible.
+    """
+    canonical = ";".join(
+        f"{cl.clause_id}|{cl.w!r}|{cl.n!r}|{cl.sum_sq!r}"
+        for cl in sorted(clauses, key=lambda c: c.clause_id)
+    )
+    digest = hashlib.sha256(canonical.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big")
+
+
+def _tie_rate_estimate(clause: ClauseObservations) -> float:
+    """Fraction of this clause's trials that were ties, from sum_sq.
+
+    A win or loss contributes (o - r)^2 with o in {0, 1}; a tie contributes
+    less. The within-clause sum of squares relative to its tie-free maximum
+    n r (1 - r) therefore identifies the tie fraction by moments.
+    """
+    rate = clause.w / clause.n
+    within_ss = max(clause.sum_sq - clause.n * rate * rate, 0.0)
+    max_ss = clause.n * rate * (1.0 - rate)
+    if max_ss <= 0.0:
+        return 0.0
+    return min(max(1.0 - within_ss / max_ss, 0.0), 1.0)
+
+
+def _draw_null_clause(
+    clause: ClauseObservations,
+    mu_0: float,
+    rng: random.Random,
+) -> ClauseObservations:
+    """One clause resampled under H_0, preserving its own n and tie structure.
+
+    Unequal n_k is the normal case, so the null reproduces each clause's own
+    observation count rather than a common one. Observations are drawn from
+    {0, 0.5, 1} at the clause's estimated tie rate, so the null carries the
+    same tie structure as the data and the peel is exercised identically on
+    both sides of the comparison.
+    """
+    p_tie = _tie_rate_estimate(clause)
+    p_win = max(mu_0 - 0.5 * p_tie, 0.0)
+    p_loss = max(1.0 - p_tie - p_win, 0.0)
+    total = p_tie + p_win + p_loss
+    p_tie, p_win = p_tie / total, p_win / total
+
+    w = 0.0
+    sum_sq = 0.0
+    for _ in range(clause.n):
+        u = rng.random()
+        if u < p_tie:
+            obs = 0.5
+        elif u < p_tie + p_win:
+            obs = 1.0
+        else:
+            obs = 0.0
+        w += obs
+        sum_sq += obs * obs
+    return ClauseObservations(clause_id=clause.clause_id, w=w, n=clause.n, sum_sq=sum_sq)
+
+
+def _heterogeneity_critical_value(clauses: list[ClauseObservations]) -> float:
+    """Critical value above which a hierarchical fit is admitted.
+
+    Tests H_0: tau^2 = 0 (one common rate; all observed spread is sampling
+    noise) against H_1: tau^2 > 0, by parametric bootstrap under the null.
+
+    This REPLACES the old fixed VAR_FLOOR as the admission rule. A magnitude
+    floor asks whether the latent variance is large; the question that decides
+    whether a hyperprior is identified is whether it is distinguishable from
+    zero given its own sampling error. A replicate with latent_var = 5e-4
+    clears a 1e-6 floor and returns a concentration of 454 fitted to noise.
+
+    Returns the (1 - alpha) quantile of the null distribution of the peeled
+    latent variance. The caller admits the fit when the observed value exceeds
+    it, and records BOTH numbers in provenance so the admission decision is
+    auditable rather than silent: a false admission is otherwise invisible in
+    the receipt, while a false refusal is visible by construction.
+
+    Specification: docs/assurance/ebmom-peel-preregistration-amendment.md
+    section 3.
+    """
+    # S311 is suppressed below: this is a statistical bootstrap, not a security
+    # primitive. A reproducible PRNG seeded from the data is exactly what is
+    # wanted here; a cryptographic source would make the verdict irreproducible.
+    rng = random.Random(_bootstrap_seed(clauses))  # noqa: S311
+    # Pooled common rate under H_0: sum(w)/sum(n), not the mean of rates.
+    total_n = sum(cl.n for cl in clauses)
+    mu_0 = sum(cl.w for cl in clauses) / total_n
+
+    null_stats: list[float] = []
+    for _ in range(HETEROGENEITY_BOOTSTRAP_B):
+        null_clauses = [_draw_null_clause(cl, mu_0, rng) for cl in clauses]
+        null_rates = [c.w / c.n for c in null_clauses]
+        null_mean = sum(null_rates) / len(null_rates)
+        null_total = sum((r - null_mean) ** 2 for r in null_rates) / (len(null_rates) - 1)
+        null_stats.append(null_total - _mean_sampling_variance(null_clauses))
+
+    null_stats.sort()
+    # One-sided upper critical value at level alpha.
+    index = math.ceil((1.0 - HETEROGENEITY_TEST_ALPHA) * len(null_stats)) - 1
+    return null_stats[min(max(index, 0), len(null_stats) - 1)]
 
 
 def _ebmom(sample_mean: float, sample_var: float) -> tuple[float, float]:

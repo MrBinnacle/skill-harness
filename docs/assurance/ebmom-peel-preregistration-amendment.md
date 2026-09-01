@@ -200,15 +200,16 @@ ratio is about 2.0, so under a normal approximation one-sided power is roughly:
 (Indicative only. The bootstrap null is skewed at the boundary, so the confirmatory run measures
 these rather than assuming them.)
 
-**Proposed: `HETEROGENEITY_TEST_ALPHA = 0.05`, one-sided.** Reasoning: `alpha = 0.01` refuses
+**SET: `HETEROGENEITY_TEST_ALPHA = 0.05`, one-sided.** Reasoning: `alpha = 0.01` refuses
 roughly two thirds of a regime the instrument was built to measure, which is an instrument that
 mostly declines to measure; `alpha = 0.10` buys 12 points of power for double the invented-fit
 rate. 0.05 sits where the audited-provenance requirement makes the residual false-admission rate
 observable rather than hidden.
 
-**This is a risk-tolerance call and it is the maintainer's, not the implementer's.** It is
-proposed with its derivation and its cost table so it can be overridden on values grounds. It is
-frozen once set, before the confirmatory run.
+This was a risk-tolerance call and it was the maintainer's, not the implementer's. It was
+proposed with the derivation and cost table above and **ruled by the maintainer on 2026-08-31**,
+before any confirmatory run. It is now frozen: it does not move because a confirmatory result
+lands on the wrong side of it.
 
 Rename the control to say what it does: `HETEROGENEITY_TEST_ALPHA`. Keep a separate tiny epsilon
 for arithmetic safety only (division guards), and do not let it carry admission meaning.
@@ -251,13 +252,66 @@ Two admissible routes. Exactly one must be chosen before the gate is built:
   the sum of squared observations, so within-clause variance is identified. Additive, but it
   widens a frozen dataclass and every producer of it.
 
-Route (a) is recommended on the strength of the existing ruling. The choice is the maintainer's
-because it decides what the production claim is about, not merely how it is computed.
+**ROUTE (b) IS CHOSEN, because route (a) is not available.** Measured 2026-08-31: #368 is still
+`OPEN`, and the discordant machinery that exists (`oc/crosschecks.py`, `oc/exact.py`,
+`oc/gate2.py`) serves the paired Gate-2 lane, not the clause-level aggregation lane that
+`fit_skill` occupies. There is no discordant table for `fit_skill` to consume, so route (a)
+cannot be built today; it is blocked on #368's migration rather than rejected on merit.
+
+This is a checkable fact about the tree, not a values call, which is why the implementing
+session settled it. **If #368's migration lands first, route (a) supersedes this choice** and the
+sufficient statistic below becomes redundant rather than wrong.
+
+Route (b) as built:
+
+```
+sum_sq_k = sum_i o_{k,i}^2                       # carried on ClauseObservations
+within_ss_k     = sum_sq_k - n_k * r_k^2         # exact within-clause sum of squares
+sampling_var_k  = within_ss_k / ((n_k - 1) * n_k)
+```
+
+This is exact under ties and **reduces to the Bernoulli form when there are none**: with
+`o in {0,1}`, `sum_sq = sum(o) = w`, so `sampling_var = (n r - n r^2)/((n-1) n) = r(1-r)/(n-1)`,
+which is the section 2 formula unchanged. The generalisation therefore costs nothing on tie-free
+data and cannot silently change the Bernoulli result.
+
+`sum_sq` is **required, not optional-with-fallback**. An optional field that silently falls back
+to the Bernoulli formula would compute a wrong peel on tie-carrying data while reporting
+success, which is the class of defect this amendment exists to remove.
 
 **No confirmatory run may use tie-free synthetic data as evidence that production is
 correct.** The development regimes draw `w_k ~ Binomial(n, p_k)` and are tie-free, so they
-cannot detect this defect at all. The confirmatory matrix must include at least one
-tie-carrying regime.
+cannot detect this defect at all.
+
+### Registered tie-carrying regime
+
+**FROZEN — registered here, before the freeze, rather than added at run time.**
+
+`tie_heavy`: `mu* = 0.65`, `c* = 60`, `n = 20`, `K = 200`, tie rate `t = 0.30`.
+
+Generative model. Draw `m_k ~ Beta(a*, b*)` as the per-clause **expected observation**. Each
+trial is then a three-point draw with
+
+```
+P(Tie)  = t          contributing o = 0.5
+P(Win)  = m_k - t/2  contributing o = 1.0
+P(Loss) = 1 - t/2 - m_k  contributing o = 0.0
+```
+
+so `E[o] = m_k` exactly and the hyperprior on `m_k` is the same Beta family as the other
+regimes. Trial probabilities are valid for `m_k` in `[t/2, 1 - t/2] = [0.15, 0.85]`;
+`c* = 60` gives `sd(m_k) = 0.061`, so that interval is 3 standard errors clear on the tight side
+and 2.5 on the other. **Any `m_k` drawn outside it is rejected and redrawn, and the rejection
+count is reported** — a silent clip would change the hyperprior the regime claims to test.
+
+Why these values: `c* = 60` and `n = 20` sit between the two development regimes, so the regime
+is not chosen at an extreme; `t = 0.30` is high enough that the Bernoulli formula's error is
+large relative to the latent variance, which is the condition under which the defect is
+detectable at all.
+
+**What this regime is for:** it is the only registered surface on which the section 4 defect can
+fire. A confirmatory run reporting the section 5 matrix on the three tie-free regimes alone is
+not a confirmatory run.
 
 ---
 
@@ -350,13 +404,16 @@ Rollback state is `main`. `agent/issue-360` stays unmerged and is the developmen
 - **Revisable with new evidence:** the bootstrap procedure and `B` (section 3).
   *Revisit if:* measured production cost is prohibitive, or a different null is correct after
   section 4 resolves.
-- **Revisable with new evidence:** the #368 route, (a) or (b) (section 4).
-  *Revisit if:* the discordant migration turns out to change what is being claimed rather than
-  how it is computed.
+- **Settled on a checkable fact:** the #368 route is **(b)**, sufficient statistics, because
+  route (a)'s discordant table does not exist in the aggregation lane and #368 is open
+  (section 4). *Revisit if:* #368's migration lands, at which point route (a) supersedes and
+  `sum_sq` becomes redundant rather than wrong.
 - **Revisable with new evidence:** how the differential reference moves (section 6).
   *Revisit if:* it is already independent, with file evidence.
-- **Maintainer's call, proposed not decided:** `HETEROGENEITY_TEST_ALPHA = 0.05`. Risk tolerance,
-  with the power cost tabled in section 3.
+- **Ruled by the maintainer 2026-08-31, now frozen:** `HETEROGENEITY_TEST_ALPHA = 0.05`, on the
+  derivation and power cost tabled in section 3. It does not move on a confirmatory result.
+- **Non-negotiable:** the `tie_heavy` regime and its generative model (section 4). It is the only
+  registered surface on which the tie defect can fire.
 
 ---
 

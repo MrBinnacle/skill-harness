@@ -105,6 +105,25 @@ def _ref_beta_posterior(alpha: float, beta: float) -> tuple[float, float, float,
     return mean, lo, hi, p_exceed
 
 
+def _ref_mean_sampling_variance(clauses: list[ClauseObservations]) -> float:
+    """Independent re-derivation of the mean within-clause sampling variance.
+
+    Written from
+    docs/assurance/ebmom-peel-preregistration-amendment.md section 2, NOT by
+    calling production: a reference that calls the implementation tests only
+    that the code equals itself.
+
+        within_ss_k    = sum_sq_k - n_k * r_k^2
+        sampling_var_k = within_ss_k / ((n_k - 1) * n_k)
+    """
+    total = 0.0
+    for cl in clauses:
+        rate = cl.w / cl.n
+        within_ss = max(cl.sum_sq - cl.n * rate * rate, 0.0)
+        total += within_ss / (max(cl.n - 1.0, 1.0) * cl.n)
+    return total / len(clauses)
+
+
 def _ref_ebmom(sample_mean: float, sample_var: float) -> tuple[float, float]:
     """Independent MoM Beta hyperprior (A53 closed form)."""
     if sample_var < VAR_FLOOR:
@@ -205,7 +224,7 @@ def _fit_skill_inputs(rng: np.random.Generator) -> list[list[ClauseObservations]
             for j in range(k):
                 n = int(rng.integers(1, 48))
                 w = float(rng.uniform(0.0, float(n)))
-                clauses.append(ClauseObservations(clause_id=f"c{j}", w=w, n=n))
+                clauses.append(ClauseObservations.bernoulli(clause_id=f"c{j}", w=w, n=n))
             out.append(clauses)
         elif bucket == 1:
             # Heterogeneous rates in (0.15, 0.85) → EB-MoM typically converges.
@@ -214,14 +233,16 @@ def _fit_skill_inputs(rng: np.random.Generator) -> list[list[ClauseObservations]
             for j in range(k):
                 n = int(rng.integers(4, 48))
                 rate = float(rng.uniform(0.15, 0.85))
-                clauses.append(ClauseObservations(clause_id=f"c{j}", w=rate * n, n=n))
+                clauses.append(ClauseObservations.bernoulli(clause_id=f"c{j}", w=rate * n, n=n))
             out.append(clauses)
         else:
             # Force BH-FDR: identical rates → sample_var = 0 < VAR_FLOOR.
             k = int(rng.integers(K_MIN_FOR_EB, 28))
             n = int(rng.integers(5, 40))
             rate = float(rng.uniform(0.05, 0.95))
-            out.append([ClauseObservations(clause_id=f"c{j}", w=rate * n, n=n) for j in range(k)])
+            out.append(
+                [ClauseObservations.bernoulli(clause_id=f"c{j}", w=rate * n, n=n) for j in range(k)]
+            )
     return out
 
 
@@ -347,11 +368,25 @@ class TestFitSkillDifferential:
                     exp_p = np.array([s[3] for s in exp_stats])
                 else:
                     sample_mean = sum(rates) / k
-                    sample_var = sum((r - sample_mean) ** 2 for r in rates) / k
-                    try:
-                        alpha_hat, beta_hat = _ref_ebmom(sample_mean, sample_var)
-                    except ConvergenceFailure:
-                        assert result.aggregation_method == "bh_fdr_fallback"
+                    # Amended estimator (#360), re-derived here from the
+                    # specification rather than by calling production:
+                    # unbiased /(k-1) total variance, minus the mean
+                    # within-clause sampling variance.
+                    total_var = sum((r - sample_mean) ** 2 for r in rates) / (k - 1)
+                    latent_var = total_var - _ref_mean_sampling_variance(clauses)
+
+                    # Branch on the method production chose, rather than
+                    # re-deriving the admission decision. Admission is a
+                    # bootstrap test seeded from the data; an "independent"
+                    # re-derivation of a seeded resampling procedure would have
+                    # to reproduce its exact RNG stream, which is cloning, not
+                    # independence. What is cross-checked here is the NUMERICS
+                    # given the branch. The admission decision itself is
+                    # covered by test_aggregation_fit.py
+                    # (test_marginal_heterogeneity_is_refused_not_fitted,
+                    # test_admission_verdict_is_deterministic) and its
+                    # calibration by the acceptance matrix.
+                    if result.aggregation_method == "bh_fdr_fallback":
                         exp_a = np.array([1.0 + cl.w for cl in clauses])
                         exp_b = np.array([1.0 + (cl.n - cl.w) for cl in clauses])
                         exp_stats = [
@@ -375,6 +410,7 @@ class TestFitSkillDifferential:
                         )
                     else:
                         assert result.aggregation_method == "ebmom_hierarchical"
+                        alpha_hat, beta_hat = _ref_ebmom(sample_mean, max(latent_var, 0.0))
                         assert_allclose(
                             float(result.aggregation_provenance["alpha_hat"]),  # type: ignore[arg-type]
                             alpha_hat,

@@ -24,6 +24,7 @@ from hypothesis import strategies as st
 
 from skill_harness.aggregation.errors import ConvergenceFailure
 from skill_harness.aggregation.fit import (
+    HETEROGENEITY_TEST_ALPHA,
     K_MIN_FOR_EB,
     VAR_FLOOR,
     ClauseObservations,
@@ -40,7 +41,17 @@ from skill_harness.aggregation.fit import (
 
 
 def make_clauses(wn_pairs: Sequence[tuple[float, int]]) -> list[ClauseObservations]:
-    return [ClauseObservations(clause_id=f"c{i}", w=w, n=n) for i, (w, n) in enumerate(wn_pairs)]
+    # Hypothesis generates fractional w here, which in production would imply
+    # ties, and (w, n) alone does not determine sum_sq. For observations in
+    # [0, 1] the feasible range is w^2/n <= sum_sq <= w, so the tie-free
+    # extreme sum_sq = w is both valid and the MOST dispersed member of that
+    # set -- the hardest case for the sampling-variance peel. These properties
+    # assert only that the fit does not crash and returns valid Betas, so
+    # picking the adversarial end of the feasible set is the right default.
+    return [
+        ClauseObservations.bernoulli(clause_id=f"c{i}", w=w, n=n)
+        for i, (w, n) in enumerate(wn_pairs)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -124,8 +135,10 @@ class TestFitSkillObservationCountPrecondition:
 
     @pytest.mark.parametrize("k", [K_MIN_FOR_EB - 1, K_MIN_FOR_EB])
     def test_nonpositive_observation_count_rejected_before_method_selection(self, k: int) -> None:
-        clauses = [ClauseObservations(clause_id=f"c{i}", w=3.0, n=10) for i in range(k - 1)]
-        clauses.append(ClauseObservations(clause_id="unmeasured", w=0.0, n=0))
+        clauses = [
+            ClauseObservations.bernoulli(clause_id=f"c{i}", w=3.0, n=10) for i in range(k - 1)
+        ]
+        clauses.append(ClauseObservations.bernoulli(clause_id="unmeasured", w=0.0, n=0))
 
         with pytest.raises(ValueError, match="unmeasured") as exc_info:
             fit_skill(clauses)
@@ -164,8 +177,10 @@ class TestFitSkillWinWeightPrecondition:
 
     @pytest.mark.parametrize("k", [K_MIN_FOR_EB - 1, K_MIN_FOR_EB])
     def test_wins_above_observations_rejected_before_method_selection(self, k: int) -> None:
-        clauses = [ClauseObservations(clause_id=f"c{i}", w=3.0, n=10) for i in range(k - 1)]
-        clauses.append(ClauseObservations(clause_id="overcounted", w=11.0, n=10))
+        clauses = [
+            ClauseObservations.bernoulli(clause_id=f"c{i}", w=3.0, n=10) for i in range(k - 1)
+        ]
+        clauses.append(ClauseObservations.bernoulli(clause_id="overcounted", w=11.0, n=10))
 
         with pytest.raises(ValueError, match="overcounted") as exc_info:
             fit_skill(clauses)
@@ -182,7 +197,7 @@ class TestFitSkillWinWeightPrecondition:
         Beta(1 + w, ...) takes a non-positive FIRST parameter.
         """
         with pytest.raises(ValueError, match="undercounted"):
-            fit_skill([ClauseObservations(clause_id="undercounted", w=-1.0, n=10)])
+            fit_skill([ClauseObservations.bernoulli(clause_id="undercounted", w=-1.0, n=10)])
 
     def test_every_observation_a_win_is_admissible(self) -> None:
         """w == n is the boundary that must NOT raise: every observation a win.
@@ -190,7 +205,7 @@ class TestFitSkillWinWeightPrecondition:
         Guards the fix against over-rejection (``w < n``) — a real skill that
         wins every comparison must still be fittable.
         """
-        result = fit_skill([ClauseObservations(clause_id="perfect", w=10.0, n=10)])
+        result = fit_skill([ClauseObservations.bernoulli(clause_id="perfect", w=10.0, n=10)])
         assert result.posteriors[0].w == 10.0
         assert result.posteriors[0].posterior_beta > 0.0
 
@@ -261,14 +276,78 @@ class TestFitSkillEbmom:
         """
         # rates 0.3 .. 0.9, then padded to the K=10 EB floor at 0.8 — no rate
         # above 1.0, and no degenerate rate == 1.0.
-        pairs: list[tuple[float, int]] = [(3.0 + i, 10) for i in range(7)]
-        pairs += [(8.0, 10)] * 3
+        #
+        # n=50 rather than n=10 (#360). The rate STRUCTURE is unchanged; only
+        # the observation count per clause moved. At n=10 this spread is not
+        # separable from binomial noise around a common rate: latent variance
+        # 0.01956 against a null 95th percentile of 0.02067, so the
+        # heterogeneity test correctly refuses it and the fit never reaches the
+        # hierarchical path these tests exist to exercise. At n=50 the same
+        # heterogeneity is identified with a wide margin (0.03661 vs 0.00355).
+        # The refusal at n=10 is itself pinned by
+        # test_marginal_heterogeneity_is_refused_not_fitted below, so this
+        # change moves the INPUT that reaches the path under test rather than
+        # erasing the behaviour change that made it necessary.
+        pairs: list[tuple[float, int]] = [(15.0 + 5 * i, 50) for i in range(7)]
+        pairs += [(40.0, 50)] * 3
         return make_clauses(pairs)
 
     def test_ebmom_method_returned(self) -> None:
         clauses = self._make_k10_clauses_with_variance()
         result = fit_skill(clauses)
         assert result.aggregation_method == "ebmom_hierarchical"
+
+    def test_marginal_heterogeneity_is_refused_not_fitted(self) -> None:
+        """K=10, n=10, rates 0.3-0.9 is NOT identifiably heterogeneous (#360).
+
+        This is the fixture these tests used before the heterogeneity gate
+        landed, and it reached the hierarchical path. It no longer does, and
+        that is the intended behaviour change rather than a regression: with
+        ten clauses of ten trials, a 0.3-to-0.9 spread of observed rates is
+        inside what binomial noise around a single common rate produces. The
+        old code answered it with a hyperprior fitted to that noise.
+
+        Pinned here so the change is asserted somewhere. Widening the fixture
+        to n=50 to exercise the hierarchical path would otherwise delete the
+        evidence that the gate does anything.
+        """
+        pairs: list[tuple[float, int]] = [(3.0 + i, 10) for i in range(7)]
+        pairs += [(8.0, 10)] * 3
+        result = fit_skill(make_clauses(pairs))
+
+        assert result.aggregation_method == "bh_fdr_fallback"
+        prov = result.aggregation_provenance
+        assert prov["fallback_reason"] == "latent_variance_not_identified", (
+            f"expected a refusal on identification grounds, got {prov['fallback_reason']!r}"
+        )
+        # The refusal must be auditable: a reader has to be able to see the
+        # test that produced it, not just that something was refused.
+        attempted = prov["attempted"]
+        assert isinstance(attempted, dict)
+        test = attempted["heterogeneity_test"]
+        assert isinstance(test, dict)
+        for field in ("statistic", "critical_value", "alpha", "bootstrap_b", "bootstrap_seed"):
+            assert field in test, f"provenance is missing {field!r}"
+        assert test["statistic"] <= test["critical_value"]
+        assert test["alpha"] == HETEROGENEITY_TEST_ALPHA
+
+    def test_admission_verdict_is_deterministic(self) -> None:
+        """The bootstrap must not make fit_skill non-deterministic (#360).
+
+        The seed is derived from the observations, so the same input gives the
+        same critical value and the same verdict on every run. A wall-clock or
+        global-RNG seed would make a published verdict irreproducible.
+        """
+        clauses = self._make_k10_clauses_with_variance()
+        first = fit_skill(clauses)
+        second = fit_skill(clauses)
+
+        assert first.aggregation_method == second.aggregation_method
+        t1 = first.aggregation_provenance["heterogeneity_test"]
+        t2 = second.aggregation_provenance["heterogeneity_test"]
+        assert isinstance(t1, dict) and isinstance(t2, dict)
+        assert t1["critical_value"] == t2["critical_value"]
+        assert t1["bootstrap_seed"] == t2["bootstrap_seed"]
 
     def test_provenance_fields_present(self) -> None:
         clauses = self._make_k10_clauses_with_variance()
@@ -438,10 +517,10 @@ class TestBhFdrDirect:
         # 5 pure-loss + 4 pure-win clauses → bimodal → alpha_hat = 0 → fallback
         clauses: list[ClauseObservations] = []
         for i in range(5):
-            clauses.append(ClauseObservations(clause_id=f"loss-{i}", w=0.0, n=10))
+            clauses.append(ClauseObservations.bernoulli(clause_id=f"loss-{i}", w=0.0, n=10))
         for i in range(4):
-            clauses.append(ClauseObservations(clause_id=f"win-{i}", w=10.0, n=10))
-        winner = ClauseObservations(clause_id="winner-clause", w=10.0, n=10)
+            clauses.append(ClauseObservations.bernoulli(clause_id=f"win-{i}", w=10.0, n=10))
+        winner = ClauseObservations.bernoulli(clause_id="winner-clause", w=10.0, n=10)
         clauses.append(winner)
         assert len(clauses) == 10  # K=10 to satisfy EB eligibility gate
 
@@ -759,8 +838,14 @@ def test_bh_fdr_fallback_reason_field() -> None:
     result = fit_skill(clauses)
     assert result.aggregation_method == "bh_fdr_fallback"
     prov = result.aggregation_provenance
-    assert prov["fallback_reason"] == "var_below_threshold", (
-        f"Expected 'var_below_threshold', got {prov['fallback_reason']!r}"
+    # The reason string moved with #360, and the move is correct. Ten identical
+    # clauses have zero latent variance, so the admission test refuses them on
+    # IDENTIFICATION grounds before the magnitude guard is ever consulted.
+    # 'var_below_threshold' now names only the arithmetic-safety epsilon inside
+    # _ebmom, which this input no longer reaches. The mutation this test kills
+    # (fallback_reason set to None) is unaffected by which reason is expected.
+    assert prov["fallback_reason"] == "latent_variance_not_identified", (
+        f"Expected 'latent_variance_not_identified', got {prov['fallback_reason']!r}"
     )
 
 
@@ -809,7 +894,7 @@ def test_clause_observations_is_frozen() -> None:
 
     Under mutation (frozen=False), assignment succeeds → FrozenInstanceError not raised → RED.
     """
-    obs = ClauseObservations(clause_id="c1", w=5.0, n=10)
+    obs = ClauseObservations.bernoulli(clause_id="c1", w=5.0, n=10)
     with pytest.raises(dataclasses.FrozenInstanceError):
         obs.w = 99.9  # type: ignore[misc]
 
