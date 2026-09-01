@@ -1,7 +1,7 @@
 # Amended pre-registration: EB-MoM sampling-variance peel and heterogeneity admission (#360)
 
 **Status:** FROZEN on authoring. No confirmatory simulation has been run against it.
-**BLOCKED:** two frozen clauses disagree about the null's estimand; see the open question
+**BLOCKED:** two frozen clauses disagree about the null's heterogeneity target; see the open question
 before section 8. A confirmatory root seed must not be spent until that is ruled on.
 **Amends:** the pre-registration in the module docstring of
 `tests/test_aggregation_fit_ebmom_recovery.py` (falsification plan item 2, #344).
@@ -165,7 +165,7 @@ win probability.
    decisive trials as Bernoulli(`p_0k`). Each clause keeps its own `n_k`; unequal `n_k` is the
    normal case and the null must reproduce it.
 
-**THE NULL HOLDS THE ENCODED CLAUSE MEAN CONSTANT. That is the estimand, and it forces the
+**THE NULL HOLDS THE ENCODED CLAUSE MEAN CONSTANT. That is the heterogeneity target, and it forces the
 decisive rate to vary by clause.** With tie fraction `q_k = ties_k / n_k`,
 
 ```
@@ -456,7 +456,7 @@ choice rather than an implied one.
 
 **FROZEN: the oracle hyperprior for a tie regime is the Beta with mean and variance matched to
 the true encoded-mean distribution.** Moment matching is the standard construction and it keeps
-the oracle in the same family as the estimand under test. For `tie_heavy_signal`:
+the oracle in the same family as the quantity under test. For `tie_heavy_signal`:
 
 ```
 mean = 0.65, variance = 0.0032142857
@@ -621,7 +621,8 @@ Rollback state is `main`. `agent/issue-360` stays unmerged and is the developmen
 ## OPEN, AND IT BLOCKS THE CONFIRMATORY RUN: two frozen clauses disagree
 
 **Found by the registered `tie_heavy_null` regime on a development smoke, before any
-confirmatory run. Not fixed here, because fixing it means choosing an estimand, and that is
+confirmatory run. Not fixed here, because fixing it means choosing a heterogeneity target,
+and that is
 adjudication.**
 
 Measured, root seed `SMOKE_NOT_CONFIRMATORY`, R=40:
@@ -662,9 +663,9 @@ Two frozen clauses describe different hypotheses:
 Those are not the same null, and the 40 percent is exactly that disagreement. Each clause is
 defensible on its own terms:
 
-- If the estimand is heterogeneity in the **decisive** rate, tie counts are an ancillary
+- If the heterogeneity target is the **decisive** rate, tie counts are an ancillary
   nuisance, the regime is right, and the null must hold the decisive rate common.
-- If the estimand is heterogeneity in the **encoded** mean, the null is right, and the regime
+- If the heterogeneity target is the **encoded** mean, the null is right, and the regime
   does not generate a null world at all: it generates conditionally heterogeneous data.
 
 Note that the second reading makes the `tie_heavy_null` label wrong rather than the code wrong.
@@ -672,7 +673,7 @@ Note that the second reading makes the `tie_heavy_null` label wrong rather than 
 ### Why this session is not deciding it
 
 Choosing between them decides **what the hierarchical lane measures heterogeneity IN**, which is
-an estimand question, not an implementation one. It also interacts with the lane-authority
+a specification question, not an implementation one. It also interacts with the lane-authority
 correction above: the diagnostic clause-aggregation lane consumes encoded `{0, 0.5, 1}`
 observations, while the production efficacy lane consumes discordant counts.
 
@@ -682,7 +683,7 @@ response to this measurement.**
 
 ### What must happen before a confirmatory root seed is spent
 
-1. The maintainer rules on the estimand: decisive rate, or encoded mean.
+1. The maintainer rules on the heterogeneity target: the decisive rate, or the encoded mean.
 2. Whichever clause loses is amended openly, superseding this text rather than overwriting it.
 3. Row 1 is re-measured on a development smoke to confirm the two clauses now agree.
 4. Only then is the root seed generated and the single confirmatory run performed.
