@@ -254,6 +254,31 @@ and covers that section only. This page stays the citable surface for every kind
 
 ## Assurance reports
 
+### [`docs/assurance/ebmom-peel-preregistration-amendment.md`](assurance/ebmom-peel-preregistration-amendment.md)
+
+- **Claims:** The mean-of-`c_hat` acceptance statistic registered for falsification
+  plan item 2 (#344) is superseded, because concentration is a reciprocal of the
+  latent variance and the peel removes that variance's magnitude without removing
+  its sampling error, so the mean is dominated by the replicates carrying least
+  information. Records the development evidence that produced the amendment (seed
+  20260902; four estimator families; the measured finite-K bias of the `/K` peel
+  matching its closed form). Freezes a replacement acceptance matrix that reports
+  false admission under homogeneity, admission rate, latent-variance bias and
+  coverage, fallback rate, and wrong-PASS, wrong-FAIL and added-abstention
+  separately. Replaces the fixed `VAR_FLOOR` with a one-sided parametric-bootstrap
+  test of `latent_variance > 0` at a proposed level of 0.05 with its power cost
+  tabled. States that `(w, n)` does not identify within-clause variance when ties
+  are present, verified on a worked pair, which makes #360 depend on #368.
+- **Refuses to claim:** That the repaired estimator passes anything — no
+  confirmatory simulation has been run against this amendment; that the proposed
+  test level is settled, as it is a risk-tolerance call left to the maintainer;
+  that the development results on seed 20260902 confirm any repair, since they are
+  quarantined as development evidence by section 0; that the original registration
+  was wrong, as its derivation is correct for the unpeeled estimator it was written
+  against; that tie-free synthetic regimes can detect the tie-identification
+  defect; that the bootstrap's power figures hold, since they are normal
+  approximations pending measurement.
+
 ### [`docs/assurance/dependency-audit.md`](assurance/dependency-audit.md)
 
 - **Claims:** The command CI runs (`python -m pip_audit --local`, pip-audit 2.10.1,

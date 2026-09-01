@@ -224,8 +224,15 @@ def fit_skill(
     sample_mean = sum(rates) / k
     sample_var = sum((r - sample_mean) ** 2 for r in rates) / k  # population var
 
+    # The across-clause variance of observed rates is true heterogeneity PLUS
+    # binomial sampling noise. Peel the noise before inverting the moment map;
+    # feeding the raw variance to _ebmom attributes sampling noise to the
+    # hyperprior and deflates the recovered concentration by ~n/(n+c+1).
+    sampling_var = _mean_sampling_variance(clauses)
+    latent_var = max(sample_var - sampling_var, 0.0)
+
     try:
-        alpha_hat, beta_hat = _ebmom(sample_mean, sample_var)
+        alpha_hat, beta_hat = _ebmom(sample_mean, latent_var)
     except ConvergenceFailure as exc:
         # -------------------------------------------------------------------
         # BH-FDR FALLBACK
@@ -235,7 +242,12 @@ def fit_skill(
             "alpha_hat": exc.alpha_hat,
             "beta_hat": exc.beta_hat,
             "sample_mean": exc.sample_mean,
+            # exc.sample_var is the PEELED variance the inversion actually saw.
+            # The raw and sampling terms are carried beside it so a reader can
+            # tell a homogeneous population from a noisy one.
             "sample_var": exc.sample_var,
+            "sample_var_raw": sample_var,
+            "sampling_var": sampling_var,
         }
         logger.warning(
             "EB-MoM convergence failure (%s): falling back to BH-FDR at q=%.2f.",
@@ -275,10 +287,38 @@ def fit_skill(
             "beta_hat": beta_hat,
             "sample_mean": sample_mean,
             "sample_var": sample_var,
+            "sampling_var": sampling_var,
+            "latent_var": latent_var,
             "k_clauses": k,
         },
         posteriors=posteriors,
     )
+
+
+def _mean_sampling_variance(clauses: list[ClauseObservations]) -> float:
+    """Mean per-clause binomial sampling variance of the observed rate w/n.
+
+    Each observed rate r_k = w_k / n_k estimates the clause's true rate p_k
+    with variance p_k (1 - p_k) / n_k. Since p_k is unknown, estimate
+    p_k (1 - p_k) from the observation itself. E[r(1-r)] equals
+    p(1-p)(n-1)/n, so r(1-r) / (n-1) is unbiased for the sampling variance
+    p(1-p)/n. That is why the denominator is n-1 and not n: using n
+    under-peels by a factor (n-1)/n and leaves a residual concentration
+    deflation that bites hardest at small n, which is exactly the regime
+    this correction exists to fix.
+
+    n_k == 1 carries no within-clause information about p_k, so the
+    denominator is clamped at 1. Such a clause contributes r(1-r), which is
+    zero for an untied observation; it cannot be peeled and is not guessed at.
+
+    Returns the mean over clauses, matching the population variance in
+    fit_skill that it is subtracted from.
+    """
+    total = 0.0
+    for clause in clauses:
+        rate = clause.w / clause.n
+        total += rate * (1.0 - rate) / max(clause.n - 1.0, 1.0)
+    return total / len(clauses)
 
 
 def _ebmom(sample_mean: float, sample_var: float) -> tuple[float, float]:
@@ -289,6 +329,13 @@ def _ebmom(sample_mean: float, sample_var: float) -> tuple[float, float]:
         v = sample_var
         alpha_hat = m * (m*(1-m)/v - 1)
         beta_hat  = (1-m) * (m*(1-m)/v - 1)
+
+    This is the pure moment inversion and knows nothing about sampling noise.
+    fit_skill passes the PEELED (latent) variance, so every guard below reads
+    against latent heterogeneity rather than raw dispersion: a population
+    whose observed spread is entirely binomial noise peels to zero and lands
+    on var_below_threshold, which routes it to the BH-FDR fallback as the
+    degenerate case it is.
 
     Raises ConvergenceFailure when:
       - sample_var < VAR_FLOOR  (degenerate; division unstable)
