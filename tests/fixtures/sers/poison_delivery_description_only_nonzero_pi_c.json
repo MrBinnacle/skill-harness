@@ -1,0 +1,45 @@
+{
+  "sers_version": "1.2.0",
+  "skill_name": "poison-description-only-nonzero-pi-c",
+  "verdict": "KEEP",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": null,
+  "value_class": "transformative-lift",
+  "evidence_admissibility": { "status": "not_applicable" },
+  "cost": {
+    "standing_tokens": { "refusal": "not_applicable" },
+    "fired_tokens": { "refusal": "not_applicable" },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": "test-model",
+    "prompt_fingerprint": "a",
+    "schema_fingerprint": "b"
+  },
+  "source": { "prose_path": "README.md" },
+  "summary": "Poison: channel=description_only implies pi_c.hat=0, but hat is 0.5.",
+  "subject_identity": {
+    "skill_id": "aabbccddee0011223344556677889900aabbccddeeff00112233445566778899",
+    "harness_version": "0.2.3",
+    "metric_version": "0.3.0",
+    "implementation_hash": "aabbccddee0011223344556677889900aabbccddeeff00112233445566778899",
+    "arms": ["null", "full"]
+  },
+  "delivery": {
+    "exposure": {
+      "value": 1.0,
+      "passes": 8,
+      "epochs": 8
+    },
+    "pi_c": {
+      "invocations": 4,
+      "trials": 8,
+      "hat": 0.5,
+      "ci_low": 0.187,
+      "ci_high": 0.813,
+      "confidence": 0.95,
+      "detector": "v1-skill-tool-call"
+    },
+    "channel": "description_only"
+  }
+}
