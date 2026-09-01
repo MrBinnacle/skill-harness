@@ -29,7 +29,8 @@ checked against the code enums in CI.
 ### `sers_version`
 
 Vocabulary generation of the receipt. Receipts that disagree on
-`sers_version` are not comparable. Supported values: `"1.0.0"`, `"1.1.0"`.
+`sers_version` are not comparable. Supported values: `"1.0.0"`, `"1.1.0"`,
+`"1.2.0"`.
 
 ### `skill_name`
 
@@ -132,6 +133,39 @@ Each leg is either `{ "tokens": <non-negative int> }` or
 `{ "refusal": "unmeasured" | "not_applicable" | "not_instrumented", ... }`.
 A missing leg, a negative count, or a free-typed excuse is non-conforming.
 
+### `delivery` (required from `sers_version` 1.2.0)
+
+Value-delivery attribution: which of the skill's two products carried the
+measured value. Required when `sers_version` is `1.2.0`; absent on `1.0.0`
+and `1.1.0` receipts.
+
+The delivery block carries three fields:
+
+| Field | Shape | Meaning |
+| --- | --- | --- |
+| `channel` | enum: `description_only`, `body_and_description`, `not_instrumented` | Which product carried the value. |
+| `exposure` | `{ "value": 0..1, "passes"?, "epochs"? }` or refusal | Exposure rate in the treated arm. |
+| `pi_c` | `{ "invocations", "trials", "hat", "ci_low", "ci_high", "confidence", "detector" }` or refusal | Invocation rate with Clopper-Pearson interval. |
+
+Channel vocabulary:
+
+| Value | Meaning |
+| --- | --- |
+| `description_only` | The standing description was read; the body was never loaded (`pi_c.hat = 0` with full exposure). |
+| `body_and_description` | Invocations are present; the body was read in addition to the description. |
+| `not_instrumented` | Receipts minted before detector v2; no delivery measurement available. |
+
+Cross-field rules:
+- `channel: description_only` requires `pi_c.hat == 0` (or `pi_c` as a refusal).
+- `channel: body_and_description` requires `pi_c.invocations > 0` (or `pi_c` as a refusal).
+
+Each sub-block (`exposure`, `pi_c`) is either a measured object or a typed
+refusal — never a null number. The refusal vocabulary is
+`"not_instrumented" | "not_applicable"`.
+
+The receipt minting path reads `pi_c` and `exposure` from the run's
+`config_json` and never recomputes them.
+
 ### `instrument_identity`
 
 Generation stamp so any figure carries the generation that produced it.
@@ -178,8 +212,9 @@ from `measurements` / `cost`.
 ### `subject_identity` (required from `sers_version` 1.1.0)
 
 Provenance block identifying the subject under test. Absent on 1.0.0
-hand-encoded receipts; required when `sers_version` is `1.1.0`. Populate via
-`skill_harness.sers.build_subject_identity` — do not free-type the fields.
+hand-encoded receipts; required when `sers_version` is `1.1.0` or `1.2.0`.
+Populate via `skill_harness.sers.build_subject_identity` — do not free-type
+the fields.
 
 | Field | Meaning |
 | --- | --- |

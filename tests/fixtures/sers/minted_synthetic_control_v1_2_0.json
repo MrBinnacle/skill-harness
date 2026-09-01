@@ -1,0 +1,75 @@
+{
+  "sers_version": "1.2.0",
+  "skill_name": "declared-synthetic-positive-control",
+  "verdict": "KEEP",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": null,
+  "value_class": "transformative-lift",
+  "wrong_instrument": false,
+  "declared_synthetic_control": true,
+  "evidence_admissibility": {
+    "status": "admissible",
+    "detail": "Store-backed paired Full-vs-Null run; evidence cleared the evidence admissibility gate at write time."
+  },
+  "cost": {
+    "standing_tokens": {
+      "refusal": "not_instrumented",
+      "detail": "Synthetic control skill; standing cost not part of the KEEP claim."
+    },
+    "fired_tokens": {
+      "refusal": "not_instrumented"
+    },
+    "aux_tokens": {
+      "refusal": "not_applicable"
+    }
+  },
+  "instrument_identity": {
+    "extractor_model": "anthropic/claude-sonnet-5",
+    "prompt_fingerprint": "synthetic-control-paired-2026-07-27",
+    "schema_fingerprint": "subject-file_contains+paired-freeze-binary"
+  },
+  "measurements": {
+    "full_pass_rate": {
+      "value": 1.0,
+      "passes": 8,
+      "epochs": 8
+    },
+    "null_pass_rate": {
+      "value": 0.0,
+      "passes": 0,
+      "epochs": 8
+    },
+    "p_win": {
+      "value": 0.99,
+      "detail": "Posterior p_win reported as 0.99 (CHANGELOG r3 positive control also cites 0.9899 pre-freeze)."
+    },
+    "go_nogo": "NOT_APPLICABLE"
+  },
+  "source": {
+    "prose_path": "README.md",
+    "date": "2026-07-27",
+    "notes": "1.2.0 mint of the 2026-07-27 declared synthetic positive control KEEP. Measurements copy the documented real run (Full 8/8 vs Null 0/8, p_win 0.99). subject_identity populated by skill_harness.sers.build_subject_identity at mint time; delivery block records not_instrumented channel (synthetic control, no live detector). Held as a conformance fixture, not under docs/sers/receipts/, so the site generator keeps a single page per skill_name."
+  },
+  "summary": "Declared synthetic positive control KEEP (2026-07-27), SERS 1.2.0: Full 8/8 vs Null 0/8, posterior p_win 0.99. Effect exists by construction; subject_identity carries harness-minted provenance. Delivery: not_instrumented (synthetic control; no live pi_c detector). Instrument-label validation, not a production-skill KEEP.",
+  "subject_identity": {
+    "skill_id": "e09345f64889bfdfc9c671b2aae43ac41cfe99ab997843422716991d51519295",
+    "harness_version": "0.2.3",
+    "metric_version": "0.3.0",
+    "implementation_hash": "7997bf55c86231f65048711e66587f0bd4e3236dee14fc665626cd45250d14c1",
+    "arms": [
+      "null",
+      "full"
+    ]
+  },
+  "delivery": {
+    "exposure": {
+      "refusal": "not_instrumented",
+      "detail": "Synthetic control; no live exposure measurement."
+    },
+    "pi_c": {
+      "refusal": "not_instrumented",
+      "detail": "Synthetic control; no live pi_c detector."
+    },
+    "channel": "not_instrumented"
+  }
+}

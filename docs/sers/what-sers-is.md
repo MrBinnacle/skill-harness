@@ -115,7 +115,8 @@ Read off the schema, which is the operative artifact.
 `value_class` are required *keys* that may hold `null`; presence is mandatory, a value is not.
 
 **Optional:** `wrong_instrument`, `declared_synthetic_control`, `measurements`.
-`subject_identity` is optional on `1.0.0` and required on `1.1.0`.
+`subject_identity` is optional on `1.0.0` and required on `1.1.0` and `1.2.0`.
+`delivery` is required on `1.2.0` and absent on `1.0.0` and `1.1.0`.
 
 **Closed vocabularies**, each checked for equality against the code enum in CI:
 
@@ -136,11 +137,20 @@ the README is prose only.
 or an object carrying `refusal` from a fixed vocabulary. There is no third form. Omitting the
 figure, substituting a placeholder, or free-typing a reason string is non-conforming.
 
+**The delivery block (1.2.0).** The `delivery` block attributes value to one of the skill's two
+products: the standing description or the body. Required from `sers_version` 1.2.0; absent on
+earlier versions. Carries `channel` (closed vocabulary: `description_only`, `body_and_description`,
+`not_instrumented`), `exposure` (treated-arm exposure rate or refusal), and `pi_c` (invocation
+rate with Clopper-Pearson interval or refusal). Cross-field rules: `description_only` requires
+`pi_c.hat = 0`; `body_and_description` requires `pi_c.invocations > 0`. The receipt minting
+path reads `pi_c` and `exposure` from the run's `config_json` and never recomputes them.
+
 **The gate term.** `evidence_admissibility` is the only permitted spelling. The bare form is
 rejected, and a poison fixture holds that line in CI.
 
-**Version semantics.** `sers_version` is one of `"1.0.0"` or `"1.1.0"`. Receipts carrying
-different values are declared non-comparable. From `1.1.0`, `subject_identity` is required.
+**Version semantics.** `sers_version` is one of `"1.0.0"`, `"1.1.0"`, or `"1.2.0"`. Receipts
+carrying different values are declared non-comparable. From `1.1.0`, `subject_identity` is
+required. From `1.2.0`, `delivery` is required.
 
 ## What this document does not settle
 

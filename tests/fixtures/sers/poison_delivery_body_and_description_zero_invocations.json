@@ -1,0 +1,45 @@
+{
+  "sers_version": "1.2.0",
+  "skill_name": "poison-body-and-description-zero-invocations",
+  "verdict": "KEEP",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": null,
+  "value_class": "transformative-lift",
+  "evidence_admissibility": { "status": "not_applicable" },
+  "cost": {
+    "standing_tokens": { "refusal": "not_applicable" },
+    "fired_tokens": { "refusal": "not_applicable" },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": "test-model",
+    "prompt_fingerprint": "a",
+    "schema_fingerprint": "b"
+  },
+  "source": { "prose_path": "README.md" },
+  "summary": "Poison: channel=body_and_description implies invocations>0, but invocations=0.",
+  "subject_identity": {
+    "skill_id": "aabbccddee0011223344556677889900aabbccddeeff00112233445566778899",
+    "harness_version": "0.2.3",
+    "metric_version": "0.3.0",
+    "implementation_hash": "aabbccddee0011223344556677889900aabbccddeeff00112233445566778899",
+    "arms": ["null", "full"]
+  },
+  "delivery": {
+    "exposure": {
+      "value": 0.0,
+      "passes": 0,
+      "epochs": 8
+    },
+    "pi_c": {
+      "invocations": 0,
+      "trials": 8,
+      "hat": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.369,
+      "confidence": 0.95,
+      "detector": "v1-skill-tool-call"
+    },
+    "channel": "body_and_description"
+  }
+}

@@ -47,6 +47,14 @@ SCHEMA_PAGE_NAME: Final[str] = "schema.html"
 ABSENT_TEXT: Final[str] = "absent from this receipt"
 NO_QUALIFIER_TEXT: Final[str] = "none stated"
 
+_DELIVERY_CHANNEL_TEXT: Final[dict[str, str]] = {
+    "description_only": (
+        "The standing description carried the value; the skill body was never read."
+    ),
+    "body_and_description": ("The skill body was read in addition to the standing description."),
+    "not_instrumented": ("No delivery detector was present; channel is not instrumented."),
+}
+
 _SLUG_RE: Final[re.Pattern[str]] = re.compile(r"[^a-z0-9]+")
 
 
@@ -235,6 +243,7 @@ def render_skill_page(
             cost_rows=_indent(_cost_rows(receipt), 14),
             clause_evidence=clause_evidence,
             measurement_rows=_indent(_measurement_rows(receipt, schema), 12),
+            delivery_section=_delivery_section(receipt),
             gate_status=safe(_gate_status(receipt)),
             gate_detail=safe(_gate_detail(receipt)),
             instrument_rows=_indent(_identity_rows(receipt), 10),
@@ -398,6 +407,54 @@ def _source_rows(receipt: Mapping[str, Any]) -> list[str]:
         else:
             rows.append(f'<dt>{safe(key)}</dt><dd class="absent">{safe(ABSENT_TEXT)}</dd>')
     return rows
+
+
+def _delivery_section(receipt: Mapping[str, Any]) -> str:
+    """Render the delivery block, or the empty string for receipts without one."""
+    delivery = receipt.get("delivery")
+    if not isinstance(delivery, Mapping):
+        return ""
+    channel = delivery.get("channel", "")
+    channel_text = _DELIVERY_CHANNEL_TEXT.get(
+        channel, f"Channel: {channel}" if isinstance(channel, str) else ABSENT_TEXT
+    )
+    parts: list[str] = [
+        '<section aria-labelledby="value-delivery">',
+        '<h2 id="value-delivery">Value delivery</h2>',
+        f"<p>{safe(channel_text)}</p>",
+    ]
+    # Pi_c detail
+    pi_c = delivery.get("pi_c")
+    if isinstance(pi_c, Mapping):
+        refusal = pi_c.get("refusal")
+        if isinstance(refusal, str):
+            parts.append(f'<p class="refusal">pi_c: REFUSED ({safe(refusal)})</p>')
+        else:
+            hat = pi_c.get("hat")
+            invocations = pi_c.get("invocations")
+            trials = pi_c.get("trials")
+            hat_ok = isinstance(hat, (int, float))
+            inv_ok = isinstance(invocations, int)
+            tri_ok = isinstance(trials, int)
+            if hat_ok and inv_ok and tri_ok:
+                parts.append(f"<p>pi_c: {hat} ({invocations}/{trials} trials)</p>")
+    # Exposure detail
+    exposure = delivery.get("exposure")
+    if isinstance(exposure, Mapping):
+        refusal = exposure.get("refusal")
+        if isinstance(refusal, str):
+            parts.append(f'<p class="refusal">exposure: REFUSED ({safe(refusal)})</p>')
+        else:
+            value = exposure.get("value")
+            passes = exposure.get("passes")
+            epochs = exposure.get("epochs")
+            if isinstance(value, (int, float)):
+                text = str(value)
+                if isinstance(passes, int) and isinstance(epochs, int):
+                    text = f"{value} ({passes}/{epochs} epochs)"
+                parts.append(f"<p>exposure: {safe(text)}</p>")
+    parts.append("</section>")
+    return "\n".join(parts)
 
 
 def _gate_status(receipt: Mapping[str, Any]) -> str:
