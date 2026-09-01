@@ -718,9 +718,16 @@ def write_paired_evidence(
                         "harness_pin_json": full.samples[0].harness_pin_json,
                         "harness_pin_fingerprint": full.samples[0].harness_pin_fingerprint,
                         "pi_c": {"detector": PI_C_DETECTOR_VERSION, **pi_c.model_dump()},
+                        # SERS delivery (#388) reads value/passes/epochs from this
+                        # block verbatim — never exposed_count/trials. detector is
+                        # extra context for store readers; build_delivery ignores it.
                         "exposure": {
+                            "value": (
+                                exposure.exposed_count / exposure.trials if exposure.trials else 0.0
+                            ),
+                            "passes": exposure.exposed_count,
+                            "epochs": exposure.trials,
                             "detector": EXPOSURE_DETECTOR_VERSION,
-                            **exposure.model_dump(),
                         },
                         "paired_cells": _paired_cell_counts(full, null),
                     },

@@ -986,9 +986,12 @@ def test_config_json_records_exposure_summary(conn: sqlite3.Connection, skill_di
     result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
     row = conn.execute("SELECT config_json FROM runs WHERE run_id = ?", (result.run_id,)).fetchone()
     config = json.loads(row[0])
-    assert config["exposure"]["exposed_count"] == 2
-    assert config["exposure"]["trials"] == 2
-    assert config["exposure"]["detector_version"] == "v2-description-channel"
+    # Shape locked by #388 build_delivery: value/passes/epochs (not
+    # exposed_count/trials). detector is extra store context.
+    assert config["exposure"]["value"] == 1.0
+    assert config["exposure"]["passes"] == 2
+    assert config["exposure"]["epochs"] == 2
+    assert config["exposure"]["detector"] == "v2-description-channel"
 
 
 def test_config_json_records_pi_c_block(conn: sqlite3.Connection, skill_dir: Path) -> None:
