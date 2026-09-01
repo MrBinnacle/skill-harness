@@ -17,6 +17,10 @@ Enforced in:
 - `src/skill_harness/ablation/stopping.py::WIN_RATE_THRESHOLD/PASS_PROB_THRESHOLD/FAIL_PROB_THRESHOLD = 0.60/0.95/0.05`
 - `src/skill_harness/aggregation/status.py::PASS_PROB_THRESHOLD/FAIL_PROB_THRESHOLD = 0.95/0.05`
 
+The half-update encoding is **provisional**, and its measured sensitivity is
+recorded in §8. Read the two together: the thresholds above were calibrated against
+the blended rate, and §8 records that the blended rate is not the estimand of record.
+
 Spec: `docs/PRD.md` §14 "Pass Rule".
 
 ## 2. Pipeline safety (dry-run default)
@@ -124,6 +128,64 @@ matched-phase feed into `oc/gate2` (#91), confirmation-attempt accounting (#93) 
 the synthetic no-leak proof (#94) are **not yet built**.
 
 Spec: skill-harness #89 (task-frontier MVP), spine #84 unit 2.
+
+## 8. Tie encoding: estimand of record, and the measured error of the interim heuristic
+
+**The estimand of record is the DISCORDANT TABLE** — the McNemar/sign-test
+convention. Concordant pairs carry no directional information about a paired
+difference, so conditioning on discordant pairs is the settled answer in the
+paired-binary literature, and it is what Gate 2 (`oc/gate2.py`) already requires.
+Ruled 2026-08-31 on #368, after items 3 (#345) and 5 (#347) measured the same
+deviation from two sides.
+
+**Half-update (Win=1.0, Tie=0.5, Loss=0.0, `n += 1`) remains the operational
+stopping heuristic in the interim.** Under it the posterior converges to
+`Beta(1+w+t/2, 1+l+t/2)`, so the mean is pulled toward 0.50 as the tie count grows.
+Measured on the win-heavy fixture: `w=8, l=0, t=16` gives `P(rate > 0.60) = 0.726`
+(INCONCLUSIVE) where drop-ties gives `0.990` (PASSED); posterior-mean shift up to
+0.178.
+
+**The "dilution is always toward 0.5" argument is FALSE, and is recorded here
+because the ruling first asserted it.** A sweep over `w, l in [0, 60]`,
+`t in [1, 80]` found **80,011 grid points where half-update RAISES**
+`P(rate > 0.60)` relative to drop-ties — loss-leaning cases pulled UP toward 0.5.
+Worst observed: `w=0, l=2, t=7`, `0.0996` against `0.0640`. The error is not
+monotone and must not be described as such.
+
+**What survives is narrower, and it is a receipt rather than an argument:**
+
+| Gate | Measured on the grid above |
+|---|---|
+| PASS (`P >= 0.95`) | **Zero** grid points where ties push a clause across the gate that drop-ties keeps below it. A false KEEP cannot be minted by tie encoding anywhere on that grid. |
+| FAIL (`P <= 0.05`) | **Three** grid points where a drop-ties-FAILED clause escapes the gate (first: `w=0, l=3, t=5`, `0.0527` against `0.0256`). All three escape to INCONCLUSIVE, never to PASS. |
+
+So the cost is a **delayed** verdict — a measurement-time cost — and not a
+claim-integrity cost. That asymmetry is the entire justification for keeping the
+interim heuristic, and it is bounded by the grid, not proven in general.
+
+**The locked 0.60/0.95/0.05 thresholds do NOT transfer unexamined** to the
+conditional parameter `P(full wins | discordant)`. They were calibrated against the
+blended rate. Re-deriving them is part of the migration and must be pre-registered
+before any production run consumes the result.
+
+Enforced in / recorded by:
+- `src/skill_harness/aggregation/fit.py`, `ablation/stopping.py` (the half-update
+  encoding this section qualifies)
+- `docs/findings/halfupdate-tie-sensitivity.md` (the finding and its fixtures)
+- `tests/test_halfupdate_tie_sensitivity.py` (strict xfails, held until the
+  encodings agree — they are NOT loosened to go green)
+
+Scope: this section documents a measured sensitivity and a ruling. The migration
+itself — routing tie-heavy clause decisions through the Gate-2 discordant machinery
+(Path C) — is **not built**.
+
+*Revisit if:* a production design exceeds the swept grid (`w, l > 60` or `t > 80`),
+in which case re-run the sweep before relying on the PASS-gate zero; or a tie-heavy
+axis shows the practical-significance inversion, where rare-but-real wins are drowned
+by ties in a way that matters operationally — that is an effect-size floor question
+for the Gate-2 net-lift bounds, not a reason to resurrect the blended rate.
+
+Spec: skill-harness #368 (ruling and its amendment), #347 (item 5 detector), #345.
 
 ---
 
