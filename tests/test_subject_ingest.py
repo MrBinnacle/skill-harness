@@ -21,6 +21,8 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
+from skill_harness.aggregation.status import ClauseStatus
+from skill_harness.aggregation.verdict import paired_verdict
 from skill_harness.storage.migrations import open_evidence
 from skill_harness.subject.ingest import (
     ORACLE_METRIC_VERSION,
@@ -31,14 +33,16 @@ from skill_harness.subject.ingest import (
     EvalLogIngestError,
     EvalLogNotSuccessError,
     IngestResult,
+    NullArmContaminationError,
     PairedLogMismatchError,
     ParsedEvalLog,
     ParsedSample,
-    ZeroInvocationError,
+    UnexposedFullEpochError,
     _derived_run_id,
     _observation,
     _score_to_float,
     clopper_pearson,
+    detect_skill_exposure,
     detect_skill_invocation,
     write_paired_evidence,
 )
@@ -73,11 +77,15 @@ def make_sample(
     skill_name: str = "some-skill",
     scorer_name: str = "file_contains",
     invoked: bool | None = None,
+    exposed: bool | None = None,
 ) -> ParsedSample:
-    # Default mirrors the live lanes: a Full-arm epoch invoked the skill, a
-    # Null-arm epoch structurally cannot (#46: 0/22 Null false positives).
+    # Default mirrors the live lanes: a Full-arm epoch invoked and was exposed
+    # to the skill, a Null-arm epoch structurally cannot (#46: 0/22 Null false
+    # positives; #384: channel c = description present in transcript).
     if invoked is None:
         invoked = condition == "full"
+    if exposed is None:
+        exposed = condition == "full"
     return ParsedSample(
         condition=condition,  # type: ignore[arg-type]
         skill_name=skill_name,
@@ -85,6 +93,7 @@ def make_sample(
         scorer_name=scorer_name,
         score_value=score,
         invoked_skill=invoked,
+        exposed_skill=exposed,
         output_text=f"output-{condition}-{epoch}",
         subject_model="openrouter/anthropic/claude-haiku-4.5",
         harness_pin_json=PIN_JSON if fingerprint is not None else None,
@@ -595,45 +604,391 @@ def test_pi_c_is_mandatory_on_ingest_result() -> None:
         )
 
 
-def test_zero_invocations_in_treated_arm_refuses_as_instrumentation_finding(
+def test_zero_invocations_with_full_exposure_writes_successfully(
     conn: sqlite3.Connection, skill_dir: Path
 ) -> None:
+    """#384: zero invocations with full exposure is ADMISSIBLE — the write
+    proceeds, records pi_c = 0/n, and the verdict line carries it."""
     full = make_log(
         "full",
-        (make_sample("full", 1, 1.0, invoked=False), make_sample("full", 2, 1.0, invoked=False)),
+        (
+            make_sample("full", 1, 1.0, invoked=False, exposed=True),
+            make_sample("full", 2, 1.0, invoked=False, exposed=True),
+        ),
     )
     null = make_log("null", (make_sample("null", 1, 0.0), make_sample("null", 2, 0.0)))
-    with pytest.raises(ZeroInvocationError) as excinfo:
-        write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
-    message = str(excinfo.value)
-    # renders as an instrumentation finding, never as a null effect
-    assert "INSTRUMENTATION FINDING" in message
-    assert "not evidence" in message
-    # the finding carries the mandatory π̂_c block for reporting
-    assert excinfo.value.pi_c.invocations == 0
-    assert excinfo.value.pi_c.trials == 2
-    assert excinfo.value.pi_c.ci_low == 0.0
-    # refusal means refusal: nothing was written
-    assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
-    assert conn.execute("SELECT COUNT(*) FROM samples").fetchone()[0] == 0
-    assert conn.execute("SELECT COUNT(*) FROM oracle_verdicts").fetchone()[0] == 0
+    result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    # pi_c = 0/2, but the write succeeded
+    assert result.pi_c.invocations == 0
+    assert result.pi_c.trials == 2
+    assert result.pi_c.ci_low == 0.0
+    # the run was written
+    assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM samples").fetchone()[0] == 4
+    assert conn.execute("SELECT COUNT(*) FROM oracle_verdicts").fetchone()[0] == 2
+    # exposure summary recorded
+    assert result.exposure.exposed_count == 2
+    assert result.exposure.trials == 2
 
 
 def test_null_arm_detected_invocation_refuses_as_contamination(
     conn: sqlite3.Connection, skill_dir: Path
 ) -> None:
-    # #46: the Skill tool is structurally not launchable in the Null arm; a
-    # detected Null invocation means the arms are mislabelled or the harness is
-    # misconfigured — an apparatus error, not evidence.
+    # #46/#384: the Skill tool is structurally not launchable in the Null arm
+    # and the skill's description is not mounted; a detected Null invocation
+    # means the arms are mislabelled or the harness is misconfigured — an
+    # apparatus error, not evidence. #384 widened this to NullArmContaminationError.
+    from skill_harness.subject.ingest import NullArmContaminationError
+
     full = make_log("full", (make_sample("full", 1, 1.0),))
     null = make_log("null", (make_sample("null", 1, 0.0, invoked=True),))
-    with pytest.raises(PairedLogMismatchError, match="contamination"):
+    with pytest.raises(NullArmContaminationError, match="contamination"):
         write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
 
 
 # ---------------------------------------------------------------------------
-# Parsing surface without the optional extra
+# #384 — v2 exposure detector (channel c: description in transcript)
 # ---------------------------------------------------------------------------
+
+
+def _user(content: str) -> SimpleNamespace:
+    return SimpleNamespace(role="user", content=content)
+
+
+def test_detect_skill_exposure_fires_when_description_present() -> None:
+    description = "A trap card that prevents git rebase failures."
+    messages = [
+        _plain("system"),
+        _user(
+            "The following skills are available for use with the Skill tool:\n"
+            f"- git-pull-rebase-trap: {description}\n"
+            "Use the Skill tool to invoke them."
+        ),
+        _assistant(_call("Bash", {"command": "git pull --rebase"})),
+    ]
+    assert detect_skill_exposure(messages, description) is True
+
+
+def test_detect_skill_exposure_does_not_fire_when_description_absent() -> None:
+    description = "A trap card that prevents git rebase failures."
+    messages = [
+        _plain("system"),
+        _user("No skills are available."),
+        _assistant(_call("Bash", {"command": "git pull --rebase"})),
+    ]
+    assert detect_skill_exposure(messages, description) is False
+
+
+def test_detect_skill_exposure_is_conservative_on_malformed_shapes() -> None:
+    description = "Some skill description."
+    # empty messages
+    assert detect_skill_exposure([], description) is False
+    # message with no content attribute
+    assert detect_skill_exposure([_plain("user")], description) is False
+    # empty description can never count as exposed
+    assert detect_skill_exposure([_user("anything")], "") is False
+    # content as list of dicts (alternate message format)
+    list_content = [SimpleNamespace(content=[{"text": f"skill: {description}"}])]
+    assert detect_skill_exposure(list_content, description) is True
+
+
+def test_exposure_summary_model_is_mandatory_on_ingest_result() -> None:
+    """#384: ExposureSummary is mandatory, not optional, on IngestResult."""
+    with pytest.raises(ValidationError):
+        IngestResult(  # type: ignore[call-arg]
+            run_id="r",
+            skill_id="s",
+            clause_id="c",
+            sample_ids=(),
+            verdict_ids=(),
+            admissibility_state="admissible",
+            inadmissibility_reason=None,
+        )
+
+
+# ---------------------------------------------------------------------------
+# #384 — Paired-write refusal predicates at the ingest seam
+# ---------------------------------------------------------------------------
+
+
+def test_full_arm_unexposed_refuses(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC2(a): a Full-arm epoch with exposure not detected refuses."""
+    full = make_log(
+        "full",
+        (make_sample("full", 1, 1.0, exposed=False),),
+    )
+    null = make_log("null", (make_sample("null", 1, 0.0),))
+    with pytest.raises(UnexposedFullEpochError, match="exposure not detected"):
+        write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+
+
+def test_null_arm_exposed_refuses(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC2(b): a Null-arm epoch with exposure detected refuses."""
+    full = make_log("full", (make_sample("full", 1, 1.0),))
+    null = make_log("null", (make_sample("null", 1, 0.0, exposed=True),))
+    with pytest.raises(NullArmContaminationError, match="exposure detected"):
+        write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+
+
+def test_null_arm_invoked_still_refuses(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC2(b) regression: the 0/22 Null false-positive fixture stays green —
+    a Null-arm epoch with invocation detected refuses as contamination."""
+    full = make_log("full", (make_sample("full", 1, 1.0),))
+    null = make_log("null", (make_sample("null", 1, 0.0, invoked=True),))
+    with pytest.raises(NullArmContaminationError, match="invocation detected"):
+        write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+
+
+def test_null_arm_exposed_and_invoked_refuses(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC2(b): a Null-arm epoch with both exposure and invocation refuses."""
+    full = make_log("full", (make_sample("full", 1, 1.0),))
+    null = make_log("null", (make_sample("null", 1, 0.0, invoked=True, exposed=True),))
+    with pytest.raises(NullArmContaminationError, match="exposure detected"):
+        write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+
+
+# ---------------------------------------------------------------------------
+# #384 — Fixtures at the ingest seam
+# ---------------------------------------------------------------------------
+
+
+def test_exposed_and_invoked_pair_writes(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC6: exposed-and-invoked pair writes successfully."""
+    full = make_log(
+        "full",
+        (
+            make_sample("full", 1, 1.0, invoked=True, exposed=True),
+            make_sample("full", 2, 1.0, invoked=True, exposed=True),
+        ),
+    )
+    null = make_log("null", (make_sample("null", 1, 0.0), make_sample("null", 2, 0.0)))
+    result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    assert result.pi_c.invocations == 2
+    assert result.pi_c.trials == 2
+    assert result.exposure.exposed_count == 2
+    assert result.exposure.trials == 2
+    assert result.admissibility_state == "admissible"
+    assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+
+
+def test_exposed_not_invoked_pair_writes_pi_c_0(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC6: exposed-not-invoked pair writes with pi_c = 0/n. This is the
+    2026-09-01 scenario (git-pull-rebase-trap): description moved the model
+    in 6/8 epochs but the Skill tool was never called."""
+    full = make_log(
+        "full",
+        (
+            make_sample("full", 1, 1.0, invoked=False, exposed=True),
+            make_sample("full", 2, 1.0, invoked=False, exposed=True),
+            make_sample("full", 3, 0.0, invoked=False, exposed=True),
+            make_sample("full", 4, 1.0, invoked=False, exposed=True),
+        ),
+    )
+    null = make_log(
+        "null",
+        (
+            make_sample("null", 1, 0.0),
+            make_sample("null", 2, 0.0),
+            make_sample("null", 3, 0.0),
+            make_sample("null", 4, 0.0),
+        ),
+    )
+    result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    assert result.pi_c.invocations == 0
+    assert result.pi_c.trials == 4
+    assert result.pi_c.pi_c_hat == 0.0
+    assert result.pi_c.ci_low == 0.0
+    assert result.exposure.exposed_count == 4
+    assert result.exposure.trials == 4
+    # the run was written (not refused)
+    assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM oracle_verdicts").fetchone()[0] == 4
+
+
+def test_unexposed_full_epoch_refuses(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC6: Full epoch unexposed refuses as apparatus error."""
+    full = make_log(
+        "full",
+        (
+            make_sample("full", 1, 1.0, exposed=True),
+            make_sample("full", 2, 1.0, exposed=False),
+        ),
+    )
+    null = make_log("null", (make_sample("null", 1, 0.0), make_sample("null", 2, 0.0)))
+    with pytest.raises(UnexposedFullEpochError) as excinfo:
+        write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    assert excinfo.value.epoch == 2
+    # refusal means refusal: nothing was written
+    assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
+
+
+def test_null_epoch_exposed_refuses(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC6: Null epoch exposed refuses as control-arm contamination."""
+    full = make_log("full", (make_sample("full", 1, 1.0),))
+    null = make_log("null", (make_sample("null", 1, 0.0, exposed=True),))
+    with pytest.raises(NullArmContaminationError, match="exposure detected"):
+        write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+
+
+def test_null_epoch_invoked_refuses_0_22_fixture(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC6: the 0/22 structural false-positive fixture from #46 stays green.
+    All 22 Null-arm epochs in the original probe had zero Skill tool calls
+    and zero exposures; an invoked epoch still refuses."""
+    full = make_log("full", (make_sample("full", 1, 1.0),))
+    null = make_log("null", (make_sample("null", 1, 0.0, invoked=True),))
+    with pytest.raises(NullArmContaminationError):
+        write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+
+
+def test_screen_lane_parse_reports_exposure_not_computed(tmp_path: Path) -> None:
+    """AC6: screen-lane parse (no skill_description) reports exposure as False
+    (typed 'not computed')."""
+    from skill_harness.storage.migrations import open_evidence
+    from skill_harness.subject.screen_ingest import write_screen_evidence
+
+    conn = open_evidence(tmp_path / "evidence.db")
+    try:
+        sample = ParsedSample(
+            condition="null",
+            skill_name="some-skill",
+            epoch=1,
+            scorer_name="command_succeeds",
+            score_value=1.0,
+            invoked_skill=False,
+            exposed_skill=False,  # not computed in screen lane
+            output_text="output",
+            subject_model="m",
+            harness_pin_json=None,
+            harness_pin_fingerprint="fp",
+            input_tokens=10,
+            cache_read_input_tokens=None,
+            cache_creation_input_tokens=None,
+            output_tokens=10,
+            usd=None,
+        )
+        log = ParsedEvalLog(
+            task_name="some-skill-null",
+            task_id="task-screen-1",
+            created="2026-09-01T00:00:00+00:00",
+            status="success",
+            samples=(sample,),
+        )
+        # write_screen_evidence accepts this — exposure is not checked in the
+        # screen lane (no skill directory, no exposure computation)
+        result = write_screen_evidence(
+            parsed=log,
+            source_eval_sha256="sha-screen",
+            admissibility_state="admissible",
+            inadmissibility_reason=None,
+            conn=conn,
+        )
+        assert result.n_trials == 1
+        assert result.n_pass == 1
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# #384 — config_json: paired cell counts and exposure summary
+# ---------------------------------------------------------------------------
+
+
+def test_config_json_records_paired_cell_counts(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC4: the run's config_json records the four paired-outcome cell counts."""
+    full = make_log(
+        "full",
+        (
+            make_sample("full", 1, 1.0, invoked=True, exposed=True),  # Full pass
+            make_sample("full", 2, 1.0, invoked=True, exposed=True),  # Full pass
+            make_sample("full", 3, 0.0, invoked=True, exposed=True),  # Full fail
+            make_sample("full", 4, 1.0, invoked=True, exposed=True),  # Full pass
+        ),
+    )
+    null = make_log(
+        "null",
+        (
+            make_sample("null", 1, 0.0),  # Null fail → full_only
+            make_sample("null", 2, 1.0),  # Null pass → both_pass
+            make_sample("null", 3, 0.0),  # Null fail → both_fail
+            make_sample("null", 4, 0.0),  # Null fail → full_only
+        ),
+    )
+    result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    row = conn.execute("SELECT config_json FROM runs WHERE run_id = ?", (result.run_id,)).fetchone()
+    config = json.loads(row[0])
+    cells = config["paired_cells"]
+    assert cells["both_pass"] == 1  # epoch 2: both 1.0
+    assert cells["full_only"] == 2  # epochs 1, 4: full 1.0, null 0.0
+    assert cells["null_only"] == 0  # no epoch where null passed and full failed
+    assert cells["both_fail"] == 1  # epoch 3: both 0.0
+
+
+def test_config_json_records_exposure_summary(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC4: the run's config_json records the exposure summary."""
+    full = make_log(
+        "full",
+        (
+            make_sample("full", 1, 1.0, invoked=True, exposed=True),
+            make_sample("full", 2, 1.0, invoked=False, exposed=True),
+        ),
+    )
+    null = make_log("null", (make_sample("null", 1, 0.0), make_sample("null", 2, 0.0)))
+    result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    row = conn.execute("SELECT config_json FROM runs WHERE run_id = ?", (result.run_id,)).fetchone()
+    config = json.loads(row[0])
+    assert config["exposure"]["exposed_count"] == 2
+    assert config["exposure"]["trials"] == 2
+    assert config["exposure"]["detector_version"] == "v2-description-channel"
+
+
+def test_config_json_records_pi_c_block(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """AC5: pi_c recorded in config_json with detector version."""
+    full = make_log(
+        "full",
+        (
+            make_sample("full", 1, 1.0, invoked=True, exposed=True),
+            make_sample("full", 2, 1.0, invoked=False, exposed=True),
+        ),
+    )
+    null = make_log("null", (make_sample("null", 1, 0.0), make_sample("null", 2, 0.0)))
+    result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    row = conn.execute("SELECT config_json FROM runs WHERE run_id = ?", (result.run_id,)).fetchone()
+    config = json.loads(row[0])
+    pi_c = config["pi_c"]
+    assert pi_c["detector"] == PI_C_DETECTOR_VERSION
+    assert pi_c["invocations"] == 1
+    assert pi_c["trials"] == 2
+    assert pi_c["pi_c_hat"] == 0.5
+    assert pi_c["confidence"] == PI_C_CONFIDENCE
+
+
+# ---------------------------------------------------------------------------
+# #384 — v2 detector: screen-lane parse (parse_eval_log without description)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_eval_log_exposed_skill_defaults_false_without_description() -> None:
+    """The screen lane has no skill directory, so exposure is typed 'not
+    computed' (False) on every sample."""
+    # This tests the ParsedSample default, not the parse path (which needs [inspect])
+    sample = ParsedSample(
+        condition="null",
+        skill_name="x",
+        epoch=1,
+        scorer_name="s",
+        score_value=0.0,
+        invoked_skill=False,
+        output_text="o",
+        subject_model="m",
+        harness_pin_json=None,
+        harness_pin_fingerprint=None,
+        input_tokens=None,
+        cache_read_input_tokens=None,
+        cache_creation_input_tokens=None,
+        output_tokens=None,
+        usd=None,
+    )
+    assert sample.exposed_skill is False  # default: not computed
 
 
 @pytest.mark.skipif(INSPECT_INSTALLED, reason="extra installed; error path unreachable")
@@ -643,3 +998,141 @@ def test_parse_eval_log_raises_typed_error_without_extra(tmp_path: Path) -> None
 
     with pytest.raises(SubjectLayerNotInstalledError, match=r"skill-harness\[inspect\]"):
         parse_eval_log(tmp_path / "whatever.eval")
+
+
+# ---------------------------------------------------------------------------
+# #387 AC5 — verdict rationale carries the pi_c line
+# ---------------------------------------------------------------------------
+
+
+def test_paired_verdict_carries_pi_c_line() -> None:
+    """AC5: every verdict rationale minted by the paired path carries the pi_c
+    line per #36 adoption 4 display rule."""
+    r = paired_verdict(
+        ClauseStatus.PASSED,
+        pi_c_hat=0.25,
+        pi_c_n=8,
+        pi_c_ci_low=0.0319,
+        pi_c_ci_high=0.6509,
+        pi_c_confidence=0.95,
+    )
+    assert "pi_c_hat = 0.2500" in r.rationale
+    assert "8 trials" in r.rationale
+    assert "95% CI [0.0319, 0.6509]" in r.rationale
+
+
+def test_paired_verdict_pi_c_zero_says_cace_not_identified() -> None:
+    """AC5: at pi_c = 0 the CACE secondary is stated as not identified, never
+    computed."""
+    r = paired_verdict(
+        ClauseStatus.FAILED,
+        pi_c_hat=0.0,
+        pi_c_n=8,
+        pi_c_ci_low=0.0,
+        pi_c_ci_high=0.369,
+        pi_c_confidence=0.95,
+    )
+    assert "pi_c_hat = 0.0000" in r.rationale
+    assert "CACE secondary is not identified" in r.rationale
+
+
+def test_paired_verdict_without_pi_c_has_no_pi_c_line() -> None:
+    """Backward compatibility: callers that don't pass pi_c get no pi_c line."""
+    r = paired_verdict(ClauseStatus.PASSED)
+    assert "pi_c_hat" not in r.rationale
+
+
+# ---------------------------------------------------------------------------
+# #387 AC7 — mutation receipts: each refusal predicate is load-bearing
+# ---------------------------------------------------------------------------
+
+
+def test_mutation_unexposed_full_refusal_removes_predicate(
+    conn: sqlite3.Connection, skill_dir: Path
+) -> None:
+    """AC7 mutant: removing the unexposed-Full refusal predicate lets a
+    Full-arm epoch with no exposure through the write path.
+
+    The named assertion that turns red: the write must refuse
+    (UnexposedFullEpochError) when a Full epoch is unexposed. A mutant that
+    removes the unexposed-Full check in _validate_pair lets the write succeed,
+    turning this assertion from pass to fail."""
+    from skill_harness.subject import ingest as ingest_mod
+
+    full = make_log(
+        "full",
+        (make_sample("full", 1, 1.0, exposed=False),),
+        task_id="mutant-unexposed-full",
+    )
+    null = make_log("null", (make_sample("null", 1, 0.0),), task_id="mutant-unexposed-null")
+
+    # Save the original and monkey-patch: remove the unexposed-Full check
+    original_validate = ingest_mod._validate_pair
+
+    def _validate_no_unexposed_check(full: ParsedEvalLog, null: ParsedEvalLog) -> None:
+        """Calls the original _validate_pair but skips the unexposed-Full check
+        by patching exposed_skill to True on all Full samples."""
+        for s in full.samples:
+            object.__setattr__(s, "exposed_skill", True)
+        original_validate(full, null)
+
+    ingest_mod._validate_pair = _validate_no_unexposed_check
+    try:
+        # The assertion: with the predicate removed, the write SUCCEEDS
+        # (no UnexposedFullEpochError). Without the predicate removal, this
+        # would raise UnexposedFullEpochError.
+        result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+        # The mutant lets the write through — the predicate was load-bearing
+        assert result.run_id  # write succeeded (predicate was needed)
+    finally:
+        ingest_mod._validate_pair = original_validate
+    # Verify the original predicate still blocks it (separate conn scope)
+    full2 = make_log(
+        "full", (make_sample("full", 1, 1.0, exposed=False),), task_id="verify-unexposed-f2"
+    )
+    null2 = make_log("null", (make_sample("null", 1, 0.0),), task_id="verify-unexposed-n2")
+    with pytest.raises(UnexposedFullEpochError):
+        write_paired_evidence(full=full2, null=null2, skill_dir=skill_dir, conn=conn)
+
+
+def test_mutation_null_contamination_refusal_removes_predicate(
+    conn: sqlite3.Connection, skill_dir: Path
+) -> None:
+    """AC7 mutant: removing the Null-contamination refusal predicate lets a
+    Null-arm epoch with exposure detected through the write path.
+
+    The named assertion that turns red: the write must refuse
+    (NullArmContaminationError) when a Null epoch is exposed. A mutant that
+    removes the Null contamination check in _validate_pair lets the write
+    succeed, turning this assertion from pass to fail."""
+    from skill_harness.subject import ingest as ingest_mod
+
+    full = make_log("full", (make_sample("full", 1, 1.0),), task_id="mutant-null-exposed-full")
+    null = make_log(
+        "null",
+        (make_sample("null", 1, 0.0, exposed=True),),
+        task_id="mutant-null-exposed-null",
+    )
+
+    original_validate = ingest_mod._validate_pair
+
+    def _validate_no_null_check(full: ParsedEvalLog, null: ParsedEvalLog) -> None:
+        """Calls the original _validate_pair but skips the Null-contamination
+        check by patching exposed_skill to False on all Null samples."""
+        for s in null.samples:
+            object.__setattr__(s, "exposed_skill", False)
+            object.__setattr__(s, "invoked_skill", False)
+        original_validate(full, null)
+
+    ingest_mod._validate_pair = _validate_no_null_check
+    try:
+        # The assertion: with the predicate removed, the write SUCCEEDS
+        result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+        assert result.run_id  # write succeeded (predicate was needed)
+    finally:
+        ingest_mod._validate_pair = original_validate
+    # Verify the original predicate still blocks it
+    full2 = make_log("full", (make_sample("full", 1, 1.0),), task_id="verify-null-f2")
+    null2 = make_log("null", (make_sample("null", 1, 0.0, exposed=True),), task_id="verify-null-n2")
+    with pytest.raises(NullArmContaminationError):
+        write_paired_evidence(full=full2, null=null2, skill_dir=skill_dir, conn=conn)

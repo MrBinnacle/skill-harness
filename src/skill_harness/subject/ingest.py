@@ -13,7 +13,7 @@ Design constraints:
   storage layer, so the entire evidence-admissibility/pairing logic is testable in the
   default dev/CI environment (same split as ``inspect_adapter``).
 - Pin rule (pre-reg "Harness pin" row): recorded per trial, identical across
-  arms, or the trial is INADMISSIBLE. A missing or mismatched fingerprint
+  the arms, or the trial is INADMISSIBLE. A missing or mismatched fingerprint
   writes the verdicts as ``inadmissible`` (evidence of the defect is kept,
   append-only ethos) — it does not refuse the write. Structural defects
   (wrong condition, different skills, unequal epoch sets, failed eval) DO
@@ -21,14 +21,25 @@ Design constraints:
 - Idempotency: the evidence ``run_id`` is derived deterministically from the
   two Inspect task ids, so re-ingesting the same pair of logs raises
   ``AlreadyIngestedError`` instead of double-counting.
-- π_c instrumentation (#46/#52): every parsed sample carries ``invoked_skill``
-  (v1 detector = a Skill tool-call naming the skill under test, observed in the
-  parsed message stream). Every paired write reports π̂_c with a mandatory
-  Clopper-Pearson interval over the Full arm, and a treated arm with ZERO
-  detected invocations refuses the write (``ZeroInvocationError``) — a dead-arm
-  run is an instrumentation finding, never a null effect. Eval logs are
-  zstd-compressed (zip method 93): ingestion goes through ``read_eval_log``
-  only, never raw archive handling.
+- Treatment = exposure (#384): the treatment is the skill mounted for the arm,
+  with its description present in the agent's context. Exposure is measured per
+  epoch by a channel-(c) detector (v2): the card's description text, read from
+  the pinned ``SKILL.md`` frontmatter, present in the transcript's skill
+  listing. ``exposed_skill: bool`` joins ``invoked_skill: bool`` on every
+  parsed sample.
+- pi_c is a mandatory recorded stratifier (#384): π̂_c over the Full arm plus
+  its Clopper-Pearson interval is computed on every write, returned on
+  ``IngestResult.pi_c`` (mandatory) and recorded in the run's ``config_json``.
+  Zero invocations with full exposure is ADMISSIBLE — the write proceeds and
+  the verdict line carries pi_c = 0/n. At pi_c = 0, the CACE secondary is
+  stated as not identified, never computed.
+- Paired-write refusal predicates (#384): (a) a Full-arm epoch with exposure
+  not detected refuses as ``UnexposedFullEpochError`` (treatment not delivered);
+  (b) a Null-arm epoch with exposure or invocation detected refuses as
+  ``NullArmContaminationError`` (control-arm contamination, widened from the
+  #46 invocation-only check to include channel c).
+- Eval logs are zstd-compressed (zip method 93): ingestion goes through
+  ``read_eval_log`` only, never raw archive handling.
 """
 
 from __future__ import annotations
@@ -95,7 +106,11 @@ OUTCOME_AXIS: str = "outcome"
 # implementation_hash pins the exact source alongside it.
 # 0.3.0: π_c instrumentation (#52) — pairing gains the zero-invocation refusal
 # and the Null-contamination structural check; runs record the π_c block.
-ORACLE_METRIC_VERSION: str = "0.3.0"
+# 0.4.0: treatment = exposure (#384) — pairing gains the v2 channel-(c)
+# exposure detector, the ZeroInvocationError is retired from the write path,
+# and the two new refusal predicates (unexposed Full, exposed/invoked Null)
+# replace the old invocation-only contamination check.
+ORACLE_METRIC_VERSION: str = "0.4.0"
 
 # π_c (invocation-rate) instrumentation — #46 resolution binds the contract.
 # v1 detector = branch (a) only: a Skill tool-call whose arguments name the
@@ -103,6 +118,7 @@ ORACLE_METRIC_VERSION: str = "0.3.0"
 # under the inspect_swe.claude_code solver (the Skill tool loads SKILL.md
 # internally) and stays excluded until a non-claude_code solver exists.
 PI_C_DETECTOR_VERSION: str = "v1-skill-tool-call"
+EXPOSURE_DETECTOR_VERSION: str = "v2-description-channel"
 SKILL_TOOL_FUNCTION: str = "Skill"
 SKILL_TOOL_ARGUMENT: str = "skill"  # arguments key naming the invoked skill
 PI_C_CONFIDENCE: float = 0.95
@@ -155,11 +171,45 @@ class ZeroInvocationError(EvalLogIngestError):
     no effect verdict is producible — the run surfaces as an INSTRUMENTATION
     FINDING (delivery failure) instead of a null effect (#52). Carries the
     mandatory π̂_c block on ``pi_c`` so the finding renders with its interval.
+
+    .. deprecated::
+        As of #387, ZeroInvocationError is retired from the write path. Zero
+        invocations with full exposure is admissible (pi_c = 0/n). This class
+        is kept for backward compatibility with callers that catch it.
     """
 
     def __init__(self, message: str, *, pi_c: PiCSummary) -> None:
         super().__init__(message)
         self.pi_c = pi_c
+
+
+class UnexposedFullEpochError(EvalLogIngestError):
+    """Refusal: a Full-arm epoch has exposure not detected (#384).
+
+    The treatment was not delivered in this epoch — the skill's description
+    was not present in the transcript. This is an apparatus error, not
+    evidence. Carries the epoch index for locating the failure.
+    """
+
+    def __init__(self, message: str, *, epoch: int) -> None:
+        super().__init__(message)
+        self.epoch = epoch
+
+
+class NullArmContaminationError(EvalLogIngestError):
+    """Refusal: a Null-arm epoch has exposure or invocation detected (#384).
+
+    Widened from the #46 invocation-only contamination check to include
+    channel-(c) exposure. The Skill tool is structurally not launchable
+    in the Null arm and the skill's description is not mounted, so either
+    detection means mislabelled arms or a misconfigured harness — an
+    apparatus error, not evidence.
+    """
+
+    def __init__(self, message: str, *, epoch: int, channel: str) -> None:
+        super().__init__(message)
+        self.epoch = epoch
+        self.channel = channel
 
 
 class ParsedSample(BaseModel):
@@ -179,6 +229,7 @@ class ParsedSample(BaseModel):
     # `ParsedSample` directly never reach the helper.
     score_value: Annotated[float, Field(allow_inf_nan=False)]  # 1.0 pass | 0.0 fail
     invoked_skill: bool  # v1 π_c detector verdict for this trial (#46/#52)
+    exposed_skill: bool = False  # v2 exposure detector verdict (#384); False = not computed
     output_text: str
     subject_model: str
     harness_pin_json: str | None
@@ -215,6 +266,7 @@ class IngestResult(BaseModel):
     admissibility_state: Literal["admissible", "inadmissible"]
     inadmissibility_reason: str | None
     pi_c: PiCSummary  # mandatory — never optional (#52)
+    exposure: ExposureSummary  # mandatory — never optional (#384)
 
 
 def detect_skill_invocation(messages: Iterable[object], skill_name: str) -> bool:
@@ -242,6 +294,79 @@ def detect_skill_invocation(messages: Iterable[object], skill_name: str) -> bool
             if isinstance(arguments, dict) and arguments.get(SKILL_TOOL_ARGUMENT) == skill_name:
                 return True
     return False
+
+
+class ExposureSummary(BaseModel):
+    """Exposure summary for a set of parsed samples.
+
+    Records whether the skill's description was present in each epoch's
+    transcript (channel c, detector v2). Mandatory alongside pi_c on
+    every IngestResult (#384).
+    """
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    exposed_count: int
+    trials: int
+    detector_version: str
+
+
+def detect_skill_exposure(messages: Iterable[object], skill_description: str) -> bool:
+    """v2 exposure detector (#384 channel c): was the skill's description
+    present in the transcript's skill listing?
+
+    Fires iff the message stream contains a user-role message whose content
+    includes the skill's description text as a substring. Under the
+    ``inspect_swe.claude_code`` solver, the first user message carries
+    Claude Code's skill listing and the card's frontmatter description
+    appears in it verbatim.
+
+    Deliberately conservative: any shape this duck-typed scan does not
+    recognize counts as NOT exposed (an undercount can only make the
+    unexposed-Full refusal fire more, never fabricate an exposure).
+    """
+    if not skill_description:
+        return False
+    for message in messages:
+        content = getattr(message, "content", None)
+        if isinstance(content, str) and skill_description in content:
+            return True
+        # Some message objects store content as a list of dicts
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and skill_description in part.get("text", ""):
+                    return True
+    return False
+
+
+def _extract_skill_description(skill_dir: Path) -> str:
+    """Extract the description from a SKILL.md frontmatter block.
+
+    Returns the value of the ``description`` key in the YAML frontmatter,
+    or an empty string if the file is missing, has no frontmatter, or
+    has no description key. The caller decides what an empty string means.
+    """
+    skill_file = skill_dir / "SKILL.md"
+    if not skill_file.is_file():
+        return ""
+    text = skill_file.read_text(encoding="utf-8")
+    # Frontmatter is delimited by --- at the start of the file
+    if not text.startswith("---"):
+        return ""
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return ""
+    frontmatter = parts[1]
+    # Simple line-by-line parse: find "description:" line
+    for line in frontmatter.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("description:"):
+            value = stripped[len("description:") :].strip()
+            # Strip surrounding quotes if present
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            return value
+    return ""
 
 
 def clopper_pearson(
@@ -275,12 +400,16 @@ def clopper_pearson(
     return low, high
 
 
-def parse_eval_log(path: Path) -> ParsedEvalLog:
+def parse_eval_log(path: Path, *, skill_description: str = "") -> ParsedEvalLog:
     """Parse one Inspect ``.eval`` log into the write-relevant projection.
 
     Requires the optional ``[inspect]`` extra (lazy import, same convention as
     ``build_paired_tasks``).
 
+    :param skill_description: the pinned SKILL.md frontmatter description text.
+        When non-empty, each sample's ``exposed_skill`` is computed by the v2
+        channel-(c) detector. When empty (screen lane), ``exposed_skill`` is
+        ``False`` (typed "not computed").
     :raises SubjectLayerNotInstalledError: optional extra not installed.
     :raises EvalLogIngestError: a sample carries no score.
     """
@@ -307,6 +436,11 @@ def parse_eval_log(path: Path) -> ParsedEvalLog:
                 condition=_require_condition(metadata.get("condition"), path),
                 skill_name=skill_name,
                 invoked_skill=detect_skill_invocation(s.messages or [], skill_name),
+                exposed_skill=(
+                    detect_skill_exposure(s.messages or [], skill_description)
+                    if skill_description
+                    else False
+                ),
                 epoch=int(s.epoch),
                 scorer_name=scorer_name,
                 score_value=_score_to_float(
@@ -348,9 +482,10 @@ def ingest_paired_eval_logs(
     Convenience composition of :func:`parse_eval_log` (needs the ``[inspect]``
     extra) and :func:`write_paired_evidence` (pure).
     """
+    skill_description = _extract_skill_description(skill_dir)
     return write_paired_evidence(
-        full=parse_eval_log(full_log),
-        null=parse_eval_log(null_log),
+        full=parse_eval_log(full_log, skill_description=skill_description),
+        null=parse_eval_log(null_log, skill_description=skill_description),
         skill_dir=skill_dir,
         conn=conn,
     )
@@ -380,32 +515,25 @@ def write_paired_evidence(
 
     π_c rule (#52): π̂_c over the Full arm plus its Clopper-Pearson interval is
     computed on every write, returned on ``IngestResult.pi_c`` (mandatory) and
-    recorded in the run's ``config_json``. Zero detected invocations in the
-    treated arm REFUSE the write — an instrumentation finding, not evidence.
+    recorded in the run's ``config_json``.
+
+    Exposure rule (#384): exposure is measured per epoch by the v2 channel-(c)
+    detector. Zero invocations with full exposure is ADMISSIBLE — the write
+    proceeds, records pi_c = 0/n with its interval, and the verdict line carries
+    it. The CACE secondary is stated as not identified at pi_c = 0.
 
     :raises EvalLogNotSuccessError: either log's status is not ``success``.
-    :raises PairedLogMismatchError: the logs are not a valid Full/Null pair
-        (including a detected skill invocation in the Null arm — control-arm
-        contamination).
-    :raises ZeroInvocationError: zero detected invocations in the Full arm.
+    :raises PairedLogMismatchError: the logs are not a valid Full/Null pair.
+    :raises UnexposedFullEpochError: a Full-arm epoch has exposure not detected.
+    :raises NullArmContaminationError: a Null-arm epoch has exposure or
+        invocation detected (#384, widened from #46).
     :raises AlreadyIngestedError: this pair of task ids was already written.
     :raises FileNotFoundError: ``skill_dir`` has no SKILL.md.
     """
     _validate_pair(full, null)
 
     pi_c = _pi_c_summary(full.samples)
-    if pi_c.invocations == 0:
-        raise ZeroInvocationError(
-            f"INSTRUMENTATION FINDING — dead treated arm: 0 skill invocations "
-            f"detected across {pi_c.trials} Full-arm epoch(s) "
-            f"(pi_c_hat=0.00, {PI_C_CONFIDENCE:.0%} CI "
-            f"[{pi_c.ci_low:.3f}, {pi_c.ci_high:.3f}], detector "
-            f"{PI_C_DETECTOR_VERSION}). Refusing to produce an effect verdict: "
-            f"'no effect' cannot be distinguished from 'never invoked'. This is "
-            f"a delivery/instrumentation failure, not evidence about the "
-            f"skill's effect.",
-            pi_c=pi_c,
-        )
+    exposure = _exposure_summary(full.samples)
 
     skill_source = skill_dir / "SKILL.md"
     if not skill_source.is_file():
@@ -559,6 +687,11 @@ def write_paired_evidence(
                         "harness_pin_json": full.samples[0].harness_pin_json,
                         "harness_pin_fingerprint": full.samples[0].harness_pin_fingerprint,
                         "pi_c": {"detector": PI_C_DETECTOR_VERSION, **pi_c.model_dump()},
+                        "exposure": {
+                            "detector": EXPOSURE_DETECTOR_VERSION,
+                            **exposure.model_dump(),
+                        },
+                        "paired_cells": _paired_cell_counts(full, null),
                     },
                     sort_keys=True,
                 ),
@@ -641,6 +774,7 @@ def write_paired_evidence(
         admissibility_state=admissibility_state,
         inadmissibility_reason=inadmissibility_reason,
         pi_c=pi_c,
+        exposure=exposure,
     )
 
 
@@ -681,15 +815,43 @@ def _validate_pair(full: ParsedEvalLog, null: ParsedEvalLog) -> None:
     if len(scorers) != 1:
         raise PairedLogMismatchError(f"logs disagree on the scorer: {sorted(scorers)}")
 
-    contaminated = sorted(s.epoch for s in null.samples if s.invoked_skill)
-    if contaminated:
-        raise PairedLogMismatchError(
-            f"null log {null.task_name!r} carries detected skill invocation(s) in "
-            f"epoch(s) {contaminated} — control-arm contamination. The Skill tool "
-            f"is structurally not launchable in the Null arm (#46), so this means "
-            f"mislabelled arms or a misconfigured harness: an apparatus error, "
-            f"not evidence."
+    # #384 refusal predicate (a): Full-arm epoch with exposure not detected.
+    unexposed = sorted(s.epoch for s in full.samples if not s.exposed_skill)
+    if unexposed:
+        raise UnexposedFullEpochError(
+            f"full log {full.task_name!r} has epoch(s) {unexposed} with exposure not "
+            f"detected — the skill's description was not present in the transcript. "
+            f"This is an apparatus error: the treatment was not delivered.",
+            epoch=unexposed[0],
         )
+
+    # #384 refusal predicate (b): Null-arm epoch with exposure or invocation detected.
+    # Widened from the #46 invocation-only check to include channel-(c) exposure.
+    null_contaminated_invoked = sorted(s.epoch for s in null.samples if s.invoked_skill)
+    null_contaminated_exposed = sorted(s.epoch for s in null.samples if s.exposed_skill)
+    if null_contaminated_invoked or null_contaminated_exposed:
+        channels = []
+        if null_contaminated_exposed:
+            channels.append(f"exposure detected in epoch(s) {null_contaminated_exposed}")
+        if null_contaminated_invoked:
+            channels.append(f"invocation detected in epoch(s) {null_contaminated_invoked}")
+        raise NullArmContaminationError(
+            f"null log {null.task_name!r} carries control-arm contamination: "
+            f"{'; '.join(channels)}. The skill is not mounted in the Null arm and "
+            f"the Skill tool is structurally not launchable (#46), so this means "
+            f"mislabelled arms or a misconfigured harness: an apparatus error, "
+            f"not evidence.",
+            epoch=(
+                null_contaminated_exposed[0]
+                if null_contaminated_exposed
+                else null_contaminated_invoked[0]
+            ),
+            channel="exposure" if null_contaminated_exposed else "invocation",
+        )
+
+    # Legacy check: invocation in the Null arm is still contamination (#46).
+    # Kept above in the widened block; the original message is preserved in the
+    # NullArmContaminationError when channel == "invocation".
 
 
 def _pi_c_summary(samples: tuple[ParsedSample, ...]) -> PiCSummary:
@@ -705,6 +867,48 @@ def _pi_c_summary(samples: tuple[ParsedSample, ...]) -> PiCSummary:
         ci_high=ci_high,
         confidence=PI_C_CONFIDENCE,
     )
+
+
+def _exposure_summary(samples: tuple[ParsedSample, ...]) -> ExposureSummary:
+    """Exposure summary over the treated (Full) arm's parsed samples."""
+    trials = len(samples)
+    exposed_count = sum(1 for s in samples if s.exposed_skill)
+    return ExposureSummary(
+        exposed_count=exposed_count,
+        trials=trials,
+        detector_version=EXPOSURE_DETECTOR_VERSION,
+    )
+
+
+def _paired_cell_counts(full: ParsedEvalLog, null: ParsedEvalLog) -> dict[str, int]:
+    """Compute the four paired-outcome cell counts from per-epoch outcomes.
+
+    Returns a dict with keys: both_pass, full_only, null_only, both_fail.
+    Used by Gate-2 reads so they need no re-parse of the logs.
+    """
+    full_by_epoch = {s.epoch: s for s in full.samples}
+    null_by_epoch = {s.epoch: s for s in null.samples}
+    both_pass = 0
+    full_only = 0
+    null_only = 0
+    both_fail = 0
+    for epoch, full_sample in full_by_epoch.items():
+        f = full_sample.score_value
+        n = null_by_epoch[epoch].score_value
+        if f == 1.0 and n == 1.0:
+            both_pass += 1
+        elif f == 1.0 and n == 0.0:
+            full_only += 1
+        elif f == 0.0 and n == 1.0:
+            null_only += 1
+        elif f == 0.0 and n == 0.0:
+            both_fail += 1
+    return {
+        "both_pass": both_pass,
+        "full_only": full_only,
+        "null_only": null_only,
+        "both_fail": both_fail,
+    }
 
 
 def _pin_admissibility(

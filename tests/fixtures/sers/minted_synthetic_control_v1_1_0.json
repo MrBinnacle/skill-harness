@@ -54,7 +54,7 @@
   "subject_identity": {
     "skill_id": "e09345f64889bfdfc9c671b2aae43ac41cfe99ab997843422716991d51519295",
     "harness_version": "0.2.3",
-    "metric_version": "0.3.0",
+    "metric_version": "0.4.0",
     "implementation_hash": "7997bf55c86231f65048711e66587f0bd4e3236dee14fc665626cd45250d14c1",
     "arms": [
       "null",

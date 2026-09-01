@@ -37,13 +37,16 @@ requires refusal at write time or fail-closed behaviour (zero verdict rows).
 The honest boundary (per the ticket's revisit clause)
 -----------------------------------------------------
 The registration above predicted the zero-invocation label-consistent swap
-would be structurally invisible. THE FIRST RUN REFUTED THAT PREDICTION, and
-the correction is recorded here rather than silently rewritten: production
-refuses it via ``ZeroInvocationError`` (dead treated arm, pi_c_hat = 0). The
-arm-swap surface is therefore CLOSED: a label-consistent swap either places
-invoked samples in the Null role (contamination refusal, #46) or presents a
-Full role with zero invocations (dead-arm refusal). An adversary would need
-fabricated invocation traces to pass both, which is outside "mis-keying".
+would be structurally invisible. THE FIRST RUN REFUTED THAT PREDICTION: under
+the old invocation-only model, production refused it via ``ZeroInvocationError``
+(dead treated arm, pi_c_hat = 0). Under #384 (treatment = exposure),
+``ZeroInvocationError`` is retired from the write path; the arm-swap surface
+is closed by the contamination refusal (invoked samples in Null role) and the
+unexposed-Full refusal (no description in Full transcript). A label-consistent
+swap either places invoked samples in the Null role (contamination refusal) or
+presents a Full role with no exposure (unexposed-Full refusal). An adversary
+would need fabricated exposure traces to pass both, which is outside
+"mis-keying".
 
 One adversary remains structurally invisible from inside a pair, and this
 module says so rather than asserting vacuously:
@@ -90,7 +93,11 @@ def _sample(
     score: float,
     *,
     invoked: bool,
+    exposed: bool | None = None,
 ) -> ParsedSample:
+    # Default: Full-arm samples are exposed, Null-arm samples are not (#384).
+    if exposed is None:
+        exposed = condition == "full"
     return ParsedSample(
         condition=condition,  # type: ignore[arg-type]
         skill_name="adversarial-skill",
@@ -98,6 +105,7 @@ def _sample(
         scorer_name="file_contains",
         score_value=score,
         invoked_skill=invoked,
+        exposed_skill=exposed,
         output_text=f"output-{condition}-{epoch}",
         subject_model="openrouter/anthropic/claude-haiku-4.5",
         harness_pin_json=None,
@@ -384,20 +392,20 @@ def test_nan_score_is_refused_or_fails_closed(
     )
 
 
-def test_zero_invocation_arm_swap_refused_as_dead_arm(
+def test_zero_invocation_arm_swap_with_null_contamination_refused(
     evidence_db: sqlite3.Connection, skill_dir: Path
 ) -> None:
-    """The other half of the swap surface: no invocations in the Full role.
+    """The other half of the swap surface: the true Full arm (which invoked)
+    is relabelled as Null.
 
-    Registered prediction was structural invisibility; the first run refuted
-    it (see module docstring). Production refuses via ZeroInvocationError --
-    'no effect' cannot be distinguished from 'never invoked' -- which closes
-    the arm-swap surface together with the contamination refusal. This test
-    pins that refusal and its fail-closed behaviour.
+    Under the #384 treatment=exposure model, the label-consistent swap with
+    invoked samples in the Null role is refused as control-arm contamination
+    (NullArmContaminationError), not as a dead treated arm. ZeroInvocationError
+    is retired from the write path; exposure, not invocation, is the treatment.
     """
     conn = evidence_db
     epochs = [1, 2]
-    swapped_null = _log("null", tuple(_sample("null", e, 1.0, invoked=False) for e in epochs))
+    swapped_null = _log("null", tuple(_sample("null", e, 1.0, invoked=True) for e in epochs))
     swapped_full = _log("full", tuple(_sample("full", e, 0.0, invoked=False) for e in epochs))
     _assert_refused(
         conn,
@@ -406,7 +414,7 @@ def test_zero_invocation_arm_swap_refused_as_dead_arm(
         full=swapped_full,
         null=swapped_null,
         skill_dir=skill_dir,
-        match="dead treated arm",
+        match="contamination",
     )
 
 
