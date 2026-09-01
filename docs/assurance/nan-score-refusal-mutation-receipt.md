@@ -4,7 +4,11 @@
 **Finding:** `docs/findings/paired-ingest-nan-score-silent-tie.md`.
 **Generator:** `scripts/mutation_receipt.py`. **Machine-readable record:**
 `docs/assurance/nan-score-refusal-mutation-receipt.json`.
-**Commit under test:** `8dcc56ce3499879c5de215f2c4875eba086a649b`. **Python:** 3.13.1.
+**Pinned by content, not by commit:** `src/skill_harness/subject/ingest.py` at
+`sha256:abf32c6e64273d4301a32011817809dc59bf44e5581d40cbaa016c23dee816e9`.
+**Commit at generation:** `210ac93c8e17512119cbc8bd39e5cc8ded7b5b96` — informational only. A rebase rewrites it and later
+commits move HEAD past it, so currency is checked against the digest above by
+`tests/test_mutation_receipt.py`. **Python:** 3.13.1.
 
 Each case runs in its **own git worktree** at a fixed commit. Production is never mutated in
 place. `PYTHONPATH` pins every case to its own sources, because the editable install would

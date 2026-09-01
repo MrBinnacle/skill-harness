@@ -1,6 +1,6 @@
 # A NaN score in a paired log is recorded as a tie
 
-**Status:** RESOLVED 2026-09-01 by #363 at commit `8dcc56c`. **Severity:** WRONG_NUMBER
+**Status:** RESOLVED 2026-09-01 by #363 at commit `210ac93`. **Severity:** WRONG_NUMBER
 (a missing measurement becomes evidence).
 **Found by:** `tests/test_paired_arm_epoch_adversarial.py::test_nan_score_is_refused_or_fails_closed`
 (falsification plan item 8, #350), first run 2026-08-31.
