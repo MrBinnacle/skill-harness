@@ -1,0 +1,42 @@
+{
+  "sers_version": "1.1.0",
+  "skill_name": "git-pull-rebase-trap",
+  "verdict": "CANT_TELL_YET",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": "inadmissible",
+  "value_class": "trap-discipline",
+  "wrong_instrument": true,
+  "declared_synthetic_control": false,
+  "evidence_admissibility": {
+    "status": "inadmissible",
+    "detail": "write_paired_evidence raised ZeroInvocationError: 0 Skill tool invocations across 8 Full-arm epochs under detector v1-skill-tool-call (pi_c_hat=0.00, 95% CI [0.000, 0.369]). No runs row was written. The trajectories show the mounted skill changed the Full arm's git command in 6 of 8 epochs through its description in the skill listing, a channel the v1 detector does not observe. The refusal is correct under the #46 contract; the contract does not cover this channel."
+  },
+  "cost": {
+    "standing_tokens": { "refusal": "not_instrumented", "detail": "Per-skill description tax in the listing was not measured in this run." },
+    "fired_tokens": { "refusal": "not_applicable", "detail": "Zero detected invocations; the body never loaded." },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": "openrouter/anthropic/claude-sonnet-4.5",
+    "prompt_fingerprint": "sha256:2289ee87959b603b5a249430efbe80f998e16831b75772ebc99c5d725c80338c",
+    "schema_fingerprint": "command_succeeds+oracle_template:sha256:9d4101935cccf2d67620e7d580ede092fbaf2bc71a6ecde02cb066b67526139b"
+  },
+  "measurements": {
+    "null_pass_rate": { "value": 0.0, "passes": 0, "epochs": 8, "detail": "Bare-arm pass rate on the de-leaked prompt; every Null epoch rebased and failed the ancestry oracle." },
+    "discordance_rate": { "value": 0.75, "passes": 6, "epochs": 8, "detail": "x=6 discordant of 8 paired epochs; Jeffreys 95% interval [0.408, 0.944]. Direction withheld per the registered micro-run template." },
+    "go_nogo": "GO"
+  },
+  "source": {
+    "prose_path": "docs/findings/pi-c-detector-blind-to-description-channel.md",
+    "date": "2026-09-01",
+    "notes": "Paired k=8, one pin both arms (5324feef...), de-leaked prompt, subject via OpenRouter because the host holds no Anthropic key (registration names the direct API; deviation declared before launch). Logs at .private/microrun/batch1/gitpull/logs-stage1-paired/."
+  },
+  "subject_identity": {
+    "skill_id": "387989fed2eda3b083ea6ce8094ff0c3685e08e738b6ed58df97da8242dbcb96",
+    "harness_version": "0.2.3",
+    "metric_version": "0.3.0",
+    "implementation_hash": "abf32c6e64273d4301a32011817809dc59bf44e5581d40cbaa016c23dee816e9",
+    "arms": ["null", "full"]
+  },
+  "summary": "git-pull-rebase-trap paired k=8 (2026-09-01): discordance x=6/8 cleared the pre-stated GO gate and the Null arm passed 0/8, but the pair is inadmissible under detector v1: zero Skill tool invocations, so the write-time gate refused it. The effect arrived through the description channel the detector cannot see. CANT_TELL_YET (inadmissible, wrong instrument); no store row; verdict withheld until the detector contract is ruled on."
+}
