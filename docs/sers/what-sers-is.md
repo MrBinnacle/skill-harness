@@ -127,6 +127,7 @@ Read off the schema, which is the operative artifact.
   `null`
 - `value_class`: `transformative-lift`, `trap-discipline`, `calibration`, `null`
 - `evidence_admissibility.status`: `admissible`, `inadmissible`, `mixed`, `not_applicable`
+- `delivery.channel` (from 1.2.0): `description_only`, `body_and_description`, `not_instrumented`
 
 **Conditionals the schema enforces:** `cut_sub_reason` is a non-null member when
 `verdict` is `CUT`, and is `null` when `verdict` is `KEEP` or `CANT_TELL_YET`. When

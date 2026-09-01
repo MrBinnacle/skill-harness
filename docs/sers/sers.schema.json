@@ -257,7 +257,7 @@
               }
             }
           ],
-          "description": "Exposure rate in the treated arm: the fraction of epochs where the skill's body was read. 'value' is the rate; 'passes' and 'epochs' are optional counts."
+          "description": "Exposure rate in the treated arm: the fraction of epochs where the skill's description was present in the agent's context (the treatment under #384). Distinct from pi_c (invocation / body load). 'value' is the rate; 'passes' and 'epochs' are optional counts."
         },
         "pi_c": {
           "oneOf": [
