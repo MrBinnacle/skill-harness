@@ -1,5 +1,6 @@
 """External contract checks for the issue #174 assurance close-out."""
 
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -169,19 +170,75 @@ def _gh_issue_read_blocker() -> str | None:
     return None
 
 
-def test_issue_174_has_the_exact_bottom_line_comment() -> None:
-    """The bottom-line paragraph must be posted verbatim as an issue comment.
+RECEIPT = ROOT / "docs/assurance/issue-174-bottom-line-receipt.md"
+_BOTTOM_LINE_HEADING = "## Bottom line" + chr(10) * 2
 
-    Credential-gated, not weakened: the CI test job provisions no `GH_TOKEN`,
-    so an unauthenticated `gh` is a missing credential rather than a failing
-    contract, and the assertion still fails loudly wherever `gh` can read the
-    issue. The read also depends on a mutable remote resource — editing the
-    posted comment turns this red — which is why the skip reason names the
-    blocker instead of hiding behind a bare worktree check.
+
+def _bottom_line_paragraph() -> str:
+    text = CLOSEOUT.read_text(encoding="utf-8").rstrip()
+    return text.rsplit(_BOTTOM_LINE_HEADING, 1)[1]
+
+
+def test_bottom_line_receipt_matches_the_closeout() -> None:
+    """The ENFORCED half of the publication contract: no credential required (#354).
+
+    The remote check below asserts the same claim more strongly, and cannot run
+    in CI: the test job provisions no `GH_TOKEN`, so it skips. That skip is why
+    the claim went unchecked while issue #174 had zero comments and the suite
+    reported green. A contract enforced only when an unrelated side effect
+    authenticates the caller is not enforced.
+
+    This assertion reads a tracked receipt instead. It fails when the close-out's
+    bottom line is edited without the receipt being re-issued, which is the
+    failure mode a reader of `docs/ASSURANCE.md` actually cares about: the
+    document claiming a published finding that was never published in that form.
+
+    It deliberately does NOT prove the remote comment is currently intact. Only
+    the credentialed check sees that, and this file says so rather than implying
+    coverage it does not have.
+    """
+    assert RECEIPT.is_file(), (
+        "MISSING_PUBLICATION_RECEIPT: docs/assurance/issue-174-bottom-line-receipt.md is absent,"
+        " so the close-out's claim to a published bottom line has no credential-free evidence."
+    )
+    receipt = RECEIPT.read_text(encoding="utf-8")
+    digest = hashlib.sha256(_bottom_line_paragraph().encode("utf-8")).hexdigest()
+    assert digest in receipt, (
+        f"RECEIPT_IS_STALE: the close-out's bottom line hashes to {digest[:12]}, which the"
+        f" receipt does not record. The paragraph was edited without re-publishing it and"
+        f" re-issuing the receipt, so docs/ASSURANCE.md now claims a finding published in a"
+        f" form that is not the form on issue #174."
+    )
+
+
+def test_publication_receipt_check_rejects_a_stale_digest() -> None:
+    """Negative control: the digest comparison must fail on a paragraph that moved.
+
+    Without this, a receipt that happened to contain any 64-hex string, or a
+    comparison accidentally made against the wrong text, would leave the
+    assertion above green and silent.
+    """
+    receipt = RECEIPT.read_text(encoding="utf-8")
+    moved = hashlib.sha256((_bottom_line_paragraph() + " edited").encode("utf-8")).hexdigest()
+    assert moved not in receipt
+
+
+def test_issue_174_has_the_exact_bottom_line_comment() -> None:
+    """CORROBORATION: the paragraph is verbatim on the issue, where `gh` can look.
+
+    Strictly stronger than the receipt check above wherever it runs, because it
+    reads the live remote and therefore catches an edit or a deletion. It cannot
+    run in CI (no `GH_TOKEN`), so it is explicitly NOT the enforced contract —
+    `test_bottom_line_receipt_matches_the_closeout` is. Treating this skip as
+    coverage is what let issue #174 sit with zero comments while the suite
+    stayed green (#354).
     """
     blocker = _gh_issue_read_blocker()
     if blocker is not None:
-        pytest.skip(blocker)
+        pytest.skip(
+            f"{blocker}. Remote corroboration not performed; the enforced contract is"
+            f" test_bottom_line_receipt_matches_the_closeout, which ran."
+        )
 
     text = CLOSEOUT.read_text(encoding="utf-8").rstrip()
     paragraph = text.rsplit("## Bottom line\n\n", 1)[1]
