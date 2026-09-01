@@ -521,8 +521,8 @@ The mutation receipt for the two #387 refusal predicates at paired ingest (the
 [`exposure-refusal-mutation-receipt.json`](assurance/exposure-refusal-mutation-receipt.json).
 
 - **Claims:** Two named mutants of `src/skill_harness/subject/ingest.py` were
-  each run in its own git worktree at commit `cde17ba` under Python 3.13.1
-  against the file at `sha256:b03887aa`, and both were KILLED by named test
+  each run in its own git worktree at commit `fb3b91b` under Python 3.13.1
+  against the file at `sha256:1eaefbae`, and both were KILLED by named test
   nodes: emptying the set behind predicate (a) so an unexposed Full-arm epoch
   writes, and emptying the channel-(c) half of predicate (b) so an exposed
   Null-arm epoch writes while the #46 invocation half stays. Each case asserted
