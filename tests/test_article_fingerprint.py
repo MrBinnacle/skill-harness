@@ -282,3 +282,57 @@ def test_historical_null_drift_fingerprint_is_not_stale_badge() -> None:
         fleet_drift_fingerprint("claude-sonnet-4-6")
         == ArticleFingerprint(model_snapshot="claude-sonnet-4-6").drift_fingerprint
     )
+
+
+def _production_call_sites(symbol: str) -> list[str]:
+    """Every `symbol` call site under src/, as "path:line"."""
+    root = Path(__file__).resolve().parents[1] / "src"
+    hits: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if f"{symbol}(" not in line:
+                continue
+            if line.lstrip().startswith(("def ", "#", '"', "'")):
+                continue  # the definition itself, or prose about it
+            hits.append(f"{path.relative_to(root).as_posix()}:{number}")
+    return hits
+
+
+def test_fleet_staleness_comparison_has_no_production_caller() -> None:
+    """Pins the #337 decision: the model pin is provenance, NOT a staleness badge.
+
+    `is_stale_vs_fleet` cannot be called in production because nothing can supply
+    its second argument. `subject_model` is a per-run parameter of `run_ablation`,
+    so runs legitimately carry different models and no designated "current fleet
+    model" exists to compare against. `docs/INVARIANTS.md` §9 records that
+    decision and its reason.
+
+    This assertion exists because the fact was previously stated in a docstring
+    (`tests/test_mint_path_allowlist.py`, from #352) and asserted nowhere — the
+    same shape as the defect #354 repaired, and as #337's own complaint about a
+    documented destination with no implementation.
+
+    Wiring a caller turns this red ON PURPOSE. That is the signal to revisit §9,
+    not to delete this test: a badge that ships while the invariant still says
+    verdicts are not badged is the drift this pins.
+    """
+    callers = _production_call_sites("is_stale_vs_fleet")
+    assert callers == [], (
+        f"FLEET_STALENESS_BADGE_WIRED: is_stale_vs_fleet now has production caller(s)"
+        f" {callers}. docs/INVARIANTS.md §9 records that verdicts are NOT badged against"
+        f" fleet-model drift, and names designating a current-fleet-model pointer as the"
+        f" condition that would change it. Update §9 in the same change, or remove the"
+        f" caller."
+    )
+
+
+def test_production_call_site_scan_finds_a_real_caller() -> None:
+    """Negative control: the scanner must find a symbol that IS called in production.
+
+    Without this, a scanner that silently returned nothing — a bad glob, a path
+    that moved — would leave the assertion above green while the badge shipped.
+    """
+    assert _production_call_sites("fleet_drift_fingerprint"), (
+        "the production call-site scanner found no caller for a symbol that is called"
+        " inside article_fingerprint.py; the scan is broken, not the codebase"
+    )
