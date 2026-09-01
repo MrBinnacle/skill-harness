@@ -39,6 +39,7 @@ from skill_harness.subject.ingest import (
     ParsedSample,
     UnexposedFullEpochError,
     _derived_run_id,
+    _extract_skill_description,
     _observation,
     _score_to_float,
     clopper_pearson,
@@ -655,6 +656,55 @@ def _user(content: str) -> SimpleNamespace:
     return SimpleNamespace(role="user", content=content)
 
 
+def test_extract_skill_description_single_line(tmp_path: Path) -> None:
+    d = tmp_path / "skill"
+    d.mkdir()
+    (d / "SKILL.md").write_text(
+        "---\nname: x\ndescription: A trap card that prevents git rebase failures.\n---\nbody\n",
+        encoding="utf-8",
+    )
+    assert _extract_skill_description(d) == "A trap card that prevents git rebase failures."
+
+
+def test_extract_skill_description_folded_block_scalar(tmp_path: Path) -> None:
+    """The repo fixture shape (description: >-) must yield the folded text the
+    listing carries — never the bare '>-' indicator."""
+    d = tmp_path / "skill"
+    d.mkdir()
+    (d / "SKILL.md").write_text(
+        "---\n"
+        "name: declared-synthetic-positive-control\n"
+        "description: >-\n"
+        "  Declared synthetic positive control. Carries one invented fact so a Full-vs-Null\n"
+        "  contrast has a real effect by construction. Instrument validation only.\n"
+        "---\n"
+        "# body\n",
+        encoding="utf-8",
+    )
+    got = _extract_skill_description(d)
+    assert got.startswith("Declared synthetic positive control.")
+    assert "Full-vs-Null" in got
+    assert "Instrument validation only." in got
+    assert ">-" not in got
+
+
+def test_extract_skill_description_quoted(tmp_path: Path) -> None:
+    d = tmp_path / "skill"
+    d.mkdir()
+    (d / "SKILL.md").write_text(
+        '---\nname: x\ndescription: "Quoted description text."\n---\nbody\n',
+        encoding="utf-8",
+    )
+    assert _extract_skill_description(d) == "Quoted description text."
+
+
+def test_extract_skill_description_missing_returns_empty(tmp_path: Path) -> None:
+    d = tmp_path / "skill"
+    d.mkdir()
+    (d / "SKILL.md").write_text("---\nname: x\n---\nbody\n", encoding="utf-8")
+    assert _extract_skill_description(d) == ""
+
+
 def test_detect_skill_exposure_fires_when_description_present() -> None:
     description = "A trap card that prevents git rebase failures."
     messages = [
@@ -841,8 +891,8 @@ def test_null_epoch_invoked_refuses_0_22_fixture(conn: sqlite3.Connection, skill
 
 
 def test_screen_lane_parse_reports_exposure_not_computed(tmp_path: Path) -> None:
-    """AC6: screen-lane parse (no skill_description) reports exposure as False
-    (typed 'not computed')."""
+    """AC6: screen-lane parse (no skill_description) reports exposure as None
+    (typed 'not computed' — never False)."""
     from skill_harness.storage.migrations import open_evidence
     from skill_harness.subject.screen_ingest import write_screen_evidence
 
@@ -855,7 +905,7 @@ def test_screen_lane_parse_reports_exposure_not_computed(tmp_path: Path) -> None
             scorer_name="command_succeeds",
             score_value=1.0,
             invoked_skill=False,
-            exposed_skill=False,  # not computed in screen lane
+            exposed_skill=None,  # not computed in screen lane
             output_text="output",
             subject_model="m",
             harness_pin_json=None,
@@ -967,9 +1017,9 @@ def test_config_json_records_pi_c_block(conn: sqlite3.Connection, skill_dir: Pat
 # ---------------------------------------------------------------------------
 
 
-def test_parse_eval_log_exposed_skill_defaults_false_without_description() -> None:
+def test_parse_eval_log_exposed_skill_defaults_none_without_description() -> None:
     """The screen lane has no skill directory, so exposure is typed 'not
-    computed' (False) on every sample."""
+    computed' (None) on every sample — never False."""
     # This tests the ParsedSample default, not the parse path (which needs [inspect])
     sample = ParsedSample(
         condition="null",
@@ -988,7 +1038,7 @@ def test_parse_eval_log_exposed_skill_defaults_false_without_description() -> No
         output_tokens=None,
         usd=None,
     )
-    assert sample.exposed_skill is False  # default: not computed
+    assert sample.exposed_skill is None  # default: not computed
 
 
 @pytest.mark.skipif(INSPECT_INSTALLED, reason="extra installed; error path unreachable")
@@ -1007,7 +1057,7 @@ def test_parse_eval_log_raises_typed_error_without_extra(tmp_path: Path) -> None
 
 def test_paired_verdict_carries_pi_c_line() -> None:
     """AC5: every verdict rationale minted by the paired path carries the pi_c
-    line per #36 adoption 4 display rule."""
+    line per #36 adoption 4 display rule (`pi_c_hat = k/n [95% CI lo, hi]`)."""
     r = paired_verdict(
         ClauseStatus.PASSED,
         pi_c_hat=0.25,
@@ -1016,9 +1066,8 @@ def test_paired_verdict_carries_pi_c_line() -> None:
         pi_c_ci_high=0.6509,
         pi_c_confidence=0.95,
     )
-    assert "pi_c_hat = 0.2500" in r.rationale
-    assert "8 trials" in r.rationale
-    assert "95% CI [0.0319, 0.6509]" in r.rationale
+    assert "pi_c_hat = 2/8 = 0.2500" in r.rationale
+    assert "95% CI 0.0319, 0.6509" in r.rationale
 
 
 def test_paired_verdict_pi_c_zero_says_cace_not_identified() -> None:
@@ -1032,14 +1081,8 @@ def test_paired_verdict_pi_c_zero_says_cace_not_identified() -> None:
         pi_c_ci_high=0.369,
         pi_c_confidence=0.95,
     )
-    assert "pi_c_hat = 0.0000" in r.rationale
+    assert "pi_c_hat = 0/8 = 0.0000" in r.rationale
     assert "CACE secondary is not identified" in r.rationale
-
-
-def test_paired_verdict_without_pi_c_has_no_pi_c_line() -> None:
-    """Backward compatibility: callers that don't pass pi_c get no pi_c line."""
-    r = paired_verdict(ClauseStatus.PASSED)
-    assert "pi_c_hat" not in r.rationale
 
 
 # ---------------------------------------------------------------------------

@@ -345,17 +345,20 @@ def paired_verdict(
 
     ``pi_c_hat``..``pi_c_ci_high`` carry the invocation-rate stratifier from the
     paired ingest path. When provided, every verdict rationale carries the pi_c
-    line per #36 adoption 4 display rule: ``pi_c_hat = k/n [95% CI lo, hi]``.
+    line per #36 adoption 4 display rule: ``pi_c_hat = k/n = 0.xxxx [95% CI lo, hi]``.
     At pi_c = 0 the CACE secondary is stated as not identified, never computed.
+    Callers minting a paired-path verdict under #384 must pass pi_c — the
+    optional form exists only for pre-#384 Path B unit fixtures.
     """
     pi_c_line = ""
     if pi_c_hat is not None and pi_c_n is not None:
         ci_lo = pi_c_ci_low if pi_c_ci_low is not None else 0.0
         ci_hi = pi_c_ci_high if pi_c_ci_high is not None else 1.0
         conf = pi_c_confidence if pi_c_confidence is not None else 0.95
+        # #36 adoption 4 display: pi_c_hat = k/n [95% CI lo, hi]
+        k = round(pi_c_hat * pi_c_n)
         pi_c_line = (
-            f" pi_c_hat = {pi_c_hat:.4f} ({pi_c_n} trials, "
-            f"{conf:.0%} CI [{ci_lo:.4f}, {ci_hi:.4f}])."
+            f" pi_c_hat = {k}/{pi_c_n} = {pi_c_hat:.4f} [{conf:.0%} CI {ci_lo:.4f}, {ci_hi:.4f}]."
         )
         if pi_c_hat == 0.0:
             pi_c_line += " CACE secondary is not identified (zero invocations with full exposure)."

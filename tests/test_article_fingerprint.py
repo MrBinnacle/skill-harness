@@ -71,6 +71,7 @@ def _sample(
         scorer_name="file_contains",
         score_value=score,
         invoked_skill=invoked,
+        exposed_skill=condition == "full",
         output_text=f"output-{condition}-{epoch}",
         subject_model=subject_model,
         harness_pin_json='{"model":"openrouter/anthropic/claude-haiku-4.5"}'

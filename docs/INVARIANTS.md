@@ -236,10 +236,12 @@ Spec: skill-harness #337, #75/#81 (the pin), #352 (the no-caller verification).
 **The treatment is exposure** — the skill's description present in the agent's
 context — **not** invocation (Skill tool call). Exposure is measured per epoch by a
 channel-(c) detector (v2): the card's description text, read from the pinned
-`SKILL.md` frontmatter, present in the transcript's skill listing. Under the
-`inspect_swe.claude_code` solver the first user message carries Claude Code's skill
-listing and the card's frontmatter description appears in it verbatim (8 of 8 Full
-epochs and 0 of 8 Null epochs, measured 2026-09-01).
+`SKILL.md` frontmatter (single-line or folded block scalar), present in the
+transcript's skill listing. `exposed_skill` is `bool | None`: `True`/`False` are
+measured verdicts; `None` is typed "not computed" (screen lane) and is never stored
+as `False`. Under the `inspect_swe.claude_code` solver the first user message
+carries Claude Code's skill listing and the card's frontmatter description appears
+in it verbatim (8 of 8 Full epochs and 0 of 8 Null epochs, measured 2026-09-01).
 
 **π_c is a mandatory recorded stratifier**, not an admission gate. Zero invocations
 with full exposure is ADMISSIBLE — the write proceeds and the verdict line carries
@@ -260,7 +262,7 @@ detection means mislabelled arms or a misconfigured harness.
 
 Enforced in:
 - `src/skill_harness/subject/ingest.py::_validate_pair` (the two refusal predicates,
-  lines 820–856)
+  lines 848–890)
 - `src/skill_harness/subject/ingest.py::detect_skill_exposure` (v2 channel-c detector)
 - `src/skill_harness/subject/ingest.py::detect_skill_invocation` (v1 Skill tool-call
   detector, unchanged)

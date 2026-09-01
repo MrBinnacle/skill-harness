@@ -25,8 +25,9 @@ Design constraints:
   with its description present in the agent's context. Exposure is measured per
   epoch by a channel-(c) detector (v2): the card's description text, read from
   the pinned ``SKILL.md`` frontmatter, present in the transcript's skill
-  listing. ``exposed_skill: bool`` joins ``invoked_skill: bool`` on every
-  parsed sample.
+  listing. ``exposed_skill: bool | None`` joins ``invoked_skill: bool`` on every
+  parsed sample (``None`` = not computed — screen lane; never conflated with
+  ``False`` = measured not-exposed).
 - pi_c is a mandatory recorded stratifier (#384): π̂_c over the Full arm plus
   its Clopper-Pearson interval is computed on every write, returned on
   ``IngestResult.pi_c`` (mandatory) and recorded in the run's ``config_json``.
@@ -229,7 +230,9 @@ class ParsedSample(BaseModel):
     # `ParsedSample` directly never reach the helper.
     score_value: Annotated[float, Field(allow_inf_nan=False)]  # 1.0 pass | 0.0 fail
     invoked_skill: bool  # v1 π_c detector verdict for this trial (#46/#52)
-    exposed_skill: bool = False  # v2 exposure detector verdict (#384); False = not computed
+    # v2 exposure detector (#384). True/False = measured; None = not computed
+    # (screen lane has no skill directory). Never store "not computed" as False.
+    exposed_skill: bool | None = None
     output_text: str
     subject_model: str
     harness_pin_json: str | None
@@ -315,15 +318,15 @@ def detect_skill_exposure(messages: Iterable[object], skill_description: str) ->
     """v2 exposure detector (#384 channel c): was the skill's description
     present in the transcript's skill listing?
 
-    Fires iff the message stream contains a user-role message whose content
-    includes the skill's description text as a substring. Under the
+    Fires iff the message stream contains a message whose content includes
+    the skill's description text as a substring. Under the
     ``inspect_swe.claude_code`` solver, the first user message carries
     Claude Code's skill listing and the card's frontmatter description
-    appears in it verbatim.
+    appears in it verbatim. Role is not required: an undercount can only
+    make the unexposed-Full refusal fire more, never fabricate an exposure.
 
     Deliberately conservative: any shape this duck-typed scan does not
-    recognize counts as NOT exposed (an undercount can only make the
-    unexposed-Full refusal fire more, never fabricate an exposure).
+    recognize counts as NOT exposed.
     """
     if not skill_description:
         return False
@@ -331,41 +334,69 @@ def detect_skill_exposure(messages: Iterable[object], skill_description: str) ->
         content = getattr(message, "content", None)
         if isinstance(content, str) and skill_description in content:
             return True
-        # Some message objects store content as a list of dicts
+        # Some message objects store content as a list of dicts / objects
         if isinstance(content, list):
             for part in content:
                 if isinstance(part, dict) and skill_description in part.get("text", ""):
                     return True
+                text = getattr(part, "text", None)
+                if isinstance(text, str) and skill_description in text:
+                    return True
     return False
+
+
+_YAML_BLOCK_SCALAR_INDICATORS = frozenset({">", ">-", ">+", "|", "|-", "|+"})
 
 
 def _extract_skill_description(skill_dir: Path) -> str:
     """Extract the description from a SKILL.md frontmatter block.
 
-    Returns the value of the ``description`` key in the YAML frontmatter,
-    or an empty string if the file is missing, has no frontmatter, or
-    has no description key. The caller decides what an empty string means.
+    Supports single-line scalars (plain or quoted) and YAML block scalars
+    (``>`` / ``|`` and their chomp variants). Folded style (``>``) joins
+    continuation lines with a single space — the shape Claude Code's skill
+    listing carries. Returns an empty string if the file is missing, has no
+    frontmatter, has no description key, or carries a bare block indicator
+    with no body (never returns the indicator character as the description).
     """
     skill_file = skill_dir / "SKILL.md"
     if not skill_file.is_file():
         return ""
     text = skill_file.read_text(encoding="utf-8")
-    # Frontmatter is delimited by --- at the start of the file
     if not text.startswith("---"):
         return ""
     parts = text.split("---", 2)
     if len(parts) < 3:
         return ""
-    frontmatter = parts[1]
-    # Simple line-by-line parse: find "description:" line
-    for line in frontmatter.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("description:"):
-            value = stripped[len("description:") :].strip()
-            # Strip surrounding quotes if present
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
-                value = value[1:-1]
-            return value
+    lines = parts[1].splitlines()
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if not stripped.startswith("description:"):
+            i += 1
+            continue
+        value = stripped[len("description:") :].strip()
+        if value in _YAML_BLOCK_SCALAR_INDICATORS:
+            folded = value.startswith(">")
+            collected: list[str] = []
+            i += 1
+            while i < len(lines):
+                cont = lines[i]
+                if cont.startswith((" ", "\t")):
+                    collected.append(cont.strip())
+                    i += 1
+                    continue
+                if not cont.strip():
+                    collected.append("")
+                    i += 1
+                    continue
+                break
+            body_parts = [p for p in collected if p]
+            if not body_parts:
+                return ""
+            return " ".join(body_parts) if folded else "\n".join(body_parts)
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+            value = value[1:-1]
+        return value
     return ""
 
 
@@ -409,7 +440,7 @@ def parse_eval_log(path: Path, *, skill_description: str = "") -> ParsedEvalLog:
     :param skill_description: the pinned SKILL.md frontmatter description text.
         When non-empty, each sample's ``exposed_skill`` is computed by the v2
         channel-(c) detector. When empty (screen lane), ``exposed_skill`` is
-        ``False`` (typed "not computed").
+        ``None`` (typed "not computed" — never ``False``).
     :raises SubjectLayerNotInstalledError: optional extra not installed.
     :raises EvalLogIngestError: a sample carries no score.
     """
@@ -439,7 +470,7 @@ def parse_eval_log(path: Path, *, skill_description: str = "") -> ParsedEvalLog:
                 exposed_skill=(
                     detect_skill_exposure(s.messages or [], skill_description)
                     if skill_description
-                    else False
+                    else None
                 ),
                 epoch=int(s.epoch),
                 scorer_name=scorer_name,
@@ -816,7 +847,9 @@ def _validate_pair(full: ParsedEvalLog, null: ParsedEvalLog) -> None:
         raise PairedLogMismatchError(f"logs disagree on the scorer: {sorted(scorers)}")
 
     # #384 refusal predicate (a): Full-arm epoch with exposure not detected.
-    unexposed = sorted(s.epoch for s in full.samples if not s.exposed_skill)
+    # True is the only admissible Full value — False (measured absent) and
+    # None (not computed) both refuse: treatment delivery was not established.
+    unexposed = sorted(s.epoch for s in full.samples if s.exposed_skill is not True)
     if unexposed:
         raise UnexposedFullEpochError(
             f"full log {full.task_name!r} has epoch(s) {unexposed} with exposure not "
@@ -827,8 +860,9 @@ def _validate_pair(full: ParsedEvalLog, null: ParsedEvalLog) -> None:
 
     # #384 refusal predicate (b): Null-arm epoch with exposure or invocation detected.
     # Widened from the #46 invocation-only check to include channel-(c) exposure.
+    # None (not computed) is not contamination; only a measured True is.
     null_contaminated_invoked = sorted(s.epoch for s in null.samples if s.invoked_skill)
-    null_contaminated_exposed = sorted(s.epoch for s in null.samples if s.exposed_skill)
+    null_contaminated_exposed = sorted(s.epoch for s in null.samples if s.exposed_skill is True)
     if null_contaminated_invoked or null_contaminated_exposed:
         channels = []
         if null_contaminated_exposed:
@@ -872,7 +906,7 @@ def _pi_c_summary(samples: tuple[ParsedSample, ...]) -> PiCSummary:
 def _exposure_summary(samples: tuple[ParsedSample, ...]) -> ExposureSummary:
     """Exposure summary over the treated (Full) arm's parsed samples."""
     trials = len(samples)
-    exposed_count = sum(1 for s in samples if s.exposed_skill)
+    exposed_count = sum(1 for s in samples if s.exposed_skill is True)
     return ExposureSummary(
         exposed_count=exposed_count,
         trials=trials,
