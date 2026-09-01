@@ -79,6 +79,10 @@ _CONFOUND_DETECTOR = (
     "tests/test_confound_status_e2e.py::TestConfoundStatusE2E"
     "::test_confound_events_produce_confounded_status"
 )
+_UNDERPOWERED_DETECTOR = (
+    "tests/test_confound_status_e2e.py::TestConfoundStatusE2E"
+    "::test_underpowered_discard_does_not_read_as_confounded"
+)
 _INGEST = "src/skill_harness/subject/ingest.py"
 _INGEST_MODULE = "skill_harness.subject.ingest"
 _PAIRED_DETECTOR = (
@@ -149,7 +153,7 @@ MUTANTS: tuple[Mutant, ...] = (
         _ENGINE_MODULE,
         '                if reason == "confounded":',
         '                if reason != "scorer_error":',
-        (_CONFOUND_DETECTOR, "tests/test_aggregation_engine.py"),
+        (_UNDERPOWERED_DETECTOR, _CONFOUND_DETECTOR),
     ),
 )
 
