@@ -73,6 +73,12 @@ class Mutant:
     selection: tuple[str, ...]  # pytest node ids run as one selection
 
 
+_ENGINE = "src/skill_harness/aggregation/engine.py"
+_ENGINE_MODULE = "skill_harness.aggregation.engine"
+_CONFOUND_DETECTOR = (
+    "tests/test_confound_status_e2e.py::TestConfoundStatusE2E"
+    "::test_confound_events_produce_confounded_status"
+)
 _INGEST = "src/skill_harness/subject/ingest.py"
 _INGEST_MODULE = "skill_harness.subject.ingest"
 _PAIRED_DETECTOR = (
@@ -113,6 +119,37 @@ MUTANTS: tuple[Mutant, ...] = (
         "        if not math.isfinite(score):",
         "        if math.isnan(score):",
         (_HELPER_DETECTOR,),
+    ),
+    Mutant(
+        "M-C1",
+        "366-reason-read",
+        "stop reading the persisted inadmissibility_reason, so CONFOUNDED is unreachable again",
+        _ENGINE,
+        _ENGINE_MODULE,
+        '                if reason == "confounded":',
+        "                if False:",
+        (_CONFOUND_DETECTOR,),
+    ),
+    Mutant(
+        "M-C2",
+        "366-flag-condition",
+        "invert the survivor gate: fire CONFOUNDED only when admissible work DID survive",
+        _ENGINE,
+        _ENGINE_MODULE,
+        "        all_confounded_flag = total > 0 and admissible_count == 0 and confounded > 0",
+        "        all_confounded_flag = total > 0 and admissible_count > 0 and confounded > 0",
+        (_CONFOUND_DETECTOR,),
+    ),
+    Mutant(
+        "M-C3",
+        "366-reason-read",
+        "count every inadmissible verdict except scorer_error as confounded, so an "
+        "underpowered clause reports as confounded",
+        _ENGINE,
+        _ENGINE_MODULE,
+        '                if reason == "confounded":',
+        '                if reason != "scorer_error":',
+        (_CONFOUND_DETECTOR, "tests/test_aggregation_engine.py"),
     ),
 )
 
@@ -297,7 +334,20 @@ def run_case(mutant: Mutant, commit: str, workroot: Path) -> CaseResult:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="-")
+    parser.add_argument(
+        "--select",
+        default="",
+        help=(
+            "only run mutants whose obligation starts with this prefix. One receipt "
+            "should attest to one repair; MUTANTS accumulates across repairs."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    selected = tuple(m for m in MUTANTS if m.obligation.startswith(args.select))
+    if not selected:
+        print(f"REFUSE: --select {args.select!r} matched no mutants", file=sys.stderr)
+        return 1
 
     dirty = _git("status", "--porcelain", cwd=REPO)
     if dirty:
@@ -309,12 +359,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     commit = _git("rev-parse", "HEAD", cwd=REPO)
-    targets = sorted({m.target for m in MUTANTS})
+    targets = sorted({m.target for m in selected})
     digests_before = {t: _digest(REPO / t) for t in targets}
 
     workroot = Path(tempfile.mkdtemp(prefix="mutation-receipt-"))
     try:
-        cases = [run_case(m, commit, workroot) for m in MUTANTS]
+        cases = [run_case(m, commit, workroot) for m in selected]
     finally:
         shutil.rmtree(workroot, ignore_errors=True)
 
