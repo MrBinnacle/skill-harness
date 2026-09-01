@@ -256,25 +256,28 @@ and covers that section only. This page stays the citable surface for every kind
 
 ### [`docs/assurance/ebmom-gate-mutation-receipt.md`](assurance/ebmom-gate-mutation-receipt.md)
 
-- **Claims:** Six hand-run mutants against the #360 peel and heterogeneity gate,
-  each confirmed to compile before its tests ran, each kill attributed to a named
-  failing assertion rather than an exit code, and each labelled with the
-  amendment section 6 obligation it belongs to. Five were killed: two numerics
-  mutants by the differential reference, and three method-selection mutants by
-  the independent admission tests. One survived: a tie-blind peel is invisible to
-  the entire differential suite, because that suite's 1,000 seeded inputs are
-  tie-free and the two formulas are algebraically identical on tie-free data. On
-  the registered `tie_heavy_signal` regime that same mutant understates the latent
-  variance by 93 percent (relative bias -0.9281 against +0.0420 clean) and drops
-  admission from 1.00 to 0.25, so the tie regime is load-bearing rather than
-  decorative. Production bytes were restored byte-identically after every mutant.
-- **Refuses to claim:** That the mutant set is exhaustive or that any mutation
-  score can be derived from it, since a hand-run campaign of six cannot support
-  one; that the candidate passes the acceptance matrix, as no confirmatory run has
-  been performed; that the smoke numbers quoted for the survivor are a result,
-  since they were produced at R=20 under a throwaway root seed solely to show the
-  mutant is detectable; that obligation B is fully covered, since acceptance-matrix
-  rows 1 and 2 have not been run at the registered replication.
+- **Claims:** Seven mutants against the #360 peel and heterogeneity gate, each
+  run in its own git worktree at a fixed commit with production never mutated in
+  place, each case recording and asserting both worktree HEADs, the
+  `module.__file__` actually imported, clean and mutant source digests, that the
+  digests differ, that the clean baseline passed first with nonzero collection,
+  that the mutant imports, the named failing assertion, and that the production
+  tree is byte-unchanged afterwards. Five killed by named assertions; two
+  survivors preserved rather than folded into a score. On its first run the
+  generator returned INVALID_BASELINE for all four method-selection cases
+  because their clean baseline was already red from a renamed provenance field,
+  which is the baseline check preventing four kills being recorded against an
+  already-failing test. Records that a tie-blind peel survives the differential
+  suite by construction, since that suite's inputs are tie-free where the two
+  formulas are algebraically identical, and that a common null decisive rate
+  survives every unit test.
+- **Refuses to claim:** Any mutation score, and that the mutant set is
+  exhaustive; that the candidate passes the acceptance matrix, since no
+  confirmatory run has been performed and the development smoke FAILS acceptance
+  row 1 on `tie_heavy_null` at exact binomial p = 3.0e-11; that the smoke numbers
+  quoted for the survivors are results, since they were produced at R=20 and R=40
+  under a throwaway root seed solely to show the mutants are detectable; that
+  obligation B is covered, since one of its mutants survived.
 
 ### [`docs/assurance/ebmom-peel-preregistration-amendment.md`](assurance/ebmom-peel-preregistration-amendment.md)
 
