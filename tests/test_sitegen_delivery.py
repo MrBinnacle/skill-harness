@@ -16,9 +16,7 @@ from typing import Any
 
 from skill_harness.sitegen.render import _delivery_section, render_skill_page
 
-_SCHEMA: dict[str, Any] = json.loads(
-    Path("docs/sers/sers.schema.json").read_text(encoding="utf-8")
-)
+_SCHEMA: dict[str, Any] = json.loads(Path("docs/sers/sers.schema.json").read_text(encoding="utf-8"))
 
 _MARKER = "test-build-marker"
 
@@ -45,10 +43,14 @@ _MINIMAL_RECEIPT: dict[str, Any] = {
 }
 
 
-def _delivery_receipt(channel: str, pi_c: dict | None = None, exposure: dict | None = None) -> dict:
+def _delivery_receipt(
+    channel: str,
+    pi_c: dict[str, Any] | None = None,
+    exposure: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     receipt = dict(_MINIMAL_RECEIPT)
     receipt["sers_version"] = "1.2.0"
-    delivery: dict = {"channel": channel}
+    delivery: dict[str, Any] = {"channel": channel}
     if pi_c is not None:
         delivery["pi_c"] = pi_c
     if exposure is not None:
