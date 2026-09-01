@@ -309,7 +309,9 @@ def parse_eval_log(path: Path) -> ParsedEvalLog:
                 invoked_skill=detect_skill_invocation(s.messages or [], skill_name),
                 epoch=int(s.epoch),
                 scorer_name=scorer_name,
-                score_value=_score_to_float(score.value, path),
+                score_value=_score_to_float(
+                    score.value, path, sample=f"sample id={s.id} epoch={s.epoch}"
+                ),
                 output_text=completion,
                 subject_model=str((pin or {}).get("model") or log.eval.model),
                 harness_pin_json=(
@@ -751,11 +753,18 @@ def _observation(full_score: float, null_score: float) -> float:
     return 0.5
 
 
-def _score_to_float(value: object, path: Path) -> float:
+def _score_to_float(value: object, path: Path, *, sample: str = "") -> float:
+    """Decode one Inspect score to the outcome oracle's {0.0, 1.0} encoding.
+
+    ``sample`` locates the offending trial in a refusal message. A log carries
+    up to forty epochs, so "this log has a bad score" is not actionable; the
+    caller passes the same ``id=/epoch=`` locator the no-scores refusal uses.
+    """
+    where = f"{path}{': ' + sample if sample else ''}"
     if isinstance(value, str):
         mapped = _SCORE_VALUE_MAP.get(value)
         if mapped is None:
-            raise EvalLogIngestError(f"{path}: unmappable score value {value!r}")
+            raise EvalLogIngestError(f"{where}: unmappable score value {value!r}")
         return mapped
     if isinstance(value, bool):
         return 1.0 if value else 0.0
@@ -763,12 +772,12 @@ def _score_to_float(value: object, path: Path) -> float:
         score = float(value)
         if not math.isfinite(score):
             raise EvalLogIngestError(
-                f"{path}: non-finite score value {value!r}. An absent measurement is not"
+                f"{where}: non-finite score value {value!r}. An absent measurement is not"
                 " a tie: _observation scores it 0.5, which records no-effect evidence"
                 " the trial never produced (#363)."
             )
         return score
-    raise EvalLogIngestError(f"{path}: unmappable score value {value!r}")
+    raise EvalLogIngestError(f"{where}: unmappable score value {value!r}")
 
 
 class _UsageTotals(NamedTuple):

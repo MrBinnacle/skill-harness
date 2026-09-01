@@ -152,6 +152,15 @@ def test_score_to_float_refuses_non_finite_scores() -> None:
             _score_to_float(value, p)
 
 
+def test_score_refusal_locates_the_offending_trial() -> None:
+    """A log carries up to forty epochs; naming only the file is not actionable."""
+    p = Path("x.eval")
+    with pytest.raises(EvalLogIngestError, match=r"x\.eval: sample id=7 epoch=2:"):
+        _score_to_float(math.nan, p, sample="sample id=7 epoch=2")
+    with pytest.raises(EvalLogIngestError, match=r"x\.eval: sample id=7 epoch=2:"):
+        _score_to_float("P", p, sample="sample id=7 epoch=2")
+
+
 def test_parsed_sample_refuses_non_finite_score_at_the_model_layer() -> None:
     """The model layer is the enforcing surface, not the parse helper (#363)."""
     for value in (math.nan, math.inf, -math.inf):

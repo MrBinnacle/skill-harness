@@ -19,8 +19,16 @@ For each mutant the receipt asserts, and records:
   the named assertion FAILS under the mutant
   the production tree is unchanged after the receipt is generated
 
-Each mutant names its own target file, module and test selection, so one
-generator serves every repair that owes a receipt. Add cases to MUTANTS.
+Each mutant names its own target file, module and test selection. That is not
+speculative generality: the generator this file is ported from hard-pinned a
+single module path at import time, which is exactly why it could not be reused
+and had to be copied. Add cases to MUTANTS.
+
+The generator EXITS NON-ZERO when a case is invalid -- a stillborn mutant, a
+no-op edit, a missing anchor, a red baseline, or a module resolved outside its
+own worktree. An invalid case is not a result, and a receipt that contains one
+attests to nothing. A SURVIVED case is a legitimate result and exits zero: a
+preserved survivor is a finding, not a failure.
 
 Usage:
     python scripts/mutation_receipt.py --out docs/assurance/<name>.json
@@ -52,7 +60,7 @@ class Mutant:
     module: str  # importable module for the isolation and compile assertions
     old: str
     new: str
-    selection: str  # one or more pytest node ids, space separated
+    selection: tuple[str, ...]  # pytest node ids run as one selection
 
 
 _INGEST = "src/skill_harness/subject/ingest.py"
@@ -74,7 +82,7 @@ MUTANTS: tuple[Mutant, ...] = (
         _INGEST_MODULE,
         "    score_value: Annotated[float, Field(allow_inf_nan=False)]  # 1.0 pass | 0.0 fail",
         "    score_value: float  # 1.0 pass | 0.0 fail",
-        f"{_PAIRED_DETECTOR} {_MODEL_DETECTOR}",
+        (_PAIRED_DETECTOR, _MODEL_DETECTOR),
     ),
     Mutant(
         "M-N2",
@@ -84,7 +92,7 @@ MUTANTS: tuple[Mutant, ...] = (
         _INGEST_MODULE,
         "        if not math.isfinite(score):",
         "        if False:",
-        _HELPER_DETECTOR,
+        (_HELPER_DETECTOR,),
     ),
     Mutant(
         "M-N3",
@@ -94,13 +102,33 @@ MUTANTS: tuple[Mutant, ...] = (
         _INGEST_MODULE,
         "        if not math.isfinite(score):",
         "        if math.isnan(score):",
-        _HELPER_DETECTOR,
+        (_HELPER_DETECTOR,),
     ),
+)
+
+
+# A case with one of these verdicts produced no measurement. It is not a result
+# that a reader can weigh, so the generator refuses rather than writing a receipt
+# that looks complete. SURVIVED is absent deliberately: a preserved survivor is a
+# finding, and folding it into an exit code would create pressure to delete it.
+INVALID_VERDICTS: frozenset[str] = frozenset(
+    {"ANCHOR_ABSENT", "INVALID_BASELINE", "INVALID_ISOLATION", "NO_OP", "STILLBORN", "UNKNOWN"}
 )
 
 
 def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _git(*args: str, cwd: Path) -> str:
+    """Run one git command and return its stripped stdout."""
+    proc = subprocess.run(  # noqa: S603 -- argv is literal, built in this file
+        ["git", *args],  # noqa: S607
+        cwd=cwd,
+        capture_output=True,
+        check=True,
+    )
+    return proc.stdout.decode("utf-8", "replace").strip()
 
 
 def _env(root: Path | None = None) -> dict[str, str]:
@@ -119,7 +147,7 @@ def _env(root: Path | None = None) -> dict[str, str]:
     return env
 
 
-def _run_pytest(root: Path, selection: str) -> tuple[int, str]:
+def _run_pytest(root: Path, selection: tuple[str, ...]) -> tuple[int, str]:
     proc = subprocess.run(  # noqa: S603 -- argv is literal, built in this file
         [
             sys.executable,
@@ -160,7 +188,7 @@ class CaseResult:
     mutant_id: str
     obligation: str
     description: str
-    selection: str
+    selection: tuple[str, ...]
     verdict: str
     clean: dict[str, object] = field(default_factory=dict)
     mutant: dict[str, object] = field(default_factory=dict)
@@ -181,11 +209,7 @@ def run_case(mutant: Mutant, commit: str, workroot: Path) -> CaseResult:
     )
     try:
         target = tree / mutant.target
-        head = (
-            subprocess.run(["git", "rev-parse", "HEAD"], cwd=tree, capture_output=True, check=True)  # noqa: S607
-            .stdout.decode()
-            .strip()
-        )
+        head = _git("rev-parse", "HEAD", cwd=tree)
 
         clean_digest = _digest(target)
         clean_module = _module_file(tree, mutant.module)
@@ -265,11 +289,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default="-")
     args = parser.parse_args(argv)
 
-    dirty = (
-        subprocess.run(["git", "status", "--porcelain"], cwd=REPO, capture_output=True, check=True)  # noqa: S607
-        .stdout.decode()
-        .strip()
-    )
+    dirty = _git("status", "--porcelain", cwd=REPO)
     if dirty:
         print(
             "REFUSE: production tree is dirty. The receipt must attest to a committed "
@@ -278,11 +298,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    commit = (
-        subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, check=True)  # noqa: S607
-        .stdout.decode()
-        .strip()
-    )
+    commit = _git("rev-parse", "HEAD", cwd=REPO)
     targets = sorted({m.target for m in MUTANTS})
     digests_before = {t: _digest(REPO / t) for t in targets}
 
@@ -293,11 +309,7 @@ def main(argv: list[str] | None = None) -> int:
         shutil.rmtree(workroot, ignore_errors=True)
 
     digests_after = {t: _digest(REPO / t) for t in targets}
-    still_clean = (
-        subprocess.run(["git", "status", "--porcelain"], cwd=REPO, capture_output=True, check=True)  # noqa: S607
-        .stdout.decode()
-        .strip()
-    )
+    still_clean = _git("status", "--porcelain", cwd=REPO)
 
     report = {
         "commit_under_test": commit,
@@ -311,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
                 "mutant_id": c.mutant_id,
                 "obligation": c.obligation,
                 "description": c.description,
-                "selection": c.selection,
+                "selection": list(c.selection),
                 "verdict": c.verdict,
                 "clean": c.clean,
                 "mutant": c.mutant,
@@ -334,6 +346,15 @@ def main(argv: list[str] | None = None) -> int:
         )
     if not report["production_tree_unchanged"]:
         print("REFUSE: production tree changed during receipt generation", file=sys.stderr)
+        return 1
+    invalid = [c for c in cases if c.verdict in INVALID_VERDICTS]
+    if invalid:
+        print(
+            "REFUSE: "
+            + ", ".join(f"{c.mutant_id} {c.verdict}" for c in invalid)
+            + ". An invalid case measured nothing, so this receipt attests to nothing.",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

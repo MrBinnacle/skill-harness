@@ -337,33 +337,36 @@ def test_nan_score_is_refused_or_fails_closed(
     this detector builds ``ParsedSample`` directly, so the write path never
     calls ``_score_to_float`` and a guard there alone leaves the property red.
 
-    Two mechanical consequences, stated because they change what this test
-    proves rather than how loudly it says it:
-
-    - Sample construction moved INSIDE the try. The refusal now precedes the
-      write instead of happening during it, which is earlier than the
-      registered requirement, not weaker than it -- nothing is written either
-      way, and the fail-closed bound below is unchanged.
-    - The accepted refusal widens to ``ValidationError``. The model layer is
-      the enforcing surface and pydantic wraps ``EvalLogIngestError`` (a
-      ``ValueError`` subclass) into ``ValidationError``, so the typed refusal
-      cannot escape a field constraint. ``_score_to_float`` still raises
-      ``EvalLogIngestError`` on the parse path, which this detector does not
-      exercise.
+    The refusal now precedes the write instead of happening during it, which is
+    earlier than the registered requirement rather than weaker than it: nothing
+    is written either way. Only the NaN-carrying construction is guarded, and
+    the guard requires the error to name ``score_value``. A blanket
+    ``except ValidationError`` around the whole pair would green this detector
+    on any future field constraint firing on any unrelated field, which would
+    keep the registered BOUND while losing the registered MECHANISM -- the test
+    would no longer prove that the NaN was what got refused.
 
     The registered bound is unchanged: no observation may be 0.5.
     """
     conn = evidence_db
     epochs = [1, 2, 3]
+    null = _log("null", tuple(_sample("null", e, 0.0, invoked=False) for e in epochs))
     try:
         full = _log(
             "full",
             tuple(_sample("full", e, math.nan if e == 2 else 1.0, invoked=True) for e in epochs),
         )
-        null = _log("null", tuple(_sample("null", e, 0.0, invoked=False) for e in epochs))
+    except ValidationError as exc:
+        assert "score_value" in str(exc), (
+            f"NAN_REFUSED_BY_THE_WRONG_FIELD: construction was refused, but not for"
+            f" score_value ({exc}); this detector must not go green on an unrelated"
+            f" constraint."
+        )
+        return  # refused at construction: nothing reaches the write path
+    try:
         result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
-    except (EvalLogIngestError, ValidationError):
-        return  # refused before any verdict row exists: the acceptable outcome
+    except EvalLogIngestError:
+        return  # refused at write time: the other acceptable outcome
     observations = [
         row[0]
         for row in conn.execute(
