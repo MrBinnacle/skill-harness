@@ -62,16 +62,21 @@ and covers that section only. This page stays the citable surface for every kind
 
 ### [`docs/findings/confound-status-silent-understatement.md`](findings/confound-status-silent-understatement.md)
 
-- **Claims:** CONFOUNDED is unreachable: the runner writes confounded
-  verdicts as `inadmissible`, the admissible VIEW excludes them on state
-  alone, and the engine's `all_confounded_flag` joins confound events
-  against admissible rows only, so it is always false; measured on the
+- **Claims:** CONFOUNDED was unreachable: the runner wrote confounded
+  verdicts as `inadmissible`, the admissible VIEW excluded them on state
+  alone, and the engine's `all_confounded_flag` joined confound events
+  against admissible rows only, so it was always false; measured on the
   detector fixture (status UNMEASURED/inadmissible, `vector.confounded=0`).
-  Primary-confounded rows verifiably never enter aggregation. Repair is
-  #366.
+  Primary-confounded rows verifiably never enter aggregation. RESOLVED by
+  #366: the engine reads the `inadmissibility_reason` the runner already
+  persists, which `docs/INVARIANTS.md` #3 forces by forbidding read-time
+  recomputation of evidence admissibility.
 - **Refuses to claim:** That any historical report understated a confound
-  (no production re-scan was run); which layer is authoritative for the
-  fix (that is #366's design call).
+  (no production re-scan was run); that the admissible VIEW's
+  `affected_clause_id` filtering question is settled (it was not touched);
+  that a clause mixing confounded and otherwise-inadmissible verdicts is
+  wholly confounded — it reads CONFOUNDED, and the split stays available in
+  `confounded_verdict_count`.
 
 ### [`docs/findings/halfupdate-tie-sensitivity.md`](findings/halfupdate-tie-sensitivity.md)
 
