@@ -10,6 +10,7 @@ Fixture-only: no network, no model calls.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -223,14 +224,62 @@ def test_build_subject_identity_uses_live_harness_sources() -> None:
 def test_v11_receipt_subject_identity_matches_harness_mint(
     sers_validator: Draft202012Validator,
 ) -> None:
-    """1.1.0 mint of the real synthetic-control run: harness block, not hand-typed."""
+    """1.1.0 mint of the real synthetic-control run: harness block, not hand-typed.
+
+    ``implementation_hash`` is deliberately EXCLUDED from the live-equality check
+    (#373). It is a SHA-256 over ``subject/ingest.py``'s own bytes, so asserting
+    that a stored fixture equals a live recomputation makes every edit to the
+    oracle module red, whatever the edit does.
+
+    Excluding it is not a concession to convenience. The field never held the
+    property this test is named for. The fixture's own ``source.notes`` records
+    its measurements as copying the documented run of 2026-07-27, and
+    ``subject/ingest.py`` was edited five times between that date and the #300
+    mint (5533740, 45087f0, 2d19430, 8da8e20, f347dab). The recorded hash has
+    therefore never been the identity of the oracle that produced 8 vs 0, and it
+    cannot be made so: the run's inputs were not retained in-tree, so the control
+    cannot be re-executed and re-minted from its own evidence.
+
+    The not-hand-typed invariant (#298) is carried by the fields that survive
+    below. ``skill_id`` is a digest of the skill file's bytes and cannot be typed
+    from a failing assertion; ``implementation_hash`` is the one field in the
+    block that can be, by copying it out of this test's own output.
+
+    The live invariant that DOES have content is asserted separately, in
+    ``test_fresh_subject_identity_mint_hashes_the_live_oracle_module``.
+    """
     assert _V11_MINTED.is_file()
     instance = _load_json(_V11_MINTED)
     sers_validator.validate(instance)
     assert instance["sers_version"] == "1.1.0"
+    recorded = instance["subject_identity"]
     expected = build_subject_identity(skill_md=_CONTROL_SKILL_MD, arms=["null", "full"])
-    assert instance["subject_identity"] == expected
+    for field in ("skill_id", "harness_version", "metric_version", "arms"):
+        assert recorded[field] == expected[field], (
+            f"SUBJECT_IDENTITY_DRIFT: {field} in the stored 1.1.0 fixture does not match"
+            f" a live harness mint. This block must be harness-populated (#298)."
+        )
+    historical_hash = recorded["implementation_hash"]
+    assert len(historical_hash) == 64, historical_hash
+    assert set(historical_hash) <= set("0123456789abcdef"), historical_hash
     # Measurements stay the documented real run — not an invented KEEP.
     assert instance["declared_synthetic_control"] is True
     assert instance["measurements"]["full_pass_rate"]["passes"] == 8
     assert instance["measurements"]["null_pass_rate"]["passes"] == 0
+
+
+def test_fresh_subject_identity_mint_hashes_the_live_oracle_module() -> None:
+    """A mint made NOW must carry the hash of the oracle module as it is now.
+
+    This is the half of the old assertion that has content, and nothing else
+    held it. It compares a fresh mint against live bytes, never against the
+    historical fixture, so it stays true across every edit to the oracle while
+    still failing if `build_subject_identity` ever stops reading the live module.
+    """
+    block = build_subject_identity(skill_md=_CONTROL_SKILL_MD, arms=["null", "full"])
+    live_bytes = (_REPO_ROOT / "src" / "skill_harness" / "subject" / "ingest.py").read_bytes()
+    assert block["implementation_hash"] == hashlib.sha256(live_bytes).hexdigest(), (
+        "MINT_DOES_NOT_HASH_THE_LIVE_ORACLE: build_subject_identity returned an"
+        " implementation_hash that is not a digest of the oracle module's current"
+        " bytes, so a minted receipt would name an oracle that is not the one running."
+    )
