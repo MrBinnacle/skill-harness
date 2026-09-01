@@ -130,8 +130,11 @@ Read off the schema, which is the operative artifact.
 
 **Conditionals the schema enforces:** `cut_sub_reason` is a non-null member when
 `verdict` is `CUT`, and is `null` when `verdict` is `KEEP` or `CANT_TELL_YET`. When
-`sers_version` is `1.1.0`, `subject_identity` is required. Every other cross-field rule in
-the README is prose only.
+`sers_version` is `1.1.0` or `1.2.0`, `subject_identity` is required. When
+`sers_version` is `1.2.0`, `delivery` is required and must carry `channel`,
+`exposure`, and `pi_c`. Cross-field rules on `delivery.channel` (`description_only`
+requires `pi_c.hat = 0`; `body_and_description` requires `pi_c.invocations > 0`)
+are schema-enforced. Every other cross-field rule in the README is prose only.
 
 **The refusal shape.** Every numeric leg is one of two closed object forms -- a measured value,
 or an object carrying `refusal` from a fixed vocabulary. There is no third form. Omitting the

@@ -23,6 +23,11 @@ from skill_harness.aggregation.status import UnmeasuredSubReason
 from skill_harness.aggregation.verdict import CutSubReason, KeepCutVerdict, ValueClass
 from skill_harness.cli.main import _resolve_harness_version
 from skill_harness.sers import build_subject_identity
+from skill_harness.sers.delivery import (
+    CHANNEL_BODY_AND_DESCRIPTION,
+    CHANNEL_DESCRIPTION_ONLY,
+    CHANNEL_NOT_INSTRUMENTED,
+)
 from skill_harness.subject.ingest import ORACLE_METRIC_VERSION, _oracle_implementation_hash
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +37,7 @@ _RECEIPTS_DIR = _SERS_DIR / "receipts"
 _POISON_DIR = _REPO_ROOT / "tests" / "fixtures" / "sers"
 _CONTROL_SKILL_MD = _POISON_DIR / "declared-synthetic-positive-control" / "SKILL.md"
 _V11_MINTED = _POISON_DIR / "minted_synthetic_control_v1_1_0.json"
+_V12_MINTED = _POISON_DIR / "minted_synthetic_control_v1_2_0.json"
 
 
 def _load_json(path: Path) -> Any:
@@ -123,6 +129,19 @@ def test_schema_unmeasured_sub_reason_enum_matches_code(sers_schema: dict[str, A
 def test_schema_value_class_enum_matches_code(sers_schema: dict[str, Any]) -> None:
     schema_vals = _schema_enum(sers_schema, "properties", "value_class", "enum")
     code_vals = {m.value for m in ValueClass}
+    assert schema_vals == code_vals
+
+
+def test_schema_delivery_channel_enum_matches_code(sers_schema: dict[str, Any]) -> None:
+    """delivery.channel closed vocabulary equals the mint-path constants (#388)."""
+    schema_vals = _schema_enum(
+        sers_schema, "properties", "delivery", "properties", "channel", "enum"
+    )
+    code_vals = {
+        CHANNEL_DESCRIPTION_ONLY,
+        CHANNEL_BODY_AND_DESCRIPTION,
+        CHANNEL_NOT_INSTRUMENTED,
+    }
     assert schema_vals == code_vals
 
 
@@ -263,6 +282,23 @@ def test_v11_receipt_subject_identity_matches_harness_mint(
     assert len(historical_hash) == 64, historical_hash
     assert set(historical_hash) <= set("0123456789abcdef"), historical_hash
     # Measurements stay the documented real run — not an invented KEEP.
+    assert instance["declared_synthetic_control"] is True
+    assert instance["measurements"]["full_pass_rate"]["passes"] == 8
+    assert instance["measurements"]["null_pass_rate"]["passes"] == 0
+
+
+def test_v12_receipt_delivery_block_conforms(
+    sers_validator: Draft202012Validator,
+) -> None:
+    """1.2.0 mint carries a delivery block; schema requires it (#388)."""
+    assert _V12_MINTED.is_file()
+    instance = _load_json(_V12_MINTED)
+    sers_validator.validate(instance)
+    assert instance["sers_version"] == "1.2.0"
+    delivery = instance["delivery"]
+    assert delivery["channel"] == CHANNEL_NOT_INSTRUMENTED
+    assert "refusal" in delivery["pi_c"]
+    assert "refusal" in delivery["exposure"]
     assert instance["declared_synthetic_control"] is True
     assert instance["measurements"]["full_pass_rate"]["passes"] == 8
     assert instance["measurements"]["null_pass_rate"]["passes"] == 0

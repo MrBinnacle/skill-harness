@@ -139,13 +139,16 @@ Value-delivery attribution: which of the skill's two products carried the
 measured value. Required when `sers_version` is `1.2.0`; absent on `1.0.0`
 and `1.1.0` receipts.
 
-The delivery block carries three fields:
+The delivery block carries three required fields:
 
 | Field | Shape | Meaning |
 | --- | --- | --- |
 | `channel` | enum: `description_only`, `body_and_description`, `not_instrumented` | Which product carried the value. |
 | `exposure` | `{ "value": 0..1, "passes"?, "epochs"? }` or refusal | Exposure rate in the treated arm. |
 | `pi_c` | `{ "invocations", "trials", "hat", "ci_low", "ci_high", "confidence", "detector" }` or refusal | Invocation rate with Clopper-Pearson interval. |
+
+The receipt field is `hat`. Ingest's `config_json` records the same figure as
+`pi_c_hat`; the mint path renames on read and does not recompute.
 
 Channel vocabulary:
 

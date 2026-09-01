@@ -3,6 +3,10 @@
 Reads pi_c and exposure from the run's config_json — never recomputes.
 The config_json is written once at ingest time (subject/ingest.py) and
 immutable thereafter; this function is a reader, not a calculator.
+
+Ingest writes the point estimate as ``pi_c_hat`` (PiCSummary field name).
+The SERS delivery block carries it as ``hat`` (ticket vocabulary). The
+mapping is the only rename this path may perform.
 """
 
 from __future__ import annotations
@@ -13,6 +17,9 @@ from typing import Any
 CHANNEL_DESCRIPTION_ONLY = "description_only"
 CHANNEL_BODY_AND_DESCRIPTION = "body_and_description"
 CHANNEL_NOT_INSTRUMENTED = "not_instrumented"
+
+# Keys ingest always writes on a measured pi_c block (see test_run_config_records_the_pi_c_block).
+_PI_C_COPY_KEYS = ("invocations", "trials", "ci_low", "ci_high", "confidence", "detector")
 
 
 def build_delivery(config_json: dict[str, Any]) -> dict[str, Any]:
@@ -25,9 +32,9 @@ def build_delivery(config_json: dict[str, Any]) -> dict[str, Any]:
     Parameters
     ----------
     config_json:
-        The parsed ``runs.config_json`` dict.  Must contain ``"pi_c"`` with
-        at least ``"invocations"`` and ``"hat"`` when the channel is
-        ``body_and_description`` or ``description_only``.
+        The parsed ``runs.config_json`` dict.  Measured ``pi_c`` uses the
+        ingest field name ``pi_c_hat``; the returned block renames it to
+        ``hat`` for the SERS receipt vocabulary.
 
     Returns
     -------
@@ -40,19 +47,27 @@ def build_delivery(config_json: dict[str, Any]) -> dict[str, Any]:
         return _not_instrumented_delivery("pi_c absent from config_json")
 
     invocations = pi_c_raw.get("invocations")
-    hat = pi_c_raw.get("hat")
+    # Ingest key is pi_c_hat; accept bare hat only if a caller already mapped.
+    if "pi_c_hat" in pi_c_raw:
+        hat = pi_c_raw["pi_c_hat"]
+    elif "hat" in pi_c_raw:
+        hat = pi_c_raw["hat"]
+    else:
+        hat = None
 
-    # Determine channel from pi_c data — the ingest wrote the summary,
-    # this function reads it.
     if not isinstance(invocations, int) or not isinstance(hat, (int, float)):
         return _not_instrumented_delivery("pi_c missing invocations or hat")
+
+    for key in _PI_C_COPY_KEYS:
+        if key not in pi_c_raw:
+            return _not_instrumented_delivery(f"pi_c missing {key}")
 
     channel = CHANNEL_DESCRIPTION_ONLY if invocations == 0 else CHANNEL_BODY_AND_DESCRIPTION
 
     pi_c = {
         "invocations": pi_c_raw["invocations"],
         "trials": pi_c_raw["trials"],
-        "hat": pi_c_raw["hat"],
+        "hat": hat,
         "ci_low": pi_c_raw["ci_low"],
         "ci_high": pi_c_raw["ci_high"],
         "confidence": pi_c_raw["confidence"],

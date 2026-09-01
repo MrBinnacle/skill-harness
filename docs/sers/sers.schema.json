@@ -220,7 +220,7 @@
       "type": "object",
       "additionalProperties": false,
       "description": "Value-delivery attribution: which of the skill's two products (description or body) carried the measured value. Required from sers_version 1.2.0 onward; absent on 1.0.0 and 1.1.0 receipts.",
-      "required": ["channel"],
+      "required": ["channel", "exposure", "pi_c"],
       "properties": {
         "exposure": {
           "oneOf": [
