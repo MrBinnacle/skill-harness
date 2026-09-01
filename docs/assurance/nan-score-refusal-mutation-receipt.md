@@ -4,7 +4,7 @@
 **Finding:** `docs/findings/paired-ingest-nan-score-silent-tie.md`.
 **Generator:** `scripts/mutation_receipt.py`. **Machine-readable record:**
 `docs/assurance/nan-score-refusal-mutation-receipt.json`.
-**Commit under test:** `fc132fe2a907175c4676bd1fd03e71f429b6efaf`. **Python:** 3.13.1.
+**Commit under test:** `d430a881f8c9cafb7d5ac4df4ec724002fafbffa`. **Python:** 3.13.1.
 
 Each case runs in its **own git worktree** at a fixed commit. Production is never mutated in
 place. `PYTHONPATH` pins every case to its own sources, because the editable install would
@@ -42,6 +42,11 @@ Read together, the two cases locate the enforcing surface by measurement rather 
 preference: the parse-path guard is necessary for logs arriving through `parse_eval_log`, and it
 is not sufficient for anything that builds the model itself.
 
+M-N1 was re-measured after code review tightened the detector. The detector now guards only the
+NaN-carrying construction and requires the refusal to name `score_value`, rather than catching
+any `ValidationError` from either log. The kill is unchanged, which is what makes the tightening
+a narrowing of the claim rather than a loss of one.
+
 ## What the parse-path cases measure
 
 M-N2 removes the guard entirely. M-N3 keeps it but narrows it to NaN, so a positive or negative
@@ -55,6 +60,14 @@ It does not claim a mutation score, adequacy of the test suite as a whole, or th
 scores have ever appeared in a production `.eval` log. No historical re-scan of stored logs was
 run. It says three specific defects are detected, in isolated worktrees, against a baseline that
 passed first.
+
+## The generator refuses rather than exiting green
+
+A case whose verdict is `ANCHOR_ABSENT`, `INVALID_BASELINE`, `INVALID_ISOLATION`, `NO_OP`,
+`STILLBORN` or `UNKNOWN` measured nothing, so the generator exits non-zero and names it. A
+receipt containing such a case attests to nothing while still rendering as a table of verdicts.
+`SURVIVED` is deliberately not in that set: a preserved survivor is a finding, and folding it
+into an exit code would create pressure to delete it rather than report it.
 
 *Revisit if:* a caller reaches `oracle_verdicts.observation` by a third path that constructs
 neither `ParsedSample` nor calls `_score_to_float`, which would put a third surface in scope.
