@@ -4,7 +4,7 @@
 **Finding:** `docs/findings/paired-ingest-nan-score-silent-tie.md`.
 **Generator:** `scripts/mutation_receipt.py`. **Machine-readable record:**
 `docs/assurance/nan-score-refusal-mutation-receipt.json`.
-**Commit under test:** `d430a881f8c9cafb7d5ac4df4ec724002fafbffa`. **Python:** 3.13.1.
+**Commit under test:** `8dcc56ce3499879c5de215f2c4875eba086a649b`. **Python:** 3.13.1.
 
 Each case runs in its **own git worktree** at a fixed commit. Production is never mutated in
 place. `PYTHONPATH` pins every case to its own sources, because the editable install would
