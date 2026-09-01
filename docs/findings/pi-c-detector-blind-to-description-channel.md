@@ -10,7 +10,7 @@ not cover the channel that produced the effect.
 ## What ran
 
 | Field (registered Stage-1 template, `docs/findings/v0.2-preregistration.md`) | Value |
-|---|---|
+| --- | --- |
 | Skill | `git-pull-rebase-trap`, `skill_id` `387989fe…` (SHA-256 of `SKILL.md`) |
 | Prompt | `prompt_v2_deleaked.txt`, SHA-256 `2289ee87…` (the D4-clean version) |
 | Oracle | `command_succeeds` over `oracle/oracle_template.sh`, SHA-256 `9d410193…`; pure git plumbing against planted SHAs |
@@ -28,6 +28,12 @@ not cover the channel that produced the effect.
 Logs: `.private/microrun/batch1/gitpull/logs-stage1-paired/` (two `.eval` files,
 one per arm). Runner: `.private/microrun/batch1/gitpull/stage1_gitpull_paired.py`.
 
+Receipt: `docs/sers/receipts/gitpull-paired-k8-2026-09-01.json`. It supersedes
+`docs/sers/receipts/superseded/reclass-git-pull-rebase-trap.json` (2026-07-20),
+whose `p0=1.00` screen row ran on the D4-leaked prompt. The site publishes one
+receipt per skill, so the older file moved out of the published directory and
+stays in the tree unedited.
+
 The registered template carries no win-direction field, and this table does not
 add one. The section below is an instrument finding and needs trajectory facts
 that carry direction. That tension is stated rather than hidden.
@@ -39,7 +45,7 @@ the Skill tool. No epoch read `SKILL.md` or any path containing
 `git-pull-rebase-trap`.
 
 | Arm | Epochs that ran `git pull --rebase` or `git rebase` | Epochs that merged | Oracle pass |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Null | 8 of 8 | 0 of 8 | 0 of 8 |
 | Full | 2 of 8 | 6 of 8 | 6 of 8 |
 

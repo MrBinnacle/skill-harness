@@ -548,7 +548,14 @@ Verdict and sub-reason strings use the
 - **Refuses to claim:** `CUT` with `cut_sub_reason=subsumed`; a transformative
   lift measurement; standing/fired token costs (not_instrumented).
 
-### [`docs/sers/receipts/reclass-git-pull-rebase-trap.json`](sers/receipts/reclass-git-pull-rebase-trap.json)
+### [`docs/sers/receipts/superseded/reclass-git-pull-rebase-trap.json`](sers/receipts/superseded/reclass-git-pull-rebase-trap.json)
+
+- **Superseded 2026-09-01** by
+  [`gitpull-paired-k8-2026-09-01.json`](sers/receipts/gitpull-paired-k8-2026-09-01.json).
+  The site publishes one receipt per skill and refuses to choose between two,
+  so the older receipt moved out of the published directory and stays in the
+  tree unedited. Its `p0=1.00` screen row is D4-voided: the prompt it ran on
+  named the skill's rule (`docs/findings/d4-prompt-leak-into-null-arm.md`).
 
 - **Claims:** `verdict=CANT_TELL_YET`, `cut_sub_reason=null`,
   `unmeasured_sub_reason=null`; `value_class=trap-discipline`;
@@ -574,7 +581,9 @@ Verdict and sub-reason strings use the
   `subject_identity`; `null_pass_rate` 0/8, `discordance_rate` 6/8 with the
   Jeffreys interval in `detail`, `go_nogo=GO`; evidence admissibility
   `inadmissible` on `ZeroInvocationError` (zero detected invocations, detector
-  v1). Source prose: the description-channel finding above.
+  v1). Source prose: the description-channel finding above. Supersedes
+  `superseded/reclass-git-pull-rebase-trap.json` (2026-07-20), whose screen row
+  is D4-voided.
 - **Refuses to claim:** `KEEP`; a win direction (withheld per the registered
   micro-run template); the registered direct-Anthropic subject (ran on
   OpenRouter); standing or fired token costs (not_instrumented /
