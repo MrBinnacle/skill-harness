@@ -187,6 +187,50 @@ for the Gate-2 net-lift bounds, not a reason to resurrect the blended rate.
 
 Spec: skill-harness #368 (ruling and its amendment), #347 (item 5 detector), #345.
 
+## 9. The model pin is provenance, not a staleness badge
+
+Every newly-minted verdict carries an `ArticleFingerprint` — `mint_oracle_verdict`
+requires one — so **no cell floats free of the model it was measured on**. That is
+the pin's whole job, and it is discharged at write time.
+
+**Verdicts are NOT badged stale against fleet-model drift**, and this is a decision
+rather than an omission (#337).
+
+`is_stale_vs_fleet(stored_drift_fingerprint, current_fleet_model)` exists in
+`storage/article_fingerprint.py` and is unit-tested. It has **no production caller**,
+because there is nothing in this repository that can supply its second argument:
+`subject_model` is a **per-run parameter** of `run_ablation` (default
+`claude-sonnet-4-6`), so different runs legitimately carry different models and no
+designated "current fleet model" exists to compare against. A badge would first
+require designating one.
+
+The staleness axis that DOES gate a claim is a different one, and it is already
+enforced: `frozen_cases_with_currency` labels a frozen case `current` only when its
+`metric_version` AND `implementation_hash` match the current audited metric version,
+and `derive_clause_status` requires `current_frozen_case_count >= 1` for PASSED
+(A15/A57, §1 and §3). That axis is the **measuring code**, which can invalidate a
+number. Fleet-model drift is the **subject**: a verdict measured on an older model is
+not wrong, it is a claim about that model, and re-reading it as a claim about today's
+model is the error a reader must not make.
+
+So the pin answers *what was this measured on*, and the currency gate answers *is this
+still computable the same way*. Neither is a substitute for the other.
+
+Enforced in:
+- `src/skill_harness/storage/article_fingerprint.py` (the pin, and the unused comparison)
+- `src/skill_harness/storage/repositories/evidence/oracle_verdicts.py::mint_oracle_verdict`
+  (structurally requires the pin)
+- `tests/test_article_fingerprint.py::test_fleet_staleness_comparison_has_no_production_caller`
+  (pins this decision: wiring a caller turns it red and forces this section to be revisited)
+
+*Revisit if:* a current-fleet-model pointer is designated — a config key, a registry
+row, anything a reader can name. At that point the comparison has a target, the badge
+becomes buildable, and the argument above expires on its own terms. Also revisit if a
+verdict is ever re-read as a claim about a model other than its own `model_snapshot`,
+which is the failure this section exists to make visible.
+
+Spec: skill-harness #337, #75/#81 (the pin), #352 (the no-caller verification).
+
 ---
 
 Re-pointed from "CLAUDE.md" to this file across `src/` and `tests/` (F5, then the
