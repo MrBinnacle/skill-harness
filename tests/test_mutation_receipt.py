@@ -15,6 +15,12 @@ receipt relies on and cannot check from the JSON alone.
 3. `_collected` reads a nonzero test count out of real pytest tail lines. The
    generator refuses a case whose baseline collected nothing, so a parse miss
    turns a valid baseline into `INVALID_BASELINE` and silently deletes evidence.
+4. `_run_pytest` spreads every node id of a multi-node selection into argv.
+   This one is written from a live defect rather than from foresight: changing
+   `selection` from a space-separated string to a tuple left one
+   `selection.split()` behind, and the campaign died with an `AttributeError`
+   mid-run. The properties above all passed while it was broken, because none
+   of them built the command line.
 
 Not covered here: an end-to-end campaign. That needs a git worktree and a
 pytest subprocess per case and runs in minutes, so the campaign's own output is
@@ -25,9 +31,11 @@ records the isolation and baseline assertions for every case it ran.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -100,3 +108,31 @@ def test_survived_is_not_an_invalid_verdict() -> None:
 )
 def test_collected_counts_executed_tests(tail: str, expected: int) -> None:
     assert MODULE._collected(tail) == expected
+
+
+def test_run_pytest_spreads_every_node_of_a_multi_node_selection(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Regression: a tuple selection must reach argv as separate arguments.
+
+    The campaign previously died with `AttributeError: 'tuple' object has no
+    attribute 'split'` after `selection` changed type. Nothing else in this
+    module builds the command line, so nothing else could catch it.
+    """
+    seen: list[list[str]] = []
+
+    def fake_run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        seen.append(argv)
+        return subprocess.CompletedProcess(argv, 0, b"2 passed in 0.1s", b"")
+
+    monkeypatch.setattr(MODULE.subprocess, "run", fake_run)
+    code, out = MODULE._run_pytest(tmp_path, ("tests/a.py::test_one", "tests/b.py::test_two"))
+
+    assert code == 0
+    assert MODULE._collected(out) == 2
+    argv = seen[0]
+    assert "tests/a.py::test_one" in argv
+    assert "tests/b.py::test_two" in argv
+    assert not any(" " in arg for arg in argv[3:]), (
+        f"a node id reached argv still joined to another: {argv!r}"
+    )

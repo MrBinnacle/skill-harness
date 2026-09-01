@@ -153,7 +153,7 @@ def _run_pytest(root: Path, selection: tuple[str, ...]) -> tuple[int, str]:
             sys.executable,
             "-m",
             "pytest",
-            *selection.split(),
+            *selection,
             "-p",
             "no:randomly",
             "-q",
