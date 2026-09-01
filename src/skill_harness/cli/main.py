@@ -2970,20 +2970,32 @@ def screen_profile_cmd(
             "are unavailable.[/]"
         )
     if skills_root is not None and skills_root.is_dir():
+        # A skills tree is either flat (<root>/<skill>/SKILL.md) or grouped by
+        # category (<root>/<category>/<skill>/SKILL.md). MrBinnacle/skills is the
+        # latter -- engineering/, meta/, orchestration/ -- so a single-level scan
+        # enumerated ZERO of its 14 cards and degraded to the "no skills-root
+        # library" footnote without erroring. That silently blanked desc-cost, the
+        # one axis on this table that needs no eval spend at all.
+        # Descend one extra level only where the direct child carries no SKILL.md,
+        # so a flat root keeps its existing behaviour exactly.
         for child in sorted(skills_root.iterdir()):
-            skill_md = child / "SKILL.md"
-            if not (child.is_dir() and skill_md.is_file()):
+            if not child.is_dir():
                 continue
-            try:
-                parsed = parse_skill_file(skill_md)
-            except (MalformedSkillError, OSError):
-                continue
-            description = parsed.frontmatter.get("description", "")
-            is_disable = parsed.frontmatter.get("disable-model-invocation", "").strip().lower() == (
-                "true"
-            )
-            desc_cost = 0 if is_disable else (len(description) + 3) // 4  # ceil(len/4)
-            library[child.name] = (desc_cost, is_disable)
+            if (child / "SKILL.md").is_file():
+                candidates = [child]
+            else:
+                candidates = [g for g in sorted(child.iterdir()) if (g / "SKILL.md").is_file()]
+            for candidate in candidates:
+                try:
+                    parsed = parse_skill_file(candidate / "SKILL.md")
+                except (MalformedSkillError, OSError):
+                    continue
+                description = parsed.frontmatter.get("description", "")
+                is_disable = parsed.frontmatter.get(
+                    "disable-model-invocation", ""
+                ).strip().lower() == ("true")
+                desc_cost = 0 if is_disable else (len(description) + 3) // 4  # ceil(len/4)
+                library[candidate.name] = (desc_cost, is_disable)
 
     if not screened and not library:
         _console.print(
