@@ -13,20 +13,22 @@
 Under the half-update encoding (`Tie=0.5`, `n+=1` per tie), the Beta posterior
 for a tie-heavy axis converges toward `Beta(1 + w + t/2, 1 + l + t/2)` as tie
 count `t` grows, pulling the posterior mean toward 0.50 regardless of the
-underlying win/loss ratio.  A drop-ties recompute (filtering `observation == 0.5`)
+underlying win/loss ratio. A drop-ties recompute (filtering `observation == 0.5`)
 produces `Beta(1 + w, 1 + l)`, preserving the signal strength.
 
-Measured scenarios where the two encodings disagree:
+Both arms are measured through the production accumulator
+(`BetaBinomialAccumulator.add` / `check_stop`). Measured scenarios where the
+two encodings disagree:
 
 | Scenario | `w` | `l` | `t` | half-update P(rate > 0.60) | drop-ties P(rate > 0.60) | half-update verdict | drop-ties verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `win-heavy-few-ties` | 8 | 0 | 8 | 0.874 | 0.990 | INCONCLUSIVE | PASSED |
-| `win-heavy-many-ties` | 8 | 0 | 16 | 0.726 | 0.990 | INCONCLUSIVE | PASSED |
+| `win-heavy-few-ties` | 8 | 0 | 8 | 0.874 | 0.990 | inconclusive (`None`) | PASSED |
+| `win-heavy-many-ties` | 8 | 0 | 16 | 0.726 | 0.990 | inconclusive (`None`) | PASSED |
 
-Both approaches use `N_MIN=8`, `PASS_PROB_THRESHOLD=0.95`.  Drop-ties reaches
+Both approaches use `N_MIN=8`, `PASS_PROB_THRESHOLD=0.95`. Drop-ties reaches
 the pass threshold with `Beta(9, 1)` (n=8); half-update stays inconclusive
 with `Beta(13, 5)` (n=16) or `Beta(17, 9)` (n=24) because ties dilute the
-signal.
+signal. Inconclusive means `check_stop().stopping_reason is None`.
 
 Posterior mean sensitivity (half-update vs drop-ties):
 
@@ -44,19 +46,22 @@ P(rate > 0.60) sensitivity (half-update vs drop-ties):
 | `tie-dominated` (w=6,l=2,t=20) | 0.363 | 0.768 | 0.406 |
 | `win-heavy-many-ties` | 0.726 | 0.990 | 0.263 |
 
+Documented bounds in the harness: `MAX_POSTERIOR_MEAN_SHIFT = 0.15`,
+`MAX_P_SENSITIVITY = 0.25`. Verdict agreement has zero tolerance.
+
 ---
 
 ## Direction and evidence strength
 
 The two verdict flips (`win-heavy-few-ties`, `win-heavy-many-ties`) are in the
-same direction: half-update says INCONCLUSIVE while drop-ties says PASSED.
+same direction: half-update stays inconclusive while drop-ties says PASSED.
 The half-update encoding delays or prevents a positive verdict on axes with
 strong win signals buried under many ties.
 
-This is the dangerous direction: a skill with many both-pass ties ( Full=1,
+This is the dangerous direction: a skill with many both-pass ties (Full=1,
 Null=1 → observation=0.5) can appear weaker than it is under half-update,
-leading to false INCONCLUSIVE or false FAILED verdicts.  The opposite
-direction (half-update says PASSED when drop-ties says INCONCLUSIVE) was not
+leading to false inconclusive or false FAILED verdicts. The opposite
+direction (half-update says PASSED when drop-ties stays inconclusive) was not
 observed at the tested grid points, but is not ruled out.
 
 ---
@@ -70,8 +75,8 @@ shipped verdict is a finding, never a reason to adjust locked thresholds
 
 `docs/PRD.md` §14.3 still marks the half-update encoding as provisional and
 records the open question of whether a flip to drop-ties preserves
-conjugacy.  `docs/INVARIANTS.md` §1 locks the encoding with no differential
-oracle behind it.  The finding is that the provisional encoding is material
+conjugacy. `docs/INVARIANTS.md` §1 locks the encoding with no differential
+oracle behind it. The finding is that the provisional encoding is material
 to the shipped verdict on measured axes.
 
 A fix would have to either:
@@ -82,23 +87,35 @@ A fix would have to either:
    inflation, which is a values decision requiring a locked INVARIANTS
    amendment.
 
-Neither change belongs inside this ticket.  The fix is its own ticket on #341.
+Neither change belongs inside this ticket. The fix is its own ticket on #341.
 
 ---
 
 ## Detection wiring
 
 - `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement`
-  — parametrized over 12 scenarios; two produce verdict flips (xfail).
+  — parametrized over 12 scenarios; two produce verdict flips
+  (`win-heavy-few-ties`, `win-heavy-many-ties`) under
+  `@pytest.mark.xfail(strict=True)`.
 - `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound`
-  — parametrized over 12 scenarios; three exceed the 0.25 bound (xfail).
+  — parametrized over 12 scenarios; three exceed the 0.25 bound
+  (`many-ties`, `tie-dominated`, `win-heavy-many-ties`) under
+  `@pytest.mark.xfail(strict=True)`.
 - `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound`
-  — parametrized over 12 scenarios; two exceed the 0.15 bound (xfail).
+  — parametrized over 12 scenarios; two exceed the 0.15 bound
+  (`win-heavy-few-ties`, `win-heavy-many-ties`) under
+  `@pytest.mark.xfail(strict=True)`.
 - `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_fixture_proves_detector_fires`
-  — hard assert proving the detector detects (passes).
+  — positive control: extreme scenario (7w, 1l, 30t) must exceed both bounds
+  through the production accumulator (passes while the condition holds).
+- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_zero_ties_arms_are_identical`
+  — sanity control (passes).
 - `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_sensitivity_grows_with_tie_count`
   — monotonicity property (passes).
-- All xfails are `strict=True` pointing at this document.
+
+All known exceedances use `strict=True` marks pointing at this document. A
+fix that removes the sensitivity makes those cells XPASS and the suite red
+until the marks are removed.
 
 ---
 
@@ -108,7 +125,7 @@ Neither change belongs inside this ticket.  The fix is its own ticket on #341.
 PYTHONHASHSEED=0 python -m pytest tests/test_halfupdate_tie_sensitivity.py -v
 ```
 
-Expected: 31 passed, 7 xfailed.  The xfailed scenarios are:
+Expected: 32 passed, 7 xfailed. The xfailed scenarios are:
 - `test_stopping_decision_agreement[win-heavy-few-ties]`
 - `test_stopping_decision_agreement[win-heavy-many-ties]`
 - `test_p_exceed_sensitivity_within_bound[many-ties]`

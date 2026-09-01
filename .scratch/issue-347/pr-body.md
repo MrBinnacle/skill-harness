@@ -9,7 +9,7 @@
 The detector lands at `tests/test_halfupdate_tie_sensitivity.py`, matching the
 `**Detection:**` line in `docs/assurance/falsification-plan.md` item 5.
 
-**Test:** `tests/test_falsification_plan_detectors_exist.py::test_every_registered_detector_exists_or_is_recorded_as_debt` — passes after the baseline removal in criterion 2.
+**Test:** `tests/test_falsification_plan_detectors_exist.py::test_every_registered_detector_exists_or_is_recorded_as_debt`
 
 ### Criterion 2: Its row is removed from the ratchet baseline in the same change
 
@@ -18,24 +18,23 @@ The detector lands at `tests/test_halfupdate_tie_sensitivity.py`, matching the
 Removed the `{"item": 5, "detector": "tests/test_halfupdate_tie_sensitivity.py", "issue": 347}` row
 from `docs/assurance/falsification-detector-baseline.json`.
 
-**Test:** `tests/test_falsification_plan_detectors_exist.py::test_baseline_names_no_detector_that_now_exists` — passes after removal.
+**Test:** `tests/test_falsification_plan_detectors_exist.py::test_baseline_names_no_detector_that_now_exists`
 
 ### Criterion 3: A fixture proves the detector goes red on the condition it registers
 
 **Status:** Complete
 
-Two fixtures prove the detector fires:
+1. `test_fixture_proves_detector_fires` — extreme scenario (7w, 1l, 30t) must
+   exceed both documented bounds through the production accumulator. Passes
+   while the condition holds; goes red if a future encoding collapses the gap.
+2. Seven cells carry `@pytest.mark.xfail(strict=True)` on real production
+   behaviour: two verdict flips (`win-heavy-few-ties`, `win-heavy-many-ties`)
+   and five bound exceedances. Strict marks XPASS→fail if the sensitivity is
+   removed without clearing the marks.
 
-1. `test_fixture_proves_detector_fires` — constructs an extreme scenario (7w, 1l, 30t) and
-   asserts the P(rate > θ) divergence (0.554) and posterior mean shift (0.225) are
-   measurably positive.  This test PASSES, proving the detector can detect the condition.
-
-2. `test_stopping_decision_agreement[win-heavy-few-ties]` and
-   `test_stopping_decision_agreement[win-heavy-many-ties]` — these XFAIL, proving the
-   detector fires on real production behaviour: half-update says INCONCLUSIVE while
-   drop-ties says PASSED.
-
-**Test:** `tests/test_halfupdate_tie_sensitivity.py` — 31 passed, 7 xfailed.
+**Test:** `tests/test_halfupdate_tie_sensitivity.py` — 32 passed, 7 xfailed
+(plus one zero-ties sanity control: 33 production-related cells + fixture +
+monotonicity + zero-ties = 32 pass + 7 xfail).
 
 ### Criterion 4: Mutation receipt in the pull request body
 
@@ -48,109 +47,90 @@ See Mutation Campaign section below.
 **Status:** Complete
 
 Every assertion names a specific invariant:
-- `test_posterior_mean_shift_within_bound`: asserts `shift <= MAX_POSTERIOR_MEAN_SHIFT + 1e-9`
-  with a message naming the scenario, the shift value, and both posterior means.
-- `test_p_exceed_sensitivity_within_bound`: asserts `divergence <= MAX_P_SENSITIVITY + 1e-9`
-  with a message naming the scenario, the divergence, and both P values.
-- `test_stopping_decision_agreement`: asserts `hu_reason == dt_reason` with a message
-  naming the scenario and both stopping reasons.
-- `test_fixture_proves_detector_fires`: asserts `divergence > 0.01` and `mean_shift > 0.05`
-  with messages naming the scenario and computed values.
+- `test_posterior_mean_shift_within_bound`: `shift <= MAX_POSTERIOR_MEAN_SHIFT`
+  with scenario, shift, and both means in the message.
+- `test_p_exceed_sensitivity_within_bound`: `divergence <= MAX_P_SENSITIVITY`
+  with scenario, divergence, and both P values in the message.
+- `test_stopping_decision_agreement`: `hu_reason == dt_reason` with both reasons.
+- `test_fixture_proves_detector_fires`: divergence and mean shift must exceed
+  the documented bounds (not a bare `> 0`).
 
-The xfail reason strings name the finding document, severity, and the violated invariant.
+Both comparison arms call `BetaBinomialAccumulator.add` / `check_stop`. The
+drop-ties arm is an in-test oracle (ties never enter the accumulator).
 
 ## Evidence
 
 ### Test Results
 
 ```
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[loss-heavy-zero-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[zero-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[loss-heavy-many-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[zero-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[win-heavy-zero-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[moderate-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[moderate-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[win-heavy-few-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[win-heavy-many-ties] XFAIL
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[win-heavy-many-ties] XFAIL
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[balanced-zero-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[many-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[tie-dominated] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[loss-heavy-zero-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[few-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[tie-dominated] XFAIL
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[balanced-many-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[balanced-many-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[win-heavy-many-ties] XFAIL
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[many-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[loss-heavy-zero-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[many-ties] XFAIL
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[loss-heavy-many-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[tie-dominated] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[balanced-zero-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[balanced-zero-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_sensitivity_grows_with_tie_count PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[win-heavy-few-ties] XFAIL
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[few-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[loss-heavy-many-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[win-heavy-few-ties] XFAIL
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[win-heavy-zero-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_fixture_proves_detector_fires PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[few-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[moderate-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[zero-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound[balanced-many-ties] PASSED
-tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound[win-heavy-zero-ties] PASSED
-
-31 passed, 7 xfailed in 2.73s
+32 passed, 7 xfailed in ~2.6s
 ```
+
+Xfailed (strict) cells:
+- `test_stopping_decision_agreement[win-heavy-few-ties]`
+- `test_stopping_decision_agreement[win-heavy-many-ties]`
+- `test_p_exceed_sensitivity_within_bound[many-ties]`
+- `test_p_exceed_sensitivity_within_bound[tie-dominated]`
+- `test_p_exceed_sensitivity_within_bound[win-heavy-many-ties]`
+- `test_posterior_mean_shift_within_bound[win-heavy-few-ties]`
+- `test_posterior_mean_shift_within_bound[win-heavy-many-ties]`
 
 ### Ratchet Guard
 
 ```
-tests/test_falsification_plan_detectors_exist.py::test_plan_registers_the_number_of_detectors_it_claims PASSED
-tests/test_falsification_plan_detectors_exist.py::test_every_registered_detector_exists_or_is_recorded_as_debt PASSED
-tests/test_falsification_plan_detectors_exist.py::test_baseline_names_no_detector_that_now_exists PASSED
-tests/test_falsification_plan_detectors_exist.py::test_baseline_records_only_rows_the_plan_registers PASSED
-tests/test_falsification_plan_detectors_exist.py::test_baseline_item_numbers_match_the_plan_order PASSED
-
-5 passed in 1.25s
+tests/test_falsification_plan_detectors_exist.py — 5 passed
 ```
 
 ### Mutation Campaign
 
-**Baseline:** all 38 tests pass (31 passed, 7 xfailed) before mutation.
+**Baseline:** 32 passed, 7 xfailed before mutation. Production file restored
+after each mutant.
 
-**Mutant 1:** Change tie encoding from `0.5` to `0.0` in `src/skill_harness/ablation/stopping.py` line 157 (`self._w += observation` → `self._w += 0.0` for ties).
-
-- Compiles: yes.
-- Reaches production call site: `BetaBinomialAccumulator.add()` at `ablation/stopping.py:147`.
-- Named assertion fails: `test_posterior_mean_shift_within_bound[win-heavy-many-ties]`.
-- Failure message: "posterior mean shift 0.246154 exceeds bound 0.15 for scenario 'win-heavy-many-ties' (half-update mean=0.653846, drop-ties mean=0.900000)".
-- The red is not setup, collection, encoding, or timeout: the assertion fires inside the test body after computing the posteriors.
-- stdout/stderr captured under explicit encoding: pytest captures UTF-8 by default.
-
-**Mutant 2:** Change `PASS_PROB_THRESHOLD` from `0.95` to `0.50` in `src/skill_harness/ablation/stopping.py`.
+**Mutant 1:** In `BetaBinomialAccumulator.add`, ties contribute `w += 0.0`
+instead of `w += observation` (still `n += 1`).
 
 - Compiles: yes.
-- Reaches production call site: `check_stop()` at `ablation/stopping.py:227`.
-- Named assertion fails: `test_stopping_decision_agreement[zero-ties]`.
-- Failure message: "stopping verdict differs: half-update=passed, drop-ties=passed".
-- Wait — this mutant makes both approaches pass, so the verdicts agree. The mutation is not caught by this detector (it would be caught by other detectors that pin the threshold).
+- Reaches production call site: `add()` at `ablation/stopping.py`.
+- Named assertion fails (among others):
+  `test_posterior_mean_shift_within_bound[few-ties]`
+- Failure message: `posterior mean shift 0.200000 exceeds bound 0.15 for
+  scenario 'few-ties' (half-update mean=0.500000, drop-ties mean=0.700000)`.
+- Also fails `test_p_exceed_sensitivity_within_bound[moderate-ties]` and
+  several verdict-agreement cells that were green under the real encoding.
+- The red is assertion failure inside the test body, not setup/collection/
+  encoding/timeout.
+- 14 failed, 18 passed, 7 xfailed.
 
-**Mutant 3:** Change tie encoding from `0.5` to `1.0` in `src/skill_harness/ablation/stopping.py` (ties count as wins).
+**Mutant 2:** Ties increment `w` but do not increment `n`
+(`if observation != 0.5: self._n += 1.0`).
 
 - Compiles: yes.
-- Reaches production call site: `BetaBinomialAccumulator.add()` at `ablation/stopping.py:147`.
-- Named assertion fails: `test_posterior_mean_shift_within_bound[win-heavy-many-ties]`.
-- Failure message: "posterior mean shift exceeds bound".
-- The mutant makes ties count as wins, inflating the half-update posterior mean well above the drop-ties mean.
-- The red is not setup, collection, encoding, or timeout.
+- Reaches production call site: `add()` at `ablation/stopping.py`.
+- Named assertion fails: `test_fixture_proves_detector_fires`
+- Failure message: `detector did not fire: P(rate > theta) divergence nan is
+  at or below bound 0.25 for extreme scenario (7w, 1l, 30t)`.
+- Also fails `test_stopping_decision_agreement[loss-heavy-many-ties]`:
+  `stopping verdict differs: half-update=passed, drop-ties=failed`.
+- 14 failed, 18 passed, 7 xfailed.
+
+**Mutant 3:** Ties contribute `w += 1.0` (ties count as wins).
+
+- Compiles: yes.
+- Reaches production call site: `add()` at `ablation/stopping.py`.
+- Named assertion fails:
+  `test_posterior_mean_shift_within_bound[balanced-many-ties]`
+- Failure message: `posterior mean shift 0.307692 exceeds bound 0.15 for
+  scenario 'balanced-many-ties' (half-update mean=0.807692, drop-ties
+  mean=0.500000)`.
+- Strict xfail cells for win-heavy mean shift XPASS (half-update mean moves
+  toward the drop-ties mean when ties count as wins); strict mode turns those
+  into failures as well.
+- 6 failed on the mean-shift parametrization alone.
 
 ## Files Changed
 
-- `tests/test_halfupdate_tie_sensitivity.py` — 12 scenarios, 5 test methods (38 test cases)
+- `tests/test_halfupdate_tie_sensitivity.py` — detector (production arms,
+  documented bounds, strict xfails)
 - `docs/assurance/falsification-detector-baseline.json` — removed item 5 row
-- `docs/findings/halfupdate-tie-sensitivity.md` — finding document (severity WRONG_NUMBER)
+- `docs/findings/halfupdate-tie-sensitivity.md` — finding (severity WRONG_NUMBER)
 - `.scratch/issue-347/pr-body.md` — this file
