@@ -155,6 +155,15 @@ repos:
         entry: '(?i)from\s+oracle_verdicts'
         files: '^src/.*\.py$'
         exclude: '^src/skill_harness/(audit/__init__|aggregation/engine|ablation/runner|cli/main|storage/repositories/evidence/frozen_cases)\.py$'
+      - id: ban-unpinned-verdict-insert
+        name: "raw insert_oracle_verdict() call outside the mint-path allowlist (plan item 10, A15) -> route through mint_oracle_verdict (pins an ArticleFingerprint), or extend the allowlist here + tests/test_mint_path_allowlist.py + the plan's item 10 with justification"
+        language: pygrep
+        entry: 'insert_oracle_verdict\s*\('
+        files: '^src/.*\.py$'
+        # oracle_verdicts.py defines the insert and the mint path calls it after
+        # pinning; dual_write.py is the documented historical/reconciler helper.
+        # Mirror test: tests/test_mint_path_allowlist.py (F-8 cross-check).
+        exclude: '^src/skill_harness/storage/(repositories/evidence/oracle_verdicts|dual_write)\.py$'
       - id: ban-timestamp-final-order-by
         name: "ORDER BY ending on a timestamp column (*_at / ts / last_updated) -> append a unique tie-break key matching the timestamp's direction, e.g. 'ORDER BY started_at, run_id' (rowid tie order is not stable across dump/restore/VACUUM on append-only tables)"
         language: pygrep
