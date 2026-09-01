@@ -60,6 +60,16 @@ and covers that section only. This page stays the citable surface for every kind
 
 ## Findings
 
+### [`docs/findings/halfupdate-tie-sensitivity.md`](findings/halfupdate-tie-sensitivity.md)
+
+- **Claims:** Under half-update (Tie=0.5, n+=1) the posterior converges to
+  Beta(1+w+t/2, 1+l+t/2); measured at w=8, l=0, t=16: P(rate>0.60)=0.726
+  (INCONCLUSIVE) where a drop-ties recompute gives 0.990 (PASSED), with
+  posterior-mean shifts up to 0.178. Decision ticket: #368.
+- **Refuses to claim:** Which encoding is the right estimand (that is a
+  pre-registered methodological choice, #368); that any minted production
+  verdict flipped (no re-scan was run).
+
 ### [`docs/findings/paired-ingest-nan-score-silent-tie.md`](findings/paired-ingest-nan-score-silent-tie.md)
 
 - **Claims:** A NaN `score_value` flows through `_score_to_float` and
