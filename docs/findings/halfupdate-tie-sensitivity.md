@@ -2,7 +2,7 @@
 
 **Severity:** `WRONG_NUMBER`  
 **Ticket:** #347 (detection); parent #341 item 5  
-**Status:** open — detector landed with strict xfail; fix is a separate ticket  
+**Status:** open — detector landed with strict xfail; decision ticket: #368  
 **Harness:** `tests/test_halfupdate_tie_sensitivity.py`  
 **Report:** this document
 
