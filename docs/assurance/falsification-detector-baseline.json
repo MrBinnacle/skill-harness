@@ -27,11 +27,6 @@
       "issue": 348
     },
     {
-      "item": 8,
-      "detector": "tests/test_paired_arm_epoch_adversarial.py",
-      "issue": 350
-    },
-    {
       "item": 10,
       "detector": "tests/test_mint_path_allowlist.py",
       "issue": 352
