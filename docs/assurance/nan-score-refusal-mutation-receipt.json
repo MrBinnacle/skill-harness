@@ -1,0 +1,101 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-y0yxkpmq\\M-N1\\src\\skill_harness\\subject\\ingest.py",
+        "source_digest": "26007c044f434ef1a73c3309787f171647d8301744c93dc4f582e6c26113fa6d",
+        "tests_collected": 2,
+        "worktree_head": "fc132fe2a907175c4676bd1fd03e71f429b6efaf"
+      },
+      "description": "remove the model-layer constraint: ParsedSample.score_value accepts NaN again",
+      "killing_assertions": [
+        "tests/test_paired_arm_epoch_adversarial.py::test_nan_score_is_refused_or_fails_closed",
+        "tests/test_subject_ingest.py::test_parsed_sample_refuses_non_finite_score_at_the_model_layer"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-y0yxkpmq\\M-N1\\src\\skill_harness\\subject\\ingest.py",
+        "source_digest": "a6703313890dd70e8bee864d828204b242efaac1fcd7338c28fef26626c4c7c3",
+        "tests_collected": 2,
+        "worktree_head": "fc132fe2a907175c4676bd1fd03e71f429b6efaf"
+      },
+      "mutant_id": "M-N1",
+      "notes": [],
+      "obligation": "363-model-layer",
+      "selection": "tests/test_paired_arm_epoch_adversarial.py::test_nan_score_is_refused_or_fails_closed tests/test_subject_ingest.py::test_parsed_sample_refuses_non_finite_score_at_the_model_layer",
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-y0yxkpmq\\M-N2\\src\\skill_harness\\subject\\ingest.py",
+        "source_digest": "26007c044f434ef1a73c3309787f171647d8301744c93dc4f582e6c26113fa6d",
+        "tests_collected": 1,
+        "worktree_head": "fc132fe2a907175c4676bd1fd03e71f429b6efaf"
+      },
+      "description": "disable the parse-path finite guard in _score_to_float",
+      "killing_assertions": [
+        "tests/test_subject_ingest.py::test_score_to_float_refuses_non_finite_scores"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-y0yxkpmq\\M-N2\\src\\skill_harness\\subject\\ingest.py",
+        "source_digest": "06e64198b89ab1a171d67b971af4e260dfab08a3103e8568eff75182f67f6027",
+        "tests_collected": 1,
+        "worktree_head": "fc132fe2a907175c4676bd1fd03e71f429b6efaf"
+      },
+      "mutant_id": "M-N2",
+      "notes": [],
+      "obligation": "363-parse-path",
+      "selection": "tests/test_subject_ingest.py::test_score_to_float_refuses_non_finite_scores",
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-y0yxkpmq\\M-N3\\src\\skill_harness\\subject\\ingest.py",
+        "source_digest": "26007c044f434ef1a73c3309787f171647d8301744c93dc4f582e6c26113fa6d",
+        "tests_collected": 1,
+        "worktree_head": "fc132fe2a907175c4676bd1fd03e71f429b6efaf"
+      },
+      "description": "narrow the parse-path guard to NaN only, letting an infinite score through",
+      "killing_assertions": [
+        "tests/test_subject_ingest.py::test_score_to_float_refuses_non_finite_scores"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-y0yxkpmq\\M-N3\\src\\skill_harness\\subject\\ingest.py",
+        "source_digest": "d32826b031b7fd630725993f9e6556e8b11ce9799f86534685e78747739e509a",
+        "tests_collected": 1,
+        "worktree_head": "fc132fe2a907175c4676bd1fd03e71f429b6efaf"
+      },
+      "mutant_id": "M-N3",
+      "notes": [],
+      "obligation": "363-parse-path",
+      "selection": "tests/test_subject_ingest.py::test_score_to_float_refuses_non_finite_scores",
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "fc132fe2a907175c4676bd1fd03e71f429b6efaf",
+  "production_tree_digest_after": {
+    "src/skill_harness/subject/ingest.py": "26007c044f434ef1a73c3309787f171647d8301744c93dc4f582e6c26113fa6d"
+  },
+  "production_tree_digest_before": {
+    "src/skill_harness/subject/ingest.py": "26007c044f434ef1a73c3309787f171647d8301744c93dc4f582e6c26113fa6d"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.1",
+  "target_files": [
+    "src/skill_harness/subject/ingest.py"
+  ]
+}
