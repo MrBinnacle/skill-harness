@@ -17,11 +17,6 @@
   "parent_issue": 341,
   "not_yet_built": [
     {
-      "item": 2,
-      "detector": "tests/test_aggregation_fit_ebmom_recovery.py",
-      "issue": 344
-    },
-    {
       "item": 5,
       "detector": "tests/test_halfupdate_tie_sensitivity.py",
       "issue": 347
