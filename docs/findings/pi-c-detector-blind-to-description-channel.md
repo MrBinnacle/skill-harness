@@ -142,3 +142,20 @@ stays refused and the receipt stays CANT_TELL_YET.
 
 The sized run on the registered route needs an Anthropic key on the host. That
 is the operator's.
+
+## Correction (2026-09-01, dated block; supersedes one refuses-to-claim line above)
+
+The line "That channel (c) can be detected from the transcript. A description-only
+effect leaves no tool call and no file read. Detecting it needs a design change, not a
+regex." is withdrawn on measurement. Read through `inspect_ai.log.read_eval_log`, the
+first user message of every epoch in both logs carries Claude Code's skill listing
+(`<system-reminder> The following skills are available for use with the Skill tool:
+...`). The card's frontmatter description appears verbatim in that listing in 8 of 8
+Full epochs and in 0 of 8 Null epochs. Channel (c) is a string match on the transcript
+against the pinned `SKILL.md` description. The ruling that follows from this, and the
+construct change it makes, is Amendment 3 of `v0.2-preregistration.md`; the ticket is
+skill-harness#384.
+
+What stands unchanged: the v1 detector counts Skill tool calls only and saw 0 of 8;
+the refusal followed the #46 contract; the pair has no store row and the receipt reads
+CANT_TELL_YET until the pair is re-ingested under the amended contract.
