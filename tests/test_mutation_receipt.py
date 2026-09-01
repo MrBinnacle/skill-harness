@@ -15,7 +15,13 @@ receipt relies on and cannot check from the JSON alone.
 3. `_collected` reads a nonzero test count out of real pytest tail lines. The
    generator refuses a case whose baseline collected nothing, so a parse miss
    turns a valid baseline into `INVALID_BASELINE` and silently deletes evidence.
-4. `_run_pytest` spreads every node id of a multi-node selection into argv.
+4. Every generated receipt is CURRENT: the files it says it mutated still hash
+   to the digests it recorded. This is the currency gate, and it is keyed on
+   content rather than on `commit_under_test`, which a rebase rewrites and every
+   later commit moves HEAD past. A receipt carried across a rebase is still
+   valid; a receipt whose subject changed is not, and only the second should be
+   red.
+5. `_run_pytest` spreads every node id of a multi-node selection into argv.
    This one is written from a live defect rather than from foresight: changing
    `selection` from a space-separated string to a tuple left one
    `selection.split()` behind, and the campaign died with an `AttributeError`
@@ -30,7 +36,9 @@ records the isolation and baseline assertions for every case it ran.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -136,3 +144,76 @@ def test_run_pytest_spreads_every_node_of_a_multi_node_selection(
     assert not any(" " in arg for arg in argv[3:]), (
         f"a node id reached argv still joined to another: {argv!r}"
     )
+
+
+def _receipt_paths() -> list[Path]:
+    return sorted((_REPO_ROOT / "docs" / "assurance").glob("*mutation-receipt*.json"))
+
+
+def test_at_least_one_mutation_receipt_is_present() -> None:
+    """Guards the currency test below against passing on an empty glob."""
+    assert _receipt_paths(), "no mutation receipts found; the currency test would be vacuous"
+
+
+def _stale_targets(receipt: dict[str, Any], root: Path) -> list[str]:
+    """Return one message per file whose live bytes disagree with the receipt.
+
+    Shared by the currency gate and its negative control, so the control
+    exercises the same code the gate runs rather than a paraphrase of it.
+    """
+    recorded = receipt["target_digests"]
+    assert recorded, "receipt records no target digests"
+    stale: list[str] = []
+    for rel, digest in recorded.items():
+        target = root / rel
+        if not target.is_file():
+            stale.append(f"{rel}: named by the receipt but no longer present")
+            continue
+        live = hashlib.sha256(target.read_bytes()).hexdigest()
+        if live != digest:
+            stale.append(f"{rel}: attested {digest[:12]}, live {live[:12]}")
+    return stale
+
+
+@pytest.mark.parametrize("receipt_path", _receipt_paths(), ids=lambda p: p.name)
+def test_receipt_still_describes_the_files_it_measured(receipt_path: Path) -> None:
+    """A receipt is stale when its SUBJECT moves, not when a commit does.
+
+    `commit_under_test` is deliberately NOT checked. A rebase rewrites it and
+    every commit landing after generation moves HEAD past it, so gating on it
+    reddens for reasons that cannot have affected the measurement. The digests
+    of the mutated files change if and only if the code under test changed.
+
+    `target_digests` is required rather than optional. Treating its absence as a
+    skip would let a receipt written by an older generator opt out of the gate
+    silently, which is the failure this gate exists to prevent.
+    """
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert "target_digests" in receipt, (
+        f"{receipt_path.name} carries no target_digests, so its currency cannot be"
+        f" checked. Regenerate it with scripts/mutation_receipt.py."
+    )
+    stale = _stale_targets(receipt, _REPO_ROOT)
+    assert not stale, (
+        f"STALE_RECEIPT: {receipt_path.name} was measured against a tree that no longer"
+        f" exists ({'; '.join(stale)}). Its kills therefore attest to code that is not"
+        f" the code shipping. Regenerate with scripts/mutation_receipt.py."
+    )
+
+
+def test_the_currency_gate_detects_a_moved_target(tmp_path: Path) -> None:
+    """Negative control: the gate must fire on a digest that does not match.
+
+    Without this, a bug making `_stale_targets` always return an empty list
+    would leave every currency assertion above green and silent.
+    """
+    moved = tmp_path / "subject.py"
+    moved.write_text("# the file as it is now", encoding="utf-8")
+    receipt = {"target_digests": {"subject.py": "0" * 64}}
+    assert _stale_targets(receipt, tmp_path), "the gate passed a digest that does not match"
+
+    current = {"target_digests": {"subject.py": hashlib.sha256(moved.read_bytes()).hexdigest()}}
+    assert not _stale_targets(current, tmp_path), "the gate fired on a matching digest"
+
+    absent = {"target_digests": {"gone.py": "0" * 64}}
+    assert _stale_targets(absent, tmp_path), "the gate passed a file that does not exist"
