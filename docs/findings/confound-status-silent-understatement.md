@@ -1,7 +1,7 @@
 # Finding: confound status silent understatement
 
 **Severity:** `WRONG_NUMBER`
-**Ticket:** #348 (e2e detector); repair filed as separate ticket
+**Ticket:** #348 (e2e detector); repair: #366
 **Status:** open — detector landed; repair not yet built
 **Harness:** `tests/test_confound_status_e2e.py`
 **Report:** this document
