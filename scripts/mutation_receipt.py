@@ -30,6 +30,16 @@ own worktree. An invalid case is not a result, and a receipt that contains one
 attests to nothing. A SURVIVED case is a legitimate result and exits zero: a
 preserved survivor is a finding, not a failure.
 
+WHAT PINS A RECEIPT IS FILE CONTENT, NOT A COMMIT. ``commit_under_test`` is a
+convenience pointer and is deliberately NOT the currency check: a rebase
+rewrites it, and every commit that lands after generation moves HEAD past it,
+so a receipt keyed on it goes stale for reasons that cannot have affected what
+it measured. The authoritative pin is ``target_digests`` -- the SHA-256 of each
+mutated file. Those change if and only if the code under test changed.
+``tests/test_mutation_receipt.py`` enforces currency against them, so a receipt
+whose subject has moved fails loudly, and one merely carried across a rebase
+does not.
+
 Usage:
     python scripts/mutation_receipt.py --out docs/assurance/<name>.json
 """
@@ -313,7 +323,12 @@ def main(argv: list[str] | None = None) -> int:
 
     report = {
         "commit_under_test": commit,
+        "commit_under_test_is_informational": (
+            "A rebase rewrites this and later commits move HEAD past it. The"
+            " authoritative pin is target_digests; currency is checked against those."
+        ),
         "target_files": targets,
+        "target_digests": digests_after,
         "production_tree_digest_before": digests_before,
         "production_tree_digest_after": digests_after,
         "production_tree_unchanged": digests_before == digests_after and still_clean == "",
