@@ -11,6 +11,7 @@ tests/test_subject_layer.py.
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from collections.abc import Iterator
 from importlib.util import find_spec
@@ -135,6 +136,36 @@ def test_score_to_float_decodes_inspect_values() -> None:
         _score_to_float("P", p)
     with pytest.raises(EvalLogIngestError, match="unmappable"):
         _score_to_float(None, p)
+
+
+def test_score_to_float_refuses_non_finite_scores() -> None:
+    """A missing measurement must not survive the parse path as a number (#363).
+
+    ``_observation`` scores NaN against anything as 0.5, so a non-finite score
+    that reaches the encoder is recorded as a genuine tie. The parse path
+    refuses it here; ``ParsedSample.score_value`` carries ``allow_inf_nan=False``
+    for callers that build the model directly (PR #364's M4 survivor).
+    """
+    p = Path("x.eval")
+    for value in (math.nan, math.inf, -math.inf):
+        with pytest.raises(EvalLogIngestError, match="non-finite score value"):
+            _score_to_float(value, p)
+
+
+def test_score_refusal_locates_the_offending_trial() -> None:
+    """A log carries up to forty epochs; naming only the file is not actionable."""
+    p = Path("x.eval")
+    with pytest.raises(EvalLogIngestError, match=r"x\.eval: sample id=7 epoch=2:"):
+        _score_to_float(math.nan, p, sample="sample id=7 epoch=2")
+    with pytest.raises(EvalLogIngestError, match=r"x\.eval: sample id=7 epoch=2:"):
+        _score_to_float("P", p, sample="sample id=7 epoch=2")
+
+
+def test_parsed_sample_refuses_non_finite_score_at_the_model_layer() -> None:
+    """The model layer is the enforcing surface, not the parse helper (#363)."""
+    for value in (math.nan, math.inf, -math.inf):
+        with pytest.raises(ValidationError):
+            make_sample("full", 1, value)
 
 
 def test_derived_run_id_is_deterministic_and_order_sensitive() -> None:
