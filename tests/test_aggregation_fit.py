@@ -332,7 +332,7 @@ class TestFitSkillEbmom:
             "p_boot",
             "critical_order_statistic",
             "exceed_count",
-            "null_win_rate",
+            "null_encoded_mean",
             "alpha",
             "bootstrap_b",
             "bootstrap_seed",
