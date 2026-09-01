@@ -93,6 +93,27 @@ and covers that section only. This page stays the citable surface for every kind
   any minted production verdict flipped (no re-scan was run); that the
   0.60/0.95/0.05 thresholds transfer to the conditional parameter unexamined.
 
+### [`docs/findings/d4-prompt-leak-into-null-arm.md`](findings/d4-prompt-leak-into-null-arm.md)
+
+- **Claims:** A fourth leak direction, D4 — the task prompt states or points at
+  the rule the skill supplies, so the Null arm is coached. Audited over all
+  eight screen fixtures: 4 LEAK (`gitpull`, `appendonly`, `bayes`, `judgegate`),
+  4 CLEAN (`tiebreak`, `dependabot`, `docx`, `microrun` root). Causation shown
+  by A/B on `gitpull` holding fixture bytes, oracle, epochs and provider fixed
+  and varying only the prompt: `p0` 1.000 (3/3) signposted against 0.000 (0/3)
+  de-leaked. Second, independent ground for voiding the same rows: all four
+  backfilled screens carry pin `2f76c933...` (2026-07-10) where the same
+  `HarnessPin.capture(...)` arguments now produce `706cbaea...`.
+- **Refuses to claim:** That the `git-pull-rebase-trap` skill arm's 1.000 (3/3)
+  against 0.000 (0/3) is a verdict of record — it is unpaired, so it yields no
+  discordant table, carries no registered estimand, ran on
+  `openrouter/anthropic/claude-sonnet-4.5` rather than the pinned subject, and
+  is n=3 per arm (Fisher one-sided p ~ 0.05); that any minted production verdict
+  changed (no re-scan was run); that no pin-currency check exists anywhere in
+  the repository — the supporting grep covers `src/` only and was not run
+  against `tests/`; that the 4 CLEAN fixtures are free of D1/D2/D3, which this
+  audit did not re-judge.
+
 ### [`docs/findings/paired-ingest-nan-score-silent-tie.md`](findings/paired-ingest-nan-score-silent-tie.md)
 
 - **Claims:** A NaN `score_value` flowed through `_score_to_float` and
