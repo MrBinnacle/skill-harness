@@ -60,6 +60,19 @@ and covers that section only. This page stays the citable surface for every kind
 
 ## Findings
 
+### [`docs/findings/confound-status-silent-understatement.md`](findings/confound-status-silent-understatement.md)
+
+- **Claims:** CONFOUNDED is unreachable: the runner writes confounded
+  verdicts as `inadmissible`, the admissible VIEW excludes them on state
+  alone, and the engine's `all_confounded_flag` joins confound events
+  against admissible rows only, so it is always false; measured on the
+  detector fixture (status UNMEASURED/inadmissible, `vector.confounded=0`).
+  Primary-confounded rows verifiably never enter aggregation. Repair is
+  #366.
+- **Refuses to claim:** That any historical report understated a confound
+  (no production re-scan was run); which layer is authoritative for the
+  fix (that is #366's design call).
+
 ### [`docs/findings/halfupdate-tie-sensitivity.md`](findings/halfupdate-tie-sensitivity.md)
 
 - **Claims:** Under half-update (Tie=0.5, n+=1) the posterior converges to

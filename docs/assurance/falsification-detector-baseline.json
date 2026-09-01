@@ -15,11 +15,5 @@
   "measured_at_commit": "ffb59592931a146b92405bd1b3469b9293a0ca99",
   "measured_at": "2026-08-31",
   "parent_issue": 341,
-  "not_yet_built": [
-    {
-      "item": 6,
-      "detector": "tests/test_confound_status_e2e.py",
-      "issue": 348
-    }
-  ]
+  "not_yet_built": []
 }
