@@ -105,7 +105,7 @@ reciprocal.
 
 ```
 total_var   = sum_k (r_k - r_bar)^2 / (K - 1)          # unbiased, NOT /K
-sampling_var= mean_k [ r_k (1 - r_k) / (n_k - 1) ]      # see section 4 on ties
+sampling_var= mean_k [ (sum_sq_k - n_k r_k^2) / ((n_k - 1) n_k) ]   # section 4
 latent_raw  = total_var - sampling_var                  # may be negative; RETAINED as-is
 ```
 
@@ -115,8 +115,7 @@ Frozen properties:
    `(K-1)/K` times the true total variance, so subtracting the full sampling term under-peels
    by `-(V_p + S)/K`. Measured at 4000 replicates, this matches the closed form to within Monte
    Carlo error and it invalidates any claim that the `/K` candidate is unbiased.
-2. **`latent_raw` is retained unclipped** and is the quantity every bias and coverage assertion
-   in section 5 reads. Clipping before analysis induces a positive bias in the retained
+2. **`latent_raw` is retained unclipped** and is the quantity the section 5 bias row reads. Clipping before analysis induces a positive bias in the retained
    estimate, because it maps the entire negative tail onto a single boundary point.
 3. **Clipping happens only after the admission decision**, and only to keep downstream
    arithmetic total. A fit that is admitted (section 3) has `latent_raw > 0` by construction, so
@@ -148,25 +147,90 @@ H_1 : tau^2 > 0
 
 Parametric bootstrap under the null:
 
-1. Fit the common rate `mu_0 = sum_k w_k / sum_k n_k` (pooled, not the mean of rates).
-2. For `b = 1..B`: for each clause `k`, regenerate an observation vector under the null model at
-   `mu_0`, **preserving that clause's own `n_k`**. Unequal `n_k` is the normal case and the
-   null must reproduce it.
-3. Compute `latent_raw` for each bootstrap sample by the section 2 formula, unchanged.
-4. Critical value `c_alpha` = the `(1 - alpha)` quantile of the `B` null values.
-5. **Admit the hierarchical fit iff `latent_raw > c_alpha`.** Otherwise raise
-   `ConvergenceFailure` and take the existing BH-FDR fallback path.
+The null is **CATEGORICAL over `{0, 0.5, 1}`, not binomial.** A binomial null at the pooled
+encoded mean would regenerate a tie-free world and compare tie-carrying data against it, which
+reintroduces exactly the misspecification `sum_sq` was added to remove.
 
-`B = 999` proposed. The bootstrap replaces a normal approximation deliberately: at a boundary
-null the sampling distribution of a variance component is skewed and partly atomic at zero, and
-a normal quantile is wrong in exactly the regime that matters.
+Ties are held **fixed per clause**. How many trials tied is a property of the evidence
+collected, not of the hypothesis under test; `H_0` is a statement about one shared *decisive*
+win probability.
 
-**Determinism must be preserved.** `fit_skill` currently documents itself as deterministic,
-and a bootstrap introduces sampling. The bootstrap seed **must** be derived from the
-observations themselves — a digest over the canonical sorted `(clause_id, w, n)` tuples — so the
-same input yields the same admission verdict on every host and every run. Check
-`docs/INVARIANTS.md` for a determinism clause before building; if one exists, this design must
-satisfy it rather than amend it.
+1. Decompose each clause exactly (section 4) into `wins_k`, `ties_k`, `losses_k`.
+2. Fit the pooled encoded mean `mu_0 = sum_k w_k / sum_k n_k`. This is the quantity the null
+   holds constant; see the note below step 3. A clause with no decisive trial is returned
+   unchanged, since no decisive rate is identified for it.
+3. For `b = 1..B`: for each clause `k`, keep `ties_k` ties and redraw its `n_k - ties_k`
+   decisive trials as Bernoulli(`p_0k`). Each clause keeps its own `n_k`; unequal `n_k` is the
+   normal case and the null must reproduce it.
+
+**THE NULL HOLDS THE ENCODED CLAUSE MEAN CONSTANT. That is the estimand, and it forces the
+decisive rate to vary by clause.** With tie fraction `q_k = ties_k / n_k`,
+
+```
+E[X_k] = 0.5 q_k + (1 - q_k) p_k
+```
+
+so a COMMON decisive rate produces DIFFERENT encoded means whenever tie fractions differ.
+Measured: at `p_0 = 0.75` the encoded mean runs 0.70, 0.65 and 0.60 for `q` = 0.20, 0.40 and
+0.60. A draw like that is not a null for the hypothesis under test; it is a world carrying real
+between-clause variation, and it would inflate the null distribution. The null therefore inverts
+per clause:
+
+```
+p_0k = (mu_0 - 0.5 q_k) / (1 - q_k),   clamped to [0, 1]
+W_k  ~ Binomial(n_k - ties_k, p_0k)
+```
+
+which gives every clause the encoded mean `mu_0` by construction. `mu_0` is pooled over
+observations, `sum_k w_k / sum_k n_k`.
+
+**One null, and it is this one:** tie counts fixed per clause AND the encoded clause mean held
+constant. An implementation that instead drew all three outcomes from a single pooled
+categorical distribution would not hold tie counts fixed, and must not be described as if it
+did.
+4. Compute `latent_raw` for each bootstrap sample by the section 2 formula, unchanged.
+5. **Decision rule, FROZEN at `B = 999`:**
+
+```
+p_boot = (1 + count_b( T_b >= T_observed )) / (B + 1)
+admit  iff  p_boot <= 0.05
+```
+
+**Not a library-interpolated 95th percentile.** At finite `B` the achievable levels are
+discrete; the `(1 + count) / (B + 1)` form is the one that keeps the test valid there, whereas
+an interpolated quantile sits between order statistics and can admit at a true level above
+`alpha`. The bootstrap replaces a normal approximation deliberately: at a boundary null the
+sampling distribution of a variance component is skewed and partly atomic at zero, and a normal
+quantile is wrong in exactly the regime that matters.
+
+Record `p_boot`, the critical order statistic, the exceedance count, `q_0`, `B`, the level, and
+the bootstrap identity.
+
+**Determinism must be preserved.** `docs/INVARIANTS.md` carries no general determinism clause,
+but `fit_skill`'s own docstring makes the promise directly, and a bootstrap introduces sampling.
+
+**The seed-derivation procedure is FROZEN in full.** Every element is part of the contract,
+because changing any one of them silently changes admission verdicts on unchanged data:
+
+| element | frozen value |
+|---|---|
+| sort order | ascending by `clause_id`, Python `str` comparison (code points) |
+| field order | `clause_id`, `w`, `n`, `sum_sq` |
+| number form | `float.hex()` for `w` and `sum_sq`; `str(int(...))` for `n` |
+| separators | `\|` between fields, `;` between clauses |
+| encoding | UTF-8 |
+| digest | SHA-256 over those bytes |
+| seed | first 8 bytes of the digest, big-endian, unsigned |
+| generator | `random.Random` (Mersenne Twister), seeded with that integer |
+
+`float.hex()` rather than `repr`: it is exact, round-trippable, and independent of repr
+formatting. **Python object hashes are NOT used** — they are salted per process, so a verdict
+would vary run to run, which is the exact failure this guards against.
+
+The digest covers **all four fields including `sum_sq`**. `(clause_id, w, n)` stopped being the
+complete input when route (b) landed: two clause sets differing only in tie composition are
+different data and must not share a bootstrap stream. Pinned by
+`test_seed_covers_sum_sq_not_just_w_and_n`.
 
 ### The level, derived rather than inherited
 
@@ -183,10 +247,13 @@ The two errors are asymmetric **in kind**:
 
 Where one error is silent and the other is visible, the silent one should be the rarer, which
 argues for a small `alpha`. But the argument is not unconditional, and the condition is
-buildable: **requiring the test statistic, critical value, level, `B`, and bootstrap identity in
-the fallback and success provenance converts the silent error into an audited one.** Once the
-admission rate is itself a reported quantity (section 5), a false admission is visible in
-aggregate, and the asymmetry that justified an extreme `alpha` weakens.
+buildable: **requiring the test statistic, `p_boot`, the critical order statistic, the level,
+`B`, and the bootstrap identity in both the fallback and success provenance converts the silent
+error into an audited one.** Once the admission rate is itself a reported quantity (section 5),
+a false admission is visible in aggregate, and the asymmetry that justified an extreme `alpha`
+weakens. **The claim being made is the weaker one:** provenance makes a decision reproducible
+and auditable, not retrospectively identifiable as a false admission. That weaker claim is
+sufficient for this argument.
 
 Against that sits power. At the registered `low_heterogeneity` regime the development signal
 ratio is about 2.0, so under a normal approximation one-sided power is roughly:
@@ -214,8 +281,22 @@ lands on the wrong side of it.
 Rename the control to say what it does: `HETEROGENEITY_TEST_ALPHA`. Keep a separate tiny epsilon
 for arithmetic safety only (division guards), and do not let it carry admission meaning.
 
+**The guarantee is PER FIT INVOCATION, and the provenance says so:**
+
+```
+HETEROGENEITY_TEST_ALPHA = 0.05 controls one fit invocation.
+It does not establish a fleet-wide or repeated-use false-admission budget.
+```
+
+Per-cell alpha does not control false qualification across many cells or repeated uses. That is
+a known open defect in the wider qualification design; it does not block this change, but a
+reader must not read a per-fit level as a program-level one.
+*Revisit if:* hierarchical admission is applied across many skills, models, or repeated
+evaluations, which needs a program-level alpha-spending rule this amendment does not provide.
+
 Fallback provenance **must** record `fallback_reason = "latent_variance_not_identified"` plus
-the observed statistic, `c_alpha`, `alpha`, `B`, and the bootstrap seed identity.
+the observed statistic, `p_boot`, the critical order statistic, the exceedance count, `q_0`,
+`alpha`, `B`, and the bootstrap seed identity.
 
 *Revisit if:* the bootstrap cost is prohibitive at production K (measure it), or a null model
 other than the pooled-rate one is the right null once section 4 resolves.
@@ -259,8 +340,23 @@ Two admissible routes. Exactly one must be chosen before the gate is built:
 cannot be built today; it is blocked on #368's migration rather than rejected on merit.
 
 This is a checkable fact about the tree, not a values call, which is why the implementing
-session settled it. **If #368's migration lands first, route (a) supersedes this choice** and the
-sufficient statistic below becomes redundant rather than wrong.
+session settled it.
+
+**CORRECTED after maintainer review: #368 does not by itself supersede `sum_sq`.** The two
+tickets repair different decision lanes, and merging their concepts must not merge their
+authority:
+
+```
+#368 supersedes scalar half-update for production matched-efficacy decisions.
+It does NOT by itself supersede sum_sq in the diagnostic clause-aggregation lane.
+sum_sq becomes redundant only if fit_skill is migrated to a sufficient
+discordant representation, or removed from that lane.
+```
+
+Matched Full/Null efficacy decisions belong to the four-cell discordant-table path and Gate 2.
+Hierarchical clause aggregation is a distinct surface and must not silently become the
+production efficacy authority. So while `fit_skill` continues to operate on clause-level
+`{0, 0.5, 1}` observations, `sum_sq` remains necessary after #368 lands, not redundant.
 
 Route (b) as built:
 
@@ -269,6 +365,20 @@ sum_sq_k = sum_i o_{k,i}^2                       # carried on ClauseObservations
 within_ss_k     = sum_sq_k - n_k * r_k^2         # exact within-clause sum of squares
 sampling_var_k  = within_ss_k / ((n_k - 1) * n_k)
 ```
+
+**`sum_sq` is a genuine sufficient statistic for this outcome alphabet, not a summary of it.**
+For observations in `{0, 0.5, 1}`, `w = wins + 0.5 ties` and `sum_sq = wins + 0.25 ties`, which
+inverts exactly:
+
+```
+ties   = 4 * (w - sum_sq)
+wins   = 2 * sum_sq - w
+losses = n - wins - ties
+```
+
+Verified on worked cases including `(wins=3, ties=4, losses=2)` and the all-tie corner
+`(0, 9, 0)`. This identity is what makes the categorical null in section 3 constructible: the
+null can hold each clause's tie count fixed because that count is recoverable, not estimated.
 
 This is exact under ties and **reduces to the Bernoulli form when there are none**: with
 `o in {0,1}`, `sum_sq = sum(o) = w`, so `sampling_var = (n r - n r^2)/((n-1) n) = r(1-r)/(n-1)`,
@@ -283,35 +393,82 @@ success, which is the class of defect this amendment exists to remove.
 correct.** The development regimes draw `w_k ~ Binomial(n, p_k)` and are tie-free, so they
 cannot detect this defect at all.
 
-### Registered tie-carrying regime
+### Registered tie-carrying regimes
 
-**FROZEN — registered here, before the freeze, rather than added at run time.**
+**FROZEN — two regimes, registered before the freeze rather than added at run time.**
 
-`tie_heavy`: `mu* = 0.65`, `c* = 60`, `n = 20`, `K = 200`, tie rate `t = 0.30`.
+One tie regime is not enough. A null regime tests whether the test is *calibrated* when ties
+are present; a signal regime tests whether the *peel* is right when ties are present. Either
+one alone leaves a hole: a calibrated test that cannot recover a known variance is useless, and
+an accurate peel that over-admits under homogeneity mints invented fits.
 
-Generative model. Draw `m_k ~ Beta(a*, b*)` as the per-clause **expected observation**. Each
-trial is then a three-point draw with
+Both encode a mean of 0.65, matching the tie-free regimes, so the tie dimension is the only
+thing that varies.
+
+#### `tie_heavy_null` — calibration under ties
 
 ```
-P(Tie)  = t          contributing o = 0.5
-P(Win)  = m_k - t/2  contributing o = 1.0
-P(Loss) = 1 - t/2 - m_k  contributing o = 0.0
+tie probability          t   = 0.40
+decisive win probability q   = 0.75, IDENTICAL for every clause
+n = 25, K = 200
+encoded mean   = 0.4*0.5 + 0.6*0.75 = 0.65
+latent variance = 0   (exactly; there is no between-clause variation)
 ```
 
-so `E[o] = m_k` exactly and the hyperprior on `m_k` is the same Beta family as the other
-regimes. Trial probabilities are valid for `m_k` in `[t/2, 1 - t/2] = [0.15, 0.85]`;
-`c* = 60` gives `sd(m_k) = 0.061`, so that interval is 3 standard errors clear on the tight side
-and 2.5 on the other. **Any `m_k` drawn outside it is rejected and redrawn, and the rejection
-count is reported** — a silent clip would change the hyperprior the regime claims to test.
+What it tests: the admission rate under an exactly homogeneous, tie-carrying world must match
+`alpha`. This is the row that catches a null model that regenerates a tie-free world, which
+would make the observed tie-carrying spread look like heterogeneity and over-admit.
 
-Why these values: `c* = 60` and `n = 20` sit between the two development regimes, so the regime
-is not chosen at an extreme; `t = 0.30` is high enough that the Bernoulli formula's error is
-large relative to the latent variance, which is the condition under which the defect is
-detectable at all.
+#### `tie_heavy_signal` — the peel under ties
 
-**What this regime is for:** it is the only registered surface on which the section 4 defect can
-fire. A confirmatory run reporting the section 5 matrix on the three tie-free regimes alone is
-not a confirmatory run.
+```
+tie probability t = 0.40
+decisive p_k ~ Beta(15, 5)      (mean 0.75, variance 0.75*0.25/21)
+n = 25, K = 200
+encoded mean = 0.2 + 0.6*0.75 = 0.65
+true encoded latent variance
+  = 0.60^2 * [0.75 * 0.25 / 21]
+  = 0.36 * 0.008928571...
+  = 0.0032142857
+```
+
+The encoded observation is `o = 0.5` with probability `t`, else decisive at `p_k`, so the
+clause's expected observation is `0.2 + 0.6 p_k` and the between-clause variance of that
+expectation is `0.6^2 Var(p_k)`. Derived above rather than simulated, and it is the target the
+bias row in section 5 measures against.
+
+What it tests: the peel must recover `0.0032142857` within the registered bias bound on
+tie-carrying data. A peel computed from `(w, n)` alone over-peels tie-heavy clauses and will
+understate it.
+
+**No confirmatory run may substitute one of these for the other.** A run reporting the
+section 5 matrix on the three tie-free regimes plus only `tie_heavy_signal` is not a
+confirmatory run, and neither is one that reports only `tie_heavy_null`.
+
+#### The oracle for a tie regime, registered
+
+Rows 5 to 7 compare fitted decisions against an oracle built from the TRUE hyperprior. For the
+tie-free regimes that hyperprior is `Beta(a*, b*)` directly. For a tie regime the encoded mean
+is `0.2 + 0.6 p_k`, a scaled Beta, which is not itself Beta, so the oracle needs a stated
+choice rather than an implied one.
+
+**FROZEN: the oracle hyperprior for a tie regime is the Beta with mean and variance matched to
+the true encoded-mean distribution.** Moment matching is the standard construction and it keeps
+the oracle in the same family as the estimand under test. For `tie_heavy_signal`:
+
+```
+mean = 0.65, variance = 0.0032142857
+c    = mean(1-mean)/variance - 1 = 69.777778
+a    = 45.355556,  b = 24.422222
+```
+
+For `tie_heavy_null` the true latent variance is 0, so the encoded mean is exactly 0.65 for
+every clause and the oracle is the degenerate distribution at 0.65. Its `P(rate > 0.60) = 1`,
+so every clause's oracle decision is PASS. Rows 5 to 7 remain well defined there; row 3 does
+not, and is reported only for regimes with nonzero true latent variance, as section 5 states.
+
+Registered here because it is a degree of freedom in the acceptance matrix, and an unstated one
+would let the harness author choose the oracle after seeing which choice passes.
 
 ---
 
@@ -320,22 +477,41 @@ not a confirmatory run.
 **FROZEN — non-negotiable.** Every quantity below is reported for every registered regime. A run
 that reports a subset is not a confirmatory run.
 
-| # | quantity | assertion |
+**Replication: `R = 1000` per registered regime.** Registered regimes are `small_n_bite`,
+`low_heterogeneity`, `benign_large_n`, `tie_heavy_null`, `tie_heavy_signal`.
+
+**Identical synthetic worlds.** `main` and the candidate are evaluated on the SAME generated
+data, world for world. The comparison rows below are paired differences on identical inputs,
+not two independent samples, so an apparent difference cannot be sampling noise between runs.
+
+| # | quantity | frozen bound |
 |---|---|---|
-| 1 | **False admission under homogeneity** — admission rate when `tau^2 = 0` exactly | within Monte Carlo error of `alpha`; this is the test's own calibration and its failure invalidates everything below |
+| 1 | **False admission under homogeneity** — admission rate where the true latent variance is 0 (`tie_heavy_null`, and any tie-free null world generated for this row) | exact binomial test of the observed admission count against `p = 0.05`, at test level `0.01`; failure to reject is the pass condition |
 | 2 | **Admission rate by regime** | reported, not bounded. A regime near the identification boundary is *expected* to admit a minority of replicates; that is a power result, not a defect |
-| 3 | **Bias of `latent_raw`** against the true variance component, unclipped | relative bias within a bound registered before the run |
-| 4 | **Interval coverage** of the recovered variance component | nominal coverage within binomial tolerance |
-| 5 | **Fallback rate** and its reason distribution | reported; `latent_variance_not_identified` separated from `alpha_le_zero` and `beta_le_zero` |
-| 6 | **Wrong PASS rate** — fitted says PASS, oracle does not | must not rise against `main` in any registered regime |
-| 7 | **Wrong FAIL rate** — fitted says FAIL, oracle does not | must not rise against `main` in any registered regime |
-| 8 | **Added abstention** — fitted says UNDECIDED, oracle decides | reported as an evidence-coverage cost, not netted against 6 or 7 |
+| 3 | **Relative bias of `latent_raw`**, unclipped, over **ALL replicates including refused ones**, against the regime's true latent variance | absolute relative bias **no greater than 10 percent** in every regime whose true latent variance is nonzero. Conditioning on admission would select the positive tail and manufacture bias, so the harness asserts it collected one estimate per replicate |
+| 4 | **Fallback rate** and its reason distribution | reported; `latent_variance_not_identified` separated from `alpha_le_zero` and `beta_le_zero` |
+| 5 | **Wrong PASS count (CLAUSE STATUS)** — fitted clause status is PASS, oracle is not | **any positive excess over `main` on the identical worlds kills the candidate** |
+| 6 | **Wrong FAIL count (CLAUSE STATUS)** — fitted clause status is FAIL, oracle is not | **any positive excess over `main` on the identical worlds kills the candidate** |
+| 7 | **Added abstention** — fitted says UNDECIDED, oracle decides | reported as an evidence-coverage cost, not netted against 5 or 6 |
+
+**The `interval coverage` row from the first draft is REMOVED, not deferred.** It named a
+property of an interval that production does not compute: `fit_skill` returns per-clause
+posterior credible intervals, and no interval is produced for the latent variance or the
+hyperprior, so there was nothing for a coverage row to measure. Row 3 measures the estimator's
+accuracy directly instead. Restoring a coverage row requires first building the interval it
+would be about, and that is not in this change.
+
+**Rows 5 to 7 are CLAUSE-STATUS errors, not production benefit or harm verdicts.** This change
+lives in the diagnostic clause-aggregation lane. A wrong clause status is not a wrong efficacy
+verdict, and nothing in this matrix licenses a claim about matched Full/Null efficacy, which
+Gate 2 and the discordant-table path decide.
 
 **The three decision outcomes stay separate and are never summed into a single flip rate.**
 The development flip rate of 0.1436 in `low_heterogeneity` mixes wrong directional verdicts with
 honest abstentions and cannot distinguish a repair that makes the instrument more careful from
 one that makes it more wrong. That conflation is why the number was uninterpretable when this
-session reported it.
+session reported it. Rows 5 and 6 are counts of wrong claims; row 7 counts honest refusals to
+claim. A rise in row 7 is a cost to report. A rise in row 5 or 6 is a kill.
 
 ---
 
@@ -347,16 +523,33 @@ session reported it.
 `main` and fails under the candidate peel. This was measured both ways; it is caused by the
 change, not pre-existing.
 
-The reference must therefore move. Frozen constraints on how:
+The reference must therefore move, and it carries **two distinct obligations that are separately
+owed**:
 
-1. **Independent re-derivation.** The reference implements the amended estimator and admission
-   rule **from this specification**, not by calling production. It must not import or invoke the
-   production peel, the admission helper, `_ebmom`, or `fit_skill`. A reference that calls the
-   implementation tests that the code equals itself.
-2. **Mutation receipt required.** Ship a receipt proving the re-derived reference *can* reject a
-   wrong implementation: mutate production, show the differential test goes red, and attribute
-   the kill **to the differential assertion by name**. A mutation that fails to compile, or that
-   reddens a different suite, is not a kill — record which assertion failed, not the exit code.
+- **Obligation A — the numerics of the selected method.** The reference re-derives the amended
+  estimator **from this specification**, not by calling production. It must not import or invoke
+  the production peel, the admission helper, `_ebmom`, or `fit_skill`. A reference that calls the
+  implementation tests only that the code equals itself.
+- **Obligation B — the method selection itself.** The reference **may branch on the method
+  production selected**, because independently re-deriving a seeded bootstrap would mean
+  reproducing its exact RNG stream, which is cloning rather than independence. But branching on
+  the selection is NOT accepting it. **The reference may not treat production's method choice as
+  correct merely because production made it.** A wrong method choice must be killed by
+  independent admission tests, not by the differential comparison, which cannot see it.
+
+Discharging obligation B: `tests/test_aggregation_fit.py::test_marginal_heterogeneity_is_refused_not_fitted`
+(a known-unidentified input must be refused), `::test_admission_verdict_is_deterministic`,
+`::test_seed_covers_sum_sq_not_just_w_and_n`, `::test_canonical_encoding_is_order_independent`,
+plus acceptance-matrix rows 1 and 2, which bound the selection's error rate rather than any
+single verdict.
+
+**Mutation receipt required, and it must name the obligation each kill belongs to.** Ship a
+receipt proving the suite *can* reject a wrong implementation: mutate production, show the gate
+goes red, and attribute the kill **to a named assertion**, recording whether that assertion
+serves A or B. A mutation that fails to compile, or that reddens a different suite than the one
+whose job the behaviour is, is not a kill — record which assertion failed, never the exit code
+alone. **A receipt that kills only obligation-A mutants leaves the method-selection surface
+unmeasured and does not discharge this section.**
 
 *Revisit if:* the existing reference is already independent by construction, in which case say so
 with the file evidence and only its expectations move.
@@ -371,9 +564,10 @@ with the file evidence and only its expectations move.
    change afterwards.
 2. The gate is built to this specification. Building may use seed `20260902` freely; anything it
    produces is development evidence and is labelled as such.
-3. **The confirmatory run uses fresh seeds chosen by someone other than the session that wrote
-   this amendment or built the gate.** The maintainer named Hans as a source for those seeds.
-   The seeds are recorded in the confirmatory receipt before the run.
+3. **The confirmatory run uses a root seed chosen by someone other than the session that wrote
+   this amendment or built the gate**, and every regime and replicate seed is derived from that
+   root by the harness. The commitment and reveal sequence is section 9; the identity the
+   receipt must carry is section 8.
 4. The confirmatory run reports the full section 5 matrix. One run, reported whichever way it
    lands.
 5. A confirmatory run that fails does not license a second run at new seeds. It licenses a new
@@ -412,8 +606,91 @@ Rollback state is `main`. `agent/issue-360` stays unmerged and is the developmen
   *Revisit if:* it is already independent, with file evidence.
 - **Ruled by the maintainer 2026-08-31, now frozen:** `HETEROGENEITY_TEST_ALPHA = 0.05`, on the
   derivation and power cost tabled in section 3. It does not move on a confirmatory result.
-- **Non-negotiable:** the `tie_heavy` regime and its generative model (section 4). It is the only
-  registered surface on which the tie defect can fire.
+- **Non-negotiable:** the `tie_heavy_null` and `tie_heavy_signal` regimes and their generative
+  models (section 4). They are the only registered surfaces on which the tie defect can fire,
+  and neither substitutes for the other.
+- **Ruled by the maintainer 2026-09-01, now frozen:** the finite-bootstrap decision rule
+  `p_boot = (1 + count)/(B + 1)`, `admit iff p_boot <= 0.05`; the full seed-derivation procedure;
+  `R = 1000`; the 10 percent bias bound; the exact-binomial calibration rule at level 0.01;
+  identical synthetic worlds for `main` and candidate; and removal of the interval-coverage row.
+
+---
+
+## 8. Receipt identity: semantic and execution
+
+**FROZEN.** Neither identity alone supports independent replay, so the confirmatory receipt
+carries both.
+
+**Measurement (semantic) identity** — what was measured:
+
+```
+amendment SHA
+estimator definition (section 2)
+alpha / B / R
+registered regimes and their generative parameters
+oracle definitions (section 4)
+acceptance matrix and kill criterion (section 5)
+```
+
+**Execution identity** — what actually ran:
+
+```
+final branch SHA
+Python / NumPy / SciPy versions
+harness digest and verifier digest
+confirmatory root seed
+per-regime and per-replicate seed derivation
+raw-output manifest hash
+the exact command line
+```
+
+A receipt missing either half is not replayable, and a claim resting on it is not checkable.
+Explicit no-change outcomes are recorded rather than omitted: a row that did not move is
+evidence, and its absence is indistinguishable from a row that was never run.
+
+---
+
+## 9. Seed commitment and reveal
+
+**FROZEN.** The root seed is committed before it is revealed, so it cannot be replaced after
+anyone has seen a result. This follows the precedent already used in this programme for a
+private pre-registration committed by digest before disclosure.
+
+1. Freeze and push the implementation and harness SHA.
+2. The maintainer generates a 256-bit root seed. The implementing session does not see it.
+3. `SHA256(root)` is committed or publicly timestamped in the run stub, before the root is
+   disclosed.
+4. The root is revealed only after that commitment exists.
+5. The harness runs ONCE.
+6. The root is published and verified against the prior commitment.
+
+Step 3 is what makes the run falsifiable by a third party: without it, "we used seed X" is an
+assertion, and with it, it is a check anyone can perform.
+
+---
+
+## 10. Appendix: researcher degrees of freedom
+
+**Every choice made while developing this change, recorded because hiding them would be the
+defect.** The smoke runs below are legitimate development evidence; concealing them, not
+performing them, would be the problem.
+
+| degree of freedom | what was done |
+|---|---|
+| estimator families tried | four: per-clause peel, pooled peel, ANOVA intraclass-correlation, full marginal-likelihood EB |
+| development seed | `20260902`, used for all four family comparisons and the finite-K bias study |
+| variance denominator | `/K` and `/(K-1)` compared over 4000 replicates against the closed-form bias |
+| clipping | investigated; `max(v,0)` measured firing on 2.3 percent of `low_heterogeneity` replicates, moving the retained mean by about 8e-6 |
+| smoke runs | R=3 and R=20, root seed `SMOKE_NOT_CONFIRMATORY`, throwaway. Used to prove the harness executes and that mutant M-A3 is detectable |
+| fixtures | the EB-path fixture was widened from n=10 to n=50; the original n=10 case was retained as an explicit refusal test rather than deleted |
+| mutants | six, listed in the mutation receipt, five killed and one survivor preserved |
+| tooling failure | one clean-restoration attempt failed silently through a `/tmp` path the interpreter could not see, so a "clean" comparison row was actually the mutant. Caught because both rows printed identically; the affected numbers were re-measured after a surgical revert |
+| amendments | this document has been amended three times before any confirmatory run: the initial supersession of the mean statistic, the maintainer's ratification pass, and the workspace-review pass that corrected the null, the oracle, and the #368 scope |
+| code changed after seeing smoke output | yes, and named: the admission-conditioned bias collection in the harness, the encoded-mean null, and the exact tie oracle. All three were corrections to defects the smoke runs and review exposed, not tuning toward a passing result. None of them moved a registered threshold, regime, or the kill criterion |
+
+**No registered regime, threshold, oracle definition or kill criterion has been changed in
+response to a smoke result.** The changes listed in the last row are repairs to the apparatus.
+The contract they are measured against is unchanged.
 
 ---
 

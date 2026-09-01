@@ -31,6 +31,7 @@ from skill_harness.aggregation.fit import (
     ClausePosterior,
     FitResult,
     _bh_fdr,
+    _bootstrap_seed,
     _ebmom,
     fit_skill,
 )
@@ -326,10 +327,25 @@ class TestFitSkillEbmom:
         assert isinstance(attempted, dict)
         test = attempted["heterogeneity_test"]
         assert isinstance(test, dict)
-        for field in ("statistic", "critical_value", "alpha", "bootstrap_b", "bootstrap_seed"):
+        for field in (
+            "statistic",
+            "p_boot",
+            "critical_order_statistic",
+            "exceed_count",
+            "null_win_rate",
+            "alpha",
+            "bootstrap_b",
+            "bootstrap_seed",
+            "admitted",
+        ):
             assert field in test, f"provenance is missing {field!r}"
-        assert test["statistic"] <= test["critical_value"]
+        assert test["admitted"] is False
+        # The decision rule is p_boot <= alpha, not a percentile comparison.
+        assert test["p_boot"] > HETEROGENEITY_TEST_ALPHA
         assert test["alpha"] == HETEROGENEITY_TEST_ALPHA
+        # (1 + exceed) / (B + 1) exactly, so the level is achievable at finite B.
+        expected_p = (1.0 + test["exceed_count"]) / (test["bootstrap_b"] + 1.0)
+        assert test["p_boot"] == expected_p
 
     def test_admission_verdict_is_deterministic(self) -> None:
         """The bootstrap must not make fit_skill non-deterministic (#360).
@@ -346,8 +362,29 @@ class TestFitSkillEbmom:
         t1 = first.aggregation_provenance["heterogeneity_test"]
         t2 = second.aggregation_provenance["heterogeneity_test"]
         assert isinstance(t1, dict) and isinstance(t2, dict)
-        assert t1["critical_value"] == t2["critical_value"]
+        assert t1["p_boot"] == t2["p_boot"]
+        assert t1["critical_order_statistic"] == t2["critical_order_statistic"]
         assert t1["bootstrap_seed"] == t2["bootstrap_seed"]
+
+    def test_seed_covers_sum_sq_not_just_w_and_n(self) -> None:
+        """Two clause sets differing ONLY in tie composition are different data.
+
+        (clause_id, w, n) stopped being the complete input when route (b) added
+        sum_sq. If the digest ignored it, a tie-heavy set and a tie-free set at
+        the same (w, n) would share a bootstrap stream, which is a silent
+        collision between two different worlds.
+        """
+        tie_free = ClauseObservations(clause_id="c", w=5.0, n=10, sum_sq=5.0)
+        tie_heavy = ClauseObservations(clause_id="c", w=5.0, n=10, sum_sq=3.5)
+        assert tie_free.w == tie_heavy.w
+        assert tie_free.n == tie_heavy.n
+        assert _bootstrap_seed([tie_free]) != _bootstrap_seed([tie_heavy])
+
+    def test_canonical_encoding_is_order_independent(self) -> None:
+        """The digest sorts by clause_id, so input order cannot change a verdict."""
+        a = ClauseObservations.bernoulli(clause_id="a", w=3.0, n=10)
+        b = ClauseObservations.bernoulli(clause_id="b", w=7.0, n=10)
+        assert _bootstrap_seed([a, b]) == _bootstrap_seed([b, a])
 
     def test_provenance_fields_present(self) -> None:
         clauses = self._make_k10_clauses_with_variance()

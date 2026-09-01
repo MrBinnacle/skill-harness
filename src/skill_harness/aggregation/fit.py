@@ -289,17 +289,21 @@ def fit_skill(
     # negative tail onto zero and induce a positive bias in the retained value.
     latent_var_raw = sample_var - sampling_var
 
-    critical_value = _heterogeneity_critical_value(clauses)
+    test = _heterogeneity_test(clauses, latent_var_raw)
     heterogeneity_test = {
-        "statistic": latent_var_raw,
-        "critical_value": critical_value,
+        "statistic": test.statistic,
+        "p_boot": test.p_boot,
+        "critical_order_statistic": test.critical_order_statistic,
+        "exceed_count": test.exceed_count,
+        "null_encoded_mean": test.encoded_mean_0,
         "alpha": HETEROGENEITY_TEST_ALPHA,
         "bootstrap_b": HETEROGENEITY_BOOTSTRAP_B,
         "bootstrap_seed": _bootstrap_seed(clauses),
+        "admitted": test.admitted,
     }
 
     try:
-        if latent_var_raw <= critical_value:
+        if not test.admitted:
             raise ConvergenceFailure(
                 reason="latent_variance_not_identified",
                 alpha_hat=None,
@@ -412,73 +416,145 @@ def _mean_sampling_variance(clauses: list[ClauseObservations]) -> float:
     return total / len(clauses)
 
 
+@dataclass(frozen=True)
+class _HeterogeneityTest:
+    """Outcome of the admission test, recorded verbatim in provenance."""
+
+    statistic: float
+    p_boot: float
+    critical_order_statistic: float
+    exceed_count: int
+    encoded_mean_0: float
+    admitted: bool
+
+
+# Seed-derivation procedure, FROZEN. Every element below is part of the
+# contract, because changing any of them silently changes admission verdicts on
+# unchanged data:
+#   sort order   -- ascending by clause_id, Python str comparison (code points)
+#   field order  -- clause_id, w, n, sum_sq
+#   number form  -- float.hex() for w and sum_sq (exact, round-trippable, and
+#                   locale- and repr-independent); str() for the integer n
+#   separators   -- "|" between fields, ";" between clauses
+#   encoding     -- UTF-8
+#   digest       -- SHA-256 over those bytes
+#   seed         -- the first 8 bytes of the digest, big-endian, unsigned
+#   generator    -- random.Random (Mersenne Twister), seeded with that integer
+# Python object hashes are NOT used: they are salted per process and would make
+# the verdict vary run to run, which is the exact failure this guards against.
+_SEED_FIELD_SEP = "|"
+_SEED_CLAUSE_SEP = ";"
+
+
+def _canonical_input_bytes(clauses: list[ClauseObservations]) -> bytes:
+    """Serialise the clause set to the frozen canonical byte form."""
+    parts = []
+    for cl in sorted(clauses, key=lambda c: c.clause_id):
+        parts.append(
+            _SEED_FIELD_SEP.join(
+                (cl.clause_id, float(cl.w).hex(), str(int(cl.n)), float(cl.sum_sq).hex())
+            )
+        )
+    return _SEED_CLAUSE_SEP.join(parts).encode("utf-8")
+
+
 def _bootstrap_seed(clauses: list[ClauseObservations]) -> int:
     """Derive the bootstrap seed from the observations themselves.
 
-    fit_skill is documented as deterministic. The admission test resamples, so
-    its seed MUST be a function of the input: the same clauses give the same
-    admission verdict on every host and every run. A wall-clock or global-RNG
-    seed would make a published verdict irreproducible.
+    fit_skill is documented as deterministic and the admission test resamples,
+    so the seed MUST be a function of the input: the same clauses give the same
+    verdict on every host and every run. A wall-clock or global-RNG seed would
+    make a published verdict irreproducible.
+
+    The seed covers all four fields including sum_sq. (clause_id, w, n) stopped
+    being the complete input when route (b) added sum_sq: two clause sets
+    differing only in tie composition are different data and must not share a
+    bootstrap stream.
     """
-    canonical = ";".join(
-        f"{cl.clause_id}|{cl.w!r}|{cl.n!r}|{cl.sum_sq!r}"
-        for cl in sorted(clauses, key=lambda c: c.clause_id)
-    )
-    digest = hashlib.sha256(canonical.encode("utf-8")).digest()
+    digest = hashlib.sha256(_canonical_input_bytes(clauses)).digest()
     return int.from_bytes(digest[:8], "big")
 
 
-def _tie_rate_estimate(clause: ClauseObservations) -> float:
-    """Fraction of this clause's trials that were ties, from sum_sq.
+def _decompose(clause: ClauseObservations) -> tuple[int, int, int]:
+    """Recover (wins, ties, losses) exactly from (w, n, sum_sq).
 
-    A win or loss contributes (o - r)^2 with o in {0, 1}; a tie contributes
-    less. The within-clause sum of squares relative to its tie-free maximum
-    n r (1 - r) therefore identifies the tie fraction by moments.
+    Observations take values in {0, 0.5, 1}, so
+
+        w      = wins + 0.5 * ties
+        sum_sq = wins + 0.25 * ties
+
+    which inverts exactly:
+
+        ties = 4 * (w - sum_sq)
+        wins = 2 * sum_sq - w
+        losses = n - wins - ties
+
+    This is an identity, not an estimate, and it is why sum_sq is a genuine
+    sufficient statistic for this outcome alphabet rather than a summary of
+    it. Counts are rounded because they arrive through float arithmetic.
     """
-    rate = clause.w / clause.n
-    within_ss = max(clause.sum_sq - clause.n * rate * rate, 0.0)
-    max_ss = clause.n * rate * (1.0 - rate)
-    if max_ss <= 0.0:
-        return 0.0
-    return min(max(1.0 - within_ss / max_ss, 0.0), 1.0)
+    ties = round(4.0 * (clause.w - clause.sum_sq))
+    wins = round(2.0 * clause.sum_sq - clause.w)
+    losses = clause.n - wins - ties
+    return max(wins, 0), max(ties, 0), max(losses, 0)
 
 
 def _draw_null_clause(
     clause: ClauseObservations,
-    mu_0: float,
+    encoded_mean_0: float,
     rng: random.Random,
 ) -> ClauseObservations:
-    """One clause resampled under H_0, preserving its own n and tie structure.
+    """One clause resampled under H_0, preserving its n and its tie count.
 
-    Unequal n_k is the normal case, so the null reproduces each clause's own
-    observation count rather than a common one. Observations are drawn from
-    {0, 0.5, 1} at the clause's estimated tie rate, so the null carries the
-    same tie structure as the data and the peel is exercised identically on
-    both sides of the comparison.
+    The null is CATEGORICAL over {0, 0.5, 1}, not binomial. A binomial null at
+    the pooled mean would generate a tie-free world and compare tie-carrying
+    data against it, reintroducing the misspecification sum_sq was added to
+    remove.
+
+    THE ESTIMAND HELD CONSTANT IS THE ENCODED CLAUSE MEAN, and that forces the
+    decisive win probability to vary by clause. With tie fraction
+    q_k = ties_k / n_k, a clause's encoded mean is
+
+        E[X_k] = 0.5 q_k + (1 - q_k) p_k
+
+    so a COMMON decisive rate p_k = p_0 produces DIFFERENT encoded means
+    whenever tie fractions differ: at p_0 = 0.75 the encoded mean runs 0.70,
+    0.65 and 0.60 for q = 0.20, 0.40 and 0.60. That is real between-clause
+    variation, so such a draw is not a null for the hypothesis under test --
+    it is a world with genuine heterogeneity in it. Inverting instead:
+
+        p_0k = (mu_0 - 0.5 q_k) / (1 - q_k)
+
+    gives every clause the same encoded mean mu_0 by construction. Tie counts
+    stay fixed because how many trials tied is a property of the evidence
+    collected, not of the hypothesis.
     """
-    p_tie = _tie_rate_estimate(clause)
-    p_win = max(mu_0 - 0.5 * p_tie, 0.0)
-    p_loss = max(1.0 - p_tie - p_win, 0.0)
-    total = p_tie + p_win + p_loss
-    p_tie, p_win = p_tie / total, p_win / total
+    _wins, ties, _losses = _decompose(clause)
+    decisive = clause.n - ties
+    if decisive <= 0:
+        # All ties: nothing to resample, and no decisive rate is identified.
+        return ClauseObservations(
+            clause_id=clause.clause_id, w=0.5 * ties, n=clause.n, sum_sq=0.25 * ties
+        )
 
-    w = 0.0
-    sum_sq = 0.0
-    for _ in range(clause.n):
-        u = rng.random()
-        if u < p_tie:
-            obs = 0.5
-        elif u < p_tie + p_win:
-            obs = 1.0
-        else:
-            obs = 0.0
-        w += obs
-        sum_sq += obs * obs
+    tie_fraction = ties / clause.n
+    p_0k = (encoded_mean_0 - 0.5 * tie_fraction) / (1.0 - tie_fraction)
+    p_0k = min(max(p_0k, 0.0), 1.0)
+
+    w = 0.5 * ties
+    sum_sq = 0.25 * ties
+    for _ in range(decisive):
+        if rng.random() < p_0k:
+            w += 1.0
+            sum_sq += 1.0
     return ClauseObservations(clause_id=clause.clause_id, w=w, n=clause.n, sum_sq=sum_sq)
 
 
-def _heterogeneity_critical_value(clauses: list[ClauseObservations]) -> float:
-    """Critical value above which a hierarchical fit is admitted.
+def _heterogeneity_test(
+    clauses: list[ClauseObservations],
+    latent_var_raw: float,
+) -> _HeterogeneityTest:
+    """Decide whether heterogeneity is identified well enough to fit.
 
     Tests H_0: tau^2 = 0 (one common rate; all observed spread is sampling
     noise) against H_1: tau^2 > 0, by parametric bootstrap under the null.
@@ -489,11 +565,13 @@ def _heterogeneity_critical_value(clauses: list[ClauseObservations]) -> float:
     zero given its own sampling error. A replicate with latent_var = 5e-4
     clears a 1e-6 floor and returns a concentration of 454 fitted to noise.
 
-    Returns the (1 - alpha) quantile of the null distribution of the peeled
-    latent variance. The caller admits the fit when the observed value exceeds
-    it, and records BOTH numbers in provenance so the admission decision is
-    auditable rather than silent: a false admission is otherwise invisible in
-    the receipt, while a false refusal is visible by construction.
+    Returns the full test outcome. The caller admits the fit when
+    ``admitted`` is true and records the whole record in provenance, so the
+    decision is reproducible and auditable: a false admission is otherwise
+    invisible in the receipt, while a false refusal is visible by
+    construction. Provenance makes the decision reproducible and auditable; it
+    does not make an individual false admission retrospectively identifiable,
+    and the weaker claim is the one being made.
 
     Specification: docs/assurance/ebmom-peel-preregistration-amendment.md
     section 3.
@@ -502,22 +580,43 @@ def _heterogeneity_critical_value(clauses: list[ClauseObservations]) -> float:
     # primitive. A reproducible PRNG seeded from the data is exactly what is
     # wanted here; a cryptographic source would make the verdict irreproducible.
     rng = random.Random(_bootstrap_seed(clauses))  # noqa: S311
-    # Pooled common rate under H_0: sum(w)/sum(n), not the mean of rates.
+
+    # The null holds the ENCODED clause mean constant, because that is the
+    # quantity whose between-clause variance the test is about. Pooled over
+    # observations, not averaged over clauses.
     total_n = sum(cl.n for cl in clauses)
-    mu_0 = sum(cl.w for cl in clauses) / total_n
+    encoded_mean_0 = sum(cl.w for cl in clauses) / total_n
 
     null_stats: list[float] = []
     for _ in range(HETEROGENEITY_BOOTSTRAP_B):
-        null_clauses = [_draw_null_clause(cl, mu_0, rng) for cl in clauses]
+        null_clauses = [_draw_null_clause(cl, encoded_mean_0, rng) for cl in clauses]
         null_rates = [c.w / c.n for c in null_clauses]
         null_mean = sum(null_rates) / len(null_rates)
         null_total = sum((r - null_mean) ** 2 for r in null_rates) / (len(null_rates) - 1)
         null_stats.append(null_total - _mean_sampling_variance(null_clauses))
 
+    # Finite-bootstrap p-value with the +1 correction, NOT an interpolated
+    # percentile. At finite B the achievable levels are discrete, and
+    # (1 + count) / (B + 1) is the form that keeps the test valid there; a
+    # library-interpolated 95th percentile sits between order statistics and
+    # can admit at a true level above alpha.
+    exceed = sum(1 for stat in null_stats if stat >= latent_var_raw)
+    p_boot = (1.0 + exceed) / (HETEROGENEITY_BOOTSTRAP_B + 1.0)
+
+    # The order statistic the decision turns on, recorded so a reader can see
+    # the boundary the observed statistic was measured against.
     null_stats.sort()
-    # One-sided upper critical value at level alpha.
     index = math.ceil((1.0 - HETEROGENEITY_TEST_ALPHA) * len(null_stats)) - 1
-    return null_stats[min(max(index, 0), len(null_stats) - 1)]
+    critical_order_statistic = null_stats[min(max(index, 0), len(null_stats) - 1)]
+
+    return _HeterogeneityTest(
+        statistic=latent_var_raw,
+        p_boot=p_boot,
+        critical_order_statistic=critical_order_statistic,
+        exceed_count=exceed,
+        encoded_mean_0=encoded_mean_0,
+        admitted=p_boot <= HETEROGENEITY_TEST_ALPHA,
+    )
 
 
 def _ebmom(sample_mean: float, sample_var: float) -> tuple[float, float]:

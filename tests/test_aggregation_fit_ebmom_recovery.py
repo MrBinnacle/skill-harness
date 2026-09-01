@@ -227,31 +227,36 @@ def test_mean_recovery(name: str, measurements: dict[str, RegimeMeasurement]) ->
 
 # Observed on first run (2026-08-31, seed 20260902): the two predicted-firing
 # regimes went red at relative errors 0.690 and 0.806 with decision flip rates
-# 0.1186 and 0.0816. Strict xfail per the registered outcome protocol; the
-# bound is NOT loosened. The repair un-marks these in the same change it lands.
-_FIRING_REGIMES: frozenset[str] = frozenset({"small_n_bite", "low_heterogeneity"})
+# 0.1186 and 0.0816. They carried a STRICT xfail naming
+# docs/findings/ebmom-missing-sampling-variance-peel.md until the repair landed.
+#
+# UN-MARKED (#360). Both went XPASS(strict) once the peel and the heterogeneity
+# admission gate were in place, and a strict xfail that passes is itself a
+# failure, so leaving the marks would turn this file red. Measured on the same
+# development seed 20260902, bounds UNCHANGED:
+#
+#   small_n_bite       c_hat 21.60 vs 20   rel err 0.080   48/50 admitted
+#   low_heterogeneity  c_hat 85.22 vs 100  rel err 0.148   36/50 admitted
+#   benign_large_n     c_hat 10.05 vs 10   rel err 0.005   50/50 admitted
+#
+# READ THAT CAREFULLY, because it is weaker than it looks. This statistic is a
+# mean over ADMITTED replicates only: the fixture skips a replicate that did not
+# reach the hierarchical fit. In low_heterogeneity 14 of 50 replicates are now
+# refused, and those are precisely the ill-conditioned ones whose divergent
+# reciprocals produced the original 0.806 error. So the bound is cleared partly
+# BECAUSE the gate removed the replicates that broke it, not because the
+# mean-of-c_hat statistic became sound.
+#
+# That is why the amendment superseded this statistic as an ACCEPTANCE
+# criterion rather than reinstating it: an admission-conditioned mean cannot
+# distinguish "the estimator improved" from "the sample was selected". The
+# registered acceptance surface is the matrix in
+# docs/assurance/ebmom-peel-preregistration-amendment.md section 5, whose bias
+# row reads ALL replicates including refused ones for exactly this reason.
+# These rows stay as regression cover, not as evidence of acceptance.
 
 
-def _concentration_params() -> list[object]:
-    params: list[object] = []
-    for name in REGIMES:
-        marks = []
-        if name in _FIRING_REGIMES:
-            marks.append(
-                pytest.mark.xfail(
-                    strict=True,
-                    reason=(
-                        "finding: docs/findings/ebmom-missing-sampling-variance-peel.md "
-                        f"(regime {name!r}; severity WRONG_NUMBER; no binomial "
-                        "sampling-variance peel before the moment inversion)"
-                    ),
-                )
-            )
-        params.append(pytest.param(name, marks=marks))
-    return params
-
-
-@pytest.mark.parametrize("name", _concentration_params())
+@pytest.mark.parametrize("name", list(REGIMES))
 def test_concentration_recovery(name: str, measurements: dict[str, RegimeMeasurement]) -> None:
     """The recovered concentration sits within CONC_REL_TOL of truth.
 
