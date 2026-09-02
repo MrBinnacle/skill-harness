@@ -5,8 +5,8 @@
 **Generator:** `scripts/mutation_receipt.py`. **Machine-readable record:**
 `docs/assurance/nan-score-refusal-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/subject/ingest.py` at
-`sha256:5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1`.
-**Commit at generation:** `53b9e95d` — informational only. A rebase rewrites it and later
+`sha256:958e44f8261da094af648fc722fceddf008be7f16ac767afcb5feb8231e0eb2e`.
+**Commit at generation:** `d1bc366` — informational only. A rebase rewrites it and later
 commits move HEAD past it, so currency is checked against the digest above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
 
