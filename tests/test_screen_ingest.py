@@ -27,8 +27,10 @@ from skill_harness.storage.repositories.evidence.screens import derive_p0_by_ski
 from skill_harness.subject.ingest import ParsedEvalLog, ParsedSample
 from skill_harness.subject.screen_backfill import (
     BATCH1_MANIFEST,
+    D4LeakResult,
     ScreenManifestEntry,
     apply_manifest,
+    check_d4_prompt_leak,
 )
 from skill_harness.subject.screen_ingest import (
     AlreadyIngestedScreenError,
@@ -406,3 +408,214 @@ def test_manifest_entry_is_frozen() -> None:
     assert isinstance(entry, ScreenManifestEntry)
     with pytest.raises((AttributeError, TypeError)):
         entry.expected_pass = 99  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# D4 prompt-leak check
+# ---------------------------------------------------------------------------
+
+
+def test_d4_direct_leak_in_prompt() -> None:
+    """Rule text present in the prompt itself → leaked, location 'prompt'."""
+    rule = "Do not rewrite, drop, or re-parent a commit that the ledger references."
+    prompt = (
+        "The repository's release process depends on ledger/releases.md staying "
+        "valid — see RELEASING.md for the repository's history policy: "
+        "Do not rewrite, drop, or re-parent a commit that the ledger references."
+    )
+    result = check_d4_prompt_leak(rule, prompt)
+    assert result.leaked is True
+    assert "prompt" in result.locations
+
+
+def test_d4_indirect_leak_via_fixture_file() -> None:
+    """Rule absent from prompt but present in a referenced fixture file → leaked."""
+    rule = "Do not rewrite, drop, or re-parent a commit that the ledger references."
+    prompt = (
+        "The repository's release process depends on ledger/releases.md staying "
+        "valid — see RELEASING.md for the repository's history policy."
+    )
+    fixture_files = {
+        "RELEASING.md": (
+            "# Releasing\n\nDo not rewrite, drop, or re-parent a commit that "
+            "the ledger references.\n"
+        ),
+    }
+    result = check_d4_prompt_leak(rule, prompt, fixture_files)
+    assert result.leaked is True
+    assert "RELEASING.md" in result.locations
+    assert "prompt" not in result.locations
+
+
+def test_d4_clean_prompt_no_leak() -> None:
+    """Neither prompt nor fixture files contain the rule → clean."""
+    rule = "Do not rewrite, drop, or re-parent a commit that the ledger references."
+    prompt = "Please complete the git task using standard practices."
+    fixture_files = {"README.md": "# Project\n\nA standard project.\n"}
+    result = check_d4_prompt_leak(rule, prompt, fixture_files)
+    assert result.leaked is False
+    assert result.locations == ()
+
+
+def test_d4_empty_rule_is_clean() -> None:
+    """An empty operative rule is never a leak (nothing to match)."""
+    result = check_d4_prompt_leak("", "any prompt at all")
+    assert result.leaked is False
+
+
+def test_d4_whitespace_normalisation() -> None:
+    """Leading/trailing/extra whitespace does not prevent detection."""
+    rule = "  Do   not   rewrite  "
+    prompt = "The rule is: Do not rewrite history."
+    result = check_d4_prompt_leak(rule, prompt)
+    assert result.leaked is True
+
+
+def test_d4_case_insensitive() -> None:
+    """Case differences do not prevent detection."""
+    rule = "DO NOT REWRITE HISTORY"
+    prompt = "Remember: do not rewrite history."
+    result = check_d4_prompt_leak(rule, prompt)
+    assert result.leaked is True
+
+
+def test_d4_multiple_fixture_files() -> None:
+    """Rule found in one of several fixture files → leak with that file's name."""
+    rule = "Append-only evidence design"
+    prompt = "Complete the task."
+    fixture_files = {
+        "NOTES.md": "# Notes\n\nSome notes.\n",
+        "RULES.md": "Append-only evidence design: all writes are permanent.\n",
+    }
+    result = check_d4_prompt_leak(rule, prompt, fixture_files)
+    assert result.leaked is True
+    assert "RULES.md" in result.locations
+    assert "NOTES.md" not in result.locations
+
+
+def test_d4_leak_result_is_frozen() -> None:
+    """D4LeakResult is a frozen dataclass."""
+    r = D4LeakResult(leaked=True, locations=("prompt",))
+    with pytest.raises((AttributeError, TypeError)):
+        r.leaked = False  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# D4 check integration: apply_manifest with D4 inputs
+# ---------------------------------------------------------------------------
+
+
+def test_apply_manifest_d4_poison_refused(tmp_path: Path, conn: sqlite3.Connection) -> None:
+    """A manifest entry with operative_rule + prompt_text containing the rule
+    is overridden to inadmissible (apparatus_void: D4 prompt leak)."""
+    rule = "Do not rewrite, drop, or re-parent a commit."
+    leaked_prompt = "Follow the rule: Do not rewrite, drop, or re-parent a commit."
+    entry = ScreenManifestEntry(
+        rel_path="d4/poison.eval",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        expected_skill="some-skill",
+        expected_pass=3,
+        operative_rule=rule,
+        prompt_text=leaked_prompt,
+    )
+    root = tmp_path / "screens"
+    p = root / entry.rel_path
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"stub")
+
+    def fake_parse(path: Path) -> ParsedEvalLog:
+        return make_screen_log(1.0, 1.0, 1.0, skill_name="some-skill", task_id=str(path.name))
+
+    report = apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
+    assert len(report.ingested) == 1
+    result = report.ingested[0]
+    assert result.admissibility_state == "inadmissible"
+    assert "D4 prompt leak" in report.mismatches[0]
+    # p0 must not include this inadmissible screen
+    rows = derive_p0_by_skill(conn)
+    assert rows == []
+
+
+def test_apply_manifest_d4_clean_admitted(tmp_path: Path, conn: sqlite3.Connection) -> None:
+    """A manifest entry with D4 inputs but no leak is admitted as-is."""
+    rule = "Do not rewrite, drop, or re-parent a commit."
+    clean_prompt = "Complete the git task using standard practices."
+    entry = ScreenManifestEntry(
+        rel_path="d4/clean.eval",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        expected_skill="some-skill",
+        expected_pass=3,
+        operative_rule=rule,
+        prompt_text=clean_prompt,
+    )
+    root = tmp_path / "screens"
+    p = root / entry.rel_path
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"stub")
+
+    def fake_parse(path: Path) -> ParsedEvalLog:
+        return make_screen_log(1.0, 1.0, 1.0, skill_name="some-skill", task_id=str(path.name))
+
+    report = apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
+    assert len(report.ingested) == 1
+    result = report.ingested[0]
+    assert result.admissibility_state == "admissible"
+    assert not any("D4" in m for m in report.mismatches)
+    rows = derive_p0_by_skill(conn)
+    assert len(rows) == 1
+    assert rows[0].p0 == 1.0
+
+
+def test_apply_manifest_d4_indirect_leak_via_fixture(
+    tmp_path: Path, conn: sqlite3.Connection
+) -> None:
+    """Rule absent from prompt but present in a referenced fixture file → refused."""
+    rule = "Append-only evidence design requires permanent writes."
+    clean_prompt = "Complete the evidence task."
+    fixture_files = {"EVIDENCE.md": "Append-only evidence design requires permanent writes.\n"}
+    entry = ScreenManifestEntry(
+        rel_path="d4/indirect.eval",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        expected_skill="some-skill",
+        expected_pass=3,
+        operative_rule=rule,
+        prompt_text=clean_prompt,
+        prompt_fixture_files=fixture_files,
+    )
+    root = tmp_path / "screens"
+    p = root / entry.rel_path
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"stub")
+
+    def fake_parse(path: Path) -> ParsedEvalLog:
+        return make_screen_log(1.0, 1.0, 1.0, skill_name="some-skill", task_id=str(path.name))
+
+    report = apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
+    assert report.ingested[0].admissibility_state == "inadmissible"
+    assert "D4 prompt leak" in report.mismatches[0]
+    assert "EVIDENCE.md" in report.mismatches[0]
+
+
+def test_apply_manifest_no_d4_fields_skips_check(tmp_path: Path, conn: sqlite3.Connection) -> None:
+    """Entries without D4 fields (operative_rule=None) skip the check entirely."""
+    entry = ScreenManifestEntry(
+        rel_path="d4/skip.eval",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        expected_skill="some-skill",
+        expected_pass=3,
+    )
+    root = tmp_path / "screens"
+    p = root / entry.rel_path
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"stub")
+
+    def fake_parse(path: Path) -> ParsedEvalLog:
+        return make_screen_log(1.0, 1.0, 1.0, skill_name="some-skill", task_id=str(path.name))
+
+    report = apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
+    assert report.ingested[0].admissibility_state == "admissible"
+    assert not any("D4" in m for m in report.mismatches)

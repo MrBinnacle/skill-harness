@@ -41,9 +41,10 @@ for a follow-up; do NOT hand-assemble it into a single evidence-admissible scree
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from skill_harness.storage.repositories.evidence.screens import derive_p0_by_skill
@@ -55,6 +56,71 @@ from skill_harness.subject.screen_ingest import (
     write_screen_evidence,
 )
 
+# ---------------------------------------------------------------------------
+# D4 leak check — prompt text or fixture files leaking the skill's rule
+# ---------------------------------------------------------------------------
+
+_D4_LEAK_REASON = "apparatus_void: D4 prompt leak"
+
+
+@dataclass(frozen=True)
+class D4LeakResult:
+    """Result of a D4 prompt-leak check.
+
+    ``leaked`` is True when the skill's operative rule was found in the prompt
+    text or in any fixture file the prompt references.  ``locations`` names
+    where the rule appeared (e.g. ``"prompt"`` or ``"RELEASING.md"``).
+    """
+
+    leaked: bool
+    locations: tuple[str, ...] = ()
+
+
+def check_d4_prompt_leak(
+    operative_rule: str,
+    prompt_text: str,
+    prompt_fixture_files: dict[str, str] | None = None,
+) -> D4LeakResult:
+    """Check whether a screen prompt leaks the skill's operative rule (D4).
+
+    The check searches:
+
+    1. The **prompt text** itself (direct leak — e.g. ``appendonly``, ``bayes``,
+       ``judgegate``).
+    2. Every **fixture file** the prompt names or references (indirect /
+       one-hop leak — e.g. ``gitpull`` pointing at ``RELEASING.md``).
+
+    Both the rule and the searched text are normalised (lowercased, whitespace
+    collapsed) before comparison, so phrasing variation does not produce false
+    negatives.
+
+    Returns a :class:`D4LeakResult` stating whether a leak was found and where.
+    """
+    rule_norm = _normalise(operative_rule)
+    if not rule_norm:
+        return D4LeakResult(leaked=False)
+
+    locations: list[str] = []
+
+    # 1. Direct check: rule in prompt text.
+    if rule_norm in _normalise(prompt_text):
+        locations.append("prompt")
+
+    # 2. Indirect check: rule in fixture files the prompt references.
+    if prompt_fixture_files:
+        for filename, content in prompt_fixture_files.items():
+            if rule_norm in _normalise(content):
+                locations.append(filename)
+
+    if locations:
+        return D4LeakResult(leaked=True, locations=tuple(locations))
+    return D4LeakResult(leaked=False)
+
+
+def _normalise(text: str) -> str:
+    """Lower-case and collapse whitespace for comparison."""
+    return re.sub(r"\s+", " ", text.lower()).strip()
+
 
 @dataclass(frozen=True)
 class ScreenManifestEntry:
@@ -64,6 +130,11 @@ class ScreenManifestEntry:
     ``.private/microrun`` tree). ``expected_skill`` / ``expected_pass`` are
     self-checks: the apply step surfaces any disagreement with the stored
     evidence rather than trusting the manifest blindly.
+
+    When ``operative_rule`` and ``prompt_text`` are set, ``apply_manifest``
+    runs the D4 prompt-leak check and overrides ``admissibility_state`` to
+    ``inadmissible`` (with reason ``apparatus_void: D4 prompt leak``) if the
+    rule is found in the prompt text or any of the ``prompt_fixture_files``.
     """
 
     rel_path: str
@@ -71,6 +142,9 @@ class ScreenManifestEntry:
     inadmissibility_reason: str | None
     expected_skill: str
     expected_pass: int  # expected passing epochs in THIS log (audit self-check)
+    operative_rule: str | None = None
+    prompt_text: str | None = None
+    prompt_fixture_files: dict[str, str] = field(default_factory=dict)
 
 
 # Curated batch-1 manifest. Paths are under the gitignored .private/microrun
@@ -148,11 +222,28 @@ def apply_manifest(
         if not path.is_file():
             raise FileNotFoundError(f"manifest log not found: {path}")
         parsed = parse(path)
+
+        # --- D4 prompt-leak check (when manifest supplies the inputs) ---------
+        admissibility = entry.admissibility_state
+        reason = entry.inadmissibility_reason
+        if entry.operative_rule is not None and entry.prompt_text is not None:
+            leak = check_d4_prompt_leak(
+                entry.operative_rule,
+                entry.prompt_text,
+                entry.prompt_fixture_files or None,
+            )
+            if leak.leaked:
+                admissibility = "inadmissible"
+                reason = _D4_LEAK_REASON
+                mismatches.append(
+                    f"{entry.rel_path}: D4 prompt leak detected in {', '.join(leak.locations)}"
+                )
+
         result = write_screen_evidence(
             parsed=parsed,
             source_eval_sha256=_sha256_file(path),
-            admissibility_state=entry.admissibility_state,
-            inadmissibility_reason=entry.inadmissibility_reason,
+            admissibility_state=admissibility,
+            inadmissibility_reason=reason,
             conn=conn,
         )
         ingested.append(result)
@@ -173,8 +264,10 @@ def apply_manifest(
 __all__ = [
     "BATCH1_MANIFEST",
     "BackfillReport",
+    "D4LeakResult",
     "ScreenManifestEntry",
     "apply_manifest",
+    "check_d4_prompt_leak",
     "derive_p0_by_skill",
     "ingest_screen_eval_log",
 ]
