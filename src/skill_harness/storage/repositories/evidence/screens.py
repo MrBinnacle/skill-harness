@@ -105,6 +105,118 @@ def get_screen_run_by_id(conn: sqlite3.Connection, screen_run_id: str) -> dict[s
     return dict(zip(cols, row, strict=True))
 
 
+def supersede_screen_run(
+    conn: sqlite3.Connection,
+    *,
+    superseded_screen_run_id: str,
+    reason: str,
+    admissibility_state: str,
+    inadmissibility_reason: str | None,
+    skill_name: str,
+    subject_model: str,
+    harness_pin_fingerprint: str | None,
+    source_eval_task_id: str,
+    source_eval_sha256: str,
+    created_at: str,
+) -> str:
+    """Append a new screen_run row that supersedes an existing one.
+
+    The superseded row is never touched. The new row carries the corrected
+    admissibility and copies the trials from the superseded run. Returns
+    the new screen_run_id.
+
+    :raises SupersededScreenRunError: the superseded screen_run_id does not
+        exist or is already superseded.
+    """
+    existing = get_screen_run_by_id(conn, superseded_screen_run_id)
+    if existing is None:
+        raise SupersededScreenRunError(
+            f"screen_run_id {superseded_screen_run_id!r} not found; "
+            "cannot supersede a nonexistent run"
+        )
+
+    already = conn.execute(
+        "SELECT 1 FROM screen_run_supersessions "
+        "WHERE superseded_screen_run_id = ?",
+        (superseded_screen_run_id,),
+    ).fetchone()
+    if already is not None:
+        raise SupersededScreenRunError(
+            f"screen_run_id {superseded_screen_run_id!r} is already superseded"
+        )
+
+    import hashlib
+    import uuid
+    from datetime import UTC, datetime
+
+    new_id = hashlib.sha256(
+        f"screen-supersede:{superseded_screen_run_id}:{reason}".encode()
+    ).hexdigest()
+    now = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+    conn.execute(
+        """
+        INSERT INTO screen_runs (
+            screen_run_id, skill_name, subject_model, harness_pin_fingerprint,
+            source_eval_task_id, source_eval_sha256, admissibility_state,
+            inadmissibility_reason, created_at, ingested_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            new_id,
+            skill_name,
+            subject_model,
+            harness_pin_fingerprint,
+            source_eval_task_id,
+            source_eval_sha256,
+            admissibility_state,
+            inadmissibility_reason,
+            created_at,
+            now,
+        ),
+    )
+
+    # Copy trials from the superseded run
+    trials = conn.execute(
+        "SELECT epoch, passed, scorer_name, scorer_explanation, output_sha256 "
+        "FROM screen_trials WHERE screen_run_id = ? ORDER BY epoch",
+        (superseded_screen_run_id,),
+    ).fetchall()
+    for epoch, passed, scorer_name, scorer_explanation, output_sha256 in trials:
+        conn.execute(
+            """
+            INSERT INTO screen_trials (
+                screen_trial_id, screen_run_id, epoch, passed, scorer_name,
+                scorer_explanation, output_sha256, sampled_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                new_id,
+                epoch,
+                passed,
+                scorer_name,
+                scorer_explanation,
+                output_sha256,
+                now,
+            ),
+        )
+
+    conn.execute(
+        "INSERT INTO screen_run_supersessions "
+        "(superseded_screen_run_id, reason) VALUES (?, ?)",
+        (superseded_screen_run_id, reason),
+    )
+
+    return new_id
+
+
+class SupersededScreenRunError(ValueError):
+    """Raised when a supersession operation references an invalid screen_run_id."""
+
+
 class ScreenP0(NamedTuple):
     """Derived p0 for one skill: the bare (Null) arm's pass rate over admissible trials."""
 
@@ -140,6 +252,9 @@ def derive_p0_by_skill(conn: sqlite3.Connection, *, fresh_pin: str | None = None
             FROM screen_runs sr
             JOIN screen_trials st ON st.screen_run_id = sr.screen_run_id
             WHERE sr.admissibility_state = 'admissible'
+              AND sr.screen_run_id NOT IN (
+                  SELECT superseded_screen_run_id FROM screen_run_supersessions
+              )
             GROUP BY sr.skill_name
             ORDER BY sr.skill_name
             """
@@ -155,6 +270,9 @@ def derive_p0_by_skill(conn: sqlite3.Connection, *, fresh_pin: str | None = None
             JOIN screen_trials st ON st.screen_run_id = sr.screen_run_id
             WHERE sr.admissibility_state = 'admissible'
               AND sr.harness_pin_fingerprint = ?
+              AND sr.screen_run_id NOT IN (
+                  SELECT superseded_screen_run_id FROM screen_run_supersessions
+              )
             GROUP BY sr.skill_name
             ORDER BY sr.skill_name
             """,

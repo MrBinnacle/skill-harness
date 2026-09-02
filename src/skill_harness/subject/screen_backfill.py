@@ -47,7 +47,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from skill_harness.storage.repositories.evidence.screens import derive_p0_by_skill
+from skill_harness.storage.repositories.evidence.screens import (
+    derive_p0_by_skill,
+    get_screen_run_by_id,
+    supersede_screen_run,
+)
 from skill_harness.subject.ingest import ParsedEvalLog, parse_eval_log
 from skill_harness.subject.screen_ingest import (
     AdmissibilityState,
@@ -386,6 +390,7 @@ __all__ = [
     "derive_p0_by_skill",
     "format_d4_leak_reason",
     "ingest_screen_eval_log",
+    "supersede_d4_screen_runs",
 ]
 
 
@@ -393,3 +398,64 @@ def _sha256_file(path: Path) -> str:
     import hashlib
 
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# D4 re-disposition — supersede the four D4-affected rows (#402)
+# ---------------------------------------------------------------------------
+
+_D4_REDISPOSITION_SKILLS = (
+    "git-pull-rebase-trap",
+    "append-only-evidence-design",
+    "bayesian-eval-discipline",
+)
+
+_D4_REDISPOSITION_REASON = "apparatus_void: D4 prompt leak; hit=prompt; searched=prompt"
+
+
+def supersede_d4_screen_runs(conn: sqlite3.Connection) -> list[str]:
+    """Supersede the three D4-affected admissible screen runs (#402).
+
+    The fourth skill (sqlite-tie-break-red-test-trap) stands on D4 ground and
+    is not superseded through this path (see the stale-pin ground in the D4
+    finding).
+
+    For each skill in ``_D4_REDISPOSITION_SKILLS``, finds the admissible row
+    (the one originally backfilled as ``CANT_TELL_YET``) and supersedes it
+    with an inadmissible corrected row. Returns the list of superseded
+    screen_run_ids.
+    """
+    superseded_ids: list[str] = []
+    for skill_name in _D4_REDISPOSITION_SKILLS:
+        rows = conn.execute(
+            "SELECT screen_run_id FROM screen_runs "
+            "WHERE skill_name = ? AND admissibility_state = 'admissible'",
+            (skill_name,),
+        ).fetchall()
+        for (screen_run_id,) in rows:
+            existing = get_screen_run_by_id(conn, screen_run_id)
+            if existing is None:
+                continue
+            # Check if already superseded
+            already = conn.execute(
+                "SELECT 1 FROM screen_run_supersessions "
+                "WHERE superseded_screen_run_id = ?",
+                (screen_run_id,),
+            ).fetchone()
+            if already is not None:
+                continue
+            supersede_screen_run(
+                conn,
+                superseded_screen_run_id=screen_run_id,
+                reason=_D4_REDISPOSITION_REASON,
+                admissibility_state="inadmissible",
+                inadmissibility_reason=_D4_REDISPOSITION_REASON,
+                skill_name=existing["skill_name"],
+                subject_model=existing["subject_model"],
+                harness_pin_fingerprint=existing["harness_pin_fingerprint"],
+                source_eval_task_id=existing["source_eval_task_id"],
+                source_eval_sha256=existing["source_eval_sha256"],
+                created_at=existing["created_at"],
+            )
+            superseded_ids.append(screen_run_id)
+    return superseded_ids

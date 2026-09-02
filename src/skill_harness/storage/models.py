@@ -753,6 +753,21 @@ class ScreenTrialWrite(BaseModel):
         return v
 
 
+class ScreenRunSupersessionWrite(BaseModel):
+    """Insert shape for evidence.screen_run_supersessions (migration 0900)."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    superseded_screen_run_id: str
+    reason: str
+
+    @field_validator("superseded_screen_run_id", "reason")
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+
 class TaskFrontierObservationWrite(BaseModel):
     """Insert shape for the three task-frontier phase partitions (migration 0700).
 
