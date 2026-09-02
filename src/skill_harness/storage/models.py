@@ -759,9 +759,10 @@ class ScreenRunSupersessionWrite(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
     superseded_screen_run_id: str
+    superseding_screen_run_id: str
     reason: str
 
-    @field_validator("superseded_screen_run_id", "reason")
+    @field_validator("superseded_screen_run_id", "superseding_screen_run_id", "reason")
     @classmethod
     def no_control_chars(cls, v: str, info: object) -> str:
         field_name = getattr(info, "field_name", "field") if info else "field"

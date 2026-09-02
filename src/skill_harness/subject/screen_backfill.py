@@ -401,32 +401,48 @@ def _sha256_file(path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# D4 re-disposition — supersede the four D4-affected rows (#402)
+# D4 / stale-pin re-disposition — supersede the four disposition-table rows (#402)
 # ---------------------------------------------------------------------------
+#
+# docs/findings/d4-prompt-leak-into-null-arm.md disposition table:
+#   git-pull-rebase-trap          → apparatus_void D4 (leak site: RELEASING.md)
+#   append-only-evidence-design   → apparatus_void D4 (leak site: prompt text)
+#   bayesian-eval-discipline      → apparatus_void D4 (leak site: prompt text)
+#   sqlite-tie-break-red-test-trap → stands on D4; voided on the stale-pin ground
+#
+# Reasons use the #401 format for D4 voids (hit=...; searched=...).
 
-_D4_REDISPOSITION_SKILLS = (
-    "git-pull-rebase-trap",
-    "append-only-evidence-design",
-    "bayesian-eval-discipline",
+_D4_REDISPOSITION: dict[str, str] = {
+    "git-pull-rebase-trap": (
+        "apparatus_void: D4 prompt leak; hit=RELEASING.md; searched=prompt,RELEASING.md"
+    ),
+    "append-only-evidence-design": ("apparatus_void: D4 prompt leak; hit=prompt; searched=prompt"),
+    "bayesian-eval-discipline": ("apparatus_void: D4 prompt leak; hit=prompt; searched=prompt"),
+}
+
+_STALE_PIN_REDISPOSITION_SKILL = "sqlite-tie-break-red-test-trap"
+_STALE_PIN_REDISPOSITION_REASON = (
+    "apparatus_void: stale harness pin; stored fingerprint does not match the running instrument"
 )
-
-_D4_REDISPOSITION_REASON = "apparatus_void: D4 prompt leak; hit=prompt; searched=prompt"
 
 
 def supersede_d4_screen_runs(conn: sqlite3.Connection) -> list[str]:
-    """Supersede the three D4-affected admissible screen runs (#402).
+    """Supersede the four disposition-table screen runs (#402).
 
-    The fourth skill (sqlite-tie-break-red-test-trap) stands on D4 ground and
-    is not superseded through this path (see the stale-pin ground in the D4
-    finding).
+    Three skills are voided on D4 ground with the #401 reason format naming
+    the leak site. ``sqlite-tie-break-red-test-trap`` stands on D4 (prompt is
+    clean) and is voided on the independent stale-pin ground instead.
 
-    For each skill in ``_D4_REDISPOSITION_SKILLS``, finds the admissible row
-    (the one originally backfilled as ``CANT_TELL_YET``) and supersedes it
-    with an inadmissible corrected row. Returns the list of superseded
-    screen_run_ids.
+    For each target skill, finds admissible rows that are not already
+    superseded and appends an inadmissible correction. Returns the list of
+    superseded screen_run_ids.
     """
     superseded_ids: list[str] = []
-    for skill_name in _D4_REDISPOSITION_SKILLS:
+    targets: list[tuple[str, str]] = [
+        *[(name, reason) for name, reason in _D4_REDISPOSITION.items()],
+        (_STALE_PIN_REDISPOSITION_SKILL, _STALE_PIN_REDISPOSITION_REASON),
+    ]
+    for skill_name, reason in targets:
         rows = conn.execute(
             "SELECT screen_run_id FROM screen_runs "
             "WHERE skill_name = ? AND admissibility_state = 'admissible'",
@@ -436,10 +452,8 @@ def supersede_d4_screen_runs(conn: sqlite3.Connection) -> list[str]:
             existing = get_screen_run_by_id(conn, screen_run_id)
             if existing is None:
                 continue
-            # Check if already superseded
             already = conn.execute(
-                "SELECT 1 FROM screen_run_supersessions "
-                "WHERE superseded_screen_run_id = ?",
+                "SELECT 1 FROM screen_run_supersessions WHERE superseded_screen_run_id = ?",
                 (screen_run_id,),
             ).fetchone()
             if already is not None:
@@ -447,9 +461,9 @@ def supersede_d4_screen_runs(conn: sqlite3.Connection) -> list[str]:
             supersede_screen_run(
                 conn,
                 superseded_screen_run_id=screen_run_id,
-                reason=_D4_REDISPOSITION_REASON,
+                reason=reason,
                 admissibility_state="inadmissible",
-                inadmissibility_reason=_D4_REDISPOSITION_REASON,
+                inadmissibility_reason=reason,
                 skill_name=existing["skill_name"],
                 subject_model=existing["subject_model"],
                 harness_pin_fingerprint=existing["harness_pin_fingerprint"],

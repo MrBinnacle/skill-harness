@@ -2,11 +2,11 @@
 
 A supersession appends a new row carrying corrected admissibility and a pointer
 to the row it replaces. The superseded row is never touched. derive_p0_by_skill
-excludes rows that have been superseded.
+and select_stale_pin_skills exclude rows that have been superseded.
 
 See issue #402 and docs/findings/d4-prompt-leak-into-null-arm.md for the problem
-this mechanism solves: four D4-voided rows cannot be re-dispositioned because
-screen_runs has no supersession path.
+this mechanism solves: four disposition-table rows cannot be re-dispositioned
+because screen_runs has no supersession path.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from skill_harness.storage.repositories.evidence.screens import (
     SupersededScreenRunError,
     derive_p0_by_skill,
     get_screen_run_by_id,
+    select_stale_pin_skills,
     supersede_screen_run,
 )
 from skill_harness.subject.ingest import ParsedEvalLog, ParsedSample
@@ -29,6 +30,7 @@ from skill_harness.subject.screen_backfill import supersede_d4_screen_runs
 from skill_harness.subject.screen_ingest import write_screen_evidence
 
 PIN_FP = "fp-deadbeef"
+FRESH_PIN = "fp-fresh-aaaa"
 
 
 @pytest.fixture
@@ -79,6 +81,29 @@ def make_screen_log(
     )
 
 
+def _supersede_as_inadmissible(
+    conn: sqlite3.Connection,
+    original_id: str,
+    *,
+    reason: str = "apparatus_void: D4 prompt leak; hit=prompt; searched=prompt",
+) -> str:
+    original_row = get_screen_run_by_id(conn, original_id)
+    assert original_row is not None
+    return supersede_screen_run(
+        conn,
+        superseded_screen_run_id=original_id,
+        reason=reason,
+        admissibility_state="inadmissible",
+        inadmissibility_reason=reason,
+        skill_name=original_row["skill_name"],
+        subject_model=original_row["subject_model"],
+        harness_pin_fingerprint=original_row["harness_pin_fingerprint"],
+        source_eval_task_id=original_row["source_eval_task_id"],
+        source_eval_sha256=original_row["source_eval_sha256"],
+        created_at=original_row["created_at"],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Criterion 1: Migration adds the supersession table; triggers unchanged
 # ---------------------------------------------------------------------------
@@ -91,15 +116,12 @@ class TestCriterion1Migration:
         cols = {row[1] for row in cur.fetchall()}
         assert "restamp_id" in cols
         assert "superseded_screen_run_id" in cols
+        assert "superseding_screen_run_id" in cols
         assert "reason" in cols
         assert "recorded_at" in cols
 
     def test_screen_runs_update_still_aborts(self, conn: sqlite3.Connection) -> None:
-        """AC1: the existing no_update trigger on screen_runs is unchanged.
-
-        A test that existed BEFORE this change and still passes: INSERT a row,
-        then attempt UPDATE. The trigger must raise append_only_violation.
-        """
+        """AC1: the existing no_update trigger on screen_runs is unchanged."""
         conn.execute(
             "INSERT INTO screen_runs "
             "(screen_run_id, skill_name, subject_model, harness_pin_fingerprint, "
@@ -138,8 +160,17 @@ class TestCriterion1Migration:
             " 'admissible', NULL, '2026-07-10T12:00:00Z', '2026-07-10T12:00:00Z')"
         )
         conn.execute(
+            "INSERT INTO screen_runs "
+            "(screen_run_id, skill_name, subject_model, harness_pin_fingerprint, "
+            " source_eval_task_id, source_eval_sha256, admissibility_state, "
+            " inadmissibility_reason, created_at, ingested_at) "
+            "VALUES ('sr-ao-child', 'some-skill', 'm', NULL, 't3b', 's3b', "
+            " 'inadmissible', 'test', '2026-07-10T12:00:00Z', '2026-07-10T12:00:00Z')"
+        )
+        conn.execute(
             "INSERT INTO screen_run_supersessions "
-            "(superseded_screen_run_id, reason) VALUES ('sr-ao-parent', 'test')"
+            "(superseded_screen_run_id, superseding_screen_run_id, reason) "
+            "VALUES ('sr-ao-parent', 'sr-ao-child', 'test')"
         )
         with pytest.raises(
             sqlite3.IntegrityError,
@@ -163,7 +194,8 @@ class TestCriterion1Migration:
         with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY constraint failed"):
             conn.execute(
                 "INSERT INTO screen_run_supersessions "
-                "(superseded_screen_run_id, reason) VALUES ('nonexistent-id', 'test')"
+                "(superseded_screen_run_id, superseding_screen_run_id, reason) "
+                "VALUES ('nonexistent-id', 'also-missing', 'test')"
             )
 
 
@@ -173,12 +205,9 @@ class TestCriterion1Migration:
 
 
 class TestCriterion2SupersessionAppends:
-    def test_supersede_appends_row_and_original_unchanged(
-        self, conn: sqlite3.Connection
-    ) -> None:
+    def test_supersede_appends_row_and_original_unchanged(self, conn: sqlite3.Connection) -> None:
         """AC2: a supersession writes a NEW screen_runs row and the old row is
         byte-identical to what it was before."""
-        # Write the original admissible run
         result = write_screen_evidence(
             parsed=make_screen_log(1.0, 1.0, 1.0, task_id="orig-task"),
             source_eval_sha256="sha-orig",
@@ -187,51 +216,35 @@ class TestCriterion2SupersessionAppends:
             conn=conn,
         )
         original_id = result.screen_run_id
-
-        # Snapshot the original row before supersession
         original_row = get_screen_run_by_id(conn, original_id)
         assert original_row is not None
         original_snapshot = dict(original_row)
 
-        # Supersede it
-        supersede_screen_run(
+        new_id = _supersede_as_inadmissible(
             conn,
-            superseded_screen_run_id=original_id,
+            original_id,
             reason="apparatus_void: D4 prompt leak; hit=prompt; searched=prompt",
-            admissibility_state="inadmissible",
-            inadmissibility_reason="apparatus_void: D4 prompt leak; hit=prompt; searched=prompt",
-            skill_name=original_snapshot["skill_name"],
-            subject_model=original_snapshot["subject_model"],
-            harness_pin_fingerprint=original_snapshot["harness_pin_fingerprint"],
-            source_eval_task_id=original_snapshot["source_eval_task_id"],
-            source_eval_sha256=original_snapshot["source_eval_sha256"],
-            created_at=original_snapshot["created_at"],
         )
 
-        # The original row is byte-identical
         after = get_screen_run_by_id(conn, original_id)
         assert after is not None
         for key, value in original_snapshot.items():
             assert after[key] == value, f"{key} changed"
 
-        # A new row exists with corrected admissibility
-        all_runs = conn.execute(
-            "SELECT screen_run_id, admissibility_state, inadmissibility_reason "
-            "FROM screen_runs WHERE skill_name = 'some-skill' "
-            "ORDER BY ingested_at"
-        ).fetchall()
-        assert len(all_runs) == 2
-        new_id = next(r[0] for r in all_runs if r[0] != original_id)
-        new_state = next(r[1] for r in all_runs if r[0] == new_id)
-        assert new_state == "inadmissible"
+        new_row = get_screen_run_by_id(conn, new_id)
+        assert new_row is not None
+        assert new_row["admissibility_state"] == "inadmissible"
+        assert new_row["inadmissibility_reason"] is not None
+        assert new_row["inadmissibility_reason"].startswith("apparatus_void:")
 
-        # The supersession record exists
         supersession = conn.execute(
-            "SELECT superseded_screen_run_id, reason FROM screen_run_supersessions"
+            "SELECT superseded_screen_run_id, superseding_screen_run_id, reason "
+            "FROM screen_run_supersessions"
         ).fetchone()
         assert supersession is not None
         assert supersession[0] == original_id
-        assert supersession[1].startswith("apparatus_void:")
+        assert supersession[1] == new_id
+        assert supersession[2].startswith("apparatus_void:")
 
     def test_supersede_copies_trials(self, conn: sqlite3.Connection) -> None:
         """The new run carries the same trials as the superseded run."""
@@ -248,27 +261,8 @@ class TestCriterion2SupersessionAppends:
             (original_id,),
         ).fetchall()
 
-        original_row = get_screen_run_by_id(conn, original_id)
-        assert original_row is not None
-        supersede_screen_run(
-            conn,
-            superseded_screen_run_id=original_id,
-            reason="apparatus_void: D4 prompt leak",
-            admissibility_state="inadmissible",
-            inadmissibility_reason="apparatus_void: D4 prompt leak",
-            skill_name=original_row["skill_name"],
-            subject_model=original_row["subject_model"],
-            harness_pin_fingerprint=original_row["harness_pin_fingerprint"],
-            source_eval_task_id=original_row["source_eval_task_id"],
-            source_eval_sha256=original_row["source_eval_sha256"],
-            created_at=original_row["created_at"],
-        )
+        new_id = _supersede_as_inadmissible(conn, original_id)
 
-        new_runs = conn.execute(
-            "SELECT screen_run_id FROM screen_runs WHERE screen_run_id != ?",
-            (original_id,),
-        ).fetchall()
-        new_id = new_runs[0][0]
         new_trials = conn.execute(
             "SELECT epoch, passed FROM screen_trials WHERE screen_run_id = ? ORDER BY epoch",
             (new_id,),
@@ -301,21 +295,9 @@ class TestCriterion2SupersessionAppends:
             inadmissibility_reason=None,
             conn=conn,
         )
+        _supersede_as_inadmissible(conn, result.screen_run_id, reason="first supersession")
         original_row = get_screen_run_by_id(conn, result.screen_run_id)
         assert original_row is not None
-        supersede_screen_run(
-            conn,
-            superseded_screen_run_id=result.screen_run_id,
-            reason="first supersession",
-            admissibility_state="inadmissible",
-            inadmissibility_reason="first supersession",
-            skill_name=original_row["skill_name"],
-            subject_model=original_row["subject_model"],
-            harness_pin_fingerprint=original_row["harness_pin_fingerprint"],
-            source_eval_task_id=original_row["source_eval_task_id"],
-            source_eval_sha256=original_row["source_eval_sha256"],
-            created_at=original_row["created_at"],
-        )
         with pytest.raises(SupersededScreenRunError, match="already superseded"):
             supersede_screen_run(
                 conn,
@@ -341,7 +323,6 @@ class TestCriterion3DeriveExcludesSuperseded:
     def test_superseded_run_excluded_from_p0(self, conn: sqlite3.Connection) -> None:
         """AC3: a skill with one superseded admissible run and one superseding
         inadmissible run produces NO p0 row — not a p0 averaged over both."""
-        # Write the original admissible run (3/3 pass)
         result = write_screen_evidence(
             parsed=make_screen_log(1.0, 1.0, 1.0, task_id="p0-super-orig"),
             source_eval_sha256="sha-p0-orig",
@@ -349,26 +330,8 @@ class TestCriterion3DeriveExcludesSuperseded:
             inadmissibility_reason=None,
             conn=conn,
         )
-        original_row = get_screen_run_by_id(conn, result.screen_run_id)
-        assert original_row is not None
+        _supersede_as_inadmissible(conn, result.screen_run_id)
 
-        # Supersede it as inadmissible
-        supersede_screen_run(
-            conn,
-            superseded_screen_run_id=result.screen_run_id,
-            reason="apparatus_void: D4 prompt leak",
-            admissibility_state="inadmissible",
-            inadmissibility_reason="apparatus_void: D4 prompt leak",
-            skill_name=original_row["skill_name"],
-            subject_model=original_row["subject_model"],
-            harness_pin_fingerprint=original_row["harness_pin_fingerprint"],
-            source_eval_task_id=original_row["source_eval_task_id"],
-            source_eval_sha256=original_row["source_eval_sha256"],
-            created_at=original_row["created_at"],
-        )
-
-        # The skill should have NO p0 row: the original is superseded, the
-        # superseding run is inadmissible.
         rows = derive_p0_by_skill(conn)
         assert rows == []
 
@@ -381,21 +344,7 @@ class TestCriterion3DeriveExcludesSuperseded:
             inadmissibility_reason=None,
             conn=conn,
         )
-        original_row = get_screen_run_by_id(conn, result.screen_run_id)
-        assert original_row is not None
-        supersede_screen_run(
-            conn,
-            superseded_screen_run_id=result.screen_run_id,
-            reason="apparatus_void: D4 prompt leak",
-            admissibility_state="inadmissible",
-            inadmissibility_reason="apparatus_void: D4 prompt leak",
-            skill_name=original_row["skill_name"],
-            subject_model=original_row["subject_model"],
-            harness_pin_fingerprint=original_row["harness_pin_fingerprint"],
-            source_eval_task_id=original_row["source_eval_task_id"],
-            source_eval_sha256=original_row["source_eval_sha256"],
-            created_at=original_row["created_at"],
-        )
+        _supersede_as_inadmissible(conn, result.screen_run_id)
 
         rows = derive_p0_by_skill(conn, fresh_pin=PIN_FP)
         assert rows == []
@@ -409,24 +358,25 @@ class TestCriterion3DeriveExcludesSuperseded:
             inadmissibility_reason=None,
             conn=conn,
         )
-        original_row = get_screen_run_by_id(conn, result.screen_run_id)
-        assert original_row is not None
-        supersede_screen_run(
-            conn,
-            superseded_screen_run_id=result.screen_run_id,
-            reason="apparatus_void: D4 prompt leak",
-            admissibility_state="inadmissible",
-            inadmissibility_reason="apparatus_void: D4 prompt leak",
-            skill_name=original_row["skill_name"],
-            subject_model=original_row["subject_model"],
-            harness_pin_fingerprint=original_row["harness_pin_fingerprint"],
-            source_eval_task_id=original_row["source_eval_task_id"],
-            source_eval_sha256=original_row["source_eval_sha256"],
-            created_at=original_row["created_at"],
-        )
+        _supersede_as_inadmissible(conn, result.screen_run_id)
 
         rows = derive_p0_by_skill(conn)
         assert rows == []
+
+    def test_stale_pin_query_excludes_superseded_rows(self, conn: sqlite3.Connection) -> None:
+        """select_stale_pin_skills must not report a skill whose only stale
+        admissible row has been superseded — otherwise screen verdict still
+        prints a stale-pin refusal for a row that no longer enters p0."""
+        result = write_screen_evidence(
+            parsed=make_screen_log(1.0, 1.0, 1.0, fingerprint=PIN_FP, task_id="stale-super"),
+            source_eval_sha256="sha-stale-super",
+            admissibility_state="admissible",
+            inadmissibility_reason=None,
+            conn=conn,
+        )
+        assert select_stale_pin_skills(conn, FRESH_PIN)
+        _supersede_as_inadmissible(conn, result.screen_run_id)
+        assert select_stale_pin_skills(conn, FRESH_PIN) == []
 
 
 # ---------------------------------------------------------------------------
@@ -442,9 +392,11 @@ class TestCriterion4NegativeControl:
             supersede_screen_run(
                 conn,
                 superseded_screen_run_id="dead-beef-cafe",
-                reason="apparatus_void: D4 prompt leak",
+                reason="apparatus_void: D4 prompt leak; hit=prompt; searched=prompt",
                 admissibility_state="inadmissible",
-                inadmissibility_reason="apparatus_void: D4 prompt leak",
+                inadmissibility_reason=(
+                    "apparatus_void: D4 prompt leak; hit=prompt; searched=prompt"
+                ),
                 skill_name="some-skill",
                 subject_model="m",
                 harness_pin_fingerprint=None,
@@ -452,22 +404,25 @@ class TestCriterion4NegativeControl:
                 source_eval_sha256="s",
                 created_at="2026-07-10T12:00:00Z",
             )
-        # Nothing was written to the supersessions table
         assert conn.execute("SELECT count(*) FROM screen_run_supersessions").fetchone()[0] == 0
 
 
 # ---------------------------------------------------------------------------
-# Criterion 5: D4 re-disposition of the three affected skills
+# Criterion 5: Four disposition-table rows re-dispositioned
 # ---------------------------------------------------------------------------
 
 
 class TestCriterion5D4Redisposition:
-    def test_supersede_d4_screen_runs_supersedes_three_skills(
+    def test_supersede_d4_screen_runs_supersedes_four_disposition_rows(
         self, conn: sqlite3.Connection
     ) -> None:
-        """AC5: the three D4-affected skills (git-pull-rebase-trap,
-        append-only-evidence-design, bayesian-eval-discipline) are superseded.
-        sqlite-tie-break-red-test-trap stands on D4 ground and is not touched."""
+        """AC5: all four disposition-table skills are re-dispositioned.
+
+        Three D4 voids carry the #401 hit/searched format with the leak site
+        named in the finding (gitpull → RELEASING.md; appendonly/bayes → prompt).
+        sqlite-tie-break-red-test-trap stands on D4 and is voided on stale-pin
+        ground. After re-disposition no skill remains in p0.
+        """
         skills = {
             "git-pull-rebase-trap": (1.0, 1.0, 1.0),
             "append-only-evidence-design": (1.0, 1.0, 1.0),
@@ -483,56 +438,64 @@ class TestCriterion5D4Redisposition:
                 conn=conn,
             )
 
-        # Before: all four skills have admissible p0
         before = {r.skill_name: r for r in derive_p0_by_skill(conn)}
         assert len(before) == 4
         for name in skills:
             assert before[name].p0 == 1.0
 
-        # Re-disposition
         superseded = supersede_d4_screen_runs(conn)
-        assert len(superseded) == 3
+        assert len(superseded) == 4
 
-        # After: only sqlite-tie-break-red-test-trap remains in p0
-        after = {r.skill_name: r for r in derive_p0_by_skill(conn)}
-        assert len(after) == 1
-        assert "sqlite-tie-break-red-test-trap" in after
+        after = derive_p0_by_skill(conn)
+        assert after == []
 
-        # The three superseded skills are gone from p0
-        for name in (
-            "git-pull-rebase-trap",
-            "append-only-evidence-design",
-            "bayesian-eval-discipline",
-        ):
-            assert name not in after
-
-        # All four original rows still exist (append-only)
         total = conn.execute("SELECT count(*) FROM screen_runs").fetchone()[0]
-        assert total == 7  # 4 original + 3 superseding
+        assert total == 8  # 4 original + 4 superseding
 
-        # The supersession records have the D4 reason format
-        supersessions = conn.execute(
-            "SELECT reason FROM screen_run_supersessions ORDER BY restamp_id"
-        ).fetchall()
-        assert len(supersessions) == 3
-        for (reason,) in supersessions:
-            assert reason.startswith("apparatus_void: D4 prompt leak")
-            assert "hit=prompt" in reason
-            assert "searched=prompt" in reason
+        by_skill_reason = {
+            row[0]: row[1]
+            for row in conn.execute(
+                "SELECT sr.skill_name, ss.reason "
+                "FROM screen_run_supersessions ss "
+                "JOIN screen_runs sr ON sr.screen_run_id = ss.superseded_screen_run_id"
+            ).fetchall()
+        }
+        assert by_skill_reason["git-pull-rebase-trap"] == (
+            "apparatus_void: D4 prompt leak; hit=RELEASING.md; searched=prompt,RELEASING.md"
+        )
+        assert by_skill_reason["append-only-evidence-design"] == (
+            "apparatus_void: D4 prompt leak; hit=prompt; searched=prompt"
+        )
+        assert by_skill_reason["bayesian-eval-discipline"] == (
+            "apparatus_void: D4 prompt leak; hit=prompt; searched=prompt"
+        )
+        assert by_skill_reason["sqlite-tie-break-red-test-trap"].startswith(
+            "apparatus_void: stale harness pin"
+        )
+
+        # With a fresh pin, superseded rows must not surface as stale-pin refusals.
+        assert select_stale_pin_skills(conn, FRESH_PIN) == []
 
     def test_supersede_d4_is_idempotent(self, conn: sqlite3.Connection) -> None:
         """Calling supersede_d4_screen_runs twice does not create duplicate supersessions."""
-        write_screen_evidence(
-            parsed=make_screen_log(
-                1.0, 1.0, 1.0, skill_name="git-pull-rebase-trap", task_id="idem-1"
-            ),
-            source_eval_sha256="sha-idem-1",
-            admissibility_state="admissible",
-            inadmissibility_reason=None,
-            conn=conn,
-        )
+        for skill_name in (
+            "git-pull-rebase-trap",
+            "append-only-evidence-design",
+            "bayesian-eval-discipline",
+            "sqlite-tie-break-red-test-trap",
+        ):
+            write_screen_evidence(
+                parsed=make_screen_log(
+                    1.0, 1.0, 1.0, skill_name=skill_name, task_id=f"idem-{skill_name}"
+                ),
+                source_eval_sha256=f"sha-idem-{skill_name}",
+                admissibility_state="admissible",
+                inadmissibility_reason=None,
+                conn=conn,
+            )
         supersede_d4_screen_runs(conn)
         first_count = conn.execute("SELECT count(*) FROM screen_run_supersessions").fetchone()[0]
         supersede_d4_screen_runs(conn)
         second_count = conn.execute("SELECT count(*) FROM screen_run_supersessions").fetchone()[0]
+        assert first_count == 4
         assert first_count == second_count

@@ -26,10 +26,11 @@
 -- ignores changes nothing, and one it double-counts is worse than none.
 
 CREATE TABLE screen_run_supersessions (
-    restamp_id              INTEGER PRIMARY KEY,
-    superseded_screen_run_id TEXT NOT NULL REFERENCES screen_runs(screen_run_id),
-    reason                  TEXT NOT NULL,
-    recorded_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    restamp_id               INTEGER PRIMARY KEY,
+    superseded_screen_run_id TEXT NOT NULL UNIQUE REFERENCES screen_runs(screen_run_id),
+    superseding_screen_run_id TEXT NOT NULL UNIQUE REFERENCES screen_runs(screen_run_id),
+    reason                   TEXT NOT NULL,
+    recorded_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE TRIGGER screen_run_supersessions_no_update
     BEFORE UPDATE ON screen_run_supersessions
