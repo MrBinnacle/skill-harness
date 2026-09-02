@@ -293,10 +293,19 @@ and covers that section only. This page stays the citable surface for every kind
   separately. Replaces the fixed `VAR_FLOOR` with a one-sided parametric-bootstrap
   test of `latent_variance > 0` at a proposed level of 0.05 with its power cost
   tabled. States that `(w, n)` does not identify within-clause variance when ties
-  are present, verified on a worked pair, which makes #360 depend on #368.
+  are present, verified on a worked pair, which makes #360 depend on #368. Amended
+  2026-09-02 by supersession on the heterogeneity-target ruling: the null redraws
+  ties from one pooled categorical because the lane's target is the encoded clause
+  mean; row 1 re-measured at 0 of 40 on the registered null world, calibrated; the
+  superseded ties-fixed text is retained and marked. Records, in section 0, that the
+  same development smoke fires the frozen kill criterion in three regimes and that
+  two of those were already present at `7d50b4a` and unreported.
 - **Refuses to claim:** That the repaired estimator passes anything — no
-  confirmatory simulation has been run against this amendment; that the proposed
-  test level is settled, as it is a risk-tolerance call left to the maintainer;
+  confirmatory simulation has been run against this amendment, and the development
+  smoke predicts a REJECTED one; that the heterogeneity target is settled beyond the
+  lane's current decision rule, since the ruling expires when the lane migrates to
+  the discordant representation; that the test level is anything but the
+  maintainer's ruling of 2026-08-31;
   that the development results on seed 20260902 confirm any repair, since they are
   quarantined as development evidence by section 0; that the original registration
   was wrong, as its derivation is correct for the unpeeled estimator it was written
