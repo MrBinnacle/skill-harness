@@ -217,3 +217,48 @@ def test_the_currency_gate_detects_a_moved_target(tmp_path: Path) -> None:
 
     absent = {"target_digests": {"gone.py": "0" * 64}}
     assert _stale_targets(absent, tmp_path), "the gate passed a file that does not exist"
+
+
+def _receipt_prose_pairs() -> list[tuple[Path, Path]]:
+    """Every machine-readable receipt that has a prose companion beside it."""
+    pairs = []
+    for json_path in _receipt_paths():
+        prose = json_path.with_suffix(".md")
+        if prose.is_file():
+            pairs.append((json_path, prose))
+    return pairs
+
+
+@pytest.mark.parametrize(
+    ("receipt_path", "prose_path"),
+    _receipt_prose_pairs(),
+    ids=lambda p: p.name,
+)
+def test_prose_companion_names_the_digest_its_receipt_attests(
+    receipt_path: Path, prose_path: Path
+) -> None:
+    """The prose must name the same digest the JSON pins.
+
+    The currency gate above reads the JSON only. A regeneration that updates the
+    JSON and leaves the prose alone therefore passes it, and the document a human
+    actually reads goes on naming a digest that is not the code shipping. That
+    happened on 2026-09-02: both ingest receipts were regenerated and merged with
+    their prose still naming the superseded digest, and CI was green throughout.
+
+    This case compares each prose file against ITS OWN receipt, not against the
+    live tree, so a receipt that legitimately pins a different module is
+    unaffected.
+    """
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    prose = prose_path.read_text(encoding="utf-8")
+    missing = [
+        f"{target}: {digest[:12]}"
+        for target, digest in receipt.get("target_digests", {}).items()
+        if digest not in prose
+    ]
+    assert not missing, (
+        f"PROSE_DRIFT: {prose_path.name} does not name the digest(s) its receipt"
+        f" attests to ({'; '.join(missing)}). The JSON was regenerated and the prose"
+        f" was not, so the document a reader trusts describes a tree that no longer"
+        f" exists. Update the prose to match {receipt_path.name}."
+    )
