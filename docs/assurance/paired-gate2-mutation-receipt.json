@@ -1,0 +1,80 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-t3919bww/M-R1/src/skill_harness/cli/paired_gate2.py",
+        "source_digest": "c15e52b2338d3480aa3f1b0ffe036640993675d74bd6c4292b3ee619dc2a9280",
+        "tests_collected": 1,
+        "worktree_head": "a2ed8cb768d2ea4687471b8e36a886ab13f97428"
+      },
+      "description": "remove the RATIFIED status check: a DRAFT record is accepted and the command proceeds to read the design",
+      "killing_assertions": [
+        "tests/test_cli_paired_gate2.py::TestUnratifiedDesign::test_draft_record_refused"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-t3919bww/M-R1/src/skill_harness/cli/paired_gate2.py",
+        "source_digest": "ee4a249cbeb3b46bf986b1668929e74cc78332658c07ab6269a2f5c9356badbf",
+        "tests_collected": 1,
+        "worktree_head": "a2ed8cb768d2ea4687471b8e36a886ab13f97428"
+      },
+      "mutant_id": "M-R1",
+      "notes": [],
+      "obligation": "389-ratification-binding",
+      "selection": [
+        "tests/test_cli_paired_gate2.py::TestUnratifiedDesign::test_draft_record_refused"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-t3919bww/M-R2/src/skill_harness/cli/paired_gate2.py",
+        "source_digest": "c15e52b2338d3480aa3f1b0ffe036640993675d74bd6c4292b3ee619dc2a9280",
+        "tests_collected": 1,
+        "worktree_head": "a2ed8cb768d2ea4687471b8e36a886ab13f97428"
+      },
+      "description": "remove the pair-count check: k=8 pairs are read against an n=32 design without refusal",
+      "killing_assertions": [
+        "tests/test_cli_paired_gate2.py::TestCountMismatch::test_pilot_k8_vs_design_n32"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-t3919bww/M-R2/src/skill_harness/cli/paired_gate2.py",
+        "source_digest": "a22962157e700c2cdec74c226ab88e178f75546d3e97812de704a7021e696f8e",
+        "tests_collected": 1,
+        "worktree_head": "a2ed8cb768d2ea4687471b8e36a886ab13f97428"
+      },
+      "mutant_id": "M-R2",
+      "notes": [],
+      "obligation": "389-count-mismatch",
+      "selection": [
+        "tests/test_cli_paired_gate2.py::TestCountMismatch::test_pilot_k8_vs_design_n32"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "a2ed8cb768d2ea4687471b8e36a886ab13f97428",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "src/skill_harness/cli/paired_gate2.py": "c15e52b2338d3480aa3f1b0ffe036640993675d74bd6c4292b3ee619dc2a9280"
+  },
+  "production_tree_digest_before": {
+    "src/skill_harness/cli/paired_gate2.py": "c15e52b2338d3480aa3f1b0ffe036640993675d74bd6c4292b3ee619dc2a9280"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.15",
+  "target_digests": {
+    "src/skill_harness/cli/paired_gate2.py": "c15e52b2338d3480aa3f1b0ffe036640993675d74bd6c4292b3ee619dc2a9280"
+  },
+  "target_files": [
+    "src/skill_harness/cli/paired_gate2.py"
+  ]
+}
