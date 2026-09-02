@@ -80,8 +80,11 @@ grid step from the target. Both are conforming; the recommendation is the regist
 - `hard_cap_usd = 23.36`, the worst case rounded UP to the cent, under the registered $35 ceiling.
   Amendment 4 prints the same row as $23.35 (rounded to nearest); the cap is the rounded-up figure
   by README rule.
-- Pre-spend re-measurement: if tokens per pair re-measure above about 470k the row breaches the
-  cap at this pricing and the run does not launch; a dated amendment records why (#391 acceptance).
+- Pre-spend re-measurement: if tokens per pair re-measure above **353,850 input** at this pricing
+  and output figure, the row breaches the cap and the run does not launch; a dated amendment
+  records why (#391 acceptance). Note: this bullet read "above about 470k" until Amendment 1 measured
+  the breakeven; see section 10, and note that the true headroom is 129 tokens per pair, not 33
+  percent.
 
 ## 7. Frontier provenance
 
@@ -121,7 +124,56 @@ The pre-spend token re-measurement still gates the launch: if the recomputed wor
 
 ## 10. Post-launch amendments
 
-None. Dated blocks only, appended below this line after launch: run_id(s), any later SME upgrade.
+Dated blocks only, appended below this line: run_id(s), any later SME upgrade, and corrections to
+the record's own prose. No registered field is edited in place; a change to a registered field is a
+new row-pick and a new record.
+
+### Amendment 1 — 2026-09-02: the breach threshold in section 6 was wrong by three orders of magnitude of headroom
+
+Section 6's last bullet says the row "breaches the cap at this pricing" if tokens per pair
+re-measure "above about 470k". That figure is wrong, and it is wrong in the unsafe direction: it
+tells a reader the cap has roughly 33 percent headroom when it has 0.036 percent.
+
+Measured 2026-09-02 by bisecting `project_pair_usd("claude-sonnet-5", ...,
+output_tokens_per_pair=2230)` against `hard_cap_usd` at `n = 32`:
+
+| Input tokens per pair | Worst-case cost at n = 32 | Against the $23.36 cap |
+|---|---|---|
+| 353,721 (registered) | $23.351744 | within, by $0.008256 |
+| **353,850** | **$23.360000** | **the exact breakeven** |
+| 353,851 | $23.360064 | breach |
+| 400,000 | $26.3136 | breach |
+| 470,000 | $30.7936 | breach |
+
+**The breach threshold is 353,850 input tokens per pair, not about 470,000.** The registered
+figure sits 129 tokens under it. The arithmetic is not subtle: `hard_cap_usd` was set by rounding
+the worst case UP to the cent, so by construction the headroom is at most one cent, and one cent
+buys 129 input tokens at $2.00 per MTok across 32 pairs. Any cap derived by rounding up to the
+cent has this property; the 470k sentence was a free-hand estimate that no one recomputed.
+
+**What this changes.** Nothing about the signature or any registered field. `gamma`, `n`,
+`delta_min`, `q_min`, the cost basis and `hard_cap_usd` are unchanged, and the operator's
+authorization still reads as it did. What changes is what the pre-spend check means in practice:
+it is knife-edge on the token re-measurement, and a re-measurement that moves at all upward
+refuses the launch.
+
+**What this does not mean.** It does not mean the run is likely to cost $23.36. The cap bounds a
+worst case computed with no cache discount; the 2026-09-01 pilot realised $0.26 per pair with 86
+percent cache reads, about a third of the projected per-pair figure. Actual spend and the cap are
+different quantities, and only the projection is knife-edge.
+
+**Pre-spend re-measurement, run 2026-09-02.** Recomputing tokens per pair over the two pilot eval
+logs in the batch-1 `gitpull` log directory returns 353,721 input across all classes and 2,230
+output — identical to the registered figures, so the projected worst case is $23.351744 and the
+launch is within the cap. Read the next sentence before relying on that: this reproduces the
+registered figures from **the same source that produced them**. It confirms the arithmetic is
+faithful to the pilot; it is not independent evidence that a 32-pair run will use the same tokens
+per pair. A genuinely independent
+re-measurement requires a run, which is the thing the check gates.
+
+*Revisit if:* `hard_cap_usd` is ever set by a rule other than rounding the worst case up to the
+cent, which would give the cap real headroom and make a stated breach threshold meaningful again;
+or a later run measures tokens per pair and the projection is rebuilt on that measurement.
 
 ## 11. Historical-classification obligation
 
