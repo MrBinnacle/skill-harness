@@ -3200,9 +3200,7 @@ def screen_backfill_cmd(
 @click.argument("ratification_path", type=click.Path(exists=True, path_type=Path))
 @click.argument(
     "value_class",
-    type=click.Choice(
-        [vc.value for vc in ValueClass], case_sensitive=False
-    ),
+    type=click.Choice([vc.value for vc in ValueClass], case_sensitive=False),
 )
 @click.option(
     "--evidence-db",
