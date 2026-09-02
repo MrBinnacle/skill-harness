@@ -553,3 +553,343 @@ def test_files_as_data_uris_empty_string_never_resolves_as_a_path() -> None:
     (uri,) = encoded.values()
     assert uri == "data:text/plain;base64,"
     assert not Path(uri).exists()
+
+
+# ---------------------------------------------------------------------------
+# AC1 — normalise_skill_frontmatter: drops schema-unknown keys, on-disk unchanged
+# ---------------------------------------------------------------------------
+
+
+def test_normalise_drops_disable_model_invocation(tmp_path: Path) -> None:
+    """AC1: a card carrying disable-model-invocation (valid in Claude Code,
+    invalid in agentskills.io) constructs successfully, and the on-disk
+    SKILL.md is unchanged."""
+    from skill_harness.subject.inspect_adapter import normalise_skill_frontmatter
+
+    skill = tmp_path / "test-skill"
+    skill.mkdir()
+    original_content = (
+        "---\nname: test-skill\ndescription: A test skill\n"
+        "disable-model-invocation: true\n---\nbody\n"
+    )
+    (skill / "SKILL.md").write_text(original_content, encoding="utf-8")
+
+    result = normalise_skill_frontmatter(skill)
+
+    try:
+        # On-disk file is unchanged
+        assert (skill / "SKILL.md").read_text(encoding="utf-8") == original_content
+        # Dropped key recorded
+        assert "disable-model-invocation" in result.dropped_keys
+        # Normalised directory exists and has a valid SKILL.md
+        normalised_file = result.temp_dir / "SKILL.md"
+        assert normalised_file.is_file()
+        normalised_content = normalised_file.read_text(encoding="utf-8")
+        assert "disable-model-invocation" not in normalised_content
+        assert "name: test-skill" in normalised_content
+        assert "description: A test skill" in normalised_content
+    finally:
+        result.cleanup()
+
+
+def test_normalise_drops_argument_hint(tmp_path: Path) -> None:
+    """AC1: argument-hint (valid in Claude Code, invalid in agentskills.io)
+    is dropped and the card becomes constructible."""
+    from skill_harness.subject.inspect_adapter import normalise_skill_frontmatter
+
+    skill = tmp_path / "test-skill"
+    skill.mkdir()
+    original_content = (
+        "---\nname: test-skill\ndescription: A test skill\n"
+        "argument-hint: --flag\n---\nbody\n"
+    )
+    (skill / "SKILL.md").write_text(original_content, encoding="utf-8")
+
+    result = normalise_skill_frontmatter(skill)
+
+    try:
+        assert (skill / "SKILL.md").read_text(encoding="utf-8") == original_content
+        assert "argument-hint" in result.dropped_keys
+        normalised_content = (result.temp_dir / "SKILL.md").read_text(encoding="utf-8")
+        assert "argument-hint" not in normalised_content
+    finally:
+        result.cleanup()
+
+
+def test_normalise_nothing_to_drop_returns_original(tmp_path: Path) -> None:
+    """AC1: a card already compliant with the schema is returned as-is
+    (no temporary directory created)."""
+    from skill_harness.subject.inspect_adapter import normalise_skill_frontmatter
+
+    skill = tmp_path / "test-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: test-skill\ndescription: A test skill\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    result = normalise_skill_frontmatter(skill)
+
+    try:
+        assert result.dropped_keys == []
+        assert result.temp_dir == skill  # returned as-is
+    finally:
+        result.cleanup()
+
+
+def test_normalise_converts_allowed_tools_list_to_string(tmp_path: Path) -> None:
+    """AC1: allowed-tools given as a list (Claude Code accepts it; the spec
+    requires a string) is converted to a space-delimited string."""
+    from skill_harness.subject.inspect_adapter import normalise_skill_frontmatter
+
+    skill = tmp_path / "test-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: test-skill\ndescription: A test skill\n"
+        "allowed-tools:\n  - Bash\n  - Read\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    result = normalise_skill_frontmatter(skill)
+
+    try:
+        # allowed-tools is a valid schema key — converted, not dropped
+        assert "allowed-tools" not in result.dropped_keys
+        normalised_content = (result.temp_dir / "SKILL.md").read_text(encoding="utf-8")
+        assert "Bash Read" in normalised_content
+    finally:
+        result.cleanup()
+
+
+def test_normalise_truncates_long_description(tmp_path: Path) -> None:
+    """AC1: description exceeding the 1024-char agentskills.io cap is
+    truncated to 1024 characters."""
+    from skill_harness.subject.inspect_adapter import (
+        _AGENTSKILLS_DESCRIPTION_MAX_LENGTH,
+        normalise_skill_frontmatter,
+    )
+
+    skill = tmp_path / "test-skill"
+    skill.mkdir()
+    long_desc = "x" * (_AGENTSKILLS_DESCRIPTION_MAX_LENGTH + 100)
+    (skill / "SKILL.md").write_text(
+        f"---\nname: test-skill\ndescription: {long_desc}\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    result = normalise_skill_frontmatter(skill)
+
+    try:
+        normalised_content = (result.temp_dir / "SKILL.md").read_text(encoding="utf-8")
+        # Description should be truncated
+        import yaml
+
+        fm_str = normalised_content.split("---")[1].strip()
+        fm = yaml.safe_load(fm_str)
+        assert len(fm["description"]) == _AGENTSKILLS_DESCRIPTION_MAX_LENGTH
+    finally:
+        result.cleanup()
+
+
+def test_normalise_preserves_author_date_version_in_dropped(tmp_path: Path) -> None:
+    """AC1: author, date, version (valid in neither specification) are dropped."""
+    from skill_harness.subject.inspect_adapter import normalise_skill_frontmatter
+
+    skill = tmp_path / "test-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: test-skill\ndescription: A test skill\n"
+        "author: someone\ndate: 2026-09-01\nversion: 1.0\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    result = normalise_skill_frontmatter(skill)
+
+    try:
+        dropped = set(result.dropped_keys)
+        assert "author" in dropped
+        assert "date" in dropped
+        assert "version" in dropped
+    finally:
+        result.cleanup()
+
+
+# ---------------------------------------------------------------------------
+# AC2 — dropped keys recorded in Task metadata → config_json
+# ---------------------------------------------------------------------------
+
+
+def test_build_paired_tasks_records_dropped_keys_in_metadata(tmp_path: Path) -> None:
+    """AC2: a card with schema-unknown keys has those keys recorded in the
+    Task metadata as normalised_keys_dropped, which flows to config_json."""
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "test-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: test-skill\ndescription: A test skill\n"
+        "disable-model-invocation: true\nargument-hint: --flag\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    # build_paired_tasks requires inspect_ai; skip if not installed
+    if not INSPECT_INSTALLED:
+        pytest.skip("requires the optional inspect extra")
+
+    tasks = build_paired_tasks(
+        skill_dir=skill,
+        prompt="do a thing",
+        oracle="command_succeeds",
+        oracle_arg="true",
+        pin=make_pin(),
+    )
+    try:
+        for arm in ("full", "null"):
+            metadata = tasks[arm].dataset[0].metadata
+            assert "normalised_keys_dropped" in metadata
+            dropped = metadata["normalised_keys_dropped"]
+            assert isinstance(dropped, list)
+            assert "disable-model-invocation" in dropped
+            assert "argument-hint" in dropped
+    finally:
+        from skill_harness.subject.inspect_adapter import normalise_skill_frontmatter
+
+        # Clean up any temp dirs created by normalise
+        pass
+
+
+def test_build_paired_tasks_no_keys_to_drop_returns_empty_list(tmp_path: Path) -> None:
+    """AC2: a compliant card records an empty normalised_keys_dropped list."""
+    from skill_harness.subject.inspect_adapter import build_paired_tasks
+
+    skill = tmp_path / "test-skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: test-skill\ndescription: A test skill\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    if not INSPECT_INSTALLED:
+        pytest.skip("requires the optional inspect extra")
+
+    tasks = build_paired_tasks(
+        skill_dir=skill,
+        prompt="do a thing",
+        oracle="command_succeeds",
+        oracle_arg="true",
+        pin=make_pin(),
+    )
+    try:
+        metadata = tasks["full"].dataset[0].metadata
+        assert metadata["normalised_keys_dropped"] == []
+    finally:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# AC3 — coverage reporting
+# ---------------------------------------------------------------------------
+
+
+def test_skill_corpus_coverage_reports_refused_cards(tmp_path: Path) -> None:
+    """AC3: coverage report over a corpus with at least one refusal returns
+    the correct shape — candidates, constructible, refused with reasons."""
+    from skill_harness.subject.inspect_adapter import skill_corpus_coverage
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+
+    # Constructible card
+    good = corpus / "good-skill"
+    good.mkdir()
+    (good / "SKILL.md").write_text(
+        "---\nname: good-skill\ndescription: A good skill\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    # Refused card (has schema-unknown key that triggers validation)
+    refused = corpus / "bad-skill"
+    refused.mkdir()
+    (refused / "SKILL.md").write_text(
+        "---\nname: bad-skill\ndescription: A bad skill\n"
+        "disable-model-invocation: true\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    # Card without SKILL.md (should not be counted)
+    no_skill = corpus / "no-skill-md"
+    no_skill.mkdir()
+    (no_skill / "README.md").write_text("not a skill", encoding="utf-8")
+
+    report = skill_corpus_coverage(corpus)
+
+    # Shape assertions (no literal count locks)
+    assert set(str(p) for p in report.candidates) == {
+        str(good),
+        str(refused),
+    }
+    assert good in report.constructible
+    assert refused in report.constructible  # normalisation makes it constructible
+
+    # AC4: refused set is a subset of candidate set
+    assert set(report.constructible).issubset(set(report.candidates))
+
+    # The report can serialise
+    d = report.as_dict()
+    assert "candidate_count" in d
+    assert "constructible_count" in d
+    assert "refused_count" in d
+    assert isinstance(d["refused"], list)
+
+
+def test_skill_corpus_coverage_refused_subset_of_candidates(tmp_path: Path) -> None:
+    """AC4: the refused set is always a subset of the candidate set,
+    and a card whose only offending key is stripped moves from refused
+    to constructible."""
+    from skill_harness.subject.inspect_adapter import skill_corpus_coverage
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+
+    # Card that normalisation cannot fix (genuinely invalid YAML)
+    broken = corpus / "broken-skill"
+    broken.mkdir()
+    (broken / "SKILL.md").write_text(
+        "---\nname: broken-skill\ndescription: Broken\n: invalid yaml: [[\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    report = skill_corpus_coverage(corpus)
+
+    # broken-skill is a candidate but refused
+    assert broken in report.candidates
+    assert broken not in report.constructible
+    broken_refused = [p for p, _ in report.refused if p == broken]
+    assert len(broken_refused) == 1
+
+    # Refused is a subset of candidates
+    refused_paths = {p for p, _ in report.refused}
+    assert refused_paths.issubset(set(report.candidates))
+
+
+def test_skill_corpus_coverage_empty_directory(tmp_path: Path) -> None:
+    """AC3: an empty corpus directory returns a zero-count report."""
+    from skill_harness.subject.inspect_adapter import skill_corpus_coverage
+
+    corpus = tmp_path / "empty-corpus"
+    corpus.mkdir()
+
+    report = skill_corpus_coverage(corpus)
+    assert report.candidate_count == 0
+    assert report.constructible_count == 0
+    assert report.refused_count == 0
+
+
+def test_skill_corpus_coverage_nonexistent_directory() -> None:
+    """AC3: a nonexistent corpus directory returns a zero-count report."""
+    from pathlib import Path
+
+    from skill_harness.subject.inspect_adapter import skill_corpus_coverage
+
+    report = skill_corpus_coverage(Path("/nonexistent/path"))
+    assert report.candidate_count == 0
