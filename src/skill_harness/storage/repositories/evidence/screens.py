@@ -122,8 +122,8 @@ def supersede_screen_run(
     """Append a new screen_run row that supersedes an existing one.
 
     The superseded row is never touched. The new row carries the corrected
-    admissibility and copies the trials from the superseded run. Returns
-    the new screen_run_id.
+    evidence-admissibility and copies the trials from the superseded run.
+    Returns the new screen_run_id.
 
     :raises SupersededScreenRunError: the superseded screen_run_id does not
         exist or is already superseded.
@@ -136,8 +136,7 @@ def supersede_screen_run(
         )
 
     already = conn.execute(
-        "SELECT 1 FROM screen_run_supersessions "
-        "WHERE superseded_screen_run_id = ?",
+        "SELECT 1 FROM screen_run_supersessions WHERE superseded_screen_run_id = ?",
         (superseded_screen_run_id,),
     ).fetchone()
     if already is not None:
@@ -205,8 +204,7 @@ def supersede_screen_run(
         )
 
     conn.execute(
-        "INSERT INTO screen_run_supersessions "
-        "(superseded_screen_run_id, reason) VALUES (?, ?)",
+        "INSERT INTO screen_run_supersessions (superseded_screen_run_id, reason) VALUES (?, ?)",
         (superseded_screen_run_id, reason),
     )
 
