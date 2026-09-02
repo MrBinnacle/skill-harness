@@ -505,9 +505,19 @@ def test_d4_leak_result_is_frozen() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _stored_admissibility(conn: sqlite3.Connection, screen_run_id: str) -> tuple[str, str | None]:
+    row = conn.execute(
+        "SELECT admissibility_state, inadmissibility_reason "
+        "FROM screen_runs WHERE screen_run_id = ?",
+        (screen_run_id,),
+    ).fetchone()
+    assert row is not None
+    return str(row[0]), None if row[1] is None else str(row[1])
+
+
 def test_apply_manifest_d4_poison_refused(tmp_path: Path, conn: sqlite3.Connection) -> None:
     """A manifest entry with operative_rule + prompt_text containing the rule
-    is overridden to inadmissible (apparatus_void: D4 prompt leak)."""
+    is overridden to inadmissible with store reason apparatus_void: D4 prompt leak."""
     rule = "Do not rewrite, drop, or re-parent a commit."
     leaked_prompt = "Follow the rule: Do not rewrite, drop, or re-parent a commit."
     entry = ScreenManifestEntry(
@@ -531,7 +541,12 @@ def test_apply_manifest_d4_poison_refused(tmp_path: Path, conn: sqlite3.Connecti
     assert len(report.ingested) == 1
     result = report.ingested[0]
     assert result.admissibility_state == "inadmissible"
-    assert "D4 prompt leak" in report.mismatches[0]
+    # External behaviour: the store reason, not an audit-mismatch side channel.
+    assert _stored_admissibility(conn, result.screen_run_id) == (
+        "inadmissible",
+        "apparatus_void: D4 prompt leak",
+    )
+    assert report.mismatches == ()
     # p0 must not include this inadmissible screen
     rows = derive_p0_by_skill(conn)
     assert rows == []
@@ -562,7 +577,8 @@ def test_apply_manifest_d4_clean_admitted(tmp_path: Path, conn: sqlite3.Connecti
     assert len(report.ingested) == 1
     result = report.ingested[0]
     assert result.admissibility_state == "admissible"
-    assert not any("D4" in m for m in report.mismatches)
+    assert _stored_admissibility(conn, result.screen_run_id) == ("admissible", None)
+    assert report.mismatches == ()
     rows = derive_p0_by_skill(conn)
     assert len(rows) == 1
     assert rows[0].p0 == 1.0
@@ -571,10 +587,22 @@ def test_apply_manifest_d4_clean_admitted(tmp_path: Path, conn: sqlite3.Connecti
 def test_apply_manifest_d4_indirect_leak_via_fixture(
     tmp_path: Path, conn: sqlite3.Connection
 ) -> None:
-    """Rule absent from prompt but present in a referenced fixture file → refused."""
-    rule = "Append-only evidence design requires permanent writes."
-    clean_prompt = "Complete the evidence task."
-    fixture_files = {"EVIDENCE.md": "Append-only evidence design requires permanent writes.\n"}
+    """Rule absent from prompt but present in a fixture file the prompt names → refused.
+
+    Mirrors the gitpull shape: the prompt points at RELEASING.md; that file
+    carries the operative rule. A prompt-text-only check would miss this.
+    """
+    rule = "Do not rewrite, drop, or re-parent a commit that the ledger references."
+    prompt = (
+        "The repository's release process depends on ledger/releases.md staying "
+        "valid — see RELEASING.md for the repository's history policy."
+    )
+    fixture_files = {
+        "RELEASING.md": (
+            "# Releasing\n\nDo not rewrite, drop, or re-parent a commit that "
+            "the ledger references.\n"
+        ),
+    }
     entry = ScreenManifestEntry(
         rel_path="d4/indirect.eval",
         admissibility_state="admissible",
@@ -582,7 +610,7 @@ def test_apply_manifest_d4_indirect_leak_via_fixture(
         expected_skill="some-skill",
         expected_pass=3,
         operative_rule=rule,
-        prompt_text=clean_prompt,
+        prompt_text=prompt,
         prompt_fixture_files=fixture_files,
     )
     root = tmp_path / "screens"
@@ -594,9 +622,18 @@ def test_apply_manifest_d4_indirect_leak_via_fixture(
         return make_screen_log(1.0, 1.0, 1.0, skill_name="some-skill", task_id=str(path.name))
 
     report = apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
-    assert report.ingested[0].admissibility_state == "inadmissible"
-    assert "D4 prompt leak" in report.mismatches[0]
-    assert "EVIDENCE.md" in report.mismatches[0]
+    result = report.ingested[0]
+    assert result.admissibility_state == "inadmissible"
+    assert _stored_admissibility(conn, result.screen_run_id) == (
+        "inadmissible",
+        "apparatus_void: D4 prompt leak",
+    )
+    assert report.mismatches == ()
+    # Pure check still names the fixture file as the leak site.
+    leak = check_d4_prompt_leak(rule, prompt, fixture_files)
+    assert leak.leaked is True
+    assert "RELEASING.md" in leak.locations
+    assert "prompt" not in leak.locations
 
 
 def test_apply_manifest_no_d4_fields_skips_check(tmp_path: Path, conn: sqlite3.Connection) -> None:
@@ -617,5 +654,7 @@ def test_apply_manifest_no_d4_fields_skips_check(tmp_path: Path, conn: sqlite3.C
         return make_screen_log(1.0, 1.0, 1.0, skill_name="some-skill", task_id=str(path.name))
 
     report = apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
-    assert report.ingested[0].admissibility_state == "admissible"
-    assert not any("D4" in m for m in report.mismatches)
+    result = report.ingested[0]
+    assert result.admissibility_state == "admissible"
+    assert _stored_admissibility(conn, result.screen_run_id) == ("admissible", None)
+    assert report.mismatches == ()

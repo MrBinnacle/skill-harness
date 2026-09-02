@@ -224,6 +224,8 @@ def apply_manifest(
         parsed = parse(path)
 
         # --- D4 prompt-leak check (when manifest supplies the inputs) ---------
+        # D4 hit → inadmissible ruling. Not an audit mismatch (mismatches =
+        # manifest-vs-log only); CLI treats mismatches as backfill failure.
         admissibility = entry.admissibility_state
         reason = entry.inadmissibility_reason
         if entry.operative_rule is not None and entry.prompt_text is not None:
@@ -235,9 +237,6 @@ def apply_manifest(
             if leak.leaked:
                 admissibility = "inadmissible"
                 reason = _D4_LEAK_REASON
-                mismatches.append(
-                    f"{entry.rel_path}: D4 prompt leak detected in {', '.join(leak.locations)}"
-                )
 
         result = write_screen_evidence(
             parsed=parsed,

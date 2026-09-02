@@ -43,8 +43,10 @@ format:   ruff format --check — 0 reformats needed
   `prompt_text`, `prompt_fixture_files`. When both `operative_rule` and
   `prompt_text` are set, `apply_manifest` calls `check_d4_prompt_leak` and
   overrides admissibility to `inadmissible` with reason
-  `apparatus_void: D4 prompt leak` when a leak is detected.
-- `apply_manifest` reports D4 leaks in its `mismatches` tuple.
+  `apparatus_void: D4 prompt leak` when a leak is detected. A D4 hit is an
+  evidence-admissibility ruling, not an audit mismatch — `mismatches` stays
+  reserved for manifest-vs-log disagreements so `screen backfill --execute`
+  does not fail a successful refuse.
 
 **Test that pins it:** `test_apply_manifest_d4_poison_refused`
 
@@ -52,9 +54,10 @@ format:   ruff format --check — 0 reformats needed
   and `prompt_text` containing that rule text is fed through `apply_manifest`.
 - **Before the change:** this test does not exist; the entry would be ingested
   as admissible and contribute to p0.
-- **After the change:** the entry is overridden to `inadmissible` with reason
-  `apparatus_void: D4 prompt leak`. p0 derivation excludes it (verified: no
-  `ScreenP0` rows for the skill).
+- **After the change:** the store row is `inadmissible` with
+  `inadmissibility_reason = "apparatus_void: D4 prompt leak"` (asserted by
+  reading `screen_runs`, not a side channel). `mismatches` stays empty. p0
+  derivation excludes it.
 
 **Test that pins the clean path:** `test_apply_manifest_d4_clean_admitted`
 
@@ -62,8 +65,8 @@ format:   ruff format --check — 0 reformats needed
   `prompt_text` ("Complete the git task using standard practices.") is fed
   through `apply_manifest`.
 - **Before the change:** this test does not exist.
-- **After the change:** the entry is admitted as `admissible`; p0 is derived
-  normally (1.0 from 3/3 passes).
+- **After the change:** the store row is `admissible` with null reason; p0 is
+  derived normally (1.0 from 3/3 passes).
 
 ---
 
@@ -83,9 +86,9 @@ eight unit tests for `check_d4_prompt_leak` directly:
 | `test_d4_multiple_fixture_files` | rule in one of several files | `leaked=True` with correct filename |
 | `test_d4_leak_result_is_frozen` | D4LeakResult dataclass | frozen (attribute assignment raises) |
 
-Plus one integration test for indirect leaks via fixture files in the manifest:
-`test_apply_manifest_d4_indirect_leak_via_fixture` — rule absent from prompt but
-present in `EVIDENCE.md` → refused as `inadmissible`.
+Plus one integration test for the gitpull one-hop shape:
+`test_apply_manifest_d4_indirect_leak_via_fixture` — prompt names `RELEASING.md`,
+rule lives only in that file → store reason `apparatus_void: D4 prompt leak`.
 
 And one test confirming entries without D4 fields skip the check:
 `test_apply_manifest_no_d4_fields_skips_check`.
