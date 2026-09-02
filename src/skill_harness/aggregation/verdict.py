@@ -50,9 +50,10 @@ Screen verdict rules (Path A, `screen_verdict`), ordered:
           trap/discipline/calibration skill: a high Null pass-rate means "the trap
           did not fire in this screen", not "the model does this unaided" — so a
           CUT(subsumed) here would be a category error. The verdict carries
-          ``wrong_instrument=True`` (the board routes the cell to the
-          field-evidence lane). The default is "not transformative-lift" so an
-          UNCLASSIFIED skill is never false-CUT while its class is pending.
+          ``wrong_instrument=True``; the field-evidence lane that would consume
+          that flag is UNBUILT (#335, deferred 2026-09-02). The default is "not
+          transformative-lift" so an UNCLASSIFIED skill is never false-CUT while
+          its class is pending.
   A3. p0 <= TRANSFORMATIVE_NULL_CEILING → CANT_TELL_YET (sourced candidate),
       unchanged, regardless of value_class. The Null arm fails often enough that
       the skill COULD be transformative — but no paired run has confirmed a KEEP.
@@ -145,7 +146,9 @@ class ValueClass(StrEnum):
     So ``screen_verdict``'s ``p0 above the bar → CUT(subsumed)`` mapping is VALID
     ONLY for a skill whose value IS transformative lift. For any other class it
     is a category error — the wrong instrument — so the guard withholds the CUT
-    and routes to the field-evidence lane instead (US-1/US-2).
+    (US-1/US-2). The field-evidence lane that would receive the withheld cell is
+    UNBUILT (#335, deferred 2026-09-02); the withheld verdict is the terminal
+    record for that cell today.
 
     Deliberately NOT the ``Estimand`` enum. ``Estimand`` is the decision TARGET of
     a measured arm — ratified at exactly two members, docstring-locked and
@@ -225,12 +228,25 @@ class VerdictResult:
     """Board-layer routing signal (#74/#76/#87). Set True when a path WITHHELD a
     CUT because ``value_class`` is not transformative-lift — the
     transformative-lift instrument cannot see this skill's value. Fires on the
-    screen path (above-bar p0) and on Path C (matched EQUIVALENT). The future
-    BoardCell consumes this to route the cell to the field-evidence lane
-    (``evidence_lane = field``) and render "HOLD — wrong instrument" rather than
-    "HOLD — untested (sourced candidate)". Default False keeps every existing
-    verdict and call site unchanged; it is never True on a CUT or a KEEP, nor on
-    the ordinary below-bar sourced-candidate / UNRESOLVED CANT_TELL_YET."""
+    screen path (above-bar p0) and on Path C (matched EQUIVALENT).
+
+    NO CONSUMER EXISTS. ``BoardCell`` and ``evidence_lane`` are not implemented
+    anywhere in this repository: before 2026-09-02 they appeared only in this
+    docstring, one test docstring, and one receipt summary string. The
+    field-evidence lane was DEFERRED on 2026-09-02 under #335, not built,
+    because a lane whose only members are wrong-instrument withholds needs the
+    false-green outcome variable defined first, and that variable does not exist
+    either. This flag is therefore a recorded signal with no destination. A
+    reader learns the same fact from the verdict's own rationale, which states
+    it in words rather than promising a lane.
+
+    Default False keeps every existing verdict and call site unchanged; it is
+    never True on a CUT or a KEEP, nor on the ordinary below-bar
+    sourced-candidate / UNRESOLVED CANT_TELL_YET.
+
+    *Revisit if:* the false-green outcome variable is defined (#403), which is the
+    quantity a field-evidence cell would carry. Building the lane before then
+    produces a destination with nothing to display."""
 
     @property
     def estimand_label(self) -> str:
@@ -264,9 +280,9 @@ def screen_verdict(
     → CUT(subsumed)`` mapping fires ONLY for ``ValueClass.TRANSFORMATIVE_LIFT``.
     For any other class — or when UNSET (the default is "not transformative-lift",
     so an unclassified skill is never false-CUT) — an above-bar p0 yields
-    CANT_TELL_YET carrying ``wrong_instrument=True`` (route to the field lane),
-    never CUT. Below the bar the verdict is the sourced-candidate CANT_TELL_YET
-    regardless of class.
+    CANT_TELL_YET carrying ``wrong_instrument=True`` (the field-evidence lane
+    that flag names is UNBUILT, #335), never CUT. Below the bar the verdict is
+    the sourced-candidate CANT_TELL_YET regardless of class.
     """
     if not 0.0 <= p0 <= 1.0:
         raise ValueError(f"p0 must be a pass-rate in [0, 1]; got {p0!r}")
@@ -290,7 +306,9 @@ def screen_verdict(
             rationale = (
                 f"CAN'T-TELL-YET (wrong instrument): Null arm p0={p0:.2f} is above the "
                 f"~{TRANSFORMATIVE_NULL_CEILING:.2f} transformative bar, but {class_clause}. "
-                f"Verdict withheld; routed to the field-evidence lane."
+                f"Verdict withheld. The field-evidence lane that would carry this "
+                f"cell is UNBUILT (#335): nothing in this repository consumes the "
+                f"wrong_instrument flag, so this verdict is the terminal record."
             )
             return VerdictResult(
                 KeepCutVerdict.CANT_TELL_YET,
@@ -485,7 +503,9 @@ def matched_gate2_verdict(
                 rationale = (
                     f"CAN'T-TELL-YET (wrong instrument): matched Gate-2 certified "
                     f"EQUIVALENT ({delta_clause}), but {class_clause}. "
-                    f"Verdict withheld; routed to the field-evidence lane."
+                    f"Verdict withheld. The field-evidence lane that would carry this "
+                    f"cell is UNBUILT (#335): nothing in this repository consumes the "
+                    f"wrong_instrument flag, so this verdict is the terminal record."
                 )
                 return VerdictResult(
                     KeepCutVerdict.CANT_TELL_YET,

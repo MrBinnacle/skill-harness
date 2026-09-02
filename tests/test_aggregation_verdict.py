@@ -143,13 +143,54 @@ def test_guard_below_bar_is_sourced_candidate_for_every_class(vc: ValueClass | N
     assert "wrong instrument" not in r.rationale.lower()
 
 
-def test_guard_wrong_instrument_verdict_names_class_and_field_lane() -> None:
-    """The withheld-CUT verdict is legible: it names the skill's class and routes
-    to the field-evidence lane, so the board can render 'HOLD — wrong instrument'."""
+def test_guard_wrong_instrument_verdict_names_class_and_declares_lane_unbuilt() -> None:
+    """#335: the withheld-CUT verdict is legible AND truthful. It names the skill's
+    class, and it states that the field-evidence lane is UNBUILT instead of telling
+    the reader the cell was routed somewhere. Before this change the rationale read
+    'Verdict withheld; routed to the field-evidence lane', which described a
+    destination that does not exist anywhere in the repository."""
     r = screen_verdict(1.0, value_class=ValueClass.TRAP_DISCIPLINE)
     assert r.wrong_instrument is True
     assert "trap-discipline" in r.rationale
-    assert "field" in r.rationale.lower()
+    assert "field-evidence lane" in r.rationale
+    assert "UNBUILT" in r.rationale
+
+
+def test_no_withhold_rationale_claims_the_cell_was_routed() -> None:
+    """#335 regression guard, both withhold paths. ``wrong_instrument`` has no
+    consumer: ``BoardCell`` and ``evidence_lane`` are unimplemented. A rationale
+    that says the cell was ROUTED makes a correctly-withheld verdict and an
+    unbuilt feature the same observable, which is the defect #335 records.
+
+    Asserted per rationale, not over a joined document: each verdict is its own
+    row, and a claim in one must not be excused by a qualifier in another.
+    """
+    from skill_harness.aggregation.profile import effect_from_matched_gate2
+    from skill_harness.aggregation.verdict import matched_gate2_verdict
+    from skill_harness.oc import Gate2Decision, Gate2Design, MMESpec
+
+    design = Gate2Design(n_pairs=16, gamma=0.90, mme=MMESpec(delta_min=0.2, q_min=0.7))
+    equivalent = effect_from_matched_gate2(
+        design, both_pass=6, full_only=2, null_only=2, both_fail=6
+    )
+    assert equivalent.decision is Gate2Decision.EQUIVALENT
+
+    withholds = [
+        screen_verdict(1.0, value_class=ValueClass.TRAP_DISCIPLINE),
+        screen_verdict(0.8, value_class=ValueClass.CALIBRATION),
+        screen_verdict(1.0),  # unclassified: the default withhold
+        matched_gate2_verdict(equivalent, value_class=ValueClass.TRAP_DISCIPLINE),
+        matched_gate2_verdict(equivalent),  # unclassified on Path C
+    ]
+
+    for r in withholds:
+        assert r.wrong_instrument is True
+        assert "routed to" not in r.rationale.lower(), (
+            f"rationale claims a destination that is not built: {r.rationale!r}"
+        )
+        assert "UNBUILT" in r.rationale, (
+            f"withhold does not declare the lane unbuilt: {r.rationale!r}"
+        )
 
 
 def test_value_class_is_a_distinct_type_from_estimand() -> None:
