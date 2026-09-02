@@ -207,3 +207,13 @@ ignore_missing_imports = true
 module = ["inspect_ai", "inspect_ai.*", "inspect_swe", "inspect_swe.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
+
+# PyYAML and jsonschema ship no stubs here and reach this environment only as
+# transitive dependencies of the [inspect] extra (inspect-swe requires pyyaml,
+# inspect-ai requires jsonschema). Both are imported lazily behind the extra's
+# install hint, so the core package still type-checks and imports without them.
+# Stub packages are deliberately not added: this repo declares no types-* deps,
+# and adding one would be a supply-chain decision for a lazily imported module.
+[[tool.mypy.overrides]]
+module = ["yaml", "jsonschema"]
+ignore_missing_imports = true

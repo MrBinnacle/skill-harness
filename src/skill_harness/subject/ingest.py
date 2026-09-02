@@ -486,9 +486,7 @@ def parse_eval_log(path: Path, *, skill_description: str = "") -> ParsedEvalLog:
                     else None
                 ),
                 harness_pin_fingerprint=metadata.get("harness_pin_fingerprint"),
-                normalised_keys_dropped=tuple(
-                    metadata.get("normalised_keys_dropped", ())
-                ),
+                normalised_keys_dropped=tuple(metadata.get("normalised_keys_dropped", ())),
                 input_tokens=usage.input_tokens,
                 cache_read_input_tokens=usage.cache_read,
                 cache_creation_input_tokens=usage.cache_write,
@@ -752,9 +750,7 @@ def write_paired_evidence(
                             "detector": EXPOSURE_DETECTOR_VERSION,
                         },
                         "paired_cells": _paired_cell_counts(full, null),
-                        "normalised_keys_dropped": list(
-                            full.samples[0].normalised_keys_dropped
-                        ),
+                        "normalised_keys_dropped": list(full.samples[0].normalised_keys_dropped),
                         # Omitted entirely when absent rather than written as
                         # null: a present-but-null key reads as "this run
                         # declared nothing", which is a claim, while an absent

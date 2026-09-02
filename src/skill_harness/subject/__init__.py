@@ -33,9 +33,9 @@ from skill_harness.subject.pin import HarnessPin
 
 __all__ = [
     "HarnessPin",
-    "build_paired_tasks",
-    "normalise_skill_frontmatter",
     "NormalisedSkillResult",
     "SkillCorpusCoverage",
+    "build_paired_tasks",
+    "normalise_skill_frontmatter",
     "skill_corpus_coverage",
 ]

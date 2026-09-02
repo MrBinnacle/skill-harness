@@ -28,8 +28,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-import yaml
-
 from skill_harness.subject.pin import HarnessPin
 
 if TYPE_CHECKING:  # pragma: no cover — typing only; runtime import is lazy
@@ -38,6 +36,25 @@ if TYPE_CHECKING:  # pragma: no cover — typing only; runtime import is lazy
 _INSTALL_HINT = (
     'the agentic subject layer requires the optional extra: pip install "skill-harness[inspect]"'
 )
+
+
+def _yaml() -> Any:
+    """Import PyYAML lazily, with this module's own install hint on failure.
+
+    Module scope would be wrong here. PyYAML reaches this environment as a
+    transitive dependency of ``inspect-swe``, which ships only in the optional
+    ``[inspect]`` extra, while this module is deliberately importable WITHOUT
+    that extra -- every inspect_ai symbol sits behind TYPE_CHECKING and a lazy
+    runtime import for exactly that reason. A top-level ``import yaml`` makes a
+    core install fail at import time with a bare ImportError naming a package
+    the user never asked for, instead of the typed hint below.
+    """
+    try:
+        import yaml
+    except ImportError as exc:  # pragma: no cover - core install without the extra
+        raise ImportError(f"skill frontmatter normalisation needs PyYAML: {_INSTALL_HINT}") from exc
+    return yaml
+
 
 Condition = Literal["full", "null"]
 AGENT_CWD = "/root"  # inspect_swe claude_code default; oracles resolve against this
@@ -202,7 +219,7 @@ def normalise_skill_frontmatter(skill_dir: Path) -> NormalisedSkillResult:
     normalised_skill_dir = tmp_root / skill_name
     shutil.copytree(skill_dir, normalised_skill_dir)
 
-    yaml_str = yaml.dump(normalised, default_flow_style=False, sort_keys=False)
+    yaml_str = _yaml().dump(normalised, default_flow_style=False, sort_keys=False)
     (normalised_skill_dir / "SKILL.md").write_text(
         f"---\n{yaml_str}---\n\n{body}", encoding="utf-8"
     )
@@ -227,6 +244,10 @@ def _parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
         return {}, content
     frontmatter_str = parts[1].strip()
     body = parts[2].lstrip("\n")
+    # Bound once: naming _yaml() in the except clause would re-enter the import
+    # while an exception is already in flight, and a failure there would mask
+    # the YAML error it was supposed to catch.
+    yaml = _yaml()
     try:
         fm = yaml.safe_load(frontmatter_str)
     except yaml.YAMLError as exc:
