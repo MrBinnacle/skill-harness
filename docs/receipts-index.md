@@ -601,8 +601,9 @@ Verdict and sub-reason strings use the
 
 ### [`docs/sers/receipts/superseded/reclass-git-pull-rebase-trap.json`](sers/receipts/superseded/reclass-git-pull-rebase-trap.json)
 
-- **Superseded 2026-09-01** by
-  [`gitpull-paired-k8-2026-09-01.json`](sers/receipts/gitpull-paired-k8-2026-09-01.json).
+- **Superseded 2026-09-01** by `gitpull-paired-k8-2026-09-01.json`, itself
+  superseded 2026-09-02 by
+  [`gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/gitpull-paired-k8-2026-09-01-detector-v2.json).
   The site publishes one receipt per skill and refuses to choose between two,
   so the older receipt moved out of the published directory and stays in the
   tree unedited. Its `p0=1.00` screen row is D4-voided: the prompt it ran on
@@ -624,7 +625,39 @@ Verdict and sub-reason strings use the
   cleared the full keep lane; standing cost as part of the KEEP claim
   (not_instrumented).
 
-### [`docs/sers/receipts/gitpull-paired-k8-2026-09-01.json`](sers/receipts/gitpull-paired-k8-2026-09-01.json)
+### [`docs/sers/receipts/gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/gitpull-paired-k8-2026-09-01-detector-v2.json)
+
+- **Claims:** `verdict=CANT_TELL_YET`, `cut_sub_reason=null`,
+  `unmeasured_sub_reason=underpowered`; `value_class=trap-discipline`;
+  `wrong_instrument=false`; `sers_version=1.2.0` with a `delivery` block;
+  evidence admissibility **admissible** — the same 2026-09-01 pair re-ingested
+  under detector v2 (#387) as run `0cc7fce87e70`, 8 samples per arm, one pin
+  (`5324feef...`) across both arms. `delivery.channel=description_only`:
+  description exposure 8/8 in the Full arm and 0/8 in the Null arm, Skill tool
+  invocations 0/8 (\(\hat\pi_c = 0.00\), 95% CI \([0.000, 0.369]\)). Paired
+  cells full_only=6, null_only=0, both_pass=0, both_fail=2. Measurements carried
+  forward unchanged from the superseded receipt: `null_pass_rate` 0/8,
+  `discordance_rate` 6/8 with the Jeffreys interval in `detail`, `go_nogo=GO`.
+  Supersedes `superseded/gitpull-paired-k8-2026-09-01.json`, whose
+  `inadmissible` status was an instrument defect and not a property of the
+  evidence.
+- **Refuses to claim:** `KEEP` — k=8 is a Stage-1 micro-run and a GO datum for
+  the sized run, which is why the sub-reason is `underpowered`; a win direction
+  (withheld per the registered micro-run template); a Gate-2 verdict — the #389
+  paired-lane read binds to a RATIFIED design record and `docs/ratifications/`
+  holds none, so no read was performed against this run; the registered
+  direct-Anthropic subject (ran on OpenRouter); standing or fired token costs
+  (not_instrumented / not_applicable, the body never loaded).
+
+### [`docs/sers/receipts/superseded/gitpull-paired-k8-2026-09-01.json`](sers/receipts/superseded/gitpull-paired-k8-2026-09-01.json)
+
+- **Superseded 2026-09-02** by
+  [`gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/gitpull-paired-k8-2026-09-01-detector-v2.json).
+  It recorded the same measurements as **inadmissible** because detector v1
+  observed only Skill tool calls and could not see the description channel the
+  effect arrived through. The #384 ruling made exposure the treatment and pi_c a
+  stratifier; the pair then ingested without refusal. The file moved out of the
+  published directory unedited.
 
 - **Claims:** `verdict=CANT_TELL_YET`, `cut_sub_reason=null`,
   `unmeasured_sub_reason=inadmissible`; `value_class=trap-discipline`;

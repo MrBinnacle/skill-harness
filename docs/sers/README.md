@@ -249,7 +249,8 @@ The harness asserts:
 | `synthetic-control-keep-2026-07-27.json` | `KEEP` (declared synthetic control) | `README.md` / `docs/FAQ.md` |
 | `double-ceiling-nogo-2026-07-09.json` | `CANT_TELL_YET` (NO-GO / structurally unmeasured) | `docs/case-studies/double-ceiling-structurally-unmeasured.md` |
 | `reclass-append-only-evidence-design.json` | `CANT_TELL_YET` (wrong instrument, calibration) | `README.md` + `docs/observations/OBS-0005-*.md` |
-| `gitpull-paired-k8-2026-09-01.json` | `CANT_TELL_YET` (inadmissible, wrong instrument, trap-discipline; paired k=8, GO on discordance, refused at write time on zero detected invocations) | `docs/findings/pi-c-detector-blind-to-description-channel.md` |
+| `gitpull-paired-k8-2026-09-01-detector-v2.json` | `CANT_TELL_YET` (underpowered, trap-discipline; admissible under detector v2; paired k=8, GO on discordance, `delivery.channel=description_only`) | `docs/findings/pi-c-detector-blind-to-description-channel.md` |
+| `superseded/gitpull-paired-k8-2026-09-01.json` | `CANT_TELL_YET` (inadmissible, wrong instrument, trap-discipline; refused at write time on zero detected invocations under detector v1); superseded 2026-09-02 | `docs/findings/pi-c-detector-blind-to-description-channel.md` |
 | `superseded/reclass-git-pull-rebase-trap.json` | `CANT_TELL_YET` (wrong instrument, trap-discipline); superseded 2026-09-01, screen row D4-voided | `README.md` |
 
 A 1.1.0 mint of the synthetic-control KEEP (same measurements, harness-populated
