@@ -296,6 +296,7 @@ def fit_skill(
         "critical_order_statistic": test.critical_order_statistic,
         "exceed_count": test.exceed_count,
         "null_encoded_mean": test.encoded_mean_0,
+        "null_tie_fraction": test.tie_fraction_0,
         "alpha": HETEROGENEITY_TEST_ALPHA,
         "bootstrap_b": HETEROGENEITY_BOOTSTRAP_B,
         "bootstrap_seed": _bootstrap_seed(clauses),
@@ -425,6 +426,7 @@ class _HeterogeneityTest:
     critical_order_statistic: float
     exceed_count: int
     encoded_mean_0: float
+    tie_fraction_0: float
     admitted: bool
 
 
@@ -499,55 +501,75 @@ def _decompose(clause: ClauseObservations) -> tuple[int, int, int]:
     return max(wins, 0), max(ties, 0), max(losses, 0)
 
 
+@dataclass(frozen=True)
+class _PooledNull:
+    """The one categorical distribution over {0, 0.5, 1} every clause draws from under H_0.
+
+    Pooled over OBSERVATIONS, not averaged over clauses: tie = sum_k ties_k / N,
+    win = sum_k wins_k / N, loss = 1 - tie - win. The encoded mean of a draw is
+    0.5 * tie + win, which equals sum_k w_k / sum_k n_k by identity.
+    """
+
+    tie: float
+    win: float
+    encoded_mean: float
+
+
+def _pooled_null(clauses: list[ClauseObservations]) -> _PooledNull:
+    total_n = sum(cl.n for cl in clauses)
+    wins = 0
+    ties = 0
+    for cl in clauses:
+        w_k, t_k, _l_k = _decompose(cl)
+        wins += w_k
+        ties += t_k
+    tie = ties / total_n
+    win = wins / total_n
+    return _PooledNull(tie=tie, win=win, encoded_mean=0.5 * tie + win)
+
+
 def _draw_null_clause(
     clause: ClauseObservations,
-    encoded_mean_0: float,
+    null: _PooledNull,
     rng: random.Random,
 ) -> ClauseObservations:
-    """One clause resampled under H_0, preserving its n and its tie count.
+    """One clause resampled under H_0, preserving its n.
 
-    The null is CATEGORICAL over {0, 0.5, 1}, not binomial. A binomial null at
-    the pooled mean would generate a tie-free world and compare tie-carrying
-    data against it, reintroducing the misspecification sum_sq was added to
-    remove.
+    H_0 is ONE categorical distribution over {0, 0.5, 1} shared by every clause
+    (amendment section 3 as amended 2026-09-02 on the heterogeneity-target
+    ruling, #360). Every observation is redrawn, ties included, because the
+    lane's heterogeneity target is the ENCODED clause mean
 
-    THE ESTIMAND HELD CONSTANT IS THE ENCODED CLAUSE MEAN, and that forces the
-    decisive win probability to vary by clause. With tie fraction
-    q_k = ties_k / n_k, a clause's encoded mean is
+        theta_k = 0.5 * t_k + (1 - t_k) * p_k
 
-        E[X_k] = 0.5 q_k + (1 - q_k) p_k
+    and a clause's tie propensity t_k is a component of theta_k: part of the
+    hypothesis under test, not an ancillary statistic to condition on. The
+    superseded null held each clause's realised tie count fixed and so
+    reproduced none of the tie-sampling variation the data carry; it admitted
+    16 of 40 replicates of the registered homogeneous tie regime where alpha
+    predicts 2.
 
-    so a COMMON decisive rate p_k = p_0 produces DIFFERENT encoded means
-    whenever tie fractions differ: at p_0 = 0.75 the encoded mean runs 0.70,
-    0.65 and 0.60 for q = 0.20, 0.40 and 0.60. That is real between-clause
-    variation, so such a draw is not a null for the hypothesis under test --
-    it is a world with genuine heterogeneity in it. Inverting instead:
-
-        p_0k = (mu_0 - 0.5 q_k) / (1 - q_k)
-
-    gives every clause the same encoded mean mu_0 by construction. Tie counts
-    stay fixed because how many trials tied is a property of the evidence
-    collected, not of the hypothesis.
+    The null is categorical, not binomial: a binomial null at the pooled mean
+    would regenerate a tie-free world and compare tie-carrying data against
+    it. Every null clause has encoded mean null.encoded_mean by identity, with
+    no per-clause inversion and no clamp. On tie-free data (null.tie == 0) the
+    draw is the binomial null at the pooled rate and consumes the RNG stream
+    exactly as the previous implementation did, so tie-free verdicts are
+    unchanged.
     """
-    _wins, ties, _losses = _decompose(clause)
-    decisive = clause.n - ties
-    if decisive <= 0:
-        # All ties: nothing to resample, and no decisive rate is identified.
-        return ClauseObservations(
-            clause_id=clause.clause_id, w=0.5 * ties, n=clause.n, sum_sq=0.25 * ties
-        )
-
-    tie_fraction = ties / clause.n
-    p_0k = (encoded_mean_0 - 0.5 * tie_fraction) / (1.0 - tie_fraction)
-    p_0k = min(max(p_0k, 0.0), 1.0)
-
-    w = 0.5 * ties
-    sum_sq = 0.25 * ties
-    for _ in range(decisive):
-        if rng.random() < p_0k:
-            w += 1.0
-            sum_sq += 1.0
-    return ClauseObservations(clause_id=clause.clause_id, w=w, n=clause.n, sum_sq=sum_sq)
+    # Ties are REDRAWN at the pooled tie fraction. Fixing ties_b at the
+    # clause's observed tie count is the superseded null; the tie-split
+    # fixture in tests/test_aggregation_fit.py refuses under that mutant.
+    ties_b = 0 if null.tie == 0.0 else sum(1 for _ in range(clause.n) if rng.random() < null.tie)
+    decisive = clause.n - ties_b
+    p_decisive = null.win / (1.0 - null.tie) if null.tie < 1.0 else 0.0
+    wins_b = sum(1 for _ in range(decisive) if rng.random() < p_decisive)
+    return ClauseObservations(
+        clause_id=clause.clause_id,
+        w=wins_b + 0.5 * ties_b,
+        n=clause.n,
+        sum_sq=wins_b + 0.25 * ties_b,
+    )
 
 
 def _heterogeneity_test(
@@ -556,8 +578,9 @@ def _heterogeneity_test(
 ) -> _HeterogeneityTest:
     """Decide whether heterogeneity is identified well enough to fit.
 
-    Tests H_0: tau^2 = 0 (one common rate; all observed spread is sampling
-    noise) against H_1: tau^2 > 0, by parametric bootstrap under the null.
+    Tests H_0: tau^2 = 0 (one common encoded clause mean; all observed spread
+    is sampling noise) against H_1: tau^2 > 0, by parametric bootstrap under
+    the null.
 
     This REPLACES the old fixed VAR_FLOOR as the admission rule. A magnitude
     floor asks whether the latent variance is large; the question that decides
@@ -581,15 +604,15 @@ def _heterogeneity_test(
     # wanted here; a cryptographic source would make the verdict irreproducible.
     rng = random.Random(_bootstrap_seed(clauses))  # noqa: S311
 
-    # The null holds the ENCODED clause mean constant, because that is the
-    # quantity whose between-clause variance the test is about. Pooled over
-    # observations, not averaged over clauses.
-    total_n = sum(cl.n for cl in clauses)
-    encoded_mean_0 = sum(cl.w for cl in clauses) / total_n
+    # The null is one pooled categorical distribution, so every null clause
+    # carries the same ENCODED mean, the quantity whose between-clause
+    # variance the test is about. Pooled over observations, not averaged
+    # over clauses.
+    null = _pooled_null(clauses)
 
     null_stats: list[float] = []
     for _ in range(HETEROGENEITY_BOOTSTRAP_B):
-        null_clauses = [_draw_null_clause(cl, encoded_mean_0, rng) for cl in clauses]
+        null_clauses = [_draw_null_clause(cl, null, rng) for cl in clauses]
         null_rates = [c.w / c.n for c in null_clauses]
         null_mean = sum(null_rates) / len(null_rates)
         null_total = sum((r - null_mean) ** 2 for r in null_rates) / (len(null_rates) - 1)
@@ -614,7 +637,8 @@ def _heterogeneity_test(
         p_boot=p_boot,
         critical_order_statistic=critical_order_statistic,
         exceed_count=exceed,
-        encoded_mean_0=encoded_mean_0,
+        encoded_mean_0=null.encoded_mean,
+        tie_fraction_0=null.tie,
         admitted=p_boot <= HETEROGENEITY_TEST_ALPHA,
     )
 

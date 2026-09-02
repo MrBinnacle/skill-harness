@@ -1,8 +1,15 @@
 # Amended pre-registration: EB-MoM sampling-variance peel and heterogeneity admission (#360)
 
 **Status:** FROZEN on authoring. No confirmatory simulation has been run against it.
-**BLOCKED:** two frozen clauses disagree about the null's heterogeneity target; see the open question
-before section 8. A confirmatory root seed must not be spent until that is ruled on.
+**BLOCKED (2026-09-01) on the clause disagreement: RESOLVED 2026-09-02** by the heterogeneity-target
+ruling (encoded mean; section 3's tie treatment superseded; row 1 re-measured calibrated at 0 of 40).
+**A confirmatory root seed is STILL not to be spent, on this session's recommendation rather than by
+contract:** the same R=40 development smoke fires the frozen kill criterion in three registered
+regimes (wrong-PASS excess +109 in `low_heterogeneity` and +17 in `tie_heavy_signal`; wrong-FAIL
+excess +12 in `tie_heavy_null`), and the two tie-free instances were already present at `7d50b4a`
+and unreported. A confirmatory run now is predicted to REJECT. The contract permits it (one run,
+reported whichever way it lands, then a superseding amendment); spending the seed on a predicted
+rejection is the maintainer's call. Section 0 carries the numbers.
 **Amends:** the pre-registration in the module docstring of
 `tests/test_aggregation_fit_ebmom_recovery.py` (falsification plan item 2, #344).
 **Supersedes:** that registration's acceptance statistic only. Its regimes, its generative
@@ -55,6 +62,10 @@ they may not be cited as confirmation of any repaired estimator.
 | four estimator families, mean c_hat | per-clause peel 30.14 / 163.67; pooled peel 33.60 / 170.53; ANOVA rho 28.60 / 144.51; marginal-likelihood EB 29.91 / 1.5e16 |
 | finite-K bias, 4000 replicates | `/K` peel biased low by -1.31e-4 and -5.8e-5 against a predicted `-(V_p+S)/K` of -1.62e-4 and -5.6e-5; `/(K-1)` biased by +3.1e-5 and -2e-6 |
 | clipping | `max(v,0)` fires on 2.3 percent of `low_heterogeneity` replicates and moves the retained mean up by about 8e-6 |
+| development smoke through the harness at `7d50b4a`, before the null amendment (2026-09-02, R=40, root `SMOKE_NOT_CONFIRMATORY`) | verdict REJECTED. Row 1 `tie_heavy_null` 16/40. Kill criterion excess over `main`: `low_heterogeneity` wrong PASS +109, wrong FAIL +19; `tie_heavy_signal` wrong PASS +17; `tie_heavy_null` wrong FAIL +6. Abstention excess: `small_n_bite` +1, `low_heterogeneity` -194, `tie_heavy_null` -3054, `tie_heavy_signal` -164. Row 3 bias 0.0249 / 0.0012 / 0.0143 / 0.0201 (all inside 10 percent). **These rows existed on the smoke the 2026-09-01 comment reported row 1 from, and were not reported.** |
+| development smoke through the harness after the null amendment (2026-09-02, R=40, same root) | verdict REJECTED. Row 1 `tie_heavy_null` **0/40, calibrated** (exact binomial p = 0.27). Kill criterion excess unchanged on the tie-free regimes (`low_heterogeneity` +109 / +19; `benign_large_n` 0 / -35; `small_n_bite` -567 / -122); `tie_heavy_signal` wrong PASS +17; `tie_heavy_null` wrong FAIL **+12** (was +6: the amended null refuses the null world, so those clauses take the unpooled path, which abstains where `main`'s over-shrunk fit happened to PASS them correctly). Abstention excess on `tie_heavy_null` -14 (was -3054). Row 3 bias unchanged. |
+| mechanism of the tie-free kills, read from the numbers | the wrong-PASS excess in `low_heterogeneity` is the section 1 reciprocal instability reaching the decisions: an admitted fit with an overshooting `c_hat` (hundreds against a truth of 100) shrinks every clause to 0.65 with a posterior narrow enough to clear `P(rate > 0.60) >= 0.95`, where the oracle at `c = 100` abstains. The admission test refuses the fits nearest the boundary; it does not bound the variance of `c_hat` among the admitted ones. A repair is a change to the estimator (section 2 mechanism, revisable), not to any threshold, and it is development work under section 7 item 2 |
+
 
 **The original registration is not rewritten, and that is deliberate.** Its text stands unedited, including its
 "from below" derivation, which is correct for the unpeeled estimator it was written against and
@@ -153,6 +164,19 @@ The null is **CATEGORICAL over `{0, 0.5, 1}`, not binomial.** A binomial null at
 encoded mean would regenerate a tie-free world and compare tie-carrying data against it, which
 reintroduces exactly the misspecification `sum_sq` was added to remove.
 
+**AMENDED 2026-09-02, on the heterogeneity-target ruling recorded on #360 that day.** The text
+from "Ties are held fixed per clause" through "must not be described as if it did" is
+**SUPERSEDED** and kept unedited as the record; the replacement follows it under "The null as
+amended". Steps 4 and 5, the decision rule, `B`, the level, the seed derivation and the provenance
+requirement are unchanged. The ruling: the lane's heterogeneity target is the **encoded clause
+mean** `theta_k = 0.5 t_k + (1 - t_k) p_k`, because the lane decides each clause on the encoded
+rate (INVARIANTS section 1) and operates on `{0, 0.5, 1}` observations under route (b) (section 4).
+Under that target the tie count is not ancillary, so a null that holds it fixed conditions on part
+of the hypothesis. It holds while both premises hold; the Revisit-if in the decision-status list
+says when it expires.
+
+---- SUPERSEDED TEXT BEGINS ----
+
 Ties are held **fixed per clause**. How many trials tied is a property of the evidence
 collected, not of the hypothesis under test; `H_0` is a statement about one shared *decisive*
 win probability.
@@ -190,6 +214,75 @@ observations, `sum_k w_k / sum_k n_k`.
 constant. An implementation that instead drew all three outcomes from a single pooled
 categorical distribution would not hold tie counts fixed, and must not be described as if it
 did.
+
+---- SUPERSEDED TEXT ENDS ----
+
+#### The null as amended (2026-09-02)
+
+`H_0` is one categorical distribution over `{0, 0.5, 1}` shared by every clause.
+
+1. Decompose each clause exactly (section 4) into `wins_k`, `ties_k`, `losses_k`.
+2. Pool over observations, not over clauses: `t_0 = sum_k ties_k / N`, `win_0 = sum_k wins_k / N`,
+   `loss_0 = 1 - t_0 - win_0`, with `N = sum_k n_k`.
+3. For `b = 1..B`: for each clause `k`, redraw **all** `n_k` observations i.i.d. from
+   `{0.5: t_0, 1: win_0, 0: loss_0}`. Each clause keeps its own `n_k`.
+
+Every null clause has encoded mean `0.5 t_0 + win_0 = mu_0` by identity, with no per-clause
+inversion and no clamp. Ties are redrawn because tie propensity is a component of `theta_k`; the
+superseded null fixed them and so reproduced none of the tie-sampling variation the data carry,
+which is the whole of the 16 of 40. On tie-free data (`t_0 = 0`) the draw is the binomial null at
+the pooled rate and consumes the RNG stream exactly as the superseded implementation did, so
+tie-free admission verdicts are unchanged. Provenance keeps `null_encoded_mean` and adds
+`null_tie_fraction` (`t_0`); the frozen provenance list gains that field and loses nothing.
+
+**Why pooled rather than a per-clause plug-in of `q_k`.** A per-clause plug-in with the superseded
+inversion clamps `p_0k` at boundary tie fractions; a clamped clause no longer has encoded mean
+`mu_0`, so the null world carries heterogeneity of its own and the test goes conservative exactly
+where `theta`-heterogeneity driven by tie propensity is real. Chosen before the row-1
+re-measurement, which checks it and does not pick it.
+
+**A limitation, measured.** `H_0: Var(theta) = 0` is composite; worlds with common `theta` and
+clause-varying `(t_k, p_k)` are inside it and the pooled null draws only its i.i.d. member. The
+statistic's null expectation is zero under every member; the null variance can differ because
+`Var(X) = theta - 0.25 t - theta^2` varies with `t`. Measured on `iso_theta` below.
+
+**`tie_heavy_null` is a null world under both readings.** In the registered regime every clause has
+`theta_k = 0.65` exactly and the population latent variance of `theta` is 0. The `6.0e-04` the
+open-question section attributed to "conditional heterogeneity" is sampling variation of the tie
+count, and only a null that conditions on realised tie counts can see it. The regime does not
+move, and its label was never wrong.
+
+**What the registered matrix cannot see.** `tie_heavy_null` is homogeneous under both readings and
+`tie_heavy_signal` has a common tie rate, so the confirmatory matrix cannot distinguish the amended
+null from a decisive-rate null. The ruling is pinned by a deterministic fixture in
+`tests/test_aggregation_fit.py::TestFitSkillEbmom::test_tie_propensity_heterogeneity_is_admitted`:
+ten clauses `(wins, ties, losses) = (60, 20, 20)` and ten `(28, 60, 12)`, decisive rates 0.75 and
+0.70, encoded 0.70 and 0.58. The amended null admits it (`p_boot = 0.001`); the ties-fixed null
+refuses it (`p_boot = 0.335`). Mutant M-B4 in the mutation receipt is now that ties-fixed draw.
+
+**Development demonstration behind the ruling** (`scripts/ebmom_null_demo_7d50b4a.py`, pinned to
+commit `7d50b4a`, root seed `SMOKE_NOT_CONFIRMATORY`, throwaway; not row 1):
+
+| world | true `Var(theta)` | null | admitted, R=40 | admitted, R=200 |
+|---|---|---|---|---|
+| `tie_heavy_null` | 0 (both readings) | ties fixed, encoded mean common (superseded) | 16/40 | 79/200 |
+| `tie_heavy_null` | 0 (both readings) | ties fixed, decisive rate common | 0/40 | 7/200 |
+| `tie_heavy_null` | 0 (both readings) | pooled categorical, ties redrawn (amended) | 0/40 | 5/200 |
+| `tie_split` | 0.0025 encoded; 0 decisive | ties fixed, encoded mean common (superseded) | 40/40 | 200/200 |
+| `tie_split` | 0.0025 encoded; 0 decisive | ties fixed, decisive rate common | 2/40 | 9/200 |
+| `tie_split` | 0.0025 encoded; 0 decisive | pooled categorical, ties redrawn (amended) | 40/40 | 199/200 |
+
+`tie_split`: common decisive rate 0.75, tie propensity 0.20 for even clauses and 0.60 for odd,
+`n = 25`, `K = 200`; encoded means 0.70 and 0.60. Through the amended production code at `R = 200`
+(no monkeypatch): `tie_heavy_null` admitted 4/200 (0.020, exact binomial p = 0.05 against 0.05); `iso_theta` (encoded mean 0.65 for every clause, `(t, p) = (0.20, 0.6875)` for even clauses and `(0.60, 0.875)` for odd, so `Var(theta) = 0` with `Var(t) > 0`) admitted 13/200 (0.065, p = 0.33); `tie_split` admitted 199/200. The composite-hypothesis member outside the null's i.i.d. world is calibrated within Monte Carlo error at this size.
+
+**Cross-family challenge review.** The ruling was reviewed before posting by two non-Anthropic
+models prompted to refute it in both directions. Both accepted the amended null as the right shape
+given the encoded target and neither could construct a case for the superseded null standing. Both
+held that the choice of target is a judgement rather than a derivation, and the ruling on #360 is
+written that way and names the alternative: hold `BLOCKED` and build route (a) first. Receipt: the
+operator's steering repository, `docs/audit/t1-360-heterogeneity-target-S394/`.
+
 4. Compute `latent_raw` for each bootstrap sample by the section 2 formula, unchanged.
 5. **Decision rule, FROZEN at `B = 999`:**
 
@@ -205,8 +298,8 @@ an interpolated quantile sits between order statistics and can admit at a true l
 sampling distribution of a variance component is skewed and partly atomic at zero, and a normal
 quantile is wrong in exactly the regime that matters.
 
-Record `p_boot`, the critical order statistic, the exceedance count, `q_0`, `B`, the level, and
-the bootstrap identity.
+Record `p_boot`, the critical order statistic, the exceedance count, `q_0`, the pooled tie
+fraction `t_0` (added 2026-09-02, additive), `B`, the level, and the bootstrap identity.
 
 **Determinism must be preserved.** `docs/INVARIANTS.md` carries no general determinism clause,
 but `fit_skill`'s own docstring makes the promise directly, and a bootstrap introduces sampling.
@@ -615,10 +708,26 @@ Rollback state is `main`. `agent/issue-360` stays unmerged and is the developmen
   `p_boot = (1 + count)/(B + 1)`, `admit iff p_boot <= 0.05`; the full seed-derivation procedure;
   `R = 1000`; the 10 percent bias bound; the exact-binomial calibration rule at level 0.01;
   identical synthetic worlds for `main` and candidate; and removal of the interval-coverage row.
+- **Ruled 2026-09-02, by the adjudication session the maintainer's close scheduled; overturnable
+  by the maintainer:** the heterogeneity target is the encoded clause mean, for as long as the lane
+  decides on the encoded rate under route (b). Section 3's null amended by supersession to the
+  pooled categorical. *Revisit if:* `fit_skill` migrates to the discordant representation, at
+  which point the target becomes the decisive rate by construction and this item expires; or the
+  section 1 decision rule stops being a threshold on the encoded rate; or a tracked ruling names
+  this lane's target explicitly.
+
 
 ---
 
 ## OPEN, AND IT BLOCKS THE CONFIRMATORY RUN: two frozen clauses disagree
+
+**RULED 2026-09-02.** The heterogeneity target is the **encoded mean**; the losing clause is section
+3's tie treatment, amended above by supersession; section 4's regime stands. The ruling, its scope,
+the crux question for the maintainer, and the fork it leaves open (repair now on the current
+encoding, or hold `BLOCKED` and build route (a) first) are recorded on #360 in the comment of
+2026-09-02. Step 3 of the sequence below was then run: row 1 on `tie_heavy_null` admitted **0 of 40** (exact binomial p = 0.27 against 0.05; calibrated). The two clauses now agree. The same smoke fires the kill criterion in three regimes, and re-running it at `7d50b4a` shows the two tie-free instances were already present before the null was amended and were not reported; see the development evidence in section 0 and the ticket comment of 2026-09-02. The text below is kept
+unedited as the record of the question as it stood.
+
 
 **Found by the registered `tie_heavy_null` regime on a development smoke, before any
 confirmatory run. Not fixed here, because fixing it means choosing a heterogeneity target,
@@ -763,8 +872,11 @@ performing them, would be the problem.
 | fixtures | the EB-path fixture was widened from n=10 to n=50; the original n=10 case was retained as an explicit refusal test rather than deleted |
 | mutants | six, listed in the mutation receipt, five killed and one survivor preserved |
 | tooling failure | one clean-restoration attempt failed silently through a `/tmp` path the interpreter could not see, so a "clean" comparison row was actually the mutant. Caught because both rows printed identically; the affected numbers were re-measured after a surgical revert |
-| amendments | this document has been amended three times before any confirmatory run: the initial supersession of the mean statistic, the maintainer's ratification pass, and the workspace-review pass that corrected the null, the oracle, and the #368 scope |
+| amendments | this document has been amended four times before any confirmatory run: the initial supersession of the mean statistic, the maintainer's ratification pass, the workspace-review pass that corrected the null, the oracle, and the #368 scope, and the 2026-09-02 supersession of the null's tie treatment on the heterogeneity-target ruling |
 | code changed after seeing smoke output | yes, and named: the admission-conditioned bias collection in the harness, the encoded-mean null, and the exact tie oracle. All three were corrections to defects the smoke runs and review exposed, not tuning toward a passing result. None of them moved a registered threshold, regime, or the kill criterion |
+| amendment of the null after the ruling | 2026-09-02: the ties-fixed tie treatment superseded by the pooled categorical, on the heterogeneity-target ruling. The form (pooled, not per-clause plug-in) was stated before row 1 was re-measured. Row 1 was then re-measured once at R=40 under `SMOKE_NOT_CONFIRMATORY`; the result is reported whichever way it landed, above |
+| demonstration behind the ruling | `scripts/ebmom_null_demo_7d50b4a.py`, R=40 and R=200, root seed `SMOKE_NOT_CONFIRMATORY`, on two worlds (the registered null, and a common-`p` split-`t` world the registered matrix does not contain). Run to exhibit the mechanism; the target was ruled on the cited facts, not on this table |
+| cross-family challenge review of the ruling | two non-Anthropic reviewers, both-directions brief, before the ruling was posted; one PARTLY SOUND, one UNSOUND, converging that the target choice is a judgement. The ruling was rewritten to say so and to name the alternative. Receipt in the operator's steering repository, `docs/audit/t1-360-heterogeneity-target-S394/` |
 
 **No registered regime, threshold, oracle definition or kill criterion has been changed in
 response to a smoke result.** The changes listed in the last row are repairs to the apparatus.

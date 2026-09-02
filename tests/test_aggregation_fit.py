@@ -333,6 +333,7 @@ class TestFitSkillEbmom:
             "critical_order_statistic",
             "exceed_count",
             "null_encoded_mean",
+            "null_tie_fraction",
             "alpha",
             "bootstrap_b",
             "bootstrap_seed",
@@ -346,6 +347,43 @@ class TestFitSkillEbmom:
         # (1 + exceed) / (B + 1) exactly, so the level is achievable at finite B.
         expected_p = (1.0 + test["exceed_count"]) / (test["bootstrap_b"] + 1.0)
         assert test["p_boot"] == expected_p
+
+    def test_tie_propensity_heterogeneity_is_admitted(self) -> None:
+        """Heterogeneity in the ENCODED mean is admitted even when the decisive rate is common.
+
+        Pins the 2026-09-02 ruling on #360: the lane's heterogeneity target is
+        the encoded clause mean theta_k = 0.5 t_k + (1 - t_k) p_k, because
+        INVARIANTS section 1 decides each clause on the encoded rate. Ten
+        clauses with (wins, ties, losses) = (60, 20, 20) and ten with
+        (28, 60, 12) share a decisive rate near 0.73 but encode 0.70 against
+        0.58. A null that redraws ties at the pooled fraction admits this
+        world (p_boot 0.001); a null that holds each clause's tie count fixed
+        refuses it (p_boot 0.335), which is the superseded null and the
+        decisive-rate reading. The registered acceptance regimes cannot tell
+        those two nulls apart, so this fixture is where the ruling is pinned.
+        """
+        clauses = [
+            ClauseObservations(clause_id=f"a{i:02d}", w=70.0, n=100, sum_sq=65.0) for i in range(10)
+        ] + [
+            ClauseObservations(clause_id=f"b{i:02d}", w=58.0, n=100, sum_sq=43.0) for i in range(10)
+        ]
+        result = fit_skill(clauses)
+
+        assert result.aggregation_method == "ebmom_hierarchical"
+        test = result.aggregation_provenance["heterogeneity_test"]
+        assert isinstance(test, dict)
+        assert test["admitted"] is True
+        # 800 ties over 2000 observations, pooled over observations.
+        assert test["null_tie_fraction"] == 0.4
+        # 880 wins + 400 half-ties over 2000 observations.
+        assert test["null_encoded_mean"] == 0.64
+
+    def test_tie_free_null_reports_zero_tie_fraction(self) -> None:
+        """On tie-free data the pooled categorical null is the binomial null at the pooled rate."""
+        clauses = self._make_k10_clauses_with_variance()
+        test = fit_skill(clauses).aggregation_provenance["heterogeneity_test"]
+        assert isinstance(test, dict)
+        assert test["null_tie_fraction"] == 0.0
 
     def test_admission_verdict_is_deterministic(self) -> None:
         """The bootstrap must not make fit_skill non-deterministic (#360).

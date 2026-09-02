@@ -103,10 +103,12 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M-B4",
         "B",
-        "hold the null decisive rate common across clauses, reintroducing "
-        "between-clause variation into the null",
-        "p_0k = (encoded_mean_0 - 0.5 * tie_fraction) / (1.0 - tie_fraction)",
-        "p_0k = encoded_mean_0",
+        "hold each clause's tie count fixed at its observed value: the superseded "
+        "null's tie treatment, which conditions on a statistic that is part of the "
+        "encoded-mean hypothesis",
+        "ties_b = 0 if null.tie == 0.0 else "
+        "sum(1 for _ in range(clause.n) if rng.random() < null.tie)",
+        "ties_b = _decompose(clause)[1]",
         "tests/test_aggregation_fit.py::TestFitSkillEbmom",
     ),
 )
