@@ -28,11 +28,23 @@ not cover the channel that produced the effect.
 Logs: `.private/microrun/batch1/gitpull/logs-stage1-paired/` (two `.eval` files,
 one per arm). Runner: `.private/microrun/batch1/gitpull/stage1_gitpull_paired.py`.
 
-Receipt: `docs/sers/receipts/gitpull-paired-k8-2026-09-01.json`. It supersedes
+Receipt: `docs/sers/receipts/gitpull-paired-k8-2026-09-01-detector-v2.json`
+(minted 2026-09-02, SERS 1.2.0, admissible). It supersedes
+`docs/sers/receipts/superseded/gitpull-paired-k8-2026-09-01.json`, the 1.1.0
+receipt that recorded these same measurements as inadmissible under detector
+v1, which in turn superseded
 `docs/sers/receipts/superseded/reclass-git-pull-rebase-trap.json` (2026-07-20),
 whose `p0=1.00` screen row ran on the D4-leaked prompt. The site publishes one
-receipt per skill, so the older file moved out of the published directory and
+receipt per skill, so each older file moved out of the published directory and
 stays in the tree unedited.
+
+**Re-ingested 2026-09-02 (issue 390).** Detector v2 landed with the #384 ruling:
+exposure is the treatment and pi_c is a stratifier, not a gate. The same two
+`.eval` logs then wrote without refusal as run `0cc7fce87e70` — 8 samples per
+arm, one pin across both arms, pi_c recorded as 0/8 with its interval, exposure
+8/8 Full and 0/8 Null, paired cells full_only=6, null_only=0, both_pass=0,
+both_fail=2. The refusal this document reports was a defect in the detector, not
+a property of the evidence, and the record now says so on both surfaces.
 
 The registered template carries no win-direction field, and this table does not
 add one. The section below is an instrument finding and needs trajectory facts
