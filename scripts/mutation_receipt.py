@@ -97,6 +97,11 @@ _UNEXPOSED_FULL_DETECTOR = "tests/test_subject_ingest.py::test_full_arm_unexpose
 _UNEXPOSED_FULL_SEAM_DETECTOR = "tests/test_subject_ingest.py::test_unexposed_full_epoch_refuses"
 _NULL_EXPOSED_DETECTOR = "tests/test_subject_ingest.py::test_null_arm_exposed_refuses"
 _NULL_EXPOSED_SEAM_DETECTOR = "tests/test_subject_ingest.py::test_null_epoch_exposed_refuses"
+# #389: ratification binding and count-mismatch refusal at the paired Gate-2 read.
+_PAIRED_GATE2 = "src/skill_harness/cli/paired_gate2.py"
+_PAIRED_GATE2_MODULE = "skill_harness.cli.paired_gate2"
+_DRAFT_REFUSED = "tests/test_cli_paired_gate2.py::TestUnratifiedDesign::test_draft_record_refused"
+_COUNT_MISMATCH = "tests/test_cli_paired_gate2.py::TestCountMismatch::test_pilot_k8_vs_design_n32"
 
 MUTANTS: tuple[Mutant, ...] = (
     Mutant(
@@ -181,6 +186,27 @@ MUTANTS: tuple[Mutant, ...] = (
         "s.epoch for s in null.samples if s.exposed_skill is True)",
         "    null_contaminated_exposed = sorted(s.epoch for s in null.samples if False)",
         (_NULL_EXPOSED_DETECTOR, _NULL_EXPOSED_SEAM_DETECTOR),
+    ),
+    Mutant(
+        "M-R1",
+        "389-ratification-binding",
+        "remove the RATIFIED status check: a DRAFT record is accepted and the command "
+        "proceeds to read the design",
+        _PAIRED_GATE2,
+        _PAIRED_GATE2_MODULE,
+        '    if record.status != "RATIFIED":',
+        "    if False:  # mutant: DRAFT accepted",
+        (_DRAFT_REFUSED,),
+    ),
+    Mutant(
+        "M-R2",
+        "389-count-mismatch",
+        "remove the pair-count check: k=8 pairs are read against an n=32 design without refusal",
+        _PAIRED_GATE2,
+        _PAIRED_GATE2_MODULE,
+        "    if total_pairs != design.n_pairs:",
+        "    if False:  # mutant: count mismatch accepted",
+        (_COUNT_MISMATCH,),
     ),
 )
 

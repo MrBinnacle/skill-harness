@@ -11,6 +11,9 @@ hard_cap_usd: 0.00
 cost_provenance: project_pair_usd
 sme_status: deliberated
 ratified_date: "YYYY-MM-DD"
+gamma: 0.90
+delta_min: 0.20
+q_min: 0.70
 ---
 
 # RAT-0000 — <skill-slug> row-pick
