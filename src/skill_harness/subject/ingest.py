@@ -50,10 +50,10 @@ import json
 import math
 import sqlite3
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Literal, NamedTuple
+from typing import Annotated, Any, Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field
 from scipy.stats import beta as beta_dist  # type: ignore[import-untyped]
@@ -507,11 +507,15 @@ def ingest_paired_eval_logs(
     null_log: Path,
     skill_dir: Path,
     conn: sqlite3.Connection,
+    runner_config: Mapping[str, Any] | None = None,
 ) -> IngestResult:
     """Parse a Full/Null ``.eval`` pair and write it to the evidence store.
 
     Convenience composition of :func:`parse_eval_log` (needs the ``[inspect]``
     extra) and :func:`write_paired_evidence` (pure).
+
+    :param runner_config: Optional runner-declared config, recorded verbatim
+        under ``config_json["runner"]``. See :func:`write_paired_evidence`.
     """
     skill_description = _extract_skill_description(skill_dir)
     return write_paired_evidence(
@@ -519,6 +523,7 @@ def ingest_paired_eval_logs(
         null=parse_eval_log(null_log, skill_description=skill_description),
         skill_dir=skill_dir,
         conn=conn,
+        runner_config=runner_config,
     )
 
 
@@ -528,6 +533,7 @@ def write_paired_evidence(
     null: ParsedEvalLog,
     skill_dir: Path,
     conn: sqlite3.Connection,
+    runner_config: Mapping[str, Any] | None = None,
 ) -> IngestResult:
     """Write one parsed Full/Null pair through the evidence-admissibility machinery.
 
@@ -552,6 +558,18 @@ def write_paired_evidence(
     detector. Zero invocations with full exposure is ADMISSIBLE — the write
     proceeds, records pi_c = 0/n with its interval, and the verdict line carries
     it. The CACE secondary is stated as not identified at pi_c = 0.
+
+    Runner config (#409): a sized run under a ratification records what it
+    declared -- the RAT id and record path, the declared skill_id, task_family
+    and estimand, and the route and model string -- under
+    ``config_json["runner"]``, verbatim and unvalidated here. Two reasons it is
+    recorded rather than derived. Section 2 of a Gate-2 ratification requires
+    the reference to travel in the runner's config and be recorded at ingest.
+    And the route is no longer recoverable from the recorded model identifier:
+    ``anthropic/claude-sonnet-5`` names the direct API to Inspect and the
+    OpenRouter route to this repository's own CLI, so the route survives only
+    because the runner writes it down. An ingest without the block keeps
+    working and simply carries no ``runner`` key.
 
     :raises EvalLogNotSuccessError: either log's status is not ``success``.
     :raises PairedLogMismatchError: the logs are not a valid Full/Null pair.
@@ -730,6 +748,11 @@ def write_paired_evidence(
                             "detector": EXPOSURE_DETECTOR_VERSION,
                         },
                         "paired_cells": _paired_cell_counts(full, null),
+                        # Omitted entirely when absent rather than written as
+                        # null: a present-but-null key reads as "this run
+                        # declared nothing", which is a claim, while an absent
+                        # key is the honest "this ingest predates the block".
+                        **({"runner": dict(runner_config)} if runner_config else {}),
                     },
                     sort_keys=True,
                 ),
