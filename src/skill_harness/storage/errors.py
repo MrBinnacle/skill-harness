@@ -45,3 +45,30 @@ class MigrationTamperedError(StorageError):
     edited post-apply or the ledger was tampered with; either way, manual
     inspection is required.
     """
+
+
+class StalePinError(StorageError):
+    """Screen store rows have harness_pin_fingerprints that differ from the live pin.
+
+    Raised by ``screen verdict`` when admissible screen rows were captured under
+    a different harness pin than the one the running instrument would produce.
+    The screen verdict cannot silently use stale evidence — a missing number is
+    a typed refusal, never an invented score.
+
+    Carries both fingerprints so the caller can render them.
+    """
+
+    def __init__(
+        self,
+        *,
+        stored_fingerprints: frozenset[str],
+        fresh_fingerprint: str,
+    ) -> None:
+        self.stored_fingerprints = stored_fingerprints
+        self.fresh_fingerprint = fresh_fingerprint
+        # Empty set = admissible rows carried NULL fingerprints.
+        stored_str = ", ".join(sorted(stored_fingerprints)) if stored_fingerprints else "missing"
+        super().__init__(
+            f"harness pin mismatch: stored [{stored_str}] vs fresh "
+            f"[{fresh_fingerprint}] — screen verdict refused"
+        )

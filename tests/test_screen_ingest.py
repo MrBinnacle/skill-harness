@@ -22,8 +22,12 @@ from skill_harness.aggregation.verdict import (
     screen_verdict,
 )
 from skill_harness.cli.main import cli
+from skill_harness.storage.errors import StalePinError
 from skill_harness.storage.migrations import open_evidence
-from skill_harness.storage.repositories.evidence.screens import derive_p0_by_skill
+from skill_harness.storage.repositories.evidence.screens import (
+    derive_p0_by_skill,
+    select_stale_pin_skills,
+)
 from skill_harness.subject.ingest import ParsedEvalLog, ParsedSample
 from skill_harness.subject.screen_backfill import (
     BATCH1_MANIFEST,
@@ -72,10 +76,14 @@ def make_null_sample(
 
 
 def make_screen_log(
-    *scores: float, skill_name: str = "some-skill", task_id: str = "task-null-1"
+    *scores: float,
+    skill_name: str = "some-skill",
+    task_id: str = "task-null-1",
+    fingerprint: str | None = PIN_FP,
 ) -> ParsedEvalLog:
     samples = tuple(
-        make_null_sample(i, s, skill_name=skill_name) for i, s in enumerate(scores, start=1)
+        make_null_sample(i, s, skill_name=skill_name, fingerprint=fingerprint)
+        for i, s in enumerate(scores, start=1)
     )
     return ParsedEvalLog(
         task_name=f"{skill_name}-null",
@@ -278,6 +286,179 @@ def test_skill_with_only_inadmissible_screens_has_no_p0_row(conn: sqlite3.Connec
         conn=conn,
     )
     assert derive_p0_by_skill(conn) == []
+
+
+# ---------------------------------------------------------------------------
+# Pin-currency check (#382) — the poison fixture: a row with a mismatched
+# harness_pin_fingerprint must not silently contribute to p0.
+# ---------------------------------------------------------------------------
+
+OLD_PIN = "fp-deadbeef"
+FRESH_PIN = "fp-cafebabe"
+
+
+def test_stale_pin_detected_for_mismatched_fingerprint(conn: sqlite3.Connection) -> None:
+    """AC3 poison fixture: an admissible screen with fingerprint=OLD_PIN is stale
+    against FRESH_PIN. The skill MUST appear in the stale list with OLD_PIN named,
+    and derive_p0_by_skill(fresh_pin=...) must yield no p0 row."""
+    write_screen_evidence(
+        parsed=make_screen_log(1.0, 1.0, 1.0, fingerprint=OLD_PIN),
+        source_eval_sha256="s1",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        conn=conn,
+    )
+    stale = select_stale_pin_skills(conn, FRESH_PIN)
+    assert len(stale) == 1
+    assert stale[0].skill_name == "some-skill"
+    assert stale[0].stored_fingerprints == frozenset({OLD_PIN})
+    # Typed refusal names both fingerprints.
+    refusal = StalePinError(
+        stored_fingerprints=stale[0].stored_fingerprints,
+        fresh_fingerprint=FRESH_PIN,
+    )
+    assert OLD_PIN in str(refusal)
+    assert FRESH_PIN in str(refusal)
+    # Stale trials must not enter p0 under the fresh pin.
+    assert derive_p0_by_skill(conn, fresh_pin=FRESH_PIN) == []
+    # Without the filter the stale row would still shape p0 — the poison baseline.
+    unfiltered = derive_p0_by_skill(conn)
+    assert len(unfiltered) == 1
+    assert unfiltered[0].p0 == 1.0
+
+
+def test_stale_pin_not_flagged_for_matching_fingerprint(conn: sqlite3.Connection) -> None:
+    """A screen whose fingerprint matches the fresh pin is NOT stale."""
+    write_screen_evidence(
+        parsed=make_screen_log(1.0, 1.0, 1.0, fingerprint=FRESH_PIN),
+        source_eval_sha256="s2",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        conn=conn,
+    )
+    assert select_stale_pin_skills(conn, FRESH_PIN) == []
+    rows = derive_p0_by_skill(conn, fresh_pin=FRESH_PIN)
+    assert len(rows) == 1
+    assert rows[0].p0 == 1.0
+
+
+def test_stale_pin_null_fingerprint_is_refused(conn: sqlite3.Connection) -> None:
+    """A screen with NULL fingerprint is stale: a missing pin is a typed refusal."""
+    write_screen_evidence(
+        parsed=make_screen_log(1.0, 1.0, 1.0, fingerprint=None),
+        source_eval_sha256="s3",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        conn=conn,
+    )
+    stale = select_stale_pin_skills(conn, FRESH_PIN)
+    assert len(stale) == 1
+    assert stale[0].skill_name == "some-skill"
+    assert stale[0].stored_fingerprints == frozenset()
+    assert derive_p0_by_skill(conn, fresh_pin=FRESH_PIN) == []
+
+
+def test_stale_pin_mixed_excludes_only_stale_rows_from_p0(conn: sqlite3.Connection) -> None:
+    """Two admissible screens for the same skill: one OLD (0/3), one FRESH (3/3).
+
+    The OLD row is refused and named; p0 under fresh_pin is 1.0 from the FRESH
+    screen alone — the stale 0/3 must not dilute it to 0.5.
+    """
+    write_screen_evidence(
+        parsed=make_screen_log(0.0, 0.0, 0.0, fingerprint=OLD_PIN, task_id="t-old"),
+        source_eval_sha256="s4a",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        conn=conn,
+    )
+    write_screen_evidence(
+        parsed=make_screen_log(1.0, 1.0, 1.0, fingerprint=FRESH_PIN, task_id="t-fresh"),
+        source_eval_sha256="s4b",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        conn=conn,
+    )
+    stale = select_stale_pin_skills(conn, FRESH_PIN)
+    assert len(stale) == 1
+    assert stale[0].skill_name == "some-skill"
+    assert stale[0].stored_fingerprints == frozenset({OLD_PIN})
+    rows = derive_p0_by_skill(conn, fresh_pin=FRESH_PIN)
+    assert len(rows) == 1
+    assert rows[0].p0 == 1.0
+    assert rows[0].n_trials == 3
+    # Unfiltered would blend stale 0/3 with fresh 3/3 → 0.5.
+    assert derive_p0_by_skill(conn)[0].p0 == 0.5
+
+
+def test_stale_pin_cli_refuses_stale_rows(tmp_path: Path) -> None:
+    """AC3 + AC2: the CLI --fresh-pin option refuses a stale skill and prints
+    both fingerprints in the refusal message."""
+    db = tmp_path / "evidence.db"
+    c = open_evidence(db)
+    write_screen_evidence(
+        parsed=make_screen_log(1.0, 1.0, 1.0, fingerprint=OLD_PIN),
+        source_eval_sha256="s5",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        conn=c,
+    )
+    c.close()
+    res = CliRunner().invoke(
+        cli,
+        ["screen", "verdict", "--evidence-db", str(db), "--fresh-pin", FRESH_PIN],
+    )
+    assert res.exit_code == 0
+    assert "Stale pin refused" in res.output
+    assert "some-skill" in res.output
+    # AC2: both fingerprints named in the typed refusal line.
+    assert OLD_PIN in res.output
+    assert FRESH_PIN in res.output
+    assert "harness pin mismatch" in res.output
+    # The skill must NOT appear in the verdict table
+    assert "CUT" not in res.output
+    assert "CANT_TELL_YET" not in res.output
+
+
+def test_stale_pin_cli_keeps_fresh_rows(tmp_path: Path) -> None:
+    """A screen with matching fingerprint passes the check and renders a verdict."""
+    db = tmp_path / "evidence.db"
+    c = open_evidence(db)
+    write_screen_evidence(
+        parsed=make_screen_log(1.0, 1.0, 1.0, fingerprint=FRESH_PIN),
+        source_eval_sha256="s6",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        conn=c,
+    )
+    c.close()
+    res = CliRunner().invoke(
+        cli,
+        ["screen", "verdict", "--evidence-db", str(db), "--fresh-pin", FRESH_PIN],
+    )
+    assert res.exit_code == 0
+    assert "Stale pin refused" not in res.output
+    assert "some-skill" in res.output
+    # Verdict table is present (has a verdict)
+    assert "CANT_TELL_YET" in res.output or "CUT" in res.output
+
+
+def test_stale_pin_cli_skips_check_without_fresh_pin(tmp_path: Path) -> None:
+    """Without --fresh-pin, the pin check is skipped and a warning is printed."""
+    db = tmp_path / "evidence.db"
+    c = open_evidence(db)
+    write_screen_evidence(
+        parsed=make_screen_log(1.0, 1.0, 1.0, fingerprint=OLD_PIN),
+        source_eval_sha256="s7",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        conn=c,
+    )
+    c.close()
+    res = CliRunner().invoke(cli, ["screen", "verdict", "--evidence-db", str(db)])
+    assert res.exit_code == 0
+    assert "Pin currency check skipped" in res.output
+    # The skill still renders (staleness not checked)
+    assert "some-skill" in res.output
 
 
 # ---------------------------------------------------------------------------
