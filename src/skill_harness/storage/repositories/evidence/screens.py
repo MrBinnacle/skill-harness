@@ -32,10 +32,18 @@ Evidence repos export only insert_*/get_*/select_*/derive_* per A24.
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
+import uuid
+from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
-from skill_harness.storage.models import ScreenRunWrite, ScreenTrialWrite
+from skill_harness.storage.models import (
+    ScreenRunSupersessionWrite,
+    ScreenRunWrite,
+    ScreenTrialWrite,
+)
+from skill_harness.storage.transaction import writer_transaction
 
 
 def insert_screen_run(conn: sqlite3.Connection, run: ScreenRunWrite) -> None:
@@ -105,6 +113,110 @@ def get_screen_run_by_id(conn: sqlite3.Connection, screen_run_id: str) -> dict[s
     return dict(zip(cols, row, strict=True))
 
 
+def supersede_screen_run(
+    conn: sqlite3.Connection,
+    *,
+    superseded_screen_run_id: str,
+    reason: str,
+    admissibility_state: str,
+    inadmissibility_reason: str | None,
+    skill_name: str,
+    subject_model: str,
+    harness_pin_fingerprint: str | None,
+    source_eval_task_id: str,
+    source_eval_sha256: str,
+    created_at: str,
+) -> str:
+    """Append a new screen_run row that supersedes an existing one.
+
+    The superseded row is never touched. The new row carries the corrected
+    evidence-admissibility and copies the trials from the superseded run.
+    Returns the new screen_run_id.
+
+    :raises SupersededScreenRunError: the superseded screen_run_id does not
+        exist or is already superseded.
+    """
+    existing = get_screen_run_by_id(conn, superseded_screen_run_id)
+    if existing is None:
+        raise SupersededScreenRunError(
+            f"screen_run_id {superseded_screen_run_id!r} not found; "
+            "cannot supersede a nonexistent run"
+        )
+
+    already = conn.execute(
+        "SELECT 1 FROM screen_run_supersessions WHERE superseded_screen_run_id = ?",
+        (superseded_screen_run_id,),
+    ).fetchone()
+    if already is not None:
+        raise SupersededScreenRunError(
+            f"screen_run_id {superseded_screen_run_id!r} is already superseded"
+        )
+
+    new_id = hashlib.sha256(
+        f"screen-supersede:{superseded_screen_run_id}:{reason}".encode()
+    ).hexdigest()
+    now = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    supersession = ScreenRunSupersessionWrite(
+        superseded_screen_run_id=superseded_screen_run_id,
+        superseding_screen_run_id=new_id,
+        reason=reason,
+    )
+
+    with writer_transaction(conn):
+        insert_screen_run(
+            conn,
+            ScreenRunWrite(
+                screen_run_id=new_id,
+                skill_name=skill_name,
+                subject_model=subject_model,
+                harness_pin_fingerprint=harness_pin_fingerprint,
+                source_eval_task_id=source_eval_task_id,
+                source_eval_sha256=source_eval_sha256,
+                admissibility_state=admissibility_state,
+                inadmissibility_reason=inadmissibility_reason,
+                created_at=created_at,
+                ingested_at=now,
+            ),
+        )
+
+        trials = conn.execute(
+            "SELECT epoch, passed, scorer_name, scorer_explanation, output_sha256 "
+            "FROM screen_trials WHERE screen_run_id = ? ORDER BY epoch",
+            (superseded_screen_run_id,),
+        ).fetchall()
+        for epoch, passed, scorer_name, scorer_explanation, output_sha256 in trials:
+            insert_screen_trial(
+                conn,
+                ScreenTrialWrite(
+                    screen_trial_id=str(uuid.uuid4()),
+                    screen_run_id=new_id,
+                    epoch=epoch,
+                    passed=passed,
+                    scorer_name=scorer_name,
+                    scorer_explanation=scorer_explanation,
+                    output_sha256=output_sha256,
+                    sampled_at=now,
+                ),
+            )
+
+        conn.execute(
+            "INSERT INTO screen_run_supersessions "
+            "(superseded_screen_run_id, superseding_screen_run_id, reason) "
+            "VALUES (?, ?, ?)",
+            (
+                supersession.superseded_screen_run_id,
+                supersession.superseding_screen_run_id,
+                supersession.reason,
+            ),
+        )
+
+    return new_id
+
+
+class SupersededScreenRunError(ValueError):
+    """Raised when a supersession operation references an invalid screen_run_id."""
+
+
 class ScreenP0(NamedTuple):
     """Derived p0 for one skill: the bare (Null) arm's pass rate over admissible trials."""
 
@@ -140,6 +252,9 @@ def derive_p0_by_skill(conn: sqlite3.Connection, *, fresh_pin: str | None = None
             FROM screen_runs sr
             JOIN screen_trials st ON st.screen_run_id = sr.screen_run_id
             WHERE sr.admissibility_state = 'admissible'
+              AND sr.screen_run_id NOT IN (
+                  SELECT superseded_screen_run_id FROM screen_run_supersessions
+              )
             GROUP BY sr.skill_name
             ORDER BY sr.skill_name
             """
@@ -155,6 +270,9 @@ def derive_p0_by_skill(conn: sqlite3.Connection, *, fresh_pin: str | None = None
             JOIN screen_trials st ON st.screen_run_id = sr.screen_run_id
             WHERE sr.admissibility_state = 'admissible'
               AND sr.harness_pin_fingerprint = ?
+              AND sr.screen_run_id NOT IN (
+                  SELECT superseded_screen_run_id FROM screen_run_supersessions
+              )
             GROUP BY sr.skill_name
             ORDER BY sr.skill_name
             """,
@@ -188,7 +306,9 @@ def select_stale_pin_skills(conn: sqlite3.Connection, fresh_pin: str) -> list[St
     freshly captured pin. NULL fingerprints count as stale: a missing pin is a
     typed refusal, not a free pass into p0. Skills that also have matching-pin
     screens still appear here so the mismatch is named; ``derive_p0_by_skill``
-    with ``fresh_pin`` keeps only the matching rows.
+    with ``fresh_pin`` keeps only the matching rows. Superseded runs are
+    excluded (#402): a row that no longer enters p0 must not surface as a
+    stale-pin refusal either.
 
     Ordered by skill_name for stable output. Used by ``screen verdict`` to refuse
     rows that would silently contribute stale evidence to p0 (#382).
@@ -199,6 +319,9 @@ def select_stale_pin_skills(conn: sqlite3.Connection, fresh_pin: str) -> list[St
                GROUP_CONCAT(DISTINCT sr.harness_pin_fingerprint) AS mismatched_pins
         FROM screen_runs sr
         WHERE sr.admissibility_state = 'admissible'
+          AND sr.screen_run_id NOT IN (
+              SELECT superseded_screen_run_id FROM screen_run_supersessions
+          )
           AND (
                 sr.harness_pin_fingerprint IS NULL
                 OR sr.harness_pin_fingerprint != ?

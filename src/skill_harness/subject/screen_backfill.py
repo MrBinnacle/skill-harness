@@ -47,7 +47,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from skill_harness.storage.repositories.evidence.screens import derive_p0_by_skill
+from skill_harness.storage.repositories.evidence.screens import (
+    derive_p0_by_skill,
+    get_screen_run_by_id,
+    supersede_screen_run,
+)
 from skill_harness.subject.ingest import ParsedEvalLog, parse_eval_log
 from skill_harness.subject.screen_ingest import (
     AdmissibilityState,
@@ -386,6 +390,7 @@ __all__ = [
     "derive_p0_by_skill",
     "format_d4_leak_reason",
     "ingest_screen_eval_log",
+    "supersede_d4_screen_runs",
 ]
 
 
@@ -393,3 +398,78 @@ def _sha256_file(path: Path) -> str:
     import hashlib
 
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# D4 / stale-pin re-disposition — supersede the four disposition-table rows (#402)
+# ---------------------------------------------------------------------------
+#
+# docs/findings/d4-prompt-leak-into-null-arm.md disposition table:
+#   git-pull-rebase-trap          → apparatus_void D4 (leak site: RELEASING.md)
+#   append-only-evidence-design   → apparatus_void D4 (leak site: prompt text)
+#   bayesian-eval-discipline      → apparatus_void D4 (leak site: prompt text)
+#   sqlite-tie-break-red-test-trap → stands on D4; voided on the stale-pin ground
+#
+# Reasons use the #401 format for D4 voids (hit=...; searched=...).
+
+_D4_REDISPOSITION: dict[str, str] = {
+    "git-pull-rebase-trap": (
+        "apparatus_void: D4 prompt leak; hit=RELEASING.md; searched=prompt,RELEASING.md"
+    ),
+    "append-only-evidence-design": ("apparatus_void: D4 prompt leak; hit=prompt; searched=prompt"),
+    "bayesian-eval-discipline": ("apparatus_void: D4 prompt leak; hit=prompt; searched=prompt"),
+}
+
+_STALE_PIN_REDISPOSITION_SKILL = "sqlite-tie-break-red-test-trap"
+_STALE_PIN_REDISPOSITION_REASON = (
+    "apparatus_void: stale harness pin; stored fingerprint does not match the running instrument"
+)
+
+
+def supersede_d4_screen_runs(conn: sqlite3.Connection) -> list[str]:
+    """Supersede the four disposition-table screen runs (#402).
+
+    Three skills are voided on D4 ground with the #401 reason format naming
+    the leak site. ``sqlite-tie-break-red-test-trap`` stands on D4 (prompt is
+    clean) and is voided on the independent stale-pin ground instead.
+
+    For each target skill, finds admissible rows that are not already
+    superseded and appends an inadmissible correction. Returns the list of
+    superseded screen_run_ids.
+    """
+    superseded_ids: list[str] = []
+    targets: list[tuple[str, str]] = [
+        *[(name, reason) for name, reason in _D4_REDISPOSITION.items()],
+        (_STALE_PIN_REDISPOSITION_SKILL, _STALE_PIN_REDISPOSITION_REASON),
+    ]
+    for skill_name, reason in targets:
+        rows = conn.execute(
+            "SELECT screen_run_id FROM screen_runs "
+            "WHERE skill_name = ? AND admissibility_state = 'admissible'",
+            (skill_name,),
+        ).fetchall()
+        for (screen_run_id,) in rows:
+            existing = get_screen_run_by_id(conn, screen_run_id)
+            if existing is None:
+                continue
+            already = conn.execute(
+                "SELECT 1 FROM screen_run_supersessions WHERE superseded_screen_run_id = ?",
+                (screen_run_id,),
+            ).fetchone()
+            if already is not None:
+                continue
+            supersede_screen_run(
+                conn,
+                superseded_screen_run_id=screen_run_id,
+                reason=reason,
+                admissibility_state="inadmissible",
+                inadmissibility_reason=reason,
+                skill_name=existing["skill_name"],
+                subject_model=existing["subject_model"],
+                harness_pin_fingerprint=existing["harness_pin_fingerprint"],
+                source_eval_task_id=existing["source_eval_task_id"],
+                source_eval_sha256=existing["source_eval_sha256"],
+                created_at=existing["created_at"],
+            )
+            superseded_ids.append(screen_run_id)
+    return superseded_ids

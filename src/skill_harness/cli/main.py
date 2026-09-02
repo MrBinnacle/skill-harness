@@ -3202,7 +3202,11 @@ def screen_backfill_cmd(
     p0 excludes them. Without --execute, prints the manifest (the curated
     evidence-admissibility decisions) without touching any DB.
     """
-    from skill_harness.subject.screen_backfill import BATCH1_MANIFEST, apply_manifest
+    from skill_harness.subject.screen_backfill import (
+        BATCH1_MANIFEST,
+        apply_manifest,
+        supersede_d4_screen_runs,
+    )
 
     if not execute:
         _console.print("\n[bold yellow]DRY-RUN[/] — batch-1 screen manifest (no writes):")
@@ -3219,6 +3223,9 @@ def screen_backfill_cmd(
 
     with StorageContext(evidence_db, runtime_db) as ctx:
         report = apply_manifest(screens_root, ctx.evidence_conn)
+        # #402: re-disposition the four D4-finding rows via the supersession path.
+        # Idempotent: already-superseded rows are skipped.
+        redispositioned = supersede_d4_screen_runs(ctx.evidence_conn)
 
     _console.print(f"\n[green]Backfilled[/] {len(report.ingested)} screens into {evidence_db}")
     for result in report.ingested:
@@ -3226,6 +3233,11 @@ def screen_backfill_cmd(
         color = "green" if state == "admissible" else "red"
         _console.print(
             f"  {result.skill_name}: [{color}]{state}[/] ({result.n_pass}/{result.n_trials} passed)"
+        )
+    if redispositioned:
+        _console.print(
+            f"\n[yellow]Re-dispositioned[/] {len(redispositioned)} screen run(s) "
+            "via supersession (#402 D4 / stale-pin disposition table)."
         )
     if report.mismatches:
         _console.print("\n[bold red]AUDIT MISMATCHES[/] (manifest disagrees with stored evidence):")
