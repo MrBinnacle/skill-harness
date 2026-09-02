@@ -166,7 +166,9 @@ class RatRecord(BaseModel):
 
     Only the load-bearing fields are mirrored (#47: the full eleven-field
     checklist lives as prose in the record body; the front-matter carries
-    exactly what the gate and DC-12 consume mechanically).
+    exactly what the gate and DC-12 consume mechanically).  Gate-2 records
+    additionally carry the dual-MME and gamma fields that the paired-lane
+    Gate-2 read uses to reconstruct the registered design.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
@@ -183,6 +185,9 @@ class RatRecord(BaseModel):
     cost_provenance: str
     sme_status: str
     ratified_date: str
+    gamma: float = 0.90
+    delta_min: float = 0.20
+    q_min: float = 0.70
 
 
 def _cents(usd: float) -> int:
@@ -263,6 +268,31 @@ def parse_rat_record(path: Path) -> RatRecord:
             f"disclosure line {DISCLOSURE_LINE!r} (#45 via #47)"
         )
 
+    gamma_raw = fields.get("gamma")
+    if gamma_raw is not None and not isinstance(gamma_raw, (int, float)):
+        raise RatificationError(f"{path.name}: field 'gamma' must be numeric")
+    gamma_value = float(gamma_raw) if gamma_raw is not None else 0.90
+    if not 0.5 < gamma_value < 1.0:
+        raise RatificationError(
+            f"{path.name}: gamma must lie in (0.5, 1); got {gamma_value}"
+        )
+    delta_min_raw = fields.get("delta_min")
+    if delta_min_raw is not None and not isinstance(delta_min_raw, (int, float)):
+        raise RatificationError(f"{path.name}: field 'delta_min' must be numeric")
+    delta_min_value = float(delta_min_raw) if delta_min_raw is not None else 0.20
+    if not 0.0 < delta_min_value < 1.0:
+        raise RatificationError(
+            f"{path.name}: delta_min must lie in (0, 1); got {delta_min_value}"
+        )
+    q_min_raw = fields.get("q_min")
+    if q_min_raw is not None and not isinstance(q_min_raw, (int, float)):
+        raise RatificationError(f"{path.name}: field 'q_min' must be numeric")
+    q_min_value = float(q_min_raw) if q_min_raw is not None else 0.70
+    if not 0.5 < q_min_value < 1.0:
+        raise RatificationError(
+            f"{path.name}: q_min must lie in (0.5, 1); got {q_min_value}"
+        )
+
     return RatRecord(
         rat_id=rat_id,
         status=status,
@@ -276,6 +306,9 @@ def parse_rat_record(path: Path) -> RatRecord:
         cost_provenance=cost_provenance,
         sme_status=sme_status,
         ratified_date=_require_str(fields, "ratified_date", "RAT", path),
+        gamma=gamma_value,
+        delta_min=delta_min_value,
+        q_min=q_min_value,
     )
 
 

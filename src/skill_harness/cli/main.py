@@ -19,6 +19,7 @@ from rich.markup import escape as _escape_markup
 from rich.table import Table
 
 from skill_harness.aggregation import aggregate_skill
+from skill_harness.aggregation.verdict import ValueClass
 from skill_harness.extractor import (
     ExtractionError,
     ExtractionResult,
@@ -3192,6 +3193,54 @@ def screen_backfill_cmd(
             _console.print(f"  [red]{_sanitize_clause_text(m, max_len=None)}[/]")
         raise click.ClickException("backfill audit failed — see mismatches above")
     _console.print("\n[dim]Run 'screen verdict' to see the derived keep/cut verdicts.[/]")
+
+
+@run.command("evaluate-paired")
+@click.argument("run_id")
+@click.argument("ratification_path", type=click.Path(exists=True, path_type=Path))
+@click.argument(
+    "value_class",
+    type=click.Choice(
+        [vc.value for vc in ValueClass], case_sensitive=False
+    ),
+)
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB (read-only; no writes, no API calls).",
+)
+def run_evaluate_paired(
+    run_id: str,
+    ratification_path: Path,
+    value_class: str,
+    evidence_db: Path,
+) -> None:
+    """Read-only paired-lane Gate-2 decision.
+
+    Takes a paired RUN_ID, a ratification-record reference, and a VALUE_CLASS,
+    and prints the decision, signed delta with its interval, pi_c line, and
+    verdict — or a typed refusal.  Performs no writes and no API calls.
+
+    The design used is the one in the referenced RATIFIED record; a DRAFT
+    record, a missing record, or a field mismatch is a typed refusal naming
+    the field.  Pair count != n_pairs returns COUNT_MISMATCH.
+    """
+    from skill_harness.aggregation.verdict import ValueClass as VC
+    from skill_harness.cli.paired_gate2 import PairedGate2Refusal, paired_gate2_read
+
+    try:
+        vc = VC(value_class)
+        paired_gate2_read(
+            run_id,
+            ratification_path,
+            vc,
+            evidence_db=evidence_db,
+        )
+    except PairedGate2Refusal as exc:
+        _console.print(f"[red]REFUSAL[/]: {exc}")
+        raise SystemExit(exc.exit_code) from exc
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -537,6 +537,27 @@ The mutation receipt for the two #387 refusal predicates at paired ingest (the
   tests pin and this receipt does not; that the #46 invocation half of
   predicate (b) is re-attested here (its 0/22 fixture is pinned separately).
 
+### [`docs/assurance/paired-gate2-mutation-receipt.md`](assurance/paired-gate2-mutation-receipt.md)
+
+The mutation receipt for the #389 ratification binding and count-mismatch
+refusal at the paired-lane Gate-2 read surface.
+
+- **Claims:** Two named mutants of `src/skill_harness/cli/paired_gate2.py`
+  were each run in its own git worktree under Python 3.13.1, and both were
+  KILLED by named test nodes: removing the `record.status != "RATIFIED"` check
+  so a DRAFT record is accepted (killed by `test_draft_record_refused`), and
+  removing the `total_pairs != design.n_pairs` check so k=8 pairs are read
+  against n=32 design (killed by `test_pilot_k8_vs_design_n32`). Each case
+  asserted its clean baseline passed first with nonzero collection, that the
+  imported `module.__file__` resolved inside its own worktree, that the source
+  digests differed, that the mutant imported, and that the production tree was
+  byte-unchanged afterwards.
+- **Refuses to claim:** A mutation score — two hand-chosen mutants cannot
+  support one; adequacy of the paired Gate-2 test suite as a whole; that the
+  ratification-record field-mismatch path is covered here (covered by
+  `test_ratification.py`); that the CLI output format is tested here (formatting
+  is pinned by the eight passing tests in `test_cli_paired_gate2.py`).
+
 ---
 
 ## Ratifications
