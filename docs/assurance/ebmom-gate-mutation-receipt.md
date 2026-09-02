@@ -25,10 +25,12 @@ tree is byte-unchanged afterwards.
 | M-B1 | B | remove the gate: always admit | **KILLED** | `test_aggregation_fit.py::TestFitSkillEbmom::test_marginal_heterogeneity_is_refused_not_fitted` |
 | M-B2 | B | seed from a constant rather than from the data | **KILLED** | `test_aggregation_fit.py::TestFitSkillEbmom::test_seed_covers_sum_sq_not_just_w_and_n` |
 | M-B3 | B | drop the `+1` finite-bootstrap correction | **KILLED** | `test_aggregation_fit.py::TestFitSkillEbmom::test_marginal_heterogeneity_is_refused_not_fitted` |
-| M-B4 | B | hold the null decisive rate common across clauses | **SURVIVED** | none in the unit suite |
+| M-B4 | B | hold each clause's tie count fixed at its observed value (the superseded null's tie treatment; redefined 2026-09-02) | **KILLED** | `test_aggregation_fit.py::TestFitSkillEbmom::test_tie_propensity_heterogeneity_is_admitted` |
 
-**Both survivors are preserved as findings.** They are not folded into a score, and no mutation
-score is reported: seven hand-chosen mutants cannot support one.
+**The survivor is preserved as a finding.** It is not folded into a score, and no mutation
+score is reported: seven hand-chosen mutants cannot support one. Re-run 2026-09-02 on a clean
+tree after the null was amended; `commit_under_test` and `production_tree_unchanged` are in the
+JSON. M-B4 changed meaning with the amendment; both its definitions are recorded below.
 
 ## The mechanization caught a live regression on its first run
 
@@ -61,7 +63,33 @@ It is caught by the registered tie **signal** regime instead. Root seed
 | clean | +0.0420 | yes | 1.00 |
 | M-A3 | **-0.9281** | no | 0.25 |
 
-## Survivor M-B4: the null's estimand is not pinned by any test
+## M-B4 after the 2026-09-02 amendment: the ties-fixed draw, killed by the fixture that pins the ruling
+
+The M-B4 of the first campaign ("hold the null decisive rate common across clauses") mutated a
+line the amended null no longer has. Chasing that survivor exposed the contract inconsistency the
+amendment's open-questions note recorded, and the ruling of 2026-09-02 on #360 resolved it: the
+lane's heterogeneity target is the encoded clause mean, so the null redraws ties from one pooled
+categorical distribution rather than holding each clause's tie count fixed.
+
+M-B4 is now the superseded null's tie treatment itself, as a one-line mutant of the amended draw:
+`ties_b = _decompose(clause)[1]` in place of the pooled redraw. It is **KILLED** by
+`tests/test_aggregation_fit.py::TestFitSkillEbmom::test_tie_propensity_heterogeneity_is_admitted`,
+a deterministic fixture with a common decisive rate and a split tie propensity (ten clauses
+`(wins, ties, losses) = (60, 20, 20)`, ten `(28, 60, 12)`). The amended null admits that world at
+`p_boot = 0.001`; the ties-fixed mutant refuses it at `p_boot = 0.335`.
+
+**Why the fixture and not the acceptance matrix.** The registered regimes cannot see this
+mutant: `tie_heavy_null` is homogeneous under both the encoded and the decisive reading, and
+`tie_heavy_signal` has a common tie rate, so a ties-fixed null with a common decisive rate is
+calibrated on both (measured at R=200: 7 of 200 and, for the amended null, 5 of 200). The
+surface that distinguishes the two nulls is a world with a common decisive rate and clause-varying
+tie propensity, which the matrix does not contain. That is what the fixture is. Recorded here
+because a future reader of the matrix alone would conclude the two nulls are interchangeable.
+
+The first campaign's M-B4 result and the reasoning around it are preserved in the section below
+as the record of how the inconsistency was found.
+
+## The first campaign's M-B4: the null's estimand was not pinned by any test
 
 M-B4 replaces the per-clause null rate with a common one. Nothing in the unit or differential
 suites detects it. The acceptance matrix's calibration row is the surface that should, and at
@@ -77,8 +105,11 @@ internally consistent.
 - It reports no mutation score, and the mutant set is not exhaustive. Seven mutants probe the
   seams the amendment freezes; they do not saturate the space.
 - It does not claim the candidate passes the acceptance matrix. **No confirmatory run has been
-  performed**, and the development smoke currently FAILS acceptance row 1 on `tie_heavy_null`.
+  performed.** After the 2026-09-02 amendment the development smoke passes acceptance row 1 on
+  `tie_heavy_null` (0 of 40, calibrated) and still returns `REJECTED` on the kill criterion in
+  three regimes; the amendment's section 0 carries the numbers.
 - The smoke numbers quoted for M-A3 exist only to show that mutant is detectable. They are
   R=20 under a throwaway root seed.
-- It does not claim obligation B is fully covered. M-B4 survived, which is direct evidence that
-  it is not.
+- It does not claim obligation B is fully covered. Four hand-chosen method-selection mutants
+  are not a coverage measurement, and the first campaign's M-B4 survived every unit test until
+  the fixture that now kills it was written.

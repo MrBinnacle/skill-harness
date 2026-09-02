@@ -262,22 +262,27 @@ and covers that section only. This page stays the citable surface for every kind
   `module.__file__` actually imported, clean and mutant source digests, that the
   digests differ, that the clean baseline passed first with nonzero collection,
   that the mutant imports, the named failing assertion, and that the production
-  tree is byte-unchanged afterwards. Five killed by named assertions; two
-  survivors preserved rather than folded into a score. On its first run the
+  tree is byte-unchanged afterwards. Re-run 2026-09-02 after the null was amended
+  on the heterogeneity-target ruling: six killed by named assertions, one
+  survivor preserved rather than folded into a score. M-B4 is now the superseded
+  ties-fixed draw and is killed by the deterministic tie-split fixture that pins
+  the ruling; the first campaign's M-B4 result is retained as the record of how
+  the contract inconsistency was found. On the first campaign's first run the
   generator returned INVALID_BASELINE for all four method-selection cases
   because their clean baseline was already red from a renamed provenance field,
   which is the baseline check preventing four kills being recorded against an
   already-failing test. Records that a tie-blind peel survives the differential
   suite by construction, since that suite's inputs are tie-free where the two
-  formulas are algebraically identical, and that a common null decisive rate
-  survives every unit test.
+  formulas are algebraically identical, and that the registered acceptance
+  regimes cannot distinguish the amended null from a ties-fixed one, which is
+  why the fixture exists.
 - **Refuses to claim:** Any mutation score, and that the mutant set is
   exhaustive; that the candidate passes the acceptance matrix, since no
-  confirmatory run has been performed and the development smoke FAILS acceptance
-  row 1 on `tie_heavy_null` at exact binomial p = 3.0e-11; that the smoke numbers
-  quoted for the survivors are results, since they were produced at R=20 and R=40
-  under a throwaway root seed solely to show the mutants are detectable; that
-  obligation B is covered, since one of its mutants survived.
+  confirmatory run has been performed and the development smoke, with row 1 now
+  calibrated at 0 of 40, still returns REJECTED on the kill criterion in three
+  regimes; that the smoke numbers quoted for the survivor are results, since they
+  were produced at R=20 under a throwaway root seed solely to show the mutant is
+  detectable; that obligation B is fully covered by seven hand-chosen mutants.
 
 ### [`docs/assurance/ebmom-peel-preregistration-amendment.md`](assurance/ebmom-peel-preregistration-amendment.md)
 
