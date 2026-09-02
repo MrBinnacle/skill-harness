@@ -92,6 +92,11 @@ _HELPER_DETECTOR = "tests/test_subject_ingest.py::test_score_to_float_refuses_no
 _MODEL_DETECTOR = (
     "tests/test_subject_ingest.py::test_parsed_sample_refuses_non_finite_score_at_the_model_layer"
 )
+# #387 (the #384 ruling): the two refusal predicates at the paired ingest seam.
+_UNEXPOSED_FULL_DETECTOR = "tests/test_subject_ingest.py::test_full_arm_unexposed_refuses"
+_UNEXPOSED_FULL_SEAM_DETECTOR = "tests/test_subject_ingest.py::test_unexposed_full_epoch_refuses"
+_NULL_EXPOSED_DETECTOR = "tests/test_subject_ingest.py::test_null_arm_exposed_refuses"
+_NULL_EXPOSED_SEAM_DETECTOR = "tests/test_subject_ingest.py::test_null_epoch_exposed_refuses"
 
 MUTANTS: tuple[Mutant, ...] = (
     Mutant(
@@ -154,6 +159,28 @@ MUTANTS: tuple[Mutant, ...] = (
         '                if reason == "confounded":',
         '                if reason != "scorer_error":',
         (_UNDERPOWERED_DETECTOR, _CONFOUND_DETECTOR),
+    ),
+    Mutant(
+        "M-X1",
+        "387-unexposed-full",
+        "remove refusal predicate (a): a Full-arm epoch with exposure not detected writes",
+        _INGEST,
+        _INGEST_MODULE,
+        "    unexposed = sorted(s.epoch for s in full.samples if s.exposed_skill is not True)",
+        "    unexposed = sorted(s.epoch for s in full.samples if False)",
+        (_UNEXPOSED_FULL_DETECTOR, _UNEXPOSED_FULL_SEAM_DETECTOR),
+    ),
+    Mutant(
+        "M-X2",
+        "387-null-contamination",
+        "narrow refusal predicate (b) back to invocation only: a Null-arm epoch with "
+        "exposure detected writes",
+        _INGEST,
+        _INGEST_MODULE,
+        "    null_contaminated_exposed = sorted("
+        "s.epoch for s in null.samples if s.exposed_skill is True)",
+        "    null_contaminated_exposed = sorted(s.epoch for s in null.samples if False)",
+        (_NULL_EXPOSED_DETECTOR, _NULL_EXPOSED_SEAM_DETECTOR),
     ),
 )
 

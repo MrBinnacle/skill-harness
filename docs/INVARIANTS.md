@@ -231,6 +231,56 @@ which is the failure this section exists to make visible.
 
 Spec: skill-harness #337, #75/#81 (the pin), #352 (the no-caller verification).
 
+## 10. Treatment = exposure; invocation is a recorded stratifier
+
+**The treatment is exposure** — the skill's description present in the agent's
+context — **not** invocation (Skill tool call). Exposure is measured per epoch by a
+channel-(c) detector (v2): the card's description text, read from the pinned
+`SKILL.md` frontmatter (single-line or folded block scalar), present in the
+transcript's skill listing. `exposed_skill` is `bool | None`: `True`/`False` are
+measured verdicts; `None` is typed "not computed" (screen lane) and is never stored
+as `False`. Under the `inspect_swe.claude_code` solver the first user message
+carries Claude Code's skill listing and the card's frontmatter description appears
+in it verbatim (8 of 8 Full epochs and 0 of 8 Null epochs, measured 2026-09-01).
+
+**π_c is a mandatory recorded stratifier**, not an admission gate. Zero invocations
+with full exposure is ADMISSIBLE — the write proceeds and the verdict line carries
+pi_c = 0/n. At pi_c = 0 the CACE secondary is stated as not identified, never
+computed.
+
+**Two refusal predicates enforce treatment fidelity:**
+
+(a) A Full-arm epoch with exposure not detected refuses as `UnexposedFullEpochError`
+(treatment not delivered). The skill's description was not present in the transcript —
+this is an apparatus error, not evidence.
+
+(b) A Null-arm epoch with exposure or invocation detected refuses as
+`NullArmContaminationError` (control-arm contamination, widened from the #46
+invocation-only check to include channel c). The Skill tool is structurally not
+launchable in the Null arm and the skill's description is not mounted, so either
+detection means mislabelled arms or a misconfigured harness.
+
+Enforced in:
+- `src/skill_harness/subject/ingest.py::_validate_pair` (the two refusal predicates,
+  lines 848–890)
+- `src/skill_harness/subject/ingest.py::detect_skill_exposure` (v2 channel-c detector)
+- `src/skill_harness/subject/ingest.py::detect_skill_invocation` (v1 Skill tool-call
+  detector, unchanged)
+- `tests/test_subject_ingest.py::test_full_arm_unexposed_refuses` (predicate (a))
+- `tests/test_subject_ingest.py::test_null_arm_exposed_refuses` (predicate (b), channel c)
+- `tests/test_subject_ingest.py::test_null_arm_invoked_still_refuses` (predicate (b),
+  channel b — the 0/22 fixture from #46)
+- `docs/assurance/exposure-refusal-mutation-receipt.md` (#341 mutation receipt: M-X1
+  kills predicate (a), M-X2 kills the channel-c half of predicate (b))
+
+*Revisit if:* a non-`claude_code` solver whose transcript lacks the skill listing
+enters production — the v2 detector would fire False on every Full epoch, refusing
+every pair as unexposed. The detector version constant (`EXPOSURE_DETECTOR_VERSION`)
+and the `_extract_skill_description` path would need a new channel for that solver.
+
+Spec: skill-harness #384 (the ruling, Amendment 3 of v0.2-preregistration.md,
+landed by #386).
+
 ---
 
 Re-pointed from "CLAUDE.md" to this file across `src/` and `tests/` (F5, then the

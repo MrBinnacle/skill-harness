@@ -1,0 +1,84 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-v9ro65kv/M-X1/src/skill_harness/subject/ingest.py",
+        "source_digest": "1eaefbaed5e14369a7c192c9737532228e419bd9016067a853abafe743374bdc",
+        "tests_collected": 2,
+        "worktree_head": "fb3b91bd36c2454baca31fa31cb733944bcab333"
+      },
+      "description": "remove refusal predicate (a): a Full-arm epoch with exposure not detected writes",
+      "killing_assertions": [
+        "tests/test_subject_ingest.py::test_full_arm_unexposed_refuses",
+        "tests/test_subject_ingest.py::test_unexposed_full_epoch_refuses"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-v9ro65kv/M-X1/src/skill_harness/subject/ingest.py",
+        "source_digest": "8ec7676f1b9ca7a6f7b53b09fe76274a526feb1e5270b901e49f33dcc8e74e5d",
+        "tests_collected": 2,
+        "worktree_head": "fb3b91bd36c2454baca31fa31cb733944bcab333"
+      },
+      "mutant_id": "M-X1",
+      "notes": [],
+      "obligation": "387-unexposed-full",
+      "selection": [
+        "tests/test_subject_ingest.py::test_full_arm_unexposed_refuses",
+        "tests/test_subject_ingest.py::test_unexposed_full_epoch_refuses"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-v9ro65kv/M-X2/src/skill_harness/subject/ingest.py",
+        "source_digest": "1eaefbaed5e14369a7c192c9737532228e419bd9016067a853abafe743374bdc",
+        "tests_collected": 2,
+        "worktree_head": "fb3b91bd36c2454baca31fa31cb733944bcab333"
+      },
+      "description": "narrow refusal predicate (b) back to invocation only: a Null-arm epoch with exposure detected writes",
+      "killing_assertions": [
+        "tests/test_subject_ingest.py::test_null_arm_exposed_refuses",
+        "tests/test_subject_ingest.py::test_null_epoch_exposed_refuses"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-v9ro65kv/M-X2/src/skill_harness/subject/ingest.py",
+        "source_digest": "c0cefd7fb8b797502b9a685ce245a0d38ae5f11e9b1e240dd91484dcaec5e54f",
+        "tests_collected": 2,
+        "worktree_head": "fb3b91bd36c2454baca31fa31cb733944bcab333"
+      },
+      "mutant_id": "M-X2",
+      "notes": [],
+      "obligation": "387-null-contamination",
+      "selection": [
+        "tests/test_subject_ingest.py::test_null_arm_exposed_refuses",
+        "tests/test_subject_ingest.py::test_null_epoch_exposed_refuses"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "fb3b91bd36c2454baca31fa31cb733944bcab333",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "src/skill_harness/subject/ingest.py": "1eaefbaed5e14369a7c192c9737532228e419bd9016067a853abafe743374bdc"
+  },
+  "production_tree_digest_before": {
+    "src/skill_harness/subject/ingest.py": "1eaefbaed5e14369a7c192c9737532228e419bd9016067a853abafe743374bdc"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.15",
+  "target_digests": {
+    "src/skill_harness/subject/ingest.py": "1eaefbaed5e14369a7c192c9737532228e419bd9016067a853abafe743374bdc"
+  },
+  "target_files": [
+    "src/skill_harness/subject/ingest.py"
+  ]
+}

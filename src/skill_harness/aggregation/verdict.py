@@ -328,14 +328,41 @@ def screen_verdict(
 
 
 def paired_verdict(
-    clause_status: ClauseStatus, *, scope: RegisteredScope | None = None
+    clause_status: ClauseStatus,
+    *,
+    scope: RegisteredScope | None = None,
+    pi_c_hat: float | None = None,
+    pi_c_n: int | None = None,
+    pi_c_ci_low: float | None = None,
+    pi_c_ci_high: float | None = None,
+    pi_c_confidence: float | None = None,
 ) -> VerdictResult:
     """Map a paired-run terminal ClauseStatus to a keep/cut verdict.
 
     See rules B1-B4 in the module docstring. Path B has never fired to date; this
     mapping is prospective. ``scope`` is the registered claim boundary the
     verdict carries; omit it ONLY for pre-registry observations.
+
+    ``pi_c_hat``..``pi_c_ci_high`` carry the invocation-rate stratifier from the
+    paired ingest path. When provided, every verdict rationale carries the pi_c
+    line per #36 adoption 4 display rule: ``pi_c_hat = k/n = 0.xxxx [95% CI lo, hi]``.
+    At pi_c = 0 the CACE secondary is stated as not identified, never computed.
+    Callers minting a paired-path verdict under #384 must pass pi_c — the
+    optional form exists only for pre-#384 Path B unit fixtures.
     """
+    pi_c_line = ""
+    if pi_c_hat is not None and pi_c_n is not None:
+        ci_lo = pi_c_ci_low if pi_c_ci_low is not None else 0.0
+        ci_hi = pi_c_ci_high if pi_c_ci_high is not None else 1.0
+        conf = pi_c_confidence if pi_c_confidence is not None else 0.95
+        # #36 adoption 4 display: pi_c_hat = k/n [95% CI lo, hi]
+        k = round(pi_c_hat * pi_c_n)
+        pi_c_line = (
+            f" pi_c_hat = {k}/{pi_c_n} = {pi_c_hat:.4f} [{conf:.0%} CI {ci_lo:.4f}, {ci_hi:.4f}]."
+        )
+        if pi_c_hat == 0.0:
+            pi_c_line += " CACE secondary is not identified (zero invocations with full exposure)."
+
     match clause_status:
         case ClauseStatus.PASSED:
             return VerdictResult(
@@ -345,6 +372,7 @@ def paired_verdict(
                     f"KEEP: paired Full-vs-Null cleared the transformative bar (Null ≤ "
                     f"~{TRANSFORMATIVE_NULL_CEILING:.2f}, Full ≥ "
                     f"~{TRANSFORMATIVE_FULL_FLOOR:.2f}, posterior ≥ pass threshold)."
+                    f"{pi_c_line}"
                 ),
                 scope=scope,
             )
@@ -357,6 +385,7 @@ def paired_verdict(
                     "the skill did not deliver a transformative lift (paired posterior "
                     "below the fail threshold). Not 'subsumed' — the model fails without "
                     "the skill."
+                    f"{pi_c_line}"
                 ),
                 scope=scope,
             )
@@ -367,6 +396,7 @@ def paired_verdict(
                 (
                     "CAN'T-TELL-YET: paired run is UNMEASURED (underpowered / budget / no "
                     "admissible data). Needs more epochs or a better-sourced task."
+                    f"{pi_c_line}"
                 ),
                 scope=scope,
             )
@@ -378,6 +408,7 @@ def paired_verdict(
                     "CAN'T-TELL-YET: paired evidence is CONFOUNDED (a harness/environment "
                     "difference co-varies with the arm). Verdict withheld until the "
                     "confound is resolved."
+                    f"{pi_c_line}"
                 ),
                 scope=scope,
             )

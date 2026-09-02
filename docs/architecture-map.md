@@ -15,8 +15,8 @@ Inspect .eval logs (Full arm / Null arm)
         |
         v
 subject/ingest.py        parse -> validate pair -> refuse or write
-        |                (arm/epoch/scorer checks, contamination gate,
-        |                 dead-arm gate, pi_c exposure record)
+        |                (arm/epoch/scorer checks, exposure/contamination
+        |                 gates, pi_c + exposure stratifier record)
         v
 evidence store (SQLite)  storage/: migrations, repositories, append-only
         |                oracle_verdicts + samples + frozen_cases
@@ -34,9 +34,11 @@ docs/sers/receipts/      minted receipts -> sitegen -> published pages
 Two lanes feed the same evidence store:
 
 - **Paired ingest lane** (`subject/`): external Inspect eval logs, Full vs
-  Null, joined by epoch. The refusal surface in `_validate_pair` and the
-  pi_c dead-arm gate are the boundary; what they cannot see is recorded in
-  `docs/findings/paired-ingest-boundary-undetectables.md`.
+  Null, joined by epoch. The refusal surface in `_validate_pair` (unexposed
+  Full; Null contamination on exposure or invocation) is the boundary; what
+  it cannot see is recorded in
+  `docs/findings/paired-ingest-boundary-undetectables.md`. pi_c is a recorded
+  stratifier, not a write gate (#384/#387).
 - **Ablation runner lane** (`ablation/`): the harness's own sampling loop
   (runner.py) with the A42 budget gate, A25 evidence-first writes, and the
   A41 cost ledger. Budget correctness rests on single-threaded serialisation

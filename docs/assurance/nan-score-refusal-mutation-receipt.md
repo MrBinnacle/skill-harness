@@ -5,10 +5,17 @@
 **Generator:** `scripts/mutation_receipt.py`. **Machine-readable record:**
 `docs/assurance/nan-score-refusal-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/subject/ingest.py` at
-`sha256:abf32c6e64273d4301a32011817809dc59bf44e5581d40cbaa016c23dee816e9`.
-**Commit at generation:** `210ac93c8e17512119cbc8bd39e5cc8ded7b5b96` — informational only. A rebase rewrites it and later
+`sha256:1eaefbaed5e14369a7c192c9737532228e419bd9016067a853abafe743374bdc`.
+**Commit at generation:** `ae9ab3c` — informational only. A rebase rewrites it and later
 commits move HEAD past it, so currency is checked against the digest above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
+
+**Regenerated 2026-09-01 for #387.** The first generation (commit `210ac93`, digest
+`abf32c6e6427`) attested to the ingest module before #387 rewrote it (treatment = exposure,
+invocation = stratifier). Regenerated again after the config_json exposure shape fix
+(`value`/`passes`/`epochs` for the #388 delivery reader). The three mutants were re-run
+by the same generator; all three anchors were still present and all three kills held. The
+results table below is unchanged in substance and was re-measured, not carried.
 
 Each case runs in its **own git worktree** at a fixed commit. Production is never mutated in
 place. `PYTHONPATH` pins every case to its own sources, because the editable install would
