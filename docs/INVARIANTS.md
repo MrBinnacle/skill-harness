@@ -270,10 +270,8 @@ Enforced in:
 - `tests/test_subject_ingest.py::test_null_arm_exposed_refuses` (predicate (b), channel c)
 - `tests/test_subject_ingest.py::test_null_arm_invoked_still_refuses` (predicate (b),
   channel b — the 0/22 fixture from #46)
-- `tests/test_subject_ingest.py::test_mutation_unexposed_full_refusal_removes_predicate`
-  (mutation receipt for predicate (a))
-- `tests/test_subject_ingest.py::test_mutation_null_contamination_refusal_removes_predicate`
-  (mutation receipt for predicate (b))
+- `docs/assurance/exposure-refusal-mutation-receipt.md` (#341 mutation receipt: M-X1
+  kills predicate (a), M-X2 kills the channel-c half of predicate (b))
 
 *Revisit if:* a non-`claude_code` solver whose transcript lacks the skill listing
 enters production — the v2 detector would fire False on every Full epoch, refusing

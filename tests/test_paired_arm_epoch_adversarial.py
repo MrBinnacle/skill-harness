@@ -395,7 +395,7 @@ def test_nan_score_is_refused_or_fails_closed(
 def test_zero_invocation_arm_swap_with_null_contamination_refused(
     evidence_db: sqlite3.Connection, skill_dir: Path
 ) -> None:
-    """The other half of the swap surface: the true Full arm (which invoked)
+    """One half of the swap surface: the true Full arm (which invoked)
     is relabelled as Null.
 
     Under the #384 treatment=exposure model, the label-consistent swap with
@@ -415,6 +415,40 @@ def test_zero_invocation_arm_swap_with_null_contamination_refused(
         null=swapped_null,
         skill_dir=skill_dir,
         match="contamination",
+    )
+
+
+def test_true_arm_swap_unexposed_full_refused(
+    evidence_db: sqlite3.Connection, skill_dir: Path
+) -> None:
+    """The other half of the swap surface: the true Null arm (no exposure)
+    is relabelled as Full.
+
+    A genuine Full/Null label swap puts the Null transcript under the Full
+    label. Exposure is absent there, so predicate (a) refuses as
+    UnexposedFullEpochError. Together with the contamination half above, the
+    arm-swap surface stays closed under treatment=exposure.
+    """
+    conn = evidence_db
+    epochs = [1, 2]
+    # Labels swapped: "full" carries Null-like (unexposed, not invoked) trials;
+    # "null" carries Full-like (exposed) trials — either half refuses.
+    swapped_full = _log(
+        "full",
+        tuple(_sample("full", e, 0.0, invoked=False, exposed=False) for e in epochs),
+    )
+    swapped_null = _log(
+        "null",
+        tuple(_sample("null", e, 1.0, invoked=False, exposed=True) for e in epochs),
+    )
+    _assert_refused(
+        conn,
+        "UNEXPOSED_FULL_SWAP_ACCEPTED",
+        "UNEXPOSED_FULL_SWAP_WROTE_VERDICTS",
+        full=swapped_full,
+        null=swapped_null,
+        skill_dir=skill_dir,
+        match="exposure not detected",
     )
 
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from importlib.util import find_spec
 from pathlib import Path
 from types import SimpleNamespace
@@ -890,52 +890,79 @@ def test_null_epoch_invoked_refuses_0_22_fixture(conn: sqlite3.Connection, skill
         write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
 
 
-def test_screen_lane_parse_reports_exposure_not_computed(tmp_path: Path) -> None:
-    """AC6: screen-lane parse (no skill_description) reports exposure as None
-    (typed 'not computed' — never False)."""
-    from skill_harness.storage.migrations import open_evidence
-    from skill_harness.subject.screen_ingest import write_screen_evidence
-
-    conn = open_evidence(tmp_path / "evidence.db")
-    try:
-        sample = ParsedSample(
-            condition="null",
-            skill_name="some-skill",
-            epoch=1,
-            scorer_name="command_succeeds",
-            score_value=1.0,
-            invoked_skill=False,
-            exposed_skill=None,  # not computed in screen lane
-            output_text="output",
-            subject_model="m",
-            harness_pin_json=None,
-            harness_pin_fingerprint="fp",
-            input_tokens=10,
-            cache_read_input_tokens=None,
-            cache_creation_input_tokens=None,
-            output_tokens=10,
-            usd=None,
-        )
-        log = ParsedEvalLog(
-            task_name="some-skill-null",
-            task_id="task-screen-1",
+def _fake_inspect_eval_log(
+    *,
+    condition: str,
+    skill_name: str,
+    messages: Sequence[object],
+    score: float = 1.0,
+    epoch: int = 1,
+) -> SimpleNamespace:
+    """Minimal duck-typed Inspect eval log for parse_eval_log tests."""
+    return SimpleNamespace(
+        samples=[
+            SimpleNamespace(
+                id="s1",
+                epoch=epoch,
+                scores={"file_contains": SimpleNamespace(value=score)},
+                metadata={
+                    "condition": condition,
+                    "skill": skill_name,
+                    "harness_pin": None,
+                    "harness_pin_fingerprint": None,
+                },
+                messages=messages,
+                output=SimpleNamespace(completion="out"),
+                model_usage={},
+            )
+        ],
+        eval=SimpleNamespace(
+            task=f"{skill_name}-{condition}",
+            task_id=f"task-{condition}-1",
             created="2026-09-01T00:00:00+00:00",
-            status="success",
-            samples=(sample,),
+            model="openrouter/anthropic/claude-haiku-4.5",
+        ),
+        status="success",
+    )
+
+
+def test_screen_lane_parse_reports_exposure_not_computed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC6: screen-lane parse (empty skill_description) sets exposed_skill=None
+    on every sample — never False, even when the transcript carries text that
+    would match a description detector."""
+    from skill_harness.subject.ingest import parse_eval_log
+
+    description = "A trap card that prevents git rebase failures."
+    # Transcript would fire the detector IF a description were supplied.
+    messages = [
+        _user(
+            "The following skills are available for use with the Skill tool:\n"
+            f"- some-skill: {description}\n"
         )
-        # write_screen_evidence accepts this — exposure is not checked in the
-        # screen lane (no skill directory, no exposure computation)
-        result = write_screen_evidence(
-            parsed=log,
-            source_eval_sha256="sha-screen",
-            admissibility_state="admissible",
-            inadmissibility_reason=None,
-            conn=conn,
-        )
-        assert result.n_trials == 1
-        assert result.n_pass == 1
-    finally:
-        conn.close()
+    ]
+    fake = _fake_inspect_eval_log(condition="null", skill_name="some-skill", messages=messages)
+
+    if INSPECT_INSTALLED:
+        import inspect_ai.log as inspect_log
+
+        monkeypatch.setattr(inspect_log, "read_eval_log", lambda path: fake)
+    else:
+        import sys
+        import types
+
+        fake_mod = types.ModuleType("inspect_ai.log")
+        fake_mod.read_eval_log = lambda path: fake  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "inspect_ai", types.ModuleType("inspect_ai"))
+        monkeypatch.setitem(sys.modules, "inspect_ai.log", fake_mod)
+
+    path = tmp_path / "screen.eval"
+    path.write_bytes(b"stub")
+    # Screen lane: no skill_description argument (default "").
+    parsed = parse_eval_log(path)
+    assert len(parsed.samples) == 1
+    assert parsed.samples[0].exposed_skill is None
 
 
 # ---------------------------------------------------------------------------
@@ -1020,28 +1047,82 @@ def test_config_json_records_pi_c_block(conn: sqlite3.Connection, skill_dir: Pat
 # ---------------------------------------------------------------------------
 
 
-def test_parse_eval_log_exposed_skill_defaults_none_without_description() -> None:
-    """The screen lane has no skill directory, so exposure is typed 'not
-    computed' (None) on every sample — never False."""
-    # This tests the ParsedSample default, not the parse path (which needs [inspect])
-    sample = ParsedSample(
-        condition="null",
-        skill_name="x",
-        epoch=1,
-        scorer_name="s",
-        score_value=0.0,
-        invoked_skill=False,
-        output_text="o",
-        subject_model="m",
-        harness_pin_json=None,
-        harness_pin_fingerprint=None,
-        input_tokens=None,
-        cache_read_input_tokens=None,
-        cache_creation_input_tokens=None,
-        output_tokens=None,
-        usd=None,
+def test_parse_eval_log_exposed_skill_defaults_none_without_description(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC1/AC6: parse_eval_log with empty skill_description leaves
+    exposed_skill as None (not computed), never False."""
+    from skill_harness.subject.ingest import parse_eval_log
+
+    fake = _fake_inspect_eval_log(
+        condition="full",
+        skill_name="some-skill",
+        messages=[_user("no skills listed")],
     )
-    assert sample.exposed_skill is None  # default: not computed
+    if INSPECT_INSTALLED:
+        import inspect_ai.log as inspect_log
+
+        monkeypatch.setattr(inspect_log, "read_eval_log", lambda path: fake)
+    else:
+        import sys
+        import types
+
+        fake_mod = types.ModuleType("inspect_ai.log")
+        fake_mod.read_eval_log = lambda path: fake  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "inspect_ai", types.ModuleType("inspect_ai"))
+        monkeypatch.setitem(sys.modules, "inspect_ai.log", fake_mod)
+
+    path = tmp_path / "pair.eval"
+    path.write_bytes(b"stub")
+    parsed = parse_eval_log(path, skill_description="")
+    assert parsed.samples[0].exposed_skill is None
+
+
+def test_parse_eval_log_computes_exposed_skill_from_description(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC1: parse_eval_log with a non-empty skill_description runs the v2
+    detector and sets exposed_skill True/False from the message stream."""
+    from skill_harness.subject.ingest import parse_eval_log
+
+    description = "A trap card that prevents git rebase failures."
+    present = _fake_inspect_eval_log(
+        condition="full",
+        skill_name="git-pull-rebase-trap",
+        messages=[
+            _user(
+                "The following skills are available for use with the Skill tool:\n"
+                f"- git-pull-rebase-trap: {description}\n"
+            )
+        ],
+    )
+    absent = _fake_inspect_eval_log(
+        condition="full",
+        skill_name="git-pull-rebase-trap",
+        messages=[_user("No skills are available.")],
+        epoch=2,
+    )
+
+    def _install(fake: SimpleNamespace) -> None:
+        if INSPECT_INSTALLED:
+            import inspect_ai.log as inspect_log
+
+            monkeypatch.setattr(inspect_log, "read_eval_log", lambda path: fake)
+        else:
+            import sys
+            import types
+
+            fake_mod = types.ModuleType("inspect_ai.log")
+            fake_mod.read_eval_log = lambda path: fake  # type: ignore[attr-defined]
+            monkeypatch.setitem(sys.modules, "inspect_ai", types.ModuleType("inspect_ai"))
+            monkeypatch.setitem(sys.modules, "inspect_ai.log", fake_mod)
+
+    path = tmp_path / "full.eval"
+    path.write_bytes(b"stub")
+    _install(present)
+    assert parse_eval_log(path, skill_description=description).samples[0].exposed_skill is True
+    _install(absent)
+    assert parse_eval_log(path, skill_description=description).samples[0].exposed_skill is False
 
 
 @pytest.mark.skipif(INSPECT_INSTALLED, reason="extra installed; error path unreachable")
@@ -1059,8 +1140,13 @@ def test_parse_eval_log_raises_typed_error_without_extra(tmp_path: Path) -> None
 
 
 def test_paired_verdict_carries_pi_c_line() -> None:
-    """AC5: every verdict rationale minted by the paired path carries the pi_c
-    line per #36 adoption 4 display rule (`pi_c_hat = k/n [95% CI lo, hi]`)."""
+    """AC5: Path B paired_verdict rationale carries the pi_c line per #36
+    adoption 4 display rule (`pi_c_hat = k/n [95% CI lo, hi]`).
+
+    Path B has no production caller yet (module docstring: never fired). This
+    pins the mapping function the eventual caller must use; it does not claim
+    a live mint already attaches the line.
+    """
     r = paired_verdict(
         ClauseStatus.PASSED,
         pi_c_hat=0.25,
@@ -1086,6 +1172,41 @@ def test_paired_verdict_pi_c_zero_says_cace_not_identified() -> None:
     )
     assert "pi_c_hat = 0/8 = 0.0000" in r.rationale
     assert "CACE secondary is not identified" in r.rationale
+
+
+def test_write_path_pi_c_feeds_verdict_display_at_zero(
+    conn: sqlite3.Connection, skill_dir: Path
+) -> None:
+    """AC5 bridge: a zero-invocation write's pi_c summary is the input the
+    Path B display line consumes — hat, n, CI — and at zero the CACE clause
+    fires. Pins the write→display join the ticket's 'verdict line' requires.
+    """
+    full = make_log(
+        "full",
+        (
+            make_sample("full", 1, 1.0, invoked=False, exposed=True),
+            make_sample("full", 2, 0.0, invoked=False, exposed=True),
+        ),
+    )
+    null = make_log("null", (make_sample("null", 1, 0.0), make_sample("null", 2, 0.0)))
+    result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    assert result.pi_c.invocations == 0
+    assert result.pi_c.trials == 2
+    r = paired_verdict(
+        ClauseStatus.UNMEASURED,
+        pi_c_hat=result.pi_c.pi_c_hat,
+        pi_c_n=result.pi_c.trials,
+        pi_c_ci_low=result.pi_c.ci_low,
+        pi_c_ci_high=result.pi_c.ci_high,
+        pi_c_confidence=result.pi_c.confidence,
+    )
+    assert f"pi_c_hat = 0/{result.pi_c.trials} = 0.0000" in r.rationale
+    assert "CACE secondary is not identified" in r.rationale
+    # The store snapshot is the same numbers the display line used.
+    row = conn.execute("SELECT config_json FROM runs WHERE run_id = ?", (result.run_id,)).fetchone()
+    stored = json.loads(row[0])["pi_c"]
+    assert stored["pi_c_hat"] == result.pi_c.pi_c_hat
+    assert stored["trials"] == result.pi_c.trials
 
 
 # ---------------------------------------------------------------------------
