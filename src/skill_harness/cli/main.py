@@ -2800,7 +2800,14 @@ def screen() -> None:
     show_default=True,
     help="Path to evidence DB (read-only; no writes, no API calls).",
 )
-def screen_verdict_cmd(evidence_db: Path) -> None:
+@click.option(
+    "--fresh-pin",
+    type=str,
+    default=None,
+    help="Fresh harness_pin_fingerprint to compare against stored rows. When set,"
+    " admissible screens with a different fingerprint are refused (#382).",
+)
+def screen_verdict_cmd(evidence_db: Path, fresh_pin: str | None) -> None:
     """Derive p0 per skill from the screen store and print the keep/cut verdict.
 
     Read-only. p0 is DERIVED from admissible screen trials (never stored); each
@@ -2812,12 +2819,19 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
     "the trap did not fire in this Null screen" — the wrong instrument for the
     question — and the verdict is CAN'T-TELL-YET, never CUT. An unclassified
     skill is treated as not-transformative, so it cannot be false-CUT.
+
+    Pin currency (#382): when --fresh-pin is provided, admissible screens whose
+    harness_pin_fingerprint differs from it are refused — the screen was captured
+    under a different instrument version and must not silently contribute to p0.
     """
     from skill_harness.aggregation.value_class_registry import value_class_for
     from skill_harness.aggregation.verdict import screen_verdict
     from skill_harness.storage.errors import BootstrapError
     from skill_harness.storage.migrations import open_evidence_readonly
-    from skill_harness.storage.repositories.evidence.screens import derive_p0_by_skill
+    from skill_harness.storage.repositories.evidence.screens import (
+        derive_p0_by_skill,
+        stale_pin_skills,
+    )
 
     if not evidence_db.exists():
         _console.print(
@@ -2842,6 +2856,30 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
             "\n[yellow]No admissible screens in the store.[/]"
             "\n[dim]  Backfill batch-1 with 'screen backfill --execute', or run a screen.[/]"
         )
+        return
+
+    stale: list[str] = []
+    if fresh_pin is not None:
+        db_conn2: sqlite3.Connection | None = None
+        try:
+            db_conn2 = open_evidence_readonly(evidence_db)
+            stale = stale_pin_skills(db_conn2, fresh_pin)
+        finally:
+            if db_conn2 is not None:
+                db_conn2.close()
+
+    if stale:
+        _console.print(f"\n[red]Stale pin refused ({len(stale)} skill(s)):[/]")
+        for name in sorted(stale):
+            _console.print(f"  [red]  {name}[/]")
+        _console.print(
+            "[dim]  These screens were captured under a different harness pin and"
+            " must not silently contribute to p0 (#382).[/]"
+        )
+        rows = [r for r in rows if r.skill_name not in set(stale)]
+
+    if not rows:
+        _console.print("\n[yellow]No admissible screens remain after pin-currency check.[/]")
         return
 
     table = Table(title="Screen verdicts (p0 derived from admissible trials)", show_lines=True)
@@ -2879,6 +2917,11 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
         " screens are kept in the store but excluded. A verdict is a hardness screen,"
         " not a paired measurement.[/]"
     )
+    if fresh_pin is None:
+        _console.print(
+            "\n[dim]Pin currency check skipped: supply --fresh-pin to refuse rows"
+            " captured under a different harness instrument (#382).[/]"
+        )
 
 
 @screen.command("profile")

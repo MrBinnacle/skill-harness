@@ -150,3 +150,34 @@ def derive_p0_by_skill(conn: sqlite3.Connection) -> list[ScreenP0]:
             )
         )
     return out
+
+
+def stale_pin_skills(conn: sqlite3.Connection, fresh_pin: str) -> list[str]:
+    """Return skill names whose admissible screens carry a different pin than ``fresh_pin``.
+
+    A screen is "stale" when its ``harness_pin_fingerprint`` is not ``None`` AND
+    differs from the freshly captured pin. Screens with ``NULL`` fingerprints are
+    treated conservatively (not stale — we cannot prove they were captured under
+    a different instrument). Skills whose screens ALL have ``NULL`` fingerprints
+    are not returned.
+
+    Ordered by skill_name for stable output. Used by ``screen verdict`` to refuse
+    rows that would silently contribute stale evidence to p0 (#382).
+    """
+    cur = conn.execute(
+        """
+        SELECT sr.skill_name,
+               COUNT(DISTINCT sr.harness_pin_fingerprint) AS n_distinct_pins,
+               GROUP_CONCAT(DISTINCT sr.harness_pin_fingerprint) AS all_pins
+        FROM screen_runs sr
+        WHERE sr.admissibility_state = 'admissible'
+          AND sr.harness_pin_fingerprint IS NOT NULL
+        GROUP BY sr.skill_name
+        """
+    )
+    out: list[str] = []
+    for skill_name, _n_distinct_pins, all_pins in cur.fetchall():
+        pins = {p for p in (all_pins or "").split(",") if p}
+        if fresh_pin not in pins:
+            out.append(skill_name)
+    return out
