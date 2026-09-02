@@ -62,6 +62,43 @@ from skill_harness.subject.screen_ingest import (
 
 _D4_LEAK_REASON = "apparatus_void: D4 prompt leak"
 
+# NOT BUILT, and the reason belongs here rather than only on the ticket.
+#
+# Issue 395 criterion 2 asks that an entry with no D4 inputs be admitted and its
+# row record `d4: not_checked`, "in the same field or an adjacent one", so a
+# reader can tell "never checked" from "checked and clean". Both placements are
+# closed today:
+#
+#   same field   `write_screen_evidence` refuses an admissible row that carries
+#                an `inadmissibility_reason` (screen_ingest.py, the
+#                "admissible screen must not carry an inadmissibility_reason"
+#                guard). That invariant is load-bearing: the column means WHY
+#                THIS IS INADMISSIBLE, and a note stored there would make the
+#                state and the reason disagree on every such row.
+#   adjacent     `screen_runs` (migration 0501) has no spare column. Adding one
+#                is a schema change, which is approval-gated here.
+#   third        `screen_trials.scorer_explanation` is the only other free-text
+#                column in the 0501 schema, and it is closed for a different
+#                reason: `write_screen_evidence` fills it from the parsed
+#                Inspect log and takes no parameter for it, so `apply_manifest`
+#                cannot reach it without new plumbing. It is also per-TRIAL,
+#                where the fact being recorded is per-RUN.
+#
+# So the criterion needs either an additive migration or an amendment, and that
+# decision is not this build's to take. The REFUSAL half of criterion 2 is built
+# and is what actually closes the hole the ticket names: a half-specified entry
+# can no longer be admitted with the check silently skipped.
+
+
+class ScreenManifestError(ValueError):
+    """A manifest entry is internally inconsistent and cannot be applied.
+
+    Raised for a HALF-SPECIFIED D4 entry: ``operative_rule`` without
+    ``prompt_text`` or the reverse. Such an entry was previously admitted with
+    the check silently skipped, which is indistinguishable in the store from an
+    entry that was checked and found clean (#395 criterion 2).
+    """
+
 
 @dataclass(frozen=True)
 class D4LeakResult:
@@ -70,10 +107,14 @@ class D4LeakResult:
     ``leaked`` is True when the skill's operative rule was found in the prompt
     text or in any fixture file the prompt references.  ``locations`` names
     where the rule appeared (e.g. ``"prompt"`` or ``"RELEASING.md"``).
+    ``searched`` names every source actually compared, in order, so a reader
+    can tell a prompt-only check from one that also read fixture files, and can
+    tell either from a check that compared nothing.
     """
 
     leaked: bool
     locations: tuple[str, ...] = ()
+    searched: tuple[str, ...] = ()
 
 
 def check_d4_prompt_leak(
@@ -94,13 +135,27 @@ def check_d4_prompt_leak(
     collapsed) before comparison, so phrasing variation does not produce false
     negatives.
 
-    Returns a :class:`D4LeakResult` stating whether a leak was found and where.
+    BOUND, and it is the reason a clean result is weaker than it looks (#395
+    criterion 3): this is a SUBSTRING match after normalisation. A prompt that
+    PARAPHRASES the operative rule is reported clean, because no normalised
+    verbatim match exists. The D4 finding
+    (``docs/findings/d4-prompt-leak-into-null-arm.md``) classified
+    ``appendonly``, ``bayes`` and ``judgegate`` as leaks by READING the prompts
+    against the cards, not by string match, so this check and that finding can
+    disagree on the same inputs. Read a clean result as "no normalised verbatim
+    match", never as "no leak".
+
+    Returns a :class:`D4LeakResult` stating whether a leak was found, where it
+    hit, and which sources were compared.
     """
     rule_norm = _normalise(operative_rule)
     if not rule_norm:
+        # Nothing to match, so nothing was compared: `searched` stays empty
+        # rather than claiming sources this call never read.
         return D4LeakResult(leaked=False)
 
     locations: list[str] = []
+    searched: list[str] = ["prompt"]
 
     # 1. Direct check: rule in prompt text.
     if rule_norm in _normalise(prompt_text):
@@ -109,12 +164,38 @@ def check_d4_prompt_leak(
     # 2. Indirect check: rule in fixture files the prompt references.
     if prompt_fixture_files:
         for filename, content in prompt_fixture_files.items():
+            searched.append(filename)
             if rule_norm in _normalise(content):
                 locations.append(filename)
 
-    if locations:
-        return D4LeakResult(leaked=True, locations=tuple(locations))
-    return D4LeakResult(leaked=False)
+    return D4LeakResult(
+        leaked=bool(locations),
+        locations=tuple(locations),
+        searched=tuple(searched),
+    )
+
+
+def format_d4_leak_reason(result: D4LeakResult) -> str:
+    """Render a leak result as the store's ``inadmissibility_reason`` (#395 criterion 1).
+
+    Shape::
+
+        apparatus_void: D4 prompt leak; hit=prompt,RELEASING.md; searched=prompt,RELEASING.md
+
+    The leading ``apparatus_void: D4 prompt leak`` is preserved verbatim so
+    existing prefix matches keep working, including the re-disposition step on
+    issue 381's criterion 3. Everything after the first ``;`` is
+    ``key=comma,separated,values``, so a reader can parse which sources hit and
+    which were compared at all.
+
+    BOUND: the grammar has no escaping. A fixture filename containing ``,`` or
+    ``;`` would render ambiguously. Every fixture name in the manifest today is
+    a plain basename, so this is a stated limit rather than a live defect; give
+    the field a real encoding before admitting arbitrary filenames.
+    """
+    return (
+        f"{_D4_LEAK_REASON}; hit={','.join(result.locations)}; searched={','.join(result.searched)}"
+    )
 
 
 def _normalise(text: str) -> str:
@@ -190,6 +271,32 @@ BATCH1_MANIFEST: tuple[ScreenManifestEntry, ...] = (
 )
 
 
+def _validate_d4_fields(manifest: tuple[ScreenManifestEntry, ...]) -> None:
+    """Refuse a manifest carrying a half-specified D4 entry (#395 criterion 2).
+
+    The check needs both the rule and the prompt. An entry supplying one of
+    them states an intent to check that cannot be honoured, and admitting it
+    unchecked writes a row indistinguishable from a checked-and-clean one.
+
+    An entry supplying NEITHER is legitimate and passes here. Its row stores a
+    NULL reason and is therefore NOT distinguishable from a checked-and-clean
+    row: that marker is the unbuilt half of criterion 2, and the reason is
+    recorded in the comment above ``_D4_LEAK_REASON``.
+    """
+    for entry in manifest:
+        has_rule = entry.operative_rule is not None
+        has_prompt = entry.prompt_text is not None
+        if has_rule == has_prompt:
+            continue
+        missing = "prompt_text" if has_rule else "operative_rule"
+        present = "operative_rule" if has_rule else "prompt_text"
+        raise ScreenManifestError(
+            f"{entry.rel_path}: manifest entry carries {present} but not "
+            f"{missing}; the D4 leak check needs both. Supply {missing}, or "
+            f"drop {present} to record the row as d4: not_checked."
+        )
+
+
 @dataclass(frozen=True)
 class BackfillReport:
     """Outcome of a manifest apply: what was ingested + any audit mismatches."""
@@ -213,8 +320,16 @@ def apply_manifest(
     ``expected_*``; disagreements are collected (not silently swallowed) so a
     stale manifest or a surprising log surfaces rather than corrupting p0.
 
+    Every entry's D4 fields are validated BEFORE anything is written, so a
+    half-specified entry anywhere in the manifest refuses the whole apply rather
+    than leaving earlier entries persisted behind a later failure.
+
+    :raises ScreenManifestError: an entry carries exactly one of
+        ``operative_rule`` / ``prompt_text`` (#395 criterion 2).
     :raises FileNotFoundError: a manifest path is absent under ``screens_root``.
     """
+    _validate_d4_fields(manifest)
+
     ingested: list[ScreenIngestResult] = []
     mismatches: list[str] = []
     for entry in manifest:
@@ -224,7 +339,7 @@ def apply_manifest(
         parsed = parse(path)
 
         # --- D4 prompt-leak check (when manifest supplies the inputs) ---------
-        # D4 hit → inadmissible ruling. Not an audit mismatch (mismatches =
+        # D4 hit -> inadmissible ruling. Not an audit mismatch (mismatches =
         # manifest-vs-log only); CLI treats mismatches as backfill failure.
         admissibility = entry.admissibility_state
         reason = entry.inadmissibility_reason
@@ -236,7 +351,7 @@ def apply_manifest(
             )
             if leak.leaked:
                 admissibility = "inadmissible"
-                reason = _D4_LEAK_REASON
+                reason = format_d4_leak_reason(leak)
 
         result = write_screen_evidence(
             parsed=parsed,
@@ -265,9 +380,11 @@ __all__ = [
     "BackfillReport",
     "D4LeakResult",
     "ScreenManifestEntry",
+    "ScreenManifestError",
     "apply_manifest",
     "check_d4_prompt_leak",
     "derive_p0_by_skill",
+    "format_d4_leak_reason",
     "ingest_screen_eval_log",
 ]
 

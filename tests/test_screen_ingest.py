@@ -33,8 +33,10 @@ from skill_harness.subject.screen_backfill import (
     BATCH1_MANIFEST,
     D4LeakResult,
     ScreenManifestEntry,
+    ScreenManifestError,
     apply_manifest,
     check_d4_prompt_leak,
+    format_d4_leak_reason,
 )
 from skill_harness.subject.screen_ingest import (
     AlreadyIngestedScreenError,
@@ -723,10 +725,14 @@ def test_apply_manifest_d4_poison_refused(tmp_path: Path, conn: sqlite3.Connecti
     result = report.ingested[0]
     assert result.admissibility_state == "inadmissible"
     # External behaviour: the store reason, not an audit-mismatch side channel.
-    assert _stored_admissibility(conn, result.screen_run_id) == (
-        "inadmissible",
-        "apparatus_void: D4 prompt leak",
-    )
+    state, reason = _stored_admissibility(conn, result.screen_run_id)
+    assert state == "inadmissible"
+    # #395 criterion 1: the prefix existing matchers key on is preserved...
+    assert reason is not None
+    assert reason.startswith("apparatus_void: D4 prompt leak")
+    # ...and the reason now says what was compared and where it hit.
+    assert "hit=prompt" in reason
+    assert "searched=prompt" in reason
     assert report.mismatches == ()
     # p0 must not include this inadmissible screen
     rows = derive_p0_by_skill(conn)
@@ -805,10 +811,14 @@ def test_apply_manifest_d4_indirect_leak_via_fixture(
     report = apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
     result = report.ingested[0]
     assert result.admissibility_state == "inadmissible"
-    assert _stored_admissibility(conn, result.screen_run_id) == (
-        "inadmissible",
-        "apparatus_void: D4 prompt leak",
-    )
+    state, reason = _stored_admissibility(conn, result.screen_run_id)
+    assert state == "inadmissible"
+    assert reason is not None
+    assert reason.startswith("apparatus_void: D4 prompt leak")
+    # #395 criterion 1: a one-hop fixture hit is distinguishable from a prompt hit.
+    assert "hit=RELEASING.md" in reason
+    assert "hit=prompt" not in reason
+    assert "searched=prompt,RELEASING.md" in reason
     assert report.mismatches == ()
     # Pure check still names the fixture file as the leak site.
     leak = check_d4_prompt_leak(rule, prompt, fixture_files)
@@ -817,8 +827,19 @@ def test_apply_manifest_d4_indirect_leak_via_fixture(
     assert "prompt" not in leak.locations
 
 
-def test_apply_manifest_no_d4_fields_skips_check(tmp_path: Path, conn: sqlite3.Connection) -> None:
-    """Entries without D4 fields (operative_rule=None) skip the check entirely."""
+def test_apply_manifest_no_d4_fields_is_admitted_with_a_null_reason(
+    tmp_path: Path, conn: sqlite3.Connection
+) -> None:
+    """Entries without D4 fields are admitted and store NULL.
+
+    #395 criterion 2 asked that such a row record ``d4: not_checked`` so a
+    reader can tell "never checked" from "checked and clean". That marker is
+    NOT BUILT, and this test pins the behaviour that actually ships rather than
+    the one the ticket wanted: ``write_screen_evidence`` refuses an admissible
+    row carrying an ``inadmissibility_reason``, and ``screen_runs`` has no
+    adjacent column, so the marker needs a migration or a criterion amendment.
+    See the comment above ``_D4_LEAK_REASON`` in ``screen_backfill``.
+    """
     entry = ScreenManifestEntry(
         rel_path="d4/skip.eval",
         admissibility_state="admissible",
@@ -839,3 +860,201 @@ def test_apply_manifest_no_d4_fields_skips_check(tmp_path: Path, conn: sqlite3.C
     assert result.admissibility_state == "admissible"
     assert _stored_admissibility(conn, result.screen_run_id) == ("admissible", None)
     assert report.mismatches == ()
+
+
+def test_store_refuses_an_admissible_row_carrying_a_reason(
+    tmp_path: Path, conn: sqlite3.Connection
+) -> None:
+    """The invariant that closes criterion 2's marker placement, pinned directly.
+
+    Recorded as a test rather than as prose so that if the guard is ever
+    relaxed, the ticket's marker becomes available and this test says so by
+    failing.
+    """
+    entry = ScreenManifestEntry(
+        rel_path="d4/admissible-with-reason.eval",
+        admissibility_state="admissible",
+        inadmissibility_reason="d4: not_checked",
+        expected_skill="some-skill",
+        expected_pass=3,
+    )
+    root = tmp_path / "screens"
+    p = root / entry.rel_path
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"stub")
+
+    def fake_parse(path: Path) -> ParsedEvalLog:
+        return make_screen_log(1.0, 1.0, 1.0, skill_name="some-skill", task_id=str(path.name))
+
+    with pytest.raises(ScreenIngestError, match="must not carry an inadmissibility_reason"):
+        apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
+
+
+def test_apply_manifest_keeps_a_curated_inadmissibility_reason(
+    tmp_path: Path, conn: sqlite3.Connection
+) -> None:
+    """An entry ruled inadmissible for another cause keeps ITS reason.
+
+    The not-checked marker fills an empty field; it never overwrites a curated
+    admissibility ruling such as the tiebreak apparatus void.
+    """
+    entry = ScreenManifestEntry(
+        rel_path="d4/other-void.eval",
+        admissibility_state="inadmissible",
+        inadmissibility_reason="apparatus_void: oracle harness crashed",
+        expected_skill="some-skill",
+        expected_pass=0,
+    )
+    root = tmp_path / "screens"
+    p = root / entry.rel_path
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"stub")
+
+    def fake_parse(path: Path) -> ParsedEvalLog:
+        return make_screen_log(0.0, 0.0, 0.0, skill_name="some-skill", task_id=str(path.name))
+
+    report = apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
+    result = report.ingested[0]
+    assert _stored_admissibility(conn, result.screen_run_id) == (
+        "inadmissible",
+        "apparatus_void: oracle harness crashed",
+    )
+    assert report.mismatches == ()
+
+
+def test_apply_manifest_refuses_rule_without_prompt(
+    tmp_path: Path, conn: sqlite3.Connection
+) -> None:
+    """#395 criterion 2: a half-specified D4 entry is a typed refusal, not a silent admit."""
+    entry = ScreenManifestEntry(
+        rel_path="d4/half-rule.eval",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        expected_skill="some-skill",
+        expected_pass=3,
+        operative_rule="Do not rewrite, drop, or re-parent a commit.",
+    )
+    root = tmp_path / "screens"
+    p = root / entry.rel_path
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"stub")
+
+    def fake_parse(path: Path) -> ParsedEvalLog:
+        return make_screen_log(1.0, 1.0, 1.0, skill_name="some-skill", task_id=str(path.name))
+
+    with pytest.raises(ScreenManifestError, match="prompt_text"):
+        apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
+
+
+def test_apply_manifest_refuses_prompt_without_rule(
+    tmp_path: Path, conn: sqlite3.Connection
+) -> None:
+    """The mirror case: prompt supplied, rule absent, still a refusal."""
+    entry = ScreenManifestEntry(
+        rel_path="d4/half-prompt.eval",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        expected_skill="some-skill",
+        expected_pass=3,
+        prompt_text="Complete the git task using standard practices.",
+    )
+    root = tmp_path / "screens"
+    p = root / entry.rel_path
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"stub")
+
+    def fake_parse(path: Path) -> ParsedEvalLog:
+        return make_screen_log(1.0, 1.0, 1.0, skill_name="some-skill", task_id=str(path.name))
+
+    with pytest.raises(ScreenManifestError, match="operative_rule"):
+        apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
+
+
+def test_apply_manifest_refuses_whole_manifest_before_writing_anything(
+    tmp_path: Path, conn: sqlite3.Connection
+) -> None:
+    """A half-specified entry LATE in the manifest still writes nothing at all.
+
+    D4 fields are validated across the whole manifest before ingestion starts,
+    so a valid first entry is not persisted behind a later failure. Without the
+    up-front pass this test would find one row: the good entry, written before
+    the bad one was reached.
+    """
+    good = ScreenManifestEntry(
+        rel_path="d4/good-first.eval",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        expected_skill="some-skill",
+        expected_pass=3,
+    )
+    bad = ScreenManifestEntry(
+        rel_path="d4/half-second.eval",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        expected_skill="some-skill",
+        expected_pass=3,
+        operative_rule="Do not rewrite a commit.",
+    )
+    root = tmp_path / "screens"
+    for entry in (good, bad):
+        p = root / entry.rel_path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"stub")
+
+    def fake_parse(path: Path) -> ParsedEvalLog:
+        return make_screen_log(1.0, 1.0, 1.0, skill_name="some-skill", task_id=str(path.name))
+
+    with pytest.raises(ScreenManifestError):
+        apply_manifest(root, conn, manifest=(good, bad), parse=fake_parse)
+    n = conn.execute("SELECT COUNT(*) FROM screen_runs").fetchone()[0]
+    assert n == 0
+
+
+def test_d4_result_records_every_source_it_compared() -> None:
+    """#395 criterion 1: `searched` names the prompt and each fixture file, in order."""
+    rule = "Do not rewrite a commit."
+    result = check_d4_prompt_leak(
+        rule,
+        "An unrelated prompt.",
+        {"RELEASING.md": "nothing here", "CONTRIBUTING.md": "nor here"},
+    )
+    assert result.leaked is False
+    assert result.locations == ()
+    assert result.searched == ("prompt", "RELEASING.md", "CONTRIBUTING.md")
+
+
+def test_d4_searched_is_prompt_only_when_no_fixtures_given() -> None:
+    """A prompt-only check says so, rather than implying files were read."""
+    result = check_d4_prompt_leak("Do not rewrite a commit.", "An unrelated prompt.")
+    assert result.searched == ("prompt",)
+
+
+def test_d4_empty_rule_searched_nothing() -> None:
+    """An empty rule compares nothing, so it claims no sources.
+
+    Distinguishes "clean because nothing matched" from "clean because there was
+    nothing to match" in the rendered reason.
+    """
+    result = check_d4_prompt_leak("", "any prompt", {"RELEASING.md": "anything"})
+    assert result.leaked is False
+    assert result.searched == ()
+
+
+def test_format_d4_leak_reason_keeps_the_prefix_and_names_both_lists() -> None:
+    """The rendered reason is prefix-compatible and parseable."""
+    result = D4LeakResult(
+        leaked=True,
+        locations=("RELEASING.md",),
+        searched=("prompt", "RELEASING.md"),
+    )
+    rendered = format_d4_leak_reason(result)
+    assert rendered.startswith("apparatus_void: D4 prompt leak")
+    assert rendered == (
+        "apparatus_void: D4 prompt leak; hit=RELEASING.md; searched=prompt,RELEASING.md"
+    )
+    # A reader can split the trailing key=value pairs back out.
+    head, *pairs = [part.strip() for part in rendered.split(";")]
+    assert head == "apparatus_void: D4 prompt leak"
+    parsed = dict(pair.split("=", 1) for pair in pairs)
+    assert parsed["hit"].split(",") == ["RELEASING.md"]
+    assert parsed["searched"].split(",") == ["prompt", "RELEASING.md"]

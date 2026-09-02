@@ -128,6 +128,34 @@ no staleness signal.
 
 That ground voids all four rows, including `tiebreak`, whose prompt is clean.
 
+## How the audit above was made, and what the shipped check does instead
+
+**The four LEAK rulings in the table were reached by READING each prompt against
+the skill card, not by string match.** That matters, because the automated check
+that now runs at ingest
+(`check_d4_prompt_leak`, `src/skill_harness/subject/screen_backfill.py`) is a
+**normalised substring match**: it lowercases and collapses whitespace, then
+looks for the operative rule in the prompt text and in every fixture file the
+manifest entry names.
+
+So the check and this audit can disagree on the same inputs:
+
+| leak shape | this audit | the shipped check |
+|---|---|---|
+| prompt states the rule in the card's own words | LEAK | detected |
+| prompt points at a fixture file carrying the rule | LEAK | detected, one hop |
+| prompt **paraphrases** the rule | LEAK | **reported clean** |
+
+`appendonly`, `bayes` and `judgegate` are the three fixtures this audit judged by
+reading. A clean result from the shipped check therefore means **"no normalised
+verbatim match"**, which is weaker than the standard applied here. It is not a
+statement that no leak exists.
+
+No paraphrase detector is built. A model-judged check would need its own
+calibration and its own receipt, and that is a separate design question rather
+than a gap in this one. Recording the bound is what keeps a clean result from
+being read as more than it is.
+
 ## What this does NOT establish
 
 The `git-pull-rebase-trap` skill arm scored **1.000 (3/3)** against the
