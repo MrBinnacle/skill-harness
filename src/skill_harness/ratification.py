@@ -167,8 +167,10 @@ class RatRecord(BaseModel):
     Only the load-bearing fields are mirrored (#47: the full eleven-field
     checklist lives as prose in the record body; the front-matter carries
     exactly what the gate and DC-12 consume mechanically).  Gate-2 records
-    additionally carry the dual-MME and gamma fields that the paired-lane
-    Gate-2 read uses to reconstruct the registered design.
+    may additionally carry the dual-MME and gamma fields that the paired-lane
+    Gate-2 read uses to reconstruct the registered design. Those knobs have
+    no defaults here: a missing value stays None, and the reader refuses by
+    name rather than authoring the Amendment-4 recommended row at parse time.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
@@ -185,9 +187,9 @@ class RatRecord(BaseModel):
     cost_provenance: str
     sme_status: str
     ratified_date: str
-    gamma: float = 0.90
-    delta_min: float = 0.20
-    q_min: float = 0.70
+    gamma: float | None = None
+    delta_min: float | None = None
+    q_min: float | None = None
 
 
 def _cents(usd: float) -> int:
@@ -268,30 +270,32 @@ def parse_rat_record(path: Path) -> RatRecord:
             f"disclosure line {DISCLOSURE_LINE!r} (#45 via #47)"
         )
 
+    gamma_value: float | None = None
     gamma_raw = fields.get("gamma")
-    if gamma_raw is not None and not isinstance(gamma_raw, (int, float)):
-        raise RatificationError(f"{path.name}: field 'gamma' must be numeric")
-    gamma_value = float(gamma_raw) if gamma_raw is not None else 0.90
-    if not 0.5 < gamma_value < 1.0:
-        raise RatificationError(
-            f"{path.name}: gamma must lie in (0.5, 1); got {gamma_value}"
-        )
+    if gamma_raw is not None:
+        if isinstance(gamma_raw, bool) or not isinstance(gamma_raw, (int, float)):
+            raise RatificationError(f"{path.name}: field 'gamma' must be numeric")
+        gamma_value = float(gamma_raw)
+        if not 0.5 < gamma_value < 1.0:
+            raise RatificationError(f"{path.name}: gamma must lie in (0.5, 1); got {gamma_value}")
+    delta_min_value: float | None = None
     delta_min_raw = fields.get("delta_min")
-    if delta_min_raw is not None and not isinstance(delta_min_raw, (int, float)):
-        raise RatificationError(f"{path.name}: field 'delta_min' must be numeric")
-    delta_min_value = float(delta_min_raw) if delta_min_raw is not None else 0.20
-    if not 0.0 < delta_min_value < 1.0:
-        raise RatificationError(
-            f"{path.name}: delta_min must lie in (0, 1); got {delta_min_value}"
-        )
+    if delta_min_raw is not None:
+        if isinstance(delta_min_raw, bool) or not isinstance(delta_min_raw, (int, float)):
+            raise RatificationError(f"{path.name}: field 'delta_min' must be numeric")
+        delta_min_value = float(delta_min_raw)
+        if not 0.0 < delta_min_value < 1.0:
+            raise RatificationError(
+                f"{path.name}: delta_min must lie in (0, 1); got {delta_min_value}"
+            )
+    q_min_value: float | None = None
     q_min_raw = fields.get("q_min")
-    if q_min_raw is not None and not isinstance(q_min_raw, (int, float)):
-        raise RatificationError(f"{path.name}: field 'q_min' must be numeric")
-    q_min_value = float(q_min_raw) if q_min_raw is not None else 0.70
-    if not 0.5 < q_min_value < 1.0:
-        raise RatificationError(
-            f"{path.name}: q_min must lie in (0.5, 1); got {q_min_value}"
-        )
+    if q_min_raw is not None:
+        if isinstance(q_min_raw, bool) or not isinstance(q_min_raw, (int, float)):
+            raise RatificationError(f"{path.name}: field 'q_min' must be numeric")
+        q_min_value = float(q_min_raw)
+        if not 0.5 < q_min_value < 1.0:
+            raise RatificationError(f"{path.name}: q_min must lie in (0.5, 1); got {q_min_value}")
 
     return RatRecord(
         rat_id=rat_id,

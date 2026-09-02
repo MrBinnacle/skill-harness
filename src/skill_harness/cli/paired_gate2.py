@@ -16,6 +16,7 @@ from pathlib import Path
 
 from rich.console import Console
 
+from skill_harness.aggregation.matched_bridge import MatchedRefusalReason
 from skill_harness.aggregation.profile import effect_from_matched_gate2
 from skill_harness.aggregation.verdict import ValueClass, matched_gate2_verdict
 from skill_harness.oc import Gate2Design, MMESpec
@@ -64,6 +65,28 @@ def paired_gate2_read(
             exit_code=1,
         )
 
+    if record.gate != "gate2":
+        raise PairedGate2Refusal(
+            f"ratification record {record.rat_id} field 'gate' is {record.gate!r}; "
+            f"paired Gate-2 read requires gate2",
+            exit_code=1,
+        )
+
+    # Design knobs are registered on the record, never defaulted here.
+    missing_design: list[str] = []
+    if record.gamma is None:
+        missing_design.append("gamma")
+    if record.delta_min is None:
+        missing_design.append("delta_min")
+    if record.q_min is None:
+        missing_design.append("q_min")
+    if missing_design:
+        named = ", ".join(repr(f) for f in missing_design)
+        raise PairedGate2Refusal(
+            f"ratification record {record.rat_id} field mismatch: missing design field(s) {named}",
+            exit_code=1,
+        )
+
     # 2. Open evidence DB read-only and load the run
     conn: sqlite3.Connection | None = None
     try:
@@ -76,7 +99,7 @@ def paired_gate2_read(
 
     try:
         row = conn.execute(
-            "SELECT config_json FROM runs WHERE run_id = ?", (run_id,)
+            "SELECT skill_id, config_json FROM runs WHERE run_id = ?", (run_id,)
         ).fetchone()
     finally:
         conn.close()
@@ -87,7 +110,15 @@ def paired_gate2_read(
             exit_code=1,
         )
 
-    config = json.loads(row[0])
+    run_skill_id, config_raw = row[0], row[1]
+    if run_skill_id != record.skill_id:
+        raise PairedGate2Refusal(
+            f"ratification record {record.rat_id} field mismatch: "
+            f"skill_id record {record.skill_id!r} != run {run_skill_id!r}",
+            exit_code=1,
+        )
+
+    config = json.loads(config_raw)
 
     # 3. Read paired cell counts from config_json (written by #387)
     paired_cells = config.get("paired_cells")
@@ -104,7 +135,10 @@ def paired_gate2_read(
     both_fail = int(paired_cells["both_fail"])
     total_pairs = both_pass + full_only + null_only + both_fail
 
-    # 4. Build the design from the ratification record
+    # 4. Build the design from the ratification record (knobs already checked)
+    assert record.gamma is not None
+    assert record.delta_min is not None
+    assert record.q_min is not None
     design = Gate2Design(
         n_pairs=record.n,
         gamma=record.gamma,
@@ -114,9 +148,9 @@ def paired_gate2_read(
     # 5. Count-mismatch check (k=8 pilot vs n=32 design)
     if total_pairs != design.n_pairs:
         raise PairedGate2Refusal(
-            f"COUNT_MISMATCH: paired run {run_id!r} has {total_pairs} pairs "
-            f"but the ratified design {record.rat_id} specifies "
-            f"n_pairs={design.n_pairs}",
+            f"{MatchedRefusalReason.COUNT_MISMATCH.name}: paired run {run_id!r} "
+            f"has {total_pairs} pairs but the ratified design {record.rat_id} "
+            f"specifies n_pairs={design.n_pairs}",
             exit_code=2,
         )
 
@@ -146,24 +180,21 @@ def paired_gate2_read(
             f"[{confidence:.0%} CI {ci_low:.4f}, {ci_high:.4f}]"
         )
         if pi_c_hat == 0.0:
-            pi_c_line += (
-                " CACE secondary is not identified "
-                "(zero invocations with full exposure)."
-            )
+            pi_c_line += " CACE secondary is not identified (zero invocations with full exposure)."
 
     # 8. Print the decision
     assert effect.decision is not None  # effect_from_matched_gate2 always sets decision
     _console.print(f"Decision: {effect.decision.value}")
     _console.print(
-        f"Signed delta: {effect.mean:.3f}, "
-        f"95% CI [{effect.ci_lo:.3f}, {effect.ci_hi:.3f}]"
+        f"Signed delta: {effect.mean:.3f}, 95% CI [{effect.ci_lo:.3f}, {effect.ci_hi:.3f}]"
     )
     if pi_c_line:
         _console.print(pi_c_line)
-    sub = (
-        f"({verdict.cut_sub_reason.value})"
-        if verdict.cut_sub_reason is not None
-        else ""
-    )
+    if verdict.cut_sub_reason is not None:
+        sub = f"({verdict.cut_sub_reason.value})"
+    elif verdict.wrong_instrument:
+        sub = "(wrong_instrument)"
+    else:
+        sub = ""
     _console.print(f"Verdict: {verdict.verdict.value} {sub}".rstrip())
     _console.print(f"Rationale: {verdict.rationale}")
