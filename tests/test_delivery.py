@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-import jsonschema  # type: ignore[import-untyped]
+import jsonschema
 
 from skill_harness.sers.delivery import (
     CHANNEL_BODY_AND_DESCRIPTION,

@@ -16,7 +16,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from jsonschema.exceptions import ValidationError  # type: ignore[import-untyped]
+from jsonschema.exceptions import ValidationError
 
 from skill_harness.sitegen import SiteBuildError, build_site
 

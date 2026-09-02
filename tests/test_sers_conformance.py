@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
-from jsonschema.exceptions import ValidationError  # type: ignore[import-untyped]
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
 
 from skill_harness.aggregation.status import UnmeasuredSubReason
 from skill_harness.aggregation.verdict import CutSubReason, KeepCutVerdict, ValueClass
