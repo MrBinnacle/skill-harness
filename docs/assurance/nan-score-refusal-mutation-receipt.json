@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rbmok89w\\M-N1\\src\\skill_harness\\subject\\ingest.py",
-        "source_digest": "132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56",
+        "module_file": "/tmp/mutation-receipt-zh1fz_ll/M-N1/src/skill_harness/subject/ingest.py",
+        "source_digest": "5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1",
         "tests_collected": 2,
-        "worktree_head": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a"
+        "worktree_head": "53b9e95da3bcb9773bc2410f54ab20f6191a2725"
       },
       "description": "remove the model-layer constraint: ParsedSample.score_value accepts NaN again",
       "killing_assertions": [
@@ -18,10 +18,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rbmok89w\\M-N1\\src\\skill_harness\\subject\\ingest.py",
-        "source_digest": "510ebeaa60b7bbc22ea506406e5b05aa1e255beb436088f3c49c4010ce79b3b2",
+        "module_file": "/tmp/mutation-receipt-zh1fz_ll/M-N1/src/skill_harness/subject/ingest.py",
+        "source_digest": "224e20b2e00c5fd4a88e71590e798fa8d2b2657d6d00fec8777b40266cfc1769",
         "tests_collected": 2,
-        "worktree_head": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a"
+        "worktree_head": "53b9e95da3bcb9773bc2410f54ab20f6191a2725"
       },
       "mutant_id": "M-N1",
       "notes": [],
@@ -36,10 +36,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rbmok89w\\M-N2\\src\\skill_harness\\subject\\ingest.py",
-        "source_digest": "132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56",
+        "module_file": "/tmp/mutation-receipt-zh1fz_ll/M-N2/src/skill_harness/subject/ingest.py",
+        "source_digest": "5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1",
         "tests_collected": 1,
-        "worktree_head": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a"
+        "worktree_head": "53b9e95da3bcb9773bc2410f54ab20f6191a2725"
       },
       "description": "disable the parse-path finite guard in _score_to_float",
       "killing_assertions": [
@@ -49,10 +49,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rbmok89w\\M-N2\\src\\skill_harness\\subject\\ingest.py",
-        "source_digest": "44974f03190dda68be6e8433271730da15d4e0b26159e13fa1dc5f4de51bdd06",
+        "module_file": "/tmp/mutation-receipt-zh1fz_ll/M-N2/src/skill_harness/subject/ingest.py",
+        "source_digest": "d9e26bb6f16c5d8fa5d0635580eb208baf933154013384b68b1632f497ad7901",
         "tests_collected": 1,
-        "worktree_head": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a"
+        "worktree_head": "53b9e95da3bcb9773bc2410f54ab20f6191a2725"
       },
       "mutant_id": "M-N2",
       "notes": [],
@@ -66,10 +66,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rbmok89w\\M-N3\\src\\skill_harness\\subject\\ingest.py",
-        "source_digest": "132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56",
+        "module_file": "/tmp/mutation-receipt-zh1fz_ll/M-N3/src/skill_harness/subject/ingest.py",
+        "source_digest": "5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1",
         "tests_collected": 1,
-        "worktree_head": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a"
+        "worktree_head": "53b9e95da3bcb9773bc2410f54ab20f6191a2725"
       },
       "description": "narrow the parse-path guard to NaN only, letting an infinite score through",
       "killing_assertions": [
@@ -79,10 +79,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rbmok89w\\M-N3\\src\\skill_harness\\subject\\ingest.py",
-        "source_digest": "bcad9b726ad6dab324eb2cb4dd8aa3c8c49556ce0fb768f79cb4f1b4647a6b2b",
+        "module_file": "/tmp/mutation-receipt-zh1fz_ll/M-N3/src/skill_harness/subject/ingest.py",
+        "source_digest": "238a95e3b5a45d7ac54ab8b05a27e414897e0189eb5b54bf53bdab8d2cae6752",
         "tests_collected": 1,
-        "worktree_head": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a"
+        "worktree_head": "53b9e95da3bcb9773bc2410f54ab20f6191a2725"
       },
       "mutant_id": "M-N3",
       "notes": [],
@@ -93,18 +93,18 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a",
+  "commit_under_test": "53b9e95da3bcb9773bc2410f54ab20f6191a2725",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "src/skill_harness/subject/ingest.py": "132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56"
+    "src/skill_harness/subject/ingest.py": "5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1"
   },
   "production_tree_digest_before": {
-    "src/skill_harness/subject/ingest.py": "132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56"
+    "src/skill_harness/subject/ingest.py": "5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1"
   },
   "production_tree_unchanged": true,
-  "python": "3.13.1",
+  "python": "3.13.15",
   "target_digests": {
-    "src/skill_harness/subject/ingest.py": "132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56"
+    "src/skill_harness/subject/ingest.py": "5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1"
   },
   "target_files": [
     "src/skill_harness/subject/ingest.py"

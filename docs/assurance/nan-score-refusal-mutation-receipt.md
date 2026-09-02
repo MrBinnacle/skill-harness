@@ -5,10 +5,12 @@
 **Generator:** `scripts/mutation_receipt.py`. **Machine-readable record:**
 `docs/assurance/nan-score-refusal-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/subject/ingest.py` at
-`sha256:132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56`.
-**Commit at generation:** `2c5f7ba` — informational only. A rebase rewrites it and later
+`sha256:5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1`.
+**Commit at generation:** `53b9e95d` — informational only. A rebase rewrites it and later
 commits move HEAD past it, so currency is checked against the digest above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
+
+**Regenerated 2026-09-02 for #400** (ingest gained `normalised_keys_dropped`; mutants re-run, all kills held).
 
 **Regenerated 2026-09-01 for #387.** The first generation (commit `210ac93`, digest
 `abf32c6e6427`) attested to the ingest module before #387 rewrote it (treatment = exposure,
