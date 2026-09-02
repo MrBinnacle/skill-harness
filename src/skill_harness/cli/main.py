@@ -2826,11 +2826,11 @@ def screen_verdict_cmd(evidence_db: Path, fresh_pin: str | None) -> None:
     """
     from skill_harness.aggregation.value_class_registry import value_class_for
     from skill_harness.aggregation.verdict import screen_verdict
-    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.errors import BootstrapError, StalePinError
     from skill_harness.storage.migrations import open_evidence_readonly
     from skill_harness.storage.repositories.evidence.screens import (
         derive_p0_by_skill,
-        stale_pin_skills,
+        select_stale_pin_skills,
     )
 
     if not evidence_db.exists():
@@ -2843,7 +2843,9 @@ def screen_verdict_cmd(evidence_db: Path, fresh_pin: str | None) -> None:
     db_conn: sqlite3.Connection | None = None
     try:
         db_conn = open_evidence_readonly(evidence_db)
-        rows = derive_p0_by_skill(db_conn)
+        stale_rows = select_stale_pin_skills(db_conn, fresh_pin) if fresh_pin is not None else []
+        # Pin filter is applied inside derive so mixed-pin skills keep only fresh rows.
+        rows = derive_p0_by_skill(db_conn, fresh_pin=fresh_pin)
     except BootstrapError:
         _console.print(f"\n[yellow]evidence.db not found at {evidence_db}.[/]")
         return
@@ -2851,35 +2853,30 @@ def screen_verdict_cmd(evidence_db: Path, fresh_pin: str | None) -> None:
         if db_conn is not None:
             db_conn.close()
 
-    if not rows:
-        _console.print(
-            "\n[yellow]No admissible screens in the store.[/]"
-            "\n[dim]  Backfill batch-1 with 'screen backfill --execute', or run a screen.[/]"
-        )
-        return
-
-    stale: list[str] = []
-    if fresh_pin is not None:
-        db_conn2: sqlite3.Connection | None = None
-        try:
-            db_conn2 = open_evidence_readonly(evidence_db)
-            stale = stale_pin_skills(db_conn2, fresh_pin)
-        finally:
-            if db_conn2 is not None:
-                db_conn2.close()
-
-    if stale:
-        _console.print(f"\n[red]Stale pin refused ({len(stale)} skill(s)):[/]")
-        for name in sorted(stale):
-            _console.print(f"  [red]  {name}[/]")
+    if stale_rows:
+        _console.print(f"\n[red]Stale pin refused ({len(stale_rows)} skill(s)):[/]")
+        for stale in stale_rows:
+            refusal = StalePinError(
+                stored_fingerprints=stale.stored_fingerprints,
+                fresh_fingerprint=fresh_pin or "",
+            )
+            _console.print(
+                f"  [red]{_sanitize_clause_text(stale.skill_name, max_len=None)}: "
+                f"{_sanitize_clause_text(str(refusal), max_len=None)}[/]"
+            )
         _console.print(
             "[dim]  These screens were captured under a different harness pin and"
             " must not silently contribute to p0 (#382).[/]"
         )
-        rows = [r for r in rows if r.skill_name not in set(stale)]
 
     if not rows:
-        _console.print("\n[yellow]No admissible screens remain after pin-currency check.[/]")
+        if fresh_pin is not None and stale_rows:
+            _console.print("\n[yellow]No admissible screens remain after pin-currency check.[/]")
+        else:
+            _console.print(
+                "\n[yellow]No admissible screens in the store.[/]"
+                "\n[dim]  Backfill batch-1 with 'screen backfill --execute', or run a screen.[/]"
+            )
         return
 
     table = Table(title="Screen verdicts (p0 derived from admissible trials)", show_lines=True)

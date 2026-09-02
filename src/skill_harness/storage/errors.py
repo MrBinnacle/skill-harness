@@ -66,7 +66,8 @@ class StalePinError(StorageError):
     ) -> None:
         self.stored_fingerprints = stored_fingerprints
         self.fresh_fingerprint = fresh_fingerprint
-        stored_str = ", ".join(sorted(stored_fingerprints))
+        # Empty set = admissible rows carried NULL fingerprints.
+        stored_str = ", ".join(sorted(stored_fingerprints)) if stored_fingerprints else "missing"
         super().__init__(
             f"harness pin mismatch: stored [{stored_str}] vs fresh "
             f"[{fresh_fingerprint}] — screen verdict refused"

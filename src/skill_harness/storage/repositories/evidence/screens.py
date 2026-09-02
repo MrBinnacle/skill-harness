@@ -115,29 +115,51 @@ class ScreenP0(NamedTuple):
     n_admissible_screens: int
 
 
-def derive_p0_by_skill(conn: sqlite3.Connection) -> list[ScreenP0]:
+def derive_p0_by_skill(conn: sqlite3.Connection, *, fresh_pin: str | None = None) -> list[ScreenP0]:
     """Derive p0 per skill over ADMISSIBLE screen trials (Discipline 6 — never stored).
 
     p0 = mean(passed) over every trial belonging to an admissible screen_run for
     the skill. Inadmissible screens (apparatus voids) are excluded — their
     evidence remains in the store, but they do not enter the derivation.
 
-    Skills whose screens are ALL inadmissible produce no row (n_trials would be
-    zero; p0 is undefined). Ordered by skill_name for stable output.
+    When ``fresh_pin`` is set (#382), only trials whose screen_run carries that
+    exact ``harness_pin_fingerprint`` enter the derivation. Mismatched and NULL
+    pins are excluded so stale instrument rows cannot silently shape p0.
+
+    Skills whose screens are ALL inadmissible (or all pin-excluded) produce no
+    row (n_trials would be zero; p0 is undefined). Ordered by skill_name for
+    stable output.
     """
-    cur = conn.execute(
-        """
-        SELECT sr.skill_name,
-               SUM(st.passed)                 AS n_pass,
-               COUNT(st.screen_trial_id)      AS n_trials,
-               COUNT(DISTINCT sr.screen_run_id) AS n_screens
-        FROM screen_runs sr
-        JOIN screen_trials st ON st.screen_run_id = sr.screen_run_id
-        WHERE sr.admissibility_state = 'admissible'
-        GROUP BY sr.skill_name
-        ORDER BY sr.skill_name
-        """
-    )
+    if fresh_pin is None:
+        cur = conn.execute(
+            """
+            SELECT sr.skill_name,
+                   SUM(st.passed)                 AS n_pass,
+                   COUNT(st.screen_trial_id)      AS n_trials,
+                   COUNT(DISTINCT sr.screen_run_id) AS n_screens
+            FROM screen_runs sr
+            JOIN screen_trials st ON st.screen_run_id = sr.screen_run_id
+            WHERE sr.admissibility_state = 'admissible'
+            GROUP BY sr.skill_name
+            ORDER BY sr.skill_name
+            """
+        )
+    else:
+        cur = conn.execute(
+            """
+            SELECT sr.skill_name,
+                   SUM(st.passed)                 AS n_pass,
+                   COUNT(st.screen_trial_id)      AS n_trials,
+                   COUNT(DISTINCT sr.screen_run_id) AS n_screens
+            FROM screen_runs sr
+            JOIN screen_trials st ON st.screen_run_id = sr.screen_run_id
+            WHERE sr.admissibility_state = 'admissible'
+              AND sr.harness_pin_fingerprint = ?
+            GROUP BY sr.skill_name
+            ORDER BY sr.skill_name
+            """,
+            (fresh_pin,),
+        )
     out: list[ScreenP0] = []
     for skill_name, n_pass, n_trials, n_screens in cur.fetchall():
         out.append(
@@ -152,14 +174,21 @@ def derive_p0_by_skill(conn: sqlite3.Connection) -> list[ScreenP0]:
     return out
 
 
-def stale_pin_skills(conn: sqlite3.Connection, fresh_pin: str) -> list[str]:
-    """Return skill names whose admissible screens carry a different pin than ``fresh_pin``.
+class StalePinSkill(NamedTuple):
+    """One skill whose admissible screens carry pins other than the fresh pin (#382)."""
 
-    A screen is "stale" when its ``harness_pin_fingerprint`` is not ``None`` AND
-    differs from the freshly captured pin. Screens with ``NULL`` fingerprints are
-    treated conservatively (not stale — we cannot prove they were captured under
-    a different instrument). Skills whose screens ALL have ``NULL`` fingerprints
-    are not returned.
+    skill_name: str
+    stored_fingerprints: frozenset[str]
+
+
+def select_stale_pin_skills(conn: sqlite3.Connection, fresh_pin: str) -> list[StalePinSkill]:
+    """Return skills with admissible screens whose pin differs from ``fresh_pin``.
+
+    A screen is stale when its ``harness_pin_fingerprint`` is not equal to the
+    freshly captured pin. NULL fingerprints count as stale: a missing pin is a
+    typed refusal, not a free pass into p0. Skills that also have matching-pin
+    screens still appear here so the mismatch is named; ``derive_p0_by_skill``
+    with ``fresh_pin`` keeps only the matching rows.
 
     Ordered by skill_name for stable output. Used by ``screen verdict`` to refuse
     rows that would silently contribute stale evidence to p0 (#382).
@@ -167,17 +196,21 @@ def stale_pin_skills(conn: sqlite3.Connection, fresh_pin: str) -> list[str]:
     cur = conn.execute(
         """
         SELECT sr.skill_name,
-               COUNT(DISTINCT sr.harness_pin_fingerprint) AS n_distinct_pins,
-               GROUP_CONCAT(DISTINCT sr.harness_pin_fingerprint) AS all_pins
+               GROUP_CONCAT(DISTINCT sr.harness_pin_fingerprint) AS mismatched_pins
         FROM screen_runs sr
         WHERE sr.admissibility_state = 'admissible'
-          AND sr.harness_pin_fingerprint IS NOT NULL
+          AND (
+                sr.harness_pin_fingerprint IS NULL
+                OR sr.harness_pin_fingerprint != ?
+              )
         GROUP BY sr.skill_name
-        """
+        ORDER BY sr.skill_name
+        """,
+        (fresh_pin,),
     )
-    out: list[str] = []
-    for skill_name, _n_distinct_pins, all_pins in cur.fetchall():
-        pins = {p for p in (all_pins or "").split(",") if p}
-        if fresh_pin not in pins:
-            out.append(skill_name)
+    out: list[StalePinSkill] = []
+    for skill_name, mismatched_pins in cur.fetchall():
+        # GROUP_CONCAT drops NULLs; a skill with only NULL pins yields None.
+        pins = frozenset(p for p in (mismatched_pins or "").split(",") if p)
+        out.append(StalePinSkill(skill_name=skill_name, stored_fingerprints=pins))
     return out
