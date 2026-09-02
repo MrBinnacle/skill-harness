@@ -96,8 +96,17 @@ Skill value kind. Members mirror `ValueClass`:
 ### `wrong_instrument`
 
 Optional boolean. `true` when a path **withheld** a `CUT` because
-`value_class` is not `transformative-lift`. Routes the cell to the
-field-evidence lane. Never `true` on a `KEEP` or `CUT`.
+`value_class` is not `transformative-lift`. Never `true` on a `KEEP` or `CUT`.
+
+**The field-evidence lane this flag names is UNBUILT.** It was deferred on
+2026-09-02 under [#335](https://github.com/MrBinnacle/skill-harness/issues/335)
+rather than built, because a lane whose only members are wrong-instrument
+withholds needs the false-green outcome variable defined first, and that
+variable does not exist
+([#403](https://github.com/MrBinnacle/skill-harness/issues/403)). Nothing in this
+repository consumes `wrong_instrument` today. Read it as a recorded reason for
+a withheld verdict, not as a pointer to a destination. Receipts minted before that date carry summary text promising the
+lane; they are append-only evidence and are not rewritten.
 
 ### `declared_synthetic_control`
 
