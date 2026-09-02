@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-0vhg83qy\\M-X1\\src\\skill_harness\\subject\\ingest.py",
-        "source_digest": "132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-e07471qa\\M-X1\\src\\skill_harness\\subject\\ingest.py",
+        "source_digest": "5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1",
         "tests_collected": 2,
-        "worktree_head": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a"
+        "worktree_head": "a9f918a14a87dbc63a9b78131a1664a5d8aa3f1c"
       },
       "description": "remove refusal predicate (a): a Full-arm epoch with exposure not detected writes",
       "killing_assertions": [
@@ -18,10 +18,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-0vhg83qy\\M-X1\\src\\skill_harness\\subject\\ingest.py",
-        "source_digest": "831a478e39fca5bdc78dbb54f2d2da118b43f2c1affcf8418391dc98022be418",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-e07471qa\\M-X1\\src\\skill_harness\\subject\\ingest.py",
+        "source_digest": "fa8fd23735b20e9df29fb850f42828ad09d0bd4d4291891ff39f6a7a00871486",
         "tests_collected": 2,
-        "worktree_head": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a"
+        "worktree_head": "a9f918a14a87dbc63a9b78131a1664a5d8aa3f1c"
       },
       "mutant_id": "M-X1",
       "notes": [],
@@ -36,10 +36,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-0vhg83qy\\M-X2\\src\\skill_harness\\subject\\ingest.py",
-        "source_digest": "132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-e07471qa\\M-X2\\src\\skill_harness\\subject\\ingest.py",
+        "source_digest": "5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1",
         "tests_collected": 2,
-        "worktree_head": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a"
+        "worktree_head": "a9f918a14a87dbc63a9b78131a1664a5d8aa3f1c"
       },
       "description": "narrow refusal predicate (b) back to invocation only: a Null-arm epoch with exposure detected writes",
       "killing_assertions": [
@@ -50,10 +50,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-0vhg83qy\\M-X2\\src\\skill_harness\\subject\\ingest.py",
-        "source_digest": "cc2bd102732d67333873ecdff9a5e4b45799086a4fca77c45d8994434062777c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-e07471qa\\M-X2\\src\\skill_harness\\subject\\ingest.py",
+        "source_digest": "e1a6586bc08da053311e33d0e78678cd33dbc74ff7d5e40e93eee718173f7e76",
         "tests_collected": 2,
-        "worktree_head": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a"
+        "worktree_head": "a9f918a14a87dbc63a9b78131a1664a5d8aa3f1c"
       },
       "mutant_id": "M-X2",
       "notes": [],
@@ -65,18 +65,18 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a",
+  "commit_under_test": "a9f918a14a87dbc63a9b78131a1664a5d8aa3f1c",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "src/skill_harness/subject/ingest.py": "132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56"
+    "src/skill_harness/subject/ingest.py": "5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1"
   },
   "production_tree_digest_before": {
-    "src/skill_harness/subject/ingest.py": "132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56"
+    "src/skill_harness/subject/ingest.py": "5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1"
   },
   "production_tree_unchanged": true,
   "python": "3.13.1",
   "target_digests": {
-    "src/skill_harness/subject/ingest.py": "132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56"
+    "src/skill_harness/subject/ingest.py": "5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1"
   },
   "target_files": [
     "src/skill_harness/subject/ingest.py"

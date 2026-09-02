@@ -5,8 +5,8 @@
 **Generator:** `scripts/mutation_receipt.py --select 387`. **Machine-readable record:**
 `docs/assurance/exposure-refusal-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/subject/ingest.py` at
-`sha256:132e9ac6e4bdb7ce68894eb301af11f8c75deb4fa6e63cd29fa176b8cc71be56`.
-**Commit at generation:** `2c5f7bad6a4af921f9d90013d9ef773a2d5a9c5a` — informational only. A rebase
+`sha256:5fb3a0f5ed1e94403d031df970bcdb574d1dc8fbaeb6dc58c29b49c219b8cdf1`.
+**Commit at generation:** `a9f918a` — informational only. A rebase
 rewrites it and later commits move HEAD past it, so currency is checked against the digest
 above by `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
 
