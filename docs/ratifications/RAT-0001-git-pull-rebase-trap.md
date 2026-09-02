@@ -82,7 +82,7 @@ grid step from the target. Both are conforming; the recommendation is the regist
   by README rule.
 - Pre-spend re-measurement: if tokens per pair re-measure above **353,850 input** at this pricing
   and output figure, the row breaches the cap and the run does not launch; a dated amendment
-  records why (#391 acceptance). ⚠ This bullet read "above about 470k" until Amendment 1 measured
+  records why (#391 acceptance). Note: this bullet read "above about 470k" until Amendment 1 measured
   the breakeven; see section 10, and note that the true headroom is 129 tokens per pair, not 33
   percent.
 
@@ -165,9 +165,10 @@ different quantities, and only the projection is knife-edge.
 **Pre-spend re-measurement, run 2026-09-02.** Recomputing tokens per pair over the two pilot eval
 logs in the batch-1 `gitpull` log directory returns 353,721 input across all classes and 2,230
 output — identical to the registered figures, so the projected worst case is $23.351744 and the
-launch is within the cap. ⚠ This reproduces the registered figures from **the same source that
-produced them**. It confirms the arithmetic is faithful to the pilot; it is not independent
-evidence that a 32-pair run will use the same tokens per pair. A genuinely independent
+launch is within the cap. Read the next sentence before relying on that: this reproduces the
+registered figures from **the same source that produced them**. It confirms the arithmetic is
+faithful to the pilot; it is not independent evidence that a 32-pair run will use the same tokens
+per pair. A genuinely independent
 re-measurement requires a run, which is the thing the check gates.
 
 *Revisit if:* `hard_cap_usd` is ever set by a rule other than rounding the worst case up to the
