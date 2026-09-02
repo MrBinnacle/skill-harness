@@ -1,6 +1,6 @@
 ---
 rat: RAT-0001
-status: DRAFT
+status: RATIFIED
 skill_id: git-pull-rebase-trap
 task_family: gitpull
 estimand: treatment-policy
@@ -10,7 +10,7 @@ worst_case_cost_usd: 23.351744
 hard_cap_usd: 23.36
 cost_provenance: project_pair_usd
 sme_status: self-certified
-ratified_date: "unsigned"
+ratified_date: "2026-09-02"
 gamma: 0.90
 delta_min: 0.20
 q_min: 0.70
@@ -18,19 +18,18 @@ q_min: 0.70
 
 # RAT-0001 — git-pull-rebase-trap row-pick
 
-This record is DRAFT. Every field below the status line is filled from Amendment 4 of
-`docs/findings/v0.2-preregistration.md`, which registered the design, the grid, the cost basis,
-the frontier and the conforming rows on 2026-09-01. The one act that flips it to RATIFIED is the
-operator's signature in section 9, and that signature authorizes one thing: spending up to
-`hard_cap_usd` on one sized paired run of this skill. Nothing in this record is a technical call
-left to the signer; the technical content is registered upstream and copied here so the gate and
-drift row DC-12 can read it.
+This record is RATIFIED, signed 2026-09-02 (section 9). Every field below the status line is
+filled from Amendment 4 of `docs/findings/v0.2-preregistration.md`, which registered the design,
+the grid, the cost basis, the frontier and the conforming rows on 2026-09-01. The signature
+authorizes one thing: spending up to `hard_cap_usd` on one sized paired run of this skill. Nothing
+in this record was a technical call left to the signer; the technical content is registered
+upstream and copied here so the gate and drift row DC-12 can read it.
 
 ## 1. Record
 
 - Id: RAT-0001. Ledger position: first record in `docs/ratifications/`.
 - Drafted 2026-09-02 from Amendment 4 (commit `9264b0447711733725f2e75649263dba45697009`, landed by
-  skill-harness#386). Status history: DRAFT (2026-09-02).
+  skill-harness#386). Status history: DRAFT (2026-09-02), RATIFIED (2026-09-02).
 - Parent tickets: skill-harness#391 (this record and the sized run), #368 (Amendment 4's items 2
   and 3), #384 (Amendment 3, the exposure ruling the run's ingest applies).
 
@@ -103,11 +102,22 @@ wait for. Verbatim disclosure: **internally derived, not externally deliberated*
 
 SME dispositions: none (expiry branch, section 8).
 
-Operator signature, LAST, pre-spend: **unsigned.** The act this signature performs is one
-sentence, and it is the only decision in this record that is the operator's: *authorize one sized
-paired run of git-pull-rebase-trap at up to $23.36.* The signing commit flips the status line to
-RATIFIED, fills `ratified_date`, and records the signer's name and date here. Everything else in
-this record was registered before the signature and does not change with it.
+Operator signature, LAST, pre-spend: **SIGNED.**
+
+- Signer: MrBinnacle, maintainer.
+- Date: 2026-09-02.
+- Channel: the maintainer's own session, in reply to the reduction posted on #391, which states
+  that saying the sentence in any channel is the signature.
+- Words, verbatim: *"ratify RAT-0001 at $23.36"*.
+
+The act this signature performs is one sentence, and it was the only decision in this record that
+was the operator's: authorize one sized paired run of git-pull-rebase-trap at up to $23.36.
+Everything else in this record was registered before the signature and does not change with it.
+
+What the signature does NOT authorize: a second run, a re-run after a failed ingest, a different
+row, or any spend above `hard_cap_usd`. Each of those needs its own dated block or its own record.
+The pre-spend token re-measurement still gates the launch: if the recomputed worst case exceeds
+`hard_cap_usd`, the run does not launch and a dated amendment in section 10 records why.
 
 ## 10. Post-launch amendments
 
