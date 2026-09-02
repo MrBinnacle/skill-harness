@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from jsonschema.exceptions import ValidationError  # type: ignore[import-untyped]
+from jsonschema.exceptions import ValidationError
 
 from skill_harness.extractor.clause_evidence import (
     REASON_NO_EXTRACTION,

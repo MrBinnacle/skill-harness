@@ -560,6 +560,33 @@ def skill_clauses(skill_id: str, evidence_db: Path) -> None:
     _console.print(_SKILL_CLAUSES_LEGEND)
 
 
+@skill.command("coverage")
+@click.argument("corpus_dir", type=click.Path(exists=True, path_type=Path))
+def skill_coverage(corpus_dir: Path) -> None:
+    """Report how many skill cards in a directory can be loaded.
+
+    Iterates over immediate subdirectories of CORPUS_DIR, each expected to
+    contain a SKILL.md.  Reports how many are constructible (frontmatter
+    normalised successfully) and how many are refused (with reasons).
+    """
+    from skill_harness.subject.inspect_adapter import skill_corpus_coverage
+
+    report = skill_corpus_coverage(corpus_dir)
+
+    _console.print(f"\n[bold]Skill corpus coverage[/] — {corpus_dir}")
+    _console.print(f"  Candidates:    {report.candidate_count}")
+    _console.print(f"  Constructible: {report.constructible_count}")
+    _console.print(f"  Refused:       {report.refused_count}")
+
+    if report.refused:
+        table = Table(title="Refused cards", show_lines=True)
+        table.add_column("Path", style="cyan", min_width=30)
+        table.add_column("Reason", min_width=40)
+        for path, reason in report.refused:
+            table.add_row(str(path), _sanitize_clause_text(reason, max_len=80))
+        _console.print(table)
+
+
 @cli.group()
 def run() -> None:
     """Evaluation runs (PRD §18)."""

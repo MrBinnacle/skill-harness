@@ -207,3 +207,23 @@ ignore_missing_imports = true
 module = ["inspect_ai", "inspect_ai.*", "inspect_swe", "inspect_swe.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
+
+# PyYAML and jsonschema ship no stubs. mypy therefore reduces both to Any in
+# either environment: absent (import-not-found) or installed without a py.typed
+# marker (import-untyped). ignore_missing_imports suppresses both diagnostics, so
+# the verdict, including which type:ignore comments count as used, is the same in
+# CI and locally.
+# Submodules are listed explicitly. `jsonschema` alone does not match
+# `jsonschema.exceptions`, and the partial rule left three import sites carrying
+# an ignore comment that the other three had to drop.
+# yaml is imported lazily (subject/inspect_adapter.py) behind the [inspect]
+# extra's install hint. jsonschema is not: sitegen imports it at module top level,
+# and jsonschema reaches this environment only through the dev extra and through
+# inspect-ai (jsonschema>3.1.1), never through [project.dependencies]. A core
+# install therefore cannot import skill_harness.sitegen. That gap is a packaging
+# defect tracked at #415, and this override does not fix or hide it.
+# Stub packages are deliberately not added: this repo declares no types-* deps,
+# and adding one would be a supply-chain decision.
+[[tool.mypy.overrides]]
+module = ["yaml", "yaml.*", "jsonschema", "jsonschema.*"]
+ignore_missing_imports = true

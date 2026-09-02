@@ -13,9 +13,29 @@ Public surface:
                          inadmissible (v0.2 gate, "Harness pin" field).
   build_paired_tasks() — the Full-vs-Null contrast as two Inspect tasks that are
                          identical except for the one skill under test.
+  normalise_skill_frontmatter() — read SKILL.md, drop keys outside the
+                         agentskills.io schema, write a temporary normalised
+                         copy for task construction.
+  NormalisedSkillResult — result of normalising a skill directory's frontmatter.
+  SkillCorpusCoverage  — coverage report for a corpus of skill cards.
+  skill_corpus_coverage() — measure how many cards in a directory can be
+                         loaded by the harness.
 """
 
-from skill_harness.subject.inspect_adapter import build_paired_tasks
+from skill_harness.subject.inspect_adapter import (
+    NormalisedSkillResult,
+    SkillCorpusCoverage,
+    build_paired_tasks,
+    normalise_skill_frontmatter,
+    skill_corpus_coverage,
+)
 from skill_harness.subject.pin import HarnessPin
 
-__all__ = ["HarnessPin", "build_paired_tasks"]
+__all__ = [
+    "HarnessPin",
+    "NormalisedSkillResult",
+    "SkillCorpusCoverage",
+    "build_paired_tasks",
+    "normalise_skill_frontmatter",
+    "skill_corpus_coverage",
+]

@@ -79,6 +79,7 @@ def make_sample(
     scorer_name: str = "file_contains",
     invoked: bool | None = None,
     exposed: bool | None = None,
+    normalised_keys_dropped: tuple[str, ...] = (),
 ) -> ParsedSample:
     # Default mirrors the live lanes: a Full-arm epoch invoked and was exposed
     # to the skill, a Null-arm epoch structurally cannot (#46: 0/22 Null false
@@ -99,6 +100,7 @@ def make_sample(
         subject_model="openrouter/anthropic/claude-haiku-4.5",
         harness_pin_json=PIN_JSON if fingerprint is not None else None,
         harness_pin_fingerprint=fingerprint,
+        normalised_keys_dropped=normalised_keys_dropped,
         input_tokens=100,
         cache_read_input_tokens=50,
         cache_creation_input_tokens=25,
@@ -1040,6 +1042,31 @@ def test_config_json_records_pi_c_block(conn: sqlite3.Connection, skill_dir: Pat
     assert pi_c["trials"] == 2
     assert pi_c["pi_c_hat"] == 0.5
     assert pi_c["confidence"] == PI_C_CONFIDENCE
+
+
+def test_config_json_records_normalised_keys_dropped(
+    conn: sqlite3.Connection, skill_dir: Path
+) -> None:
+    """#400 AC2: dropped frontmatter keys appear in the run's config_json."""
+    dropped = ("disable-model-invocation", "argument-hint")
+    full = make_log(
+        "full",
+        (
+            make_sample(
+                "full",
+                1,
+                1.0,
+                invoked=True,
+                exposed=True,
+                normalised_keys_dropped=dropped,
+            ),
+        ),
+    )
+    null = make_log("null", (make_sample("null", 1, 0.0),))
+    result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+    row = conn.execute("SELECT config_json FROM runs WHERE run_id = ?", (result.run_id,)).fetchone()
+    config = json.loads(row[0])
+    assert config["normalised_keys_dropped"] == list(dropped)
 
 
 # ---------------------------------------------------------------------------

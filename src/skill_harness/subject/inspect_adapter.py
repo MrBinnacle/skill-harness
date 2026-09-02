@@ -37,8 +37,35 @@ _INSTALL_HINT = (
     'the agentic subject layer requires the optional extra: pip install "skill-harness[inspect]"'
 )
 
+
+def _yaml() -> Any:
+    """Import PyYAML lazily, with this module's own install hint on failure.
+
+    Module scope would be wrong here. PyYAML reaches this environment as a
+    transitive dependency of ``inspect-swe``, which ships only in the optional
+    ``[inspect]`` extra, while this module is deliberately importable WITHOUT
+    that extra -- every inspect_ai symbol sits behind TYPE_CHECKING and a lazy
+    runtime import for exactly that reason. A top-level ``import yaml`` makes a
+    core install fail at import time with a bare ImportError naming a package
+    the user never asked for, instead of the typed hint below.
+    """
+    try:
+        import yaml
+    except ImportError as exc:  # pragma: no cover - core install without the extra
+        raise ImportError(f"skill frontmatter normalisation needs PyYAML: {_INSTALL_HINT}") from exc
+    return yaml
+
+
 Condition = Literal["full", "null"]
 AGENT_CWD = "/root"  # inspect_swe claude_code default; oracles resolve against this
+
+# Keys that the agentskills.io schema recognises (required + optional).
+# Mirrors inspect_ai.tool._tools._skill.read._skill_schema properties.
+_AGENTSKILLS_SCHEMA_KEYS = frozenset(
+    {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+)
+# Maximum description length enforced by the agentskills.io schema.
+_AGENTSKILLS_DESCRIPTION_MAX_LENGTH = 1024
 
 # Mirrors inspect_ai's auto-generated COMPOSE_GENERIC_YAML exactly, except the
 # image is the pin's digest reference instead of the floating default tag.
@@ -94,6 +121,201 @@ def _cleanup_auto_created_compose_dirs() -> None:
     """
     for directory in _auto_created_compose_dirs:
         shutil.rmtree(directory, ignore_errors=True)
+
+
+class NormalisedSkillResult:
+    """Result of normalising a skill directory's frontmatter.
+
+    ``temp_dir`` is a skill directory suitable for ``read_skills`` /
+    ``claude_code``.  When normalisation rewrote the card, that directory is
+    a temporary copy (owned); otherwise it is the original ``skill_dir``.
+    ``cleanup`` removes only an owned temporary root — never the original
+    on-disk card.
+    """
+
+    def __init__(
+        self,
+        temp_dir: Path,
+        dropped_keys: list[str],
+        *,
+        owned_temp_root: Path | None = None,
+    ) -> None:
+        self.temp_dir = temp_dir
+        self.dropped_keys = dropped_keys
+        self._owned_temp_root = owned_temp_root
+
+    def cleanup(self) -> None:
+        """Remove the owned temporary root, if any. Never touches the original card."""
+        if self._owned_temp_root is not None:
+            shutil.rmtree(self._owned_temp_root, ignore_errors=True)
+
+
+def normalise_skill_frontmatter(skill_dir: Path) -> NormalisedSkillResult:
+    """Read SKILL.md, drop keys outside the agentskills.io schema, write a
+    temporary normalised copy, and return it.
+
+    The on-disk SKILL.md is never modified.  The returned
+    ``NormalisedSkillResult`` carries a skill directory suitable for
+    ``read_skills`` / ``claude_code`` and the list of keys that were dropped.
+
+    Normalisation rules (deliberately conservative — drop unknown keys; only
+    coerce shapes the schema rejects without changing tool identity):
+
+    - Any key not in the agentskills.io schema is dropped.
+    - ``allowed-tools`` given as a list (Claude Code accepts it; the spec
+      requires a string) is converted to a space-delimited string.
+    - ``description`` exceeding the schema's 1024-character cap is
+      truncated to 1024 characters.
+    - Invalid YAML at the top level is re-raised (the card is genuinely
+      broken).
+
+    When a temporary copy is written, the full skill tree (scripts/,
+    references/, assets/, and any other sibling of SKILL.md) is preserved;
+    only the frontmatter of SKILL.md is rewritten.
+    """
+    skill_dir = skill_dir.resolve()
+    skill_file = skill_dir / "SKILL.md"
+    if not skill_file.is_file():
+        raise FileNotFoundError(f"no SKILL.md in skill_dir: {skill_dir}")
+
+    content = skill_file.read_text(encoding="utf-8")
+    frontmatter, body = _parse_frontmatter(content)
+
+    if not frontmatter:
+        return NormalisedSkillResult(temp_dir=skill_dir, dropped_keys=[])
+
+    dropped_keys: list[str] = []
+    normalised: dict[str, Any] = {}
+    needs_normalisation = False
+
+    for key, raw_value in frontmatter.items():
+        if key not in _AGENTSKILLS_SCHEMA_KEYS:
+            dropped_keys.append(str(key))
+            needs_normalisation = True
+            continue
+        coerced: Any = raw_value
+        if key == "allowed-tools" and isinstance(raw_value, list):
+            coerced = " ".join(str(v) for v in raw_value)
+            needs_normalisation = True
+        if (
+            key == "description"
+            and isinstance(raw_value, str)
+            and len(raw_value) > _AGENTSKILLS_DESCRIPTION_MAX_LENGTH
+        ):
+            coerced = raw_value[:_AGENTSKILLS_DESCRIPTION_MAX_LENGTH]
+            needs_normalisation = True
+        normalised[key] = coerced
+
+    if not needs_normalisation:
+        return NormalisedSkillResult(temp_dir=skill_dir, dropped_keys=[])
+
+    # Full tree copy so scripts/references/assets survive; only SKILL.md is rewritten.
+    tmp_root = Path(tempfile.mkdtemp(prefix="skill-harness-normalise-"))
+    _track_auto_created_compose_dir(tmp_root)
+
+    skill_name = normalised.get("name", skill_dir.name)
+    if not isinstance(skill_name, str) or not skill_name:
+        skill_name = skill_dir.name
+    normalised_skill_dir = tmp_root / skill_name
+    shutil.copytree(skill_dir, normalised_skill_dir)
+
+    yaml_str = _yaml().dump(normalised, default_flow_style=False, sort_keys=False)
+    (normalised_skill_dir / "SKILL.md").write_text(
+        f"---\n{yaml_str}---\n\n{body}", encoding="utf-8"
+    )
+
+    return NormalisedSkillResult(
+        temp_dir=normalised_skill_dir,
+        dropped_keys=dropped_keys,
+        owned_temp_root=tmp_root,
+    )
+
+
+def _parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
+    """Parse YAML frontmatter from markdown content.
+
+    Returns (frontmatter dict, markdown body).  Returns ({}, content) when
+    there is no frontmatter block.
+    """
+    if not content.startswith("---"):
+        return {}, content
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        return {}, content
+    frontmatter_str = parts[1].strip()
+    body = parts[2].lstrip("\n")
+    # Bound once: naming _yaml() in the except clause would re-enter the import
+    # while an exception is already in flight, and a failure there would mask
+    # the YAML error it was supposed to catch.
+    yaml = _yaml()
+    try:
+        fm = yaml.safe_load(frontmatter_str)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid YAML frontmatter: {exc}") from exc
+    return (fm if isinstance(fm, dict) else {}), body
+
+
+def _validate_against_agentskills_schema(skill_dir: Path) -> None:
+    """Raise ValueError when skill_dir would fail agentskills frontmatter validation.
+
+    Mirrors inspect_ai's ``read_skills`` frontmatter checks (required keys,
+    additionalProperties false, name matches directory) so coverage can refuse
+    the same cards the harness refuses without requiring the inspect extra at
+    report time. When inspect is installed, prefer its ``read_skills``.
+    """
+    try:
+        from inspect_ai.tool import read_skills
+
+        read_skills([skill_dir])
+        return
+    except ImportError:
+        pass
+    except Exception as exc:
+        raise ValueError(str(exc)) from exc
+
+    skill_file = skill_dir / "SKILL.md"
+    if not skill_file.is_file():
+        raise ValueError(f"SKILL.md not found in: {skill_dir}")
+    content = skill_file.read_text(encoding="utf-8")
+    frontmatter, _body = _parse_frontmatter(content)
+    try:
+        from jsonschema import Draft7Validator
+    except ImportError as exc:  # pragma: no cover — jsonschema is a core dep via inspect; fallback
+        if "name" not in frontmatter or "description" not in frontmatter:
+            raise ValueError("frontmatter missing required name or description") from exc
+        unknown = set(frontmatter) - _AGENTSKILLS_SCHEMA_KEYS
+        if unknown:
+            raise ValueError(f"additional properties not allowed: {sorted(unknown)}") from None
+        return
+
+    schema = {
+        "type": "object",
+        "required": ["name", "description"],
+        "properties": {
+            "name": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+            },
+            "description": {"type": "string", "maxLength": 1024},
+            "license": {"type": "string"},
+            "compatibility": {"type": "string", "maxLength": 500},
+            "metadata": {"type": "object"},
+            "allowed-tools": {"type": "string"},
+        },
+        "additionalProperties": False,
+    }
+    errors = list(Draft7Validator(schema).iter_errors(frontmatter))
+    if errors:
+        raise ValueError(
+            "Found {n} validation error(s) parsing SKILL.md:\n{msgs}".format(
+                n=len(errors),
+                msgs="\n".join(f"- {e.message}" for e in errors),
+            )
+        )
+    name = frontmatter.get("name")
+    if name != skill_dir.name:
+        raise ValueError(f"Skill name '{name}' does not match directory name '{skill_dir.name}'")
 
 
 def files_as_data_uris(files: Mapping[str, str | bytes]) -> dict[str, str]:
@@ -317,12 +539,20 @@ def build_paired_tasks(
     if not (skill_dir / "SKILL.md").is_file():
         raise FileNotFoundError(f"no SKILL.md in skill_dir: {skill_dir}")
 
+    # Normalise the frontmatter so cards with keys outside the agentskills.io
+    # schema (e.g. disable-model-invocation, argument-hint) can still be
+    # measured.  The on-disk SKILL.md is never modified — the normalised copy
+    # lives in a temporary directory.
+    normalised = normalise_skill_frontmatter(skill_dir)
+    effective_skill_dir = normalised.temp_dir
+    dropped_keys = normalised.dropped_keys
+
     compose_path = write_pinned_compose(pin, compose_dir)
     scorer = _build_scorer(oracle, oracle_arg, oracle_target, pin.cwd)
 
     def make_task(condition: Condition) -> Task:
         agent = claude_code(
-            skills=[skill_dir] if condition == "full" else None,
+            skills=[effective_skill_dir] if condition == "full" else None,
             model=pin.model,
             version=pin.agent_version,
             cwd=pin.cwd,
@@ -342,6 +572,7 @@ def build_paired_tasks(
                         "skill": skill_dir.name,
                         "harness_pin": pin.model_dump(),
                         "harness_pin_fingerprint": pin.fingerprint(),
+                        "normalised_keys_dropped": dropped_keys,
                     },
                 )
             ],
@@ -406,3 +637,73 @@ def _build_scorer(
         return score
 
     return command_succeeds()
+
+
+class SkillCorpusCoverage:
+    """Coverage report for a corpus of skill cards.
+
+    Records the set of candidate cards, how many were constructible (their
+    frontmatter normalised successfully), and how many were refused (with
+    reasons).  The refused set is always a subset of the candidate set.
+    """
+
+    def __init__(self) -> None:
+        self.candidates: list[Path] = []
+        self.constructible: list[Path] = []
+        self.refused: list[tuple[Path, str]] = []
+
+    @property
+    def candidate_count(self) -> int:
+        return len(self.candidates)
+
+    @property
+    def constructible_count(self) -> int:
+        return len(self.constructible)
+
+    @property
+    def refused_count(self) -> int:
+        return len(self.refused)
+
+    def as_dict(self) -> dict[str, Any]:
+        """Serialise to a dict suitable for config_json or JSON output."""
+        return {
+            "candidate_count": self.candidate_count,
+            "constructible_count": self.constructible_count,
+            "refused_count": self.refused_count,
+            "refused": [{"path": str(p), "reason": r} for p, r in self.refused],
+        }
+
+
+def skill_corpus_coverage(corpus_dir: Path) -> SkillCorpusCoverage:
+    """Measure how many cards in a directory can be loaded by the harness.
+
+    Iterates over immediate subdirectories of ``corpus_dir``, each expected
+    to contain a ``SKILL.md``.  For each, normalises frontmatter then validates
+    the result against the agentskills schema (the same gate ``read_skills``
+    applies at task construction). Records constructible vs refused with reasons.
+
+    The on-disk cards are never modified.
+    """
+    report = SkillCorpusCoverage()
+    if not corpus_dir.is_dir():
+        return report
+
+    for entry in sorted(corpus_dir.iterdir()):
+        if not entry.is_dir():
+            continue
+        skill_file = entry / "SKILL.md"
+        if not skill_file.is_file():
+            continue
+        report.candidates.append(entry)
+        result: NormalisedSkillResult | None = None
+        try:
+            result = normalise_skill_frontmatter(entry)
+            _validate_against_agentskills_schema(result.temp_dir)
+            report.constructible.append(entry)
+        except Exception as exc:
+            report.refused.append((entry, str(exc)))
+        finally:
+            if result is not None:
+                result.cleanup()
+
+    return report
