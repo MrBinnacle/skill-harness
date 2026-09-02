@@ -1303,3 +1303,80 @@ def test_mutation_null_contamination_refusal_removes_predicate(
     null2 = make_log("null", (make_sample("null", 1, 0.0, exposed=True),), task_id="verify-null-n2")
     with pytest.raises(NullArmContaminationError):
         write_paired_evidence(full=full2, null=null2, skill_dir=skill_dir, conn=conn)
+
+
+# ---------------------------------------------------------------------------
+# Runner config recorded at ingest (#409, RAT-0001 section 2)
+# ---------------------------------------------------------------------------
+
+
+def _config_of(conn: sqlite3.Connection, run_id: str) -> dict[str, object]:
+    row = conn.execute("SELECT config_json FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+    assert row is not None
+    parsed = json.loads(row[0])
+    assert isinstance(parsed, dict)
+    return parsed
+
+
+def test_runner_config_is_recorded_verbatim(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """ARM: a declared runner config reaches config_json under 'runner'.
+
+    Section 2 of a Gate-2 ratification requires the reference to travel in the
+    runner's config and be recorded here. The route matters as much as the
+    reference: 'anthropic/claude-sonnet-5' names the direct API to Inspect and
+    the OpenRouter route to this repository's own CLI, so after the fact the
+    recorded model identifier alone cannot say which one ran.
+    """
+    declared = {
+        "rat_id": "RAT-0001",
+        "ratification_path": "docs/ratifications/RAT-0001-git-pull-rebase-trap.md",
+        "skill_id": "git-pull-rebase-trap",
+        "task_family": "gitpull",
+        "estimand": "treatment-policy",
+        "route": "anthropic-direct",
+        "model": "anthropic/claude-sonnet-5",
+        "n_pairs": 32,
+    }
+    full = make_log("full", (make_sample("full", 1, 1.0),), task_id="runner-cfg-f")
+    null = make_log("null", (make_sample("null", 1, 0.0),), task_id="runner-cfg-n")
+
+    result = write_paired_evidence(
+        full=full, null=null, skill_dir=skill_dir, conn=conn, runner_config=declared
+    )
+
+    recorded = _config_of(conn, result.run_id)["runner"]
+    assert recorded == declared
+
+
+def test_ingest_without_runner_config_omits_the_key(
+    conn: sqlite3.Connection, skill_dir: Path
+) -> None:
+    """CONTROL: no declaration means no key, not a null.
+
+    Without this case the arm above would pass on an implementation that wrote
+    'runner' unconditionally. It also pins the distinction the key carries: an
+    absent key says this ingest predates the block, while a present-but-null key
+    would assert that a runner declared nothing, which is a different claim.
+    """
+    full = make_log("full", (make_sample("full", 1, 1.0),), task_id="no-runner-cfg-f")
+    null = make_log("null", (make_sample("null", 1, 0.0),), task_id="no-runner-cfg-n")
+
+    result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
+
+    config = _config_of(conn, result.run_id)
+    assert "runner" not in config
+    # The pre-existing keys are untouched: the block is additive.
+    assert "paired_cells" in config
+    assert "pi_c" in config
+
+
+def test_empty_runner_config_omits_the_key(conn: sqlite3.Connection, skill_dir: Path) -> None:
+    """An empty mapping is a declaration of nothing, and records nothing."""
+    full = make_log("full", (make_sample("full", 1, 1.0),), task_id="empty-runner-cfg-f")
+    null = make_log("null", (make_sample("null", 1, 0.0),), task_id="empty-runner-cfg-n")
+
+    result = write_paired_evidence(
+        full=full, null=null, skill_dir=skill_dir, conn=conn, runner_config={}
+    )
+
+    assert "runner" not in _config_of(conn, result.run_id)

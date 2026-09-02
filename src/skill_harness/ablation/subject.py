@@ -289,6 +289,23 @@ def resolve_price_key(model: str) -> str:
     append-only, and rewriting the recorded identifier would erase which route
     a run was actually made under.
 
+    One identifier is route-AMBIGUOUS, and the paragraph above does not hold
+    for it (#409). ``anthropic/claude-sonnet-5`` is what the CLI's own fallback
+    writes when it reroutes a bare name through OpenRouter, AND it is Inspect's
+    string for the direct Anthropic API (``inspect eval --model
+    anthropic/claude-sonnet-5``). A run recorded under it may have taken either
+    route, and the identifier cannot say which. Do not read a route off this
+    string: sized paired runs record the route explicitly in
+    ``config_json["runner"]["route"]`` (``subject/paired_launch.py``), and that
+    field is where the route now lives. Pricing is unaffected either way, which
+    is why this stayed invisible: both routes strip to the same row.
+
+    The strip takes ONE segment, so a two-segment identifier such as
+    ``openrouter/anthropic/claude-sonnet-4.5`` resolves to
+    ``anthropic/claude-sonnet-4.5`` and misses every row. That is a KeyError at
+    the call site, which fails safe rather than mispricing, and it is why the
+    batch-1 runner carried its own price table instead of calling this.
+
     Lookup stays exact after the strip. An unrecognised model still raises
     KeyError at the call site rather than falling back to ``_default`` - a cap
     projection must never silently price the wrong model.
