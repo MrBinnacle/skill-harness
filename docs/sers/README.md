@@ -258,7 +258,8 @@ The harness asserts:
 | `synthetic-control-keep-2026-07-27.json` | `KEEP` (declared synthetic control) | `README.md` / `docs/FAQ.md` |
 | `double-ceiling-nogo-2026-07-09.json` | `CANT_TELL_YET` (NO-GO / structurally unmeasured) | `docs/case-studies/double-ceiling-structurally-unmeasured.md` |
 | `reclass-append-only-evidence-design.json` | `CANT_TELL_YET` (wrong instrument, calibration) | `README.md` + `docs/observations/OBS-0005-*.md` |
-| `gitpull-paired-k8-2026-09-01-detector-v2.json` | `CANT_TELL_YET` (underpowered, trap-discipline; admissible under detector v2; paired k=8, GO on discordance, `delivery.channel=description_only`) | `docs/findings/pi-c-detector-blind-to-description-channel.md` |
+| `gitpull-paired-n32-2026-09-03-sized.json` | `CANT_TELL_YET` (unresolved, trap-discipline; sized paired run n=32 under RAT-0001; the Null arm never met the hazard, `delivery.channel=body_and_description`) | `docs/ratifications/RAT-0001-git-pull-rebase-trap.md` |
+| `superseded/gitpull-paired-k8-2026-09-01-detector-v2.json` | `CANT_TELL_YET` (underpowered, trap-discipline; admissible under detector v2; paired k=8, GO on discordance, `delivery.channel=description_only`); superseded 2026-09-03 by the sized-run receipt; it stays the GO datum that run was sized on | `docs/findings/pi-c-detector-blind-to-description-channel.md` |
 | `superseded/gitpull-paired-k8-2026-09-01.json` | `CANT_TELL_YET` (inadmissible, wrong instrument, trap-discipline; refused at write time on zero detected invocations under detector v1); superseded 2026-09-02 | `docs/findings/pi-c-detector-blind-to-description-channel.md` |
 | `superseded/reclass-git-pull-rebase-trap.json` | `CANT_TELL_YET` (wrong instrument, trap-discipline); superseded 2026-09-01, screen row D4-voided | `README.md` |
 

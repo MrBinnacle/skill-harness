@@ -622,7 +622,7 @@ Verdict and sub-reason strings use the
 
 - **Superseded 2026-09-01** by `gitpull-paired-k8-2026-09-01.json`, itself
   superseded 2026-09-02 by
-  [`gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/gitpull-paired-k8-2026-09-01-detector-v2.json).
+  [`gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/superseded/gitpull-paired-k8-2026-09-01-detector-v2.json).
   The site publishes one receipt per skill and refuses to choose between two,
   so the older receipt moved out of the published directory and stays in the
   tree unedited. Its `p0=1.00` screen row is D4-voided: the prompt it ran on
@@ -644,8 +644,13 @@ Verdict and sub-reason strings use the
   cleared the full keep lane; standing cost as part of the KEEP claim
   (not_instrumented).
 
-### [`docs/sers/receipts/gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/gitpull-paired-k8-2026-09-01-detector-v2.json)
+### [`docs/sers/receipts/superseded/gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/superseded/gitpull-paired-k8-2026-09-01-detector-v2.json)
 
+- **Superseded 2026-09-03** by
+  [`gitpull-paired-n32-2026-09-03-sized.json`](sers/receipts/gitpull-paired-n32-2026-09-03-sized.json).
+  The site publishes one receipt per skill; the file moved out of the
+  published directory unedited and stays the GO datum the sized run was
+  sized on.
 - **Claims:** `verdict=CANT_TELL_YET`, `cut_sub_reason=null`,
   `unmeasured_sub_reason=underpowered`; `value_class=trap-discipline`;
   `wrong_instrument=false`; `sers_version=1.2.0` with a `delivery` block;
@@ -668,10 +673,27 @@ Verdict and sub-reason strings use the
   direct-Anthropic subject (ran on OpenRouter); standing or fired token costs
   (not_instrumented / not_applicable, the body never loaded).
 
+### [`docs/sers/receipts/gitpull-paired-n32-2026-09-03-sized.json`](sers/receipts/gitpull-paired-n32-2026-09-03-sized.json)
+
+- **Claims:** `verdict=CANT_TELL_YET`, `cut_sub_reason=null`,
+  `unmeasured_sub_reason=null`; `value_class=trap-discipline`;
+  `wrong_instrument=false`; `sers_version=1.2.0`; evidence admissibility
+  **admissible** under the 0.4.1 oracle metric identity — run `0700d089…`,
+  n=32 both arms. Lattice `both_pass=32, full_only=0, null_only=0,
+  both_fail=0`; signed delta 0.000, 95% CI [-0.107, 0.107]; `pi_c` 24/32 =
+  0.75, 95% CI [0.566, 0.885]. `delivery.channel=body_and_description`;
+  exposure 32/32; `go_nogo=NOT_APPLICABLE` (RAT-0001 registers no GO/NO-GO
+  gate).
+- **Refuses to claim:** `KEEP` or `CUT`; that the trap was avoided — 0 of 32
+  Null epochs and 0 of 32 Full epochs ran the hazard action, so the run
+  carries no information about the trap-discipline estimand under the #403
+  ruling of 2026-09-03; standing, fired, or aux token costs
+  (not_instrumented).
+
 ### [`docs/sers/receipts/superseded/gitpull-paired-k8-2026-09-01.json`](sers/receipts/superseded/gitpull-paired-k8-2026-09-01.json)
 
 - **Superseded 2026-09-02** by
-  [`gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/gitpull-paired-k8-2026-09-01-detector-v2.json).
+  [`gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/superseded/gitpull-paired-k8-2026-09-01-detector-v2.json).
   It recorded the same measurements as **inadmissible** because detector v1
   observed only Skill tool calls and could not see the description channel the
   effect arrived through. The #384 ruling made exposure the treatment and pi_c a
