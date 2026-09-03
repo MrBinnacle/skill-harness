@@ -1,6 +1,6 @@
-"""Repository functions for the Stage-0 screen store (migration 0501).
+"""Repository functions for the Stage-0 screen store (migrations 0501 + 1000).
 
-Columns (from migrations/evidence/0501_screen_store.sql):
+Columns (from migrations/evidence/0501_screen_store.sql and 1000_screen_d4_check_state.sql):
     screen_runs
         screen_run_id           TEXT PRIMARY KEY
         skill_name              TEXT NOT NULL
@@ -12,6 +12,9 @@ Columns (from migrations/evidence/0501_screen_store.sql):
         inadmissibility_reason  TEXT
         created_at              TEXT NOT NULL
         ingested_at             TEXT NOT NULL
+        d4_check_state          TEXT NOT NULL CHECK (unknown_legacy|not_applicable|
+                                                    ran_clean|ran_flagged)
+                                                    DEFAULT unknown_legacy  (#395 / 1000)
     screen_trials
         screen_trial_id     TEXT PRIMARY KEY
         screen_run_id       TEXT NOT NULL REFERENCES screen_runs
@@ -39,6 +42,7 @@ from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
 from skill_harness.storage.models import (
+    D4CheckState,
     ScreenRunSupersessionWrite,
     ScreenRunWrite,
     ScreenTrialWrite,
@@ -53,9 +57,9 @@ def insert_screen_run(conn: sqlite3.Connection, run: ScreenRunWrite) -> None:
         INSERT INTO screen_runs (
             screen_run_id, skill_name, subject_model, harness_pin_fingerprint,
             source_eval_task_id, source_eval_sha256, admissibility_state,
-            inadmissibility_reason, created_at, ingested_at
+            inadmissibility_reason, d4_check_state, created_at, ingested_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             run.screen_run_id,
@@ -66,6 +70,7 @@ def insert_screen_run(conn: sqlite3.Connection, run: ScreenRunWrite) -> None:
             run.source_eval_sha256,
             run.admissibility_state,
             run.inadmissibility_reason,
+            run.d4_check_state,
             run.created_at,
             run.ingested_at,
         ),
@@ -101,7 +106,7 @@ def get_screen_run_by_id(conn: sqlite3.Connection, screen_run_id: str) -> dict[s
         """
         SELECT screen_run_id, skill_name, subject_model, harness_pin_fingerprint,
                source_eval_task_id, source_eval_sha256, admissibility_state,
-               inadmissibility_reason, created_at, ingested_at
+               inadmissibility_reason, d4_check_state, created_at, ingested_at
         FROM screen_runs WHERE screen_run_id = ?
         """,
         (screen_run_id,),
@@ -120,6 +125,7 @@ def supersede_screen_run(
     reason: str,
     admissibility_state: str,
     inadmissibility_reason: str | None,
+    d4_check_state: D4CheckState,
     skill_name: str,
     subject_model: str,
     harness_pin_fingerprint: str | None,
@@ -131,6 +137,9 @@ def supersede_screen_run(
 
     The superseded row is never touched. The new row carries the corrected
     evidence-admissibility and copies the trials from the superseded run.
+    ``d4_check_state`` is required (no default): the superseding write is a
+    new row and must name its own D4 status rather than inherit the SQLite
+    ``unknown_legacy`` default.
     Returns the new screen_run_id.
 
     :raises SupersededScreenRunError: the superseded screen_run_id does not
@@ -174,6 +183,7 @@ def supersede_screen_run(
                 source_eval_sha256=source_eval_sha256,
                 admissibility_state=admissibility_state,
                 inadmissibility_reason=inadmissibility_reason,
+                d4_check_state=d4_check_state,
                 created_at=created_at,
                 ingested_at=now,
             ),

@@ -50,6 +50,7 @@ def _seed_screen(evidence_db: Path, skill_name: str, *, n_trials: int, n_pass: i
                 source_eval_sha256=_sha("task-1"),
                 admissibility_state="admissible",
                 inadmissibility_reason=None,
+                d4_check_state="not_applicable",
                 created_at=_TS,
                 ingested_at=_TS,
             ),

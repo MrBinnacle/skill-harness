@@ -107,6 +107,7 @@ def test_admissible_screen_writes_run_and_trials(conn: sqlite3.Connection) -> No
         source_eval_sha256="sha-a",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=conn,
     )
     assert result.skill_name == "some-skill"
@@ -124,6 +125,7 @@ def test_passed_maps_binary_score(conn: sqlite3.Connection) -> None:
         source_eval_sha256="sha-b",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=conn,
     )
     assert (result.n_pass, result.n_trials) == (2, 3)
@@ -136,6 +138,7 @@ def test_non_binary_score_refused(conn: sqlite3.Connection) -> None:
             source_eval_sha256="sha-c",
             admissibility_state="admissible",
             inadmissibility_reason=None,
+            d4_check_state="not_applicable",
             conn=conn,
         )
 
@@ -171,6 +174,7 @@ def test_non_null_condition_refused(conn: sqlite3.Connection) -> None:
             source_eval_sha256="sha-d",
             admissibility_state="admissible",
             inadmissibility_reason=None,
+            d4_check_state="not_applicable",
             conn=conn,
         )
 
@@ -182,6 +186,7 @@ def test_inadmissible_requires_reason(conn: sqlite3.Connection) -> None:
             source_eval_sha256="sha-e",
             admissibility_state="inadmissible",
             inadmissibility_reason=None,
+            d4_check_state="not_applicable",
             conn=conn,
         )
 
@@ -193,6 +198,7 @@ def test_admissible_rejects_reason(conn: sqlite3.Connection) -> None:
             source_eval_sha256="sha-f",
             admissibility_state="admissible",
             inadmissibility_reason="oops",
+            d4_check_state="not_applicable",
             conn=conn,
         )
 
@@ -204,6 +210,7 @@ def test_reingest_is_idempotent(conn: sqlite3.Connection) -> None:
         source_eval_sha256="s",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=conn,
     )
     with pytest.raises(AlreadyIngestedScreenError):
@@ -212,6 +219,7 @@ def test_reingest_is_idempotent(conn: sqlite3.Connection) -> None:
             source_eval_sha256="s",
             admissibility_state="admissible",
             inadmissibility_reason=None,
+            d4_check_state="not_applicable",
             conn=conn,
         )
 
@@ -230,6 +238,7 @@ def test_p0_excludes_inadmissible_screens(conn: sqlite3.Connection) -> None:
         source_eval_sha256="g",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=conn,
     )
     # inadmissible 0/3 (apparatus void) — same skill
@@ -238,6 +247,7 @@ def test_p0_excludes_inadmissible_screens(conn: sqlite3.Connection) -> None:
         source_eval_sha256="v",
         admissibility_state="inadmissible",
         inadmissibility_reason="apparatus_void: oracle crash",
+        d4_check_state="not_applicable",
         conn=conn,
     )
     rows = derive_p0_by_skill(conn)
@@ -257,6 +267,7 @@ def test_p0_multiple_skills_and_verdicts(conn: sqlite3.Connection) -> None:
         source_eval_sha256="c",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=conn,
     )
     write_screen_evidence(
@@ -264,6 +275,7 @@ def test_p0_multiple_skills_and_verdicts(conn: sqlite3.Connection) -> None:
         source_eval_sha256="h",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=conn,
     )
     by_skill = {r.skill_name: r for r in derive_p0_by_skill(conn)}
@@ -285,6 +297,7 @@ def test_skill_with_only_inadmissible_screens_has_no_p0_row(conn: sqlite3.Connec
         source_eval_sha256="x",
         admissibility_state="inadmissible",
         inadmissibility_reason="void",
+        d4_check_state="not_applicable",
         conn=conn,
     )
     assert derive_p0_by_skill(conn) == []
@@ -308,6 +321,7 @@ def test_stale_pin_detected_for_mismatched_fingerprint(conn: sqlite3.Connection)
         source_eval_sha256="s1",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=conn,
     )
     stale = select_stale_pin_skills(conn, FRESH_PIN)
@@ -336,6 +350,7 @@ def test_stale_pin_not_flagged_for_matching_fingerprint(conn: sqlite3.Connection
         source_eval_sha256="s2",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=conn,
     )
     assert select_stale_pin_skills(conn, FRESH_PIN) == []
@@ -351,6 +366,7 @@ def test_stale_pin_null_fingerprint_is_refused(conn: sqlite3.Connection) -> None
         source_eval_sha256="s3",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=conn,
     )
     stale = select_stale_pin_skills(conn, FRESH_PIN)
@@ -371,6 +387,7 @@ def test_stale_pin_mixed_excludes_only_stale_rows_from_p0(conn: sqlite3.Connecti
         source_eval_sha256="s4a",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=conn,
     )
     write_screen_evidence(
@@ -378,6 +395,7 @@ def test_stale_pin_mixed_excludes_only_stale_rows_from_p0(conn: sqlite3.Connecti
         source_eval_sha256="s4b",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=conn,
     )
     stale = select_stale_pin_skills(conn, FRESH_PIN)
@@ -402,6 +420,7 @@ def test_stale_pin_cli_refuses_stale_rows(tmp_path: Path) -> None:
         source_eval_sha256="s5",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=c,
     )
     c.close()
@@ -430,6 +449,7 @@ def test_stale_pin_cli_keeps_fresh_rows(tmp_path: Path) -> None:
         source_eval_sha256="s6",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=c,
     )
     c.close()
@@ -453,6 +473,7 @@ def test_stale_pin_cli_skips_check_without_fresh_pin(tmp_path: Path) -> None:
         source_eval_sha256="s7",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=c,
     )
     c.close()
@@ -557,6 +578,7 @@ def test_cli_screen_verdict_renders_cant_tell_for_unclassified_ceiling(tmp_path:
         source_eval_sha256="s",
         admissibility_state="admissible",
         inadmissibility_reason=None,
+        d4_check_state="not_applicable",
         conn=c,
     )
     c.close()
@@ -698,6 +720,15 @@ def _stored_admissibility(conn: sqlite3.Connection, screen_run_id: str) -> tuple
     return str(row[0]), None if row[1] is None else str(row[1])
 
 
+def _stored_d4_check_state(conn: sqlite3.Connection, screen_run_id: str) -> str:
+    row = conn.execute(
+        "SELECT d4_check_state FROM screen_runs WHERE screen_run_id = ?",
+        (screen_run_id,),
+    ).fetchone()
+    assert row is not None
+    return str(row[0])
+
+
 def test_apply_manifest_d4_poison_refused(tmp_path: Path, conn: sqlite3.Connection) -> None:
     """A manifest entry with operative_rule + prompt_text containing the rule
     is overridden to inadmissible with store reason apparatus_void: D4 prompt leak."""
@@ -733,6 +764,7 @@ def test_apply_manifest_d4_poison_refused(tmp_path: Path, conn: sqlite3.Connecti
     # ...and the reason now says what was compared and where it hit.
     assert "hit=prompt" in reason
     assert "searched=prompt" in reason
+    assert _stored_d4_check_state(conn, result.screen_run_id) == "ran_flagged"
     assert report.mismatches == ()
     # p0 must not include this inadmissible screen
     rows = derive_p0_by_skill(conn)
@@ -765,6 +797,7 @@ def test_apply_manifest_d4_clean_admitted(tmp_path: Path, conn: sqlite3.Connecti
     result = report.ingested[0]
     assert result.admissibility_state == "admissible"
     assert _stored_admissibility(conn, result.screen_run_id) == ("admissible", None)
+    assert _stored_d4_check_state(conn, result.screen_run_id) == "ran_clean"
     assert report.mismatches == ()
     rows = derive_p0_by_skill(conn)
     assert len(rows) == 1
@@ -819,6 +852,7 @@ def test_apply_manifest_d4_indirect_leak_via_fixture(
     assert "hit=RELEASING.md" in reason
     assert "hit=prompt" not in reason
     assert "searched=prompt,RELEASING.md" in reason
+    assert _stored_d4_check_state(conn, result.screen_run_id) == "ran_flagged"
     assert report.mismatches == ()
     # Pure check still names the fixture file as the leak site.
     leak = check_d4_prompt_leak(rule, prompt, fixture_files)
@@ -827,18 +861,15 @@ def test_apply_manifest_d4_indirect_leak_via_fixture(
     assert "prompt" not in leak.locations
 
 
-def test_apply_manifest_no_d4_fields_is_admitted_with_a_null_reason(
+def test_apply_manifest_no_d4_fields_is_admitted_as_not_applicable(
     tmp_path: Path, conn: sqlite3.Connection
 ) -> None:
-    """Entries without D4 fields are admitted and store NULL.
+    """Entries without D4 fields are admitted and mark d4_check_state=not_applicable.
 
-    #395 criterion 2 asked that such a row record ``d4: not_checked`` so a
-    reader can tell "never checked" from "checked and clean". That marker is
-    NOT BUILT, and this test pins the behaviour that actually ships rather than
-    the one the ticket wanted: ``write_screen_evidence`` refuses an admissible
-    row carrying an ``inadmissibility_reason``, and ``screen_runs`` has no
-    adjacent column, so the marker needs a migration or a criterion amendment.
-    See the comment above ``_D4_LEAK_REASON`` in ``screen_backfill``.
+    #395 criterion 2: "not checked" and "checked, clean" must be distinguishable
+    in the store. The marker is the coded column (migration 1000), not the
+    free-text inadmissibility_reason field — that field still means WHY THIS
+    IS INADMISSIBLE and refuses an admissible row carrying a reason.
     """
     entry = ScreenManifestEntry(
         rel_path="d4/skip.eval",
@@ -859,18 +890,14 @@ def test_apply_manifest_no_d4_fields_is_admitted_with_a_null_reason(
     result = report.ingested[0]
     assert result.admissibility_state == "admissible"
     assert _stored_admissibility(conn, result.screen_run_id) == ("admissible", None)
+    assert _stored_d4_check_state(conn, result.screen_run_id) == "not_applicable"
     assert report.mismatches == ()
 
 
 def test_store_refuses_an_admissible_row_carrying_a_reason(
     tmp_path: Path, conn: sqlite3.Connection
 ) -> None:
-    """The invariant that closes criterion 2's marker placement, pinned directly.
-
-    Recorded as a test rather than as prose so that if the guard is ever
-    relaxed, the ticket's marker becomes available and this test says so by
-    failing.
-    """
+    """Same-field marker placement stays blocked: reason means WHY INADMISSIBLE."""
     entry = ScreenManifestEntry(
         rel_path="d4/admissible-with-reason.eval",
         admissibility_state="admissible",
@@ -888,6 +915,68 @@ def test_store_refuses_an_admissible_row_carrying_a_reason(
 
     with pytest.raises(ScreenIngestError, match="must not carry an inadmissibility_reason"):
         apply_manifest(root, conn, manifest=(entry,), parse=fake_parse)
+
+
+def test_write_screen_evidence_refuses_unknown_legacy(
+    tmp_path: Path, conn: sqlite3.Connection
+) -> None:
+    """unknown_legacy is reserved for pre-migration rows; a post-write must name a real state."""
+    with pytest.raises(ScreenIngestError, match="unknown_legacy"):
+        write_screen_evidence(
+            parsed=make_screen_log(1.0, task_id="legacy-forbidden"),
+            source_eval_sha256="s-legacy",
+            admissibility_state="admissible",
+            inadmissibility_reason=None,
+            d4_check_state="unknown_legacy",
+            conn=conn,
+        )
+
+
+def test_no_post_migration_write_carries_unknown_legacy(conn: sqlite3.Connection) -> None:
+    """Row-5 control from the #395 design: omitting the column would silently
+    default to unknown_legacy. Every write path must name a real state, so after
+    any write_screen_evidence call the store has zero unknown_legacy rows.
+    """
+    write_screen_evidence(
+        parsed=make_screen_log(1.0, 0.0, task_id="post-mig-control"),
+        source_eval_sha256="s-post",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        d4_check_state="not_applicable",
+        conn=conn,
+    )
+    n = conn.execute(
+        "SELECT COUNT(*) FROM screen_runs WHERE d4_check_state = 'unknown_legacy'"
+    ).fetchone()[0]
+    assert n == 0
+
+
+def test_d4_check_state_check_rejects_unlisted_value(conn: sqlite3.Connection) -> None:
+    """SQL CHECK rejects a value outside the four-state vocabulary."""
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        conn.execute(
+            "INSERT INTO screen_runs "
+            "(screen_run_id, skill_name, subject_model, harness_pin_fingerprint, "
+            " source_eval_task_id, source_eval_sha256, admissibility_state, "
+            " inadmissibility_reason, d4_check_state, created_at, ingested_at) "
+            "VALUES ('sr-bad-d4', 's', 'm', NULL, 't', 'sha', 'admissible', "
+            " NULL, 'not_a_real_state', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+        )
+
+
+def test_d4_check_state_column_exists_with_expected_default(conn: sqlite3.Connection) -> None:
+    """Migration 1000 adds the column; omitting it at INSERT yields unknown_legacy."""
+    cols = {row[1]: row for row in conn.execute("PRAGMA table_info(screen_runs)").fetchall()}
+    assert "d4_check_state" in cols
+    conn.execute(
+        "INSERT INTO screen_runs "
+        "(screen_run_id, skill_name, subject_model, harness_pin_fingerprint, "
+        " source_eval_task_id, source_eval_sha256, admissibility_state, "
+        " inadmissibility_reason, created_at, ingested_at) "
+        "VALUES ('sr-omit-d4', 's', 'm', NULL, 't', 'sha', 'admissible', "
+        " NULL, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+    )
+    assert _stored_d4_check_state(conn, "sr-omit-d4") == "unknown_legacy"
 
 
 def test_apply_manifest_keeps_a_curated_inadmissibility_reason(

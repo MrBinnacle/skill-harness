@@ -95,6 +95,7 @@ def _supersede_as_inadmissible(
         reason=reason,
         admissibility_state="inadmissible",
         inadmissibility_reason=reason,
+        d4_check_state="ran_flagged",
         skill_name=original_row["skill_name"],
         subject_model=original_row["subject_model"],
         harness_pin_fingerprint=original_row["harness_pin_fingerprint"],
@@ -213,6 +214,7 @@ class TestCriterion2SupersessionAppends:
             source_eval_sha256="sha-orig",
             admissibility_state="admissible",
             inadmissibility_reason=None,
+            d4_check_state="not_applicable",
             conn=conn,
         )
         original_id = result.screen_run_id
@@ -253,6 +255,7 @@ class TestCriterion2SupersessionAppends:
             source_eval_sha256="sha-tc",
             admissibility_state="admissible",
             inadmissibility_reason=None,
+            d4_check_state="not_applicable",
             conn=conn,
         )
         original_id = result.screen_run_id
@@ -278,6 +281,7 @@ class TestCriterion2SupersessionAppends:
                 reason="test",
                 admissibility_state="inadmissible",
                 inadmissibility_reason="test",
+                d4_check_state="ran_flagged",
                 skill_name="some-skill",
                 subject_model="m",
                 harness_pin_fingerprint=None,
@@ -293,6 +297,7 @@ class TestCriterion2SupersessionAppends:
             source_eval_sha256="sha-as",
             admissibility_state="admissible",
             inadmissibility_reason=None,
+            d4_check_state="not_applicable",
             conn=conn,
         )
         _supersede_as_inadmissible(conn, result.screen_run_id, reason="first supersession")
@@ -305,6 +310,7 @@ class TestCriterion2SupersessionAppends:
                 reason="second supersession",
                 admissibility_state="admissible",
                 inadmissibility_reason=None,
+                d4_check_state="ran_flagged",
                 skill_name=original_row["skill_name"],
                 subject_model=original_row["subject_model"],
                 harness_pin_fingerprint=original_row["harness_pin_fingerprint"],
@@ -328,6 +334,7 @@ class TestCriterion3DeriveExcludesSuperseded:
             source_eval_sha256="sha-p0-orig",
             admissibility_state="admissible",
             inadmissibility_reason=None,
+            d4_check_state="not_applicable",
             conn=conn,
         )
         _supersede_as_inadmissible(conn, result.screen_run_id)
@@ -342,6 +349,7 @@ class TestCriterion3DeriveExcludesSuperseded:
             source_eval_sha256="sha-p0-pin",
             admissibility_state="admissible",
             inadmissibility_reason=None,
+            d4_check_state="not_applicable",
             conn=conn,
         )
         _supersede_as_inadmissible(conn, result.screen_run_id)
@@ -356,6 +364,7 @@ class TestCriterion3DeriveExcludesSuperseded:
             source_eval_sha256="sha-p0-unf",
             admissibility_state="admissible",
             inadmissibility_reason=None,
+            d4_check_state="not_applicable",
             conn=conn,
         )
         _supersede_as_inadmissible(conn, result.screen_run_id)
@@ -372,6 +381,7 @@ class TestCriterion3DeriveExcludesSuperseded:
             source_eval_sha256="sha-stale-super",
             admissibility_state="admissible",
             inadmissibility_reason=None,
+            d4_check_state="not_applicable",
             conn=conn,
         )
         assert select_stale_pin_skills(conn, FRESH_PIN)
@@ -397,6 +407,7 @@ class TestCriterion4NegativeControl:
                 inadmissibility_reason=(
                     "apparatus_void: D4 prompt leak; hit=prompt; searched=prompt"
                 ),
+                d4_check_state="ran_flagged",
                 skill_name="some-skill",
                 subject_model="m",
                 harness_pin_fingerprint=None,
@@ -435,6 +446,7 @@ class TestCriterion5D4Redisposition:
                 source_eval_sha256=f"sha-d4-{skill_name}",
                 admissibility_state="admissible",
                 inadmissibility_reason=None,
+                d4_check_state="not_applicable",
                 conn=conn,
             )
 
@@ -491,6 +503,7 @@ class TestCriterion5D4Redisposition:
                 source_eval_sha256=f"sha-idem-{skill_name}",
                 admissibility_state="admissible",
                 inadmissibility_reason=None,
+                d4_check_state="not_applicable",
                 conn=conn,
             )
         supersede_d4_screen_runs(conn)
