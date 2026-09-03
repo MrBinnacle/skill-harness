@@ -20,7 +20,7 @@ from skill_harness.aggregation.matched_bridge import MatchedRefusalReason
 from skill_harness.aggregation.profile import effect_from_matched_gate2
 from skill_harness.aggregation.verdict import ValueClass, matched_gate2_verdict
 from skill_harness.oc import Gate2Design, MMESpec
-from skill_harness.ratification import RatificationError, parse_rat_record
+from skill_harness.ratification import RatificationError, RatRecord, parse_rat_record
 from skill_harness.storage.migrations import open_evidence_readonly
 
 _console = Console()
@@ -32,6 +32,42 @@ class PairedGate2Refusal(Exception):
     def __init__(self, reason: str, exit_code: int = 1) -> None:
         super().__init__(reason)
         self.exit_code = exit_code
+
+
+# The four fields section 2 of a Gate-2 record requires the runner to declare
+# and the ingest to record. Compared as strings against the parsed record.
+_RUNNER_DECLARED_FIELDS: tuple[str, ...] = ("rat_id", "skill_id", "task_family", "estimand")
+
+
+def _check_runner_declaration(record: RatRecord, run_id: str, runner: object) -> None:
+    """Refuse unless the run's recorded runner block declares this record's identity.
+
+    :param record: The parsed RATIFIED record.
+    :param run_id: The paired run id, for the refusal text.
+    :param runner: ``config_json["runner"]`` as ingested, or ``None`` when the run
+        carries no block.
+    :raises PairedGate2Refusal: No runner block, or a declared field differs from
+        the record. The refusal names every differing field.
+    """
+    if not isinstance(runner, dict):
+        raise PairedGate2Refusal(
+            f"paired run {run_id!r} records no runner block in config_json; "
+            f"section 2 of {record.rat_id} requires the runner to declare "
+            f"{', '.join(_RUNNER_DECLARED_FIELDS)} and the ingest to record them "
+            f"(a run launched outside the record cannot be decided under it)",
+            exit_code=1,
+        )
+    mismatches: list[str] = []
+    for field in _RUNNER_DECLARED_FIELDS:
+        declared = runner.get(field)
+        expected = getattr(record, field)
+        if declared != expected:
+            mismatches.append(f"{field} record {expected!r} != run {declared!r}")
+    if mismatches:
+        raise PairedGate2Refusal(
+            f"ratification record {record.rat_id} field mismatch: " + "; ".join(mismatches),
+            exit_code=1,
+        )
 
 
 def paired_gate2_read(
@@ -110,14 +146,7 @@ def paired_gate2_read(
             exit_code=1,
         )
 
-    run_skill_id, config_raw = row[0], row[1]
-    if run_skill_id != record.skill_id:
-        raise PairedGate2Refusal(
-            f"ratification record {record.rat_id} field mismatch: "
-            f"skill_id record {record.skill_id!r} != run {run_skill_id!r}",
-            exit_code=1,
-        )
-
+    config_raw = row[1]
     config = json.loads(config_raw)
 
     # 3. Read paired cell counts from config_json (written by #387)
@@ -128,6 +157,15 @@ def paired_gate2_read(
             f"(was this run ingested by #387?)",
             exit_code=1,
         )
+
+    # 4. The run must be the one the record authorises. Section 2 of a Gate-2
+    # record puts that equality on the RUNNER-DECLARED config, recorded at
+    # ingest under config_json["runner"] (#409, #411): rat_id, skill_id,
+    # task_family and estimand must equal the record's values exactly. The
+    # runs.skill_id column is the card's content digest, not its name, so it
+    # was never the field the record names; comparing it refused every real
+    # ingest (#391, 2026-09-03) while the seeded tests passed on a name.
+    _check_runner_declaration(record, run_id, config.get("runner"))
 
     both_pass = int(paired_cells["both_pass"])
     full_only = int(paired_cells["full_only"])
