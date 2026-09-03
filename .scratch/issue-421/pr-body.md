@@ -65,7 +65,29 @@ The first build of this ticket implemented the pre-amendment zero-only Null chec
 
 `docs/ratifications/RAT-0001-git-pull-rebase-trap.md` gains a dated line (2026-09-03) recording that `evaluate-paired` now returns `HAZARD_NOT_RECORDED` for run `0700d089…` because its runner block predates the `hazard` field. The `CANT_TELL_YET` line in Amendment 2's decision table is superseded; the store is not rewritten (append-only stands).
 
+## Mutation campaign
+
+`scripts/mutation_receipt.py --select 389` was re-run after `be86b77` moved
+`paired_gate2.py`'s bytes (the `#403`-amendment hazard refusal landed in the same
+module), which made the prior receipt's `target_digests` pin stale
+(`c1ba4677…` → `8abfb41b…`). The two `#389` mutants were re-measured against the
+current file; both anchors were still present exactly once and both kills held,
+by the same detectors:
+
+| mutant | obligation | mutation | verdict | killing assertion |
+|---|---|---|---|---|
+| M-R1 | 389-ratification-binding | force `record.status != "RATIFIED"` to `False`: a DRAFT record is accepted | **KILLED** | `tests/test_cli_paired_gate2.py::TestUnratifiedDesign::test_draft_record_refused` |
+| M-R2 | 389-count-mismatch | force `total_pairs != design.n_pairs` to `False`: k=8 read against n=32 | **KILLED** | `tests/test_cli_paired_gate2.py::TestCountMismatch::test_pilot_k8_vs_design_n32` |
+
+The regenerated receipt is `docs/assurance/paired-gate2-mutation-receipt.json`
+(commit `be86b77`, Python 3.13.15, digest `8abfb41b…`); its prose companion and
+the `docs/receipts-index.md` entry were updated to name the same digest
+(`tests/test_mutation_receipt.py::test_prose_companion_names_the_digest_its_receipt_attests`
+pins that). The `#421` hazard refusals themselves are pinned by the named
+negative-control tests above, not by mutants in this receipt — the receipt
+attests only to the two `#389` guards, matching its `--select 389` scope.
+
 ## Gate
 
-- tests: focused suite on the changed modules — green.
-- types / lint / drift-guard: left to the harness compound gate.
+- tests: `PYTHONHASHSEED=0 pytest -q -m "not live and not calibration and not assurance"` — green (mutation-receipt currency and prose-companion tests included).
+- types / lint / drift-guard: green (see the compound gate run below).
