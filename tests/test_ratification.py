@@ -362,3 +362,67 @@ class TestCheckExecuteRatification:
         assert not decision.allowed
         assert decision.reason == RefusalReason.SCOPE_MISMATCH
         assert "not declared" in decision.detail
+
+
+# ---------------------------------------------------------------------------
+# #421: hazard_action — a regex registered on the record, validated at parse
+# ---------------------------------------------------------------------------
+
+
+class TestHazardAction:
+    """The hazard_action field is optional, but when present it must compile."""
+
+    def test_hazard_action_absent_parses(self, tmp_path: Path) -> None:
+        record = parse_rat_record(_write_rat(tmp_path, _rat_text()))
+        assert record.hazard_action is None
+
+    def test_hazard_action_present_parses(self, tmp_path: Path) -> None:
+        text = _rat_text({"hazard_action": r"git\s+pull"})
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.hazard_action == r"git\s+pull"
+
+    def test_hazard_action_non_compiling_regex_refused_by_name(self, tmp_path: Path) -> None:
+        """Negative control: a regex that does not compile is refused, naming the field."""
+        text = _rat_text({"hazard_action": r"git(s+pull"})
+        with pytest.raises(RatificationError, match="hazard_action"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+    def test_hazard_action_empty_string_refused(self, tmp_path: Path) -> None:
+        text = _rat_text({"hazard_action": ""})
+        with pytest.raises(RatificationError, match="hazard_action"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+
+# ---------------------------------------------------------------------------
+# #421: pilot_subject_model + subject_change_waiver
+# ---------------------------------------------------------------------------
+
+
+class TestPilotSubjectModel:
+    """pilot_subject_model is optional at parse time; subject_change_waiver is a nested block."""
+
+    def test_pilot_subject_model_absent_parses(self, tmp_path: Path) -> None:
+        record = parse_rat_record(_write_rat(tmp_path, _rat_text()))
+        assert record.pilot_subject_model is None
+        assert record.subject_change_waiver is None
+
+    def test_pilot_subject_model_present_parses(self, tmp_path: Path) -> None:
+        text = _rat_text({"pilot_subject_model": "claude-sonnet-5"})
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.pilot_subject_model == "claude-sonnet-5"
+
+    def test_subject_change_waiver_parses_as_nested_block(self, tmp_path: Path) -> None:
+        text = _rat_text()
+        text = text.replace(
+            "---\n\n# RAT-0001",
+            "subject_change_waiver:\n"
+            "  reason: host had no Anthropic key\n"
+            "  measurement: OBS-0007 measured sonnet-5 at the ceiling\n"
+            '  date: "2026-09-03"\n'
+            "---\n\n# RAT-0001",
+        )
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.subject_change_waiver is not None
+        assert record.subject_change_waiver["reason"] == "host had no Anthropic key"
+        assert "sonnet-5" in record.subject_change_waiver["measurement"]
+        assert record.subject_change_waiver["date"] == "2026-09-03"

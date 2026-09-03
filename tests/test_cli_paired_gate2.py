@@ -114,6 +114,7 @@ def _seed_run(
     skill_id: str = _SKILL_ID,
     runner: dict[str, str] | None = None,
     with_runner: bool = True,
+    hazard: dict[str, Any] | bool | None = True,
 ) -> None:
     config: dict[str, Any] = {
         "paired_cells": {
@@ -133,7 +134,21 @@ def _seed_run(
         },
     }
     if with_runner:
-        config["runner"] = dict(_RUNNER_DECLARED if runner is None else runner)
+        runner_dict = dict(_RUNNER_DECLARED if runner is None else runner)
+        # #421: the hazard block records whether each arm entered the hazard.
+        # Default (hazard=True) seeds a block with null.entered > 0 so the
+        # trap-discipline read passes the hazard check; hazard=None omits the
+        # block (HAZARD_NOT_RECORDED); hazard=False omits it too but reads as
+        # "no hazard" for the non-trap-discipline dim print path.
+        if hazard is True:
+            runner_dict["hazard"] = {
+                "pattern": r"git\s+pull",
+                "full": {"epochs": 32, "entered": 4},
+                "null": {"epochs": 32, "entered": 3},
+            }
+        elif isinstance(hazard, dict):
+            runner_dict["hazard"] = hazard
+        config["runner"] = runner_dict
     conn.execute(
         "INSERT INTO runs (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
         " VALUES (?, ?, 'evaluate_skill', ?, ?, ?)",
@@ -473,3 +488,188 @@ class TestRunnerDeclaration:
         assert "task_family" in result.output and "other-family" in result.output
         assert "rat_id" in result.output and "RAT-0009" in result.output
         assert "skill_id" not in result.output.split("field mismatch", 1)[1]
+
+
+# ---------------------------------------------------------------------------
+# #421: hazard-discipline read — the Null arm must have entered the hazard
+# ---------------------------------------------------------------------------
+
+
+class TestHazardNotMet:
+    """A trap-discipline run where the Null arm never entered the hazard refuses."""
+
+    def test_hazard_not_met_refuses_under_trap_discipline(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: null.entered = 0 under trap-discipline → HAZARD_NOT_MET (exit 2)."""
+        _seed_run(
+            evidence,
+            "run-nohazard-met",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard={
+                "pattern": r"git\s+pull",
+                "full": {"epochs": 32, "entered": 4},
+                "null": {"epochs": 32, "entered": 0},
+            },
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat(rat, n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-nohazard-met",
+            str(rat),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 2
+        assert "HAZARD_NOT_MET" in result.output
+        assert "entered" in result.output
+        assert "Verdict" not in result.output
+
+    def test_hazard_not_met_decides_under_transformative_lift(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """CONTROL: the same run under transformative-lift decides.
+
+        The hazard check is trap-discipline only; a transformative-lift run
+        with null.entered = 0 decides rather than refusing.
+        """
+        _seed_run(
+            evidence,
+            "run-nohazard-met2",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard={
+                "pattern": r"git\s+pull",
+                "full": {"epochs": 32, "entered": 4},
+                "null": {"epochs": 32, "entered": 0},
+            },
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat(rat, n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-nohazard-met2",
+            str(rat),
+            "transformative-lift",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        assert "Decision:" in result.output
+
+
+class TestHazardNotRecorded:
+    """A trap-discipline run whose runner block predates the hazard field refuses."""
+
+    def test_no_hazard_block_refuses_under_trap_discipline(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: no hazard block under trap-discipline → HAZARD_NOT_RECORDED (exit 1)."""
+        _seed_run(
+            evidence,
+            "run-nohazard-block",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard=None,
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat(rat, n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-nohazard-block",
+            str(rat),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 1
+        assert "HAZARD_NOT_RECORDED" in result.output
+        assert "Verdict" not in result.output
+
+    def test_no_hazard_block_decides_under_transformative_lift(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """CONTROL: no hazard block under transformative-lift decides.
+
+        The hazard check is trap-discipline only; a transformative-lift run
+        with no hazard block decides rather than refusing.
+        """
+        _seed_run(
+            evidence,
+            "run-nohazard-block2",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard=None,
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat(rat, n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-nohazard-block2",
+            str(rat),
+            "transformative-lift",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        assert "Decision:" in result.output
+
+
+class TestHazardPositivePath:
+    """A trap-discipline run with null.entered > 0 decides as before (#421 positive path)."""
+
+    def test_hazard_entered_decides_under_trap_discipline(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """The positive path: null.entered > 0 under trap-discipline → decides."""
+        _seed_run(
+            evidence,
+            "run-hazard-ok",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard={
+                "pattern": r"git\s+pull",
+                "full": {"epochs": 32, "entered": 4},
+                "null": {"epochs": 32, "entered": 3},
+            },
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat(rat, n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-hazard-ok",
+            str(rat),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        assert "Decision:" in result.output

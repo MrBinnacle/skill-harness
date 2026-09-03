@@ -45,7 +45,11 @@ where a reader can recover the route the recorded identifier no longer carries.
 
 from __future__ import annotations
 
+import json
 import os
+import re
+import sqlite3
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Final
 
@@ -58,11 +62,15 @@ from skill_harness.ratification import RatRecord, check_execute_ratification, pa
 __all__ = [
     "ANTHROPIC_KEY_ENV",
     "DIRECT_ROUTE",
+    "HAZARD_BASH_TOOL",
     "OPENROUTER_ROUTE",
+    "HazardEntry",
     "PairedLaunchRefusal",
     "PairedRunnerConfig",
     "design_from_record",
+    "hazard_entry_counts",
     "preflight_sized_run",
+    "prior_measurements",
     "resolve_direct_subject",
     "runner_config_payload",
 ]
@@ -118,6 +126,216 @@ class PairedRunnerConfig(BaseModel):
     route: str
     model: str
     n_pairs: int
+
+
+# ---------------------------------------------------------------------------
+# #421: hazard-entry counting — did the Null arm ever meet the hazard?
+#
+# The oracle checks the outcome (ancestry preserved), not whether the hazard
+# was entered. A model that never runs the trap-entering command passes, and
+# the lattice is indistinguishable from "trap avoided". This counts bash
+# tool-call commands matching a registered pattern per epoch, so a
+# trap-discipline read can refuse when the Null arm never entered the hazard.
+# ---------------------------------------------------------------------------
+
+#: The bash tool function name in inspect_swe.claude_code transcripts.
+#: Claude Code registers its shell tool as ``Bash``; the command lives in
+#: ``arguments["command"]``. Matched case-insensitively so a renamed tool
+#: still surfaces.
+HAZARD_BASH_TOOL: Final = "bash"
+
+
+class HazardEntry(BaseModel):
+    """Per-arm hazard-entry count from one eval log.
+
+    ``pattern`` is the regex the count was matched against (recorded so a
+    reader cannot mistake which hazard was counted). ``epochs`` is the number
+    of epochs in the log. ``entered`` is the number of epochs where at least
+    one bash tool-call command matched the pattern.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    pattern: str
+    epochs: int
+    entered: int
+
+
+def _bash_commands(messages: Iterable[object]) -> Iterable[str]:
+    """Yield every bash tool-call command string from a message stream.
+
+    Duck-typed against the same ``tool_calls``/``function``/``arguments``
+    shape ``detect_skill_invocation`` reads (#46). A tool call counts when
+    its function name case-insensitively matches ``HAZARD_BASH_TOOL`` and its
+    arguments carry a ``command`` string. Any shape this scan does not
+    recognise is skipped — an undercount can only make the hazard refusal fire
+    more, never fabricate an entry.
+    """
+    for message in messages:
+        calls = getattr(message, "tool_calls", None) or ()
+        for call in calls:
+            function = getattr(call, "function", None)
+            if not isinstance(function, str) or function.lower() != HAZARD_BASH_TOOL:
+                continue
+            arguments = getattr(call, "arguments", None)
+            if not isinstance(arguments, dict):
+                continue
+            command = arguments.get("command")
+            if isinstance(command, str):
+                yield command
+
+
+def hazard_entry_counts(
+    eval_log_path: Path, pattern: str, *, skill_description: str = ""
+) -> HazardEntry:
+    """Count epochs whose bash tool-call commands match ``pattern``.
+
+    Reads one Inspect ``.eval`` log (needs the optional ``[inspect]`` extra,
+    lazily imported — same convention as :func:`parse_eval_log`) and returns
+    :class:`HazardEntry` with the pattern, the epoch count, and the number of
+    epochs where at least one bash command matched.
+
+    :param eval_log_path: Path to the ``.eval`` log.
+    :param pattern: A regular expression matched against every bash
+        tool-call command in each epoch (compiled here; a non-compiling
+        pattern is a caller bug, not a parse error).
+    :param skill_description: Forwarded to ``read_eval_log``-shape parsing
+        only when the underlying reader needs it; unused for the bash scan.
+    :raises PairedLaunchRefusal: If the ``[inspect]`` extra is not installed.
+    :raises re.error: If ``pattern`` does not compile (caller bug — the
+        record's ``hazard_action`` is validated at parse time).
+    """
+    try:
+        from inspect_ai.log import read_eval_log
+    except ImportError as exc:  # pragma: no cover — exercised only sans extra
+        raise PairedLaunchRefusal(
+            'hazard_entry_counts requires the optional extra: pip install "skill-harness[inspect]"'
+        ) from exc
+
+    regex = re.compile(pattern)
+    log = read_eval_log(str(eval_log_path))
+    epochs = 0
+    entered = 0
+    for sample in log.samples or []:
+        epochs += 1
+        messages = getattr(sample, "messages", None) or ()
+        if any(regex.search(cmd) for cmd in _bash_commands(messages)):
+            entered += 1
+    return HazardEntry(pattern=pattern, epochs=epochs, entered=entered)
+
+
+# ---------------------------------------------------------------------------
+# #421: prior measurements — ledgered evidence for the priced subject,
+# printed before the cost line so the launcher sees the ceiling at zero cost.
+# ---------------------------------------------------------------------------
+
+
+def _prior_screen_measurements(
+    conn: sqlite3.Connection, record: RatRecord, bare_model: str
+) -> list[str]:
+    """Screen-store prior measurements for the record's card and priced subject.
+
+    Matches ``screen_runs`` by ``skill_name == record.skill_id`` (the card
+    name; the screen store carries no task_family) and ``subject_model``
+    containing the bare pricing-table name. Returns one line per admissible,
+    non-superseded screen run, ordered by creation.
+    """
+    lines: list[str] = []
+    rows = conn.execute(
+        "SELECT sr.screen_run_id, sr.subject_model, sr.source_eval_sha256, "
+        "sr.admissibility_state, sr.created_at "
+        "FROM screen_runs sr "
+        "WHERE sr.skill_name = ? "
+        "AND sr.screen_run_id NOT IN ("
+        "    SELECT superseded_screen_run_id FROM screen_run_supersessions) "
+        "ORDER BY sr.created_at",
+        (record.skill_id,),
+    ).fetchall()
+    for screen_run_id, subject_model, source_eval_sha256, _admissibility, _created in rows:
+        model_str = subject_model or ""
+        if bare_model not in model_str:
+            continue
+        trial_row = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(passed), 0) FROM screen_trials WHERE screen_run_id = ?",
+            (screen_run_id,),
+        ).fetchone()
+        n_trials = int(trial_row[0]) if trial_row else 0
+        n_pass = int(trial_row[1]) if trial_row else 0
+        p0 = n_pass / n_trials if n_trials else 0.0
+        sha_short = (source_eval_sha256 or "")[:8]
+        lines.append(
+            f"prior: screen run {sha_short}, {bare_model}, "
+            f"Null {n_pass} of {n_trials}, p0 = {p0:.4f}"
+        )
+    return lines
+
+
+def _prior_paired_measurements(
+    conn: sqlite3.Connection, record: RatRecord, bare_model: str
+) -> list[str]:
+    """Evidence-store prior paired runs for the record's task family and subject.
+
+    Matches ``runs`` by the runner-declared ``task_family`` in
+    ``config_json["runner"]`` and the runner's ``model`` containing the bare
+    pricing-table name. Returns one line per matching run, ordered by start.
+    """
+    lines: list[str] = []
+    rows = conn.execute(
+        "SELECT run_id, config_json FROM runs WHERE run_kind = 'evaluate_skill' "
+        "ORDER BY started_at",
+    ).fetchall()
+    for run_id, config_raw in rows:
+        try:
+            config = json.loads(config_raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        runner = config.get("runner")
+        if not isinstance(runner, dict):
+            continue
+        if runner.get("task_family") != record.task_family:
+            continue
+        model_str = runner.get("model", "")
+        if bare_model not in model_str:
+            continue
+        sha_short = (run_id or "")[:8]
+        cells = config.get("paired_cells", {})
+        both_pass = int(cells.get("both_pass", 0))
+        full_only = int(cells.get("full_only", 0))
+        null_only = int(cells.get("null_only", 0))
+        both_fail = int(cells.get("both_fail", 0))
+        total = both_pass + full_only + null_only + both_fail
+        lines.append(
+            f"prior: paired run {sha_short}, {bare_model}, "
+            f"{total} pairs ({both_pass}/{full_only}/{null_only}/{both_fail})"
+        )
+    return lines
+
+
+def prior_measurements(record: RatRecord, evidence_db: Path, bare_model: str) -> list[str]:
+    """List every prior measurement for the record's task family and priced subject.
+
+    Queries the evidence store (paired runs) and the screen store (stage-0
+    screens) for measurements matching the record's ``task_family`` / card and
+    the priced subject, by fixture SHA and model. Returns one line per
+    measurement; printing is the check (#421: refusal is not proposed here).
+    """
+    from skill_harness.storage.migrations import open_evidence_readonly
+
+    lines: list[str] = []
+    conn: sqlite3.Connection | None = None
+    try:
+        conn = open_evidence_readonly(evidence_db)
+        lines.extend(_prior_paired_measurements(conn, record, bare_model))
+        lines.extend(_prior_screen_measurements(conn, record, bare_model))
+    except Exception:
+        # A missing or unreadable store is not a refusal (#421: printing is the
+        # check). The launcher proceeds without prior measurements rather than
+        # silently spending on a record the store could not vouch for.
+        return []
+    finally:
+        if conn is not None:
+            conn.close()
+    return lines
 
 
 def design_from_record(record: RatRecord) -> Gate2Design:
@@ -202,6 +420,7 @@ def preflight_sized_run(
     bare_model: str,
     input_tokens_per_pair: float,
     output_tokens_per_pair: float,
+    evidence_db: Path | None = None,
 ) -> tuple[RatRecord, Gate2Design, PairedRunnerConfig, float]:
     """Everything that must hold before the first model call.
 
@@ -210,11 +429,21 @@ def preflight_sized_run(
     then the live cost projection against the cap. The cheapest refusals come
     first so a misconfigured launch fails without touching the network.
 
+    When ``evidence_db`` is given (#421), the pre-flight additionally prints
+    every prior measurement for the record's task family and priced subject
+    from the evidence and screen stores (before the cost line) and refuses
+    when ``pilot_subject_model`` is missing from the record or differs from
+    the priced subject without a ``subject_change_waiver`` block. A real launch
+    always carries the evidence DB; the cap-boundary tests that omit it test
+    the cap projection alone and are unaffected by the #421 checks.
+
     :param ratification_path: Path to the RATIFIED record.
     :param bare_model: Bare pricing-table subject name.
     :param input_tokens_per_pair: Re-measured input tokens per pair, both arms,
         all classes.
     :param output_tokens_per_pair: Re-measured output tokens per pair.
+    :param evidence_db: Optional path to the evidence DB. When given, prior
+        measurements are printed and ``pilot_subject_model`` is checked.
     :returns: ``(record, design, runner_config, projected_worst_case_usd)``.
     :raises PairedLaunchRefusal: On any failing precondition, naming it.
     """
@@ -234,6 +463,44 @@ def preflight_sized_run(
         raise PairedLaunchRefusal(f"execute gate refused: {gate.reason} - {gate.detail}")
 
     design = design_from_record(record)
+
+    # #421: print prior measurements before the cost line so the launcher sees
+    # the ceiling at zero cost. Printing is the check; refusal is not proposed.
+    if evidence_db is not None:
+        for line in prior_measurements(record, evidence_db, bare_model):
+            print(line)
+
+    # #421: a pilot on one subject cannot size a run on another silently. The
+    # record must name the pilot's subject; if it differs from the priced
+    # subject, a dated subject_change_waiver block must authorise the transfer.
+    if evidence_db is not None:
+        if record.pilot_subject_model is None:
+            raise PairedLaunchRefusal(
+                f"{record.rat_id} is missing 'pilot_subject_model'; the pilot's "
+                f"subject model must be recorded so a sized run on a different "
+                f"subject cannot launch silently (#421). Record the bare "
+                f"pricing-table name the pilot ran (e.g. '{bare_model}') and "
+                f"re-run."
+            )
+        if record.pilot_subject_model != bare_model:
+            waiver = record.subject_change_waiver
+            if waiver is None:
+                raise PairedLaunchRefusal(
+                    f"{record.rat_id} pilot_subject_model "
+                    f"{record.pilot_subject_model!r} differs from the priced "
+                    f"subject {bare_model!r}; a subject_change_waiver block "
+                    f"naming the reason and the measurement that supports the "
+                    f"transfer is required (#421)."
+                )
+            for required_key in ("reason", "measurement", "date"):
+                if required_key not in waiver or not str(waiver[required_key]).strip():
+                    raise PairedLaunchRefusal(
+                        f"{record.rat_id} subject_change_waiver is missing the "
+                        f"'{required_key}' field; the waiver must name the reason, "
+                        f"the measurement that supports the transfer, and the "
+                        f"date (#421)."
+                    )
+
     model = resolve_direct_subject(bare_model)
 
     per_pair = project_pair_usd(

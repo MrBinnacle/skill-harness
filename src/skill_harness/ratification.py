@@ -190,6 +190,21 @@ class RatRecord(BaseModel):
     gamma: float | None = None
     delta_min: float | None = None
     q_min: float | None = None
+    #: #421: the hazard action pattern the trap-discipline read matches against
+    #: every bash tool-call command in an epoch. Registered on the record the way
+    #: the oracle knobs are, so a later run cannot quietly change what "entered"
+    #: means. Optional; a record without it predates the field (#421 acceptance:
+    #: reading such a run returns HAZARD_NOT_RECORDED, not CANT_TELL_YET).
+    hazard_action: str | None = None
+    #: #421: the subject model the pilot ran, so a sized run on a different
+    #: subject cannot launch silently. Optional at parse time (existing records
+    #: without it still parse); required at pre-flight (#421: preflight_sized_run
+    #: refuses by name when it is missing).
+    pilot_subject_model: str | None = None
+    #: #421: a dated block waiving a pilot_subject_model / priced-subject
+    #: mismatch. Present iff pilot_subject_model differs from the priced subject
+    #: and the transfer is authorised. Names the reason and the measurement.
+    subject_change_waiver: dict[str, str] | None = None
 
 
 def _cents(usd: float) -> int:
@@ -297,6 +312,47 @@ def parse_rat_record(path: Path) -> RatRecord:
         if not 0.5 < q_min_value < 1.0:
             raise RatificationError(f"{path.name}: q_min must lie in (0.5, 1); got {q_min_value}")
 
+    # #421: hazard_action — a regex matched against bash tool-call commands.
+    # Optional; a record without it predates the field. Refused by name when
+    # present but not a compilable regular expression.
+    hazard_action_value: str | None = None
+    hazard_action_raw = fields.get("hazard_action")
+    if hazard_action_raw is not None:
+        if not isinstance(hazard_action_raw, str) or not hazard_action_raw.strip():
+            raise RatificationError(
+                f"{path.name}: field 'hazard_action' must be a non-empty string"
+            )
+        try:
+            re.compile(hazard_action_raw)
+        except re.error as exc:
+            raise RatificationError(
+                f"{path.name}: field 'hazard_action' is not a valid regular expression: {exc}"
+            ) from exc
+        hazard_action_value = hazard_action_raw
+
+    # #421: pilot_subject_model — the subject the pilot ran, so a sized run on
+    # a different subject cannot launch silently. Optional at parse time;
+    # preflight_sized_run refuses by name when it is missing.
+    pilot_subject_model_value: str | None = None
+    pilot_subject_model_raw = fields.get("pilot_subject_model")
+    if pilot_subject_model_raw is not None:
+        if not isinstance(pilot_subject_model_raw, str) or not pilot_subject_model_raw.strip():
+            raise RatificationError(
+                f"{path.name}: field 'pilot_subject_model' must be a non-empty string"
+            )
+        pilot_subject_model_value = pilot_subject_model_raw
+
+    # #421: subject_change_waiver — a dated block authorising a
+    # pilot_subject_model / priced-subject mismatch. A nested front-matter block.
+    subject_change_waiver_value: dict[str, str] | None = None
+    subject_change_waiver_raw = fields.get("subject_change_waiver")
+    if subject_change_waiver_raw is not None:
+        if not isinstance(subject_change_waiver_raw, dict):
+            raise RatificationError(
+                f"{path.name}: field 'subject_change_waiver' must be a nested block"
+            )
+        subject_change_waiver_value = {str(k): str(v) for k, v in subject_change_waiver_raw.items()}
+
     return RatRecord(
         rat_id=rat_id,
         status=status,
@@ -313,6 +369,9 @@ def parse_rat_record(path: Path) -> RatRecord:
         gamma=gamma_value,
         delta_min=delta_min_value,
         q_min=q_min_value,
+        hazard_action=hazard_action_value,
+        pilot_subject_model=pilot_subject_model_value,
+        subject_change_waiver=subject_change_waiver_value,
     )
 
 

@@ -39,6 +39,14 @@ class PairedGate2Refusal(Exception):
 _RUNNER_DECLARED_FIELDS: tuple[str, ...] = ("rat_id", "skill_id", "task_family", "estimand")
 
 
+def _null_entered_msg(hazard_block: dict) -> str:
+    """Render the null.entered count for the non-refusal dim print (#421)."""
+    null_hazard = hazard_block.get("null")
+    if isinstance(null_hazard, dict):
+        return f"{null_hazard.get('entered', '?')}/{null_hazard.get('epochs', '?')}"
+    return "?"
+
+
 def _check_runner_declaration(record: RatRecord, run_id: str, runner: object) -> None:
     """Refuse unless the run's recorded runner block declares this record's identity.
 
@@ -166,6 +174,48 @@ def paired_gate2_read(
     # was never the field the record names; comparing it refused every real
     # ingest (#391, 2026-09-03) while the seeded tests passed on a name.
     _check_runner_declaration(record, run_id, config.get("runner"))
+
+    # 4b. #421: a trap-discipline read refuses when the Null arm never met the
+    # hazard. The oracle checks the outcome (ancestry preserved), not whether
+    # the hazard was entered; a model that never runs the trap-entering
+    # command passes, and the lattice is indistinguishable from "trap avoided".
+    # The hazard block is recorded under config_json["runner"]["hazard"] by
+    # hazard_entry_counts; a run whose runner block predates the field carries
+    # no block and is refused as HAZARD_NOT_RECORDED (the correct reading of a
+    # run that never recorded hazard entry).
+    runner_block = config.get("runner")
+    hazard_block = runner_block.get("hazard") if isinstance(runner_block, dict) else None
+    if value_class is ValueClass.TRAP_DISCIPLINE:
+        if not isinstance(hazard_block, dict):
+            raise PairedGate2Refusal(
+                f"HAZARD_NOT_RECORDED: paired run {run_id!r} records no hazard block "
+                f"in config_json['runner']['hazard'] under {record.rat_id}; "
+                f"a trap-discipline read refuses when the runner never recorded "
+                f"whether the Null arm entered the hazard (#421). The run predates "
+                f"the hazard_entry_counts field and is not evidence the trap was "
+                f"avoided.",
+                exit_code=1,
+            )
+        null_hazard = hazard_block.get("null")
+        null_entered = null_hazard.get("entered", 0) if isinstance(null_hazard, dict) else 0
+        if int(null_entered) == 0:
+            raise PairedGate2Refusal(
+                f"HAZARD_NOT_MET: paired run {run_id!r} under {record.rat_id} "
+                f"records null.entered = {null_entered} of "
+                f"{null_hazard.get('epochs', '?') if isinstance(null_hazard, dict) else '?'} "
+                f"epochs; the Null arm never ran the hazard action "
+                f"(pattern {hazard_block.get('pattern', '?')!r}). A trap-discipline "
+                f"read refuses when the Null arm never entered the hazard (#421): "
+                f"the oracle checks the outcome, not whether the trap was entered, "
+                f"so a model that never pulls cannot be distinguished from one "
+                f"that avoids the pull trap.",
+                exit_code=2,
+            )
+    elif isinstance(hazard_block, dict):
+        _console.print(
+            f"[dim]hazard: pattern={hazard_block.get('pattern', '?')!r} "
+            f"null.entered={_null_entered_msg(hazard_block)}[/]"
+        )
 
     both_pass = int(paired_cells["both_pass"])
     full_only = int(paired_cells["full_only"])
