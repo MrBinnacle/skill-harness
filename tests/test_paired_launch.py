@@ -84,6 +84,25 @@ def _write_rat(tmp_path: Path, **overrides: str) -> Path:
     return path
 
 
+def _rat_0001_with_pilot(tmp_path: Path, *, pilot: str = "claude-sonnet-5") -> Path:
+    """Real RAT-0001 bytes plus pilot_subject_model so cap tests can launch.
+
+    #421 refuses preflight when pilot_subject_model is missing; RAT-0001 is not
+    edited (no launch under it is authorised). Cap-boundary tests need the
+    shipped numbers, so they copy the record and inject only the pilot field.
+    """
+    text = RAT_0001.read_text(encoding="utf-8")
+    needle = 'ratified_date: "2026-09-02"\n'
+    if needle not in text:
+        raise AssertionError("RAT-0001 front-matter shape changed; update the pilot inject")
+    if "pilot_subject_model:" in text.split("---", 2)[1]:
+        raise AssertionError("RAT-0001 already carries pilot_subject_model; drop the inject")
+    text = text.replace(needle, f"{needle}pilot_subject_model: {pilot}\n", 1)
+    path = tmp_path / "RAT-0001-with-pilot.md"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
 # ---------------------------------------------------------------------------
 # design_from_record: the design comes from the record, or not at all
 # ---------------------------------------------------------------------------
@@ -183,11 +202,14 @@ def test_already_routed_name_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_preflight_passes_at_the_registered_figures(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_preflight_passes_at_the_registered_figures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """CONTROL for the cap arm: the ratified row launches."""
     monkeypatch.setenv(ANTHROPIC_KEY_ENV, "sk-ant-test")
+    rat = _rat_0001_with_pilot(tmp_path)
     record, design, config, worst_case = preflight_sized_run(
-        ratification_path=RAT_0001,
+        ratification_path=rat,
         bare_model="claude-sonnet-5",
         input_tokens_per_pair=REGISTERED_INPUT_TOKENS,
         output_tokens_per_pair=REGISTERED_OUTPUT_TOKENS,
@@ -201,7 +223,9 @@ def test_preflight_passes_at_the_registered_figures(monkeypatch: pytest.MonkeyPa
     assert config.rat_id == "RAT-0001"
 
 
-def test_preflight_passes_exactly_at_the_breakeven(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_preflight_passes_exactly_at_the_breakeven(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """At the measured breakeven the projection equals the cap, so it launches.
 
     This pins the boundary as an equality rather than a near-miss: if the
@@ -210,7 +234,7 @@ def test_preflight_passes_exactly_at_the_breakeven(monkeypatch: pytest.MonkeyPat
     """
     monkeypatch.setenv(ANTHROPIC_KEY_ENV, "sk-ant-test")
     _, _, _, worst_case = preflight_sized_run(
-        ratification_path=RAT_0001,
+        ratification_path=_rat_0001_with_pilot(tmp_path),
         bare_model="claude-sonnet-5",
         input_tokens_per_pair=BREAKEVEN_INPUT_TOKENS,
         output_tokens_per_pair=REGISTERED_OUTPUT_TOKENS,
@@ -218,7 +242,9 @@ def test_preflight_passes_exactly_at_the_breakeven(monkeypatch: pytest.MonkeyPat
     assert worst_case == pytest.approx(23.36, abs=1e-9)
 
 
-def test_one_token_over_the_breakeven_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_one_token_over_the_breakeven_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """ARM: the knife-edge. 129 tokens of headroom, and this is token 130.
 
     A cent-rounded comparison passes this case, which is why the comparison is
@@ -228,7 +254,7 @@ def test_one_token_over_the_breakeven_refuses(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv(ANTHROPIC_KEY_ENV, "sk-ant-test")
     with pytest.raises(PairedLaunchRefusal) as exc:
         preflight_sized_run(
-            ratification_path=RAT_0001,
+            ratification_path=_rat_0001_with_pilot(tmp_path),
             bare_model="claude-sonnet-5",
             input_tokens_per_pair=BREAKEVEN_INPUT_TOKENS + 1,
             output_tokens_per_pair=REGISTERED_OUTPUT_TOKENS,
@@ -262,11 +288,14 @@ def test_draft_record_refuses_on_status_not_on_the_key(
     assert ANTHROPIC_KEY_ENV not in message
 
 
-def test_runner_config_payload_is_json_shaped(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runner_config_payload_is_json_shaped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The payload the ingest records carries the route and the reference."""
     monkeypatch.setenv(ANTHROPIC_KEY_ENV, "sk-ant-test")
+    rat = _rat_0001_with_pilot(tmp_path)
     _, _, config, _ = preflight_sized_run(
-        ratification_path=RAT_0001,
+        ratification_path=rat,
         bare_model="claude-sonnet-5",
         input_tokens_per_pair=REGISTERED_INPUT_TOKENS,
         output_tokens_per_pair=REGISTERED_OUTPUT_TOKENS,
@@ -276,7 +305,7 @@ def test_runner_config_payload_is_json_shaped(monkeypatch: pytest.MonkeyPatch) -
     assert payload["rat_id"] == "RAT-0001"
     assert payload["estimand"] == "treatment-policy"
     assert payload["n_pairs"] == 32
-    assert payload["ratification_path"].endswith("RAT-0001-git-pull-rebase-trap.md")
+    assert payload["ratification_path"].endswith("RAT-0001-with-pilot.md")
     assert all(isinstance(value, (str, int)) for value in payload.values())
 
 
@@ -417,16 +446,13 @@ class TestPilotSubjectModel:
     """preflight_sized_run refuses when pilot_subject_model is missing or differs."""
 
     def test_missing_pilot_subject_model_refuses_by_name(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The real dry run of RAT-0001 refuses on the missing pilot_subject_model."""
-        monkeypatch.setenv(ANTHROPIC_KEY_ENV, "sk-ant-test")
-        db = tmp_path / "evidence.db"
-        # Open and close a fresh evidence DB so prior_measurements can read it.
-        from skill_harness.storage.migrations import open_evidence
+        """RAT-0001 refuses on the missing pilot_subject_model with no evidence_db.
 
-        conn = open_evidence(db)
-        conn.close()
+        The check is always on (#421): omitting evidence_db must not skip it.
+        """
+        monkeypatch.setenv(ANTHROPIC_KEY_ENV, "sk-ant-test")
 
         with pytest.raises(PairedLaunchRefusal, match="pilot_subject_model"):
             preflight_sized_run(
@@ -434,7 +460,6 @@ class TestPilotSubjectModel:
                 bare_model="claude-sonnet-5",
                 input_tokens_per_pair=REGISTERED_INPUT_TOKENS,
                 output_tokens_per_pair=REGISTERED_OUTPUT_TOKENS,
-                evidence_db=db,
             )
 
     def test_mismatched_pilot_subject_model_refuses_without_waiver(
@@ -442,13 +467,7 @@ class TestPilotSubjectModel:
     ) -> None:
         """pilot_subject_model != bare_model refuses without a subject_change_waiver."""
         monkeypatch.setenv(ANTHROPIC_KEY_ENV, "sk-ant-test")
-        db = tmp_path / "evidence.db"
-        from skill_harness.storage.migrations import open_evidence
 
-        conn = open_evidence(db)
-        conn.close()
-
-        # Fixture record with pilot_subject_model set to a different subject.
         rat = tmp_path / "RAT-0001-fixture.md"
         text = _rat_text(pilot_subject_model="claude-sonnet-4.5")
         rat.write_text(text, encoding="utf-8")
@@ -459,7 +478,6 @@ class TestPilotSubjectModel:
                 bare_model="claude-sonnet-5",
                 input_tokens_per_pair=REGISTERED_INPUT_TOKENS,
                 output_tokens_per_pair=REGISTERED_OUTPUT_TOKENS,
-                evidence_db=db,
             )
 
     def test_mismatched_pilot_subject_model_passes_with_waiver(
@@ -467,11 +485,6 @@ class TestPilotSubjectModel:
     ) -> None:
         """pilot_subject_model != bare_model passes with a subject_change_waiver block."""
         monkeypatch.setenv(ANTHROPIC_KEY_ENV, "sk-ant-test")
-        db = tmp_path / "evidence.db"
-        from skill_harness.storage.migrations import open_evidence
-
-        conn = open_evidence(db)
-        conn.close()
 
         rat = tmp_path / "RAT-0001-fixture.md"
         text = _rat_text(pilot_subject_model="claude-sonnet-4.5")
@@ -490,10 +503,23 @@ class TestPilotSubjectModel:
             bare_model="claude-sonnet-5",
             input_tokens_per_pair=REGISTERED_INPUT_TOKENS,
             output_tokens_per_pair=REGISTERED_OUTPUT_TOKENS,
-            evidence_db=db,
         )
         assert record.pilot_subject_model == "claude-sonnet-4.5"
         assert _design.n_pairs == 32
+
+    def test_matching_pilot_subject_model_passes_without_waiver(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """pilot_subject_model == bare_model launches; no waiver required."""
+        monkeypatch.setenv(ANTHROPIC_KEY_ENV, "sk-ant-test")
+        record, design, _config, _worst = preflight_sized_run(
+            ratification_path=_rat_0001_with_pilot(tmp_path),
+            bare_model="claude-sonnet-5",
+            input_tokens_per_pair=REGISTERED_INPUT_TOKENS,
+            output_tokens_per_pair=REGISTERED_OUTPUT_TOKENS,
+        )
+        assert record.pilot_subject_model == "claude-sonnet-5"
+        assert design.n_pairs == 32
 
 
 # ---------------------------------------------------------------------------

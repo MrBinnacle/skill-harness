@@ -429,13 +429,12 @@ def preflight_sized_run(
     then the live cost projection against the cap. The cheapest refusals come
     first so a misconfigured launch fails without touching the network.
 
-    When ``evidence_db`` is given (#421), the pre-flight additionally prints
-    every prior measurement for the record's task family and priced subject
-    from the evidence and screen stores (before the cost line) and refuses
-    when ``pilot_subject_model`` is missing from the record or differs from
-    the priced subject without a ``subject_change_waiver`` block. A real launch
-    always carries the evidence DB; the cap-boundary tests that omit it test
-    the cap projection alone and are unaffected by the #421 checks.
+    Always refuses when ``pilot_subject_model`` is missing from the record or
+    differs from the priced subject without a complete ``subject_change_waiver``
+    block (#421: existing records without the field are refused by name; the
+    check is not optional). When ``evidence_db`` is given, also prints every
+    prior measurement for the record's task family and priced subject before
+    the cost line.
 
     :param ratification_path: Path to the RATIFIED record.
     :param bare_model: Bare pricing-table subject name.
@@ -443,7 +442,7 @@ def preflight_sized_run(
         all classes.
     :param output_tokens_per_pair: Re-measured output tokens per pair.
     :param evidence_db: Optional path to the evidence DB. When given, prior
-        measurements are printed and ``pilot_subject_model`` is checked.
+        measurements are printed before the cost line.
     :returns: ``(record, design, runner_config, projected_worst_case_usd)``.
     :raises PairedLaunchRefusal: On any failing precondition, naming it.
     """
@@ -473,33 +472,33 @@ def preflight_sized_run(
     # #421: a pilot on one subject cannot size a run on another silently. The
     # record must name the pilot's subject; if it differs from the priced
     # subject, a dated subject_change_waiver block must authorise the transfer.
-    if evidence_db is not None:
-        if record.pilot_subject_model is None:
+    # Always on — omitting evidence_db must not skip this gate.
+    if record.pilot_subject_model is None:
+        raise PairedLaunchRefusal(
+            f"{record.rat_id} is missing 'pilot_subject_model'; the pilot's "
+            f"subject model must be recorded so a sized run on a different "
+            f"subject cannot launch silently (#421). Record the bare "
+            f"pricing-table name the pilot ran (e.g. '{bare_model}') and "
+            f"re-run."
+        )
+    if record.pilot_subject_model != bare_model:
+        waiver = record.subject_change_waiver
+        if waiver is None:
             raise PairedLaunchRefusal(
-                f"{record.rat_id} is missing 'pilot_subject_model'; the pilot's "
-                f"subject model must be recorded so a sized run on a different "
-                f"subject cannot launch silently (#421). Record the bare "
-                f"pricing-table name the pilot ran (e.g. '{bare_model}') and "
-                f"re-run."
+                f"{record.rat_id} pilot_subject_model "
+                f"{record.pilot_subject_model!r} differs from the priced "
+                f"subject {bare_model!r}; a subject_change_waiver block "
+                f"naming the reason and the measurement that supports the "
+                f"transfer is required (#421)."
             )
-        if record.pilot_subject_model != bare_model:
-            waiver = record.subject_change_waiver
-            if waiver is None:
+        for required_key in ("reason", "measurement", "date"):
+            if required_key not in waiver or not str(waiver[required_key]).strip():
                 raise PairedLaunchRefusal(
-                    f"{record.rat_id} pilot_subject_model "
-                    f"{record.pilot_subject_model!r} differs from the priced "
-                    f"subject {bare_model!r}; a subject_change_waiver block "
-                    f"naming the reason and the measurement that supports the "
-                    f"transfer is required (#421)."
+                    f"{record.rat_id} subject_change_waiver is missing the "
+                    f"'{required_key}' field; the waiver must name the reason, "
+                    f"the measurement that supports the transfer, and the "
+                    f"date (#421)."
                 )
-            for required_key in ("reason", "measurement", "date"):
-                if required_key not in waiver or not str(waiver[required_key]).strip():
-                    raise PairedLaunchRefusal(
-                        f"{record.rat_id} subject_change_waiver is missing the "
-                        f"'{required_key}' field; the waiver must name the reason, "
-                        f"the measurement that supports the transfer, and the "
-                        f"date (#421)."
-                    )
 
     model = resolve_direct_subject(bare_model)
 

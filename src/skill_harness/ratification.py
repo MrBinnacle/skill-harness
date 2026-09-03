@@ -203,8 +203,8 @@ class RatRecord(BaseModel):
     hazard_floor: float | None = None
     #: #421: the subject model the pilot ran, so a sized run on a different
     #: subject cannot launch silently. Optional at parse time (existing records
-    #: without it still parse); required at pre-flight (#421: preflight_sized_run
-    #: refuses by name when it is missing).
+    #: without it still parse); required at every preflight_sized_run call
+    #: (refuses by name when missing — not gated on evidence_db).
     pilot_subject_model: str | None = None
     #: #421: a dated block waiving a pilot_subject_model / priced-subject
     #: mismatch. Present iff pilot_subject_model differs from the priced subject
