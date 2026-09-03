@@ -89,5 +89,22 @@ attests only to the two `#389` guards, matching its `--select 389` scope.
 
 ## Gate
 
-- tests: `PYTHONHASHSEED=0 pytest -q -m "not live and not calibration and not assurance"` — green (mutation-receipt currency and prose-companion tests included).
-- types / lint / drift-guard: green (see the compound gate run below).
+Compound gate run single-process (`PYTHONHASHSEED=0`, `-p no:randomly`), the
+form CI takes (CONTRIBUTING.md; `-n auto` reddens unrelated cli-render/store
+tests by parallelism non-determinism and is not the canonical command):
+
+- tests: `pytest -q -m "not live and not calibration and not assurance"` — **2553 passed, 20 skipped, 11 xfailed**. Mutation-receipt currency and prose-companion tests included.
+- types: `mypy --strict src tests` — **Success, 0 issues in 290 files**.
+- lint: `ruff check src tests` + `ruff format --check src tests` — **clean**.
+- drift-guard: `python scripts/drift_check.py` — **PASS, 13 live contracts hold**.
+
+Two gate-hygiene fixes landed on top of the feature commits, each pinned by the
+test that exposed it:
+
+- `paired_launch.py` prior-measurement `ORDER BY` ended on `created_at` /
+  `started_at` with no unique tie-break; `test_structural_bans.py::
+  test_no_timestamp_final_order_by_without_tiebreak` reddened. `screen_run_id`
+  / `run_id` appended as the ascending tie-break.
+- `test_paired_launch.py` second `TestHazardEntryCounts` case set
+  `read_eval_log` on a synthetic `inspect_ai.log` module without the
+  `attr-defined` ignore its sibling carried; `mypy --strict` reddened.
