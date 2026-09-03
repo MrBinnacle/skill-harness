@@ -302,6 +302,7 @@ a rebuilt cost basis for `gitpull` is registered upstream, which supersedes the 
 projection purposes but not as the measurement of this run.
 
 2026-09-03 — receipt minted: `docs/sers/receipts/gitpull-paired-n32-2026-09-03-sized.json` (skill-harness#423).
+2026-09-03 — the k=8 receipt section 2 names moved to `docs/sers/receipts/superseded/` in the same pull request; its bytes are unchanged.
 
 ## 11. Historical-classification obligation
 
