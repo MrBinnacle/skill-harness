@@ -34,7 +34,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from skill_harness.storage.models import ScreenRunWrite, ScreenTrialWrite
+from skill_harness.storage.models import D4CheckState, ScreenRunWrite, ScreenTrialWrite
 from skill_harness.storage.repositories.evidence.screens import (
     get_screen_run_by_id,
     insert_screen_run,
@@ -82,6 +82,9 @@ def ingest_screen_eval_log(
     Convenience composition of :func:`parse_eval_log` (needs the ``[inspect]``
     extra) and :func:`write_screen_evidence` (pure). The source ``.eval`` file
     bytes are hashed for provenance / idempotency.
+
+    The live ingest path has no prompt or task directory, so D4 cannot run
+    here: ``d4_check_state`` is always ``not_applicable``.
     """
     source_eval_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
     return write_screen_evidence(
@@ -89,6 +92,7 @@ def ingest_screen_eval_log(
         source_eval_sha256=source_eval_sha256,
         admissibility_state=admissibility_state,
         inadmissibility_reason=inadmissibility_reason,
+        d4_check_state="not_applicable",
         conn=conn,
     )
 
@@ -99,12 +103,17 @@ def write_screen_evidence(
     source_eval_sha256: str,
     admissibility_state: AdmissibilityState,
     inadmissibility_reason: str | None,
+    d4_check_state: D4CheckState,
     conn: sqlite3.Connection,
 ) -> ScreenIngestResult:
     """Write one parsed Null-only screen log to the screen store (single transaction).
 
     Writes one ``screen_runs`` row and one ``screen_trials`` row per epoch,
     ``passed = 1`` iff the Null arm passed the outcome oracle (score 1.0).
+
+    ``d4_check_state`` is required with no default: omission is a type error,
+    not a silent ``unknown_legacy`` (the SQLite column default reserved for
+    pre-migration rows). Callers that never ran D4 pass ``not_applicable``.
 
     :raises NotANullScreenError: the log has no samples or a non-Null sample.
     :raises ScreenIngestError: a trial score is not a binary pass/fail, or the
@@ -115,6 +124,11 @@ def write_screen_evidence(
         raise ScreenIngestError("inadmissible screen requires an inadmissibility_reason")
     if admissibility_state == "admissible" and inadmissibility_reason:
         raise ScreenIngestError("admissible screen must not carry an inadmissibility_reason")
+    if d4_check_state == "unknown_legacy":
+        raise ScreenIngestError(
+            "d4_check_state='unknown_legacy' is reserved for pre-migration rows; "
+            "a post-migration write must name not_applicable, ran_clean, or ran_flagged"
+        )
 
     if not parsed.samples:
         raise NotANullScreenError(f"screen log {parsed.task_name!r} has no samples")
@@ -153,6 +167,7 @@ def write_screen_evidence(
                 source_eval_sha256=source_eval_sha256,
                 admissibility_state=admissibility_state,
                 inadmissibility_reason=inadmissibility_reason,
+                d4_check_state=d4_check_state,
                 created_at=parsed.created,
                 ingested_at=now,
             ),

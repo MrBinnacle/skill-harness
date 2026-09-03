@@ -47,6 +47,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from skill_harness.storage.models import D4CheckState
 from skill_harness.storage.repositories.evidence.screens import (
     derive_p0_by_skill,
     get_screen_run_by_id,
@@ -66,32 +67,21 @@ from skill_harness.subject.screen_ingest import (
 
 _D4_LEAK_REASON = "apparatus_void: D4 prompt leak"
 
-# NOT BUILT, and the reason belongs here rather than only on the ticket.
+# #395 criterion 2 — d4_check_state (migration 1000).
 #
-# Issue 395 criterion 2 asks that an entry with no D4 inputs be admitted and its
-# row record `d4: not_checked`, "in the same field or an adjacent one", so a
-# reader can tell "never checked" from "checked and clean". Both placements are
-# closed today:
+# A screen_runs row that never ran D4 must be distinguishable from one that ran
+# and came back clean. The marker is the coded column ``d4_check_state``:
 #
-#   same field   `write_screen_evidence` refuses an admissible row that carries
-#                an `inadmissibility_reason` (screen_ingest.py, the
-#                "admissible screen must not carry an inadmissibility_reason"
-#                guard). That invariant is load-bearing: the column means WHY
-#                THIS IS INADMISSIBLE, and a note stored there would make the
-#                state and the reason disagree on every such row.
-#   adjacent     `screen_runs` (migration 0501) has no spare column. Adding one
-#                is a schema change, which is approval-gated here.
-#   third        `screen_trials.scorer_explanation` is the only other free-text
-#                column in the 0501 schema, and it is closed for a different
-#                reason: `write_screen_evidence` fills it from the parsed
-#                Inspect log and takes no parameter for it, so `apply_manifest`
-#                cannot reach it without new plumbing. It is also per-TRIAL,
-#                where the fact being recorded is per-RUN.
+#   unknown_legacy  pre-migration rows only (SQLite DEFAULT; never written)
+#   not_applicable  entry carried neither operative_rule nor prompt_text
+#   ran_clean       check ran; no normalised verbatim match
+#   ran_flagged     check ran; leak found
 #
-# So the criterion needs either an additive migration or an amendment, and that
-# decision is not this build's to take. The REFUSAL half of criterion 2 is built
-# and is what actually closes the hole the ticket names: a half-specified entry
-# can no longer be admitted with the check silently skipped.
+# Same-field placement (``inadmissibility_reason = "d4: not_checked"``) is
+# blocked by the write_screen_evidence guard that refuses an admissible row
+# carrying a reason — that column means WHY THIS IS INADMISSIBLE. The four-
+# state vocabulary and the decision against a companion table are recorded on
+# issue 395 (owner comment, 2026-09-02).
 
 
 class ScreenManifestError(ValueError):
@@ -282,10 +272,9 @@ def _validate_d4_fields(manifest: tuple[ScreenManifestEntry, ...]) -> None:
     them states an intent to check that cannot be honoured, and admitting it
     unchecked writes a row indistinguishable from a checked-and-clean one.
 
-    An entry supplying NEITHER is legitimate and passes here. Its row stores a
-    NULL reason and is therefore NOT distinguishable from a checked-and-clean
-    row: that marker is the unbuilt half of criterion 2, and the reason is
-    recorded in the comment above ``_D4_LEAK_REASON``.
+    An entry supplying NEITHER is legitimate and passes here. Its row stores
+    ``d4_check_state='not_applicable'`` so a reader can tell it from
+    ``ran_clean``.
     """
     for entry in manifest:
         has_rule = entry.operative_rule is not None
@@ -297,7 +286,7 @@ def _validate_d4_fields(manifest: tuple[ScreenManifestEntry, ...]) -> None:
         raise ScreenManifestError(
             f"{entry.rel_path}: manifest entry carries {present} but not "
             f"{missing}; the D4 leak check needs both. Supply {missing}, or "
-            f"drop {present} to record the row as d4: not_checked."
+            f"drop {present} to record the row as d4_check_state=not_applicable."
         )
 
 
@@ -347,6 +336,8 @@ def apply_manifest(
         # manifest-vs-log only); CLI treats mismatches as backfill failure.
         admissibility = entry.admissibility_state
         reason = entry.inadmissibility_reason
+        # #395 criterion 2: coded marker so "never checked" != "checked clean".
+        d4_state: D4CheckState = "not_applicable"
         if entry.operative_rule is not None and entry.prompt_text is not None:
             leak = check_d4_prompt_leak(
                 entry.operative_rule,
@@ -356,12 +347,16 @@ def apply_manifest(
             if leak.leaked:
                 admissibility = "inadmissible"
                 reason = format_d4_leak_reason(leak)
+                d4_state = "ran_flagged"
+            else:
+                d4_state = "ran_clean"
 
         result = write_screen_evidence(
             parsed=parsed,
             source_eval_sha256=_sha256_file(path),
             admissibility_state=admissibility,
             inadmissibility_reason=reason,
+            d4_check_state=d4_state,
             conn=conn,
         )
         ingested.append(result)
@@ -464,6 +459,9 @@ def supersede_d4_screen_runs(conn: sqlite3.Connection) -> list[str]:
                 reason=reason,
                 admissibility_state="inadmissible",
                 inadmissibility_reason=reason,
+                d4_check_state=(
+                    "ran_flagged" if skill_name in _D4_REDISPOSITION else "not_applicable"
+                ),
                 skill_name=existing["skill_name"],
                 subject_model=existing["subject_model"],
                 harness_pin_fingerprint=existing["harness_pin_fingerprint"],
