@@ -738,3 +738,142 @@ class TestHazardPositivePath:
         assert result.exit_code == 0
         assert "Decision:" in result.output
         assert "Full arm entered the hazard in 5/32" in result.output
+
+
+# ---------------------------------------------------------------------------
+# #421: round-trip control — write through the writer, read through the CLI
+# ---------------------------------------------------------------------------
+
+
+class TestHazardRoundTrip:
+    """The block is built through the writer, not hand-seeded in the fixture.
+
+    Every existing hazard test on this branch constructs the block by hand in
+    ``_seed_run``. A check that can only refuse looks as safe as a check that
+    can only pass, and measures the same amount. This test crosses the
+    write/read seam: it calls ``attach_hazard_block`` (the writer), serialises
+    with ``runner_config_payload``, places the result under
+    ``config_json["runner"]``, and asserts ``evaluate-paired`` decides rather
+    than refusing ``HAZARD_NOT_RECORDED``.
+
+    Its negative arm: the same config with the writer not called refuses
+    ``HAZARD_NOT_RECORDED``. Both arms must fail on ``main`` at a9d1c1f
+    before the change and pass after.
+    """
+
+    def test_writer_payload_decides_under_trap_discipline(
+        self, tmp_path: Path, evidence: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ARM: build the block through the writer → decides (exit 0)."""
+        from skill_harness.subject.paired_launch import (
+            HazardEntry,
+            PairedRunnerConfig,
+            attach_hazard_block,
+            runner_config_payload,
+        )
+
+        config = PairedRunnerConfig(
+            rat_id="RAT-0001",
+            ratification_path="r.md",
+            skill_id="test-skill",
+            task_family="test-family",
+            estimand="treatment-policy",
+            route="anthropic-direct",
+            model="anthropic/claude-sonnet-5",
+            n_pairs=32,
+        )
+
+        null_entry = HazardEntry(pattern=r"git\s+pull", epochs=32, entered=7)
+        full_entry = HazardEntry(pattern=r"git\s+pull", epochs=32, entered=5)
+
+        def _mock_hazard_counts(path: Path, pattern: str, **_kw: object) -> HazardEntry:
+            return full_entry if "full" in str(path).lower() else null_entry
+
+        monkeypatch.setattr(
+            "skill_harness.subject.paired_launch.hazard_entry_counts",
+            _mock_hazard_counts,
+        )
+
+        enriched = attach_hazard_block(
+            config,
+            null_log=tmp_path / "null.eval",
+            full_log=tmp_path / "full.eval",
+            pattern=r"git\s+pull",
+            floor=0.20,
+        )
+        payload = runner_config_payload(enriched)
+        assert "hazard" in payload
+        assert payload["hazard"]["pattern"] == r"git\s+pull"
+        assert payload["hazard"]["floor"] == 0.20
+        assert payload["hazard"]["null"]["entered"] == 7
+
+        # Merge into the seed config (simulating what ingest records)
+        seed_config: dict[str, Any] = {
+            "paired_cells": {
+                "both_pass": 32,
+                "full_only": 0,
+                "null_only": 0,
+                "both_fail": 0,
+            },
+            "pi_c": {
+                "detector": "v1-skill-tool-call",
+                "invocations": 0,
+                "trials": 4,
+                "pi_c_hat": 0.0,
+                "ci_low": 0.0,
+                "ci_high": 1.0,
+                "confidence": 0.95,
+            },
+            "runner": payload,
+        }
+        evidence.execute(
+            "INSERT INTO runs (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+            " VALUES (?, ?, 'evaluate_skill', ?, ?, ?)",
+            ("run-writer-roundtrip", _SKILL_ID, json.dumps(seed_config, sort_keys=True), _TS, _TS),
+        )
+
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat_with_hazard(rat, n=32, hazard_floor=0.20)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-writer-roundtrip",
+            str(rat),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        assert "Decision:" in result.output
+        assert "Verdict" in result.output
+
+    def test_without_writer_refuses_hazard_not_recorded(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """NEGATIVE ARM: same config, writer not called → HAZARD_NOT_RECORDED."""
+        _seed_run(
+            evidence,
+            "run-no-writer",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard=None,
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat_with_hazard(rat, n=32, hazard_floor=0.20)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-no-writer",
+            str(rat),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 1
+        assert "HAZARD_NOT_RECORDED" in result.output

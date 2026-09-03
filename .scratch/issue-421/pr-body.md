@@ -6,6 +6,25 @@ RAT-0001 Amendment 2 (#418) records three assumptions that the sized run of 2026
 
 The first build of this ticket implemented the pre-amendment zero-only Null check. This build carries the #403 amendment that the issue body now inlines: the registered floor, the two-arm hazard block, and the below-floor negative control.
 
+## The gap this pass closes
+
+**Nothing writes `runner_config["hazard"]`.** The reader, the counting function and the record fields are correct and tested. They are not connected. `PairedRunnerConfig` carried eight fields and no `hazard`, so `runner_config_payload` could not serialise it. The round-trip from writer to reader was broken.
+
+### What was built
+
+1. **Two-arm block model.** `HazardArmBlock` (per-arm: `epochs`, `entered`) and `HazardBlock` (block-level: `pattern`, `floor`, `null`, `full`) in `paired_launch.py`. The serialised key names match `cli/paired_gate2.py`'s reader exactly.
+
+2. **`hazard` field on `PairedRunnerConfig`.** `hazard: HazardBlock | None = None`. `frozen=True, strict=True` preserved. A run recorded before this field still parses (default is `None`).
+
+3. **`attach_hazard_block` writer.** Calls `hazard_entry_counts` once per arm log, reads counts, validates the block as a Pydantic model, and returns a new config via `model_copy(update=...)`. Lives in the tracked module `paired_launch.py`.
+
+4. **`runner_config_payload` excludes `None`.** `hazard=None` does not appear in the serialised form, preserving the pre-existing contract where absent fields read as "predates the field" rather than "present but null".
+
+### Tests that pin it
+
+- **`TestHazardRoundTrip::test_writer_payload_decides_under_trap_discipline`** — ARM: builds the block through `attach_hazard_block` (not by hand in the fixture), serialises with `runner_config_payload`, seeds the evidence DB, invokes `evaluate-paired` → exit 0, `Decision:` present. This test imports `attach_hazard_block` and would fail on `main` at a9d1c1f (ImportError: the writer does not exist).
+- **`TestHazardRoundTrip::test_without_writer_refuses_hazard_not_recorded`** — NEGATIVE ARM: same run with writer not called → exit 1, `HAZARD_NOT_RECORDED`. Pins that the refusal still fires when the block is absent.
+
 ## Check 1: a trap-discipline read refuses when the Null arm met the hazard too rarely to measure
 
 ### What was built
@@ -34,6 +53,8 @@ The first build of this ticket implemented the pre-amendment zero-only Null chec
 - `TestHazardEntryCounts::test_zero_of_32_when_no_epoch_ran_git_pull` / `test_three_of_8_when_three_epochs_ran_git_pull`.
 - `TestHazardAction` — pair required together; floor below `delta_min` refused; non-compiling regex refused.
 - `TestIngestByteIdentical::test_ingest_py_hash_is_unchanged`.
+- `TestHazardRoundTrip::test_writer_payload_decides_under_trap_discipline` — builds through writer, decides.
+- `TestHazardRoundTrip::test_without_writer_refuses_hazard_not_recorded` — no writer → refuses.
 
 ## Check 2: a pilot on one subject cannot size a run on another silently
 
