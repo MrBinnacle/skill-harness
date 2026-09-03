@@ -16,9 +16,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from jsonschema.exceptions import ValidationError
-
-from skill_harness.sitegen import SiteBuildError, build_site
+from skill_harness.sitegen import SiteBuildError, SitegenNotInstalledError, build_site
 
 _DEFAULT_SCHEMA = Path("docs") / "sers" / "sers.schema.json"
 _DEFAULT_RECEIPTS = Path("docs") / "sers" / "receipts"
@@ -55,8 +53,33 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _validation_errors() -> tuple[type[BaseException], ...]:
+    """Exception types ``main`` treats as build refusals, beyond ``SiteBuildError``.
+
+    ``jsonschema``'s ``ValidationError`` is included only when the
+    ``[sitegen]`` extra is importable. Without the extra, ``build_site`` raises
+    ``SitegenNotInstalledError`` before any receipt is validated, so the
+    empty-tuple return matches nothing and this branch is never reached. The
+    import is lazy for the same reason the validator import in
+    ``skill_harness.sitegen`` is: a core install must be able to import this
+    module (and answer ``--help``) without ``jsonschema`` present.
+    """
+    try:
+        from jsonschema.exceptions import ValidationError
+    except ImportError:
+        return ()
+    return (ValidationError,)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    # ``ValidationError`` joins the refusal tuple only when the [sitegen] extra
+    # is importable; without it ``build_site`` raises ``SitegenNotInstalledError``
+    # first, so the empty-tuple case matches nothing. Built before the try so
+    # the ``except`` clause stays a literal tuple of exception classes (mypy
+    # checks ``except`` operands statically and does not follow ``*`` unpacking
+    # of a function call there).
+    refusal: tuple[type[BaseException], ...] = (SiteBuildError, *_validation_errors())
     try:
         written = build_site(
             schema_path=args.schema,
@@ -65,7 +88,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=args.output,
             marker=args.marker,
         )
-    except (SiteBuildError, ValidationError) as exc:
+    except SitegenNotInstalledError as exc:
+        print(f"SITE BUILD: REFUSED -- {exc}", file=sys.stderr)
+        return 1
+    except refusal as exc:
         print(f"SITE BUILD: REFUSED -- {exc}", file=sys.stderr)
         return 1
     for path in written:
