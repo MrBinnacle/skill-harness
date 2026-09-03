@@ -193,9 +193,14 @@ class RatRecord(BaseModel):
     #: #421: the hazard action pattern the trap-discipline read matches against
     #: every bash tool-call command in an epoch. Registered on the record the way
     #: the oracle knobs are, so a later run cannot quietly change what "entered"
-    #: means. Optional; a record without it predates the field (#421 acceptance:
-    #: reading such a run returns HAZARD_NOT_RECORDED, not CANT_TELL_YET).
+    #: means. Optional alone only when both hazard fields are absent (a record
+    #: that predates them); when either is present both are required together.
     hazard_action: str | None = None
+    #: #421: the minimum Null-arm hazard-entry rate a trap-discipline read will
+    #: accept. Half-open (0, 1]. Must be >= delta_min when delta_min is set: a
+    #: floor below the minimum detectable effect cannot certify BENEFIT. Paired
+    #: with hazard_action — one without the other is refused at parse.
+    hazard_floor: float | None = None
     #: #421: the subject model the pilot ran, so a sized run on a different
     #: subject cannot launch silently. Optional at parse time (existing records
     #: without it still parse); required at pre-flight (#421: preflight_sized_run
@@ -312,9 +317,10 @@ def parse_rat_record(path: Path) -> RatRecord:
         if not 0.5 < q_min_value < 1.0:
             raise RatificationError(f"{path.name}: q_min must lie in (0.5, 1); got {q_min_value}")
 
-    # #421: hazard_action — a regex matched against bash tool-call commands.
-    # Optional; a record without it predates the field. Refused by name when
-    # present but not a compilable regular expression.
+    # #421: hazard_action + hazard_floor — required together when either is
+    # present. hazard_action is a regex matched against bash tool-call commands;
+    # hazard_floor is the minimum Null-arm entry rate a trap-discipline read
+    # accepts. A record without both predates the fields.
     hazard_action_value: str | None = None
     hazard_action_raw = fields.get("hazard_action")
     if hazard_action_raw is not None:
@@ -329,6 +335,35 @@ def parse_rat_record(path: Path) -> RatRecord:
                 f"{path.name}: field 'hazard_action' is not a valid regular expression: {exc}"
             ) from exc
         hazard_action_value = hazard_action_raw
+
+    hazard_floor_value: float | None = None
+    hazard_floor_raw = fields.get("hazard_floor")
+    if hazard_floor_raw is not None:
+        if isinstance(hazard_floor_raw, bool) or not isinstance(hazard_floor_raw, (int, float)):
+            raise RatificationError(f"{path.name}: field 'hazard_floor' must be numeric")
+        hazard_floor_value = float(hazard_floor_raw)
+        if not 0.0 < hazard_floor_value <= 1.0:
+            raise RatificationError(
+                f"{path.name}: hazard_floor must lie in (0, 1]; got {hazard_floor_value}"
+            )
+
+    if (hazard_action_value is None) ^ (hazard_floor_value is None):
+        present = "hazard_action" if hazard_action_value is not None else "hazard_floor"
+        missing = "hazard_floor" if hazard_action_value is not None else "hazard_action"
+        raise RatificationError(
+            f"{path.name}: field {present!r} is set but {missing!r} is missing; "
+            f"hazard_action and hazard_floor are required together (#421)"
+        )
+    if (
+        hazard_floor_value is not None
+        and delta_min_value is not None
+        and hazard_floor_value < delta_min_value
+    ):
+        raise RatificationError(
+            f"{path.name}: hazard_floor {hazard_floor_value} is below delta_min "
+            f"{delta_min_value}; a floor below the minimum detectable effect "
+            f"cannot certify BENEFIT (#421)"
+        )
 
     # #421: pilot_subject_model — the subject the pilot ran, so a sized run on
     # a different subject cannot launch silently. Optional at parse time;
@@ -370,6 +405,7 @@ def parse_rat_record(path: Path) -> RatRecord:
         delta_min=delta_min_value,
         q_min=q_min_value,
         hazard_action=hazard_action_value,
+        hazard_floor=hazard_floor_value,
         pilot_subject_model=pilot_subject_model_value,
         subject_change_waiver=subject_change_waiver_value,
     )

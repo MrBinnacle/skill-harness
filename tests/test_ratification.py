@@ -365,30 +365,67 @@ class TestCheckExecuteRatification:
 
 
 # ---------------------------------------------------------------------------
-# #421: hazard_action — a regex registered on the record, validated at parse
+# #421: hazard_action + hazard_floor — required together, floor >= delta_min
 # ---------------------------------------------------------------------------
 
 
 class TestHazardAction:
-    """The hazard_action field is optional, but when present it must compile."""
+    """hazard_action and hazard_floor are optional as a pair; each alone is refused."""
 
-    def test_hazard_action_absent_parses(self, tmp_path: Path) -> None:
+    def test_hazard_fields_absent_parses(self, tmp_path: Path) -> None:
         record = parse_rat_record(_write_rat(tmp_path, _rat_text()))
         assert record.hazard_action is None
+        assert record.hazard_floor is None
 
-    def test_hazard_action_present_parses(self, tmp_path: Path) -> None:
-        text = _rat_text({"hazard_action": r"git\s+pull"})
+    def test_hazard_pair_present_parses(self, tmp_path: Path) -> None:
+        text = _rat_text(
+            {
+                "hazard_action": r"git\s+pull",
+                "hazard_floor": "0.20",
+                "delta_min": "0.20",
+            }
+        )
         record = parse_rat_record(_write_rat(tmp_path, text))
         assert record.hazard_action == r"git\s+pull"
+        assert record.hazard_floor == 0.20
+
+    def test_hazard_action_without_floor_refused_by_name(self, tmp_path: Path) -> None:
+        """Negative control: hazard_action alone is refused, naming the missing field."""
+        text = _rat_text({"hazard_action": r"git\s+pull"})
+        with pytest.raises(RatificationError, match="hazard_floor"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+    def test_hazard_floor_without_action_refused_by_name(self, tmp_path: Path) -> None:
+        text = _rat_text({"hazard_floor": "0.20", "delta_min": "0.20"})
+        with pytest.raises(RatificationError, match="hazard_action"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+    def test_hazard_floor_below_delta_min_refused_by_name(self, tmp_path: Path) -> None:
+        """Negative control: floor below delta_min cannot certify BENEFIT."""
+        text = _rat_text(
+            {
+                "hazard_action": r"git\s+pull",
+                "hazard_floor": "0.10",
+                "delta_min": "0.20",
+            }
+        )
+        with pytest.raises(RatificationError, match="hazard_floor"):
+            parse_rat_record(_write_rat(tmp_path, text))
 
     def test_hazard_action_non_compiling_regex_refused_by_name(self, tmp_path: Path) -> None:
         """Negative control: a regex that does not compile is refused, naming the field."""
-        text = _rat_text({"hazard_action": r"git(s+pull"})
+        text = _rat_text(
+            {
+                "hazard_action": r"git(s+pull",
+                "hazard_floor": "0.20",
+                "delta_min": "0.20",
+            }
+        )
         with pytest.raises(RatificationError, match="hazard_action"):
             parse_rat_record(_write_rat(tmp_path, text))
 
     def test_hazard_action_empty_string_refused(self, tmp_path: Path) -> None:
-        text = _rat_text({"hazard_action": ""})
+        text = _rat_text({"hazard_action": "", "hazard_floor": "0.20", "delta_min": "0.20"})
         with pytest.raises(RatificationError, match="hazard_action"):
             parse_rat_record(_write_rat(tmp_path, text))
 

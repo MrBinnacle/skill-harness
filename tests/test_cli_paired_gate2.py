@@ -134,15 +134,15 @@ def _seed_run(
         },
     }
     if with_runner:
-        runner_dict = dict(_RUNNER_DECLARED if runner is None else runner)
-        # #421: the hazard block records whether each arm entered the hazard.
-        # Default (hazard=True) seeds a block with null.entered > 0 so the
-        # trap-discipline read passes the hazard check; hazard=None omits the
-        # block (HAZARD_NOT_RECORDED); hazard=False omits it too but reads as
-        # "no hazard" for the non-trap-discipline dim print path.
+        runner_dict: dict[str, Any] = dict(_RUNNER_DECLARED if runner is None else runner)
+        # #421: the hazard block records both arms and the registered floor.
+        # Default (hazard=True) seeds a block whose Null rate meets the floor so
+        # trap-discipline tests of other criteria still decide; hazard=None omits
+        # the block (HAZARD_NOT_RECORDED).
         if hazard is True:
             runner_dict["hazard"] = {
                 "pattern": r"git\s+pull",
+                "floor": 0.05,
                 "full": {"epochs": 32, "entered": 4},
                 "null": {"epochs": 32, "entered": 3},
             }
@@ -491,12 +491,51 @@ class TestRunnerDeclaration:
 
 
 # ---------------------------------------------------------------------------
-# #421: hazard-discipline read — the Null arm must have entered the hazard
+# #421: hazard-discipline read — Null rate must meet the registered floor
 # ---------------------------------------------------------------------------
+
+_HAZARD_FLOOR = 0.20
+_HAZARD_PATTERN = r"git\s+pull"
+
+
+def _hazard_block(
+    *,
+    null_entered: int,
+    null_epochs: int = 32,
+    full_entered: int = 4,
+    full_epochs: int = 32,
+    floor: float = _HAZARD_FLOOR,
+) -> dict[str, Any]:
+    return {
+        "pattern": _HAZARD_PATTERN,
+        "floor": floor,
+        "full": {"epochs": full_epochs, "entered": full_entered},
+        "null": {"epochs": null_epochs, "entered": null_entered},
+    }
+
+
+def _write_rat_with_hazard(
+    path: Path,
+    *,
+    n: int = 32,
+    hazard_floor: float = _HAZARD_FLOOR,
+    hazard_action: str = _HAZARD_PATTERN,
+) -> None:
+    """RAT fixture carrying the registered hazard pair (#421)."""
+    _write_rat(path, n=n)
+    text = path.read_text(encoding="utf-8")
+    text = text.replace(
+        'ratified_date: "2026-09-01"\n',
+        'ratified_date: "2026-09-01"\n'
+        f"hazard_action: {hazard_action}\n"
+        f"hazard_floor: {hazard_floor}\n",
+    )
+    # delta_min is required for floor >= delta_min; _write_rat already sets 0.20.
+    path.write_text(text, encoding="utf-8")
 
 
 class TestHazardNotMet:
-    """A trap-discipline run where the Null arm never entered the hazard refuses."""
+    """A trap-discipline run whose Null rate is below the floor refuses."""
 
     def test_hazard_not_met_refuses_under_trap_discipline(
         self, tmp_path: Path, evidence: sqlite3.Connection
@@ -509,14 +548,10 @@ class TestHazardNotMet:
             full_only=0,
             null_only=0,
             both_fail=0,
-            hazard={
-                "pattern": r"git\s+pull",
-                "full": {"epochs": 32, "entered": 4},
-                "null": {"epochs": 32, "entered": 0},
-            },
+            hazard=_hazard_block(null_entered=0),
         )
         rat = tmp_path / "RAT-0001-test.md"
-        _write_rat(rat, n=32)
+        _write_rat_with_hazard(rat, n=32)
 
         result = _invoke(
             "run",
@@ -531,6 +566,42 @@ class TestHazardNotMet:
         assert result.exit_code == 2
         assert "HAZARD_NOT_MET" in result.output
         assert "entered" in result.output
+        assert "hazard_floor" in result.output
+        assert "Verdict" not in result.output
+
+    def test_below_floor_but_nonzero_refuses_under_trap_discipline(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: null.entered > 0 but rate < floor → HAZARD_NOT_MET (exit 2).
+
+        3 of 32 = 0.09375 is below hazard_floor 0.20. The zero test alone does
+        not cover this; the registered floor is the real gate (#403 / #421).
+        """
+        _seed_run(
+            evidence,
+            "run-below-floor",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard=_hazard_block(null_entered=3),
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat_with_hazard(rat, n=32, hazard_floor=0.20)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-below-floor",
+            str(rat),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 2
+        assert "HAZARD_NOT_MET" in result.output
+        assert "hazard_floor" in result.output
         assert "Verdict" not in result.output
 
     def test_hazard_not_met_decides_under_transformative_lift(
@@ -548,14 +619,10 @@ class TestHazardNotMet:
             full_only=0,
             null_only=0,
             both_fail=0,
-            hazard={
-                "pattern": r"git\s+pull",
-                "full": {"epochs": 32, "entered": 4},
-                "null": {"epochs": 32, "entered": 0},
-            },
+            hazard=_hazard_block(null_entered=0),
         )
         rat = tmp_path / "RAT-0001-test.md"
-        _write_rat(rat, n=32)
+        _write_rat_with_hazard(rat, n=32)
 
         result = _invoke(
             "run",
@@ -639,12 +706,13 @@ class TestHazardNotRecorded:
 
 
 class TestHazardPositivePath:
-    """A trap-discipline run with null.entered > 0 decides as before (#421 positive path)."""
+    """A trap-discipline run with null rate at or above the floor decides (#421)."""
 
-    def test_hazard_entered_decides_under_trap_discipline(
+    def test_hazard_at_floor_decides_under_trap_discipline(
         self, tmp_path: Path, evidence: sqlite3.Connection
     ) -> None:
-        """The positive path: null.entered > 0 under trap-discipline → decides."""
+        """Positive path: null.entered/epochs >= hazard_floor → decides; Full arm printed."""
+        # 7 of 32 = 0.21875 >= floor 0.20
         _seed_run(
             evidence,
             "run-hazard-ok",
@@ -652,14 +720,10 @@ class TestHazardPositivePath:
             full_only=0,
             null_only=0,
             both_fail=0,
-            hazard={
-                "pattern": r"git\s+pull",
-                "full": {"epochs": 32, "entered": 4},
-                "null": {"epochs": 32, "entered": 3},
-            },
+            hazard=_hazard_block(null_entered=7, full_entered=5),
         )
         rat = tmp_path / "RAT-0001-test.md"
-        _write_rat(rat, n=32)
+        _write_rat_with_hazard(rat, n=32, hazard_floor=0.20)
 
         result = _invoke(
             "run",
@@ -673,3 +737,4 @@ class TestHazardPositivePath:
 
         assert result.exit_code == 0
         assert "Decision:" in result.output
+        assert "Full arm entered the hazard in 5/32" in result.output
