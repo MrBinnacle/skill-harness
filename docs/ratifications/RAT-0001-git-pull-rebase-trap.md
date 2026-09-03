@@ -303,6 +303,7 @@ projection purposes but not as the measurement of this run.
 
 2026-09-03 — receipt minted: `docs/sers/receipts/gitpull-paired-n32-2026-09-03-sized.json` (skill-harness#423).
 2026-09-03 — the k=8 receipt section 2 names moved to `docs/sers/receipts/superseded/` in the same pull request; its bytes are unchanged.
+2026-09-03 — `run evaluate-paired 0700d089… RAT-0001-git-pull-rebase-trap.md trap-discipline` now returns `HAZARD_NOT_RECORDED` (exit 1) instead of `CANT_TELL_YET`, because the run's runner block predates the `hazard` field added by #421. The `CANT_TELL_YET` line in the decision table above is superseded; the correct reading of a run whose runner block never recorded whether the Null arm entered the hazard is `HAZARD_NOT_RECORDED`, not `CANT_TELL_YET`.
 
 ## 11. Historical-classification obligation
 

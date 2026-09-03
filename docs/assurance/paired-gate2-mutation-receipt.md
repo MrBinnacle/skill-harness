@@ -4,10 +4,19 @@
 **Generator:** `scripts/mutation_receipt.py --select 389`. **Machine-readable record:**
 `docs/assurance/paired-gate2-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/cli/paired_gate2.py` at
-`sha256:c1ba46773010ea991fb6915dc27307b634a81f454284e0b9d061efd711395dda`.
-**Commit at generation:** `3564d01f41f804dbd1ab98677ceb53dc4228e81b` — informational only. A rebase
+`sha256:8abfb41bd9b9cb469e87e10c9d63b003a8f517dd2522ceaad9bf1607ee6eebec`.
+**Commit at generation:** `be86b77f22e3ecf94100ea63f4e61138096c287b` — informational only. A rebase
 rewrites it and later commits move HEAD past it, so currency is checked against the digest
-above by `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
+above by `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
+
+**Regenerated 2026-09-03 for #421.** Commit `be86b77` added the `#403`-amendment hazard
+refusal (registered `hazard_floor`, two-arm block, Full arm printed and never gated) to
+`paired_gate2.py`, which moved the file's bytes and made the `#417` receipt's digest pin
+stale. The hazard refusal is a separate control with its own pinning tests
+(`TestHazardNotRecorded`, `TestHazardNotMet`, `TestHazardPositivePath`); it is not a mutant
+in this receipt, which attests only to the two `#389` guards. Both `#389` mutants were
+re-run by the same generator; both anchors were still present and both kills held, by the
+same detectors. The results table below was re-measured, not carried.
 
 **Regenerated 2026-09-03 for #417 (#391).** The first generation (commit `a2ed8cb`, digest
 `c15e52b2338d`) attested to the module before #417 replaced the `runs.skill_id` comparison with

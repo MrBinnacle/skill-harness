@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 
@@ -37,6 +38,14 @@ class PairedGate2Refusal(Exception):
 # The four fields section 2 of a Gate-2 record requires the runner to declare
 # and the ingest to record. Compared as strings against the parsed record.
 _RUNNER_DECLARED_FIELDS: tuple[str, ...] = ("rat_id", "skill_id", "task_family", "estimand")
+
+
+def _arm_entered_msg(hazard_block: dict[str, Any], arm: str) -> str:
+    """Render ``entered/epochs`` for one arm of the hazard block (#421)."""
+    arm_block = hazard_block.get(arm)
+    if isinstance(arm_block, dict):
+        return f"{arm_block.get('entered', '?')}/{arm_block.get('epochs', '?')}"
+    return "?"
 
 
 def _check_runner_declaration(record: RatRecord, run_id: str, runner: object) -> None:
@@ -166,6 +175,80 @@ def paired_gate2_read(
     # was never the field the record names; comparing it refused every real
     # ingest (#391, 2026-09-03) while the seeded tests passed on a name.
     _check_runner_declaration(record, run_id, config.get("runner"))
+
+    # 4b. #421: a trap-discipline read refuses when the Null arm met the hazard
+    # too rarely to measure. The oracle checks the outcome (ancestry preserved),
+    # not whether the hazard was entered; a model that never runs the
+    # trap-entering command passes, and the lattice is indistinguishable from
+    # "trap avoided". The hazard block is under config_json["runner"]["hazard"]
+    # (pattern, floor, null/full epochs+entered). A run whose runner block
+    # predates the field is refused as HAZARD_NOT_RECORDED. The threshold is the
+    # registered hazard_floor (on the record; mirrored into the block at launch),
+    # not zero: entered = 0 is the degenerate case of the same refusal.
+    # The Full arm is printed and never gated (#403): hazard entry there is
+    # post-treatment.
+    runner_block = config.get("runner")
+    hazard_block = runner_block.get("hazard") if isinstance(runner_block, dict) else None
+    if value_class is ValueClass.TRAP_DISCIPLINE:
+        if not isinstance(hazard_block, dict):
+            raise PairedGate2Refusal(
+                f"HAZARD_NOT_RECORDED: paired run {run_id!r} records no hazard block "
+                f"in config_json['runner']['hazard'] under {record.rat_id}; "
+                f"a trap-discipline read refuses when the runner never recorded "
+                f"whether the Null arm entered the hazard (#421). The run predates "
+                f"the hazard_entry_counts field and is not evidence the trap was "
+                f"avoided.",
+                exit_code=1,
+            )
+        null_hazard = hazard_block.get("null")
+        if not isinstance(null_hazard, dict):
+            raise PairedGate2Refusal(
+                f"HAZARD_NOT_RECORDED: paired run {run_id!r} hazard block under "
+                f"{record.rat_id} carries no null arm counts "
+                f"(config_json['runner']['hazard']['null']); "
+                f"a trap-discipline read refuses when Null-arm entry was never "
+                f"recorded (#421).",
+                exit_code=1,
+            )
+        null_entered = int(null_hazard.get("entered", 0) or 0)
+        null_epochs = int(null_hazard.get("epochs", 0) or 0)
+        # Floor: record first (registered), then the block mirror written at launch.
+        floor_raw = record.hazard_floor
+        if floor_raw is None:
+            block_floor = hazard_block.get("floor")
+            floor_raw = float(block_floor) if isinstance(block_floor, (int, float)) else None
+        if floor_raw is None:
+            raise PairedGate2Refusal(
+                f"HAZARD_NOT_RECORDED: paired run {run_id!r} under {record.rat_id} "
+                f"has a hazard block but neither the record nor the block carries "
+                f"hazard_floor; the Null-arm rate cannot be checked against a "
+                f"registered floor (#421).",
+                exit_code=1,
+            )
+        floor = float(floor_raw)
+        null_rate = (null_entered / null_epochs) if null_epochs > 0 else 0.0
+        if null_rate < floor:
+            raise PairedGate2Refusal(
+                f"HAZARD_NOT_MET: paired run {run_id!r} under {record.rat_id} "
+                f"records null.entered = {null_entered} of {null_epochs} epochs "
+                f"(rate {null_rate:.4f}) below hazard_floor {floor}; "
+                f"pattern {hazard_block.get('pattern', '?')!r}. A trap-discipline "
+                f"read refuses when the Null arm met the hazard too rarely to "
+                f"measure (#421): the oracle checks the outcome, not whether the "
+                f"trap was entered, so a model that rarely or never pulls cannot "
+                f"be distinguished from one that avoids the pull trap.",
+                exit_code=2,
+            )
+        _console.print(
+            f"Full arm entered the hazard in {_arm_entered_msg(hazard_block, 'full')} "
+            f"(pattern {hazard_block.get('pattern', '?')!r}; not gated)"
+        )
+    elif isinstance(hazard_block, dict):
+        _console.print(
+            f"[dim]hazard: pattern={hazard_block.get('pattern', '?')!r} "
+            f"null.entered={_arm_entered_msg(hazard_block, 'null')} "
+            f"full.entered={_arm_entered_msg(hazard_block, 'full')}[/]"
+        )
 
     both_pass = int(paired_cells["both_pass"])
     full_only = int(paired_cells["full_only"])
