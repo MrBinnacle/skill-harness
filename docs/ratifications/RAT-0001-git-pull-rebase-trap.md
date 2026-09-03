@@ -213,6 +213,19 @@ overrides any equivalence mass, so the decision is the rule's output and not an 
 failure. What the run observed is that under this task the trap did not fire in the Null arm
 either: both arms passed every sample, so the instrument saw no contrast to decide on.
 
+**What the pilot says about that.** The 2026-09-01 pilot (receipt
+`docs/sers/receipts/gitpull-paired-k8-2026-09-01-detector-v2.json`) ran the same fixture bytes
+and the same de-leaked prompt with subject `claude-sonnet-4.5` routed through OpenRouter, and its
+Null arm passed 0 of 8: every bare epoch rebased and failed the ancestry oracle. This run's
+subject is `claude-sonnet-5`, the model this record prices, and its Null arm passed 32 of 32.
+Same trap, same prompt, two models. The reading consistent with both measurements is that the
+newer model already does what the card teaches, so the skill's lift is model-dependent and has
+lapsed for this subject. The registered rule cannot reach `CUT(subsumed)` from one
+zero-discordant run, because a single run cannot separate "the model learned it" from "the
+fixture stopped arming the trap for this model". The control that separates them is a small Null
+arm on `claude-sonnet-4.5` against the same fixture: if it still fails, the fixture is intact and
+the difference is the model. That control is new spend and is not authorised by this record.
+
 **Measured tokens per pair, and what they do to section 6.** Read from the eval logs' usage
 totals, both arms, all input classes, divided by 32 pairs:
 
