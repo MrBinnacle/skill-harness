@@ -5,10 +5,13 @@
 **Generator:** `scripts/mutation_receipt.py`. **Machine-readable record:**
 `docs/assurance/nan-score-refusal-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/subject/ingest.py` at
-`sha256:958e44f8261da094af648fc722fceddf008be7f16ac767afcb5feb8231e0eb2e`.
-**Commit at generation:** `d1bc366` — informational only. A rebase rewrites it and later
+`sha256:ae28a10512c62a5b16a2ca272d07a81510afba9085197e926c50e39c879d09a4`.
+**Commit at generation:** `4a19dbd` — informational only. A rebase rewrites it and later
 commits move HEAD past it, so currency is checked against the digest above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
+
+**Regenerated 2026-09-03 for #416 (#391)** (the oracle metric identity moved to 0.4.1, digest
+`958e44f8261d` to `ae28a10512c6`; mutants re-run, all three kills held by the same detectors).
 
 **Regenerated 2026-09-02 for #400** (ingest gained `normalised_keys_dropped`; mutants re-run, all kills held).
 

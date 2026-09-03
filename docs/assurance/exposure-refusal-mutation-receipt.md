@@ -5,10 +5,13 @@
 **Generator:** `scripts/mutation_receipt.py --select 387`. **Machine-readable record:**
 `docs/assurance/exposure-refusal-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/subject/ingest.py` at
-`sha256:958e44f8261da094af648fc722fceddf008be7f16ac767afcb5feb8231e0eb2e`.
-**Commit at generation:** `adc006c` — informational only. A rebase
+`sha256:ae28a10512c62a5b16a2ca272d07a81510afba9085197e926c50e39c879d09a4`.
+**Commit at generation:** `27487cb` — informational only. A rebase
 rewrites it and later commits move HEAD past it, so currency is checked against the digest
 above by `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
+
+**Regenerated 2026-09-03 for #416 (#391)** (the oracle metric identity moved to 0.4.1, digest
+`958e44f8261d` to `ae28a10512c6`; both mutants re-run, both kills held by the same detectors).
 
 Each case runs in its **own git worktree** at a fixed commit. Production is never mutated in
 place. `PYTHONPATH` pins every case to its own sources, because the editable install would
