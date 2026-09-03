@@ -386,11 +386,12 @@ class TestHazardEntryCounts:
             import types
 
             fake_mod = types.ModuleType("inspect_ai.log")
-            fake_mod.read_eval_log = lambda path: fake
+            fake_mod.read_eval_log = lambda path: fake  # type: ignore[attr-defined]
             monkeypatch.setitem(sys.modules, "inspect_ai", types.ModuleType("inspect_ai"))
             monkeypatch.setitem(sys.modules, "inspect_ai.log", fake_mod)
 
         entry = hazard_entry_counts(tmp_path / "null.eval", r"git.*pull")
+        assert entry.pattern == r"git.*pull"
         assert entry.epochs == 8
         assert entry.entered == 3
 
