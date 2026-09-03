@@ -10,15 +10,25 @@ Tests the read-only paired-lane Gate-2 decision surface:
   - Unratified design refusal
   - Missing ratification record
   - Missing design fields refused by name
-  - skill_id field mismatch
+  - skill_id field mismatch, read from the runner-declared block (#391)
+  - No runner block recorded is a refusal, not a pass
+  - task_family and rat_id mismatches refused by name
+
+The seeded run row carries the card's content DIGEST in runs.skill_id, which is
+what a real ingest writes; the card NAME the record carries lives only in the
+runner-declared block under config_json["runner"]. Until #391 the seed used the
+name in both places, so the comparison against the digest column passed here
+and refused every real ingest.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner, Result
@@ -27,7 +37,14 @@ from skill_harness.cli.main import cli
 from skill_harness.storage.migrations import open_evidence
 
 _TS = "2026-09-01T12:00:00+00:00"
-_SKILL_ID = "test-skill"
+_SKILL_NAME = "test-skill"
+_SKILL_ID = hashlib.sha256(b"test-skill card bytes").hexdigest()
+_RUNNER_DECLARED: dict[str, str] = {
+    "rat_id": "RAT-0001",
+    "skill_id": _SKILL_NAME,
+    "task_family": "test-family",
+    "estimand": "treatment-policy",
+}
 
 
 def _invoke(*args: str) -> Result:
@@ -95,8 +112,10 @@ def _seed_run(
     pi_c_hat: float = 0.5,
     pi_c_trials: int = 4,
     skill_id: str = _SKILL_ID,
+    runner: dict[str, str] | None = None,
+    with_runner: bool = True,
 ) -> None:
-    config = {
+    config: dict[str, Any] = {
         "paired_cells": {
             "both_pass": both_pass,
             "full_only": full_only,
@@ -113,6 +132,8 @@ def _seed_run(
             "confidence": 0.95,
         },
     }
+    if with_runner:
+        config["runner"] = dict(_RUNNER_DECLARED if runner is None else runner)
     conn.execute(
         "INSERT INTO runs (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
         " VALUES (?, ?, 'evaluate_skill', ?, ?, ?)",
@@ -286,8 +307,8 @@ class TestNoPairedCells:
     def test_no_paired_cells_refused(self, tmp_path: Path, evidence: sqlite3.Connection) -> None:
         evidence.execute(
             "INSERT INTO runs (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
-            " VALUES (?, 'test-skill', 'evaluate_skill', '{}', ?, ?)",
-            ("run-old", _TS, _TS),
+            " VALUES (?, ?, 'evaluate_skill', '{}', ?, ?)",
+            ("run-old", _SKILL_ID, _TS, _TS),
         )
         rat = tmp_path / "RAT-0001-test.md"
         _write_rat(rat, n=4)
@@ -362,3 +383,93 @@ class TestSkillIdMismatch:
         assert result.exit_code == 1
         assert "field mismatch" in result.output
         assert "skill_id" in result.output
+        assert "other-skill" in result.output
+
+
+class TestRunnerDeclaration:
+    """Section 2: the equality is on the runner-declared block, never on runs.skill_id.
+
+    The happy-path tests above already seed runs.skill_id as a 64-hex digest
+    with a matching runner block, so a KEEP through that seed is the positive
+    control for this class: the digest column is not compared to the name.
+    """
+
+    def test_digest_column_is_not_compared_to_record_name(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        _seed_run(evidence, "run-digest", both_pass=4, full_only=8, null_only=0, both_fail=4)
+        assert _SKILL_ID != _SKILL_NAME and len(_SKILL_ID) == 64
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat(rat, n=16)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-digest",
+            str(rat),
+            "transformative-lift",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Verdict: KEEP" in result.output
+
+    def test_no_runner_block_refused(self, tmp_path: Path, evidence: sqlite3.Connection) -> None:
+        _seed_run(
+            evidence,
+            "run-norunner",
+            both_pass=4,
+            full_only=8,
+            null_only=0,
+            both_fail=4,
+            with_runner=False,
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat(rat, n=16)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-norunner",
+            str(rat),
+            "transformative-lift",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 1
+        assert "no runner block" in result.output
+        assert "Verdict" not in result.output
+
+    def test_task_family_and_rat_id_mismatch_refused_by_name(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        declared = dict(_RUNNER_DECLARED, task_family="other-family", rat_id="RAT-0009")
+        _seed_run(
+            evidence,
+            "run-family",
+            both_pass=4,
+            full_only=8,
+            null_only=0,
+            both_fail=4,
+            runner=declared,
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat(rat, n=16)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-family",
+            str(rat),
+            "transformative-lift",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 1
+        assert "field mismatch" in result.output
+        assert "task_family" in result.output and "other-family" in result.output
+        assert "rat_id" in result.output and "RAT-0009" in result.output
+        assert "skill_id" not in result.output.split("field mismatch", 1)[1]

@@ -4,10 +4,16 @@
 **Generator:** `scripts/mutation_receipt.py --select 389`. **Machine-readable record:**
 `docs/assurance/paired-gate2-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/cli/paired_gate2.py` at
-`sha256:c15e52b2338d3480aa3f1b0ffe036640993675d74bd6c4292b3ee619dc2a9280`.
-**Commit at generation:** `a2ed8cb768d2ea4687471b8e36a886ab13f97428` — informational only. A rebase
+`sha256:c1ba46773010ea991fb6915dc27307b634a81f454284e0b9d061efd711395dda`.
+**Commit at generation:** `3564d01f41f804dbd1ab98677ceb53dc4228e81b` — informational only. A rebase
 rewrites it and later commits move HEAD past it, so currency is checked against the digest
-above by `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
+above by `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
+
+**Regenerated 2026-09-03 for #417 (#391).** The first generation (commit `a2ed8cb`, digest
+`c15e52b2338d`) attested to the module before #417 replaced the `runs.skill_id` comparison with
+the runner-declared identity check. Both mutants were re-run by the same generator; both anchors
+were still present and both kills held, by the same detectors. The results table below was
+re-measured, not carried.
 
 Each case runs in its **own git worktree** at a fixed commit. Production is never mutated in
 place. `PYTHONPATH` pins every case to its own sources, because the editable install would
