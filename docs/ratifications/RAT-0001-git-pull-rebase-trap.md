@@ -175,6 +175,83 @@ re-measurement requires a run, which is the thing the check gates.
 cent, which would give the cap real headroom and make a stated breach threshold meaningful again;
 or a later run measures tokens per pair and the projection is rebuilt on that measurement.
 
+### Amendment 2 — 2026-09-03: the authorised run was performed once, its decision is UNRESOLVED, and its measured tokens per pair falsify section 6's projection basis
+
+**The run.** Launched 2026-09-03 02:36:16 UTC from the batch-1 `gitpull` directory by
+`stage2_gitpull_sized.py`, after a dry run that resolved the registered figures exactly (n = 32,
+gamma = 0.90, worst case $23.351744 against the $23.36 cap). Subject `anthropic/claude-sonnet-5`,
+route `anthropic-direct`, sandbox image `aisiuk/inspect-tool-support@sha256:fb045da8…`, pin
+fingerprint `706cbaea…cffa1b`. Full arm: 32 of 32 samples, 23 min 25 s. Null arm: 32 of 32
+samples, 22 min 30 s. Zero HTTP retries in either arm. Exposure detected in 32 of 32 Full epochs
+and 0 of 32 Null epochs; the skill was invoked in 24 of 32 Full epochs.
+
+**Ingest.** The runner refused at ingest with `MetricImplementationDriftError`: the
+`subject:command_succeeds` 0.4.0 identity had been registered on 2026-09-02 against
+`subject/ingest.py` at 4001686, and #411 and #413 then edited that module (28 insertions, all
+imports, signatures, docstrings and config plumbing, including the `runner` block that section 2
+of this record requires). The identity was declared anew as 0.4.1 (skill-harness#416) and the
+run's own eval logs were ingested from disk under it as run
+`0700d089a0275ed27d3e219a680e1959bd69ec11e7841a4280d95a4e17243907`, with the runner block
+recorded: `rat_id RAT-0001`, `skill_id git-pull-rebase-trap`, `task_family gitpull`, `estimand
+treatment-policy`, `route anthropic-direct`. This was a re-ingest of the authorised run's logs.
+No second run was launched; section 9 was not exceeded.
+
+**Decision read.** `run evaluate-paired` first refused the run on `skill_id`, because it compared
+this record's card name to the run row's content digest instead of to the runner-declared block
+that section 2 names; fixed in skill-harness#417. With that fix the read is:
+
+| Field | Value |
+|---|---|
+| Discordant lattice | both_pass 32, full_only 0, null_only 0, both_fail 0 |
+| Decision | `unresolved` |
+| Signed delta | 0.000, 95% CI [-0.107, 0.107] |
+| pi_c_hat | 24/32 = 0.7500, 95% CI [0.5660, 0.8854] |
+| Verdict (`trap-discipline`) | `CANT_TELL_YET` |
+
+A zero-discordant table is a defined `UNRESOLVED` branch of the registered rule (#37); it
+overrides any equivalence mass, so the decision is the rule's output and not an instrument
+failure. What the run observed is that under this task the trap did not fire in the Null arm
+either: both arms passed every sample, so the instrument saw no contrast to decide on.
+
+**Measured tokens per pair, and what they do to section 6.** Read from the eval logs' usage
+totals, both arms, all input classes, divided by 32 pairs:
+
+| Quantity | Registered (section 6) | Measured (this run) |
+|---|---|---|
+| Input tokens per pair | 353,721 | **539,011** (ratio 1.524) |
+| Output tokens per pair | 2,230 | 2,963 |
+| Cache-read share of input | not assumed | 98.6 percent |
+| No-discount worst case at n = 32 | $23.351744 | **$35.44** |
+| Spend at section 6 prices | cap $23.36 | **$4.93** computed from the logs, not read from the billing console |
+
+The cap held in realised dollars by a factor of about 4.7, because 98.6 percent of the input was
+served from cache at $0.20 per MTok. The projection basis did not hold: the measured input per
+pair is 52 percent above the registered figure and 185,161 tokens above the 353,850 breakeven
+that Amendment 1 established. At the measured rate the no-discount worst case exceeds not only
+`hard_cap_usd` but the registered $35 ceiling. The pre-spend re-measurement on 2026-09-02 could
+not see this, for the reason Amendment 1 stated in advance: it reproduced the registered figures
+from the pilot logs that produced them, and the pilot had 8 pairs of a task whose transcripts
+grew longer at 32.
+
+**What this changes.** No registered field is edited; `n`, `gamma`, `delta_min`, `q_min`,
+`hard_cap_usd` and the cost basis stand as signed, and the authorised run was performed once
+within the cap. What changes is the standing of section 6's projection basis for any later
+row-pick on this task family: it is falsified in the unsafe direction and must be rebuilt from
+the measured 539,011 input tokens per pair, or from a projection that prices cache reads
+explicitly, before another cap is set. That rebuild is a new row-pick and a new record, per the
+rule at the head of section 10.
+
+**What this does not authorise.** A second run of this design, a re-run under a rebuilt cost
+basis, or any spend on this record beyond the one run already performed.
+
+**Pending.** A SERS receipt for run `0700d089…` has not been minted; the collection's card for
+`git-pull-rebase-trap` therefore does not yet carry this run. Until it does, this record and the
+evidence store are the only places the decision is written.
+
+*Revisit if:* a receipt is minted for this run, which should be recorded here as a dated line; or
+a rebuilt cost basis for `gitpull` is registered upstream, which supersedes the table above for
+projection purposes but not as the measurement of this run.
+
 ## 11. Historical-classification obligation
 
 n/a — not the first Gate-1 row-pick (this is a Gate-2 record; the obligation attaches to the first
