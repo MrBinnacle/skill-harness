@@ -111,7 +111,18 @@ OUTCOME_AXIS: str = "outcome"
 # exposure detector, the ZeroInvocationError is retired from the write path,
 # and the two new refusal predicates (unexposed Full, exposed/invoked Null)
 # replace the old invocation-only contamination check.
-ORACLE_METRIC_VERSION: str = "0.4.0"
+# 0.4.1: identity moved, logic did not (#391 sized run, 2026-09-03). The 0.4.0
+# identity was registered against this module at 4001686. #411 then added the
+# runner_config recording that RAT-0001 section 2 requires at ingest, and #413
+# added normalised_keys_dropped; 28 lines, none of them in score decoding,
+# pairing or observation mapping (git diff 4001686 57a0790 -- this file). Both
+# changes are signature and docstring edits, which the #209 ruling treats as
+# identity-bearing, so the drift check refused and the restamp path did not
+# apply. Ingesting under 4001686 would satisfy the hash and violate section 2.
+# This bump declares the new identity for the module that carries the block
+# the ratification demands; it is not a repair of 0.4.0, and 0.4.0 evidence
+# (the 2026-09-01 pilot pair) is not the same measurement as 0.4.1 evidence.
+ORACLE_METRIC_VERSION: str = "0.4.1"
 
 # π_c (invocation-rate) instrumentation — #46 resolution binds the contract.
 # v1 detector = branch (a) only: a Skill tool-call whose arguments name the

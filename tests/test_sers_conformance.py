@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -266,6 +267,16 @@ def test_v11_receipt_subject_identity_matches_harness_mint(
 
     The live invariant that DOES have content is asserted separately, in
     ``test_fresh_subject_identity_mint_hashes_the_live_oracle_module``.
+
+    ``metric_version`` is excluded from the live-equality check for the same
+    reason, found the same way (#391, 2026-09-03). It names the identity that
+    minted the receipt, and a receipt minted under 0.4.0 stays a 0.4.0 receipt
+    after the module moves to 0.4.1. Asserting it equals the live constant
+    makes every version bump red, and the fixture shows what happens next: at
+    4001686 its ``metric_version`` was retyped from 0.3.0 to 0.4.0 beside an
+    ``implementation_hash`` that still names the 2026-08-17 module, which never
+    carried 0.4.0. The field was typed from a failing assertion, which is the
+    exact defect #298 named. It is now held to the registered-version shape.
     """
     assert _V11_MINTED.is_file()
     instance = _load_json(_V11_MINTED)
@@ -273,11 +284,13 @@ def test_v11_receipt_subject_identity_matches_harness_mint(
     assert instance["sers_version"] == "1.1.0"
     recorded = instance["subject_identity"]
     expected = build_subject_identity(skill_md=_CONTROL_SKILL_MD, arms=["null", "full"])
-    for field in ("skill_id", "harness_version", "metric_version", "arms"):
+    for field in ("skill_id", "harness_version", "arms"):
         assert recorded[field] == expected[field], (
             f"SUBJECT_IDENTITY_DRIFT: {field} in the stored 1.1.0 fixture does not match"
             f" a live harness mint. This block must be harness-populated (#298)."
         )
+    historical_version = recorded["metric_version"]
+    assert re.fullmatch(r"\d+\.\d+\.\d+", historical_version), historical_version
     historical_hash = recorded["implementation_hash"]
     assert len(historical_hash) == 64, historical_hash
     assert set(historical_hash) <= set("0123456789abcdef"), historical_hash
