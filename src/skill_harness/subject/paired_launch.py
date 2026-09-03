@@ -248,7 +248,7 @@ def _prior_screen_measurements(
         "WHERE sr.skill_name = ? "
         "AND sr.screen_run_id NOT IN ("
         "    SELECT superseded_screen_run_id FROM screen_run_supersessions) "
-        "ORDER BY sr.created_at",
+        "ORDER BY sr.created_at, sr.screen_run_id",
         (record.skill_id,),
     ).fetchall()
     for screen_run_id, subject_model, source_eval_sha256, _admissibility, _created in rows:
@@ -282,7 +282,7 @@ def _prior_paired_measurements(
     lines: list[str] = []
     rows = conn.execute(
         "SELECT run_id, config_json FROM runs WHERE run_kind = 'evaluate_skill' "
-        "ORDER BY started_at",
+        "ORDER BY started_at, run_id",
     ).fetchall()
     for run_id, config_raw in rows:
         try:
