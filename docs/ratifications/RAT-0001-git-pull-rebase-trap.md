@@ -213,18 +213,54 @@ overrides any equivalence mass, so the decision is the rule's output and not an 
 failure. What the run observed is that under this task the trap did not fire in the Null arm
 either: both arms passed every sample, so the instrument saw no contrast to decide on.
 
-**What the pilot says about that.** The 2026-09-01 pilot (receipt
-`docs/sers/receipts/gitpull-paired-k8-2026-09-01-detector-v2.json`) ran the same fixture bytes
-and the same de-leaked prompt with subject `claude-sonnet-4.5` routed through OpenRouter, and its
-Null arm passed 0 of 8: every bare epoch rebased and failed the ancestry oracle. This run's
-subject is `claude-sonnet-5`, the model this record prices, and its Null arm passed 32 of 32.
-Same trap, same prompt, two models. The reading consistent with both measurements is that the
-newer model already does what the card teaches, so the skill's lift is model-dependent and has
-lapsed for this subject. The registered rule cannot reach `CUT(subsumed)` from one
-zero-discordant run, because a single run cannot separate "the model learned it" from "the
-fixture stopped arming the trap for this model". The control that separates them is a small Null
-arm on `claude-sonnet-4.5` against the same fixture: if it still fails, the fixture is intact and
-the difference is the model. That control is new spend and is not authorised by this record.
+**What the transcripts say, read 2026-09-03 from the eval logs (every bash tool call, both
+arms, both runs).** The trap this card patches is `git pull` under `pull.rebase=true`, where
+`--no-ff` is silently ignored and local SHAs are rewritten. Entering it requires the agent to run
+`git pull`. Measured:
+
+| Arm, subject | n | ran `git pull` | ran `git rebase` | ran `fetch` + `merge` | passed oracle |
+|---|---|---|---|---|---|
+| Pilot Null, `claude-sonnet-4.5` (2026-09-01, same fixture and prompt) | 8 | 3 | 8 | 0 | 0 |
+| Pilot Full, `claude-sonnet-4.5` | 8 | 4 | 1 | 4 | 6 |
+| This run Null, `claude-sonnet-5` | 32 | 0 | 0 | 32 | 32 |
+| This run Full, `claude-sonnet-5` | 32 | 0 | 0 | 32 | 32 |
+
+No Sonnet 5 epoch in either arm ran `git pull`. All 64 fetched and merged, which the ancestry
+oracle passes. The armed `pull.rebase=true` config was never exercised, so the run did not test
+the trap; it measured whether this model rebases by habit, and it does not. The pilot's contrast
+was mostly the other mechanism: Sonnet 4.5 rebased explicitly in 8 of 8 bare epochs, 5 of them
+without pulling at all, and the card's description in context talked it into merging. That is
+lift for that model on this task, but it is not the `--no-ff` trap the card describes.
+
+**This ceiling was already on record.** OBS-0007, in the maintainer's research ledger of
+backward-looking observation records (created 2026-08-04 for a screen of 2026-07-20), ledgers
+the stage-0 Null screen on this same fixture with stock `claude-sonnet-5`: 3 of 3 pass, p0 = 1;
+its evidence is screen run `dae60c17…` in the private screen store beside this run's logs.
+Its disposition says a ceiling on this fixture carries no signal for a trap-discipline skill and
+that the honest measurement is hazard-enriched, with the agent placed in front of the hazard.
+This run reproduced that ceiling at n = 32.
+
+**The assumptions this exposes, each falsified by a row above.**
+
+1. That the oracle's pass means the trap was avoided. It means ancestry was preserved, which a
+   model that never pulls achieves without meeting the trap. The instrument does not record
+   whether the trap was entered.
+2. That the task elicits the trap-entering action. "Integrate the teammate's changes, then push"
+   is satisfied by `fetch` + `merge`; nothing in the prompt makes `git pull` the natural move.
+   The de-leaking of 2026-09-01 removed the history-policy signpost and, with it, any reason to
+   touch `pull` at all.
+3. That the pilot's Null rate transferred to the priced subject. The pilot ran Sonnet 4.5
+   because the host had no Anthropic key; the record priced Sonnet 5; nobody re-screened the
+   Null arm on Sonnet 5 before sizing, although OBS-0007 had already measured it at the ceiling.
+
+**What follows.** The decision above stands as the rule's output on the data. It is not evidence
+about the skill's value for a model that does pull, and the maintainer reports that on
+`claude-opus-5` in ordinary work the trap fires routinely; that model has not been measured
+here. Before any further row-pick on this family: a task version in which pulling is the
+natural move (naming the action is not leaking the rule; the rule is "check `pull.rebase`
+first"), oracle re-validation at zero cost, an instrument covariate recording whether each epoch
+ran `git pull`, and a Null screen on the priced subject. Filed as a skill-harness ticket from this
+amendment. None of that is spend under this record.
 
 **Measured tokens per pair, and what they do to section 6.** Read from the eval logs' usage
 totals, both arms, all input classes, divided by 32 pairs:
