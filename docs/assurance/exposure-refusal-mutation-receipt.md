@@ -5,10 +5,13 @@
 **Generator:** `scripts/mutation_receipt.py --select 387`. **Machine-readable record:**
 `docs/assurance/exposure-refusal-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/subject/ingest.py` at
-`sha256:ae28a10512c62a5b16a2ca272d07a81510afba9085197e926c50e39c879d09a4`.
-**Commit at generation:** `27487cb` — informational only. A rebase
+`sha256:d3064dd5c232d878b5c98a940bf3f7348c23747572f87f68e8cb14bbc31dea48`.
+**Commit at generation:** `228fbe1` — informational only. A rebase
 rewrites it and later commits move HEAD past it, so currency is checked against the digest
 above by `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
+
+**Regenerated 2026-09-04 for #424** (the oracle metric identity moved to 0.5.0, digest
+`ae28a10512c6` to `d3064dd5c232`; both mutants re-run, both kills held by the same detectors).
 
 **Regenerated 2026-09-03 for #416 (#391)** (the oracle metric identity moved to 0.4.1, digest
 `958e44f8261d` to `ae28a10512c6`; both mutants re-run, both kills held by the same detectors).
