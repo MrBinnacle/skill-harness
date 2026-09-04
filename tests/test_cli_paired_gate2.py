@@ -1076,17 +1076,75 @@ def _seed_run_424(
 class TestNegativeControlNeverPull:
     """#424 negative control 1: never pull, never push.
 
-    I=1 both arms is zero-discordance → Gate-2 UNRESOLVED (#37), not
-    EQUIVALENT. Ruling table: UNRESOLVED → CANT_TELL_YET for any C. Never KEEP.
-    (A zero-discordance all-pass I lattice cannot be BENEFIT, so the completion
-    guard — which only rewrites KEEP — does not fire. The control's "never KEEP"
-    half holds; CUT(harmful) via completion requires a BENEFIT primary read.)
+    The #403 ruling registers its three seeded policies "over a qualified
+    fixture" (section 3), and a fixture qualifies only when the untreated Null
+    arm enters the hazard at or above the floor (section 4). So a control
+    policy is the treated (Full) arm's behaviour against a Null arm that pulls
+    and violates. Seeded that way, "never pull, never push" is the ruling's own
+    section 3 row 2: BENEFIT on I, Full completion below the margin, so
+    CUT(harmful) through the completion guard. That is the control the ruling
+    names, and it is the first test below.
+
+    The first build (PR #431) seeded the policy on BOTH arms. I=1 on every
+    pair is zero-discordance, so Gate-2 returns UNRESOLVED (#37) and the
+    verdict is CANT_TELL_YET; the completion guard rewrites only KEEP and
+    cannot fire. That seed is not a qualified design (a Null arm that never
+    pulls contradicts a hazard block that says it entered), so it is kept only
+    as the weaker pin it can support: never KEEP. Adjudicated 2026-09-04 on
+    sh#424; neither the ruling's expected verdict nor the #37 branch changed.
     """
 
-    def test_never_pull_never_keeps_under_split_oracle(
+    def test_never_pull_full_arm_cuts_harmful_via_completion_guard(
         self, tmp_path: Path, evidence: sqlite3.Connection
     ) -> None:
-        """ARM: I=1 both arms, C=0 both arms → never KEEP."""
+        """ARM: Full never pulls or pushes; the qualified Null pulls under rebase.
+
+        Hazard: Null entered 32/32 (h0 = 1.0, at or above the floor), Full
+        entered 0/32. I lattice: full_only=32 (Null's SHAs rewritten every
+        epoch, Full's preserved) gives BENEFIT. C lattice: null_only=32 (Null
+        pushed, Full never did) gives Full_C = 0, below Null_C minus the
+        margin, so CUT(harmful) via the guard.
+        """
+        hazard = {
+            "pattern": _N424_HAZARD_PATTERN,
+            "floor": _N424_HAZARD_FLOOR,
+            "full": {"epochs": 32, "entered": 0},
+            "null": {"epochs": 32, "entered": 32},
+        }
+        _seed_run_424(
+            evidence,
+            "run-never-pull-full-arm",
+            both_pass=0,
+            full_only=32,
+            null_only=0,
+            both_fail=0,
+            comp_both_pass=0,
+            comp_full_only=0,
+            comp_null_only=32,
+            comp_both_fail=0,
+            hazard=hazard,
+        )
+        _write_rat_424(tmp_path / "RAT-0001-test.md", n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-never-pull-full-arm",
+            str(tmp_path / "RAT-0001-test.md"),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        assert "Verdict: KEEP" not in result.output
+        assert "CUT" in result.output
+        assert "harmful" in result.output.lower()
+
+    def test_never_pull_both_arms_never_keeps(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: I=1 both arms, C=0 both arms (unqualified seed), never KEEP."""
         _seed_run_424(
             evidence,
             "run-never-pull",
@@ -1128,11 +1186,9 @@ class TestNegativeControlPullRebase:
         self, tmp_path: Path, evidence: sqlite3.Connection
     ) -> None:
         """ARM: invariant I=0 in every epoch → HARM → CUT(harmful)."""
-        # I lattice: full_only=0, null_only=32 (Full fails I, Null passes I —
-        # wait, that's wrong. Let me re-think.
-        # Actually: pull.rebase rewrites SHAs, so I=0 for the Full arm.
-        # Null arm never pulls, so I=1 for Null.
-        # This gives: null_only=32 (Null passes I, Full fails I) → HARM.
+        # I lattice: null_only=32. pull.rebase rewrites SHAs, so I=0 for the
+        # Full arm in every epoch; the Null arm as seeded preserves I. Null
+        # passes I, Full fails I: HARM.
         _seed_run_424(
             evidence,
             "run-pull-rebase",
