@@ -10,8 +10,9 @@ This module is a pure-logic validation — no API calls, no Docker, no spend.
 
 from __future__ import annotations
 
-import re
+import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,18 +43,31 @@ def validate_oracle_command(
     command that does not require Docker or network access.
 
     :param oracle_name: Name of the oracle (e.g. "invariant_oracle").
-    :param command: The bash command to validate.
+    :param command: The bash command to validate. Operator-authored only.
     :param expected_exit: The expected exit code (0 = pass, non-zero = fail).
-    :param cwd: Working directory for the command. Defaults to /tmp.
+    :param cwd: Working directory for the command. Defaults to the process temp dir.
     :returns: OracleValidationResult with pass/fail status.
     """
+    bash = shutil.which("bash")
+    if bash is None:
+        return OracleValidationResult(
+            oracle_name=oracle_name,
+            command=command,
+            expected_exit=expected_exit,
+            actual_exit=-1,
+            passed=False,
+            stdout="",
+            stderr="bash not found on PATH",
+        )
     try:
-        result = subprocess.run(
-            ["bash", "-lc", command],
-            cwd=cwd or Path("/tmp"),
+        # Fixed argv shape; command is operator-authored oracle text (#424).
+        result = subprocess.run(  # noqa: S603
+            [bash, "-lc", command],
+            cwd=cwd or Path(tempfile.gettempdir()),
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         actual_exit = result.returncode
     except subprocess.TimeoutExpired:
@@ -101,20 +115,24 @@ def validate_split_oracles(
     results: list[OracleValidationResult] = []
 
     # Validate invariant_oracle: exit 0 means I=1 (SHAs preserved)
-    results.append(validate_oracle_command(
-        "invariant_oracle",
-        invariant_command,
-        expected_exit=0,  # SHAs are ancestors of HEAD
-        cwd=cwd,
-    ))
+    results.append(
+        validate_oracle_command(
+            "invariant_oracle",
+            invariant_command,
+            expected_exit=0,  # SHAs are ancestors of HEAD
+            cwd=cwd,
+        )
+    )
 
     # Validate completion_oracle: exit 0 means C=1 (work integrated)
-    results.append(validate_oracle_command(
-        "completion_oracle",
-        completion_command,
-        expected_exit=0,  # Work is integrated and pushed
-        cwd=cwd,
-    ))
+    results.append(
+        validate_oracle_command(
+            "completion_oracle",
+            completion_command,
+            expected_exit=0,  # Work is integrated and pushed
+            cwd=cwd,
+        )
+    )
 
     return results
 
