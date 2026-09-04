@@ -499,6 +499,31 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
             ),
         ),
     ),
+    LiveRow(
+        dc_id="DC-14",
+        summary=(
+            "outcome_type values: pass_fail + invariant in ratification.py parse == "
+            "sers.schema.json outcome_type enum == README prose (#424)"
+        ),
+        value_sites=(
+            ValueSite(
+                "src/skill_harness/ratification.py",
+                r'^    _OUTCOME_TYPES = frozenset\(\{([^}]+)\}\)$',
+                ('"pass_fail", "invariant"',),
+            ),
+            ValueSite(
+                "docs/sers/sers.schema.json",
+                r'"outcome_type":\s*\{[^}]*"enum":\s*\[([^\]]+)\]',
+                ('"pass_fail", "invariant", null',),
+            ),
+        ),
+        registered_texts=(
+            RegisteredText(
+                "docs/sers/README.md",
+                "Scoring-oracle kind the record authorises",
+            ),
+        ),
+    ),
 )
 
 PLANNED_ROWS: tuple[PlannedRow, ...] = (

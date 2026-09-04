@@ -93,6 +93,19 @@ Skill value kind. Members mirror `ValueClass`:
 | `calibration` | Makes a measurement trustworthy; same wrong-instrument rule as trap-discipline. |
 | `null` | Unclassified — guard defaults to withhold `CUT`. |
 
+### `outcome_type`
+
+Scoring-oracle kind the record authorises (#424). Members mirror the
+registered set in `ratification.py`:
+
+| Value | Meaning |
+| --- | --- |
+| `pass_fail` | Legacy conjunction oracle (Full pass AND Null fail). |
+| `invariant` | Split oracle: invariant_oracle (I) + completion_oracle (C). |
+
+`null` on `pass_fail` records (absent from the record). Required for
+trap-discipline; refused by name when absent.
+
 ### `wrong_instrument`
 
 Optional boolean. `true` when a path **withheld** a `CUT` because
