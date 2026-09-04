@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-1wq284_8/M-R1/src/skill_harness/cli/paired_gate2.py",
-        "source_digest": "8abfb41bd9b9cb469e87e10c9d63b003a8f517dd2522ceaad9bf1607ee6eebec",
+        "module_file": "/tmp/mutation-receipt-1u33spl2/M-R1/src/skill_harness/cli/paired_gate2.py",
+        "source_digest": "2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31",
         "tests_collected": 1,
-        "worktree_head": "be86b77f22e3ecf94100ea63f4e61138096c287b"
+        "worktree_head": "6fe71b6af9dce205a212973fd843e29a551f25cd"
       },
       "description": "remove the RATIFIED status check: a DRAFT record is accepted and the command proceeds to read the design",
       "killing_assertions": [
@@ -17,10 +17,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-1wq284_8/M-R1/src/skill_harness/cli/paired_gate2.py",
-        "source_digest": "60a89adf6181f78b06821deb800a345d29bec38eb3e76f4065d045da679b2de7",
+        "module_file": "/tmp/mutation-receipt-1u33spl2/M-R1/src/skill_harness/cli/paired_gate2.py",
+        "source_digest": "3e2521fa96e16a3c8158464f49aac9349befbc3d9b01ab01a109966e448a82ff",
         "tests_collected": 1,
-        "worktree_head": "be86b77f22e3ecf94100ea63f4e61138096c287b"
+        "worktree_head": "6fe71b6af9dce205a212973fd843e29a551f25cd"
       },
       "mutant_id": "M-R1",
       "notes": [],
@@ -34,10 +34,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-1wq284_8/M-R2/src/skill_harness/cli/paired_gate2.py",
-        "source_digest": "8abfb41bd9b9cb469e87e10c9d63b003a8f517dd2522ceaad9bf1607ee6eebec",
+        "module_file": "/tmp/mutation-receipt-1u33spl2/M-R2/src/skill_harness/cli/paired_gate2.py",
+        "source_digest": "2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31",
         "tests_collected": 1,
-        "worktree_head": "be86b77f22e3ecf94100ea63f4e61138096c287b"
+        "worktree_head": "6fe71b6af9dce205a212973fd843e29a551f25cd"
       },
       "description": "remove the pair-count check: k=8 pairs are read against an n=32 design without refusal",
       "killing_assertions": [
@@ -47,10 +47,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-1wq284_8/M-R2/src/skill_harness/cli/paired_gate2.py",
-        "source_digest": "85dc2d944e638bde432669748a27b0945635370827454a6078b4f3c6704bafe8",
+        "module_file": "/tmp/mutation-receipt-1u33spl2/M-R2/src/skill_harness/cli/paired_gate2.py",
+        "source_digest": "29481b95d0e35ec620e9a5cf3b2f8ddd783a63c8e14dc07513d49940c11208e9",
         "tests_collected": 1,
-        "worktree_head": "be86b77f22e3ecf94100ea63f4e61138096c287b"
+        "worktree_head": "6fe71b6af9dce205a212973fd843e29a551f25cd"
       },
       "mutant_id": "M-R2",
       "notes": [],
@@ -61,18 +61,18 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "be86b77f22e3ecf94100ea63f4e61138096c287b",
+  "commit_under_test": "6fe71b6af9dce205a212973fd843e29a551f25cd",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "src/skill_harness/cli/paired_gate2.py": "8abfb41bd9b9cb469e87e10c9d63b003a8f517dd2522ceaad9bf1607ee6eebec"
+    "src/skill_harness/cli/paired_gate2.py": "2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31"
   },
   "production_tree_digest_before": {
-    "src/skill_harness/cli/paired_gate2.py": "8abfb41bd9b9cb469e87e10c9d63b003a8f517dd2522ceaad9bf1607ee6eebec"
+    "src/skill_harness/cli/paired_gate2.py": "2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31"
   },
   "production_tree_unchanged": true,
   "python": "3.13.15",
   "target_digests": {
-    "src/skill_harness/cli/paired_gate2.py": "8abfb41bd9b9cb469e87e10c9d63b003a8f517dd2522ceaad9bf1607ee6eebec"
+    "src/skill_harness/cli/paired_gate2.py": "2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31"
   },
   "target_files": [
     "src/skill_harness/cli/paired_gate2.py"
