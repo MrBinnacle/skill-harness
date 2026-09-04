@@ -133,6 +133,14 @@ def test_schema_value_class_enum_matches_code(sers_schema: dict[str, Any]) -> No
     assert schema_vals == code_vals
 
 
+def test_schema_outcome_type_enum_matches_code(sers_schema: dict[str, Any]) -> None:
+    """outcome_type closed vocabulary equals the registered set (#424)."""
+    schema_vals = _schema_enum(sers_schema, "properties", "outcome_type", "enum")
+    # The registered outcome types: pass_fail (legacy) and invariant (split oracle).
+    code_vals = {"pass_fail", "invariant"}
+    assert schema_vals == code_vals
+
+
 def test_schema_delivery_channel_enum_matches_code(sers_schema: dict[str, Any]) -> None:
     """delivery.channel closed vocabulary equals the mint-path constants (#388)."""
     schema_vals = _schema_enum(

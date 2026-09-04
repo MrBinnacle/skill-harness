@@ -318,11 +318,10 @@ from types import SimpleNamespace  # noqa: E402
 
 _INSPECT_INSTALLED = find_spec("inspect_ai") is not None
 
-#: The oracle identity 0.4.1 implementation hash of subject/ingest.py. #421
-#: acceptance: the file is byte-identical before and after this change, and
-#: this test asserts it. If this hash moves, ingest.py was edited and the
-#: oracle identity 0.4.1 was violated.
-_INGEST_PY_HASH = "ae28a10512c62a5b16a2ca272d07a81510afba9085197e926c50e39c879d09a4"
+#: The oracle identity 0.5.0 implementation hash of subject/ingest.py (#424).
+#: If this hash moves, ingest.py was edited and the oracle identity must bump
+#: with regenerated mutation receipts.
+_INGEST_PY_HASH = "d3064dd5c232d878b5c98a940bf3f7348c23747572f87f68e8cb14bbc31dea48"
 
 
 def _bash_call(command: str) -> SimpleNamespace:
@@ -587,23 +586,23 @@ class TestPriorMeasurements:
 # ---------------------------------------------------------------------------
 
 
-class TestIngestByteIdentical:
-    """subject/ingest.py is byte-identical before and after this change (#421)."""
+class TestIngestOracleIdentity050:
+    """#424: oracle metric identity 0.5.0 after the split-oracle ingest change."""
 
-    def test_ingest_py_hash_is_unchanged(self) -> None:
-        """The oracle identity 0.4.1 implementation hash is unchanged."""
+    def test_ingest_py_hash_matches_0_5_0_identity(self) -> None:
+        """The oracle identity 0.5.0 implementation hash is the live ingest bytes."""
         import hashlib
 
         from skill_harness.subject import ingest as ingest_module
 
         live_hash = hashlib.sha256(Path(ingest_module.__file__).read_bytes()).hexdigest()
         assert live_hash == _INGEST_PY_HASH, (
-            "subject/ingest.py was modified; the oracle identity 0.4.1 hash "
+            "subject/ingest.py was modified; the oracle identity 0.5.0 hash "
             f"moved from {_INGEST_PY_HASH} to {live_hash}. "
-            "#421 requires this file to be byte-identical."
+            "Bump ORACLE_METRIC_VERSION and regenerate mutation receipts."
         )
 
-    def test_oracle_metric_version_is_0_4_1(self) -> None:
+    def test_oracle_metric_version_is_0_5_0(self) -> None:
         from skill_harness.subject.ingest import ORACLE_METRIC_VERSION
 
-        assert ORACLE_METRIC_VERSION == "0.4.1"
+        assert ORACLE_METRIC_VERSION == "0.5.0"

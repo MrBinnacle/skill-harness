@@ -38,6 +38,7 @@ _LIVE_IDS = (
     "DC-10",
     "DC-11",
     "DC-12",
+    "DC-14",
     "AC-1",
 )
 _PLANNED_IDS = ("DC-13",)
@@ -63,6 +64,9 @@ _LIVE_SURFACES = (
     "src/skill_harness/oc/gate1.py",
     "src/skill_harness/oc/gate2.py",
     "src/skill_harness/oracles/calibration/cost_projection.py",
+    "src/skill_harness/ratification.py",
+    "docs/sers/sers.schema.json",
+    "docs/sers/README.md",
     "docs/INVARIANTS.md",
     "docs/PLAN.md",
     "docs/PRD.md",

@@ -122,7 +122,14 @@ OUTCOME_AXIS: str = "outcome"
 # This bump declares the new identity for the module that carries the block
 # the ratification demands; it is not a repair of 0.4.0, and 0.4.0 evidence
 # (the 2026-09-01 pilot pair) is not the same measurement as 0.4.1 evidence.
-ORACLE_METRIC_VERSION: str = "0.4.1"
+# 0.5.0: split-oracle outcome variable (#424).  The ingest now carries
+# paired_cells_completion and silent_violation blocks when the eval log
+# carries invariant_oracle + completion_oracle scores.  The new blocks are
+# absent on legacy pass_fail runs (store is append-only, existing evidence
+# untouched).  Oracle identity bump: the split-oracle scorers change the
+# decision logic — runs scored under 0.4.1 (conjunction) are not the same
+# measurement as runs scored under 0.5.0 (invariant + completion).
+ORACLE_METRIC_VERSION: str = "0.5.0"
 
 # π_c (invocation-rate) instrumentation — #46 resolution binds the contract.
 # v1 detector = branch (a) only: a Skill tool-call whose arguments name the
@@ -254,6 +261,13 @@ class ParsedSample(BaseModel):
     cache_creation_input_tokens: int | None
     output_tokens: int | None
     usd: float | None
+    #: #424: split-oracle scores for trap-discipline. When outcome_type is
+    #: ``invariant``, the eval log carries two scorers: ``invariant_oracle``
+    #: (I) and ``completion_oracle`` (C). These fields are absent on legacy
+    #: ``pass_fail`` runs.  ``score_value`` continues to hold the primary (I)
+    #: score when present; for ``pass_fail`` runs it holds the conjunction.
+    score_value_invariant: Annotated[float, Field(allow_inf_nan=False)] | None = None
+    score_value_completion: Annotated[float, Field(allow_inf_nan=False)] | None = None
 
 
 class ParsedEvalLog(BaseModel):
@@ -468,7 +482,35 @@ def parse_eval_log(path: Path, *, skill_description: str = "") -> ParsedEvalLog:
     for s in log.samples or []:
         if not s.scores:
             raise EvalLogIngestError(f"{path}: sample id={s.id} epoch={s.epoch} has no scores")
+        # #424: extract split-oracle scores when present. The eval log may
+        # carry one scorer (legacy pass_fail) or two (split invariant +
+        # completion).  The primary score goes into score_value; the optional
+        # split scores are extracted by name when present.
         scorer_name, score = next(iter(s.scores.items()))
+        score_val = _score_to_float(score.value, path, sample=f"sample id={s.id} epoch={s.epoch}")
+        inv_score_val: float | None = None
+        comp_score_val: float | None = None
+        if len(s.scores) == 2 and scorer_name in ("invariant_oracle", "completion_oracle"):
+            names = list(s.scores.keys())
+            for n in names:
+                sc = s.scores[n]
+                sv = _score_to_float(sc.value, path, sample=f"sample id={s.id} epoch={s.epoch}")
+                if n == "invariant_oracle":
+                    inv_score_val = sv
+                elif n == "completion_oracle":
+                    comp_score_val = sv
+            # For split-oracle, score_value = I score (the primary lattice)
+            if scorer_name == "invariant_oracle":
+                score_val = inv_score_val if inv_score_val is not None else score_val
+            else:
+                # completion_oracle first in iteration — find invariant
+                for n in names:
+                    if n == "invariant_oracle":
+                        score_val = _score_to_float(
+                            s.scores[n].value,
+                            path,
+                            sample=f"sample id={s.id} epoch={s.epoch}",
+                        )
         metadata = s.metadata or {}
         pin = metadata.get("harness_pin")
         usage = _sum_usage(getattr(s, "model_usage", None) or {})
@@ -486,9 +528,9 @@ def parse_eval_log(path: Path, *, skill_description: str = "") -> ParsedEvalLog:
                 ),
                 epoch=int(s.epoch),
                 scorer_name=scorer_name,
-                score_value=_score_to_float(
-                    score.value, path, sample=f"sample id={s.id} epoch={s.epoch}"
-                ),
+                score_value=score_val,
+                score_value_invariant=inv_score_val,
+                score_value_completion=comp_score_val,
                 output_text=completion,
                 subject_model=str((pin or {}).get("model") or log.eval.model),
                 harness_pin_json=(
@@ -761,6 +803,12 @@ def write_paired_evidence(
                             "detector": EXPOSURE_DETECTOR_VERSION,
                         },
                         "paired_cells": _paired_cell_counts(full, null),
+                        # #424: when the split oracle is used (outcome_type
+                        # invariant), the ingest also records paired_cells on
+                        # the completion lattice and silent-violation counts
+                        # per arm.  The presence of these blocks signals the
+                        # decision layer to use the split-oracle path.
+                        **(_split_oracle_config(full, null)),
                         "normalised_keys_dropped": list(full.samples[0].normalised_keys_dropped),
                         # Omitted entirely when absent rather than written as
                         # null: a present-but-null key reads as "this run
@@ -986,6 +1034,93 @@ def _paired_cell_counts(full: ParsedEvalLog, null: ParsedEvalLog) -> dict[str, i
         "full_only": full_only,
         "null_only": null_only,
         "both_fail": both_fail,
+    }
+
+
+def _paired_cell_counts_on_score(
+    full: ParsedEvalLog, null: ParsedEvalLog, accessor: str
+) -> dict[str, int]:
+    """Compute paired cell counts using a specific score accessor.
+
+    #424: for split-oracle (outcome_type=invariant), the ingest computes
+    paired_cells on the invariant score (I) and paired_cells_completion on
+    the completion score (C).  ``accessor`` names the ParsedSample field:
+    ``score_value_invariant`` or ``score_value_completion``.
+    """
+    full_by_epoch = {s.epoch: s for s in full.samples}
+    null_by_epoch = {s.epoch: s for s in null.samples}
+    both_pass = 0
+    full_only = 0
+    null_only = 0
+    both_fail = 0
+    for epoch, full_sample in full_by_epoch.items():
+        f = getattr(full_sample, accessor)
+        n = getattr(null_by_epoch[epoch], accessor)
+        if f is None or n is None:
+            continue
+        if f == 1.0 and n == 1.0:
+            both_pass += 1
+        elif f == 1.0 and n == 0.0:
+            full_only += 1
+        elif f == 0.0 and n == 1.0:
+            null_only += 1
+        elif f == 0.0 and n == 0.0:
+            both_fail += 1
+    return {
+        "both_pass": both_pass,
+        "full_only": full_only,
+        "null_only": null_only,
+        "both_fail": both_fail,
+    }
+
+
+def _silent_violation_counts(full: ParsedEvalLog, null: ParsedEvalLog) -> dict[str, int]:
+    """Count silent violations per arm: C=1 but I=0 (completion held, invariant broke).
+
+    #424: a silent violation is when the completion oracle passes but the
+    invariant oracle fails — the teammate's work was integrated but the
+    original SHAs were not preserved.  This is counted per arm.
+    """
+    full_by_epoch = {s.epoch: s for s in full.samples}
+    null_by_epoch = {s.epoch: s for s in null.samples}
+    full_violations = 0
+    null_violations = 0
+    for epoch, full_sample in full_by_epoch.items():
+        full_inv = full_sample.score_value_invariant
+        full_comp = full_sample.score_value_completion
+        if full_inv is not None and full_comp is not None and full_comp == 1.0 and full_inv == 0.0:
+            full_violations += 1
+        null_sample = null_by_epoch[epoch]
+        null_inv = null_sample.score_value_invariant
+        null_comp = null_sample.score_value_completion
+        if null_inv is not None and null_comp is not None and null_comp == 1.0 and null_inv == 0.0:
+            null_violations += 1
+    return {
+        "full": full_violations,
+        "null": null_violations,
+    }
+
+
+def _split_oracle_config(full: ParsedEvalLog, null: ParsedEvalLog) -> dict[str, Any]:
+    """Build config_json entries for the split oracle when present.
+
+    #424: when the eval log carries both invariant_oracle and completion_oracle
+    scores, this returns the completion lattice and silent-violation blocks.
+    Returns an empty dict for legacy pass_fail runs (no split scores).
+    """
+    if not any(s.score_value_invariant is not None for s in full.samples) and not any(
+        s.score_value_invariant is not None for s in null.samples
+    ):
+        return {}
+    return {
+        # Ticket: ingest writes outcome_type into config_json beside the runner
+        # block so a store reader can see which oracle scored the run without
+        # re-parsing the eval log.
+        "outcome_type": "invariant",
+        "paired_cells_completion": _paired_cell_counts_on_score(
+            full, null, "score_value_completion"
+        ),
+        "silent_violation": _silent_violation_counts(full, null),
     }
 
 

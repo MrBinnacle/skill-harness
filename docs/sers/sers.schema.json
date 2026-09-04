@@ -21,7 +21,7 @@
   "properties": {
     "sers_version": {
       "type": "string",
-      "enum": ["1.0.0", "1.1.0", "1.2.0"],
+      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0"],
       "description": "SERS vocabulary generation. Receipts from different sers_version values are not comparable."
     },
     "skill_name": {
@@ -58,6 +58,11 @@
       "type": ["string", "null"],
       "enum": ["transformative-lift", "trap-discipline", "calibration", null],
       "description": "Skill value kind. Screen-path CUT(subsumed) is valid only for transformative-lift; other classes route above-bar p0 to CANT_TELL_YET (wrong instrument). null = unclassified."
+    },
+    "outcome_type": {
+      "type": ["string", "null"],
+      "enum": ["pass_fail", "invariant", null],
+      "description": "The scoring-oracle kind the record authorises. pass_fail = legacy conjunction oracle; invariant = split invariant + completion oracle. Required for trap-discipline; null on pass_fail records."
     },
     "wrong_instrument": {
       "type": "boolean",
@@ -147,6 +152,26 @@
           "type": "string",
           "enum": ["GO", "NO_GO", "NOT_APPLICABLE"],
           "description": "Pre-stated GO/NO-GO apparatus gate when one was registered."
+        },
+        "hazard_entry_null": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Null-arm hazard-entry rate: the fraction of Null epochs where the hazard pattern was entered."
+        },
+        "hazard_entry_full": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Full-arm hazard-entry rate: the fraction of Full epochs where the hazard pattern was entered."
+        },
+        "null_completion_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Null-arm completion rate: the fraction of Null epochs where the completion oracle scored pass."
+        },
+        "full_completion_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Full-arm completion rate: the fraction of Full epochs where the completion oracle scored pass."
+        },
+        "silent_violation_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Silent violation rate: the fraction of epochs where completion held but invariant failed (C=1, I=0)."
         }
       }
     },
@@ -361,6 +386,15 @@
     {
       "if": {
         "properties": { "sers_version": { "const": "1.2.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.3.0" } },
         "required": ["sers_version"]
       },
       "then": {

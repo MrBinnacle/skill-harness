@@ -210,6 +210,15 @@ class RatRecord(BaseModel):
     #: mismatch. Present iff pilot_subject_model differs from the priced subject
     #: and the transfer is authorised. Names the reason and the measurement.
     subject_change_waiver: dict[str, str] | None = None
+    #: #424: the scoring-oracle kind the record authorises. ``pass_fail`` is the
+    #: legacy conjunction oracle (Full pass AND Null fail); ``invariant`` is the
+    #: split oracle (invariant_oracle I + completion_oracle C). Required for
+    #: trap-discipline; absent on pass_fail records.
+    outcome_type: str | None = None
+    #: #424: the completion-rate margin the decision rule compares against.
+    #: ``delta_min`` when absent — the minimum detectable effect the record
+    #: already registered, so the completion margin inherits the same bar.
+    completion_margin: float | None = None
 
 
 def _cents(usd: float) -> int:
@@ -388,6 +397,39 @@ def parse_rat_record(path: Path) -> RatRecord:
             )
         subject_change_waiver_value = {str(k): str(v) for k, v in subject_change_waiver_raw.items()}
 
+    # #424: outcome_type — the scoring-oracle kind the record authorises.
+    # ``pass_fail`` is the legacy conjunction oracle; ``invariant`` is the
+    # split oracle (invariant_oracle I + completion_oracle C). Optional alone;
+    # required at evaluate-paired time for trap-discipline (refused by name
+    # when absent).
+    _OUTCOME_TYPES = frozenset({"pass_fail", "invariant"})
+    outcome_type_value: str | None = None
+    outcome_type_raw = fields.get("outcome_type")
+    if outcome_type_raw is not None:
+        if not isinstance(outcome_type_raw, str) or not outcome_type_raw.strip():
+            raise RatificationError(f"{path.name}: field 'outcome_type' must be a non-empty string")
+        if outcome_type_raw not in _OUTCOME_TYPES:
+            raise RatificationError(
+                f"{path.name}: outcome_type {outcome_type_raw!r} not in {sorted(_OUTCOME_TYPES)}"
+            )
+        outcome_type_value = outcome_type_raw
+
+    # #424: completion_margin — the completion-rate margin the decision rule
+    # compares against. Absent means delta_min (the minimum detectable effect
+    # the record already registered). Half-open [0, 1).
+    completion_margin_value: float | None = None
+    completion_margin_raw = fields.get("completion_margin")
+    if completion_margin_raw is not None:
+        if isinstance(completion_margin_raw, bool) or not isinstance(
+            completion_margin_raw, (int, float)
+        ):
+            raise RatificationError(f"{path.name}: field 'completion_margin' must be numeric")
+        completion_margin_value = float(completion_margin_raw)
+        if not 0.0 <= completion_margin_value < 1.0:
+            raise RatificationError(
+                f"{path.name}: completion_margin must lie in [0, 1); got {completion_margin_value}"
+            )
+
     return RatRecord(
         rat_id=rat_id,
         status=status,
@@ -408,6 +450,8 @@ def parse_rat_record(path: Path) -> RatRecord:
         hazard_floor=hazard_floor_value,
         pilot_subject_model=pilot_subject_model_value,
         subject_change_waiver=subject_change_waiver_value,
+        outcome_type=outcome_type_value,
+        completion_margin=completion_margin_value,
     )
 
 

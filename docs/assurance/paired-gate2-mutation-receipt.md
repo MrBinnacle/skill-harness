@@ -4,10 +4,15 @@
 **Generator:** `scripts/mutation_receipt.py --select 389`. **Machine-readable record:**
 `docs/assurance/paired-gate2-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/cli/paired_gate2.py` at
-`sha256:8abfb41bd9b9cb469e87e10c9d63b003a8f517dd2522ceaad9bf1607ee6eebec`.
-**Commit at generation:** `be86b77f22e3ecf94100ea63f4e61138096c287b` — informational only. A rebase
+`sha256:2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31`.
+**Commit at generation:** `6fe71b6` — informational only. A rebase
 rewrites it and later commits move HEAD past it, so currency is checked against the digest
 above by `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
+
+**Regenerated 2026-09-04 for #424.** The completion non-inferiority guard and
+`outcome_type` refusal moved `paired_gate2.py` bytes. Both `#389` mutants were
+re-run by the same generator; both anchors were still present and both kills held, by the
+same detectors. The results table below was re-measured, not carried.
 
 **Regenerated 2026-09-03 for #421.** Commit `be86b77` added the `#403`-amendment hazard
 refusal (registered `hazard_floor`, two-arm block, Full arm printed and never gated) to

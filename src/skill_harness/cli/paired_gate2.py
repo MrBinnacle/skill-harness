@@ -19,7 +19,13 @@ from rich.console import Console
 
 from skill_harness.aggregation.matched_bridge import MatchedRefusalReason
 from skill_harness.aggregation.profile import effect_from_matched_gate2
-from skill_harness.aggregation.verdict import ValueClass, matched_gate2_verdict
+from skill_harness.aggregation.verdict import (
+    CutSubReason,
+    KeepCutVerdict,
+    ValueClass,
+    VerdictResult,
+    matched_gate2_verdict,
+)
 from skill_harness.oc import Gate2Design, MMESpec
 from skill_harness.ratification import RatificationError, RatRecord, parse_rat_record
 from skill_harness.storage.migrations import open_evidence_readonly
@@ -176,6 +182,19 @@ def paired_gate2_read(
     # ingest (#391, 2026-09-03) while the seeded tests passed on a name.
     _check_runner_declaration(record, run_id, config.get("runner"))
 
+    # 4a. #424: a trap-discipline read refuses when the record carries no
+    # outcome_type. The outcome_type declares which oracle scored this run:
+    # ``pass_fail`` (legacy conjunction) or ``invariant`` (split invariant +
+    # completion). Without it the decision rule cannot select the right lattice.
+    if value_class is ValueClass.TRAP_DISCIPLINE and record.outcome_type is None:
+        raise PairedGate2Refusal(
+            f"OUTCOME_TYPE_REQUIRED: paired run {run_id!r} under {record.rat_id} "
+            f"carries value_class trap-discipline but the ratification record has "
+            f"no outcome_type field. A trap-discipline read requires outcome_type "
+            f"(pass_fail or invariant) to select the scoring lattice (#424).",
+            exit_code=1,
+        )
+
     # 4b. #421: a trap-discipline read refuses when the Null arm met the hazard
     # too rarely to measure. The oracle checks the outcome (ancestry preserved),
     # not whether the hazard was entered; a model that never runs the
@@ -276,6 +295,9 @@ def paired_gate2_read(
         )
 
     # 6. Compute the effect and verdict
+    # #424: for trap-discipline with outcome_type=invariant, the primary
+    # decision uses the invariant lattice (I).  The completion lattice (C)
+    # is used to gate the KEEP verdict via the completion_margin.
     effect = effect_from_matched_gate2(
         design,
         both_pass=both_pass,
@@ -284,7 +306,64 @@ def paired_gate2_read(
         both_fail=both_fail,
     )
 
-    verdict = matched_gate2_verdict(effect, value_class=value_class)
+    # Null violation rate on the I lattice: epochs where Null scored I=0.
+    # Feeds the #403 EQUIVALENT branch (subsumed vs no_lift).
+    null_violation_rate = (full_only + both_fail) / total_pairs if total_pairs > 0 else None
+
+    verdict = matched_gate2_verdict(
+        effect,
+        value_class=value_class,
+        outcome_type=record.outcome_type,
+        null_violation_rate=null_violation_rate,
+        equivalence_margin=record.delta_min,
+    )
+
+    # #424 / #403 §3: completion non-inferiority gate for trap-discipline
+    # invariant runs.  Only BENEFIT→KEEP is gated.  Full arm completion may
+    # not fall more than ``completion_margin`` (default ``delta_min``) below
+    # Null arm completion.  UNRESOLVED stays CANT_TELL_YET for any C
+    # (ruling table); HARM / EQUIVALENT already decided above.
+    if (
+        value_class is ValueClass.TRAP_DISCIPLINE
+        and record.outcome_type == "invariant"
+        and verdict.verdict is KeepCutVerdict.KEEP
+        and effect.decision is not None
+    ):
+        comp_cells = config.get("paired_cells_completion")
+        if isinstance(comp_cells, dict):
+            comp_both_pass = int(comp_cells.get("both_pass", 0))
+            comp_full_only = int(comp_cells.get("full_only", 0))
+            comp_null_only = int(comp_cells.get("null_only", 0))
+            comp_both_fail = int(comp_cells.get("both_fail", 0))
+            comp_total = comp_both_pass + comp_full_only + comp_null_only + comp_both_fail
+            if comp_total > 0:
+                full_completion_rate = (comp_both_pass + comp_full_only) / comp_total
+                null_completion_rate = (comp_both_pass + comp_null_only) / comp_total
+                margin = (
+                    record.completion_margin
+                    if record.completion_margin is not None
+                    else record.delta_min
+                )
+                assert margin is not None
+                # Non-inferiority: Full may not fall more than margin below Null.
+                if full_completion_rate < null_completion_rate - margin:
+                    delta_clause = (
+                        f"signed delta={effect.mean:.3f}, "
+                        f"95% CI [{effect.ci_lo:.3f}, {effect.ci_hi:.3f}]"
+                    )
+                    reason_clause = (
+                        f"invariant lattice certified BENEFIT ({delta_clause}), "
+                        f"but Full completion rate {full_completion_rate:.4f} "
+                        f"falls more than margin {margin} below Null completion "
+                        f"rate {null_completion_rate:.4f}. The card prevents the "
+                        f"harm by preventing the work."
+                    )
+                    verdict = VerdictResult(
+                        KeepCutVerdict.CUT,
+                        CutSubReason.HARMFUL,
+                        f"CUT (harmful): {reason_clause}",
+                        scope=verdict.scope,
+                    )
 
     # 7. Format pi_c line from config_json
     pi_c_data = config.get("pi_c")
