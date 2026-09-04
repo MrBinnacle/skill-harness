@@ -606,3 +606,126 @@ class TestIngestOracleIdentity050:
         from skill_harness.subject.ingest import ORACLE_METRIC_VERSION
 
         assert ORACLE_METRIC_VERSION == "0.5.0"
+
+
+# ---------------------------------------------------------------------------
+# #430: the gitpull screen reaches the store through the manifest, the D4
+# supersession voids it, and prior_measurements says so instead of printing a
+# ceiling the harness has discarded.
+# ---------------------------------------------------------------------------
+
+_GITPULL_EVAL_NAME = (
+    "2026-07-21T03-05-28-00-00_git-pull-rebase-trap-null_E9uYtKBETxuAQtRHExMsTW.eval"
+)
+_D4_GITPULL_REASON = (
+    "apparatus_void: D4 prompt leak; hit=RELEASING.md; searched=prompt,RELEASING.md"
+)
+
+
+def _gitpull_screen_log(*scores: float) -> object:
+    """A ParsedEvalLog shaped like the OBS-0007 Null screen on the priced subject."""
+    from skill_harness.subject.ingest import ParsedEvalLog, ParsedSample
+
+    samples = tuple(
+        ParsedSample(
+            condition="null",
+            skill_name="git-pull-rebase-trap",
+            epoch=epoch,
+            scorer_name="command_succeeds",
+            score_value=score,
+            invoked_skill=False,
+            output_text=f"null-output-{epoch}",
+            subject_model="anthropic/claude-sonnet-5",
+            harness_pin_json=None,
+            harness_pin_fingerprint="fp-obs-0007",
+            input_tokens=100,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+            output_tokens=10,
+            usd=None,
+        )
+        for epoch, score in enumerate(scores, start=1)
+    )
+    return ParsedEvalLog(
+        task_name="git-pull-rebase-trap-null",
+        task_id="E9uYtKBETxuAQtRHExMsTW",
+        created="2026-07-21T03:05:28+00:00",
+        status="success",
+        samples=samples,
+    )
+
+
+class TestPriorScreenVoidedByD4:
+    """#430: seeded through the production writer, never by hand."""
+
+    def _seed_through_manifest(self, tmp_path: Path, *, supersede: bool) -> tuple[Path, str]:
+        """Apply the gitpull manifest entry into a temporary store; return (db, sha prefix)."""
+        import hashlib
+
+        from skill_harness.storage.migrations import open_evidence
+        from skill_harness.subject.screen_backfill import (
+            BATCH1_MANIFEST,
+            apply_manifest,
+            supersede_d4_screen_runs,
+        )
+
+        (entry,) = [e for e in BATCH1_MANIFEST if e.expected_skill == "git-pull-rebase-trap"]
+        assert entry.rel_path.endswith(_GITPULL_EVAL_NAME)
+        assert entry.admissibility_state == "admissible"
+        root = tmp_path / "screens"
+        log_path = root / entry.rel_path
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_bytes(b"obs-0007 stub bytes")
+        sha_prefix = hashlib.sha256(b"obs-0007 stub bytes").hexdigest()[:8]
+
+        db = tmp_path / "evidence.db"
+        conn = open_evidence(db)
+        try:
+            report = apply_manifest(
+                root,
+                conn,
+                manifest=(entry,),
+                parse=lambda _path: _gitpull_screen_log(1.0, 1.0, 1.0),  # type: ignore[arg-type,return-value]
+            )
+            assert report.mismatches == ()
+            if supersede:
+                superseded = supersede_d4_screen_runs(conn)
+                assert len(superseded) == 1
+            conn.commit()
+        finally:
+            conn.close()
+        return db, sha_prefix
+
+    def test_voided_screen_prints_as_voided_not_as_a_ceiling(self, tmp_path: Path) -> None:
+        """ARM: ingested and D4-superseded, exactly one voided line, no p0."""
+        from skill_harness.subject.paired_launch import prior_measurements
+
+        db, sha_prefix = self._seed_through_manifest(tmp_path, supersede=True)
+        lines = prior_measurements(parse_rat_record(RAT_0001), db, "claude-sonnet-5")
+        screen_lines = [line for line in lines if "screen run" in line]
+        assert screen_lines == [
+            f"prior: screen run {sha_prefix}, claude-sonnet-5, VOIDED ({_D4_GITPULL_REASON})"
+        ]
+        assert not any("p0 =" in line for line in screen_lines)
+
+    def test_admissible_screen_still_prints_p0(self, tmp_path: Path) -> None:
+        """NEGATIVE ARM (b): ingested, not superseded, the ceiling line prints, no voided line."""
+        from skill_harness.subject.paired_launch import prior_measurements
+
+        db, sha_prefix = self._seed_through_manifest(tmp_path, supersede=False)
+        lines = prior_measurements(parse_rat_record(RAT_0001), db, "claude-sonnet-5")
+        screen_lines = [line for line in lines if "screen run" in line]
+        assert screen_lines == [
+            f"prior: screen run {sha_prefix}, claude-sonnet-5, Null 3 of 3, p0 = 1.0000"
+        ]
+        assert not any("VOIDED" in line for line in screen_lines)
+
+    def test_no_gitpull_row_prints_no_gitpull_line(self, tmp_path: Path) -> None:
+        """NEGATIVE ARM (a): an empty store prints no screen line at all."""
+        from skill_harness.storage.migrations import open_evidence
+        from skill_harness.subject.paired_launch import prior_measurements
+
+        db = tmp_path / "evidence.db"
+        open_evidence(db).close()
+        lines = prior_measurements(parse_rat_record(RAT_0001), db, "claude-sonnet-5")
+        assert not any("screen run" in line for line in lines)

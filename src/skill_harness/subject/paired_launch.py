@@ -311,13 +311,20 @@ def _prior_screen_measurements(
 
     Matches ``screen_runs`` by ``skill_name == record.skill_id`` (the card
     name; the screen store carries no task_family) and ``subject_model``
-    containing the bare pricing-table name. Returns one line per admissible,
+    containing the bare pricing-table name. Returns one line per
     non-superseded screen run, ordered by creation.
+
+    An admissible run prints its Null count and ``p0``. An inadmissible run
+    prints ``VOIDED`` with its ``inadmissibility_reason`` verbatim and no
+    ``p0`` (#430): a supersession appends a new inadmissible row carrying the
+    trials, and before this branch that row printed as a ceiling the harness
+    had already discarded. Silence would be wrong the other way: a launcher
+    who sees no line assumes no screen was ever run.
     """
     lines: list[str] = []
     rows = conn.execute(
         "SELECT sr.screen_run_id, sr.subject_model, sr.source_eval_sha256, "
-        "sr.admissibility_state, sr.created_at "
+        "sr.admissibility_state, sr.inadmissibility_reason, sr.created_at "
         "FROM screen_runs sr "
         "WHERE sr.skill_name = ? "
         "AND sr.screen_run_id NOT IN ("
@@ -325,9 +332,14 @@ def _prior_screen_measurements(
         "ORDER BY sr.created_at, sr.screen_run_id",
         (record.skill_id,),
     ).fetchall()
-    for screen_run_id, subject_model, source_eval_sha256, _admissibility, _created in rows:
+    for screen_run_id, subject_model, source_eval_sha256, admissibility, reason, _created in rows:
         model_str = subject_model or ""
         if bare_model not in model_str:
+            continue
+        sha_short = (source_eval_sha256 or "")[:8]
+        if admissibility != "admissible":
+            void_reason = reason or "no reason recorded"
+            lines.append(f"prior: screen run {sha_short}, {bare_model}, VOIDED ({void_reason})")
             continue
         trial_row = conn.execute(
             "SELECT COUNT(*), COALESCE(SUM(passed), 0) FROM screen_trials WHERE screen_run_id = ?",
@@ -336,7 +348,6 @@ def _prior_screen_measurements(
         n_trials = int(trial_row[0]) if trial_row else 0
         n_pass = int(trial_row[1]) if trial_row else 0
         p0 = n_pass / n_trials if n_trials else 0.0
-        sha_short = (source_eval_sha256 or "")[:8]
         lines.append(
             f"prior: screen run {sha_short}, {bare_model}, "
             f"Null {n_pass} of {n_trials}, p0 = {p0:.4f}"
