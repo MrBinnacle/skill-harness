@@ -3255,6 +3255,13 @@ def screen_backfill_cmd(
         redispositioned = supersede_d4_screen_runs(ctx.evidence_conn)
 
     _console.print(f"\n[green]Backfilled[/] {len(report.ingested)} screens into {evidence_db}")
+    if report.skipped:
+        _console.print(
+            f"[dim]Skipped {len(report.skipped)} manifest entr"
+            f"{'y' if len(report.skipped) == 1 else 'ies'} already in the store (#430):[/]"
+        )
+        for line in report.skipped:
+            _console.print(f"  [dim]{_sanitize_clause_text(line, max_len=None)}[/]")
     for result in report.ingested:
         state = result.admissibility_state
         color = "green" if state == "admissible" else "red"

@@ -57,6 +57,7 @@ from skill_harness.subject.ingest import ParsedEvalLog, parse_eval_log
 from skill_harness.subject.screen_ingest import (
     AdmissibilityState,
     ScreenIngestResult,
+    derived_screen_run_id,
     ingest_screen_eval_log,
     write_screen_evidence,
 )
@@ -312,6 +313,10 @@ class BackfillReport:
 
     ingested: tuple[ScreenIngestResult, ...]
     mismatches: tuple[str, ...]  # human-readable audit disagreements (empty == clean)
+    # Entries whose screen task was already in the store (#430): a re-run
+    # against a live store is the normal case once the manifest has grown,
+    # and it must reach the new entries instead of refusing at the first old one.
+    skipped: tuple[str, ...] = ()
 
 
 def apply_manifest(
@@ -341,11 +346,20 @@ def apply_manifest(
 
     ingested: list[ScreenIngestResult] = []
     mismatches: list[str] = []
+    skipped: list[str] = []
     for entry in manifest:
         path = screens_root / entry.rel_path
         if not path.is_file():
             raise FileNotFoundError(f"manifest log not found: {path}")
         parsed = parse(path)
+
+        # #430: an entry already in the store is skipped, not refused. The
+        # writer's own guard decides (same derivation of screen_run_id), so a
+        # re-run cannot double-ingest; it reports what it left alone.
+        existing_id = derived_screen_run_id(parsed.task_id)
+        if get_screen_run_by_id(conn, existing_id) is not None:
+            skipped.append(f"{entry.rel_path}: already ingested as {existing_id}")
+            continue
 
         # --- D4 prompt-leak check (when manifest supplies the inputs) ---------
         # D4 hit -> inadmissible ruling. Not an audit mismatch (mismatches =
@@ -386,7 +400,9 @@ def apply_manifest(
                 f"{entry.rel_path}: {result.n_pass} passing epochs != expected "
                 f"{entry.expected_pass}"
             )
-    return BackfillReport(ingested=tuple(ingested), mismatches=tuple(mismatches))
+    return BackfillReport(
+        ingested=tuple(ingested), mismatches=tuple(mismatches), skipped=tuple(skipped)
+    )
 
 
 # convenience re-export so callers backfill + read p0 from one module
