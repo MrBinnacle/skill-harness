@@ -147,7 +147,7 @@ def write_screen_evidence(
     fingerprints = {s.harness_pin_fingerprint for s in parsed.samples}
     fingerprint = next(iter(fingerprints)) if len(fingerprints) == 1 else None
 
-    screen_run_id = _derived_screen_run_id(parsed.task_id)
+    screen_run_id = derived_screen_run_id(parsed.task_id)
     if get_screen_run_by_id(conn, screen_run_id) is not None:
         raise AlreadyIngestedScreenError(
             f"screen task {parsed.task_id!r} already ingested as {screen_run_id}"
@@ -215,7 +215,8 @@ def _passed(score_value: float, task_name: str) -> int:
     )
 
 
-def _derived_screen_run_id(task_id: str) -> str:
+def derived_screen_run_id(task_id: str) -> str:
+    """The screen_run_id a task_id ingests as. One derivation, shared with the backfill (#430)."""
     return hashlib.sha256(f"screen-ingest:{task_id}".encode()).hexdigest()
 
 

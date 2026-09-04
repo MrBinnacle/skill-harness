@@ -521,6 +521,39 @@ def test_apply_manifest_clean(tmp_path: Path, conn: sqlite3.Connection) -> None:
     assert "sqlite-tie-break-red-test-trap" in verdicts  # the void log did not sink it
 
 
+def test_apply_manifest_rerun_skips_ingested_and_applies_new(
+    tmp_path: Path, conn: sqlite3.Connection
+) -> None:
+    """A re-run against a store that already holds earlier entries must not refuse.
+
+    #430 half B: the live store held batch-1 from the 2026-09-01 backfill, and
+    the first entry raised AlreadyIngestedScreenError before the new gitpull
+    entry was reached. A backfill that can run once is a migration, not a
+    backfill; the manifest grows and the store keeps what it has.
+    """
+    root = _fake_tree(tmp_path)
+
+    def fake_parse(path: Path) -> ParsedEvalLog:
+        entry = next(e for e in BATCH1_MANIFEST if str(path).endswith(e.rel_path.split("/")[-1]))
+        scores = tuple(1.0 for _ in range(3)) if entry.expected_pass == 3 else (0.0, 0.0, 0.0)
+        return make_screen_log(*scores, skill_name=entry.expected_skill, task_id=str(path.name))
+
+    first = apply_manifest(root, conn, manifest=BATCH1_MANIFEST[:-1], parse=fake_parse)
+    assert len(first.ingested) == len(BATCH1_MANIFEST) - 1
+    assert first.skipped == ()
+    before = conn.execute("SELECT COUNT(*) FROM screen_runs").fetchone()[0]
+
+    second = apply_manifest(root, conn, parse=fake_parse)
+
+    assert len(second.ingested) == 1
+    assert second.ingested[0].skill_name == BATCH1_MANIFEST[-1].expected_skill
+    assert len(second.skipped) == len(BATCH1_MANIFEST) - 1
+    assert all("already ingested" in line for line in second.skipped)
+    assert second.mismatches == ()
+    after = conn.execute("SELECT COUNT(*) FROM screen_runs").fetchone()[0]
+    assert after == before + 1
+
+
 def test_apply_manifest_surfaces_pass_mismatch(tmp_path: Path, conn: sqlite3.Connection) -> None:
     """A manifest whose expected_pass disagrees with the log must surface, not corrupt p0."""
     root = _fake_tree(tmp_path)
