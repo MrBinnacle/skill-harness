@@ -508,7 +508,7 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         value_sites=(
             ValueSite(
                 "src/skill_harness/ratification.py",
-                r'^    _OUTCOME_TYPES = frozenset\(\{([^}]+)\}\)$',
+                r"^    _OUTCOME_TYPES = frozenset\(\{([^}]+)\}\)$",
                 ('"pass_fail", "invariant"',),
             ),
             ValueSite(
