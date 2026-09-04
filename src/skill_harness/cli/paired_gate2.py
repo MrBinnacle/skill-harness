@@ -306,63 +306,58 @@ def paired_gate2_read(
         both_fail=both_fail,
     )
 
+    # Null violation rate on the I lattice: epochs where Null scored I=0.
+    # Feeds the #403 EQUIVALENT branch (subsumed vs no_lift).
+    null_violation_rate = (full_only + both_fail) / total_pairs if total_pairs > 0 else None
+
     verdict = matched_gate2_verdict(
         effect,
         value_class=value_class,
         outcome_type=record.outcome_type,
+        null_violation_rate=null_violation_rate,
+        equivalence_margin=record.delta_min,
     )
 
-    # #424: completion-margin gate for trap-discipline invariant runs.
-    # The completion lattice (C) gates the verdict when the invariant
-    # lattice (I) produces KEEP or UNRESOLVED.  When the Full arm's
-    # completion rate is below the completion_margin (default: delta_min),
-    # the verdict is CUT(harmful) — the teammate's work was not reliably
-    # completed despite the invariant holding or being inconclusive.
+    # #424 / #403 §3: completion non-inferiority gate for trap-discipline
+    # invariant runs.  Only BENEFIT→KEEP is gated.  Full arm completion may
+    # not fall more than ``completion_margin`` (default ``delta_min``) below
+    # Null arm completion.  UNRESOLVED stays CANT_TELL_YET for any C
+    # (ruling table); HARM / EQUIVALENT already decided above.
     if (
         value_class is ValueClass.TRAP_DISCIPLINE
         and record.outcome_type == "invariant"
-        and verdict.verdict in (KeepCutVerdict.KEEP, KeepCutVerdict.CANT_TELL_YET)
+        and verdict.verdict is KeepCutVerdict.KEEP
         and effect.decision is not None
     ):
         comp_cells = config.get("paired_cells_completion")
         if isinstance(comp_cells, dict):
             comp_both_pass = int(comp_cells.get("both_pass", 0))
             comp_full_only = int(comp_cells.get("full_only", 0))
-            comp_total = (
-                comp_both_pass
-                + comp_full_only
-                + int(comp_cells.get("null_only", 0))
-                + int(comp_cells.get("both_fail", 0))
-            )
+            comp_null_only = int(comp_cells.get("null_only", 0))
+            comp_both_fail = int(comp_cells.get("both_fail", 0))
+            comp_total = comp_both_pass + comp_full_only + comp_null_only + comp_both_fail
             if comp_total > 0:
-                completion_rate = (comp_both_pass + comp_full_only) / comp_total
+                full_completion_rate = (comp_both_pass + comp_full_only) / comp_total
+                null_completion_rate = (comp_both_pass + comp_null_only) / comp_total
                 margin = (
                     record.completion_margin
                     if record.completion_margin is not None
                     else record.delta_min
                 )
                 assert margin is not None
-                if completion_rate < margin:
+                # Non-inferiority: Full may not fall more than margin below Null.
+                if full_completion_rate < null_completion_rate - margin:
                     delta_clause = (
                         f"signed delta={effect.mean:.3f}, "
                         f"95% CI [{effect.ci_lo:.3f}, {effect.ci_hi:.3f}]"
                     )
-                    if verdict.verdict is KeepCutVerdict.KEEP:
-                        reason_clause = (
-                            f"invariant lattice certified BENEFIT "
-                            f"({delta_clause}), but the completion rate "
-                            f"{completion_rate:.4f} is below the margin "
-                            f"{margin}.  The teammate's work was not reliably "
-                            f"completed despite the invariant holding."
-                        )
-                    else:
-                        reason_clause = (
-                            f"invariant lattice left the contrast "
-                            f"UNRESOLVED ({delta_clause}), and the "
-                            f"completion rate {completion_rate:.4f} is below "
-                            f"the margin {margin}.  The teammate's work was "
-                            f"not reliably completed — CUT (harmful)."
-                        )
+                    reason_clause = (
+                        f"invariant lattice certified BENEFIT ({delta_clause}), "
+                        f"but Full completion rate {full_completion_rate:.4f} "
+                        f"falls more than margin {margin} below Null completion "
+                        f"rate {null_completion_rate:.4f}. The card prevents the "
+                        f"harm by preventing the work."
+                    )
                     verdict = VerdictResult(
                         KeepCutVerdict.CUT,
                         CutSubReason.HARMFUL,

@@ -487,18 +487,14 @@ def parse_eval_log(path: Path, *, skill_description: str = "") -> ParsedEvalLog:
         # completion).  The primary score goes into score_value; the optional
         # split scores are extracted by name when present.
         scorer_name, score = next(iter(s.scores.items()))
-        score_val = _score_to_float(
-            score.value, path, sample=f"sample id={s.id} epoch={s.epoch}"
-        )
+        score_val = _score_to_float(score.value, path, sample=f"sample id={s.id} epoch={s.epoch}")
         inv_score_val: float | None = None
         comp_score_val: float | None = None
         if len(s.scores) == 2 and scorer_name in ("invariant_oracle", "completion_oracle"):
             names = list(s.scores.keys())
             for n in names:
                 sc = s.scores[n]
-                sv = _score_to_float(
-                    sc.value, path, sample=f"sample id={s.id} epoch={s.epoch}"
-                )
+                sv = _score_to_float(sc.value, path, sample=f"sample id={s.id} epoch={s.epoch}")
                 if n == "invariant_oracle":
                     inv_score_val = sv
                 elif n == "completion_oracle":
@@ -511,7 +507,8 @@ def parse_eval_log(path: Path, *, skill_description: str = "") -> ParsedEvalLog:
                 for n in names:
                     if n == "invariant_oracle":
                         score_val = _score_to_float(
-                            s.scores[n].value, path,
+                            s.scores[n].value,
+                            path,
                             sample=f"sample id={s.id} epoch={s.epoch}",
                         )
         metadata = s.metadata or {}
@@ -1077,9 +1074,7 @@ def _paired_cell_counts_on_score(
     }
 
 
-def _silent_violation_counts(
-    full: ParsedEvalLog, null: ParsedEvalLog
-) -> dict[str, int]:
+def _silent_violation_counts(full: ParsedEvalLog, null: ParsedEvalLog) -> dict[str, int]:
     """Count silent violations per arm: C=1 but I=0 (completion held, invariant broke).
 
     #424: a silent violation is when the completion oracle passes but the
@@ -1093,37 +1088,35 @@ def _silent_violation_counts(
     for epoch, full_sample in full_by_epoch.items():
         full_inv = full_sample.score_value_invariant
         full_comp = full_sample.score_value_completion
-        if full_inv is not None and full_comp is not None:
-            if full_comp == 1.0 and full_inv == 0.0:
-                full_violations += 1
+        if full_inv is not None and full_comp is not None and full_comp == 1.0 and full_inv == 0.0:
+            full_violations += 1
         null_sample = null_by_epoch[epoch]
         null_inv = null_sample.score_value_invariant
         null_comp = null_sample.score_value_completion
-        if null_inv is not None and null_comp is not None:
-            if null_comp == 1.0 and null_inv == 0.0:
-                null_violations += 1
+        if null_inv is not None and null_comp is not None and null_comp == 1.0 and null_inv == 0.0:
+            null_violations += 1
     return {
         "full": full_violations,
         "null": null_violations,
     }
 
 
-def _split_oracle_config(
-    full: ParsedEvalLog, null: ParsedEvalLog
-) -> dict[str, Any]:
+def _split_oracle_config(full: ParsedEvalLog, null: ParsedEvalLog) -> dict[str, Any]:
     """Build config_json entries for the split oracle when present.
 
     #424: when the eval log carries both invariant_oracle and completion_oracle
     scores, this returns the completion lattice and silent-violation blocks.
     Returns an empty dict for legacy pass_fail runs (no split scores).
     """
-    if not any(
-        s.score_value_invariant is not None for s in full.samples
-    ) and not any(
+    if not any(s.score_value_invariant is not None for s in full.samples) and not any(
         s.score_value_invariant is not None for s in null.samples
     ):
         return {}
     return {
+        # Ticket: ingest writes outcome_type into config_json beside the runner
+        # block so a store reader can see which oracle scored the run without
+        # re-parsing the eval log.
+        "outcome_type": "invariant",
         "paired_cells_completion": _paired_cell_counts_on_score(
             full, null, "score_value_completion"
         ),

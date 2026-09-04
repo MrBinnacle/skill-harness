@@ -214,7 +214,13 @@ class TestHarmToCut:
 
 
 class TestEquivalentNonTransformative:
-    """AC6: EQUIVALENT under non-transformative class -> CANT_TELL_YET(wrong_instrument)."""
+    """AC6: EQUIVALENT under trap-discipline + invariant decides per #403 table.
+
+    Pre-#424 this class withheld wrong_instrument on EQUIVALENT. With the
+    registered (trap-discipline, invariant) instrument the table decides:
+    Null violation rate at/below the equivalence-margin floor → CUT(subsumed);
+    otherwise CUT(no_lift). Never KEEP, never wrong_instrument.
+    """
 
     def test_equivalent_trap_discipline(self, tmp_path: Path, evidence: sqlite3.Connection) -> None:
         # Provide a hazard block with null_entered high enough to clear the floor.
@@ -225,6 +231,9 @@ class TestEquivalentNonTransformative:
             full_epochs=32,
             floor=_HAZARD_FLOOR,
         )
+        # both_pass=6, full_only=2, null_only=2, both_fail=6 → n=16
+        # Null violation rate = (full_only + both_fail)/n = 8/16 = 0.50
+        # delta_min default 0.20 → above floor → CUT(no_lift)
         _seed_run(
             evidence,
             "run-equiv",
@@ -249,7 +258,8 @@ class TestEquivalentNonTransformative:
 
         assert result.exit_code == 0
         assert "Decision: equivalent" in result.output
-        assert "Verdict: CANT_TELL_YET (wrong_instrument)" in result.output
+        assert "Verdict: CUT (no_lift)" in result.output
+        assert "wrong_instrument" not in result.output
 
 
 class TestCountMismatch:
@@ -699,6 +709,7 @@ class TestHazardNotRecorded:
 
         assert result.exit_code == 1
         assert "HAZARD_NOT_RECORDED" in result.output
+        assert "Verdict" not in result.output
 
     def test_no_hazard_block_decides_under_transformative_lift(
         self, tmp_path: Path, evidence: sqlite3.Connection
@@ -1065,17 +1076,17 @@ def _seed_run_424(
 class TestNegativeControlNeverPull:
     """#424 negative control 1: never pull, never push.
 
-    Under the old conjunction oracle: both arms pass (SHAs preserved, no
-    conflict) → KEEP.  Under the split oracle: I=1 (SHAs preserved) but
-    C=0 (work not integrated) → CUT(harmful) through the completion guard.
+    I=1 both arms is zero-discordance → Gate-2 UNRESOLVED (#37), not
+    EQUIVALENT. Ruling table: UNRESOLVED → CANT_TELL_YET for any C. Never KEEP.
+    (A zero-discordance all-pass I lattice cannot be BENEFIT, so the completion
+    guard — which only rewrites KEEP — does not fire. The control's "never KEEP"
+    half holds; CUT(harmful) via completion requires a BENEFIT primary read.)
     """
 
-    def test_never_pull_cut_harmful_under_split_oracle(
+    def test_never_pull_never_keeps_under_split_oracle(
         self, tmp_path: Path, evidence: sqlite3.Connection
     ) -> None:
-        """ARM: invariant I=1 but completion C=0 → CUT(harmful)."""
-        # I lattice: both_pass=32 (SHAs preserved in both arms)
-        # C lattice: both_fail=32 (work not integrated in either arm)
+        """ARM: I=1 both arms, C=0 both arms → never KEEP."""
         _seed_run_424(
             evidence,
             "run-never-pull",
@@ -1101,10 +1112,8 @@ class TestNegativeControlNeverPull:
         )
 
         assert result.exit_code == 0
-        # The completion guard overrides KEEP to CUT(harmful)
-        assert "CUT" in result.output
-        assert "harmful" in result.output.lower()
-        assert "completion rate" in result.output.lower() or "margin" in result.output.lower()
+        assert "Verdict: KEEP" not in result.output
+        assert "CANT_TELL_YET" in result.output or "CUT" in result.output
 
 
 class TestNegativeControlPullRebase:
@@ -1160,9 +1169,7 @@ class TestNegativeControlFetchMerge:
     so HAZARD_NOT_MET from #421's gate.
     """
 
-    def test_fetch_merge_hazard_not_met(
-        self, tmp_path: Path, evidence: sqlite3.Connection
-    ) -> None:
+    def test_fetch_merge_hazard_not_met(self, tmp_path: Path, evidence: sqlite3.Connection) -> None:
         """ARM: Null arm never enters hazard → HAZARD_NOT_MET."""
         hazard = {
             "pattern": _N424_HAZARD_PATTERN,
@@ -1233,16 +1240,20 @@ class TestPositiveControlBenefitWithinMargin:
 
 
 class TestCompletionMarginFlip:
-    """#424: a Full arm whose completion rate is below the margin by one
-    epoch flips KEEP to CUT(harmful), and at the margin does not."""
+    """#424: non-inferiority on C — Full may not fall more than margin below Null.
+
+    Ruling §3: gated co-primary, Full_C >= Null_C - margin. Absolute Full_C
+    compared to margin alone is not the rule.
+    """
 
     def test_below_margin_by_one_flips_to_cut(
         self, tmp_path: Path, evidence: sqlite3.Connection
     ) -> None:
-        """ARM: I=benefit, C completion rate below margin → CUT(harmful)."""
+        """ARM: I=benefit, Full_C < Null_C - margin → CUT(harmful)."""
         # 32 pairs. I lattice: full_only=24, null_only=0 → BENEFIT.
-        # C lattice: full_only=5, null_only=0 → completion = (0+5)/32 = 0.15625
-        # With default margin = delta_min = 0.20, 0.15625 < 0.20 → CUT.
+        # C lattice: Full completes 5/32, Null completes 20/32.
+        # margin = delta_min = 0.20; Null_C - margin = 0.625 - 0.20 = 0.425
+        # Full_C = 5/32 ≈ 0.156 < 0.425 → CUT(harmful).
         _seed_run_424(
             evidence,
             "run-below-margin",
@@ -1252,8 +1263,8 @@ class TestCompletionMarginFlip:
             both_fail=8,
             comp_both_pass=0,
             comp_full_only=5,
-            comp_null_only=0,
-            comp_both_fail=27,
+            comp_null_only=20,
+            comp_both_fail=7,
         )
         _write_rat_424(tmp_path / "RAT-0001-test.md", n=32)
 
@@ -1271,13 +1282,11 @@ class TestCompletionMarginFlip:
         assert "CUT" in result.output
         assert "harmful" in result.output.lower()
 
-    def test_at_margin_keeps(
-        self, tmp_path: Path, evidence: sqlite3.Connection
-    ) -> None:
-        """ARM: I=benefit, C completion rate at margin → KEEP."""
+    def test_at_margin_keeps(self, tmp_path: Path, evidence: sqlite3.Connection) -> None:
+        """ARM: I=benefit, Full_C == Null_C - margin → KEEP."""
         # 32 pairs. I lattice: full_only=24, null_only=0 → BENEFIT.
-        # C lattice: full_only=7, null_only=0 → completion = (0+7)/32 = 0.21875
-        # With default margin = delta_min = 0.20, 0.21875 >= 0.20 → KEEP.
+        # C: Null completes 16/32 = 0.50; Full completes 10/32 = 0.3125
+        # margin = 0.20; Null_C - margin = 0.30; Full_C 0.3125 >= 0.30 → KEEP.
         _seed_run_424(
             evidence,
             "run-at-margin",
@@ -1286,9 +1295,9 @@ class TestCompletionMarginFlip:
             null_only=0,
             both_fail=8,
             comp_both_pass=0,
-            comp_full_only=7,
-            comp_null_only=0,
-            comp_both_fail=25,
+            comp_full_only=10,
+            comp_null_only=16,
+            comp_both_fail=6,
         )
         _write_rat_424(tmp_path / "RAT-0001-test.md", n=32)
 
@@ -1309,9 +1318,7 @@ class TestCompletionMarginFlip:
 class TestPassFailRunReadUnderTrapDiscipline:
     """#424: a pass_fail run read under trap-discipline withholds with wrong_instrument."""
 
-    def test_pass_fail_wrong_instrument(
-        self, tmp_path: Path, evidence: sqlite3.Connection
-    ) -> None:
+    def test_pass_fail_wrong_instrument(self, tmp_path: Path, evidence: sqlite3.Connection) -> None:
         """ARM: pass_fail run + trap-discipline → wrong_instrument."""
         _seed_run_424(
             evidence,

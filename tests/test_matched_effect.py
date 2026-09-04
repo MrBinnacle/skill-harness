@@ -161,12 +161,51 @@ class TestMatchedGate2ValueClassGuard:
     def test_equivalent_non_transformative_is_cant_tell_wrong_instrument(
         self, vc: ValueClass | None
     ) -> None:
-        """Guard/calibration/unset + EQUIVALENT → CANT_TELL_YET(wrong_instrument), never CUT."""
+        """Guard/calibration/unset + EQUIVALENT under pass_fail → wrong_instrument.
+
+        trap-discipline without outcome_type defaults to pass_fail, which is not
+        a registered pair (#424), so the instrument guard withholds. With
+        outcome_type=invariant the #403 table decides (see sibling test).
+        """
         bp, xf, xn, bf, _ = _CASES["equivalent"]
         result = matched_gate2_verdict(_effect(bp, xf, xn, bf), value_class=vc)
         assert result.verdict is KeepCutVerdict.CANT_TELL_YET
         assert result.cut_sub_reason is None
         assert result.wrong_instrument is True
+
+    def test_equivalent_trap_discipline_invariant_is_cut_no_lift(self) -> None:
+        """#403/#424: trap-discipline + invariant + EQUIVALENT → CUT(no_lift).
+
+        Null violation rate above the equivalence-margin floor.
+        """
+        bp, xf, xn, bf, _ = _CASES["equivalent"]
+        # n = bp+xf+xn+bf; Null violations = xf+bf
+        n = bp + xf + xn + bf
+        null_viol = (xf + bf) / n
+        result = matched_gate2_verdict(
+            _effect(bp, xf, xn, bf),
+            value_class=ValueClass.TRAP_DISCIPLINE,
+            outcome_type="invariant",
+            null_violation_rate=null_viol,
+            equivalence_margin=0.20,
+        )
+        assert result.verdict is KeepCutVerdict.CUT
+        assert result.cut_sub_reason is CutSubReason.NO_LIFT
+        assert result.wrong_instrument is False
+
+    def test_equivalent_trap_discipline_invariant_at_floor_is_cut_subsumed(self) -> None:
+        """#403/#424: Null violation rate at/below delta_min floor → CUT(subsumed)."""
+        bp, xf, xn, bf, _ = _CASES["equivalent"]
+        result = matched_gate2_verdict(
+            _effect(bp, xf, xn, bf),
+            value_class=ValueClass.TRAP_DISCIPLINE,
+            outcome_type="invariant",
+            null_violation_rate=0.10,
+            equivalence_margin=0.20,
+        )
+        assert result.verdict is KeepCutVerdict.CUT
+        assert result.cut_sub_reason is CutSubReason.SUBSUMED
+        assert result.wrong_instrument is False
 
     def test_equivalent_transformative_is_cut_no_lift(self) -> None:
         bp, xf, xn, bf, _ = _CASES["equivalent"]

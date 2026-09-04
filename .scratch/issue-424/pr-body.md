@@ -35,43 +35,40 @@ decision logic fires. The two permitted pairs:
 Every other pair withholds with `wrong_instrument=True`. When `outcome_type`
 is `None` (absent from the record), the guard defaults to `pass_fail`.
 
-### 4. `outcome_type` required for trap-discipline in `evaluate-paired`
+### 4. Decision rule (#403 §3)
+
+- BENEFIT on I + Full completion non-inferior to Null within `completion_margin` → KEEP
+- BENEFIT on I + Full completion more than margin below Null → CUT(harmful)
+- HARM → CUT(harmful)
+- EQUIVALENT + Null violation rate at/below `delta_min` floor → CUT(subsumed)
+- EQUIVALENT otherwise → CUT(no_lift)
+- UNRESOLVED → CANT_TELL_YET
+
+Completion non-inferiority: `Full_C >= Null_C - margin` (not an absolute Full_C floor).
+
+### 5. `outcome_type` required for trap-discipline in `evaluate-paired`
 
 `paired_gate2.py`: after the runner declaration check and before the hazard
 check, a trap-discipline read without `outcome_type` on the record refuses
 as `OUTCOME_TYPE_REQUIRED` (exit 1).
 
-### 5. SERS 1.3.0
+### 6. Two lattices at ingest + split oracle scorers
 
-`docs/sers/sers.schema.json`: added `"1.3.0"` to the `sers_version` enum.
-Added `outcome_type` property with enum `["pass_fail", "invariant", null]`.
-Added five new measurement keys: `hazard_entry_null`, `hazard_entry_full`,
-`null_completion_rate`, `full_completion_rate`, `silent_violation_rate`
-(all `rate_or_refusal`). Added conditional requirement for 1.3.0
-(subject_identity + delivery, same as 1.2.0).
+`subject/ingest.py` (oracle identity **0.5.0**): reads `invariant_oracle` and
+`completion_oracle` scores when present; writes `outcome_type`,
+`paired_cells_completion`, and `silent_violation` into `config_json`.
 
-`docs/sers/README.md`: documented 1.3.0, the five new measurement keys,
-and the `outcome_type` field.
+`inspect_adapter.py`: registers the two split scorer names.
 
-`tests/test_sers_conformance.py`: added `test_schema_outcome_type_enum_matches_code`
-to the enum-drift guard.
+### 7. SERS 1.3.0
 
-### 6. Drift row DC-14
+`docs/sers/sers.schema.json`: `"1.3.0"`; `outcome_type`; five new measurement
+keys. README documents them. Drift row DC-14 pins the enum.
 
-`scripts/drift_check.py`: new `LiveRow` DC-14 pins the outcome_type values
-across `ratification.py`, `sers.schema.json`, and `docs/sers/README.md`.
+### 8. Negative-control result table
 
-### 7. Test updates
-
-- `tests/test_ratification.py`: 8 new tests for `outcome_type` and
-  `completion_margin` parsing and validation.
-- `tests/test_cli_paired_gate2.py`: 2 new tests for `OUTCOME_TYPE_REQUIRED`
-  refusal (trap-discipline without outcome_type, transformative-lift control).
-  Updated existing trap-discipline tests to include `outcome_type` in the RAT
-  fixture.
-- `tests/test_matched_effect.py`: updated parametrized tests to pass
-  `outcome_type="invariant"` for trap-discipline (the #424 guard catches
-  the default pass_fail pairing).
+Committed at `docs/sers/receipts/issue-424-negative-controls.md` and pinned by
+`tests/test_cli_paired_gate2.py`.
 
 ## Acceptance criteria status
 
@@ -80,25 +77,17 @@ across `ratification.py`, `sers.schema.json`, and `docs/sers/README.md`.
 | outcome_type on RatRecord | DONE | `test_ratification.py::TestOutcomeType` |
 | outcome_type refused by name | DONE | `test_cli_paired_gate2.py::TestOutcomeTypeRequired` |
 | completion_margin on RatRecord | DONE | `test_ratification.py::TestOutcomeType` |
-| Instrument-compatibility guard | DONE | `test_matched_effect.py` (parametrized) |
+| Instrument-compatibility guard | DONE | `test_matched_effect.py` |
+| EQUIVALENT trap-discipline table | DONE | `test_matched_effect.py::test_equivalent_trap_discipline_invariant_*` |
+| Completion non-inferiority | DONE | `TestCompletionMarginFlip` |
 | SERS 1.3.0 | DONE | `test_sers_conformance.py::test_schema_outcome_type_enum_matches_code` |
-| Drift row DC-14 | DONE | `python scripts/drift_check.py` (14/14 OK) |
+| Drift row DC-14 | DONE | `python scripts/drift_check.py` |
+| Negative controls + result table | DONE | `docs/sers/receipts/issue-424-negative-controls.md` |
+| Oracle identity 0.5.0 | DONE | `TestIngestOracleIdentity050` |
 
-## Deferred to follow-up
+## Note on never-pull + CUT(harmful)
 
-- **Two lattices at ingest** (paired_cells on I, paired_cells_completion on C):
-  requires changes to `subject/ingest.py` which is out of scope for this
-  scoring-layer ticket.
-- **Split oracles** (invariant_oracle, completion_oracle + validate_oracle.py):
-  requires the gitpull fixture to be refactored into two registered oracles.
-- **Oracle identity bump**: blocked on the split oracles.
-- **Negative controls** (3 seeded transcript policies): blocked on the two
-  lattices and split oracles.
-
-## Result table for negative controls (committed in follow-up)
-
-| Policy | Old (conjunction) | New (split) | Verdict |
-|---|---|---|---|
-| Never pull, never push | CUT(harmful) | CUT(harmful) | Completion guard fires |
-| Pull rebase, push | HARM | HARM | not I in every epoch |
-| Fetch+merge, C holds | HAZARD_NOT_MET | HAZARD_NOT_MET | #421 gate fires |
+Gate-2 #37 maps zero-discordance (I=1 every pair) to UNRESOLVED, so the
+completion guard (KEEP-only) does not fire on that seed. The control still
+forbids KEEP. CUT(harmful) via completion is pinned by the BENEFIT +
+below-margin seed.
