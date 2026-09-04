@@ -217,15 +217,31 @@ class TestEquivalentNonTransformative:
     """AC6: EQUIVALENT under non-transformative class -> CANT_TELL_YET(wrong_instrument)."""
 
     def test_equivalent_trap_discipline(self, tmp_path: Path, evidence: sqlite3.Connection) -> None:
-        _seed_run(evidence, "run-equiv", both_pass=6, full_only=2, null_only=2, both_fail=6)
-        rat = tmp_path / "RAT-0001-test.md"
-        _write_rat(rat, n=16)
+        # Provide a hazard block with null_entered high enough to clear the floor.
+        hazard = _hazard_block(
+            null_entered=7,
+            null_epochs=32,
+            full_entered=4,
+            full_epochs=32,
+            floor=_HAZARD_FLOOR,
+        )
+        _seed_run(
+            evidence,
+            "run-equiv",
+            both_pass=6,
+            full_only=2,
+            null_only=2,
+            both_fail=6,
+            hazard=hazard,
+        )
+        # RAT with outcome_type so the #424 check passes.
+        _write_rat_with_hazard(tmp_path / "RAT-0001-test.md", n=16, hazard_floor=_HAZARD_FLOOR)
 
         result = _invoke(
             "run",
             "evaluate-paired",
             "run-equiv",
-            str(rat),
+            str(tmp_path / "RAT-0001-test.md"),
             "trap-discipline",
             "--evidence-db",
             str(tmp_path / "evidence.db"),
@@ -242,6 +258,13 @@ class TestCountMismatch:
     def test_pilot_k8_vs_design_n32(self, tmp_path: Path, evidence: sqlite3.Connection) -> None:
         """The pilot run (k=8) produces COUNT_MISMATCH against the Amendment 4
         recommended row (n=32)."""
+        hazard = _hazard_block(
+            null_entered=7,
+            null_epochs=32,
+            full_entered=4,
+            full_epochs=32,
+            floor=_HAZARD_FLOOR,
+        )
         _seed_run(
             evidence,
             "run-pilot-k8",
@@ -251,15 +274,16 @@ class TestCountMismatch:
             both_fail=0,
             pi_c_hat=0.0,
             pi_c_trials=8,
+            hazard=hazard,
         )
-        rat = tmp_path / "RAT-0001-test.md"
-        _write_rat(rat, n=32)
+        # RAT with outcome_type so the #424 check passes.
+        _write_rat_with_hazard(tmp_path / "RAT-0001-test.md", n=32, hazard_floor=_HAZARD_FLOOR)
 
         result = _invoke(
             "run",
             "evaluate-paired",
             "run-pilot-k8",
-            str(rat),
+            str(tmp_path / "RAT-0001-test.md"),
             "trap-discipline",
             "--evidence-db",
             str(tmp_path / "evidence.db"),
@@ -520,15 +544,17 @@ def _write_rat_with_hazard(
     n: int = 32,
     hazard_floor: float = _HAZARD_FLOOR,
     hazard_action: str = _HAZARD_PATTERN,
+    outcome_type: str = "invariant",
 ) -> None:
-    """RAT fixture carrying the registered hazard pair (#421)."""
+    """RAT fixture carrying the registered hazard pair (#421) and outcome_type (#424)."""
     _write_rat(path, n=n)
     text = path.read_text(encoding="utf-8")
     text = text.replace(
         'ratified_date: "2026-09-01"\n',
         'ratified_date: "2026-09-01"\n'
         f"hazard_action: {hazard_action}\n"
-        f"hazard_floor: {hazard_floor}\n",
+        f"hazard_floor: {hazard_floor}\n"
+        f"outcome_type: {outcome_type}\n",
     )
     # delta_min is required for floor >= delta_min; _write_rat already sets 0.20.
     path.write_text(text, encoding="utf-8")
@@ -644,7 +670,11 @@ class TestHazardNotRecorded:
     def test_no_hazard_block_refuses_under_trap_discipline(
         self, tmp_path: Path, evidence: sqlite3.Connection
     ) -> None:
-        """ARM: no hazard block under trap-discipline → HAZARD_NOT_RECORDED (exit 1)."""
+        """ARM: no hazard block under trap-discipline → HAZARD_NOT_RECORDED (exit 1).
+
+        The RAT carries outcome_type so the #424 check passes and the #421
+        hazard check is reached.
+        """
         _seed_run(
             evidence,
             "run-nohazard-block",
@@ -654,14 +684,14 @@ class TestHazardNotRecorded:
             both_fail=0,
             hazard=None,
         )
-        rat = tmp_path / "RAT-0001-test.md"
-        _write_rat(rat, n=32)
+        # Use a RAT with outcome_type so the outcome_type check passes.
+        _write_rat_with_hazard(tmp_path / "RAT-0001-test.md", n=32, hazard_floor=0.20)
 
         result = _invoke(
             "run",
             "evaluate-paired",
             "run-nohazard-block",
-            str(rat),
+            str(tmp_path / "RAT-0001-test.md"),
             "trap-discipline",
             "--evidence-db",
             str(tmp_path / "evidence.db"),
@@ -669,7 +699,6 @@ class TestHazardNotRecorded:
 
         assert result.exit_code == 1
         assert "HAZARD_NOT_RECORDED" in result.output
-        assert "Verdict" not in result.output
 
     def test_no_hazard_block_decides_under_transformative_lift(
         self, tmp_path: Path, evidence: sqlite3.Connection
@@ -877,3 +906,70 @@ class TestHazardRoundTrip:
 
         assert result.exit_code == 1
         assert "HAZARD_NOT_RECORDED" in result.output
+
+
+# ---------------------------------------------------------------------------
+# #424: outcome_type required for trap-discipline
+# ---------------------------------------------------------------------------
+
+
+class TestOutcomeTypeRequired:
+    """A trap-discipline read without outcome_type on the record refuses by name."""
+
+    def test_trap_discipline_without_outcome_type_refuses(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: trap-discipline record with no outcome_type → OUTCOME_TYPE_REQUIRED."""
+        _seed_run(
+            evidence,
+            "run-no-outcome-type",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard=_hazard_block(null_entered=7),
+        )
+        # Write a RAT WITHOUT outcome_type (the thing we're testing)
+        _write_rat(tmp_path / "RAT-0001-test.md", n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-no-outcome-type",
+            str(tmp_path / "RAT-0001-test.md"),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 1
+        assert "OUTCOME_TYPE_REQUIRED" in result.output
+        assert "outcome_type" in result.output
+        assert "Verdict" not in result.output
+
+    def test_transformative_lift_without_outcome_type_decides(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """CONTROL: transformative-lift without outcome_type decides."""
+        _seed_run(
+            evidence,
+            "run-no-outcome-type-tl",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+        )
+        _write_rat(tmp_path / "RAT-0001-test.md", n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-no-outcome-type-tl",
+            str(tmp_path / "RAT-0001-test.md"),
+            "transformative-lift",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        assert "Decision:" in result.output

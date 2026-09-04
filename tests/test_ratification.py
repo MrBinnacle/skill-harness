@@ -463,3 +463,52 @@ class TestPilotSubjectModel:
         assert record.subject_change_waiver["reason"] == "host had no Anthropic key"
         assert "sonnet-5" in record.subject_change_waiver["measurement"]
         assert record.subject_change_waiver["date"] == "2026-09-03"
+
+
+# ---------------------------------------------------------------------------
+# #424: outcome_type + completion_margin
+# ---------------------------------------------------------------------------
+
+_OUTCOME_TYPES = frozenset({"pass_fail", "invariant"})
+
+
+class TestOutcomeType:
+    """outcome_type declares the scoring oracle; required for trap-discipline."""
+
+    def test_outcome_type_absent_parses(self, tmp_path: Path) -> None:
+        record = parse_rat_record(_write_rat(tmp_path, _rat_text()))
+        assert record.outcome_type is None
+
+    def test_outcome_type_pass_fail_parses(self, tmp_path: Path) -> None:
+        text = _rat_text({"outcome_type": "pass_fail"})
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.outcome_type == "pass_fail"
+
+    def test_outcome_type_invariant_parses(self, tmp_path: Path) -> None:
+        text = _rat_text({"outcome_type": "invariant"})
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.outcome_type == "invariant"
+
+    def test_outcome_type_invalid_value_refused(self, tmp_path: Path) -> None:
+        text = _rat_text({"outcome_type": "boolean"})
+        with pytest.raises(RatificationError, match="outcome_type"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+    def test_completion_margin_absent_defaults_to_none(self, tmp_path: Path) -> None:
+        record = parse_rat_record(_write_rat(tmp_path, _rat_text()))
+        assert record.completion_margin is None
+
+    def test_completion_margin_present_parses(self, tmp_path: Path) -> None:
+        text = _rat_text({"completion_margin": "0.15"})
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.completion_margin == 0.15
+
+    def test_completion_margin_non_numeric_refused(self, tmp_path: Path) -> None:
+        text = _rat_text({"completion_margin": "not-a-number"})
+        with pytest.raises(RatificationError, match="completion_margin"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+    def test_completion_margin_out_of_range_refused(self, tmp_path: Path) -> None:
+        text = _rat_text({"completion_margin": "1.5"})
+        with pytest.raises(RatificationError, match="completion_margin"):
+            parse_rat_record(_write_rat(tmp_path, text))

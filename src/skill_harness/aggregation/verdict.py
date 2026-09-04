@@ -444,19 +444,58 @@ def matched_gate2_verdict(
     *,
     scope: RegisteredScope | None = None,
     value_class: ValueClass | None = None,
+    outcome_type: str | None = None,
 ) -> VerdictResult:
     """Map a matched Gate-2 EffectEstimate to a keep/cut verdict.
 
     Harm is a first-class CUT sub-reason here — never folded into no_lift.
     Requires ``effect.decision`` from ``effect_from_matched_gate2``; a scaffold
-    estimate without a Gate-2 decision is refused (no silent coercion).
+    estimate without a decision is refused (no silent coercion).
 
     ``value_class`` is the #76/#77/#87 wrong-instrument guard on EQUIVALENT:
     ``EQUIVALENT → CUT(no_lift)`` fires ONLY for ``ValueClass.TRANSFORMATIVE_LIFT``.
     For any other class — or when UNSET (default "not transformative-lift") —
     EQUIVALENT yields CANT_TELL_YET carrying ``wrong_instrument=True``, never CUT.
     BENEFIT / HARM / UNRESOLVED are class-independent (see rules C2-C5).
+
+    ``outcome_type`` is the #424 instrument-compatibility guard: the
+    ``(value_class, outcome_type)`` pair must be a registered combination
+    for the verdict to decide.  The two permitted pairs are
+    ``(transformative-lift, pass_fail)`` and ``(trap-discipline, invariant)``.
+    Every other pair withholds with ``wrong_instrument=True``.
+    When ``outcome_type`` is ``None`` (absent from the record), the guard
+    defaults to ``pass_fail`` (legacy behaviour).
     """
+    # #424: instrument-compatibility guard. The (value_class, outcome_type) pair
+    # must be a registered combination for the verdict to decide. The two
+    # permitted pairs are (transformative-lift, pass_fail) and
+    # (trap-discipline, invariant). Every other pair withholds with
+    # wrong_instrument=True. When outcome_type is None (absent from the record),
+    # default to pass_fail (legacy behaviour).
+    _EFFECTIVE_OUTCOME_TYPE = outcome_type if outcome_type is not None else "pass_fail"
+    _PERMITTED_PAIRS = frozenset(
+        {(ValueClass.TRANSFORMATIVE_LIFT, "pass_fail"), (ValueClass.TRAP_DISCIPLINE, "invariant")}
+    )
+    effective_vc = value_class if value_class is not None else ValueClass.TRANSFORMATIVE_LIFT
+    if (effective_vc, _EFFECTIVE_OUTCOME_TYPE) not in _PERMITTED_PAIRS:
+        vc_label = effective_vc.value if value_class is not None else "unclassified"
+        pairs_str = sorted(f"({vc.value}, {ot})" for vc, ot in _PERMITTED_PAIRS)
+        rationale = (
+            f"CAN'T-TELL-YET (wrong instrument): the (value_class, outcome_type)"
+            f" pair ({vc_label!r}, {_EFFECTIVE_OUTCOME_TYPE!r}) is not a registered"
+            f" instrument combination. Registered pairs: {pairs_str}."
+            f" Verdict withheld. The field-evidence lane that would carry this"
+            f" cell is UNBUILT (#335): nothing in this repository consumes the"
+            f" wrong_instrument flag, so this verdict is the terminal record."
+        )
+        return VerdictResult(
+            KeepCutVerdict.CANT_TELL_YET,
+            None,
+            rationale,
+            scope=scope,
+            wrong_instrument=True,
+        )
+
     if effect.decision is None:
         raise ValueError(
             "matched_gate2_verdict requires effect.decision from the matched "

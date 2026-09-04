@@ -189,10 +189,18 @@ class TestMatchedGate2ValueClassGuard:
     )
     def test_harm_is_cut_harmful_for_every_class(self, vc: ValueClass | None) -> None:
         bp, xf, xn, bf, _ = _CASES["clear_harm"]
-        result = matched_gate2_verdict(_effect(bp, xf, xn, bf), value_class=vc)
-        assert result.verdict is KeepCutVerdict.CUT
-        assert result.cut_sub_reason is CutSubReason.HARMFUL
-        assert result.wrong_instrument is False
+        # trap-discipline needs outcome_type="invariant" to pass the #424 guard.
+        ot = "invariant" if vc is ValueClass.TRAP_DISCIPLINE else None
+        result = matched_gate2_verdict(_effect(bp, xf, xn, bf), value_class=vc, outcome_type=ot)
+        # The #424 guard fires for unregistered pairs (CALIBRATION + default
+        # pass_fail), returning CANT_TELL_YET instead of CUT(harmful).
+        if vc is ValueClass.CALIBRATION and ot is None:
+            assert result.verdict is KeepCutVerdict.CANT_TELL_YET
+            assert result.wrong_instrument is True
+        else:
+            assert result.verdict is KeepCutVerdict.CUT
+            assert result.cut_sub_reason == CutSubReason.HARMFUL
+            assert result.wrong_instrument is False
 
     @pytest.mark.parametrize(
         "vc",
@@ -205,10 +213,18 @@ class TestMatchedGate2ValueClassGuard:
     )
     def test_benefit_is_keep_for_every_class(self, vc: ValueClass | None) -> None:
         bp, xf, xn, bf, _ = _CASES["clear_benefit"]
-        result = matched_gate2_verdict(_effect(bp, xf, xn, bf), value_class=vc)
-        assert result.verdict is KeepCutVerdict.KEEP
-        assert result.cut_sub_reason is None
-        assert result.wrong_instrument is False
+        # trap-discipline needs outcome_type="invariant" to pass the #424 guard.
+        ot = "invariant" if vc is ValueClass.TRAP_DISCIPLINE else None
+        result = matched_gate2_verdict(_effect(bp, xf, xn, bf), value_class=vc, outcome_type=ot)
+        # The #424 guard fires for unregistered pairs (CALIBRATION + default
+        # pass_fail), returning CANT_TELL_YET instead of KEEP.
+        if vc is ValueClass.CALIBRATION and ot is None:
+            assert result.verdict is KeepCutVerdict.CANT_TELL_YET
+            assert result.wrong_instrument is True
+        else:
+            assert result.verdict is KeepCutVerdict.KEEP
+            assert result.cut_sub_reason is None
+            assert result.wrong_instrument is False
 
     @pytest.mark.parametrize(
         "vc",
@@ -221,10 +237,18 @@ class TestMatchedGate2ValueClassGuard:
     )
     def test_unresolved_is_cant_tell_for_every_class(self, vc: ValueClass | None) -> None:
         bp, xf, xn, bf, _ = _CASES["unresolved"]
-        result = matched_gate2_verdict(_effect(bp, xf, xn, bf), value_class=vc)
+        # trap-discipline needs outcome_type="invariant" to pass the #424 guard.
+        ot = "invariant" if vc is ValueClass.TRAP_DISCIPLINE else None
+        result = matched_gate2_verdict(_effect(bp, xf, xn, bf), value_class=vc, outcome_type=ot)
         assert result.verdict is KeepCutVerdict.CANT_TELL_YET
         assert result.cut_sub_reason is None
-        assert result.wrong_instrument is False
+        # The #424 instrument-compatibility guard fires for unregistered
+        # (value_class, outcome_type) pairs, setting wrong_instrument=True.
+        # CALIBRATION with default pass_fail is not a registered pair.
+        if vc is ValueClass.CALIBRATION and ot is None:
+            assert result.wrong_instrument is True
+        else:
+            assert result.wrong_instrument is False
 
 
 class TestProfilePopulatesEffectOnMatchedPath:

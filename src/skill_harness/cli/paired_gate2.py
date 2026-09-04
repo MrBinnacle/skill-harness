@@ -176,6 +176,19 @@ def paired_gate2_read(
     # ingest (#391, 2026-09-03) while the seeded tests passed on a name.
     _check_runner_declaration(record, run_id, config.get("runner"))
 
+    # 4a. #424: a trap-discipline read refuses when the record carries no
+    # outcome_type. The outcome_type declares which oracle scored this run:
+    # ``pass_fail`` (legacy conjunction) or ``invariant`` (split invariant +
+    # completion). Without it the decision rule cannot select the right lattice.
+    if value_class is ValueClass.TRAP_DISCIPLINE and record.outcome_type is None:
+        raise PairedGate2Refusal(
+            f"OUTCOME_TYPE_REQUIRED: paired run {run_id!r} under {record.rat_id} "
+            f"carries value_class trap-discipline but the ratification record has "
+            f"no outcome_type field. A trap-discipline read requires outcome_type "
+            f"(pass_fail or invariant) to select the scoring lattice (#424).",
+            exit_code=1,
+        )
+
     # 4b. #421: a trap-discipline read refuses when the Null arm met the hazard
     # too rarely to measure. The oracle checks the outcome (ancestry preserved),
     # not whether the hazard was entered; a model that never runs the
