@@ -30,7 +30,7 @@ checked against the code enums in CI.
 
 Vocabulary generation of the receipt. Receipts that disagree on
 `sers_version` are not comparable. Supported values: `"1.0.0"`, `"1.1.0"`,
-`"1.2.0"`.
+`"1.2.0"`, `"1.3.0"`.
 
 ### `skill_name`
 
@@ -202,6 +202,18 @@ either `{ "value": 0..1, "passes"?, "epochs"?, "detail"? }` or
 
 `go_nogo` is the pre-stated apparatus gate when one was registered
 (`GO` / `NO_GO` / `NOT_APPLICABLE`).
+
+New in 1.3.0 — trap-discipline measurement keys (#424):
+
+| Field | Meaning |
+| --- | --- |
+| `hazard_entry_null` | Null-arm hazard-entry rate: fraction of Null epochs where the hazard pattern was entered. |
+| `hazard_entry_full` | Full-arm hazard-entry rate: fraction of Full epochs where the hazard pattern was entered. |
+| `null_completion_rate` | Null-arm completion rate: fraction of Null epochs where the completion oracle scored pass. |
+| `full_completion_rate` | Full-arm completion rate: fraction of Full epochs where the completion oracle scored pass. |
+| `silent_violation_rate` | Silent violation rate: fraction of epochs where completion held but invariant failed (C=1, I=0). |
+
+Each is a `rate_or_refusal`. Absent on 1.2.0 and earlier receipts.
 
 ### `source`
 
