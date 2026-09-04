@@ -262,6 +262,22 @@ BATCH1_MANIFEST: tuple[ScreenManifestEntry, ...] = (
         expected_skill="sqlite-tie-break-red-test-trap",
         expected_pass=0,
     ),
+    # #430: the OBS-0007 Null screen of 2026-07-21, 3/3 on the priced subject.
+    # Admissible AT CAPTURE; docs/findings/d4-prompt-leak-into-null-arm.md
+    # later ruled its prompt leaked one hop via RELEASING.md, and
+    # supersede_d4_screen_runs (run on the same --execute) appends the
+    # apparatus_void supersession. The manifest records the capture and the
+    # supersession records the void, in that order, which is what the store's
+    # append-only shape is for. Marking it inadmissible here would erase the
+    # order and leave the D4 disposition table's gitpull row store-less.
+    ScreenManifestEntry(
+        rel_path="batch1/gitpull/logs-stage0/"
+        "2026-07-21T03-05-28-00-00_git-pull-rebase-trap-null_E9uYtKBETxuAQtRHExMsTW.eval",
+        admissibility_state="admissible",
+        inadmissibility_reason=None,
+        expected_skill="git-pull-rebase-trap",
+        expected_pass=3,
+    ),
 )
 
 
