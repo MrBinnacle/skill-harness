@@ -19,7 +19,13 @@ from rich.console import Console
 
 from skill_harness.aggregation.matched_bridge import MatchedRefusalReason
 from skill_harness.aggregation.profile import effect_from_matched_gate2
-from skill_harness.aggregation.verdict import ValueClass, matched_gate2_verdict
+from skill_harness.aggregation.verdict import (
+    CutSubReason,
+    KeepCutVerdict,
+    ValueClass,
+    VerdictResult,
+    matched_gate2_verdict,
+)
 from skill_harness.oc import Gate2Design, MMESpec
 from skill_harness.ratification import RatificationError, RatRecord, parse_rat_record
 from skill_harness.storage.migrations import open_evidence_readonly
@@ -289,6 +295,9 @@ def paired_gate2_read(
         )
 
     # 6. Compute the effect and verdict
+    # #424: for trap-discipline with outcome_type=invariant, the primary
+    # decision uses the invariant lattice (I).  The completion lattice (C)
+    # is used to gate the KEEP verdict via the completion_margin.
     effect = effect_from_matched_gate2(
         design,
         both_pass=both_pass,
@@ -297,7 +306,69 @@ def paired_gate2_read(
         both_fail=both_fail,
     )
 
-    verdict = matched_gate2_verdict(effect, value_class=value_class)
+    verdict = matched_gate2_verdict(
+        effect,
+        value_class=value_class,
+        outcome_type=record.outcome_type,
+    )
+
+    # #424: completion-margin gate for trap-discipline invariant runs.
+    # The completion lattice (C) gates the verdict when the invariant
+    # lattice (I) produces KEEP or UNRESOLVED.  When the Full arm's
+    # completion rate is below the completion_margin (default: delta_min),
+    # the verdict is CUT(harmful) — the teammate's work was not reliably
+    # completed despite the invariant holding or being inconclusive.
+    if (
+        value_class is ValueClass.TRAP_DISCIPLINE
+        and record.outcome_type == "invariant"
+        and verdict.verdict in (KeepCutVerdict.KEEP, KeepCutVerdict.CANT_TELL_YET)
+        and effect.decision is not None
+    ):
+        comp_cells = config.get("paired_cells_completion")
+        if isinstance(comp_cells, dict):
+            comp_both_pass = int(comp_cells.get("both_pass", 0))
+            comp_full_only = int(comp_cells.get("full_only", 0))
+            comp_total = (
+                comp_both_pass
+                + comp_full_only
+                + int(comp_cells.get("null_only", 0))
+                + int(comp_cells.get("both_fail", 0))
+            )
+            if comp_total > 0:
+                completion_rate = (comp_both_pass + comp_full_only) / comp_total
+                margin = (
+                    record.completion_margin
+                    if record.completion_margin is not None
+                    else record.delta_min
+                )
+                assert margin is not None
+                if completion_rate < margin:
+                    delta_clause = (
+                        f"signed delta={effect.mean:.3f}, "
+                        f"95% CI [{effect.ci_lo:.3f}, {effect.ci_hi:.3f}]"
+                    )
+                    if verdict.verdict is KeepCutVerdict.KEEP:
+                        reason_clause = (
+                            f"invariant lattice certified BENEFIT "
+                            f"({delta_clause}), but the completion rate "
+                            f"{completion_rate:.4f} is below the margin "
+                            f"{margin}.  The teammate's work was not reliably "
+                            f"completed despite the invariant holding."
+                        )
+                    else:
+                        reason_clause = (
+                            f"invariant lattice left the contrast "
+                            f"UNRESOLVED ({delta_clause}), and the "
+                            f"completion rate {completion_rate:.4f} is below "
+                            f"the margin {margin}.  The teammate's work was "
+                            f"not reliably completed — CUT (harmful)."
+                        )
+                    verdict = VerdictResult(
+                        KeepCutVerdict.CUT,
+                        CutSubReason.HARMFUL,
+                        f"CUT (harmful): {reason_clause}",
+                        scope=verdict.scope,
+                    )
 
     # 7. Format pi_c line from config_json
     pi_c_data = config.get("pi_c")

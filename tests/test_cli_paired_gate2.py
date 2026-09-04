@@ -973,3 +973,367 @@ class TestOutcomeTypeRequired:
 
         assert result.exit_code == 0
         assert "Decision:" in result.output
+
+
+# ---------------------------------------------------------------------------
+# #424: negative controls — three seeded transcript policies
+# ---------------------------------------------------------------------------
+
+_N424_HAZARD_FLOOR = 0.20
+_N424_HAZARD_PATTERN = r"git\s+pull"
+
+
+def _write_rat_424(
+    path: Path,
+    *,
+    n: int = 32,
+    outcome_type: str = "invariant",
+    completion_margin: float | None = None,
+) -> None:
+    """RAT fixture for #424 negative controls: outcome_type + hazard pair."""
+    _write_rat(path, n=n)
+    text = path.read_text(encoding="utf-8")
+    replace_str = 'ratified_date: "2026-09-01"\n'
+    extra = (
+        f"hazard_action: {_N424_HAZARD_PATTERN}\n"
+        f"hazard_floor: {_N424_HAZARD_FLOOR}\n"
+        f"outcome_type: {outcome_type}\n"
+    )
+    if completion_margin is not None:
+        extra += f"completion_margin: {completion_margin}\n"
+    text = text.replace(replace_str, replace_str + extra)
+    path.write_text(text, encoding="utf-8")
+
+
+def _seed_run_424(
+    conn: sqlite3.Connection,
+    run_id: str,
+    *,
+    both_pass: int = 0,
+    full_only: int = 0,
+    null_only: int = 0,
+    both_fail: int = 0,
+    comp_both_pass: int | None = None,
+    comp_full_only: int | None = None,
+    comp_null_only: int | None = None,
+    comp_both_fail: int | None = None,
+    hazard: dict[str, Any] | None = None,
+) -> None:
+    """Seed a run with optional completion-lattice cells (#424)."""
+    config: dict[str, Any] = {
+        "paired_cells": {
+            "both_pass": both_pass,
+            "full_only": full_only,
+            "null_only": null_only,
+            "both_fail": both_fail,
+        },
+        "pi_c": {
+            "detector": "v1-skill-tool-call",
+            "invocations": 0,
+            "trials": both_pass + full_only + null_only + both_fail,
+            "pi_c_hat": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 1.0,
+            "confidence": 0.95,
+        },
+    }
+    runner_dict: dict[str, Any] = dict(_RUNNER_DECLARED)
+    if hazard is None:
+        hazard = {
+            "pattern": _N424_HAZARD_PATTERN,
+            "floor": _N424_HAZARD_FLOOR,
+            "full": {"epochs": 32, "entered": 4},
+            "null": {"epochs": 32, "entered": 7},
+        }
+    runner_dict["hazard"] = hazard
+    config["runner"] = runner_dict
+    # Completion lattice for split-oracle runs
+    if comp_both_pass is not None:
+        config["paired_cells_completion"] = {
+            "both_pass": comp_both_pass,
+            "full_only": comp_full_only or 0,
+            "null_only": comp_null_only or 0,
+            "both_fail": comp_both_fail or 0,
+        }
+    conn.execute(
+        "INSERT INTO runs (run_id, skill_id, run_kind, config_json, started_at, completed_at)"
+        " VALUES (?, ?, 'evaluate_skill', ?, ?, ?)",
+        (run_id, _SKILL_ID, json.dumps(config, sort_keys=True), _TS, _TS),
+    )
+
+
+class TestNegativeControlNeverPull:
+    """#424 negative control 1: never pull, never push.
+
+    Under the old conjunction oracle: both arms pass (SHAs preserved, no
+    conflict) → KEEP.  Under the split oracle: I=1 (SHAs preserved) but
+    C=0 (work not integrated) → CUT(harmful) through the completion guard.
+    """
+
+    def test_never_pull_cut_harmful_under_split_oracle(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: invariant I=1 but completion C=0 → CUT(harmful)."""
+        # I lattice: both_pass=32 (SHAs preserved in both arms)
+        # C lattice: both_fail=32 (work not integrated in either arm)
+        _seed_run_424(
+            evidence,
+            "run-never-pull",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            comp_both_pass=0,
+            comp_full_only=0,
+            comp_null_only=0,
+            comp_both_fail=32,
+        )
+        _write_rat_424(tmp_path / "RAT-0001-test.md", n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-never-pull",
+            str(tmp_path / "RAT-0001-test.md"),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        # The completion guard overrides KEEP to CUT(harmful)
+        assert "CUT" in result.output
+        assert "harmful" in result.output.lower()
+        assert "completion rate" in result.output.lower() or "margin" in result.output.lower()
+
+
+class TestNegativeControlPullRebase:
+    """#424 negative control 2: pull under pull.rebase=true, then push.
+
+    Under the old conjunction oracle: Full passes (rebased and pushed),
+    Null fails (SHAs rewritten) → BENEFIT → KEEP.  Under the split oracle:
+    I=0 (SHAs rewritten) in every epoch → HARM → CUT(harmful).
+    """
+
+    def test_pull_rebase_harm_under_split_oracle(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: invariant I=0 in every epoch → HARM → CUT(harmful)."""
+        # I lattice: full_only=0, null_only=32 (Full fails I, Null passes I —
+        # wait, that's wrong. Let me re-think.
+        # Actually: pull.rebase rewrites SHAs, so I=0 for the Full arm.
+        # Null arm never pulls, so I=1 for Null.
+        # This gives: null_only=32 (Null passes I, Full fails I) → HARM.
+        _seed_run_424(
+            evidence,
+            "run-pull-rebase",
+            both_pass=0,
+            full_only=0,
+            null_only=32,
+            both_fail=0,
+            comp_both_pass=0,
+            comp_full_only=32,
+            comp_null_only=0,
+            comp_both_fail=0,
+        )
+        _write_rat_424(tmp_path / "RAT-0001-test.md", n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-pull-rebase",
+            str(tmp_path / "RAT-0001-test.md"),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        assert "harm" in result.output.lower()
+        assert "CUT" in result.output
+
+
+class TestNegativeControlFetchMerge:
+    """#424 negative control 3: fetch and merge, C holds, H never fires.
+
+    This is the 2026-09-03 run's shape: Null arm never enters the hazard,
+    so HAZARD_NOT_MET from #421's gate.
+    """
+
+    def test_fetch_merge_hazard_not_met(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: Null arm never enters hazard → HAZARD_NOT_MET."""
+        hazard = {
+            "pattern": _N424_HAZARD_PATTERN,
+            "floor": _N424_HAZARD_FLOOR,
+            "full": {"epochs": 32, "entered": 0},
+            "null": {"epochs": 32, "entered": 0},
+        }
+        _seed_run_424(
+            evidence,
+            "run-fetch-merge",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard=hazard,
+        )
+        _write_rat_424(tmp_path / "RAT-0001-test.md", n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-fetch-merge",
+            str(tmp_path / "RAT-0001-test.md"),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 2
+        assert "HAZARD_NOT_MET" in result.output
+
+
+class TestPositiveControlBenefitWithinMargin:
+    """#424 positive control: seeded BENEFIT on I, completion within margin → KEEP."""
+
+    def test_benefit_within_margin_keeps(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: I lattice BENEFIT + completion rate within margin → KEEP."""
+        # I lattice: full_only=16, null_only=0 (Full wins I)
+        # C lattice: full_only=16, null_only=0 (completion holds)
+        _seed_run_424(
+            evidence,
+            "run-benefit-keep",
+            both_pass=0,
+            full_only=16,
+            null_only=0,
+            both_fail=16,
+            comp_both_pass=0,
+            comp_full_only=16,
+            comp_null_only=0,
+            comp_both_fail=16,
+        )
+        _write_rat_424(tmp_path / "RAT-0001-test.md", n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-benefit-keep",
+            str(tmp_path / "RAT-0001-test.md"),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        assert "KEEP" in result.output
+
+
+class TestCompletionMarginFlip:
+    """#424: a Full arm whose completion rate is below the margin by one
+    epoch flips KEEP to CUT(harmful), and at the margin does not."""
+
+    def test_below_margin_by_one_flips_to_cut(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: I=benefit, C completion rate below margin → CUT(harmful)."""
+        # 32 pairs. I lattice: full_only=24, null_only=0 → BENEFIT.
+        # C lattice: full_only=5, null_only=0 → completion = (0+5)/32 = 0.15625
+        # With default margin = delta_min = 0.20, 0.15625 < 0.20 → CUT.
+        _seed_run_424(
+            evidence,
+            "run-below-margin",
+            both_pass=0,
+            full_only=24,
+            null_only=0,
+            both_fail=8,
+            comp_both_pass=0,
+            comp_full_only=5,
+            comp_null_only=0,
+            comp_both_fail=27,
+        )
+        _write_rat_424(tmp_path / "RAT-0001-test.md", n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-below-margin",
+            str(tmp_path / "RAT-0001-test.md"),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        assert "CUT" in result.output
+        assert "harmful" in result.output.lower()
+
+    def test_at_margin_keeps(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: I=benefit, C completion rate at margin → KEEP."""
+        # 32 pairs. I lattice: full_only=24, null_only=0 → BENEFIT.
+        # C lattice: full_only=7, null_only=0 → completion = (0+7)/32 = 0.21875
+        # With default margin = delta_min = 0.20, 0.21875 >= 0.20 → KEEP.
+        _seed_run_424(
+            evidence,
+            "run-at-margin",
+            both_pass=0,
+            full_only=24,
+            null_only=0,
+            both_fail=8,
+            comp_both_pass=0,
+            comp_full_only=7,
+            comp_null_only=0,
+            comp_both_fail=25,
+        )
+        _write_rat_424(tmp_path / "RAT-0001-test.md", n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-at-margin",
+            str(tmp_path / "RAT-0001-test.md"),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        assert "KEEP" in result.output
+
+
+class TestPassFailRunReadUnderTrapDiscipline:
+    """#424: a pass_fail run read under trap-discipline withholds with wrong_instrument."""
+
+    def test_pass_fail_wrong_instrument(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: pass_fail run + trap-discipline → wrong_instrument."""
+        _seed_run_424(
+            evidence,
+            "run-pass-fail-wrong",
+            both_pass=0,
+            full_only=16,
+            null_only=0,
+            both_fail=16,
+        )
+        # Write a RAT with outcome_type=pass_fail
+        _write_rat_424(tmp_path / "RAT-0001-test.md", n=32, outcome_type="pass_fail")
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-pass-fail-wrong",
+            str(tmp_path / "RAT-0001-test.md"),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 0
+        assert "CANT_TELL_YET" in result.output or "CAN'T-TELL-YET" in result.output
+        assert "wrong_instrument" in result.output.lower()

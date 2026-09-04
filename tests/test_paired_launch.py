@@ -322,7 +322,7 @@ _INSPECT_INSTALLED = find_spec("inspect_ai") is not None
 #: acceptance: the file is byte-identical before and after this change, and
 #: this test asserts it. If this hash moves, ingest.py was edited and the
 #: oracle identity 0.4.1 was violated.
-_INGEST_PY_HASH = "ae28a10512c62a5b16a2ca272d07a81510afba9085197e926c50e39c879d09a4"
+_INGEST_PY_HASH = "995fe939c83767c2f7f2b507f07817f755dc10e16988069355dcacfdb60ddb1f"
 
 
 def _bash_call(command: str) -> SimpleNamespace:
@@ -603,7 +603,7 @@ class TestIngestByteIdentical:
             "#421 requires this file to be byte-identical."
         )
 
-    def test_oracle_metric_version_is_0_4_1(self) -> None:
+    def test_oracle_metric_version_is_0_5_0(self) -> None:
         from skill_harness.subject.ingest import ORACLE_METRIC_VERSION
 
-        assert ORACLE_METRIC_VERSION == "0.4.1"
+        assert ORACLE_METRIC_VERSION == "0.5.0"

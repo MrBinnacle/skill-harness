@@ -432,7 +432,7 @@ def build_paired_tasks(
     *,
     skill_dir: Path,
     prompt: str,
-    oracle: Literal["file_contains", "command_succeeds"],
+    oracle: Literal["file_contains", "command_succeeds", "invariant_oracle", "completion_oracle"],
     oracle_arg: str,
     oracle_target: str = "",
     pin: HarnessPin,
@@ -587,12 +587,18 @@ def build_paired_tasks(
 
 
 def _build_scorer(
-    oracle: Literal["file_contains", "command_succeeds"],
+    oracle: Literal["file_contains", "command_succeeds", "invariant_oracle", "completion_oracle"],
     oracle_arg: str,
     oracle_target: str,
     cwd: str,
 ) -> Any:
-    """Build the outcome scorer. All paths/commands resolve against the agent cwd."""
+    """Build the outcome scorer. All paths/commands resolve against the agent cwd.
+
+    #424: ``invariant_oracle`` and ``completion_oracle`` are the split oracle
+    scorers for trap-discipline cards. Each runs a separate bash command:
+    - ``invariant_oracle``: checks if original local SHAs are ancestors of HEAD.
+    - ``completion_oracle``: checks if teammate's work is integrated and pushed.
+    """
     from inspect_ai.scorer import CORRECT, INCORRECT, Score, Target, accuracy, scorer
     from inspect_ai.solver import TaskState
     from inspect_ai.util import sandbox
@@ -622,6 +628,24 @@ def _build_scorer(
             return score
 
         return file_contains()
+
+    if oracle in ("invariant_oracle", "completion_oracle"):
+        scorer_name = oracle
+
+        @scorer(metrics=[accuracy()], name=scorer_name)  # type: ignore[untyped-decorator]
+        def _split_scorer() -> Any:
+            async def score(state: TaskState, target: Target) -> Score:
+                _ = state, target
+                result = await sandbox().exec(["bash", "-lc", oracle_arg], cwd=cwd)
+                explanation = (result.stdout + result.stderr)[-300:]
+                return Score(
+                    value=CORRECT if result.success else INCORRECT,
+                    explanation=f"exit={result.returncode}: {explanation}",
+                )
+
+            return score
+
+        return _split_scorer()
 
     @scorer(metrics=[accuracy()], name="command_succeeds")  # type: ignore[untyped-decorator]
     def command_succeeds() -> Any:
