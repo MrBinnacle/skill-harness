@@ -64,9 +64,12 @@ __all__ = [
     "DIRECT_ROUTE",
     "HAZARD_BASH_TOOL",
     "OPENROUTER_ROUTE",
+    "HazardArmBlock",
+    "HazardBlock",
     "HazardEntry",
     "PairedLaunchRefusal",
     "PairedRunnerConfig",
+    "attach_hazard_block",
     "design_from_record",
     "hazard_entry_counts",
     "preflight_sized_run",
@@ -102,6 +105,37 @@ class PairedLaunchRefusal(Exception):
     """
 
 
+class HazardArmBlock(BaseModel):
+    """Per-arm hazard-entry counts from the runner block.
+
+    Records the number of epochs and how many entered the hazard for one arm.
+    ``pattern`` is not here — it lives on :class:`HazardBlock` at the block
+    level, matching the reader's key layout in ``cli/paired_gate2.py``.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    epochs: int
+    entered: int
+
+
+class HazardBlock(BaseModel):
+    """Two-arm hazard block recorded in the runner config after the run.
+
+    Assembled by :func:`attach_hazard_block` from per-arm
+    :class:`~skill_harness.subject.paired_launch.HazardEntry` counts. The
+    serialised shape is consumed by ``cli/paired_gate2.py`` and must match
+    its reader keys exactly (``pattern``, ``floor``, ``null``, ``full``).
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    pattern: str
+    floor: float
+    null: HazardArmBlock
+    full: HazardArmBlock
+
+
 class PairedRunnerConfig(BaseModel):
     """What the runner declares about itself, recorded at ingest.
 
@@ -126,6 +160,7 @@ class PairedRunnerConfig(BaseModel):
     route: str
     model: str
     n_pairs: int
+    hazard: HazardBlock | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +257,45 @@ def hazard_entry_counts(
         if any(regex.search(cmd) for cmd in _bash_commands(messages)):
             entered += 1
     return HazardEntry(pattern=pattern, epochs=epochs, entered=entered)
+
+
+def attach_hazard_block(
+    config: PairedRunnerConfig,
+    *,
+    null_log: Path,
+    full_log: Path,
+    pattern: str,
+    floor: float,
+    skill_description: str = "",
+) -> PairedRunnerConfig:
+    """Assemble the hazard block and attach it to the runner config.
+
+    Post-run step: calls :func:`hazard_entry_counts` once per arm log, reads
+    the counts, and returns a new config carrying the assembled
+    :class:`HazardBlock`. :func:`runner_config_payload` then serialises it
+    with no change to that function.
+
+    :param config: The runner config produced by :func:`preflight_sized_run`.
+    :param null_log: Path to the Null arm's ``.eval`` log.
+    :param full_log: Path to the Full arm's ``.eval`` log.
+    :param pattern: The regex matched against bash tool-call commands
+        (``hazard_action`` from the ratification record).
+    :param floor: The registered hazard floor (``hazard_floor`` from the
+        ratification record).
+    :param skill_description: Forwarded to :func:`hazard_entry_counts`.
+    :returns: A new config with the hazard block attached.
+    :raises re.error: If ``pattern`` does not compile (caller bug — the
+        record's ``hazard_action`` is validated at parse time).
+    """
+    null_entry = hazard_entry_counts(null_log, pattern, skill_description=skill_description)
+    full_entry = hazard_entry_counts(full_log, pattern, skill_description=skill_description)
+    block = HazardBlock(
+        pattern=pattern,
+        floor=floor,
+        null=HazardArmBlock(epochs=null_entry.epochs, entered=null_entry.entered),
+        full=HazardArmBlock(epochs=full_entry.epochs, entered=full_entry.entered),
+    )
+    return config.model_copy(update={"hazard": block})
 
 
 # ---------------------------------------------------------------------------
@@ -548,7 +622,13 @@ def preflight_sized_run(
 def runner_config_payload(config: PairedRunnerConfig) -> dict[str, Any]:
     """The runner config as the plain mapping the ingest records.
 
+    ``None`` values are excluded so that absent fields (like ``hazard`` before
+    the block is attached) do not appear in the serialised form. This preserves
+    the pre-existing contract: the ingest writes ``config_json["runner"]``
+    verbatim, and a reader that checks ``key in block`` sees the absence as
+    "predates the field" rather than "present but null".
+
     :param config: The validated runner config.
     :returns: A JSON-serialisable mapping.
     """
-    return dict(config.model_dump())
+    return {k: v for k, v in config.model_dump().items() if v is not None}
