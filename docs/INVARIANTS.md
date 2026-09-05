@@ -138,12 +138,14 @@ paired-binary literature, and it is what Gate 2 (`oc/gate2.py`) already requires
 Ruled 2026-08-31 on #368, after items 3 (#345) and 5 (#347) measured the same
 deviation from two sides.
 
-**Half-update (Win=1.0, Tie=0.5, Loss=0.0, `n += 1`) remains the operational
-stopping heuristic in the interim.** Under it the posterior converges to
+**Half-update (Win=1.0, Tie=0.5, Loss=0.0, `n += 1`) was the interim operational
+stopping heuristic until Path C landed.** Under it the posterior converges to
 `Beta(1+w+t/2, 1+l+t/2)`, so the mean is pulled toward 0.50 as the tie count grows.
 Measured on the win-heavy fixture: `w=8, l=0, t=16` gives `P(rate > 0.60) = 0.726`
 (INCONCLUSIVE) where drop-ties gives `0.990` (PASSED); posterior-mean shift up to
-0.178.
+0.178. The ablation runner no longer uses that encoding for stop decisions
+(see Path C below); the legacy accumulator remains for zero-tie fallback inside
+the Gate-2 wrapper and for calibration/sizing callers.
 
 **The "dilution is always toward 0.5" argument is FALSE, and is recorded here
 because the ruling first asserted it.** A sweep over `w, l in [0, 60]`,
@@ -168,15 +170,18 @@ conditional parameter `P(full wins | discordant)`. They were calibrated against 
 blended rate. Re-deriving them is part of the migration and must be pre-registered
 before any production run consumes the result.
 
-**Path C migration (landed #368).** The ablation lane now routes tie-heavy clause
-decisions through the Gate-2 discordant machinery (`ablation/gate2_stopping.py`),
-consuming the registered design form and thresholds from Amendment 4 of
+**Path C migration (landed #368).** The ablation lane routes tie-heavy clause
+decisions through the Gate-2 discordant machinery
+(`ablation/gate2_stopping.py::DiscordantStoppingAccumulator`), consuming the
+registered design form and thresholds from Amendment 4 of
 `docs/findings/v0.2-preregistration.md` (gamma=0.90, delta_min=0.20, q_min=0.70,
-PR #386, RAT-0001 #391). When ties are present, the decision comes from Gate-2's
-three-sided rule; when Gate-2 returns UNRESOLVED, the scalar thresholds on the
-discordant-only `Beta(1+w, 1+l)` determine the stop decision. This produces a
-`StopDecision` compatible with the ablation runner and ensures the production path
-matches the drop-ties recompute on the registered fixture scenarios.
+PR #386, RAT-0001 #391). The runner constructs that accumulator and records the
+ratification id plus thresholds under `runs.config_json["gate2_stopping"]`. When
+ties are present, the decision comes from Gate-2's three-sided rule; when Gate-2
+returns UNRESOLVED, the scalar thresholds on the discordant-only `Beta(1+w, 1+l)`
+determine the stop decision. This produces a `StopDecision` compatible with the
+ablation runner and matches the drop-ties recompute on the registered fixture
+scenarios.
 
 The seven strict xfails in `tests/test_halfupdate_tie_sensitivity.py` that marked the
 former sensitivity between half-update and drop-ties have been removed: the production
@@ -184,18 +189,21 @@ path and the drop-ties oracle now agree on every fixture scenario (divergence = 
 
 Enforced in / recorded by:
 - `src/skill_harness/ablation/gate2_stopping.py` (the Gate-2 discordant stopping
-  wrapper for the ablation lane)
+  wrapper and production accumulator for the ablation lane)
+- `src/skill_harness/ablation/runner.py` (constructs `DiscordantStoppingAccumulator`;
+  writes `gate2_stopping` into `runs.config_json`)
 - `src/skill_harness/aggregation/fit.py`, `ablation/stopping.py` (the half-update
   encoding this section qualifies; `stopping.py` is the legacy scalar artifact)
 - `docs/findings/halfupdate-tie-sensitivity.md` (the finding and its fixtures)
 - `tests/test_halfupdate_tie_sensitivity.py` (xfails removed; production path and
-  drop-ties agree on all scenarios)
+  drop-ties agree on all scenarios; runner seam pinned)
 - `docs/assurance/halfupdate-tie-migration-mutation-receipt.md` (mutation receipt
   for the migration)
 
 Scope: the Path C migration is landed. The scalar `BetaBinomialAccumulator` in
-`stopping.py` remains as the legacy artifact for zero-tie cases and is NOT modified
-(#42: parallel machinery, not a refactor). The diagnostic clause-aggregation lane
+`stopping.py` remains as the legacy artifact for zero-tie cases inside the Gate-2
+wrapper and for calibration/sizing callers, and is NOT modified (#42: parallel
+machinery, not a refactor). The diagnostic clause-aggregation lane
 (`fit_skill`, #360/#405) keeps `sum_sq` and its own amendment (scope boundary per
 maintainer correction on #360).
 

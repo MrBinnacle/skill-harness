@@ -48,11 +48,14 @@ from skill_harness.ablation.confound import (
 from skill_harness.ablation.operator import AblationOperator
 from skill_harness.ablation.reconciler import reconcile_run_cost
 from skill_harness.ablation.render import ConditionRenderer
+from skill_harness.ablation.gate2_stopping import (
+    DiscordantStoppingAccumulator,
+    registered_thresholds,
+)
 from skill_harness.ablation.stopping import (
     N_INC,
     N_MAX,
     N_MIN,
-    BetaBinomialAccumulator,
     StopDecision,
     StoppingReason,
     next_check_at,
@@ -204,6 +207,8 @@ class RunConfig:
                 "max_usd": self.max_usd,
                 "family_size": self.family_size,
                 "stopping_reasons": self.stopping_reasons,
+                # #368 Path C: Gate-2 discordant stopping thresholds by reference
+                "gate2_stopping": registered_thresholds(),
             },
             sort_keys=True,
         )
@@ -696,7 +701,7 @@ class AblationRunner:
                 ClauseResult(
                     clause_id=clause_id,
                     stopping_reason=StoppingReason.UNDERPOWERED_NMAX,
-                    stop_decision=BetaBinomialAccumulator().check_stop(),
+                    stop_decision=DiscordantStoppingAccumulator().check_stop(),
                     samples_collected=0,
                     length_confounded=False,
                     unmeasured_reason="tier2_uncalibrated",
@@ -721,7 +726,7 @@ class AblationRunner:
                 ClauseResult(
                     clause_id=clause_id,
                     stopping_reason=StoppingReason.UNDERPOWERED_NMAX,
-                    stop_decision=BetaBinomialAccumulator().check_stop(),
+                    stop_decision=DiscordantStoppingAccumulator().check_stop(),
                     samples_collected=0,
                     length_confounded=True,
                     unmeasured_reason="length_confounded",
@@ -735,8 +740,8 @@ class AblationRunner:
             f"FILLER_UNIT_TOKENS must be > 0 (QUAL-2); got {FILLER_UNIT_TOKENS!r}"
         )
 
-        # Sequential stop accumulator
-        acc = BetaBinomialAccumulator()
+        # Sequential stop accumulator (#368 Path C: Gate-2 discordant)
+        acc = DiscordantStoppingAccumulator()
 
         samples_collected = samples_collected_ref[0]
         sample_index_full = 0

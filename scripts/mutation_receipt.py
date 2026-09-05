@@ -112,7 +112,7 @@ _SCALAR_FALLBACK_KILLED = (
 )
 _POSTERIOR_KILLED = (
     "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity"
-    "::test_fixture_proves_detector_fires"
+    "::test_migration_collapses_divergence_on_extreme_fixture"
 )
 
 MUTANTS: tuple[Mutant, ...] = (

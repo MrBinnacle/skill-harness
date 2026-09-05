@@ -96,8 +96,9 @@ those detectors pin are the ones to treat carefully when editing:
    (`test_paired_arm_epoch_adversarial.py`: swap surface closed, within-set
    epoch permutation documented as structurally invisible).
 4. **The tie encoding** feeding stopping and fit — dilution measured, estimand
-   ruled discordant-table on #368
-   (`test_halfupdate_tie_sensitivity.py`, strict xfails until migration).
+   ruled discordant-table on #368; Path C migration landed
+   (`DiscordantStoppingAccumulator` in the ablation runner;
+   `test_halfupdate_tie_sensitivity.py`).
 5. **The budget/ledger identity** in `ablation/runner.py`
    (`test_budget_ledger_reconciliation.py`).
 6. **The confound status path** — CONFOUNDED currently unreachable; repair is

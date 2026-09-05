@@ -109,9 +109,10 @@ and covers that section only. This page stays the citable surface for every kind
   Beta(1+w+t/2, 1+l+t/2); measured at w=8, l=0, t=16: P(rate>0.60)=0.726
   (INCONCLUSIVE) where a drop-ties recompute gives 0.990 (PASSED), with
   posterior-mean shifts up to 0.178. The estimand was RULED on #368
-  (2026-08-31): the discordant table is the estimand of record, half-update
-  stays as the interim heuristic, and the measured sensitivity is recorded in
-  `docs/INVARIANTS.md` §8.
+  (2026-08-31): the discordant table is the estimand of record. Path C
+  migration landed under the same ticket: the ablation runner uses
+  `DiscordantStoppingAccumulator` (Gate-2 discordant machinery) and the seven
+  detector xfails are green with bounds unchanged.
 - **Refuses to claim:** That the error is monotone dilution toward 0.5 — a
   sweep found 80,011 grid points where half-update RAISES P(rate>0.60); that
   the PASS-gate zero holds beyond the swept grid (w, l <= 60, t <= 80); that

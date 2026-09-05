@@ -2,10 +2,10 @@
 
 **Severity:** `WRONG_NUMBER`  
 **Ticket:** #347 (detection); parent #341 item 5  
-**Status:** RULED, not yet migrated — detector landed with strict xfail; the estimand
-was ruled on #368 (2026-08-31) and the measured sensitivity is recorded in
-`docs/INVARIANTS.md` §8. The xfails stay until the encodings agree; they are not
-loosened to go green.  
+**Status:** RULED and migrated (#368 Path C) — detector landed with strict xfail;
+the estimand was ruled on #368 (2026-08-31) and recorded in `docs/INVARIANTS.md`
+§8. The ablation runner now routes through `DiscordantStoppingAccumulator`
+(Gate-2 discordant machinery); the seven xfails are removed with bounds unchanged.
 **Harness:** `tests/test_halfupdate_tie_sensitivity.py`  
 **Report:** this document
 
@@ -108,31 +108,26 @@ Neither change belongs inside this ticket. The fix is its own ticket on #341.
 
 ---
 
-## Detection wiring
+## Detection wiring (post #368 Path C migration)
 
 - `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement`
-  — parametrized over 12 scenarios; two produce verdict flips
-  (`win-heavy-few-ties`, `win-heavy-many-ties`) under
-  `@pytest.mark.xfail(strict=True)`.
+  — parametrized over 12 scenarios; production (`DiscordantStoppingAccumulator`)
+  and drop-ties agree on every row (bounds unchanged; xfails removed).
 - `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_p_exceed_sensitivity_within_bound`
-  — parametrized over 12 scenarios; three exceed the 0.25 bound
-  (`many-ties`, `tie-dominated`, `win-heavy-many-ties`) under
-  `@pytest.mark.xfail(strict=True)`.
+  — divergence is 0 on every row under the migrated path.
 - `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_posterior_mean_shift_within_bound`
-  — parametrized over 12 scenarios; two exceed the 0.15 bound
-  (`win-heavy-few-ties`, `win-heavy-many-ties`) under
-  `@pytest.mark.xfail(strict=True)`.
-- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_fixture_proves_detector_fires`
-  — positive control: extreme scenario (7w, 1l, 30t) must exceed both bounds
-  through the production accumulator (passes while the condition holds).
-- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_zero_ties_arms_are_identical`
-  — sanity control (passes).
-- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_sensitivity_grows_with_tie_count`
-  — monotonicity property (passes).
-
-All known exceedances use `strict=True` marks pointing at this document. A
-fix that removes the sensitivity makes those cells XPASS and the suite red
-until the marks are removed.
+  — mean shift is 0 on every row under the migrated path.
+- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_fixture_proves_legacy_halfupdate_still_diverges`
+  — positive control: the retired half-update encoding still exceeds both bounds
+  on the original extreme fixture (7w, 1l, 30t).
+- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_migration_collapses_divergence_on_extreme_fixture`
+  — migration control: production matches drop-ties on the same extreme fixture.
+- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_win_heavy_many_ties_passes_where_halfupdate_was_inconclusive`
+  — gate scenario from this finding (w=8, l=0, t=16): production PASSED, legacy INCONCLUSIVE.
+- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_runner_config_records_ratification_thresholds`
+  — `runs.config_json` carries `gate2_stopping.rat_id` and the registered thresholds.
+- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_runner_imports_discordant_accumulator`
+  — runner source constructs `DiscordantStoppingAccumulator`, not the half-update accumulator.
 
 ---
 
@@ -142,11 +137,4 @@ until the marks are removed.
 PYTHONHASHSEED=0 python -m pytest tests/test_halfupdate_tie_sensitivity.py -v
 ```
 
-Expected: 32 passed, 7 xfailed. The xfailed scenarios are:
-- `test_stopping_decision_agreement[win-heavy-few-ties]`
-- `test_stopping_decision_agreement[win-heavy-many-ties]`
-- `test_p_exceed_sensitivity_within_bound[many-ties]`
-- `test_p_exceed_sensitivity_within_bound[tie-dominated]`
-- `test_p_exceed_sensitivity_within_bound[win-heavy-many-ties]`
-- `test_posterior_mean_shift_within_bound[win-heavy-few-ties]`
-- `test_posterior_mean_shift_within_bound[win-heavy-many-ties]`
+Expected: all passed, 0 xfailed.
