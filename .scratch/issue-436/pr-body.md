@@ -4,7 +4,7 @@
 
 A cache-aware pair projector (`project_pair_usd_cache_aware`) beside the existing
 `project_pair_usd` in `cost_projection.py`, a drift-check row (DC-15) enforcing
-cache-aware record consistency, and 15 tests covering both.
+cache-aware record consistency, and 18 tests covering both.
 
 ---
 
@@ -22,7 +22,7 @@ rather than defaulting — `KeyError` if `"input"`, `"cache_read"`, `"cache_writ
 or `"output"` is absent from the model's row.
 
 **Test that pins it:** `TestCacheAwarePairProjector` in
-`tests/oracles/calibration/test_cost_projection.py` (9 tests):
+`tests/oracles/calibration/test_cost_projection.py` (10 tests):
 - `test_cache_read_tokens_priced_at_cache_read_rate` — 100k input at $3/M + 100k
   cache_read at $0.30/M + 4k output at $15/M = $0.39 on sonnet-4-6.
 - `test_cache_write_tokens_priced_at_cache_write_rate` — 50k cache_write at
@@ -30,10 +30,12 @@ or `"output"` is absent from the model's row.
 - `test_all_four_classes_combined` — all four classes priced independently.
 - `test_unknown_model_raises_not_defaults` — `KeyError` on unknown model.
 - `test_negative_tokens_rejected` — `ValueError` on negative in any class.
+- `test_cache_read_share_out_of_range_rejected` — `ValueError` on share outside
+  `[0.0, 1.0]`.
 
 **Observed before/after:** Before the change, the import
 `from ...cost_projection import project_pair_usd_cache_aware` raised
-`ImportError` (RED). After implementation, all 9 tests pass (GREEN).
+`ImportError` (RED). After implementation, all 10 tests pass (GREEN).
 
 ### Criterion 2: Declared cache-read share as a registered input
 
@@ -77,18 +79,28 @@ contains `cache_aware_cost_usd`, the check requires `worst_case_cost_usd` and
 `cache_read_share` to also be present, and validates `cache_aware <= worst_case`
 (caching reduces cost).
 
-**Test that pins it:** 6 tests in `tests/test_drift_check.py::TestDC15`:
+**Test that pins it:** 8 tests in `tests/test_drift_check.py` (DC-15):
 - `test_dc15_valid_cache_aware_record_is_green` — all three fields present,
-  cache-aware <= worst case: green.
+  cache-aware <= worst case, share in range: green.
 - `test_dc15_cache_aware_without_worst_case_blocks` — missing
   `worst_case_cost_usd`: FAIL DC-15.
 - `test_dc15_cache_aware_without_share_blocks` — missing `cache_read_share`:
   FAIL DC-15.
 - `test_dc15_cache_aware_exceeding_worst_case_blocks` — cache-aware > worst
   case: FAIL DC-15.
+- `test_dc15_share_out_of_range_blocks` — share outside `[0.0, 1.0]`: FAIL DC-15.
+- `test_dc15_unreadable_share_blocks` — non-numeric share: FAIL DC-15.
 - `test_dc15_no_cache_aware_fields_is_green` — no cache-aware fields: not
   subject to DC-15, green.
 - `test_dc15_printed_in_green_listing` — DC-15 appears in the OK listing.
+
+**Scope note on "reconcile through the projector":** full re-derivation of the
+three figures through `project_pair_usd` / `project_pair_usd_cache_aware` needs
+token-class counts and a model id on the RAT front-matter. Those fields are not
+in the schema this ticket settles. DC-15 enforces the checkable subset —
+presence of the three fields, parseable share in `[0.0, 1.0]`, and
+`cache_aware <= worst_case`. Token-class round-trip is a follow-up if a later
+record schema carries the inputs.
 
 **Observed before/after:** Before the change, a RAT record with
 `cache_aware_cost_usd` but no `worst_case_cost_usd` passed the drift check
@@ -133,15 +145,18 @@ output=2,963 (from #420 rebuilt basis).
 | Cache-read tokens at $0.20/M | 0 | 431,209 (80%) |
 | Cache-write tokens at $2.50/M | 0 | 0 (unknown; conservatively 0) |
 | Output tokens at $10.00/M | 2,963 | 2,963 |
-| **Per-pair cost** | **$1.10765200** | **$0.30245380** |
-| n=32 total | $35.444864 | $9.678522 |
-| Cap (rounded up to cent) | $35.45 | $9.68 |
-| Against $35.00 ceiling | **breach, by $0.45** | **within** |
-| DC-12 valid? | No (empty interval) | Yes ($9.68 in [$9.68, $35.00]) |
+| **Per-pair cost** | **$1.10765200** | **$0.33147616** |
+| n=32 total | $35.444864 | $10.607237 |
+| Cap (rounded up to cent) | $35.45 | $10.61 |
+| Against $35.00 ceiling | **breach, by $0.45** | **within (companion figure only)** |
 
-The cache-aware figure is roughly one-quarter of the worst case. The worst-case
-column remains the figure DC-12 tests; the cache-aware column is the
-instrument improvement this ticket delivers.
+Computed live via `project_pair_usd` / `project_pair_usd_cache_aware` on
+`claude-sonnet-5` at the declared share. The cache-aware figure is about
+30 percent of the worst case. DC-12 still keys on the worst-case column
+only: at n=32 that column's interval `[worst_case, 35.00]` is empty, so
+the cache-aware companion does not open a DC-12 path by itself. The
+worst-case column remains the figure DC-12 tests; the cache-aware column
+is the instrument improvement this ticket delivers.
 
 ---
 
@@ -158,11 +173,11 @@ pricing arithmetic breaks it.
 
 ## Gate results
 
-- **Tests:** 112 passed (61 cost-projection + 51 drift-check), 0 failed
+- **Tests:** cost-projection + drift-check suites green on the #436 additions
 - **Lint:** ruff check clean on all changed files
 - **Drift check:** PASS — 15 live contracts hold on the real tree
-- **Existing tests:** all 97 pre-existing tests pass unchanged; no tests
-  weakened, skipped, or renamed
+- **Existing tests:** pre-existing tests pass unchanged; no tests weakened,
+  skipped, or renamed
 
 ---
 
@@ -172,8 +187,8 @@ pricing arithmetic breaks it.
 |---|---|
 | `src/skill_harness/oracles/calibration/cost_projection.py` | Added `project_pair_usd_cache_aware` function |
 | `scripts/drift_check.py` | Added `CacheAwareContract` dataclass, `_check_cache_aware` function, DC-15 row |
-| `tests/oracles/calibration/test_cost_projection.py` | Added `TestCacheAwarePairProjector` (9 tests) |
-| `tests/test_drift_check.py` | Added DC-15 to `_LIVE_IDS`, added 6 DC-15 tests |
+| `tests/oracles/calibration/test_cost_projection.py` | Added `TestCacheAwarePairProjector` (10 tests) |
+| `tests/test_drift_check.py` | Added DC-15 to `_LIVE_IDS`, added 8 DC-15 tests |
 | `.scratch/issue-436/pr-body.md` | This evidence body |
 
 ## Companion artifacts

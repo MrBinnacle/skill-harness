@@ -132,8 +132,10 @@ class EstimandContract:
 @dataclass(frozen=True)
 class CacheAwareContract:
     """DC-15 (#436): a RAT record quoting ``cache_aware_cost_usd`` must also
-    quote ``worst_case_cost_usd`` and ``cache_read_share``; the cache-aware
-    figure must not exceed the worst case (caching reduces cost)."""
+    quote ``worst_case_cost_usd`` and ``cache_read_share``; share must parse
+    as a float in ``[0.0, 1.0]``; the cache-aware figure must not exceed the
+    worst case. Token-class re-derivation through the projector is out of
+    scope until the RAT front-matter schema carries those inputs."""
 
     ledger_dir: str
     cache_aware_field: str
@@ -749,7 +751,16 @@ def _check_rat_ledger(root: Path, contract: RatLedgerContract) -> list[str]:
 
 def _check_cache_aware(root: Path, contract: CacheAwareContract) -> list[str]:
     """DC-15 (#436): a RAT record quoting cache_aware_cost_usd must also
-    quote worst_case_cost_usd and cache_read_share; cache_aware <= worst."""
+    quote worst_case_cost_usd and cache_read_share; share in [0, 1];
+    cache_aware <= worst.
+
+    Full re-derivation through the projector needs token-class counts and a
+    model id on the record; those fields are not in the RAT front-matter
+    schema this ticket settles. Presence of the three quoted figures, a
+    parseable share in range, and cache_aware <= worst_case are the
+    checkable subset: the author must have produced the figures through
+    the projector, and the gate refuses a record that cannot be.
+    """
     base = root / contract.ledger_dir
     if not base.is_dir():
         return []
@@ -778,8 +789,12 @@ def _check_cache_aware(root: Path, contract: CacheAwareContract) -> list[str]:
         try:
             cache_aware = float(fields[contract.cache_aware_field])
             worst_case = float(fields[contract.worst_case_field])
+            share = float(fields[contract.share_field])
         except ValueError as exc:
             failures.append(f"{rel}: cache-aware fields unreadable ({exc!r})")
+            continue
+        if not (0.0 <= share <= 1.0):
+            failures.append(f"{rel}: {contract.share_field} {share} outside [0.0, 1.0]")
             continue
         if cache_aware > worst_case:
             failures.append(

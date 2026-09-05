@@ -648,7 +648,9 @@ class TestCacheAwarePairProjector:
     def test_cache_read_share_is_metadata(self) -> None:
         """The cache_read_share argument is a declared input, not used in the
         cost calculation — different shares with the same token split produce
-        the same USD (the share is recorded alongside, not applied to price)."""
+        the same USD (the share is recorded alongside, not applied to price).
+        Caller applies the share when splitting tokens into classes; the
+        projector prices the classes it is given."""
         usd_a = project_pair_usd_cache_aware(
             "claude-sonnet-4-6",
             input_tokens=100_000,
@@ -666,6 +668,27 @@ class TestCacheAwarePairProjector:
             cache_read_share=0.9,
         )
         assert usd_a == pytest.approx(usd_b)
+
+    def test_cache_read_share_out_of_range_rejected(self) -> None:
+        """cache_read_share outside [0.0, 1.0] is rejected."""
+        with pytest.raises(ValueError, match="cache_read_share"):
+            project_pair_usd_cache_aware(
+                "claude-sonnet-4-6",
+                input_tokens=1_000,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                output_tokens=100,
+                cache_read_share=1.5,
+            )
+        with pytest.raises(ValueError, match="cache_read_share"):
+            project_pair_usd_cache_aware(
+                "claude-sonnet-4-6",
+                input_tokens=1_000,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                output_tokens=100,
+                cache_read_share=-0.1,
+            )
 
     def test_sonnet_5_all_cache_classes(self) -> None:
         """Sonnet 5 pricing: input=$2, output=$10, cache_write=$2.50, cache_read=$0.20.

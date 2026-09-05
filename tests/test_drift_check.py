@@ -767,6 +767,28 @@ def test_dc15_printed_in_green_listing(tmp_path: Path) -> None:
     assert any("DC-15" in line for line in ok_lines), r.stdout
 
 
+def test_dc15_share_out_of_range_blocks(tmp_path: Path) -> None:
+    """A cache_read_share outside [0.0, 1.0] must block — the share is the
+    registered assumption and must be a fraction."""
+    root = _make_tree(tmp_path)
+    _write_cache_aware_rat_record(root, share="1.5")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-15" in line and "cache_read_share" in line for line in fail_lines), r.stdout
+
+
+def test_dc15_unreadable_share_blocks(tmp_path: Path) -> None:
+    """A non-numeric cache_read_share must block the same way unreadable
+    cost fields do."""
+    root = _make_tree(tmp_path)
+    _write_cache_aware_rat_record(root, share="not-a-fraction")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-15" in line and "unreadable" in line for line in fail_lines), r.stdout
+
+
 # ---------------------------------------------------------------------------
 # AC-1: calibrated-interval primacy (#160 close-out candidate, ratified in
 # docs/ASSURANCE.md; activated by #248)
