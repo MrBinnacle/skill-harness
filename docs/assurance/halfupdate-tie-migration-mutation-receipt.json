@@ -1,0 +1,110 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729",
+        "tests_collected": 39,
+        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+      },
+      "description": "remove the scalar fallback: tie-heavy scenarios that should pass (P >= 0.95) now return inconclusive",
+      "killing_assertions": [
+        "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[win-heavy-many-ties]"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "mutant-digest-placeholder-M-G1",
+        "tests_collected": 39,
+        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+      },
+      "mutant_id": "M-G1",
+      "notes": [],
+      "obligation": "368-scalar-fallback",
+      "selection": [
+        "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[win-heavy-many-ties]"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729",
+        "tests_collected": 39,
+        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+      },
+      "description": "swap the pass/fail thresholds: high-probability scenarios (P=0.99) now fail the wrong condition and return inconclusive",
+      "killing_assertions": [
+        "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[win-heavy-many-ties]"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "mutant-digest-placeholder-M-G2",
+        "tests_collected": 39,
+        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+      },
+      "mutant_id": "M-G2",
+      "notes": [],
+      "obligation": "368-threshold-correctness",
+      "selection": [
+        "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[win-heavy-many-ties]"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729",
+        "tests_collected": 39,
+        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+      },
+      "description": "zero the posterior parameters: the posterior no longer matches the drop-ties recompute",
+      "killing_assertions": [
+        "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_fixture_proves_detector_fires"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "mutant-digest-placeholder-M-G3",
+        "tests_collected": 39,
+        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+      },
+      "mutant_id": "M-G3",
+      "notes": [],
+      "obligation": "368-posterior-correctness",
+      "selection": [
+        "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_fixture_proves_detector_fires"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "src/skill_harness/ablation/gate2_stopping.py": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729"
+  },
+  "production_tree_digest_before": {
+    "src/skill_harness/ablation/gate2_stopping.py": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.15",
+  "target_digests": {
+    "src/skill_harness/ablation/gate2_stopping.py": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729"
+  },
+  "target_files": [
+    "src/skill_harness/ablation/gate2_stopping.py"
+  ]
+}

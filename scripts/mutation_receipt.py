@@ -103,6 +103,18 @@ _PAIRED_GATE2_MODULE = "skill_harness.cli.paired_gate2"
 _DRAFT_REFUSED = "tests/test_cli_paired_gate2.py::TestUnratifiedDesign::test_draft_record_refused"
 _COUNT_MISMATCH = "tests/test_cli_paired_gate2.py::TestCountMismatch::test_pilot_k8_vs_design_n32"
 
+# #368: Gate-2 discordant stopping migration.
+_GATE2_STOPPING = "src/skill_harness/ablation/gate2_stopping.py"
+_GATE2_STOPPING_MODULE = "skill_harness.ablation.gate2_stopping"
+_SCALAR_FALLBACK_KILLED = (
+    "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity"
+    "::test_stopping_decision_agreement[win-heavy-many-ties]"
+)
+_POSTERIOR_KILLED = (
+    "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity"
+    "::test_fixture_proves_detector_fires"
+)
+
 MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M-N1",
@@ -207,6 +219,51 @@ MUTANTS: tuple[Mutant, ...] = (
         "    if total_pairs != design.n_pairs:",
         "    if False:  # mutant: count mismatch accepted",
         (_COUNT_MISMATCH,),
+    ),
+    Mutant(
+        "M-G1",
+        "368-scalar-fallback",
+        "remove the scalar fallback: tie-heavy scenarios that should pass "
+        "(P >= 0.95) now return inconclusive",
+        _GATE2_STOPPING,
+        _GATE2_STOPPING_MODULE,
+        "    elif p >= PASS_PROB_THRESHOLD:\n"
+        "        should_stop = True\n"
+        "        reason = StoppingReason.PASSED\n"
+        "    elif p <= FAIL_PROB_THRESHOLD:\n"
+        "        should_stop = True\n"
+        "        reason = StoppingReason.FAILED\n"
+        "    else:\n"
+        "        should_stop = False\n"
+        "        reason = None",
+        "    else:\n"
+        "        should_stop = False\n"
+        "        reason = None",
+        (_SCALAR_FALLBACK_KILLED,),
+    ),
+    Mutant(
+        "M-G2",
+        "368-threshold-correctness",
+        "swap the pass and fail thresholds: high-probability scenarios "
+        "(P=0.99) now fail the wrong condition and return inconclusive",
+        _GATE2_STOPPING,
+        _GATE2_STOPPING_MODULE,
+        "    elif p >= PASS_PROB_THRESHOLD:",
+        "    elif p <= PASS_PROB_THRESHOLD:",
+        (_SCALAR_FALLBACK_KILLED,),
+    ),
+    Mutant(
+        "M-G3",
+        "368-posterior-correctness",
+        "zero the posterior parameters: the posterior no longer matches "
+        "the drop-ties recompute",
+        _GATE2_STOPPING,
+        _GATE2_STOPPING_MODULE,
+        "    alpha = 1.0 + wins\n"
+        "    beta_param = 1.0 + losses",
+        "    alpha = 1.0\n"
+        "    beta_param = 1.0",
+        (_POSTERIOR_KILLED,),
     ),
 )
 
