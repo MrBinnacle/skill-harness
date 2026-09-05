@@ -625,6 +625,25 @@ which is the only test of it that carries no selection. A rejection on the fresh
 that passed the evaluation half falsifies the stability of the R = 1000 counts and is reported
 as such, never re-run.
 
+**Ruled S414, and it is an amendment to the condition above, made after class 2's result was
+seen.** A cell at `G = 1` on worlds 500 to 999 decides the freeze in neither direction: the exact
+test at `G = 1` cannot reach level 0.01 (a severity failure, not the bound's vacuity), so a pass
+there is not the abstention-rather-than-luck this condition asks for, and a false claim there is
+not a rejection. For that row the condition is then evaluated once more, on worlds 1,000 to 3,999
+of the burned root in that regime: the same derivation (`derive_seed(root, regime, index)`), never
+generated for any class, outside both halves, carrying no selection, and not the fresh root of
+section 8. Rule: worlds 0 to 999 of the extension dump must reproduce the committed dump row for
+row, or the extension is void; the class freezes if and only if the exact test rejects no cell of
+that regime on worlds 1,000 to 3,999. A `G <= 1` cell on the extension passes, and there is no
+second extension. The kill test does not change and no claim-count gate is added: the first draft
+of the ruling carried one and cross-family review identified it as the section 9 gate under a new
+name. The trigger and the test use disjoint worlds with independent seeds, so for a calibrated
+candidate the extension withholds the freeze with probability at most 0.01 and can grant nothing
+the letter withholds. Ruling, arithmetic and receipt: steering repository,
+`docs/research/ebmom-405-rescore-S411/prereg-S414-freeze-ruling-extension.md`,
+`docs/audit/t1-s414-sh437/`. *Revisit if:* the maintainer rules a `G = 1` cell satisfies the
+condition as first written, which withdraws the extension.
+
 *Revisit if:* no class clears admitted 6c in `low_heterogeneity` at R = 1000, in which case the
 question is whether the FAIL promise on that path is reachable at `n = 25` by any estimator, and
 it goes back to #405 as a design question with the three measurements attached.
@@ -756,14 +775,13 @@ receipt carries both identities of v1 section 8, plus this document's SHA.
   dump. It reports five cells where the tests disagree, all of them the bound passing by vacuity
   where the exact test rejects, and it puts a number on the seed-dependence of every verdict.
   Section 0.6, mechanism class 2 at R = 1000 on the burned root, scored on all three world ranges.
-- **The decision this document is now waiting on, and it is the maintainer's:** class 2 rejects in
-  no cell and so meets section 4's freeze condition as written, but the cell the condition turns on
-  holds one decision in one world, where the registered test cannot reject at level 0.01 under any
-  selection. Whether that satisfies the condition is a question about what the condition was for.
-  It is the same question as the confirmatory-kill against mechanism-gate fork below, reached from
-  the other side.
-- **Open until freeze:** class 3 if the maintainer rules a one-world cell insufficient (#437), and
-  section 6's admitted-path lines, which wait on which class freezes.
+- **Ruled S414, overturnable by the maintainer:** a `G = 1` cell decides the freeze in neither
+  direction, and the condition is evaluated once more on 3,000 never-generated burned-root worlds
+  under the same exact test (section 4, the S414 paragraph). The mechanism-gate alternative in the
+  fork above is declined a second time, on the ground that any claim-count threshold is set after
+  the count is known; the kill test stays.
+- **Open until freeze:** the result of that extension (section 0.7 when it lands), class 3 if
+  class 2 fails it, and section 6's admitted-path lines, which wait on which class freezes.
 
 ---
 
@@ -777,6 +795,7 @@ receipt carries both identities of v1 section 8, plus this document's SHA.
 | predictions | the 2026-09-05 ruling section 5 predicted `cand` fails refused 6c in `tie_heavy_null`, `low_heterogeneity` and `small_n_bite` and passes admitted 5c in all five: held in the four landed regimes. It did not predict the admitted 6c cell. Its R = 40 P4 missed (recorded there). |
 | the admitted-path probe | one class run before this document was drafted, on four named worlds and at R = 40; reported whichever way it landed (two of four cleared). |
 | withdrawn figures | two per-path rates derived by subtraction reached #405 and were corrected the same day; the script has no pooled-only counter left. |
-| cross-family review | the 2026-09-05 ruling: two seats, both changed it. This document and the S412 rulings: two seats before posting, both PARTLY SOUND overall; they added the forking-path admission, the split-half freeze control, the family-wise statement and the sparse-cell reading, and named the mechanism-gate fork. Receipt: steering repository `docs/audit/t1-s412-sh405/`. |
+| cross-family review | the 2026-09-05 ruling: two seats, both changed it. This document and the S412 rulings: two seats before posting, both PARTLY SOUND overall; they added the forking-path admission, the split-half freeze control, the family-wise statement and the sparse-cell reading, and named the mechanism-gate fork. Receipt: steering repository `docs/audit/t1-s412-sh405/`. The S414 freeze ruling: two seats (PARTLY SOUND, UNSOUND); they removed a claim-count rule the first draft carried, relabelled the fresh-root risk table as scenario analysis, and forced the error-rate statement to be written; receipt `docs/audit/t1-s414-sh437/`. |
+| the freeze condition evaluated on more worlds after a `G = 1` result | yes, S414. Section 4's condition was written for R = 1000 and the split halves; after class 2 landed at `G = 1` on the evaluation half, the condition was extended once to worlds 1,000 to 3,999 of the burned root, under the same test, with the rule committed before the worlds existed and the reading pre-registered as more likely to fail class 2 than to pass it. Strict direction only. The mechanism-gate alternative was declined twice. |
 
 No registered regime, oracle, generative model, admission level or `B` has moved.
