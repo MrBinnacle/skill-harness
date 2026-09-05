@@ -345,9 +345,9 @@ drew 4 to 6 wins of 25 against a true mean above 0.60, and its tail lands a hair
 oracle at the true concentration abstains on all four. This is the concentration-uncertainty
 class the 2026-09-05 ruling section 4 named as the first to be measured if the park lifted.
 
-### 0.6 The admitted-path probe (`proto_hu.py`), measured
+### 0.6 The admitted-path mechanism classes, measured
 
-Normal-approximation hyperparameter uncertainty carried into the decision (section 4 states the
+**Class 1, normal-approximation hyperparameter uncertainty (`proto_hu.py`).** Carried into the decision (section 4 states the
 form). On the four worlds above: worlds 255 and 600 move to UNDECIDED (255 was the one true
 FAIL); worlds 316 and 783 stay FAIL at `P = 0.0495` and `0.0432`. `low_heterogeneity` at
 R = 40 on `SMOKE_NOT_CONFIRMATORY`: admitted 5c moves from 39 / 1,029 to 35 / 932, and the
@@ -357,6 +357,73 @@ burned root (`proto-hu-lowhet-R1000.log`): admitted 5c moves from 831 / 24,302 (
 for the form-B candidate drops from +7,862 to +6,230 and its abstention rises from -8,595 to
 -7,602; **admitted 6c moves from 3 of 4 to 2 of 2, both false, two worlds** (316 and 783), which
 section 2.1 still rejects (`p = 0.0025`). The class narrows the tail and does not clear it.
+
+**Class 2, the admission-conditioned parametric bootstrap (`proto_pb.py`), measured.** Section 4
+names it as the class to measure if the first does not clear the row. It does not, so it was.
+Draw K clause means from the fitted `Beta(alpha_hat, beta_hat)`, generate a synthetic world under
+them preserving each clause's `n_k` and the pooled tie fraction the data carry, recompute the
+moments `fit_skill` computes, keep the draw when the recomputed peel exceeds the admission critical
+order statistic, and average the clause tail probability over `S = 200` kept draws. This replaces
+class 1's normal approximation with the finite-sample distribution the fitted model itself implies.
+Both classes centre their draws at the fitted values, so **neither corrects the winner's-curse bias
+in the point estimate**; class 2 captures the shape of the sampling distribution, and that is the
+whole of what it adds.
+
+On the four worlds of section 0.5: 255, 316 and 600 move to UNDECIDED and 783 stays FAIL at
+`P = 0.0429`. Class 1 cleared 255 and 600 only. World 255's clause is a true fail, so clearing it
+is an abstention cost rather than a repair.
+
+At R = 1000 on the burned root, admitted path, against the form-B plug-in column:
+
+| regime | row | `cand_bpB` | class 1 | class 2 |
+|---|---|---|---|---|
+| `small_n_bite` | 5c | 608 / 13,936 | not run | 579 / 13,446 |
+| | 6c | 22 / 369 (229 worlds) | not run | 16 / 267 (164 worlds) |
+| `low_heterogeneity` | 5c | 831 / 24,302 (395/687) | 668 / 21,677 (364/687) | 666 / 21,607 (360/687) |
+| | 6c | **3 / 4 (4 worlds)** | **2 / 2 (2 worlds)** | **1 / 1 (1 world)** |
+| `benign_large_n` | 5c | 578 / 93,023 | not run | 578 / 93,028 |
+| | 6c | 299 / 36,424 | not run | 293 / 36,330 |
+| `tie_heavy_null` | 5c | 0 / 3,075 | not run | 0 / 1,762 |
+| `tie_heavy_signal` | 5c | 338 / 22,722 (222/999) | not run | 338 / 23,009 (231/999) |
+
+In `low_heterogeneity` class 2 removes 1,622 of the form-B candidate's wrong-PASS excess over
+`main` (+7,862 to +6,240) and adds 1,073 abstentions; class 1 removed 1,632 and added 993. The two
+classes differ on almost nothing except the row that decides.
+
+**Class 2 rejects in no cell, in any regime, on any of the three world ranges, under either test.**
+Two controls stated before the run both passed: the `cand_bpB` column computed inside the class-2
+run reproduces this document's section 0.3 cells exactly, by a different code path; and every
+refused-path cell is identical between `cand_bpB` and `cand_pb`, as their shared form B requires.
+
+**The split-half score, and the reason this document is still a draft.** Section 4 selects on
+worlds 0 to 499 and evaluates the freeze on 500 to 999. For `low_heterogeneity` admitted 6c:
+
+| range | `cand_bpB` | class 2 | verdict on class 2 |
+|---|---|---|---|
+| selection, 0-499 | 1 / 2 in 2 worlds | 0 / 0 | not testable |
+| evaluation, 500-999 | 2 / 2 in 2 worlds, rejects at `p = 0.0025` | 1 / 1 in 1 world | passes at `p = 0.050` |
+| all 1,000 | 3 / 4 in 4 worlds, rejects at `p = 4.8e-4` | 1 / 1 in 1 world | passes at `p = 0.050` |
+
+Section 4's freeze condition is met as written. It is met by a cell that **cannot reject at level
+0.01 under any selection**, because with one decision-bearing world the largest attainable
+statistic is one false selection and `P(Binomial(1, 0.05) >= 1) = 0.05`. `clustered_bound.py`
+reports the rejecting count per cell, and for this cell it reports that no such count exists.
+
+That is the vacuity section 2.1 removed from the world-block bound, reappearing through the
+replacement test's power floor rather than the bound's zero atom. It is far narrower — one
+decision-bearing world, against the bound's four-or-fewer false-bearing worlds at any rate — and it
+is where the candidate now sits. Two readings sharpen it: on the selection half the cell is empty,
+so the split-half control had nothing to control on this row; and a candidate that abstained on
+that row entirely would pass the same way, which is why section 5 already holds the build to the
+oracle's behaviour rather than to a sparse pass, and why the abstention columns above are the ones
+that separate the two.
+
+**This document therefore does not freeze on class 2 here.** Whether a `G = 1` cell satisfies
+section 4's condition is a question about what the condition was for, and it belongs with the fork
+section 9 already hands the maintainer between a confirmatory kill and a mechanism gate — a gate
+matched to the oracle's abstention is precisely the instrument a one-world cell defeats and a gate
+does not. Full measurements: the steering repository's `RESULTS-S413-class2.md`, and the reading
+pre-registered before the run landed in `prereg-S413-class2-reading.md`.
 
 ---
 
@@ -688,8 +755,15 @@ receipt carries both identities of v1 section 8, plus this document's SHA.
 - **Closed since drafting:** section 0.4, both tests on every cell, from the completed per-world
   dump. It reports five cells where the tests disagree, all of them the bound passing by vacuity
   where the exact test rejects, and it puts a number on the seed-dependence of every verdict.
-- **Open until freeze:** 0.6 for mechanism classes 2 and 3 at R = 1000 (#437), and section 6's
-  admitted-path lines, which wait on which class freezes.
+  Section 0.6, mechanism class 2 at R = 1000 on the burned root, scored on all three world ranges.
+- **The decision this document is now waiting on, and it is the maintainer's:** class 2 rejects in
+  no cell and so meets section 4's freeze condition as written, but the cell the condition turns on
+  holds one decision in one world, where the registered test cannot reject at level 0.01 under any
+  selection. Whether that satisfies the condition is a question about what the condition was for.
+  It is the same question as the confirmatory-kill against mechanism-gate fork below, reached from
+  the other side.
+- **Open until freeze:** class 3 if the maintainer rules a one-world cell insufficient (#437), and
+  section 6's admitted-path lines, which wait on which class freezes.
 
 ---
 
