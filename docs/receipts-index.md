@@ -60,6 +60,31 @@ and covers that section only. This page stays the citable surface for every kind
 
 ## Findings
 
+### [`docs/findings/gitpull-cost-basis-unregisterable.md`](findings/gitpull-cost-basis-unregisterable.md)
+
+- **Claims:** The rebuilt `gitpull` cost basis `#420` asks for cannot be
+  registered at the design's own `n`. Computed through `project_pair_usd`, the
+  measured run gives $1.10765200 per pair (input 539,011, output 2,963), so
+  n = 32 costs $35.444864 and its rounded-up cap $35.45 breaches the $35.00
+  ceiling DC-12 enforces; since DC-12 also fails a cap below the record's own
+  worst case, the valid interval `[worst_case, 35.00]` is empty at n = 32. The
+  control reproduces `RAT-0001` §6 exactly ($0.72974200 at the registered
+  tokens), so the disagreement is in the tokens and not the arithmetic. The
+  cache-aware alternative has no projector: `project_pair_usd` carries no cache
+  term by design, `project_calibration_cost` models a judge prefix rather than
+  a Gate-2 pair, and DC-9 bans hand arithmetic. The original projection was
+  conservative in dollars and wrong in tokens at once — roughly sevenfold
+  over-priced, 1.524 under-counted — so the cap held for a reason unrelated to
+  the basis being sound.
+- **Refuses to claim:** Any choice among the three paths that would make a
+  record registerable (reduce `n` to 31, raise the $35 ceiling, build a
+  cache-aware pair projector) — the fork is stated and deliberately not taken;
+  that 98.6 percent cache-read share generalises beyond the single run that
+  measured it; that n = 31 preserves power over the registered H1 region (no
+  power recomputation was run); any change to `RAT-0001`'s registered fields;
+  and any figure for a task family other than `gitpull` at this prompt and
+  fixture.
+
 ### [`docs/findings/confound-status-silent-understatement.md`](findings/confound-status-silent-understatement.md)
 
 - **Claims:** CONFOUNDED was unreachable: the runner wrote confounded
