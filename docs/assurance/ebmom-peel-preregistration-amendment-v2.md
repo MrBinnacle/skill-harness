@@ -1,8 +1,9 @@
 # Superseding pre-registration (v2): rows 5 and 6 become per-path false-claim rates against the generative truth, the refused path pools, and the admitted path is repaired before any seed is spent (#360, #405)
 
-**Status:** DRAFT, 2026-09-05. NOT FROZEN. It freezes when section 4's condition is met and the
-document is merged to `agent/issue-360` with the word DRAFT removed from this line, and not
-before. No confirmatory root exists for it. Nothing in it may be cited as confirmation.
+**Status:** FROZEN, 2026-09-05 (S414), on mechanism class 2. Section 4's condition was met at
+R = 1000 in every regime and, under the S414 amendment, on 3,000 further burned-root worlds in
+`low_heterogeneity` (section 0.7). No confirmatory root exists for it. Nothing in it may be cited
+as confirmation.
 **Supersedes:** in `ebmom-peel-preregistration-amendment.md` (v1, at `13f0fbb`): section 5 rows
 5 and 6 as kill rows, the kill criterion, and the refused-path decision procedure that v1 left
 implicit (unpooled `Beta(1 + w, 1 + n - w)` under BH-FDR). Everything else in v1 stands by
@@ -425,6 +426,35 @@ matched to the oracle's abstention is precisely the instrument a one-world cell 
 does not. Full measurements: the steering repository's `RESULTS-S413-class2.md`, and the reading
 pre-registered before the run landed in `prereg-S413-class2-reading.md`.
 
+### 0.7 The S414 extension: class 2 on worlds 1,000 to 3,999, and the freeze
+
+The S414 ruling (section 4) evaluated the condition once more, on 3,000 burned-root worlds in
+`low_heterogeneity` that were never generated for any class, under the same exact test, with the
+rule committed before the run started and the pre-registered reading saying class 2 would more
+likely fail it than pass it.
+
+**Rule 1, reproducibility: passed.** All 1,000 committed per-world rows reproduce in the
+extension's prefix, four columns, zero differences.
+
+**Rule 2, the exact test on worlds 1,000 to 3,999: passed with power.** `false / decisions (G / g)`:
+
+| column | admitted 5c | admitted 6c | refused 5c |
+|---|---|---|---|
+| class 2 | 2,164 / 67,607 (2,138 / 1,206), pass | **1 / 5 (5 / 1), `p = 0.226`, rejects at 3, pass** | 2,291 / 44,948 (859 / 643), pass |
+| plug-in | 2,780 / 76,900, pass | **4 / 12 (12 / 4), `p = 0.0022`, FAIL under every selection** | same cell by construction |
+| `main` | pass | 500 / 1,497, FAIL | pass; refused 6c 58 / 182 FAIL |
+| `oracle` | pass | 0 / 0 | pass |
+
+Four of class 2's five residual FAIL claims are true. The pre-registered scenarios put the false
+fraction at 0.5 to 1.0 from the prior columns; the measured fraction is 0.2 on the new worlds and
+0.33 over all 4,000 (2 of 6). The plug-in on the same worlds is the 0.33 the scenarios were built
+from, and it fails. The removed abstention rule (at most one false) would also have passed and was
+not the swing vote. Pooled: 6 decision-bearing worlds in 4,000, 2 false, `p = 0.033`, rejects at 3.
+
+**The freeze executes.** Measurement of record: the steering repository's
+`RESULTS-S414-extension.md`, `proto-pb-low_heterogeneity-R4000-f95e4de5.json`,
+`clustered-bound-pb-R4000-f95e4de5-w1000-4000.log` and the full-range log beside it.
+
 ---
 
 ## 1. What is superseded, stated plainly
@@ -695,9 +725,22 @@ never as a demonstration.
 
 ## 6. Prediction for the confirmatory run, to be completed at freeze
 
-Stated now for the parts the burned root already determines; the admitted-path cells depend on
-section 4's outcome and are written at freeze, before the root is generated.
+Stated now for the parts the burned root already determines; the admitted-path cells were written
+at freeze (S414), before the root is generated.
 
+- **Admitted path, class 2, 5c:** passes in every regime. Burned-root point estimates 4.3 percent
+  (`small_n_bite`, 579 / 13,446), 3.1 percent (`low_heterogeneity`, 666 / 21,607 at R = 1000 and
+  2,830 / 89,214 over 4,000 worlds), 0.6 percent (`benign_large_n`), 0 (`tie_heavy_null`), 1.5
+  percent (`tie_heavy_signal`). Rejection probability over seeds under 0.01 in every cell.
+- **Admitted path, class 2, 6c, every regime but one:** passes. `small_n_bite` 16 / 267 across 164
+  worlds; `benign_large_n` 293 / 36,330 across 247 worlds; the tie regimes mint no admitted FAIL.
+- **Admitted path, class 2, 6c in `low_heterogeneity`: a distribution, not a verdict.** At the
+  pooled burned-root rate (1.5 decision-bearing worlds per 1,000, false fraction 0.33) a fresh
+  root of 1,000 worlds has `G = 0` with probability 0.22 (not testable), `G = 1` with 0.34 (a
+  pass the test cannot fail), `G >= 2` with 0.44; the exact test rejects the cell with probability
+  **0.07** at the measured figures, 0.16 at the rate's 95 percent upper bound. A rejection there
+  is the sparse-cell outcome section 5 describes: it kills under the criterion as written, and it
+  does not falsify the stability of the R = 1000 counts.
 - Refused path, form B: 5c passes in every regime (point estimates 4.76 percent and below, 313
   and 21 refused worlds); 6c not testable in every regime (form B mints no refused-path FAIL).
 - `main`: fails 6c on the admitted path in `small_n_bite` and `low_heterogeneity` (12.4 and 40
@@ -716,9 +759,10 @@ section 4's outcome and are written at freeze, before the root is generated.
   `p = 0.0025`) and its outcome on a fresh root is dominated by how many FAIL claims happen to
   be made. The freeze condition therefore asks the mechanism to match the oracle's behaviour on
   that side, which is to abstain, rather than to be lucky.
-- A NOT_REJECTED result is the prediction if and only if section 4's condition was met on the
-  burned root; a REJECTED result in any cell that passed on the burned root falsifies the
-  stability of the R = 1000 counts and is reported as such.
+- A NOT_REJECTED result is the prediction, section 4's condition having been met on the burned
+  root; a REJECTED result in any cell that passed on the burned root with a rejection probability
+  over seeds under 0.01 falsifies the stability of the R = 1000 counts and is reported as such.
+  The one cell that carries its own distribution above is excluded from that reading.
 
 ---
 
@@ -780,8 +824,11 @@ receipt carries both identities of v1 section 8, plus this document's SHA.
   under the same exact test (section 4, the S414 paragraph). The mechanism-gate alternative in the
   fork above is declined a second time, on the ground that any claim-count threshold is set after
   the count is known; the kill test stays.
-- **Open until freeze:** the result of that extension (section 0.7 when it lands), class 3 if
-  class 2 fails it, and section 6's admitted-path lines, which wait on which class freezes.
+- **Frozen, S414:** mechanism class 2 (section 4's second class, `proto_pb.py`'s form, `S = 200`),
+  on the extension result in section 0.7. Class 3 does not run. Section 6's admitted-path lines
+  are written. Section 7's fourth mutant is owed by the build. The build's acceptance includes
+  reproducing `proto-pb-all-R1000-f95e4de5.json`'s per-path cells at R = 1000 on the burned root,
+  so that what the fresh root tests is the mechanism that was measured.
 
 ---
 
