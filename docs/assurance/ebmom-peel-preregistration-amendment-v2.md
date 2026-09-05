@@ -116,13 +116,217 @@ against the truth, with the oracle itself at 2.2 percent.
 
 ### 0.4 The two tests, cell by cell
 
-Appended when the per-world dump (`rescore405_worlds.py`, started 2026-09-05T14:43Z) completes:
-the table printed by `clustered_bound.py`, giving for every cell the world-block 99 percent lower
-bound of the 2026-09-05 ruling and the one-per-world exact binomial of section 2, with their
-verdicts side by side. Every verdict that decides an item in this document is already fixed by
-the counts in 0.3 (a cell whose false-bearing worlds are all selected still passes, or whose
-selected decisions are all false still rejects), and section 3 says so cell by cell; the table
-adds the bound column and the drawn counts.
+**Measured.** The per-world dump (`rescore405_worlds.py`, started 2026-09-05T14:43Z) completed at
+15:54Z across all five regimes. `clustered_bound.py` read it and printed the table below. Its
+faithfulness control asserts that the per-world sums equal every cell of section 0.3 and refuses
+to run otherwise; it did not refuse, so the per-world data and the per-path counts are the same
+data.
+
+Reading the columns. `G` is the decision-bearing worlds on the path, `g` the false-bearing worlds.
+`bound99` is the world-block 99 percent lower bound of the 2026-09-05 ruling and `bound-verdict`
+its call, marked `(vacuous)` where `p_none` exceeds 0.01 and the cell holds at least one false
+decision, meaning the bound is 0 by construction and cannot reject at any rate. `exact_p` is the
+all-decision exact binomial, valid only where every decision sits in its own world (`n == G`);
+it is printed for reference and is not a kill. The columns right of the bar are section 2.1's
+kill test: the selected false count over `G`, its exact p, its verdict, the interval `[kmin, kmax]`
+that the counts permit any selection to reach, the count at which the cell rejects, and either
+`fixed` (no selection changes the verdict) or `P(rej)`, the exact probability that a different
+registered seed rejects the cell, computed as a Poisson-binomial tail over the per-world false
+fractions.
+
+One difference from the registered procedure, stated because it changes the realised numbers.
+Section 2.1 selects a decision per world by a seeded draw over `clause_id`. This dump holds
+per-world counts and not clause identities, so the script draws the selected decision's false
+indicator as `Bernoulli(false_w / n_w)`. The two are equal in distribution, so every probability
+column is exact; the realised `k` in a given cell is a different draw from the same law than the
+harness will produce. The `[kmin, kmax]`, `rej>=`, `fixed` and `P(rej)` columns do not depend on
+the draw at all.
+
+```
+regime             column    path     row  false/dec   G    g   rate    bound99  p_none  exact_p   bound-verdict | opw k/G  opw_p    opw   [kmin,kmax] rej>=  seed-dep
+benign_large_n     cand      admitted 5c    578/93023  1000  428  0.0062  0.0056  0.000   1.00e+00  pass             |   6/1000 1.00e+00  pass  [  0,428] rej>=68   P(rej)=0.000
+benign_large_n     cand      admitted 6c    299/36424  1000  250  0.0082  0.0072  0.000   1.00e+00  pass             |   6/1000 1.00e+00  pass  [  0,250] rej>=68   P(rej)=0.000
+benign_large_n     cand      refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+benign_large_n     cand      refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+benign_large_n     cand_bpA  admitted 5c    578/93023  1000  428  0.0062  0.0056  0.000   1.00e+00  pass             |   5/1000 1.00e+00  pass  [  0,428] rej>=68   P(rej)=0.000
+benign_large_n     cand_bpA  admitted 6c    299/36424  1000  250  0.0082  0.0071  0.000   1.00e+00  pass             |   7/1000 1.00e+00  pass  [  0,250] rej>=68   P(rej)=0.000
+benign_large_n     cand_bpA  refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+benign_large_n     cand_bpA  refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+benign_large_n     cand_bpB  admitted 5c    578/93023  1000  428  0.0062  0.0055  0.000   1.00e+00  pass             |   8/1000 1.00e+00  pass  [  0,428] rej>=68   P(rej)=0.000
+benign_large_n     cand_bpB  admitted 6c    299/36424  1000  250  0.0082  0.0071  0.000   1.00e+00  pass             |  16/1000 1.00e+00  pass  [  0,250] rej>=68   P(rej)=0.000
+benign_large_n     cand_bpB  refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+benign_large_n     cand_bpB  refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+benign_large_n     cand_prod admitted 5c    578/93023  1000  428  0.0062  0.0056  0.000   1.00e+00  pass             |   5/1000 1.00e+00  pass  [  0,428] rej>=68   P(rej)=0.000
+benign_large_n     cand_prod admitted 6c    299/36424  1000  250  0.0082  0.0070  0.000   1.00e+00  pass             |   9/1000 1.00e+00  pass  [  0,250] rej>=68   P(rej)=0.000
+benign_large_n     cand_prod refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+benign_large_n     cand_prod refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+benign_large_n     main      admitted 5c    578/93040  1000  428  0.0062  0.0056  0.000   1.00e+00  pass             |   4/1000 1.00e+00  pass  [  0,428] rej>=68   P(rej)=0.000
+benign_large_n     main      admitted 6c    333/37151  1000  273  0.0090  0.0077  0.000   1.00e+00  pass             |  14/1000 1.00e+00  pass  [  0,273] rej>=68   P(rej)=0.000
+benign_large_n     main      refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+benign_large_n     main      refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+benign_large_n     oracle    admitted 5c    581/93091  1000  431  0.0062  0.0056  0.000   1.00e+00  pass             |   9/1000 1.00e+00  pass  [  0,431] rej>=68   P(rej)=0.000
+benign_large_n     oracle    admitted 6c    232/35330  1000  212  0.0066  0.0056  0.000   1.00e+00  pass             |   6/1000 1.00e+00  pass  [  0,212] rej>=68   P(rej)=0.000
+benign_large_n     oracle    refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+benign_large_n     oracle    refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+low_heterogeneity  cand      admitted 5c    831/24302   687  395  0.0342  0.0314  0.000   1.00e+00  pass             |  26/687  9.44e-01  pass  [  0,395] rej>=49   P(rej)=0.000
+low_heterogeneity  cand      admitted 6c      3/4         4    3  0.7500  0.0000  0.050   4.81e-04  pass (vacuous)   |   3/4    4.81e-04  FAIL  [  3,  3] rej>=3    fixed
+low_heterogeneity  cand      refused  5c    158/5923    313  128  0.0267  0.0224  0.000   1.00e+00  pass             |   8/313  9.89e-01  pass  [  0,128] rej>=26   P(rej)=0.000
+low_heterogeneity  cand      refused  6c    347/744     283  212  0.4664  0.4265  0.000   2.68e-239  FAIL             | 143/283  5.21e-106  FAIL  [ 65,212] rej>=24   fixed
+low_heterogeneity  cand_bpA  admitted 5c    831/24302   687  395  0.0342  0.0311  0.000   1.00e+00  pass             |  17/687  1.00e+00  pass  [  0,395] rej>=49   P(rej)=0.000
+low_heterogeneity  cand_bpA  admitted 6c      3/4         4    3  0.7500  0.0000  0.050   4.81e-04  pass (vacuous)   |   3/4    4.81e-04  FAIL  [  3,  3] rej>=3    fixed
+low_heterogeneity  cand_bpA  refused  5c    429/10852   313  192  0.0395  0.0338  0.000   1.00e+00  pass             |   8/313  9.89e-01  pass  [  0,192] rej>=26   P(rej)=0.000
+low_heterogeneity  cand_bpA  refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+low_heterogeneity  cand_bpB  admitted 5c    831/24302   687  395  0.0342  0.0309  0.000   1.00e+00  pass             |  23/687  9.85e-01  pass  [  0,395] rej>=49   P(rej)=0.000
+low_heterogeneity  cand_bpB  admitted 6c      3/4         4    3  0.7500  0.0000  0.050   4.81e-04  pass (vacuous)   |   3/4    4.81e-04  FAIL  [  3,  3] rej>=3    fixed
+low_heterogeneity  cand_bpB  refused  5c    773/16251   313  244  0.0476  0.0429  0.000   9.26e-01  pass             |  10/313  9.53e-01  pass  [  0,244] rej>=26   P(rej)=0.001
+low_heterogeneity  cand_bpB  refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+low_heterogeneity  cand_prod admitted 5c    831/24302   687  395  0.0342  0.0310  0.000   1.00e+00  pass             |  24/687  9.76e-01  pass  [  0,395] rej>=49   P(rej)=0.000
+low_heterogeneity  cand_prod admitted 6c      3/4         4    3  0.7500  0.0000  0.050   4.81e-04  pass (vacuous)   |   3/4    4.81e-04  FAIL  [  3,  3] rej>=3    fixed
+low_heterogeneity  cand_prod refused  5c      0/139      60    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/60   1.00e+00  pass  [  0,  0] rej>=8    fixed
+low_heterogeneity  cand_prod refused  6c    347/744     283  212  0.4664  0.4256  0.000   2.68e-239  FAIL             | 133/283  1.97e-93  FAIL  [ 65,212] rej>=24   fixed
+low_heterogeneity  main      admitted 5c    453/17353   687  294  0.0261  0.0231  0.000   1.00e+00  pass             |  15/687  1.00e+00  pass  [  0,294] rej>=49   P(rej)=0.000
+low_heterogeneity  main      admitted 6c    203/504     340  176  0.4028  0.3519  0.000   2.16e-125  FAIL             | 137/340  2.93e-85  FAIL  [104,176] rej>=28   fixed
+low_heterogeneity  main      refused  5c    192/6743    313  140  0.0285  0.0236  0.000   1.00e+00  pass             |   8/313  9.89e-01  pass  [  0,140] rej>=26   P(rej)=0.000
+low_heterogeneity  main      refused  6c     27/84       75   27  0.3214  0.2118  0.000   3.37e-15  FAIL             |  23/75   1.11e-12  FAIL  [ 21, 27] rej>=10   fixed
+low_heterogeneity  oracle    admitted 5c    987/28525   687  512  0.0346  0.0319  0.000   1.00e+00  pass             |  26/687  9.44e-01  pass  [  0,512] rej>=49   P(rej)=0.000
+low_heterogeneity  oracle    admitted 6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+low_heterogeneity  oracle    refused  5c    423/11719   313  232  0.0361  0.0318  0.000   1.00e+00  pass             |  11/313  9.15e-01  pass  [  0,232] rej>=26   P(rej)=0.000
+low_heterogeneity  oracle    refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+small_n_bite       cand      admitted 5c    608/13936   962  331  0.0436  0.0394  0.000   1.00e+00  pass             |  32/962  9.95e-01  pass  [  0,331] rej>=65   P(rej)=0.000
+small_n_bite       cand      admitted 6c     22/369     229   22  0.0596  0.0329  0.000   2.28e-01  pass             |  11/229  5.97e-01  pass  [  9, 22] rej>=21   P(rej)=0.000
+small_n_bite       cand      refused  5c     22/408      21   15  0.0539  0.0308  0.000   3.89e-01  pass             |   1/21   6.59e-01  pass  [  0, 15] rej>=5    P(rej)=0.003
+small_n_bite       cand      refused  6c     25/129      21   17  0.1938  0.1240  0.000   5.65e-09  FAIL             |   6/21   4.42e-04  FAIL  [  0, 17] rej>=5    P(rej)=0.403
+small_n_bite       cand_bpA  admitted 5c    608/13936   962  331  0.0436  0.0395  0.000   1.00e+00  pass             |  27/962  1.00e+00  pass  [  0,331] rej>=65   P(rej)=0.000
+small_n_bite       cand_bpA  admitted 6c     22/369     229   22  0.0596  0.0327  0.000   2.28e-01  pass             |  16/229  1.13e-01  pass  [  9, 22] rej>=21   P(rej)=0.000
+small_n_bite       cand_bpA  refused  5c      4/160      18    3  0.0250  0.0000  0.050   9.61e-01  pass (vacuous)   |   0/18   1.00e+00  pass  [  0,  3] rej>=5    fixed
+small_n_bite       cand_bpA  refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+small_n_bite       cand_bpB  admitted 5c    608/13936   962  331  0.0436  0.0394  0.000   1.00e+00  pass             |  25/962  1.00e+00  pass  [  0,331] rej>=65   P(rej)=0.000
+small_n_bite       cand_bpB  admitted 6c     22/369     229   22  0.0596  0.0334  0.000   2.28e-01  pass             |  15/229  1.75e-01  pass  [  9, 22] rej>=21   P(rej)=0.000
+small_n_bite       cand_bpB  refused  5c     18/220      17    3  0.0818  0.0000  0.050   2.86e-02  pass (vacuous)   |   0/17   1.00e+00  pass  [  0,  3] rej>=4    fixed
+small_n_bite       cand_bpB  refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+small_n_bite       cand_prod admitted 5c    608/13936   962  331  0.0436  0.0392  0.000   1.00e+00  pass             |  24/962  1.00e+00  pass  [  0,331] rej>=65   P(rej)=0.000
+small_n_bite       cand_prod admitted 6c     22/369     229   22  0.0596  0.0345  0.000   2.28e-01  pass             |  14/229  2.58e-01  pass  [  9, 22] rej>=21   P(rej)=0.000
+small_n_bite       cand_prod refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+small_n_bite       cand_prod refused  6c     25/129      21   17  0.1938  0.1293  0.000   5.65e-09  FAIL             |   5/21   3.24e-03  FAIL  [  0, 17] rej>=5    P(rej)=0.403
+small_n_bite       main      admitted 5c   1328/26495   979  716  0.0501  0.0467  0.000   4.67e-01  pass             |  51/979  4.02e-01  pass  [  0,716] rej>=66   P(rej)=0.008
+small_n_bite       main      admitted 6c    437/3510    952  347  0.1245  0.1111  0.000   2.30e-66  FAIL             | 117/952  1.12e-18  FAIL  [ 18,347] rej>=65   P(rej)=1.000
+small_n_bite       main      refused  5c     22/408      21   15  0.0539  0.0312  0.000   3.89e-01  pass             |   1/21   6.59e-01  pass  [  0, 15] rej>=5    P(rej)=0.003
+small_n_bite       main      refused  6c      2/26       17    2  0.0769  0.0000  0.135   3.76e-01  pass (vacuous)   |   2/17   2.08e-01  pass  [  1,  2] rej>=4    fixed
+small_n_bite       oracle    admitted 5c    156/6445    979  147  0.0242  0.0199  0.000   1.00e+00  pass             |  28/979  1.00e+00  pass  [  0,147] rej>=66   P(rej)=0.000
+small_n_bite       oracle    admitted 6c      4/80       79    4  0.0500  0.0000  0.018   5.72e-01  pass (vacuous)   |   4/79   5.62e-01  pass  [  4,  4] rej>=10   fixed
+small_n_bite       oracle    refused  5c      1/89       20    1  0.0112  0.0000  0.368   9.90e-01  pass (vacuous)   |   0/20   1.00e+00  pass  [  0,  1] rej>=5    fixed
+small_n_bite       oracle    refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_null     cand      admitted 5c      0/3075     39    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/39   1.00e+00  pass  [  0,  0] rej>=7    fixed
+tie_heavy_null     cand      admitted 6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_null     cand      refused  5c      0/8005    961    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/961  1.00e+00  pass  [  0,  0] rej>=65   fixed
+tie_heavy_null     cand      refused  6c    251/251     219  219  1.0000  1.0000  0.000   0.00e+00  FAIL             | 219/219  1.19e-285  FAIL  [219,219] rej>=20   fixed
+tie_heavy_null     cand_bpA  admitted 5c      0/3075     39    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/39   1.00e+00  pass  [  0,  0] rej>=7    fixed
+tie_heavy_null     cand_bpA  admitted 6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_null     cand_bpA  refused  5c      0/112337  961    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/961  1.00e+00  pass  [  0,  0] rej>=65   fixed
+tie_heavy_null     cand_bpA  refused  6c      4/4         3    3  1.0000  0.0000  0.050   6.25e-06  pass (vacuous)   |   3/3    1.25e-04  FAIL  [  3,  3] rej>=2    fixed
+tie_heavy_null     cand_bpB  admitted 5c      0/3075     39    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/39   1.00e+00  pass  [  0,  0] rej>=7    fixed
+tie_heavy_null     cand_bpB  admitted 6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_null     cand_bpB  refused  5c      0/120466  961    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/961  1.00e+00  pass  [  0,  0] rej>=65   fixed
+tie_heavy_null     cand_bpB  refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_null     cand_prod admitted 5c      0/3075     39    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/39   1.00e+00  pass  [  0,  0] rej>=7    fixed
+tie_heavy_null     cand_prod admitted 6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_null     cand_prod refused  5c      0/1         1    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/1    1.00e+00  pass  [  0,  0] rej>=None fixed
+tie_heavy_null     cand_prod refused  6c    251/251     219  219  1.0000  1.0000  0.000   0.00e+00  FAIL             | 219/219  1.19e-285  FAIL  [219,219] rej>=20   fixed
+tie_heavy_null     main      admitted 5c      0/500      39    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/39   1.00e+00  pass  [  0,  0] rej>=7    fixed
+tie_heavy_null     main      admitted 6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_null     main      refused  5c      0/8395    955    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/955  1.00e+00  pass  [  0,  0] rej>=65   fixed
+tie_heavy_null     main      refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_null     oracle    admitted 5c      0/7800     39    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/39   1.00e+00  pass  [  0,  0] rej>=7    fixed
+tie_heavy_null     oracle    admitted 6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_null     oracle    refused  5c      0/192200  961    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/961  1.00e+00  pass  [  0,  0] rej>=65   fixed
+tie_heavy_null     oracle    refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand      admitted 5c    338/22722   999  222  0.0149  0.0125  0.000   1.00e+00  pass             |  11/999  1.00e+00  pass  [  0,222] rej>=68   P(rej)=0.000
+tie_heavy_signal   cand      admitted 6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand      refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand      refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand_bpA  admitted 5c    338/22722   999  222  0.0149  0.0126  0.000   1.00e+00  pass             |  15/999  1.00e+00  pass  [  0,222] rej>=68   P(rej)=0.000
+tie_heavy_signal   cand_bpA  admitted 6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand_bpA  refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand_bpA  refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand_bpB  admitted 5c    338/22722   999  222  0.0149  0.0126  0.000   1.00e+00  pass             |   4/999  1.00e+00  pass  [  0,222] rej>=68   P(rej)=0.000
+tie_heavy_signal   cand_bpB  admitted 6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand_bpB  refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand_bpB  refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand_prod admitted 5c    338/22722   999  222  0.0149  0.0126  0.000   1.00e+00  pass             |  10/999  1.00e+00  pass  [  0,222] rej>=68   P(rej)=0.000
+tie_heavy_signal   cand_prod admitted 6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand_prod refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   cand_prod refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   main      admitted 5c    162/17345  1000  145  0.0093  0.0077  0.000   1.00e+00  pass             |  11/1000 1.00e+00  pass  [  0,145] rej>=68   P(rej)=0.000
+tie_heavy_signal   main      admitted 6c      0/81       77    0  0.0000  0.0000  1.000   1.00e+00  pass             |   0/77   1.00e+00  pass  [  0,  0] rej>=10   fixed
+tie_heavy_signal   main      refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   main      refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   oracle    admitted 5c   1293/57908  1000  722  0.0223  0.0209  0.000   1.00e+00  pass             |  26/1000 1.00e+00  pass  [  0,722] rej>=68   P(rej)=0.000
+tie_heavy_signal   oracle    admitted 6c      2/181     170    2  0.0110  0.0000  0.135   9.99e-01  pass (vacuous)   |   2/170  9.98e-01  pass  [  1,  2] rej>=17   fixed
+tie_heavy_signal   oracle    refused  5c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+tie_heavy_signal   oracle    refused  6c      0/0         0    0     -       -    1.000      -     n/t              |          n/t  
+wrote rescore405-R1000-f95e4de5-worlds-bounds.json
+```
+
+Four findings from the table.
+
+**1. The two tests disagree in five cells, and every disagreement runs one way.** The bound passes
+by vacuity where the exact test rejects. No cell anywhere rejects under the bound and passes under
+the exact test.
+
+| regime | column | cell | count | `g` / `G` | bound | exact test |
+|---|---|---|---|---|---|---|
+| `low_heterogeneity` | `cand` | admitted 6c | 3 / 4 | 3 / 4 | pass (vacuous) | **FAIL**, `p = 4.8e-4` |
+| `low_heterogeneity` | `cand_prod` | admitted 6c | 3 / 4 | 3 / 4 | pass (vacuous) | **FAIL**, `p = 4.8e-4` |
+| `low_heterogeneity` | `cand_bpA` | admitted 6c | 3 / 4 | 3 / 4 | pass (vacuous) | **FAIL**, `p = 4.8e-4` |
+| `low_heterogeneity` | `cand_bpB` | admitted 6c | 3 / 4 | 3 / 4 | pass (vacuous) | **FAIL**, `p = 4.8e-4` |
+| `tie_heavy_null` | `cand_bpA` | refused 6c | 4 / 4 | 3 / 3 | pass (vacuous) | **FAIL**, `p = 1.25e-4` |
+
+The first four rows are one cell, not four: the admitted path is shared by every candidate column,
+so the same four worlds appear under each. It is the cell that lifts the park (section 4). The
+fifth row is the cell that fails form A (section 3). Both cells reject under every possible
+selection: `P(rej) = 1.0`. This is the measured form of the argument section 2.1 makes in prose —
+the bound's blind spot is not a hypothetical, it is where both of this document's live decisions
+were taken.
+
+**2. Every pass in the table is a pass the seed did not buy.** Of 120 rows, 75 are testable and 45
+report no decisions of their kind. Of the 75, 31 verdicts are fixed by the counts and 44 could in
+principle move with the seed. Quantified rather than left as a logical range: **the highest
+rejection probability over seeds among all 74 passing-or-failing cells that passed is 0.0084**,
+which is `main`'s admitted 5c cell in `small_n_bite` (1,328 false of 26,495, `G = 979`, rejecting
+at 66 selected false, observed at 51). Every other passing cell is at or below 0.0032. No pass in
+this table is a lucky draw.
+
+One edge worth recording for the freeze evaluation: a cell with exactly one decision-bearing world
+cannot reject at level 0.01 under any selection, because `P(Binomial(1, 0.05) >= 1) = 0.05`. One
+cell here is that size (`tie_heavy_null`, `cand_prod`, refused 5c, `G = 1`) and its pass carries no
+information. Section 5's rule that a cell with no decisions reports not testable rather than passed
+should be read as covering this case in substance; the table reports `G` beside every verdict so a
+reader can see it.
+
+**3. One correction to what this section was expected to say.** The placeholder for 0.4 asserted
+that every verdict deciding an item in this document is already fixed by the counts in 0.3. That is
+true of both rejections above and of form B's refused 5c cell in `small_n_bite` (at most 3 of 17
+selections can be false and the cell rejects at 4, so it passes under every draw). It is **not**
+literally true of form B's refused 5c cell in `low_heterogeneity`: 773 false of 16,251 decisions
+over 313 worlds, 244 of them false-bearing, rejecting at 26 selected false, observed at 10. A
+selection reaching 26 exists. Its probability is **0.0007**. The form-selection conclusion is
+therefore not fixed by the counts in the strict sense; it is stable at seven parts in ten thousand,
+and section 3's branch does not change.
+
+**4. A weakness in one piece of section 3's supporting evidence, reported rather than argued.**
+Section 3 cites three cells where the unpooled fallback's FAIL promise breaks: 251 of 251 in
+`tie_heavy_null`, 347 of 744 in `low_heterogeneity`, 25 of 129 in `small_n_bite`. As counts all
+three are exactly as stated. Under the registered kill test the first two reject under every
+selection, and **the third rejects with probability 0.40** — a coin flip, because its 25 false
+FAILs sit in 17 of 21 worlds and the test keeps one decision per world. This is the cost section
+2.2 names under "what it discards", now with a number on it. It does not touch the form choice:
+form A is failed by a cell that rejects with probability 1, and form B mints no refused-path FAIL
+in `small_n_bite` at all. It does mean the `small_n_bite` refused 6c cell should not be offered as
+independent confirmation of the pooling policy, and section 3's other two cells carry that claim
+unaided.
+
+`clustered_bound.py` writes `rescore405-R1000-f95e4de5-worlds-bounds.json` beside the dump, holding
+every column above per cell.
 
 ### 0.5 The four admitted-path FAIL worlds in `low_heterogeneity`, read directly
 
@@ -481,8 +685,11 @@ receipt carries both identities of v1 section 8, plus this document's SHA.
   under both tests.
 - **Revisable:** the form of the admitted-path mechanism (section 4), by the sequence stated
   there; the reliability table's binning; `S = 200`.
-- **Open until freeze:** section 0.4 (both tests, every cell), 0.6 at R = 1000, `tie_heavy_signal`
-  in 0.3, and section 6's admitted-path lines.
+- **Closed since drafting:** section 0.4, both tests on every cell, from the completed per-world
+  dump. It reports five cells where the tests disagree, all of them the bound passing by vacuity
+  where the exact test rejects, and it puts a number on the seed-dependence of every verdict.
+- **Open until freeze:** 0.6 for mechanism classes 2 and 3 at R = 1000 (#437), and section 6's
+  admitted-path lines, which wait on which class freezes.
 
 ---
 
