@@ -45,13 +45,13 @@ from skill_harness.ablation.confound import (
     detect_confounds,
     get_default_tier1_scorers,
 )
-from skill_harness.ablation.operator import AblationOperator
-from skill_harness.ablation.reconciler import reconcile_run_cost
-from skill_harness.ablation.render import ConditionRenderer
 from skill_harness.ablation.gate2_stopping import (
     DiscordantStoppingAccumulator,
     registered_thresholds,
 )
+from skill_harness.ablation.operator import AblationOperator
+from skill_harness.ablation.reconciler import reconcile_run_cost
+from skill_harness.ablation.render import ConditionRenderer
 from skill_harness.ablation.stopping import (
     N_INC,
     N_MAX,
