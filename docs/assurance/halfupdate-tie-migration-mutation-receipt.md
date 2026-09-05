@@ -4,8 +4,8 @@
 **Machine-readable record:**
 `docs/assurance/halfupdate-tie-migration-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/ablation/gate2_stopping.py` at
-`sha256:b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729`.
-**Commit at generation:** `f916612` — informational only. A rebase
+`sha256:b6b9e5c04b705ebf0e02cab01f42cd1391333d23d0d5af184f3153044cf3c99a`.
+**Commit at generation:** `36bf46a` — informational only. A rebase
 rewrites it and later commits move HEAD past it, so currency is checked against the digest
 above by `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
 
@@ -40,8 +40,8 @@ The Gate-2 discordant stopping wrapper (`gate2_stopping_decision`) enforces thre
 | mutant | obligation | mutation | verdict | killing tests |
 |---|---|---|---|---|
 | M-G1 | 368-scalar-fallback | Remove the scalar fallback: replace the `elif p >= PASS_PROB_THRESHOLD:` / `elif p <= FAIL_PROB_THRESHOLD:` branches with `else: should_stop = False; reason = None`. Tie-heavy scenarios that should pass (P >= 0.95) now return inconclusive | **KILLED** | `test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[win-heavy-many-ties]` |
-| M-G2 | 368-threshold-correctness | Swap the pass and fail thresholds: replace `p >= PASS_PROB_THRESHOLD` with `p <= PASS_PROB_THRESHOLD` and `p <= FAIL_PROB_THRESHOLD` with `p >= FAIL_PROB_THRESHOLD`. High-probability scenarios (P=0.99) now fail the wrong condition and return inconclusive | **KILLED** | `test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[win-heavy-many-ties]` |
-| M-G3 | 368-posterior-correctness | Zero the posterior parameters: replace `alpha = 1.0 + wins` / `beta_param = 1.0 + losses` with `alpha = 1.0` / `beta_param = 1.0`. The posterior no longer matches the drop-ties recompute | **KILLED** | `test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_fixture_proves_detector_fires` |
+| M-G2 | 368-threshold-correctness | Swap the pass and fail thresholds: replace `p >= PASS_PROB_THRESHOLD` with `p <= PASS_PROB_THRESHOLD`. High-probability scenarios (P=0.99) now fail the wrong condition and return inconclusive | **KILLED** | `test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[win-heavy-many-ties]` |
+| M-G3 | 368-posterior-correctness | Zero the posterior parameters: replace `alpha = 1.0 + wins` / `beta_param = 1.0 + losses` with `alpha = 1.0` / `beta_param = 1.0`. The posterior no longer matches the drop-ties recompute | **KILLED** | `test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_migration_collapses_divergence_on_extreme_fixture` |
 
 Three hand-chosen mutants. **No mutation score is reported**, because three cases cannot support
 one; each case is a named obligation, not a sample.
@@ -64,7 +64,8 @@ A mutation score — three hand-chosen mutants cannot support one. Adequacy of t
 `test_halfupdate_tie_sensitivity.py` test suite as a whole. That the Gate-2 decision rule
 (gamma, delta_min, q_min) is tested here (it is tested by `tests/test_oc_gate2.py`). That
 the zero-tie scalar path is tested here (it is tested by the existing `stopping.py` seam
-tests).
+tests). That the runner wiring itself is mutated here (pinned by
+`test_runner_imports_discordant_accumulator` and `test_runner_config_records_ratification_thresholds`).
 
 ## The generator refuses rather than exiting green
 

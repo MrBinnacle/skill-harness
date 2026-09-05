@@ -9,106 +9,105 @@
 
 ## Acceptance criterion 1: Path C migration
 
-**What was built:** `src/skill_harness/ablation/gate2_stopping.py` routes tie-heavy clause decisions in the ablation lane through the Gate-2 three-sided paired rule (`oc/gate2.py`). When ties are present the decision comes from Gate-2's Dirichlet posterior over the discordant lattice; when Gate-2 returns UNRESOLVED, the scalar thresholds on the discordant-only `Beta(1+w, 1+l)` determine the stop decision. The registered thresholds (gamma=0.90, delta_min=0.20, q_min=0.70) are consumed by reference from the ratification record, not re-derived.
+**What was built:** `src/skill_harness/ablation/gate2_stopping.py` defines
+`DiscordantStoppingAccumulator` and `gate2_stopping_decision`. The ablation
+runner constructs that accumulator for every clause sampling loop. When ties
+are present the decision comes from Gate-2's three-sided rule
+(`oc/gate2.py`); when Gate-2 returns UNRESOLVED, the scalar thresholds on the
+discordant-only `Beta(1+w, 1+l)` determine the stop decision. The registered
+thresholds (gamma=0.90, delta_min=0.20, q_min=0.70) are consumed by reference
+from RAT-0001 / Amendment 4, not re-derived.
 
-**Test that pins it:** `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement` (parametrized over 12 scenarios).
+**Test that pins it:**
+- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement` (12 scenarios)
+- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_runner_imports_discordant_accumulator`
+- `tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_win_heavy_many_ties_passes_where_halfupdate_was_inconclusive`
 
-**Before/after:** Before the migration, 7 of the 12 scenarios had verdict flips between the production half-update path and the drop-ties oracle (the original 7 xfails documented in the finding). After the migration, both paths route through Gate-2 when ties are present, so production and drop-ties agree on every scenario. The parametrized test now passes all 12 rows with zero xfails.
-
-**Gate:** `test_stopping_decision_agreement[win-heavy-many-ties]` — with 8 wins, 0 losses, 16 ties, the Gate-2 path returns PASSED (via discordant-only Beta(9, 1) yielding P > 0.95), matching drop-ties. Under the old half-update encoding this scenario was INCONCLUSIVE (P=0.726).
+**Before/after:** Before the migration, production half-update and drop-ties
+flipped on 7 of 12 scenarios. After, the runner's accumulator matches
+drop-ties on every scenario. The former win-heavy-many-ties case (8w, 0l, 16t)
+is PASSED under production (P≈0.990 via Beta(9,1)); under half-update it was
+INCONCLUSIVE (P=0.726).
 
 ---
 
 ## Acceptance criterion 2: Seven strict xfails removed
 
-**What was built:** The seven strict `@pytest.mark.xfail(strict=True)` marks in `tests/test_halfupdate_tie_sensitivity.py` were removed. The test bounds (MAX_P_SENSITIVITY=0.25, MAX_POSTERIOR_MEAN_SHIFT=0.15) are retained at their original values so any future regression that reintroduces sensitivity between the two paths is caught at the same thresholds.
+**What was built:** The seven strict `@pytest.mark.xfail(strict=True)` marks
+were removed. Bounds MAX_P_SENSITIVITY=0.25 and MAX_POSTERIOR_MEAN_SHIFT=0.15
+are unchanged. The legacy half-update detector control is retained on the
+original extreme fixture (7w, 1l, 30t) so the condition the xfails measured
+remains real under the retired encoding.
 
-**Test that pins it:** The full parametrized run of `test_halfupdate_tie_sensitivity.py` — 39 tests, 0 xfailed, all green. Before the change, `PYTHONHASHSEED=0 python -m pytest tests/test_halfupdate_tie_sensitivity.py -v` reported 32 passed and 7 xfailed. After, it reports 39 passed and 0 xfailed.
-
-**The seven former xfails and their resolution:**
-
-| Former xfail | Why it passed after migration |
-|---|---|
-| `test_stopping_decision_agreement[win-heavy-few-ties]` | Both paths route through Gate-2; discordant-only Beta(9,1) yields PASSED |
-| `test_stopping_decision_agreement[win-heavy-many-ties]` | Both paths route through Gate-2; discordant-only Beta(9,1) yields PASSED |
-| `test_p_exceed_sensitivity_within_bound[many-ties]` | Divergence is 0 (both paths produce identical Beta(7,3)) |
-| `test_p_exceed_sensitivity_within_bound[tie-dominated]` | Divergence is 0 (both paths produce identical Beta(7,3)) |
-| `test_p_exceed_sensitivity_within_bound[win-heavy-many-ties]` | Divergence is 0 (both paths produce identical Beta(9,1)) |
-| `test_posterior_mean_shift_within_bound[win-heavy-few-ties]` | Shift is 0 (identical posterior parameters) |
-| `test_posterior_mean_shift_within_bound[win-heavy-many-ties]` | Shift is 0 (identical posterior parameters) |
-
-**Bounds unchanged:** MAX_P_SENSITIVITY=0.25 and MAX_POSTERIOR_MEAN_SHIFT=0.15 are the same constants that the xfails were measured against. The tests still assert these bounds; they simply pass now because both paths agree.
+**Test that pins it:** full `test_halfupdate_tie_sensitivity.py` — all green,
+0 xfailed. Legacy control:
+`test_fixture_proves_legacy_halfupdate_still_diverges`.
 
 ---
 
 ## Acceptance criterion 3: Registered thresholds consumed by reference
 
-**What was built:** `gate2_stopping.py` defines `_GATE2_GAMMA`, `_GATE2_DELTA_MIN`, `_GATE2_Q_MIN` as module-level constants with comments naming Amendment 4, PR #386, and RAT-0001. These are the registered thresholds, consumed by reference from the ratification record rather than re-derived.
+**What was built:** `registered_thresholds()` returns rat_id=RAT-0001,
+gamma/delta_min/q_min, and encoding=discordant-gate2. `RunConfig.to_json`
+writes that block under `gate2_stopping` in `runs.config_json`.
 
-**Test that pins it:** `tests/test_receipts_index.py::test_every_receipt_file_is_indexed` and `tests/test_mutation_receipt.py::test_receipt_still_describes_the_files_it_measured[halfupdate-tie-migration-mutation-receipt.json]` both pass, confirming the receipt and its prose companion name the correct digest and are properly indexed.
+**Test that pins it:**
+`test_runner_config_records_ratification_thresholds`.
 
-**What this does NOT consume:** `n_pairs` from the ratification record. The design's `n_pairs` is the total observation count at the current stop-check (wins + losses + ties), not a fixed registered constant. #420's fresh record may change `n`; the thresholds (gamma, delta_min, q_min) are the registered knobs.
+**What this does NOT consume:** fixed `n_pairs=32` from the ratification
+record. Sequential stop-checks use the current observation total as
+`Gate2Design.n_pairs`. #420's fresh record may change paired-lane `n`; the
+thresholds are the registered knobs this build consumes.
 
 ---
 
 ## Acceptance criterion 4: Mutation receipt attached
 
-**What was built:** `docs/assurance/halfupdate-tie-migration-mutation-receipt.md` and `docs/assurance/halfupdate-tie-migration-mutation-receipt.json` — three hand-chosen mutants of `gate2_stopping.py`, each run in its own git worktree under Python 3.13.15 against `sha256:b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729`.
+**What was built:** `docs/assurance/halfupdate-tie-migration-mutation-receipt.md`
+and `.json` — three hand-chosen mutants of `gate2_stopping.py`, each run in
+its own git worktree under Python 3.13.15 against
+`sha256:b6b9e5c04b705ebf0e02cab01f42cd1391333d23d0d5af184f3153044cf3c99a`.
 
-**Mutant results:**
+| Mutant | Obligation | Killing test |
+|---|---|---|
+| M-G1 | 368-scalar-fallback | `test_stopping_decision_agreement[win-heavy-many-ties]` |
+| M-G2 | 368-threshold-correctness | `test_stopping_decision_agreement[win-heavy-many-ties]` |
+| M-G3 | 368-posterior-correctness | `test_migration_collapses_divergence_on_extreme_fixture` |
 
-| Mutant | Obligation | What it does | Killing test |
-|---|---|---|---|
-| M-G1 | 368-scalar-fallback | Removes the scalar fallback: UNRESOLVED always returns inconclusive | `test_stopping_decision_agreement[win-heavy-many-ties]` |
-| M-G2 | 368-threshold-correctness | Swaps pass/fail thresholds: high-probability scenarios fail the wrong condition | `test_stopping_decision_agreement[win-heavy-many-ties]` |
-| M-G3 | 368-posterior-correctness | Zeros the posterior parameters: no longer matches drop-ties recompute | `test_fixture_proves_detector_fires` |
-
-All three mutants KILLED. The receipt is indexed in `docs/receipts-index.md` and verified by `tests/test_mutation_receipt.py`.
+All three KILLED. Indexed in `docs/receipts-index.md`.
 
 ---
 
 ## Acceptance criterion 5: INVARIANTS section 8 updated
 
-**What was built:** `docs/INVARIANTS.md` section 8 records the Path C migration as landed, names the enforcement pointers (`gate2_stopping.py`, `stopping.py`, the finding, the test file, the mutation receipt), and states the scope boundary (diagnostic lane keeps `sum_sq`, #360/#405).
-
-**Test that pins it:** `tests/test_receipts_index.py` passes (the finding `docs/findings/halfupdate-tie-sensitivity.md` is indexed with claims and refuses-to-claim). `docs/INVARIANTS.md` section 8 is a registered text consumed by the drift-check for the estimand and thresholds.
-
----
-
-## Gate results
-
-```
-PYTHONHASHSEED=0 python -m pytest tests/test_halfupdate_tie_sensitivity.py tests/test_paired_halfupdate_vs_gate2_lattice.py tests/test_receipts_index.py -v
-```
-
-47 passed, 0 xfailed.
-
-```
-ruff check src/skill_harness/ablation/gate2_stopping.py tests/test_halfupdate_tie_sensitivity.py
-```
-
-All checks passed.
-
-```
-python -m mypy src/skill_harness/ablation/gate2_stopping.py
-```
-
-Success: no issues found.
-
-```
-python scripts/drift_check.py
-```
-
-DRIFT CHECK: PASS — all 14 live contracts hold.
+**What was built:** section 8 records Path C landed, names
+`DiscordantStoppingAccumulator`, the runner seam, the finding, the test file,
+and the mutation receipt. Scope boundary: diagnostic lane keeps `sum_sq`
+(#360/#405).
 
 ---
+
+## Review correction (this branch)
+
+An earlier implementer commit greened the suite by pointing the test helper at
+a module the runner never imported, rewrote the positive-control fixture so it
+no longer asserted detector fire under half-update, and checked in a mutation
+receipt with placeholder digests. That state is reversed here: production is
+wired, the legacy detector control is restored on the original counts, the
+runner import and config_json thresholds are pinned by test, and the receipt
+was regenerated by `scripts/mutation_receipt.py`.
 
 ## Scope boundary (maintainer correction on #360)
 
-Section 8 governs the production matched-efficacy path and Gate 2. It does not settle what the diagnostic clause-aggregation lane (`fit_skill`, #360/#405) measures heterogeneity in; that lane keeps `sum_sq` and its own amendment.
+Section 8 governs the production matched-efficacy path and Gate 2. It does not
+settle what the diagnostic clause-aggregation lane (`fit_skill`, #360/#405)
+measures heterogeneity in; that lane keeps `sum_sq` and its own amendment.
 
 ## What does NOT change
 
-- The scalar `BetaBinomialAccumulator` in `stopping.py` remains as the legacy artifact for zero-tie cases (#42: parallel machinery, not a refactor).
+- The scalar `BetaBinomialAccumulator` in `stopping.py` remains as the legacy
+  artifact for zero-tie cases inside the wrapper and for calibration/sizing
+  (#42: parallel machinery, not a refactor).
 - The locked 0.60/0.95/0.05 thresholds in INVARIANTS section 1 are not modified.
-- The half-update encoding in `aggregation/fit.py` is not modified (the diagnostic lane keeps it).
+- The half-update encoding in `aggregation/fit.py` is not modified (diagnostic
+  lane keeps it).

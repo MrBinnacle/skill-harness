@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
-        "source_digest": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729",
-        "tests_collected": 39,
-        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+        "module_file": "/tmp/mutation-receipt-7x7qo7nu/M-G1/src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "b6b9e5c04b705ebf0e02cab01f42cd1391333d23d0d5af184f3153044cf3c99a",
+        "tests_collected": 1,
+        "worktree_head": "36bf46a9d3b58a0b516f3d8accbe40b44a395f37"
       },
       "description": "remove the scalar fallback: tie-heavy scenarios that should pass (P >= 0.95) now return inconclusive",
       "killing_assertions": [
@@ -17,10 +17,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
-        "source_digest": "mutant-digest-placeholder-M-G1",
-        "tests_collected": 39,
-        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+        "module_file": "/tmp/mutation-receipt-7x7qo7nu/M-G1/src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "8e85bfb810e53f95b5d990ebecca4a9f246725e2f81ae98433b6519aa742e903",
+        "tests_collected": 1,
+        "worktree_head": "36bf46a9d3b58a0b516f3d8accbe40b44a395f37"
       },
       "mutant_id": "M-G1",
       "notes": [],
@@ -34,12 +34,12 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
-        "source_digest": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729",
-        "tests_collected": 39,
-        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+        "module_file": "/tmp/mutation-receipt-7x7qo7nu/M-G2/src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "b6b9e5c04b705ebf0e02cab01f42cd1391333d23d0d5af184f3153044cf3c99a",
+        "tests_collected": 1,
+        "worktree_head": "36bf46a9d3b58a0b516f3d8accbe40b44a395f37"
       },
-      "description": "swap the pass/fail thresholds: high-probability scenarios (P=0.99) now fail the wrong condition and return inconclusive",
+      "description": "swap the pass and fail thresholds: high-probability scenarios (P=0.99) now fail the wrong condition and return inconclusive",
       "killing_assertions": [
         "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_stopping_decision_agreement[win-heavy-many-ties]"
       ],
@@ -47,10 +47,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
-        "source_digest": "mutant-digest-placeholder-M-G2",
-        "tests_collected": 39,
-        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+        "module_file": "/tmp/mutation-receipt-7x7qo7nu/M-G2/src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "ae3d8087754e44601434867e7fe77d39443fdc24a9e005d7b59af5d58c5d5e8b",
+        "tests_collected": 1,
+        "worktree_head": "36bf46a9d3b58a0b516f3d8accbe40b44a395f37"
       },
       "mutant_id": "M-G2",
       "notes": [],
@@ -64,45 +64,45 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
-        "source_digest": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729",
-        "tests_collected": 39,
-        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+        "module_file": "/tmp/mutation-receipt-7x7qo7nu/M-G3/src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "b6b9e5c04b705ebf0e02cab01f42cd1391333d23d0d5af184f3153044cf3c99a",
+        "tests_collected": 1,
+        "worktree_head": "36bf46a9d3b58a0b516f3d8accbe40b44a395f37"
       },
       "description": "zero the posterior parameters: the posterior no longer matches the drop-ties recompute",
       "killing_assertions": [
-        "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_fixture_proves_detector_fires"
+        "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_migration_collapses_divergence_on_extreme_fixture"
       ],
       "mutant": {
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "src/skill_harness/ablation/gate2_stopping.py",
-        "source_digest": "mutant-digest-placeholder-M-G3",
-        "tests_collected": 39,
-        "worktree_head": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b"
+        "module_file": "/tmp/mutation-receipt-7x7qo7nu/M-G3/src/skill_harness/ablation/gate2_stopping.py",
+        "source_digest": "77800aeb4763085f2bd6ebf60a76e4aaead614ffabb29d9cfc4eab0fa03bfa8e",
+        "tests_collected": 1,
+        "worktree_head": "36bf46a9d3b58a0b516f3d8accbe40b44a395f37"
       },
       "mutant_id": "M-G3",
       "notes": [],
       "obligation": "368-posterior-correctness",
       "selection": [
-        "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_fixture_proves_detector_fires"
+        "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity::test_migration_collapses_divergence_on_extreme_fixture"
       ],
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "f9166121cbce1988bd3cb82d6e9eed71dccbdf9b",
+  "commit_under_test": "36bf46a9d3b58a0b516f3d8accbe40b44a395f37",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "src/skill_harness/ablation/gate2_stopping.py": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729"
+    "src/skill_harness/ablation/gate2_stopping.py": "b6b9e5c04b705ebf0e02cab01f42cd1391333d23d0d5af184f3153044cf3c99a"
   },
   "production_tree_digest_before": {
-    "src/skill_harness/ablation/gate2_stopping.py": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729"
+    "src/skill_harness/ablation/gate2_stopping.py": "b6b9e5c04b705ebf0e02cab01f42cd1391333d23d0d5af184f3153044cf3c99a"
   },
   "production_tree_unchanged": true,
   "python": "3.13.15",
   "target_digests": {
-    "src/skill_harness/ablation/gate2_stopping.py": "b0c0c5487de4180b685d015371d7cdc7c1fda8c50aa5818618f4f738c2d0a729"
+    "src/skill_harness/ablation/gate2_stopping.py": "b6b9e5c04b705ebf0e02cab01f42cd1391333d23d0d5af184f3153044cf3c99a"
   },
   "target_files": [
     "src/skill_harness/ablation/gate2_stopping.py"
