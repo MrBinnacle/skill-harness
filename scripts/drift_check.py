@@ -130,6 +130,18 @@ class EstimandContract:
 
 
 @dataclass(frozen=True)
+class CacheAwareContract:
+    """DC-15 (#436): a RAT record quoting ``cache_aware_cost_usd`` must also
+    quote ``worst_case_cost_usd`` and ``cache_read_share``; the cache-aware
+    figure must not exceed the worst case (caching reduces cost)."""
+
+    ledger_dir: str
+    cache_aware_field: str
+    worst_case_field: str
+    share_field: str
+
+
+@dataclass(frozen=True)
 class LiveRow:
     dc_id: str
     summary: str
@@ -140,6 +152,7 @@ class LiveRow:
     estimand_contract: EstimandContract | None = None
     import_ban: ImportScanBan | None = None
     rat_ledger: RatLedgerContract | None = None
+    cache_aware_contract: CacheAwareContract | None = None
 
 
 @dataclass(frozen=True)
@@ -524,6 +537,19 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
             ),
         ),
     ),
+    LiveRow(
+        dc_id="DC-15",
+        summary=(
+            "cache-aware record consistency: cache_aware_cost_usd quotes "
+            "worst_case_cost_usd + cache_read_share; cache-aware <= worst (#436)"
+        ),
+        cache_aware_contract=CacheAwareContract(
+            ledger_dir="docs/ratifications",
+            cache_aware_field="cache_aware_cost_usd",
+            worst_case_field="worst_case_cost_usd",
+            share_field="cache_read_share",
+        ),
+    ),
 )
 
 PLANNED_ROWS: tuple[PlannedRow, ...] = (
@@ -721,6 +747,48 @@ def _check_rat_ledger(root: Path, contract: RatLedgerContract) -> list[str]:
     return failures
 
 
+def _check_cache_aware(root: Path, contract: CacheAwareContract) -> list[str]:
+    """DC-15 (#436): a RAT record quoting cache_aware_cost_usd must also
+    quote worst_case_cost_usd and cache_read_share; cache_aware <= worst."""
+    base = root / contract.ledger_dir
+    if not base.is_dir():
+        return []
+    failures: list[str] = []
+    for path in sorted(base.glob("RAT-*.md")):
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        block = _RAT_FRONTMATTER.match(text)
+        if block is None:
+            continue
+        fields = dict(_RAT_FIELD.findall(block.group(1)))
+        if contract.cache_aware_field not in fields:
+            continue
+        # cache-aware figure present — worst case and share are mandatory
+        if contract.worst_case_field not in fields:
+            failures.append(
+                f"{rel}: {contract.cache_aware_field} present but "
+                f"{contract.worst_case_field} missing"
+            )
+            continue
+        if contract.share_field not in fields:
+            failures.append(
+                f"{rel}: {contract.cache_aware_field} present but {contract.share_field} missing"
+            )
+            continue
+        try:
+            cache_aware = float(fields[contract.cache_aware_field])
+            worst_case = float(fields[contract.worst_case_field])
+        except ValueError as exc:
+            failures.append(f"{rel}: cache-aware fields unreadable ({exc!r})")
+            continue
+        if cache_aware > worst_case:
+            failures.append(
+                f"{rel}: {contract.cache_aware_field} {cache_aware} exceeds "
+                f"{contract.worst_case_field} {worst_case}"
+            )
+    return failures
+
+
 def _run_row(root: Path, row: LiveRow) -> list[str]:
     failures: list[str] = []
     for site in row.value_sites:
@@ -737,6 +805,8 @@ def _run_row(root: Path, row: LiveRow) -> list[str]:
         failures.extend(_check_import_ban(root, row.import_ban))
     if row.rat_ledger is not None:
         failures.extend(_check_rat_ledger(root, row.rat_ledger))
+    if row.cache_aware_contract is not None:
+        failures.extend(_check_cache_aware(root, row.cache_aware_contract))
     return failures
 
 

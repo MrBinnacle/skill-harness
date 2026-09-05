@@ -39,6 +39,7 @@ _LIVE_IDS = (
     "DC-11",
     "DC-12",
     "DC-14",
+    "DC-15",
     "AC-1",
 )
 _PLANNED_IDS = ("DC-13",)
@@ -621,6 +622,149 @@ def test_rat_unparseable_record_blocks(tmp_path: Path) -> None:
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-12" in line and "RAT-0002" in line for line in fail_lines), r.stdout
+
+
+# ---------------------------------------------------------------------------
+# DC-15: cache-aware record consistency (#436)
+# ---------------------------------------------------------------------------
+
+_CACHE_AWARE_RAT_RECORD = """---
+rat: RAT-0001
+status: RATIFIED
+skill_id: skill-abc
+task_family: example-family
+estimand: treatment-policy
+gate: gate2
+n: 20
+worst_case_cost_usd: {worst}
+hard_cap_usd: {cap}
+cost_provenance: project_pair_usd
+sme_status: {sme}
+ratified_date: "2026-08-02"
+cache_aware_cost_usd: {cache_aware}
+cache_read_share: {share}
+---
+
+# RAT-0001 - cache-aware record (DC-15 fixture)
+{body}
+"""
+
+
+def _write_cache_aware_rat_record(
+    root: Path,
+    *,
+    worst: str = "15.55",
+    cap: str = "15.55",
+    sme: str = "deliberated",
+    cache_aware: str = "4.93",
+    share: str = "0.85",
+    body: str = "",
+) -> None:
+    path = root / "docs" / "ratifications" / "RAT-0001-skill-abc.md"
+    path.write_text(
+        _CACHE_AWARE_RAT_RECORD.format(
+            worst=worst, cap=cap, sme=sme, cache_aware=cache_aware, share=share, body=body
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_dc15_valid_cache_aware_record_is_green(tmp_path: Path) -> None:
+    """A RAT record quoting a cache-aware figure alongside worst case and
+    declared share is green — all three fields present and reconcilable."""
+    root = _make_tree(tmp_path)
+    _write_cache_aware_rat_record(root)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc15_cache_aware_without_worst_case_blocks(tmp_path: Path) -> None:
+    """A record quoting cache_aware_cost_usd without worst_case_cost_usd
+    must block — the worst case is the cap-tested figure."""
+    root = _make_tree(tmp_path)
+    path = root / "docs" / "ratifications" / "RAT-0001-skill-abc.md"
+    path.write_text(
+        "---\n"
+        "rat: RAT-0001\n"
+        "status: RATIFIED\n"
+        "skill_id: skill-abc\n"
+        "task_family: example-family\n"
+        "estimand: treatment-policy\n"
+        "gate: gate2\n"
+        "n: 20\n"
+        "hard_cap_usd: 15.55\n"
+        "cost_provenance: project_pair_usd\n"
+        "sme_status: deliberated\n"
+        'ratified_date: "2026-08-02"\n'
+        "cache_aware_cost_usd: 4.93\n"
+        "cache_read_share: 0.85\n"
+        "---\n\n"
+        "# RAT-0001 - missing worst_case_cost_usd\n",
+        encoding="utf-8",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-15" in line and "worst_case_cost_usd" in line for line in fail_lines), r.stdout
+
+
+def test_dc15_cache_aware_without_share_blocks(tmp_path: Path) -> None:
+    """A record quoting cache_aware_cost_usd without cache_read_share
+    must block — the share is the registered assumption the projector
+    needs."""
+    root = _make_tree(tmp_path)
+    path = root / "docs" / "ratifications" / "RAT-0001-skill-abc.md"
+    path.write_text(
+        "---\n"
+        "rat: RAT-0001\n"
+        "status: RATIFIED\n"
+        "skill_id: skill-abc\n"
+        "task_family: example-family\n"
+        "estimand: treatment-policy\n"
+        "gate: gate2\n"
+        "n: 20\n"
+        "worst_case_cost_usd: 15.55\n"
+        "hard_cap_usd: 15.55\n"
+        "cost_provenance: project_pair_usd\n"
+        "sme_status: deliberated\n"
+        'ratified_date: "2026-08-02"\n'
+        "cache_aware_cost_usd: 4.93\n"
+        "---\n\n"
+        "# RAT-0001 - missing cache_read_share\n",
+        encoding="utf-8",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-15" in line and "cache_read_share" in line for line in fail_lines), r.stdout
+
+
+def test_dc15_cache_aware_exceeding_worst_case_blocks(tmp_path: Path) -> None:
+    """A cache-aware figure must not exceed the worst case — caching
+    reduces cost, so cache_aware <= worst_case."""
+    root = _make_tree(tmp_path)
+    _write_cache_aware_rat_record(root, worst="4.92", cache_aware="4.93")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-15" in line and "exceeds" in line for line in fail_lines), r.stdout
+
+
+def test_dc15_no_cache_aware_fields_is_green(tmp_path: Path) -> None:
+    """A record without cache_aware_cost_usd is not subject to DC-15 —
+    the row only fires when the cache-aware figure is quoted."""
+    root = _make_tree(tmp_path)
+    _write_rat_record(root)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc15_printed_in_green_listing(tmp_path: Path) -> None:
+    """DC-15 must appear in the OK listing on a green run."""
+    r = _run()
+    assert r.returncode == 0
+    ok_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("OK")]
+    assert any("DC-15" in line for line in ok_lines), r.stdout
 
 
 # ---------------------------------------------------------------------------
