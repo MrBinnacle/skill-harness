@@ -168,24 +168,46 @@ conditional parameter `P(full wins | discordant)`. They were calibrated against 
 blended rate. Re-deriving them is part of the migration and must be pre-registered
 before any production run consumes the result.
 
-Enforced in / recorded by:
-- `src/skill_harness/aggregation/fit.py`, `ablation/stopping.py` (the half-update
-  encoding this section qualifies)
-- `docs/findings/halfupdate-tie-sensitivity.md` (the finding and its fixtures)
-- `tests/test_halfupdate_tie_sensitivity.py` (strict xfails, held until the
-  encodings agree — they are NOT loosened to go green)
+**Path C migration (landed #368).** The ablation lane now routes tie-heavy clause
+decisions through the Gate-2 discordant machinery (`ablation/gate2_stopping.py`),
+consuming the registered design form and thresholds from Amendment 4 of
+`docs/findings/v0.2-preregistration.md` (gamma=0.90, delta_min=0.20, q_min=0.70,
+PR #386, RAT-0001 #391). When ties are present, the decision comes from Gate-2's
+three-sided rule; when Gate-2 returns UNRESOLVED, the scalar thresholds on the
+discordant-only `Beta(1+w, 1+l)` determine the stop decision. This produces a
+`StopDecision` compatible with the ablation runner and ensures the production path
+matches the drop-ties recompute on the registered fixture scenarios.
 
-Scope: this section documents a measured sensitivity and a ruling. The migration
-itself — routing tie-heavy clause decisions through the Gate-2 discordant machinery
-(Path C) — is **not built**.
+The seven strict xfails in `tests/test_halfupdate_tie_sensitivity.py` that marked the
+former sensitivity between half-update and drop-ties have been removed: the production
+path and the drop-ties oracle now agree on every fixture scenario (divergence = 0).
+
+Enforced in / recorded by:
+- `src/skill_harness/ablation/gate2_stopping.py` (the Gate-2 discordant stopping
+  wrapper for the ablation lane)
+- `src/skill_harness/aggregation/fit.py`, `ablation/stopping.py` (the half-update
+  encoding this section qualifies; `stopping.py` is the legacy scalar artifact)
+- `docs/findings/halfupdate-tie-sensitivity.md` (the finding and its fixtures)
+- `tests/test_halfupdate_tie_sensitivity.py` (xfails removed; production path and
+  drop-ties agree on all scenarios)
+- `docs/assurance/halfupdate-tie-migration-mutation-receipt.md` (mutation receipt
+  for the migration)
+
+Scope: the Path C migration is landed. The scalar `BetaBinomialAccumulator` in
+`stopping.py` remains as the legacy artifact for zero-tie cases and is NOT modified
+(#42: parallel machinery, not a refactor). The diagnostic clause-aggregation lane
+(`fit_skill`, #360/#405) keeps `sum_sq` and its own amendment (scope boundary per
+maintainer correction on #360).
 
 *Revisit if:* a production design exceeds the swept grid (`w, l > 60` or `t > 80`),
 in which case re-run the sweep before relying on the PASS-gate zero; or a tie-heavy
 axis shows the practical-significance inversion, where rare-but-real wins are drowned
 by ties in a way that matters operationally — that is an effect-size floor question
-for the Gate-2 net-lift bounds, not a reason to resurrect the blended rate.
+for the Gate-2 net-lift bounds, not a reason to resurrect the blended rate; or #420's
+re-pick changes gamma or the MME, which it is not expected to.
 
-Spec: skill-harness #368 (ruling and its amendment), #347 (item 5 detector), #345.
+Spec: skill-harness #368 (ruling, amendment, and Path C migration), #347 (item 5
+detector), #345.
 
 ## 9. The model pin is provenance, not a staleness badge
 
