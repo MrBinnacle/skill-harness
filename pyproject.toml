@@ -133,7 +133,12 @@ filterwarnings = ["error"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-extend-exclude = ["fuzz/corpus", "fuzz/crashes", "fuzz/artifacts"]
+extend-exclude = [
+  "fuzz/corpus", "fuzz/crashes", "fuzz/artifacts",
+  # Vendored verbatim copies of the measured class-2 prototype (S414). They must stay
+  # byte-identical to what produced amendment v2's numbers; lint would rewrite them.
+  "docs/assurance/reference",
+]
 
 [tool.ruff.lint]
 select = [
