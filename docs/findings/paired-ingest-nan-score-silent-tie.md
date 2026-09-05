@@ -1,6 +1,7 @@
 # A NaN score in a paired log is recorded as a tie
 
-**Status:** OPEN. **Severity:** WRONG_NUMBER (a missing measurement becomes evidence).
+**Status:** RESOLVED 2026-09-01 by #363 at commit `210ac93`. **Severity:** WRONG_NUMBER
+(a missing measurement becomes evidence).
 **Found by:** `tests/test_paired_arm_epoch_adversarial.py::test_nan_score_is_refused_or_fails_closed`
 (falsification plan item 8, #350), first run 2026-08-31.
 **Registered in advance:** the module docstring predicted this exact mechanism and outcome
@@ -41,7 +42,24 @@ None on the mechanism: the failure is deterministic and reproduced by constructi
 whether production `.eval` logs have ever actually carried NaN scores; no historical re-scan
 was run here.
 
+## The repair that landed
+
+Both surfaces named above were closed, not one of them. `ParsedSample.score_value` carries
+`allow_inf_nan=False`, so a non-finite score cannot be constructed; `_score_to_float` raises
+`EvalLogIngestError` naming the log path, so the parse path keeps its typed refusal.
+
+The model layer is the enforcing surface, and that placement was measured rather than chosen.
+PR #364's receipt recorded M4 as an honest survivor: a guard in `_score_to_float` alone left
+this detector red, because the detector constructs `ParsedSample` directly and the write path
+never reaches the helper. `docs/assurance/nan-score-refusal-mutation-receipt.md` records the
+converse case killing, in an isolated worktree, against a baseline that passed first.
+
+The detector's strict xfail is removed and its registered bound is unchanged: no observation
+may be 0.5.
+
 ## Next action
 
-Repair ticket filed (see the issue referencing this document). Detector stays strict-xfail
-until the refusal lands.
+None for the mechanism. The open uncertainty above is unchanged: no historical re-scan of
+stored `.eval` logs was run, so whether a production log has ever carried a non-finite score
+is still unmeasured. A re-scan would be a separate ticket, and its result cannot change the
+refusal.

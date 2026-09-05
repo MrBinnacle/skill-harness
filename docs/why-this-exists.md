@@ -62,8 +62,15 @@ every break into a standing rule, and then build the same honesty into the tool.
 
 ## The size of the detour
 
-Measured on 2026-08-15: **71 commits of collection against 323 commits of machinery built
+Measured on 2026-09-02: **152 commits of collection against 511 commits of machinery built
 to find out whether the collection is worth anything.**
+
+Both numbers move. This page carried the 2026-08-15 measurement — 71 against 323 — for
+eighteen days, during which the collection more than doubled and the machinery gained 188
+commits. A reader who ran the commands below during that window got numbers that did not
+match the ones above them. The durable figure is the **ratio**, which has stayed between
+three and five to one across every measurement taken; the absolute counts are stale the day
+after they are written.
 
 The basis is a fresh clone at `HEAD` — what a plain `git clone` gets you —
 so you can land on the same figures yourself, give or take what has merged since:
@@ -75,8 +82,8 @@ git clone https://github.com/MrBinnacle/skill-harness.git && git -C skill-harnes
 
 This used to be on the front page. It came off on 2026-08-23, and the reason is worth
 stating rather than hiding: the figures are checkable, but the inference they invite is
-not supported. A four-to-one ratio does not establish that the instrument was worth
-building, that the collection is small, or that either number is the right size. It
+not supported. A three- or four-to-one ratio does not establish that the instrument was
+worth building, that the collection is small, or that either number is the right size. It
 establishes one thing, which is where the time went.
 
 Moving a claim to a quieter page does not fix an inference. So it is stated here with the

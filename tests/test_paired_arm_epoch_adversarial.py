@@ -37,13 +37,16 @@ requires refusal at write time or fail-closed behaviour (zero verdict rows).
 The honest boundary (per the ticket's revisit clause)
 -----------------------------------------------------
 The registration above predicted the zero-invocation label-consistent swap
-would be structurally invisible. THE FIRST RUN REFUTED THAT PREDICTION, and
-the correction is recorded here rather than silently rewritten: production
-refuses it via ``ZeroInvocationError`` (dead treated arm, pi_c_hat = 0). The
-arm-swap surface is therefore CLOSED: a label-consistent swap either places
-invoked samples in the Null role (contamination refusal, #46) or presents a
-Full role with zero invocations (dead-arm refusal). An adversary would need
-fabricated invocation traces to pass both, which is outside "mis-keying".
+would be structurally invisible. THE FIRST RUN REFUTED THAT PREDICTION: under
+the old invocation-only model, production refused it via ``ZeroInvocationError``
+(dead treated arm, pi_c_hat = 0). Under #384 (treatment = exposure),
+``ZeroInvocationError`` is retired from the write path; the arm-swap surface
+is closed by the contamination refusal (invoked samples in Null role) and the
+unexposed-Full refusal (no description in Full transcript). A label-consistent
+swap either places invoked samples in the Null role (contamination refusal) or
+presents a Full role with no exposure (unexposed-Full refusal). An adversary
+would need fabricated exposure traces to pass both, which is outside
+"mis-keying".
 
 One adversary remains structurally invisible from inside a pair, and this
 module says so rather than asserting vacuously:
@@ -71,6 +74,7 @@ from pathlib import Path
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+from pydantic import ValidationError
 
 from skill_harness.subject.ingest import (
     EvalLogIngestError,
@@ -89,7 +93,11 @@ def _sample(
     score: float,
     *,
     invoked: bool,
+    exposed: bool | None = None,
 ) -> ParsedSample:
+    # Default: Full-arm samples are exposed, Null-arm samples are not (#384).
+    if exposed is None:
+        exposed = condition == "full"
     return ParsedSample(
         condition=condition,  # type: ignore[arg-type]
         skill_name="adversarial-skill",
@@ -97,6 +105,7 @@ def _sample(
         scorer_name="file_contains",
         score_value=score,
         invoked_skill=invoked,
+        exposed_skill=exposed,
         output_text=f"output-{condition}-{epoch}",
         subject_model="openrouter/anthropic/claude-haiku-4.5",
         harness_pin_json=None,
@@ -320,37 +329,52 @@ def test_duplicate_epoch_refused(
         conn.execute("RELEASE hyp_example")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "finding: docs/findings/paired-ingest-nan-score-silent-tie.md "
-        "(severity WRONG_NUMBER; a NaN score_value flows through "
-        "_score_to_float and _observation scores it 0.5, so a missing "
-        "measurement is recorded as a tie)"
-    ),
-)
 def test_nan_score_is_refused_or_fails_closed(
     evidence_db: sqlite3.Connection, skill_dir: Path
 ) -> None:
     """Property 5: an absent measurement arriving as NaN must not become a tie.
 
     Registered prediction: RED on current code, confirmed on first run
-    (observations=[0.5, 1.0, 1.0]). NaN passes _score_to_float, and
-    _observation(nan, x) returns 0.5 because both orderings are False, so a
-    missing score silently dilutes the paired effect toward no-effect. Strict
-    xfail per the registered outcome protocol; the repair un-marks this.
+    (observations=[0.5, 1.0, 1.0]). NaN passed ``_score_to_float``, and
+    ``_observation(nan, x)`` returned 0.5 because both orderings are False, so
+    a missing score silently diluted the paired effect toward no-effect.
+
+    Repaired by #363 at the MODEL layer: ``ParsedSample.score_value`` carries
+    ``allow_inf_nan=False``, so the refusal fires when the sample is
+    constructed. PR #364's M4 survivor is the evidence for that placement --
+    this detector builds ``ParsedSample`` directly, so the write path never
+    calls ``_score_to_float`` and a guard there alone leaves the property red.
+
+    The refusal now precedes the write instead of happening during it, which is
+    earlier than the registered requirement rather than weaker than it: nothing
+    is written either way. Only the NaN-carrying construction is guarded, and
+    the guard requires the error to name ``score_value``. A blanket
+    ``except ValidationError`` around the whole pair would green this detector
+    on any future field constraint firing on any unrelated field, which would
+    keep the registered BOUND while losing the registered MECHANISM -- the test
+    would no longer prove that the NaN was what got refused.
+
+    The registered bound is unchanged: no observation may be 0.5.
     """
     conn = evidence_db
     epochs = [1, 2, 3]
-    full = _log(
-        "full",
-        tuple(_sample("full", e, math.nan if e == 2 else 1.0, invoked=True) for e in epochs),
-    )
     null = _log("null", tuple(_sample("null", e, 0.0, invoked=False) for e in epochs))
+    try:
+        full = _log(
+            "full",
+            tuple(_sample("full", e, math.nan if e == 2 else 1.0, invoked=True) for e in epochs),
+        )
+    except ValidationError as exc:
+        assert "score_value" in str(exc), (
+            f"NAN_REFUSED_BY_THE_WRONG_FIELD: construction was refused, but not for"
+            f" score_value ({exc}); this detector must not go green on an unrelated"
+            f" constraint."
+        )
+        return  # refused at construction: nothing reaches the write path
     try:
         result = write_paired_evidence(full=full, null=null, skill_dir=skill_dir, conn=conn)
     except EvalLogIngestError:
-        return  # refused at write time: the acceptable outcome
+        return  # refused at write time: the other acceptable outcome
     observations = [
         row[0]
         for row in conn.execute(
@@ -368,20 +392,20 @@ def test_nan_score_is_refused_or_fails_closed(
     )
 
 
-def test_zero_invocation_arm_swap_refused_as_dead_arm(
+def test_zero_invocation_arm_swap_with_null_contamination_refused(
     evidence_db: sqlite3.Connection, skill_dir: Path
 ) -> None:
-    """The other half of the swap surface: no invocations in the Full role.
+    """One half of the swap surface: the true Full arm (which invoked)
+    is relabelled as Null.
 
-    Registered prediction was structural invisibility; the first run refuted
-    it (see module docstring). Production refuses via ZeroInvocationError --
-    'no effect' cannot be distinguished from 'never invoked' -- which closes
-    the arm-swap surface together with the contamination refusal. This test
-    pins that refusal and its fail-closed behaviour.
+    Under the #384 treatment=exposure model, the label-consistent swap with
+    invoked samples in the Null role is refused as control-arm contamination
+    (NullArmContaminationError), not as a dead treated arm. ZeroInvocationError
+    is retired from the write path; exposure, not invocation, is the treatment.
     """
     conn = evidence_db
     epochs = [1, 2]
-    swapped_null = _log("null", tuple(_sample("null", e, 1.0, invoked=False) for e in epochs))
+    swapped_null = _log("null", tuple(_sample("null", e, 1.0, invoked=True) for e in epochs))
     swapped_full = _log("full", tuple(_sample("full", e, 0.0, invoked=False) for e in epochs))
     _assert_refused(
         conn,
@@ -390,7 +414,41 @@ def test_zero_invocation_arm_swap_refused_as_dead_arm(
         full=swapped_full,
         null=swapped_null,
         skill_dir=skill_dir,
-        match="dead treated arm",
+        match="contamination",
+    )
+
+
+def test_true_arm_swap_unexposed_full_refused(
+    evidence_db: sqlite3.Connection, skill_dir: Path
+) -> None:
+    """The other half of the swap surface: the true Null arm (no exposure)
+    is relabelled as Full.
+
+    A genuine Full/Null label swap puts the Null transcript under the Full
+    label. Exposure is absent there, so predicate (a) refuses as
+    UnexposedFullEpochError. Together with the contamination half above, the
+    arm-swap surface stays closed under treatment=exposure.
+    """
+    conn = evidence_db
+    epochs = [1, 2]
+    # Labels swapped: "full" carries Null-like (unexposed, not invoked) trials;
+    # "null" carries Full-like (exposed) trials — either half refuses.
+    swapped_full = _log(
+        "full",
+        tuple(_sample("full", e, 0.0, invoked=False, exposed=False) for e in epochs),
+    )
+    swapped_null = _log(
+        "null",
+        tuple(_sample("null", e, 1.0, invoked=False, exposed=True) for e in epochs),
+    )
+    _assert_refused(
+        conn,
+        "UNEXPOSED_FULL_SWAP_ACCEPTED",
+        "UNEXPOSED_FULL_SWAP_WROTE_VERDICTS",
+        full=swapped_full,
+        null=swapped_null,
+        skill_dir=skill_dir,
+        match="exposure not detected",
     )
 
 

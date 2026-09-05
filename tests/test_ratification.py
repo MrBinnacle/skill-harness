@@ -362,3 +362,153 @@ class TestCheckExecuteRatification:
         assert not decision.allowed
         assert decision.reason == RefusalReason.SCOPE_MISMATCH
         assert "not declared" in decision.detail
+
+
+# ---------------------------------------------------------------------------
+# #421: hazard_action + hazard_floor — required together, floor >= delta_min
+# ---------------------------------------------------------------------------
+
+
+class TestHazardAction:
+    """hazard_action and hazard_floor are optional as a pair; each alone is refused."""
+
+    def test_hazard_fields_absent_parses(self, tmp_path: Path) -> None:
+        record = parse_rat_record(_write_rat(tmp_path, _rat_text()))
+        assert record.hazard_action is None
+        assert record.hazard_floor is None
+
+    def test_hazard_pair_present_parses(self, tmp_path: Path) -> None:
+        text = _rat_text(
+            {
+                "hazard_action": r"git\s+pull",
+                "hazard_floor": "0.20",
+                "delta_min": "0.20",
+            }
+        )
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.hazard_action == r"git\s+pull"
+        assert record.hazard_floor == 0.20
+
+    def test_hazard_action_without_floor_refused_by_name(self, tmp_path: Path) -> None:
+        """Negative control: hazard_action alone is refused, naming the missing field."""
+        text = _rat_text({"hazard_action": r"git\s+pull"})
+        with pytest.raises(RatificationError, match="hazard_floor"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+    def test_hazard_floor_without_action_refused_by_name(self, tmp_path: Path) -> None:
+        text = _rat_text({"hazard_floor": "0.20", "delta_min": "0.20"})
+        with pytest.raises(RatificationError, match="hazard_action"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+    def test_hazard_floor_below_delta_min_refused_by_name(self, tmp_path: Path) -> None:
+        """Negative control: floor below delta_min cannot certify BENEFIT."""
+        text = _rat_text(
+            {
+                "hazard_action": r"git\s+pull",
+                "hazard_floor": "0.10",
+                "delta_min": "0.20",
+            }
+        )
+        with pytest.raises(RatificationError, match="hazard_floor"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+    def test_hazard_action_non_compiling_regex_refused_by_name(self, tmp_path: Path) -> None:
+        """Negative control: a regex that does not compile is refused, naming the field."""
+        text = _rat_text(
+            {
+                "hazard_action": r"git(s+pull",
+                "hazard_floor": "0.20",
+                "delta_min": "0.20",
+            }
+        )
+        with pytest.raises(RatificationError, match="hazard_action"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+    def test_hazard_action_empty_string_refused(self, tmp_path: Path) -> None:
+        text = _rat_text({"hazard_action": "", "hazard_floor": "0.20", "delta_min": "0.20"})
+        with pytest.raises(RatificationError, match="hazard_action"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+
+# ---------------------------------------------------------------------------
+# #421: pilot_subject_model + subject_change_waiver
+# ---------------------------------------------------------------------------
+
+
+class TestPilotSubjectModel:
+    """pilot_subject_model is optional at parse time; subject_change_waiver is a nested block."""
+
+    def test_pilot_subject_model_absent_parses(self, tmp_path: Path) -> None:
+        record = parse_rat_record(_write_rat(tmp_path, _rat_text()))
+        assert record.pilot_subject_model is None
+        assert record.subject_change_waiver is None
+
+    def test_pilot_subject_model_present_parses(self, tmp_path: Path) -> None:
+        text = _rat_text({"pilot_subject_model": "claude-sonnet-5"})
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.pilot_subject_model == "claude-sonnet-5"
+
+    def test_subject_change_waiver_parses_as_nested_block(self, tmp_path: Path) -> None:
+        text = _rat_text()
+        text = text.replace(
+            "---\n\n# RAT-0001",
+            "subject_change_waiver:\n"
+            "  reason: host had no Anthropic key\n"
+            "  measurement: OBS-0007 measured sonnet-5 at the ceiling\n"
+            '  date: "2026-09-03"\n'
+            "---\n\n# RAT-0001",
+        )
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.subject_change_waiver is not None
+        assert record.subject_change_waiver["reason"] == "host had no Anthropic key"
+        assert "sonnet-5" in record.subject_change_waiver["measurement"]
+        assert record.subject_change_waiver["date"] == "2026-09-03"
+
+
+# ---------------------------------------------------------------------------
+# #424: outcome_type + completion_margin
+# ---------------------------------------------------------------------------
+
+_OUTCOME_TYPES = frozenset({"pass_fail", "invariant"})
+
+
+class TestOutcomeType:
+    """outcome_type declares the scoring oracle; required for trap-discipline."""
+
+    def test_outcome_type_absent_parses(self, tmp_path: Path) -> None:
+        record = parse_rat_record(_write_rat(tmp_path, _rat_text()))
+        assert record.outcome_type is None
+
+    def test_outcome_type_pass_fail_parses(self, tmp_path: Path) -> None:
+        text = _rat_text({"outcome_type": "pass_fail"})
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.outcome_type == "pass_fail"
+
+    def test_outcome_type_invariant_parses(self, tmp_path: Path) -> None:
+        text = _rat_text({"outcome_type": "invariant"})
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.outcome_type == "invariant"
+
+    def test_outcome_type_invalid_value_refused(self, tmp_path: Path) -> None:
+        text = _rat_text({"outcome_type": "boolean"})
+        with pytest.raises(RatificationError, match="outcome_type"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+    def test_completion_margin_absent_defaults_to_none(self, tmp_path: Path) -> None:
+        record = parse_rat_record(_write_rat(tmp_path, _rat_text()))
+        assert record.completion_margin is None
+
+    def test_completion_margin_present_parses(self, tmp_path: Path) -> None:
+        text = _rat_text({"completion_margin": "0.15"})
+        record = parse_rat_record(_write_rat(tmp_path, text))
+        assert record.completion_margin == 0.15
+
+    def test_completion_margin_non_numeric_refused(self, tmp_path: Path) -> None:
+        text = _rat_text({"completion_margin": "not-a-number"})
+        with pytest.raises(RatificationError, match="completion_margin"):
+            parse_rat_record(_write_rat(tmp_path, text))
+
+    def test_completion_margin_out_of_range_refused(self, tmp_path: Path) -> None:
+        text = _rat_text({"completion_margin": "1.5"})
+        with pytest.raises(RatificationError, match="completion_margin"):
+            parse_rat_record(_write_rat(tmp_path, text))

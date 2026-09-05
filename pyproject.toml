@@ -65,6 +65,13 @@ inspect = [
   "inspect-ai>=0.3.245",
   "inspect-swe>=0.2.65",
 ]
+# Receipts site generator (#186): the SERS draft-2020-12 validator. Opt-in —
+# the core package never imports jsonschema; sitegen pulls it lazily behind
+# this extra's typed install hint (src/skill_harness/sitegen/__init__.py).
+# Supply-chain note: python-jsonschema org reference implementation.
+sitegen = [
+  "jsonschema>=4.26.0",
+]
 dev = [
   "pytest>=7.4",
   "pytest-cov>=4.1",
@@ -88,6 +95,11 @@ dev = [
   "pytest-randomly>=4.1",
   # #182 — SERS conformance harness (draft 2020-12 validator).
   # Owner-approved 2026-08-09; python-jsonschema org reference implementation.
+  # Re-declared from [sitegen] here (mirroring scipy/statsmodels) so
+  # `pip install -e ".[dev]"` alone lands the full test stack; the
+  # operator-facing extra is [sitegen]. Also pulled transitively by inspect-ai
+  # (jsonschema>3.1.1). Where jsonschema comes from is recorded once, in
+  # [project.optional-dependencies.sitegen].
   "jsonschema>=4.26.0",
 ]
 
@@ -212,3 +224,25 @@ ignore_missing_imports = true
 module = ["inspect_ai", "inspect_ai.*", "inspect_swe", "inspect_swe.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
+
+# PyYAML and jsonschema ship no stubs. mypy therefore reduces both to Any in
+# either environment: absent (import-not-found) or installed without a py.typed
+# marker (import-untyped). ignore_missing_imports suppresses both diagnostics, so
+# the verdict, including which type:ignore comments count as used, is the same in
+# CI and locally.
+# Submodules are listed explicitly. `jsonschema` alone does not match
+# `jsonschema.exceptions`, and the partial rule left three import sites carrying
+# an ignore comment that the other three had to drop.
+# Both are imported lazily behind their optional extras' install hints: yaml
+# behind [inspect] (subject/inspect_adapter.py), jsonschema behind [sitegen]
+# (sitegen/__init__.py). A core install imports neither at module top level,
+# so `import skill_harness.sitegen` and the inspect adapter both succeed
+# without the extras; the typed error names the extra to install. jsonschema
+# reaches this environment through [sitegen], through [dev] (re-declared there
+# for the test stack), and transitively through inspect-ai (jsonschema>3.1.1)
+# — never through [project.dependencies].
+# Stub packages are deliberately not added: this repo declares no types-* deps,
+# and adding one would be a supply-chain decision.
+[[tool.mypy.overrides]]
+module = ["yaml", "yaml.*", "jsonschema", "jsonschema.*"]
+ignore_missing_imports = true

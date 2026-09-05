@@ -1,0 +1,5 @@
+{
+  "skipContextFiles": true,
+  "skipSkills": true,
+  "defaultBranch": "main"
+}

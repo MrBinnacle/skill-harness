@@ -176,51 +176,30 @@ def aggregate_skill(
             if comparison == "full_vs_null":
                 full_vs_null_observations.append(float(obs))
 
-        # Total verdicts (raw table — for inadmissible / confounded detection)
+        # Total verdicts (raw table — for inadmissible / confounded detection).
+        #
+        # `inadmissibility_reason` is read, not re-derived (#366). The runner
+        # writes a confounded verdict as ('inadmissible', 'confounded') at
+        # write time, so the reason is already on the row. The previous code
+        # asked confound_events instead, filtered to
+        # admissibility_state='admissible' — a set the runner never writes into,
+        # so the confounded count was structurally zero and CONFOUNDED was
+        # unreachable. Reading the persisted reason also keeps the locked
+        # evidence model: admissibility is a write-time snapshot, never
+        # recomputed at read time.
         total_rows = evidence_conn_ro.execute(
-            "SELECT clause_id, axis, admissibility_state FROM oracle_verdicts WHERE run_id = ?",
+            "SELECT clause_id, axis, admissibility_state, inadmissibility_reason "
+            "FROM oracle_verdicts WHERE run_id = ?",
             (run_id,),
         ).fetchall()
         for row in total_rows:
-            clause_id, axis, adm = row
+            clause_id, axis, adm, reason = row
             key = (clause_id, axis)
             clause_total_verdicts[key] += 1
             if adm == "inadmissible":
                 clause_inadmissible_verdicts[key] += 1
-
-        # Confounded verdicts: those that were in oracle_verdicts but excluded by VIEW
-        # = admissible raw rows that have confound_events with delta_kind='confound_flagged'
-        confounded_rows = evidence_conn_ro.execute(
-            """
-            SELECT DISTINCT v.clause_id, v.axis
-            FROM oracle_verdicts v
-            JOIN confound_events ce
-              ON ce.run_id = v.run_id
-             AND ce.primary_clause_id = v.clause_id
-             AND ce.delta_kind = 'confound_flagged'
-            WHERE v.run_id = ? AND v.admissibility_state = 'admissible'
-            """,
-            (run_id,),
-        ).fetchall()
-        for row in confounded_rows:
-            clause_id, axis = row
-            key = (clause_id, axis)
-            # Count the admissible-but-confounded verdicts for this run
-            cnt = evidence_conn_ro.execute(
-                """
-                SELECT COUNT(*) FROM oracle_verdicts v
-                WHERE v.run_id = ? AND v.clause_id = ? AND v.axis = ?
-                  AND v.admissibility_state = 'admissible'
-                  AND EXISTS (
-                    SELECT 1 FROM confound_events ce
-                    WHERE ce.run_id = v.run_id
-                      AND ce.primary_clause_id = v.clause_id
-                      AND ce.delta_kind = 'confound_flagged'
-                  )
-                """,
-                (run_id, clause_id, axis),
-            ).fetchone()
-            clause_confounded_verdicts[key] += cnt[0] if cnt else 0
+                if reason == "confounded":
+                    clause_confounded_verdicts[key] += 1
 
         # Ablation operator hash + A55 comparability fields — read from runs.config_json
         config_json = run.get("config_json", "{}")
@@ -361,23 +340,22 @@ def aggregate_skill(
         # Count distinct verdict kinds
         total = clause_total_verdicts.get(key, 0)
         confounded = clause_confounded_verdicts.get(key, 0)
-        inadmissible = clause_inadmissible_verdicts.get(key, 0)
         admissible_count = n  # admissible + non-confounded
 
-        # For CONFOUNDED rule: admissible_count == 0 AND confounded > 0
-        # But the VIEW already excludes confounded, so admissible_count > 0 means
-        # there are non-confounded verdicts. If admissible_count == 0 but there
-        # are confounded verdicts, the clause is CONFOUNDED.
-        # Let's compute whether ALL verdicts are confounded:
-        # total = all verdicts; inadmissible = inadmissible ones
-        # admissible_raw = total - inadmissible; confounded = admissible-but-confounded
-        # non_confounded_admissible = admissible_raw - confounded (= n above)
-        all_confounded_flag = (
-            total > 0
-            and (total - inadmissible) > 0  # some admissible existed
-            and admissible_count == 0  # none survived confound filter
-            and confounded > 0
-        )
+        # CONFOUNDED: nothing survived for this clause, and confounding is why.
+        #
+        # The rule the comment here always stated is `admissible_count == 0 AND
+        # confounded > 0`. The implementation additionally required
+        # `(total - inadmissible) > 0` -- "some admissible existed" -- which a
+        # fully confounded clause can never satisfy, because the runner writes
+        # every confounded verdict as inadmissible. That clause is dropped (#366):
+        # it made the flag false in exactly the case it was written to detect.
+        #
+        # A clause with a mix of confounded and otherwise-inadmissible verdicts
+        # still reads CONFOUNDED. Naming the cause the operator can act on beats
+        # a generic `inadmissible` that hides it, and `confounded_verdict_count`
+        # travels on the report vector for anyone who needs the split.
+        all_confounded_flag = total > 0 and admissible_count == 0 and confounded > 0
 
         # B1: resolve BH-FDR gate for this clause when the skill fit fell back to
         # BH-FDR. None (not that method) leaves the raw threshold ungated.

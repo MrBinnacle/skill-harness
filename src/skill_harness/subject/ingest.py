@@ -13,7 +13,7 @@ Design constraints:
   storage layer, so the entire evidence-admissibility/pairing logic is testable in the
   default dev/CI environment (same split as ``inspect_adapter``).
 - Pin rule (pre-reg "Harness pin" row): recorded per trial, identical across
-  arms, or the trial is INADMISSIBLE. A missing or mismatched fingerprint
+  the arms, or the trial is INADMISSIBLE. A missing or mismatched fingerprint
   writes the verdicts as ``inadmissible`` (evidence of the defect is kept,
   append-only ethos) — it does not refuse the write. Structural defects
   (wrong condition, different skills, unequal epoch sets, failed eval) DO
@@ -21,28 +21,41 @@ Design constraints:
 - Idempotency: the evidence ``run_id`` is derived deterministically from the
   two Inspect task ids, so re-ingesting the same pair of logs raises
   ``AlreadyIngestedError`` instead of double-counting.
-- π_c instrumentation (#46/#52): every parsed sample carries ``invoked_skill``
-  (v1 detector = a Skill tool-call naming the skill under test, observed in the
-  parsed message stream). Every paired write reports π̂_c with a mandatory
-  Clopper-Pearson interval over the Full arm, and a treated arm with ZERO
-  detected invocations refuses the write (``ZeroInvocationError``) — a dead-arm
-  run is an instrumentation finding, never a null effect. Eval logs are
-  zstd-compressed (zip method 93): ingestion goes through ``read_eval_log``
-  only, never raw archive handling.
+- Treatment = exposure (#384): the treatment is the skill mounted for the arm,
+  with its description present in the agent's context. Exposure is measured per
+  epoch by a channel-(c) detector (v2): the card's description text, read from
+  the pinned ``SKILL.md`` frontmatter, present in the transcript's skill
+  listing. ``exposed_skill: bool | None`` joins ``invoked_skill: bool`` on every
+  parsed sample (``None`` = not computed — screen lane; never conflated with
+  ``False`` = measured not-exposed).
+- pi_c is a mandatory recorded stratifier (#384): π̂_c over the Full arm plus
+  its Clopper-Pearson interval is computed on every write, returned on
+  ``IngestResult.pi_c`` (mandatory) and recorded in the run's ``config_json``.
+  Zero invocations with full exposure is ADMISSIBLE — the write proceeds and
+  the verdict line carries pi_c = 0/n. At pi_c = 0, the CACE secondary is
+  stated as not identified, never computed.
+- Paired-write refusal predicates (#384): (a) a Full-arm epoch with exposure
+  not detected refuses as ``UnexposedFullEpochError`` (treatment not delivered);
+  (b) a Null-arm epoch with exposure or invocation detected refuses as
+  ``NullArmContaminationError`` (control-arm contamination, widened from the
+  #46 invocation-only check to include channel c).
+- Eval logs are zstd-compressed (zip method 93): ingestion goes through
+  ``read_eval_log`` only, never raw archive handling.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sqlite3
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import Annotated, Any, Literal, NamedTuple
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from scipy.stats import beta as beta_dist  # type: ignore[import-untyped]
 
 from skill_harness.storage.article_fingerprint import ArticleFingerprint
@@ -94,7 +107,29 @@ OUTCOME_AXIS: str = "outcome"
 # implementation_hash pins the exact source alongside it.
 # 0.3.0: π_c instrumentation (#52) — pairing gains the zero-invocation refusal
 # and the Null-contamination structural check; runs record the π_c block.
-ORACLE_METRIC_VERSION: str = "0.3.0"
+# 0.4.0: treatment = exposure (#384) — pairing gains the v2 channel-(c)
+# exposure detector, the ZeroInvocationError is retired from the write path,
+# and the two new refusal predicates (unexposed Full, exposed/invoked Null)
+# replace the old invocation-only contamination check.
+# 0.4.1: identity moved, logic did not (#391 sized run, 2026-09-03). The 0.4.0
+# identity was registered against this module at 4001686. #411 then added the
+# runner_config recording that RAT-0001 section 2 requires at ingest, and #413
+# added normalised_keys_dropped; 28 lines, none of them in score decoding,
+# pairing or observation mapping (git diff 4001686 57a0790 -- this file). Both
+# changes are signature and docstring edits, which the #209 ruling treats as
+# identity-bearing, so the drift check refused and the restamp path did not
+# apply. Ingesting under 4001686 would satisfy the hash and violate section 2.
+# This bump declares the new identity for the module that carries the block
+# the ratification demands; it is not a repair of 0.4.0, and 0.4.0 evidence
+# (the 2026-09-01 pilot pair) is not the same measurement as 0.4.1 evidence.
+# 0.5.0: split-oracle outcome variable (#424).  The ingest now carries
+# paired_cells_completion and silent_violation blocks when the eval log
+# carries invariant_oracle + completion_oracle scores.  The new blocks are
+# absent on legacy pass_fail runs (store is append-only, existing evidence
+# untouched).  Oracle identity bump: the split-oracle scorers change the
+# decision logic — runs scored under 0.4.1 (conjunction) are not the same
+# measurement as runs scored under 0.5.0 (invariant + completion).
+ORACLE_METRIC_VERSION: str = "0.5.0"
 
 # π_c (invocation-rate) instrumentation — #46 resolution binds the contract.
 # v1 detector = branch (a) only: a Skill tool-call whose arguments name the
@@ -102,6 +137,7 @@ ORACLE_METRIC_VERSION: str = "0.3.0"
 # under the inspect_swe.claude_code solver (the Skill tool loads SKILL.md
 # internally) and stays excluded until a non-claude_code solver exists.
 PI_C_DETECTOR_VERSION: str = "v1-skill-tool-call"
+EXPOSURE_DETECTOR_VERSION: str = "v2-description-channel"
 SKILL_TOOL_FUNCTION: str = "Skill"
 SKILL_TOOL_ARGUMENT: str = "skill"  # arguments key naming the invoked skill
 PI_C_CONFIDENCE: float = 0.95
@@ -154,11 +190,45 @@ class ZeroInvocationError(EvalLogIngestError):
     no effect verdict is producible — the run surfaces as an INSTRUMENTATION
     FINDING (delivery failure) instead of a null effect (#52). Carries the
     mandatory π̂_c block on ``pi_c`` so the finding renders with its interval.
+
+    .. deprecated::
+        As of #387, ZeroInvocationError is retired from the write path. Zero
+        invocations with full exposure is admissible (pi_c = 0/n). This class
+        is kept for backward compatibility with callers that catch it.
     """
 
     def __init__(self, message: str, *, pi_c: PiCSummary) -> None:
         super().__init__(message)
         self.pi_c = pi_c
+
+
+class UnexposedFullEpochError(EvalLogIngestError):
+    """Refusal: a Full-arm epoch has exposure not detected (#384).
+
+    The treatment was not delivered in this epoch — the skill's description
+    was not present in the transcript. This is an apparatus error, not
+    evidence. Carries the epoch index for locating the failure.
+    """
+
+    def __init__(self, message: str, *, epoch: int) -> None:
+        super().__init__(message)
+        self.epoch = epoch
+
+
+class NullArmContaminationError(EvalLogIngestError):
+    """Refusal: a Null-arm epoch has exposure or invocation detected (#384).
+
+    Widened from the #46 invocation-only contamination check to include
+    channel-(c) exposure. The Skill tool is structurally not launchable
+    in the Null arm and the skill's description is not mounted, so either
+    detection means mislabelled arms or a misconfigured harness — an
+    apparatus error, not evidence.
+    """
+
+    def __init__(self, message: str, *, epoch: int, channel: str) -> None:
+        super().__init__(message)
+        self.epoch = epoch
+        self.channel = channel
 
 
 class ParsedSample(BaseModel):
@@ -170,17 +240,34 @@ class ParsedSample(BaseModel):
     skill_name: str
     epoch: int
     scorer_name: str
-    score_value: float  # 1.0 pass | 0.0 fail (outcome oracle)
+    # Non-finite refused at the MODEL layer, not only in the parse helper (#363).
+    # `_observation(nan, x)` returns 0.5 because both ordered comparisons are
+    # False, so a NaN would be recorded as a genuine tie and would dilute every
+    # Gate-2 table built from the pair. PR #364's M4 survivor measured that a
+    # guard in `_score_to_float` alone does not close this: callers that build
+    # `ParsedSample` directly never reach the helper.
+    score_value: Annotated[float, Field(allow_inf_nan=False)]  # 1.0 pass | 0.0 fail
     invoked_skill: bool  # v1 π_c detector verdict for this trial (#46/#52)
+    # v2 exposure detector (#384). True/False = measured; None = not computed
+    # (screen lane has no skill directory). Never store "not computed" as False.
+    exposed_skill: bool | None = None
     output_text: str
     subject_model: str
     harness_pin_json: str | None
     harness_pin_fingerprint: str | None
+    normalised_keys_dropped: tuple[str, ...] = ()
     input_tokens: int | None
     cache_read_input_tokens: int | None
     cache_creation_input_tokens: int | None
     output_tokens: int | None
     usd: float | None
+    #: #424: split-oracle scores for trap-discipline. When outcome_type is
+    #: ``invariant``, the eval log carries two scorers: ``invariant_oracle``
+    #: (I) and ``completion_oracle`` (C). These fields are absent on legacy
+    #: ``pass_fail`` runs.  ``score_value`` continues to hold the primary (I)
+    #: score when present; for ``pass_fail`` runs it holds the conjunction.
+    score_value_invariant: Annotated[float, Field(allow_inf_nan=False)] | None = None
+    score_value_completion: Annotated[float, Field(allow_inf_nan=False)] | None = None
 
 
 class ParsedEvalLog(BaseModel):
@@ -208,6 +295,7 @@ class IngestResult(BaseModel):
     admissibility_state: Literal["admissible", "inadmissible"]
     inadmissibility_reason: str | None
     pi_c: PiCSummary  # mandatory — never optional (#52)
+    exposure: ExposureSummary  # mandatory — never optional (#384)
 
 
 def detect_skill_invocation(messages: Iterable[object], skill_name: str) -> bool:
@@ -235,6 +323,107 @@ def detect_skill_invocation(messages: Iterable[object], skill_name: str) -> bool
             if isinstance(arguments, dict) and arguments.get(SKILL_TOOL_ARGUMENT) == skill_name:
                 return True
     return False
+
+
+class ExposureSummary(BaseModel):
+    """Exposure summary for a set of parsed samples.
+
+    Records whether the skill's description was present in each epoch's
+    transcript (channel c, detector v2). Mandatory alongside pi_c on
+    every IngestResult (#384).
+    """
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    exposed_count: int
+    trials: int
+    detector_version: str
+
+
+def detect_skill_exposure(messages: Iterable[object], skill_description: str) -> bool:
+    """v2 exposure detector (#384 channel c): was the skill's description
+    present in the transcript's skill listing?
+
+    Fires iff the message stream contains a message whose content includes
+    the skill's description text as a substring. Under the
+    ``inspect_swe.claude_code`` solver, the first user message carries
+    Claude Code's skill listing and the card's frontmatter description
+    appears in it verbatim. Role is not required: an undercount can only
+    make the unexposed-Full refusal fire more, never fabricate an exposure.
+
+    Deliberately conservative: any shape this duck-typed scan does not
+    recognize counts as NOT exposed.
+    """
+    if not skill_description:
+        return False
+    for message in messages:
+        content = getattr(message, "content", None)
+        if isinstance(content, str) and skill_description in content:
+            return True
+        # Some message objects store content as a list of dicts / objects
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and skill_description in part.get("text", ""):
+                    return True
+                text = getattr(part, "text", None)
+                if isinstance(text, str) and skill_description in text:
+                    return True
+    return False
+
+
+_YAML_BLOCK_SCALAR_INDICATORS = frozenset({">", ">-", ">+", "|", "|-", "|+"})
+
+
+def _extract_skill_description(skill_dir: Path) -> str:
+    """Extract the description from a SKILL.md frontmatter block.
+
+    Supports single-line scalars (plain or quoted) and YAML block scalars
+    (``>`` / ``|`` and their chomp variants). Folded style (``>``) joins
+    continuation lines with a single space — the shape Claude Code's skill
+    listing carries. Returns an empty string if the file is missing, has no
+    frontmatter, has no description key, or carries a bare block indicator
+    with no body (never returns the indicator character as the description).
+    """
+    skill_file = skill_dir / "SKILL.md"
+    if not skill_file.is_file():
+        return ""
+    text = skill_file.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        return ""
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return ""
+    lines = parts[1].splitlines()
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if not stripped.startswith("description:"):
+            i += 1
+            continue
+        value = stripped[len("description:") :].strip()
+        if value in _YAML_BLOCK_SCALAR_INDICATORS:
+            folded = value.startswith(">")
+            collected: list[str] = []
+            i += 1
+            while i < len(lines):
+                cont = lines[i]
+                if cont.startswith((" ", "\t")):
+                    collected.append(cont.strip())
+                    i += 1
+                    continue
+                if not cont.strip():
+                    collected.append("")
+                    i += 1
+                    continue
+                break
+            body_parts = [p for p in collected if p]
+            if not body_parts:
+                return ""
+            return " ".join(body_parts) if folded else "\n".join(body_parts)
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+            value = value[1:-1]
+        return value
+    return ""
 
 
 def clopper_pearson(
@@ -268,12 +457,16 @@ def clopper_pearson(
     return low, high
 
 
-def parse_eval_log(path: Path) -> ParsedEvalLog:
+def parse_eval_log(path: Path, *, skill_description: str = "") -> ParsedEvalLog:
     """Parse one Inspect ``.eval`` log into the write-relevant projection.
 
     Requires the optional ``[inspect]`` extra (lazy import, same convention as
     ``build_paired_tasks``).
 
+    :param skill_description: the pinned SKILL.md frontmatter description text.
+        When non-empty, each sample's ``exposed_skill`` is computed by the v2
+        channel-(c) detector. When empty (screen lane), ``exposed_skill`` is
+        ``None`` (typed "not computed" — never ``False``).
     :raises SubjectLayerNotInstalledError: optional extra not installed.
     :raises EvalLogIngestError: a sample carries no score.
     """
@@ -289,7 +482,35 @@ def parse_eval_log(path: Path) -> ParsedEvalLog:
     for s in log.samples or []:
         if not s.scores:
             raise EvalLogIngestError(f"{path}: sample id={s.id} epoch={s.epoch} has no scores")
+        # #424: extract split-oracle scores when present. The eval log may
+        # carry one scorer (legacy pass_fail) or two (split invariant +
+        # completion).  The primary score goes into score_value; the optional
+        # split scores are extracted by name when present.
         scorer_name, score = next(iter(s.scores.items()))
+        score_val = _score_to_float(score.value, path, sample=f"sample id={s.id} epoch={s.epoch}")
+        inv_score_val: float | None = None
+        comp_score_val: float | None = None
+        if len(s.scores) == 2 and scorer_name in ("invariant_oracle", "completion_oracle"):
+            names = list(s.scores.keys())
+            for n in names:
+                sc = s.scores[n]
+                sv = _score_to_float(sc.value, path, sample=f"sample id={s.id} epoch={s.epoch}")
+                if n == "invariant_oracle":
+                    inv_score_val = sv
+                elif n == "completion_oracle":
+                    comp_score_val = sv
+            # For split-oracle, score_value = I score (the primary lattice)
+            if scorer_name == "invariant_oracle":
+                score_val = inv_score_val if inv_score_val is not None else score_val
+            else:
+                # completion_oracle first in iteration — find invariant
+                for n in names:
+                    if n == "invariant_oracle":
+                        score_val = _score_to_float(
+                            s.scores[n].value,
+                            path,
+                            sample=f"sample id={s.id} epoch={s.epoch}",
+                        )
         metadata = s.metadata or {}
         pin = metadata.get("harness_pin")
         usage = _sum_usage(getattr(s, "model_usage", None) or {})
@@ -300,9 +521,16 @@ def parse_eval_log(path: Path) -> ParsedEvalLog:
                 condition=_require_condition(metadata.get("condition"), path),
                 skill_name=skill_name,
                 invoked_skill=detect_skill_invocation(s.messages or [], skill_name),
+                exposed_skill=(
+                    detect_skill_exposure(s.messages or [], skill_description)
+                    if skill_description
+                    else None
+                ),
                 epoch=int(s.epoch),
                 scorer_name=scorer_name,
-                score_value=_score_to_float(score.value, path),
+                score_value=score_val,
+                score_value_invariant=inv_score_val,
+                score_value_completion=comp_score_val,
                 output_text=completion,
                 subject_model=str((pin or {}).get("model") or log.eval.model),
                 harness_pin_json=(
@@ -311,6 +539,7 @@ def parse_eval_log(path: Path) -> ParsedEvalLog:
                     else None
                 ),
                 harness_pin_fingerprint=metadata.get("harness_pin_fingerprint"),
+                normalised_keys_dropped=tuple(metadata.get("normalised_keys_dropped", ())),
                 input_tokens=usage.input_tokens,
                 cache_read_input_tokens=usage.cache_read,
                 cache_creation_input_tokens=usage.cache_write,
@@ -333,17 +562,23 @@ def ingest_paired_eval_logs(
     null_log: Path,
     skill_dir: Path,
     conn: sqlite3.Connection,
+    runner_config: Mapping[str, Any] | None = None,
 ) -> IngestResult:
     """Parse a Full/Null ``.eval`` pair and write it to the evidence store.
 
     Convenience composition of :func:`parse_eval_log` (needs the ``[inspect]``
     extra) and :func:`write_paired_evidence` (pure).
+
+    :param runner_config: Optional runner-declared config, recorded verbatim
+        under ``config_json["runner"]``. See :func:`write_paired_evidence`.
     """
+    skill_description = _extract_skill_description(skill_dir)
     return write_paired_evidence(
-        full=parse_eval_log(full_log),
-        null=parse_eval_log(null_log),
+        full=parse_eval_log(full_log, skill_description=skill_description),
+        null=parse_eval_log(null_log, skill_description=skill_description),
         skill_dir=skill_dir,
         conn=conn,
+        runner_config=runner_config,
     )
 
 
@@ -353,6 +588,7 @@ def write_paired_evidence(
     null: ParsedEvalLog,
     skill_dir: Path,
     conn: sqlite3.Connection,
+    runner_config: Mapping[str, Any] | None = None,
 ) -> IngestResult:
     """Write one parsed Full/Null pair through the evidence-admissibility machinery.
 
@@ -371,32 +607,37 @@ def write_paired_evidence(
 
     π_c rule (#52): π̂_c over the Full arm plus its Clopper-Pearson interval is
     computed on every write, returned on ``IngestResult.pi_c`` (mandatory) and
-    recorded in the run's ``config_json``. Zero detected invocations in the
-    treated arm REFUSE the write — an instrumentation finding, not evidence.
+    recorded in the run's ``config_json``.
+
+    Exposure rule (#384): exposure is measured per epoch by the v2 channel-(c)
+    detector. Zero invocations with full exposure is ADMISSIBLE — the write
+    proceeds, records pi_c = 0/n with its interval, and the verdict line carries
+    it. The CACE secondary is stated as not identified at pi_c = 0.
+
+    Runner config (#409): a sized run under a ratification records what it
+    declared -- the RAT id and record path, the declared skill_id, task_family
+    and estimand, and the route and model string -- under
+    ``config_json["runner"]``, verbatim and unvalidated here. Two reasons it is
+    recorded rather than derived. Section 2 of a Gate-2 ratification requires
+    the reference to travel in the runner's config and be recorded at ingest.
+    And the route is no longer recoverable from the recorded model identifier:
+    ``anthropic/claude-sonnet-5`` names the direct API to Inspect and the
+    OpenRouter route to this repository's own CLI, so the route survives only
+    because the runner writes it down. An ingest without the block keeps
+    working and simply carries no ``runner`` key.
 
     :raises EvalLogNotSuccessError: either log's status is not ``success``.
-    :raises PairedLogMismatchError: the logs are not a valid Full/Null pair
-        (including a detected skill invocation in the Null arm — control-arm
-        contamination).
-    :raises ZeroInvocationError: zero detected invocations in the Full arm.
+    :raises PairedLogMismatchError: the logs are not a valid Full/Null pair.
+    :raises UnexposedFullEpochError: a Full-arm epoch has exposure not detected.
+    :raises NullArmContaminationError: a Null-arm epoch has exposure or
+        invocation detected (#384, widened from #46).
     :raises AlreadyIngestedError: this pair of task ids was already written.
     :raises FileNotFoundError: ``skill_dir`` has no SKILL.md.
     """
     _validate_pair(full, null)
 
     pi_c = _pi_c_summary(full.samples)
-    if pi_c.invocations == 0:
-        raise ZeroInvocationError(
-            f"INSTRUMENTATION FINDING — dead treated arm: 0 skill invocations "
-            f"detected across {pi_c.trials} Full-arm epoch(s) "
-            f"(pi_c_hat=0.00, {PI_C_CONFIDENCE:.0%} CI "
-            f"[{pi_c.ci_low:.3f}, {pi_c.ci_high:.3f}], detector "
-            f"{PI_C_DETECTOR_VERSION}). Refusing to produce an effect verdict: "
-            f"'no effect' cannot be distinguished from 'never invoked'. This is "
-            f"a delivery/instrumentation failure, not evidence about the "
-            f"skill's effect.",
-            pi_c=pi_c,
-        )
+    exposure = _exposure_summary(full.samples)
 
     skill_source = skill_dir / "SKILL.md"
     if not skill_source.is_file():
@@ -550,6 +791,30 @@ def write_paired_evidence(
                         "harness_pin_json": full.samples[0].harness_pin_json,
                         "harness_pin_fingerprint": full.samples[0].harness_pin_fingerprint,
                         "pi_c": {"detector": PI_C_DETECTOR_VERSION, **pi_c.model_dump()},
+                        # SERS delivery (#388) reads value/passes/epochs from this
+                        # block verbatim — never exposed_count/trials. detector is
+                        # extra context for store readers; build_delivery ignores it.
+                        "exposure": {
+                            "value": (
+                                exposure.exposed_count / exposure.trials if exposure.trials else 0.0
+                            ),
+                            "passes": exposure.exposed_count,
+                            "epochs": exposure.trials,
+                            "detector": EXPOSURE_DETECTOR_VERSION,
+                        },
+                        "paired_cells": _paired_cell_counts(full, null),
+                        # #424: when the split oracle is used (outcome_type
+                        # invariant), the ingest also records paired_cells on
+                        # the completion lattice and silent-violation counts
+                        # per arm.  The presence of these blocks signals the
+                        # decision layer to use the split-oracle path.
+                        **(_split_oracle_config(full, null)),
+                        "normalised_keys_dropped": list(full.samples[0].normalised_keys_dropped),
+                        # Omitted entirely when absent rather than written as
+                        # null: a present-but-null key reads as "this run
+                        # declared nothing", which is a claim, while an absent
+                        # key is the honest "this ingest predates the block".
+                        **({"runner": dict(runner_config)} if runner_config else {}),
                     },
                     sort_keys=True,
                 ),
@@ -632,6 +897,7 @@ def write_paired_evidence(
         admissibility_state=admissibility_state,
         inadmissibility_reason=inadmissibility_reason,
         pi_c=pi_c,
+        exposure=exposure,
     )
 
 
@@ -672,15 +938,46 @@ def _validate_pair(full: ParsedEvalLog, null: ParsedEvalLog) -> None:
     if len(scorers) != 1:
         raise PairedLogMismatchError(f"logs disagree on the scorer: {sorted(scorers)}")
 
-    contaminated = sorted(s.epoch for s in null.samples if s.invoked_skill)
-    if contaminated:
-        raise PairedLogMismatchError(
-            f"null log {null.task_name!r} carries detected skill invocation(s) in "
-            f"epoch(s) {contaminated} — control-arm contamination. The Skill tool "
-            f"is structurally not launchable in the Null arm (#46), so this means "
-            f"mislabelled arms or a misconfigured harness: an apparatus error, "
-            f"not evidence."
+    # #384 refusal predicate (a): Full-arm epoch with exposure not detected.
+    # True is the only admissible Full value — False (measured absent) and
+    # None (not computed) both refuse: treatment delivery was not established.
+    unexposed = sorted(s.epoch for s in full.samples if s.exposed_skill is not True)
+    if unexposed:
+        raise UnexposedFullEpochError(
+            f"full log {full.task_name!r} has epoch(s) {unexposed} with exposure not "
+            f"detected — the skill's description was not present in the transcript. "
+            f"This is an apparatus error: the treatment was not delivered.",
+            epoch=unexposed[0],
         )
+
+    # #384 refusal predicate (b): Null-arm epoch with exposure or invocation detected.
+    # Widened from the #46 invocation-only check to include channel-(c) exposure.
+    # None (not computed) is not contamination; only a measured True is.
+    null_contaminated_invoked = sorted(s.epoch for s in null.samples if s.invoked_skill)
+    null_contaminated_exposed = sorted(s.epoch for s in null.samples if s.exposed_skill is True)
+    if null_contaminated_invoked or null_contaminated_exposed:
+        channels = []
+        if null_contaminated_exposed:
+            channels.append(f"exposure detected in epoch(s) {null_contaminated_exposed}")
+        if null_contaminated_invoked:
+            channels.append(f"invocation detected in epoch(s) {null_contaminated_invoked}")
+        raise NullArmContaminationError(
+            f"null log {null.task_name!r} carries control-arm contamination: "
+            f"{'; '.join(channels)}. The skill is not mounted in the Null arm and "
+            f"the Skill tool is structurally not launchable (#46), so this means "
+            f"mislabelled arms or a misconfigured harness: an apparatus error, "
+            f"not evidence.",
+            epoch=(
+                null_contaminated_exposed[0]
+                if null_contaminated_exposed
+                else null_contaminated_invoked[0]
+            ),
+            channel="exposure" if null_contaminated_exposed else "invocation",
+        )
+
+    # Legacy check: invocation in the Null arm is still contamination (#46).
+    # Kept above in the widened block; the original message is preserved in the
+    # NullArmContaminationError when channel == "invocation".
 
 
 def _pi_c_summary(samples: tuple[ParsedSample, ...]) -> PiCSummary:
@@ -696,6 +993,135 @@ def _pi_c_summary(samples: tuple[ParsedSample, ...]) -> PiCSummary:
         ci_high=ci_high,
         confidence=PI_C_CONFIDENCE,
     )
+
+
+def _exposure_summary(samples: tuple[ParsedSample, ...]) -> ExposureSummary:
+    """Exposure summary over the treated (Full) arm's parsed samples."""
+    trials = len(samples)
+    exposed_count = sum(1 for s in samples if s.exposed_skill is True)
+    return ExposureSummary(
+        exposed_count=exposed_count,
+        trials=trials,
+        detector_version=EXPOSURE_DETECTOR_VERSION,
+    )
+
+
+def _paired_cell_counts(full: ParsedEvalLog, null: ParsedEvalLog) -> dict[str, int]:
+    """Compute the four paired-outcome cell counts from per-epoch outcomes.
+
+    Returns a dict with keys: both_pass, full_only, null_only, both_fail.
+    Used by Gate-2 reads so they need no re-parse of the logs.
+    """
+    full_by_epoch = {s.epoch: s for s in full.samples}
+    null_by_epoch = {s.epoch: s for s in null.samples}
+    both_pass = 0
+    full_only = 0
+    null_only = 0
+    both_fail = 0
+    for epoch, full_sample in full_by_epoch.items():
+        f = full_sample.score_value
+        n = null_by_epoch[epoch].score_value
+        if f == 1.0 and n == 1.0:
+            both_pass += 1
+        elif f == 1.0 and n == 0.0:
+            full_only += 1
+        elif f == 0.0 and n == 1.0:
+            null_only += 1
+        elif f == 0.0 and n == 0.0:
+            both_fail += 1
+    return {
+        "both_pass": both_pass,
+        "full_only": full_only,
+        "null_only": null_only,
+        "both_fail": both_fail,
+    }
+
+
+def _paired_cell_counts_on_score(
+    full: ParsedEvalLog, null: ParsedEvalLog, accessor: str
+) -> dict[str, int]:
+    """Compute paired cell counts using a specific score accessor.
+
+    #424: for split-oracle (outcome_type=invariant), the ingest computes
+    paired_cells on the invariant score (I) and paired_cells_completion on
+    the completion score (C).  ``accessor`` names the ParsedSample field:
+    ``score_value_invariant`` or ``score_value_completion``.
+    """
+    full_by_epoch = {s.epoch: s for s in full.samples}
+    null_by_epoch = {s.epoch: s for s in null.samples}
+    both_pass = 0
+    full_only = 0
+    null_only = 0
+    both_fail = 0
+    for epoch, full_sample in full_by_epoch.items():
+        f = getattr(full_sample, accessor)
+        n = getattr(null_by_epoch[epoch], accessor)
+        if f is None or n is None:
+            continue
+        if f == 1.0 and n == 1.0:
+            both_pass += 1
+        elif f == 1.0 and n == 0.0:
+            full_only += 1
+        elif f == 0.0 and n == 1.0:
+            null_only += 1
+        elif f == 0.0 and n == 0.0:
+            both_fail += 1
+    return {
+        "both_pass": both_pass,
+        "full_only": full_only,
+        "null_only": null_only,
+        "both_fail": both_fail,
+    }
+
+
+def _silent_violation_counts(full: ParsedEvalLog, null: ParsedEvalLog) -> dict[str, int]:
+    """Count silent violations per arm: C=1 but I=0 (completion held, invariant broke).
+
+    #424: a silent violation is when the completion oracle passes but the
+    invariant oracle fails — the teammate's work was integrated but the
+    original SHAs were not preserved.  This is counted per arm.
+    """
+    full_by_epoch = {s.epoch: s for s in full.samples}
+    null_by_epoch = {s.epoch: s for s in null.samples}
+    full_violations = 0
+    null_violations = 0
+    for epoch, full_sample in full_by_epoch.items():
+        full_inv = full_sample.score_value_invariant
+        full_comp = full_sample.score_value_completion
+        if full_inv is not None and full_comp is not None and full_comp == 1.0 and full_inv == 0.0:
+            full_violations += 1
+        null_sample = null_by_epoch[epoch]
+        null_inv = null_sample.score_value_invariant
+        null_comp = null_sample.score_value_completion
+        if null_inv is not None and null_comp is not None and null_comp == 1.0 and null_inv == 0.0:
+            null_violations += 1
+    return {
+        "full": full_violations,
+        "null": null_violations,
+    }
+
+
+def _split_oracle_config(full: ParsedEvalLog, null: ParsedEvalLog) -> dict[str, Any]:
+    """Build config_json entries for the split oracle when present.
+
+    #424: when the eval log carries both invariant_oracle and completion_oracle
+    scores, this returns the completion lattice and silent-violation blocks.
+    Returns an empty dict for legacy pass_fail runs (no split scores).
+    """
+    if not any(s.score_value_invariant is not None for s in full.samples) and not any(
+        s.score_value_invariant is not None for s in null.samples
+    ):
+        return {}
+    return {
+        # Ticket: ingest writes outcome_type into config_json beside the runner
+        # block so a store reader can see which oracle scored the run without
+        # re-parsing the eval log.
+        "outcome_type": "invariant",
+        "paired_cells_completion": _paired_cell_counts_on_score(
+            full, null, "score_value_completion"
+        ),
+        "silent_violation": _silent_violation_counts(full, null),
+    }
 
 
 def _pin_admissibility(
@@ -744,17 +1170,31 @@ def _observation(full_score: float, null_score: float) -> float:
     return 0.5
 
 
-def _score_to_float(value: object, path: Path) -> float:
+def _score_to_float(value: object, path: Path, *, sample: str = "") -> float:
+    """Decode one Inspect score to the outcome oracle's {0.0, 1.0} encoding.
+
+    ``sample`` locates the offending trial in a refusal message. A log carries
+    up to forty epochs, so "this log has a bad score" is not actionable; the
+    caller passes the same ``id=/epoch=`` locator the no-scores refusal uses.
+    """
+    where = f"{path}{': ' + sample if sample else ''}"
     if isinstance(value, str):
         mapped = _SCORE_VALUE_MAP.get(value)
         if mapped is None:
-            raise EvalLogIngestError(f"{path}: unmappable score value {value!r}")
+            raise EvalLogIngestError(f"{where}: unmappable score value {value!r}")
         return mapped
     if isinstance(value, bool):
         return 1.0 if value else 0.0
     if isinstance(value, int | float):
-        return float(value)
-    raise EvalLogIngestError(f"{path}: unmappable score value {value!r}")
+        score = float(value)
+        if not math.isfinite(score):
+            raise EvalLogIngestError(
+                f"{where}: non-finite score value {value!r}. An absent measurement is not"
+                " a tie: _observation scores it 0.5, which records no-effect evidence"
+                " the trial never produced (#363)."
+            )
+        return score
+    raise EvalLogIngestError(f"{where}: unmappable score value {value!r}")
 
 
 class _UsageTotals(NamedTuple):

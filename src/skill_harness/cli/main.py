@@ -19,6 +19,7 @@ from rich.markup import escape as _escape_markup
 from rich.table import Table
 
 from skill_harness.aggregation import aggregate_skill
+from skill_harness.aggregation.verdict import ValueClass
 from skill_harness.extractor import (
     ExtractionError,
     ExtractionResult,
@@ -557,6 +558,33 @@ def skill_clauses(skill_id: str, evidence_db: Path) -> None:
 
     _console.print(table)
     _console.print(_SKILL_CLAUSES_LEGEND)
+
+
+@skill.command("coverage")
+@click.argument("corpus_dir", type=click.Path(exists=True, path_type=Path))
+def skill_coverage(corpus_dir: Path) -> None:
+    """Report how many skill cards in a directory can be loaded.
+
+    Iterates over immediate subdirectories of CORPUS_DIR, each expected to
+    contain a SKILL.md.  Reports how many are constructible (frontmatter
+    normalised successfully) and how many are refused (with reasons).
+    """
+    from skill_harness.subject.inspect_adapter import skill_corpus_coverage
+
+    report = skill_corpus_coverage(corpus_dir)
+
+    _console.print(f"\n[bold]Skill corpus coverage[/] — {corpus_dir}")
+    _console.print(f"  Candidates:    {report.candidate_count}")
+    _console.print(f"  Constructible: {report.constructible_count}")
+    _console.print(f"  Refused:       {report.refused_count}")
+
+    if report.refused:
+        table = Table(title="Refused cards", show_lines=True)
+        table.add_column("Path", style="cyan", min_width=30)
+        table.add_column("Reason", min_width=40)
+        for path, reason in report.refused:
+            table.add_row(str(path), _sanitize_clause_text(reason, max_len=80))
+        _console.print(table)
 
 
 @cli.group()
@@ -2799,7 +2827,14 @@ def screen() -> None:
     show_default=True,
     help="Path to evidence DB (read-only; no writes, no API calls).",
 )
-def screen_verdict_cmd(evidence_db: Path) -> None:
+@click.option(
+    "--fresh-pin",
+    type=str,
+    default=None,
+    help="Fresh harness_pin_fingerprint to compare against stored rows. When set,"
+    " admissible screens with a different fingerprint are refused (#382).",
+)
+def screen_verdict_cmd(evidence_db: Path, fresh_pin: str | None) -> None:
     """Derive p0 per skill from the screen store and print the keep/cut verdict.
 
     Read-only. p0 is DERIVED from admissible screen trials (never stored); each
@@ -2811,12 +2846,19 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
     "the trap did not fire in this Null screen" — the wrong instrument for the
     question — and the verdict is CAN'T-TELL-YET, never CUT. An unclassified
     skill is treated as not-transformative, so it cannot be false-CUT.
+
+    Pin currency (#382): when --fresh-pin is provided, admissible screens whose
+    harness_pin_fingerprint differs from it are refused — the screen was captured
+    under a different instrument version and must not silently contribute to p0.
     """
     from skill_harness.aggregation.value_class_registry import value_class_for
     from skill_harness.aggregation.verdict import screen_verdict
-    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.errors import BootstrapError, StalePinError
     from skill_harness.storage.migrations import open_evidence_readonly
-    from skill_harness.storage.repositories.evidence.screens import derive_p0_by_skill
+    from skill_harness.storage.repositories.evidence.screens import (
+        derive_p0_by_skill,
+        select_stale_pin_skills,
+    )
 
     if not evidence_db.exists():
         _console.print(
@@ -2828,7 +2870,9 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
     db_conn: sqlite3.Connection | None = None
     try:
         db_conn = open_evidence_readonly(evidence_db)
-        rows = derive_p0_by_skill(db_conn)
+        stale_rows = select_stale_pin_skills(db_conn, fresh_pin) if fresh_pin is not None else []
+        # Pin filter is applied inside derive so mixed-pin skills keep only fresh rows.
+        rows = derive_p0_by_skill(db_conn, fresh_pin=fresh_pin)
     except BootstrapError:
         _console.print(f"\n[yellow]evidence.db not found at {evidence_db}.[/]")
         return
@@ -2836,11 +2880,30 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
         if db_conn is not None:
             db_conn.close()
 
-    if not rows:
+    if stale_rows:
+        _console.print(f"\n[red]Stale pin refused ({len(stale_rows)} skill(s)):[/]")
+        for stale in stale_rows:
+            refusal = StalePinError(
+                stored_fingerprints=stale.stored_fingerprints,
+                fresh_fingerprint=fresh_pin or "",
+            )
+            _console.print(
+                f"  [red]{_sanitize_clause_text(stale.skill_name, max_len=None)}: "
+                f"{_sanitize_clause_text(str(refusal), max_len=None)}[/]"
+            )
         _console.print(
-            "\n[yellow]No admissible screens in the store.[/]"
-            "\n[dim]  Backfill batch-1 with 'screen backfill --execute', or run a screen.[/]"
+            "[dim]  These screens were captured under a different harness pin and"
+            " must not silently contribute to p0 (#382).[/]"
         )
+
+    if not rows:
+        if fresh_pin is not None and stale_rows:
+            _console.print("\n[yellow]No admissible screens remain after pin-currency check.[/]")
+        else:
+            _console.print(
+                "\n[yellow]No admissible screens in the store.[/]"
+                "\n[dim]  Backfill batch-1 with 'screen backfill --execute', or run a screen.[/]"
+            )
         return
 
     table = Table(title="Screen verdicts (p0 derived from admissible trials)", show_lines=True)
@@ -2878,6 +2941,11 @@ def screen_verdict_cmd(evidence_db: Path) -> None:
         " screens are kept in the store but excluded. A verdict is a hardness screen,"
         " not a paired measurement.[/]"
     )
+    if fresh_pin is None:
+        _console.print(
+            "\n[dim]Pin currency check skipped: supply --fresh-pin to refuse rows"
+            " captured under a different harness instrument (#382).[/]"
+        )
 
 
 @screen.command("profile")
@@ -2970,20 +3038,32 @@ def screen_profile_cmd(
             "are unavailable.[/]"
         )
     if skills_root is not None and skills_root.is_dir():
+        # A skills tree is either flat (<root>/<skill>/SKILL.md) or grouped by
+        # category (<root>/<category>/<skill>/SKILL.md). MrBinnacle/skills is the
+        # latter -- engineering/, meta/, orchestration/ -- so a single-level scan
+        # enumerated ZERO of its 14 cards and degraded to the "no skills-root
+        # library" footnote without erroring. That silently blanked desc-cost, the
+        # one axis on this table that needs no eval spend at all.
+        # Descend one extra level only where the direct child carries no SKILL.md,
+        # so a flat root keeps its existing behaviour exactly.
         for child in sorted(skills_root.iterdir()):
-            skill_md = child / "SKILL.md"
-            if not (child.is_dir() and skill_md.is_file()):
+            if not child.is_dir():
                 continue
-            try:
-                parsed = parse_skill_file(skill_md)
-            except (MalformedSkillError, OSError):
-                continue
-            description = parsed.frontmatter.get("description", "")
-            is_disable = parsed.frontmatter.get("disable-model-invocation", "").strip().lower() == (
-                "true"
-            )
-            desc_cost = 0 if is_disable else (len(description) + 3) // 4  # ceil(len/4)
-            library[child.name] = (desc_cost, is_disable)
+            if (child / "SKILL.md").is_file():
+                candidates = [child]
+            else:
+                candidates = [g for g in sorted(child.iterdir()) if (g / "SKILL.md").is_file()]
+            for candidate in candidates:
+                try:
+                    parsed = parse_skill_file(candidate / "SKILL.md")
+                except (MalformedSkillError, OSError):
+                    continue
+                description = parsed.frontmatter.get("description", "")
+                is_disable = parsed.frontmatter.get(
+                    "disable-model-invocation", ""
+                ).strip().lower() == ("true")
+                desc_cost = 0 if is_disable else (len(description) + 3) // 4  # ceil(len/4)
+                library[candidate.name] = (desc_cost, is_disable)
 
     if not screened and not library:
         _console.print(
@@ -3149,7 +3229,11 @@ def screen_backfill_cmd(
     p0 excludes them. Without --execute, prints the manifest (the curated
     evidence-admissibility decisions) without touching any DB.
     """
-    from skill_harness.subject.screen_backfill import BATCH1_MANIFEST, apply_manifest
+    from skill_harness.subject.screen_backfill import (
+        BATCH1_MANIFEST,
+        apply_manifest,
+        supersede_d4_screen_runs,
+    )
 
     if not execute:
         _console.print("\n[bold yellow]DRY-RUN[/] — batch-1 screen manifest (no writes):")
@@ -3166,13 +3250,28 @@ def screen_backfill_cmd(
 
     with StorageContext(evidence_db, runtime_db) as ctx:
         report = apply_manifest(screens_root, ctx.evidence_conn)
+        # #402: re-disposition the four D4-finding rows via the supersession path.
+        # Idempotent: already-superseded rows are skipped.
+        redispositioned = supersede_d4_screen_runs(ctx.evidence_conn)
 
     _console.print(f"\n[green]Backfilled[/] {len(report.ingested)} screens into {evidence_db}")
+    if report.skipped:
+        _console.print(
+            f"[dim]Skipped {len(report.skipped)} manifest entr"
+            f"{'y' if len(report.skipped) == 1 else 'ies'} already in the store (#430):[/]"
+        )
+        for line in report.skipped:
+            _console.print(f"  [dim]{_sanitize_clause_text(line, max_len=None)}[/]")
     for result in report.ingested:
         state = result.admissibility_state
         color = "green" if state == "admissible" else "red"
         _console.print(
             f"  {result.skill_name}: [{color}]{state}[/] ({result.n_pass}/{result.n_trials} passed)"
+        )
+    if redispositioned:
+        _console.print(
+            f"\n[yellow]Re-dispositioned[/] {len(redispositioned)} screen run(s) "
+            "via supersession (#402 D4 / stale-pin disposition table)."
         )
     if report.mismatches:
         _console.print("\n[bold red]AUDIT MISMATCHES[/] (manifest disagrees with stored evidence):")
@@ -3180,6 +3279,52 @@ def screen_backfill_cmd(
             _console.print(f"  [red]{_sanitize_clause_text(m, max_len=None)}[/]")
         raise click.ClickException("backfill audit failed — see mismatches above")
     _console.print("\n[dim]Run 'screen verdict' to see the derived keep/cut verdicts.[/]")
+
+
+@run.command("evaluate-paired")
+@click.argument("run_id")
+@click.argument("ratification_path", type=click.Path(exists=True, path_type=Path))
+@click.argument(
+    "value_class",
+    type=click.Choice([vc.value for vc in ValueClass], case_sensitive=False),
+)
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("./evidence.db"),
+    show_default=True,
+    help="Path to evidence DB (read-only; no writes, no API calls).",
+)
+def run_evaluate_paired(
+    run_id: str,
+    ratification_path: Path,
+    value_class: str,
+    evidence_db: Path,
+) -> None:
+    """Read-only paired-lane Gate-2 decision.
+
+    Takes a paired RUN_ID, a ratification-record reference, and a VALUE_CLASS,
+    and prints the decision, signed delta with its interval, pi_c line, and
+    verdict — or a typed refusal.  Performs no writes and no API calls.
+
+    The design used is the one in the referenced RATIFIED record; a DRAFT
+    record, a missing record, or a field mismatch is a typed refusal naming
+    the field.  Pair count != n_pairs returns COUNT_MISMATCH.
+    """
+    from skill_harness.aggregation.verdict import ValueClass as VC
+    from skill_harness.cli.paired_gate2 import PairedGate2Refusal, paired_gate2_read
+
+    try:
+        vc = VC(value_class)
+        paired_gate2_read(
+            run_id,
+            ratification_path,
+            vc,
+            evidence_db=evidence_db,
+        )
+    except PairedGate2Refusal as exc:
+        _console.print(f"[red]REFUSAL[/]: {exc}")
+        raise SystemExit(exc.exit_code) from exc
 
 
 if __name__ == "__main__":  # pragma: no cover

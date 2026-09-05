@@ -27,8 +27,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
-
 from skill_harness.extractor.clause_evidence import (
     ClauseEvidenceOutcome,
     load_clause_evidence,
@@ -49,10 +47,45 @@ from skill_harness.sitegen.render import (
 
 __all__ = [
     "SiteBuildError",
+    "SitegenNotInstalledError",
     "build_site",
     "load_receipts",
     "load_schema",
 ]
+
+
+# The [sitegen] extra's install hint. ``jsonschema`` reaches this environment
+# only through that extra (and through [dev], which re-declares it for the test
+# stack; and transitively through inspect-ai, jsonschema>3.1.1) -- never
+# through [project.dependencies]. A core install therefore imports this module
+# fine; the validator import sits behind this hint so a build fails at use
+# time with an actionable message rather than at import time with a bare
+# ImportError. Mirrors subject/inspect_adapter._yaml for the same reason.
+_INSTALL_HINT = (
+    'building the receipts site requires the optional extra: pip install "skill-harness[sitegen]"'
+)
+
+
+class SitegenNotInstalledError(RuntimeError):
+    """Raised when ``jsonschema`` is missing (the optional ``[sitegen]`` extra)."""
+
+
+def _validator() -> Any:
+    """Import ``jsonschema.Draft202012Validator`` lazily, with this module's
+    own install hint on failure.
+
+    Module scope would be wrong here. ``jsonschema`` is an optional extra, not
+    a core dependency: a top-level ``from jsonschema import ...`` makes a core
+    install fail at import time with a bare ImportError naming a package the
+    user never asked for, instead of the typed hint below. ``build_site`` and
+    the schema self-check both go through this seam so the failure is at use
+    time, naming the extra to install.
+    """
+    try:
+        from jsonschema import Draft202012Validator
+    except ImportError as exc:  # pragma: no cover - core install without the extra
+        raise SitegenNotInstalledError(_INSTALL_HINT) from exc
+    return Draft202012Validator
 
 
 @dataclass(frozen=True)
@@ -78,7 +111,7 @@ def validate_receipts(
     receipts_dir: Path,
 ) -> list[dict[str, Any]]:
     """Validate every receipt in ``receipts_dir``, hard-failing on the first bad one."""
-    validator = Draft202012Validator(dict(schema))
+    validator = _validator()(dict(schema))
     loaded: list[dict[str, Any]] = []
     for path in sorted(receipts_dir.glob("*.json")):
         receipt_obj: object = json.loads(path.read_text(encoding="utf-8"))
@@ -173,7 +206,7 @@ def _parse_schema(schema_text: str) -> dict[str, Any]:
     if not isinstance(schema_obj, dict):
         raise SiteBuildError("SERS schema must be a JSON object")
     schema: dict[str, Any] = schema_obj
-    Draft202012Validator.check_schema(schema)
+    _validator().check_schema(schema)
     return schema
 
 

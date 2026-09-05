@@ -50,9 +50,10 @@ Screen verdict rules (Path A, `screen_verdict`), ordered:
           trap/discipline/calibration skill: a high Null pass-rate means "the trap
           did not fire in this screen", not "the model does this unaided" — so a
           CUT(subsumed) here would be a category error. The verdict carries
-          ``wrong_instrument=True`` (the board routes the cell to the
-          field-evidence lane). The default is "not transformative-lift" so an
-          UNCLASSIFIED skill is never false-CUT while its class is pending.
+          ``wrong_instrument=True``; the field-evidence lane that would consume
+          that flag is UNBUILT (#335, deferred 2026-09-02). The default is "not
+          transformative-lift" so an UNCLASSIFIED skill is never false-CUT while
+          its class is pending.
   A3. p0 <= TRANSFORMATIVE_NULL_CEILING → CANT_TELL_YET (sourced candidate),
       unchanged, regardless of value_class. The Null arm fails often enough that
       the skill COULD be transformative — but no paired run has confirmed a KEEP.
@@ -145,7 +146,9 @@ class ValueClass(StrEnum):
     So ``screen_verdict``'s ``p0 above the bar → CUT(subsumed)`` mapping is VALID
     ONLY for a skill whose value IS transformative lift. For any other class it
     is a category error — the wrong instrument — so the guard withholds the CUT
-    and routes to the field-evidence lane instead (US-1/US-2).
+    (US-1/US-2). The field-evidence lane that would receive the withheld cell is
+    UNBUILT (#335, deferred 2026-09-02); the withheld verdict is the terminal
+    record for that cell today.
 
     Deliberately NOT the ``Estimand`` enum. ``Estimand`` is the decision TARGET of
     a measured arm — ratified at exactly two members, docstring-locked and
@@ -225,12 +228,25 @@ class VerdictResult:
     """Board-layer routing signal (#74/#76/#87). Set True when a path WITHHELD a
     CUT because ``value_class`` is not transformative-lift — the
     transformative-lift instrument cannot see this skill's value. Fires on the
-    screen path (above-bar p0) and on Path C (matched EQUIVALENT). The future
-    BoardCell consumes this to route the cell to the field-evidence lane
-    (``evidence_lane = field``) and render "HOLD — wrong instrument" rather than
-    "HOLD — untested (sourced candidate)". Default False keeps every existing
-    verdict and call site unchanged; it is never True on a CUT or a KEEP, nor on
-    the ordinary below-bar sourced-candidate / UNRESOLVED CANT_TELL_YET."""
+    screen path (above-bar p0) and on Path C (matched EQUIVALENT).
+
+    NO CONSUMER EXISTS. ``BoardCell`` and ``evidence_lane`` are not implemented
+    anywhere in this repository: before 2026-09-02 they appeared only in this
+    docstring, one test docstring, and one receipt summary string. The
+    field-evidence lane was DEFERRED on 2026-09-02 under #335, not built,
+    because a lane whose only members are wrong-instrument withholds needs the
+    false-green outcome variable defined first, and that variable does not exist
+    either. This flag is therefore a recorded signal with no destination. A
+    reader learns the same fact from the verdict's own rationale, which states
+    it in words rather than promising a lane.
+
+    Default False keeps every existing verdict and call site unchanged; it is
+    never True on a CUT or a KEEP, nor on the ordinary below-bar
+    sourced-candidate / UNRESOLVED CANT_TELL_YET.
+
+    *Revisit if:* the false-green outcome variable is defined (#403), which is the
+    quantity a field-evidence cell would carry. Building the lane before then
+    produces a destination with nothing to display."""
 
     @property
     def estimand_label(self) -> str:
@@ -264,9 +280,9 @@ def screen_verdict(
     → CUT(subsumed)`` mapping fires ONLY for ``ValueClass.TRANSFORMATIVE_LIFT``.
     For any other class — or when UNSET (the default is "not transformative-lift",
     so an unclassified skill is never false-CUT) — an above-bar p0 yields
-    CANT_TELL_YET carrying ``wrong_instrument=True`` (route to the field lane),
-    never CUT. Below the bar the verdict is the sourced-candidate CANT_TELL_YET
-    regardless of class.
+    CANT_TELL_YET carrying ``wrong_instrument=True`` (the field-evidence lane
+    that flag names is UNBUILT, #335), never CUT. Below the bar the verdict is
+    the sourced-candidate CANT_TELL_YET regardless of class.
     """
     if not 0.0 <= p0 <= 1.0:
         raise ValueError(f"p0 must be a pass-rate in [0, 1]; got {p0!r}")
@@ -290,7 +306,9 @@ def screen_verdict(
             rationale = (
                 f"CAN'T-TELL-YET (wrong instrument): Null arm p0={p0:.2f} is above the "
                 f"~{TRANSFORMATIVE_NULL_CEILING:.2f} transformative bar, but {class_clause}. "
-                f"Verdict withheld; routed to the field-evidence lane."
+                f"Verdict withheld. The field-evidence lane that would carry this "
+                f"cell is UNBUILT (#335): nothing in this repository consumes the "
+                f"wrong_instrument flag, so this verdict is the terminal record."
             )
             return VerdictResult(
                 KeepCutVerdict.CANT_TELL_YET,
@@ -328,14 +346,41 @@ def screen_verdict(
 
 
 def paired_verdict(
-    clause_status: ClauseStatus, *, scope: RegisteredScope | None = None
+    clause_status: ClauseStatus,
+    *,
+    scope: RegisteredScope | None = None,
+    pi_c_hat: float | None = None,
+    pi_c_n: int | None = None,
+    pi_c_ci_low: float | None = None,
+    pi_c_ci_high: float | None = None,
+    pi_c_confidence: float | None = None,
 ) -> VerdictResult:
     """Map a paired-run terminal ClauseStatus to a keep/cut verdict.
 
     See rules B1-B4 in the module docstring. Path B has never fired to date; this
     mapping is prospective. ``scope`` is the registered claim boundary the
     verdict carries; omit it ONLY for pre-registry observations.
+
+    ``pi_c_hat``..``pi_c_ci_high`` carry the invocation-rate stratifier from the
+    paired ingest path. When provided, every verdict rationale carries the pi_c
+    line per #36 adoption 4 display rule: ``pi_c_hat = k/n = 0.xxxx [95% CI lo, hi]``.
+    At pi_c = 0 the CACE secondary is stated as not identified, never computed.
+    Callers minting a paired-path verdict under #384 must pass pi_c — the
+    optional form exists only for pre-#384 Path B unit fixtures.
     """
+    pi_c_line = ""
+    if pi_c_hat is not None and pi_c_n is not None:
+        ci_lo = pi_c_ci_low if pi_c_ci_low is not None else 0.0
+        ci_hi = pi_c_ci_high if pi_c_ci_high is not None else 1.0
+        conf = pi_c_confidence if pi_c_confidence is not None else 0.95
+        # #36 adoption 4 display: pi_c_hat = k/n [95% CI lo, hi]
+        k = round(pi_c_hat * pi_c_n)
+        pi_c_line = (
+            f" pi_c_hat = {k}/{pi_c_n} = {pi_c_hat:.4f} [{conf:.0%} CI {ci_lo:.4f}, {ci_hi:.4f}]."
+        )
+        if pi_c_hat == 0.0:
+            pi_c_line += " CACE secondary is not identified (zero invocations with full exposure)."
+
     match clause_status:
         case ClauseStatus.PASSED:
             return VerdictResult(
@@ -345,6 +390,7 @@ def paired_verdict(
                     f"KEEP: paired Full-vs-Null cleared the transformative bar (Null ≤ "
                     f"~{TRANSFORMATIVE_NULL_CEILING:.2f}, Full ≥ "
                     f"~{TRANSFORMATIVE_FULL_FLOOR:.2f}, posterior ≥ pass threshold)."
+                    f"{pi_c_line}"
                 ),
                 scope=scope,
             )
@@ -357,6 +403,7 @@ def paired_verdict(
                     "the skill did not deliver a transformative lift (paired posterior "
                     "below the fail threshold). Not 'subsumed' — the model fails without "
                     "the skill."
+                    f"{pi_c_line}"
                 ),
                 scope=scope,
             )
@@ -367,6 +414,7 @@ def paired_verdict(
                 (
                     "CAN'T-TELL-YET: paired run is UNMEASURED (underpowered / budget / no "
                     "admissible data). Needs more epochs or a better-sourced task."
+                    f"{pi_c_line}"
                 ),
                 scope=scope,
             )
@@ -378,6 +426,7 @@ def paired_verdict(
                     "CAN'T-TELL-YET: paired evidence is CONFOUNDED (a harness/environment "
                     "difference co-varies with the arm). Verdict withheld until the "
                     "confound is resolved."
+                    f"{pi_c_line}"
                 ),
                 scope=scope,
             )
@@ -395,19 +444,66 @@ def matched_gate2_verdict(
     *,
     scope: RegisteredScope | None = None,
     value_class: ValueClass | None = None,
+    outcome_type: str | None = None,
+    null_violation_rate: float | None = None,
+    equivalence_margin: float | None = None,
 ) -> VerdictResult:
     """Map a matched Gate-2 EffectEstimate to a keep/cut verdict.
 
     Harm is a first-class CUT sub-reason here — never folded into no_lift.
     Requires ``effect.decision`` from ``effect_from_matched_gate2``; a scaffold
-    estimate without a Gate-2 decision is refused (no silent coercion).
+    estimate without a decision is refused (no silent coercion).
 
     ``value_class`` is the #76/#77/#87 wrong-instrument guard on EQUIVALENT:
-    ``EQUIVALENT → CUT(no_lift)`` fires ONLY for ``ValueClass.TRANSFORMATIVE_LIFT``.
-    For any other class — or when UNSET (default "not transformative-lift") —
-    EQUIVALENT yields CANT_TELL_YET carrying ``wrong_instrument=True``, never CUT.
+    ``EQUIVALENT → CUT(no_lift)`` fires ONLY for ``ValueClass.TRANSFORMATIVE_LIFT``
+    under ``pass_fail``. For ``trap-discipline`` + ``invariant`` the #403/#424
+    table decides: Null violation rate at or below the equivalence-margin floor
+    → ``CUT(subsumed)``; otherwise ``CUT(no_lift)``. Every other class — or UNSET —
+    yields CANT_TELL_YET carrying ``wrong_instrument=True``, never CUT.
     BENEFIT / HARM / UNRESOLVED are class-independent (see rules C2-C5).
+
+    ``outcome_type`` is the #424 instrument-compatibility guard: the
+    ``(value_class, outcome_type)`` pair must be a registered combination
+    for the verdict to decide.  The two permitted pairs are
+    ``(transformative-lift, pass_fail)`` and ``(trap-discipline, invariant)``.
+    Every other pair withholds with ``wrong_instrument=True``.
+    When ``outcome_type`` is ``None`` (absent from the record), the guard
+    defaults to ``pass_fail`` (legacy behaviour).
+
+    ``null_violation_rate`` and ``equivalence_margin`` feed the trap-discipline
+    EQUIVALENT branch (#403 §3): rate of Null-arm invariant breaks, and the
+    record's ``delta_min``. Absent → ``CUT(no_lift)`` (cannot claim subsumed).
     """
+    # #424: instrument-compatibility guard. The (value_class, outcome_type) pair
+    # must be a registered combination for the verdict to decide. The two
+    # permitted pairs are (transformative-lift, pass_fail) and
+    # (trap-discipline, invariant). Every other pair withholds with
+    # wrong_instrument=True. When outcome_type is None (absent from the record),
+    # default to pass_fail (legacy behaviour).
+    _EFFECTIVE_OUTCOME_TYPE = outcome_type if outcome_type is not None else "pass_fail"
+    _PERMITTED_PAIRS = frozenset(
+        {(ValueClass.TRANSFORMATIVE_LIFT, "pass_fail"), (ValueClass.TRAP_DISCIPLINE, "invariant")}
+    )
+    effective_vc = value_class if value_class is not None else ValueClass.TRANSFORMATIVE_LIFT
+    if (effective_vc, _EFFECTIVE_OUTCOME_TYPE) not in _PERMITTED_PAIRS:
+        vc_label = effective_vc.value if value_class is not None else "unclassified"
+        pairs_str = sorted(f"({vc.value}, {ot})" for vc, ot in _PERMITTED_PAIRS)
+        rationale = (
+            f"CAN'T-TELL-YET (wrong instrument): the (value_class, outcome_type)"
+            f" pair ({vc_label!r}, {_EFFECTIVE_OUTCOME_TYPE!r}) is not a registered"
+            f" instrument combination. Registered pairs: {pairs_str}."
+            f" Verdict withheld. The field-evidence lane that would carry this"
+            f" cell is UNBUILT (#335): nothing in this repository consumes the"
+            f" wrong_instrument flag, so this verdict is the terminal record."
+        )
+        return VerdictResult(
+            KeepCutVerdict.CANT_TELL_YET,
+            None,
+            rationale,
+            scope=scope,
+            wrong_instrument=True,
+        )
+
     if effect.decision is None:
         raise ValueError(
             "matched_gate2_verdict requires effect.decision from the matched "
@@ -436,6 +532,46 @@ def matched_gate2_verdict(
                 scope=scope,
             )
         case Gate2Decision.EQUIVALENT:
+            # #403/#424 trap-discipline table: EQUIVALENT decides, never withholds.
+            if value_class is ValueClass.TRAP_DISCIPLINE and _EFFECTIVE_OUTCOME_TYPE == "invariant":
+                # Null violation rate at/below the equivalence-margin floor →
+                # the model handles the hazard unaided (subsumed). Otherwise the
+                # skill delivered no lift on a hazard the model still hits.
+                at_floor = (
+                    null_violation_rate is not None
+                    and equivalence_margin is not None
+                    and null_violation_rate <= equivalence_margin
+                )
+                if at_floor:
+                    assert null_violation_rate is not None and equivalence_margin is not None
+                    return VerdictResult(
+                        KeepCutVerdict.CUT,
+                        CutSubReason.SUBSUMED,
+                        (
+                            f"CUT (subsumed): matched Gate-2 certified EQUIVALENT "
+                            f"({delta_clause}); Null violation rate "
+                            f"{null_violation_rate:.4f} is at the floor of the "
+                            f"registered equivalence margin {equivalence_margin} — "
+                            f"the model handles the hazard unaided."
+                        ),
+                        scope=scope,
+                    )
+                rate_clause = (
+                    f"Null violation rate {null_violation_rate:.4f}"
+                    if null_violation_rate is not None
+                    else "Null violation rate not supplied"
+                )
+                return VerdictResult(
+                    KeepCutVerdict.CUT,
+                    CutSubReason.NO_LIFT,
+                    (
+                        f"CUT (no lift): matched Gate-2 certified EQUIVALENT "
+                        f"({delta_clause}); {rate_clause} is above the "
+                        f"equivalence-margin floor. Not harmful — the interval "
+                        f"does not support worse."
+                    ),
+                    scope=scope,
+                )
             if value_class is not ValueClass.TRANSFORMATIVE_LIFT:
                 if value_class is None:
                     class_clause = (
@@ -454,7 +590,9 @@ def matched_gate2_verdict(
                 rationale = (
                     f"CAN'T-TELL-YET (wrong instrument): matched Gate-2 certified "
                     f"EQUIVALENT ({delta_clause}), but {class_clause}. "
-                    f"Verdict withheld; routed to the field-evidence lane."
+                    f"Verdict withheld. The field-evidence lane that would carry this "
+                    f"cell is UNBUILT (#335): nothing in this repository consumes the "
+                    f"wrong_instrument flag, so this verdict is the terminal record."
                 )
                 return VerdictResult(
                     KeepCutVerdict.CANT_TELL_YET,

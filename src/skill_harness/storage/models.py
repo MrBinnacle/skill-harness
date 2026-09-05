@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
@@ -684,8 +685,15 @@ class CostLedgerWrite(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# Coded D4 status on screen_runs (migration 1000). Required on every write —
+# no Python default, so omission is a type error rather than a silent
+# unknown_legacy (the SQLite column default, reserved for pre-migration rows).
+D4_CHECK_STATES = frozenset({"unknown_legacy", "not_applicable", "ran_clean", "ran_flagged"})
+D4CheckState = Literal["unknown_legacy", "not_applicable", "ran_clean", "ran_flagged"]
+
+
 class ScreenRunWrite(BaseModel):
-    """Insert shape for evidence.screen_runs (migration 0501)."""
+    """Insert shape for evidence.screen_runs (migrations 0501 + 1000)."""
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
@@ -697,6 +705,7 @@ class ScreenRunWrite(BaseModel):
     source_eval_sha256: str
     admissibility_state: str
     inadmissibility_reason: str | None
+    d4_check_state: D4CheckState
     created_at: str
     ingested_at: str
 
@@ -707,6 +716,7 @@ class ScreenRunWrite(BaseModel):
         "source_eval_task_id",
         "source_eval_sha256",
         "admissibility_state",
+        "d4_check_state",
         "created_at",
         "ingested_at",
     )
@@ -714,6 +724,13 @@ class ScreenRunWrite(BaseModel):
     def no_control_chars(cls, v: str, info: object) -> str:
         field_name = getattr(info, "field_name", "field") if info else "field"
         return _check_text(v, field_name)
+
+    @field_validator("d4_check_state")
+    @classmethod
+    def known_d4_check_state(cls, v: str) -> str:
+        if v not in D4_CHECK_STATES:
+            raise ValueError(f"d4_check_state must be one of {sorted(D4_CHECK_STATES)}; got {v!r}")
+        return v
 
     @field_validator("harness_pin_fingerprint", "inadmissibility_reason", mode="before")
     @classmethod
@@ -751,6 +768,22 @@ class ScreenTrialWrite(BaseModel):
         if isinstance(v, str):
             return _check_text(v, info.field_name or "field")
         return v
+
+
+class ScreenRunSupersessionWrite(BaseModel):
+    """Insert shape for evidence.screen_run_supersessions (migration 0900)."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    superseded_screen_run_id: str
+    superseding_screen_run_id: str
+    reason: str
+
+    @field_validator("superseded_screen_run_id", "superseding_screen_run_id", "reason")
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
 
 
 class TaskFrontierObservationWrite(BaseModel):

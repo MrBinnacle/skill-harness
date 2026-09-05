@@ -2,11 +2,28 @@
 
 **Severity:** `WRONG_NUMBER`  
 **Ticket:** #347 (detection); parent #341 item 5  
-**Status:** open — detector landed with strict xfail; decision ticket: #368  
+**Status:** RULED, not yet migrated — detector landed with strict xfail; the estimand
+was ruled on #368 (2026-08-31) and the measured sensitivity is recorded in
+`docs/INVARIANTS.md` §8. The xfails stay until the encodings agree; they are not
+loosened to go green.  
 **Harness:** `tests/test_halfupdate_tie_sensitivity.py`  
 **Report:** this document
 
 ---
+
+## Ruling and where it is recorded (#368, 2026-08-31)
+
+The estimand of record is the **discordant table** (McNemar/sign-test convention).
+Half-update stays as the interim operational heuristic. `docs/INVARIANTS.md` §8
+carries the measured sensitivity, the corrected description of the error, and the
+gate-by-gate result.
+
+One correction from that ruling's own amendment belongs here, because this document's
+framing invited it: **the error is NOT monotone dilution toward 0.5**. A sweep over
+`w, l in [0, 60]`, `t in [1, 80]` found 80,011 grid points where half-update RAISES
+`P(rate > 0.60)` relative to drop-ties. What survives is narrower and measured: zero
+grid points cross the PASS gate that drop-ties keeps below it, and three escape the
+FAIL gate — all to INCONCLUSIVE, never to PASS.
 
 ## Summary
 

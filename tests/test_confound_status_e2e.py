@@ -23,8 +23,6 @@ import json
 import sqlite3
 from pathlib import Path
 
-import pytest
-
 from skill_harness.aggregation import (
     aggregate_skill,
 )
@@ -62,12 +60,27 @@ N_VERDICTS = N_WINS + N_LOSSES
 def _seed_confound_scenario(
     ev: sqlite3.Connection,
     rt: sqlite3.Connection,
+    *,
+    inadmissibility_reason: str = "confounded",
 ) -> None:
     """Seed a scenario where confound events exist for a clause.
 
-    The runner would write verdicts as inadmissible/confounded, so every
-    verdict gets admissibility_state='inadmissible'.  A confound_events
-    row is inserted for the same (run_id, primary_clause_id).
+    Runner-shaped by evidence, not by assumption. Every verdict is written
+    ``admissibility_state='inadmissible'`` AND
+    ``inadmissibility_reason='confounded'``, which is the exact pair
+    ``AblationRunner._snapshot_admissibility`` returns for a confounded
+    comparison. That pairing is pinned independently, against the real runner,
+    by ``tests/ablation/test_runner.py`` (the query asserting
+    ``admissibility_state = 'inadmissible' AND inadmissibility_reason =
+    'confounded'``), so this fixture cannot drift into a shape the runner never
+    produces without that test going red first.
+
+    The reason column was absent here until #366. That omission is why the
+    repair could not simply be verified against this fixture: the engine reads
+    the persisted reason, and a fixture that never wrote one could not exercise
+    it. A ``confound_events`` row is inserted for the same
+    (run_id, primary_clause_id) so the VIEW-exclusion half of the detector is
+    unaffected.
     """
     # Skills
     ev.execute(
@@ -141,10 +154,10 @@ def _seed_confound_scenario(
                 verdict_id, run_id, clause_id, axis, comparison,
                 sample_a_id, sample_b_id, observation, oracle_tier,
                 metric_id, metric_version,
-                admissibility_state, written_at
+                admissibility_state, inadmissibility_reason, written_at
             ) VALUES (
                 ?, ?, ?, ?, 'full_vs_ablated', ?, ?, ?, 1,
-                'verbosity', '1.0.0', 'inadmissible', ?
+                'verbosity', '1.0.0', 'inadmissible', ?, ?
             )""",
             (
                 f"v-conf-{i}",
@@ -154,6 +167,7 @@ def _seed_confound_scenario(
                 f"sa-{i}",
                 f"sb-{i}",
                 obs,
+                inadmissibility_reason,
                 _TS,
             ),
         )
@@ -196,10 +210,13 @@ def _seed_confound_scenario(
 
 
 def _aggregate(
-    evidence_db: sqlite3.Connection, tmp_path: Path
+    evidence_db: sqlite3.Connection,
+    tmp_path: Path,
+    *,
+    inadmissibility_reason: str = "confounded",
 ) -> tuple[SkillReport, sqlite3.Connection]:
     rt = open_runtime(tmp_path / "runtime.db")
-    _seed_confound_scenario(evidence_db, rt)
+    _seed_confound_scenario(evidence_db, rt, inadmissibility_reason=inadmissibility_reason)
     report = aggregate_skill(
         SKILL_ID,
         evidence_conn_ro=evidence_db,
@@ -263,15 +280,6 @@ class TestConfoundStatusE2E:
             if rt is not None:
                 rt.close()
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "finding: docs/findings/confound-status-silent-understatement.md "
-            "(engine all_confounded_flag always false; derive_clause_status "
-            "never returns CONFOUNDED; confounded work understates as "
-            "UNMEASURED(inadmissible))"
-        ),
-    )
     def test_confound_events_produce_confounded_status(
         self, evidence_db: sqlite3.Connection, tmp_path: Path
     ) -> None:
@@ -305,6 +313,48 @@ class TestConfoundStatusE2E:
             assert clause.sub_reason is None, (
                 f"CONFOUNDED status must carry no unmeasured sub_reason; "
                 f"got sub_reason={clause.sub_reason!r}."
+            )
+        finally:
+            if rt is not None:
+                rt.close()
+
+    def test_underpowered_discard_does_not_read_as_confounded(
+        self, evidence_db: sqlite3.Connection, tmp_path: Path
+    ) -> None:
+        """A clause discarded for a NON-confound reason must not report CONFOUNDED.
+
+        Written from a measured survivor, not from foresight. The #366 mutation
+        campaign ran a mutant that counted every inadmissible verdict except
+        `scorer_error` as confounded, and NOTHING killed it: every existing
+        fixture discards for confound, so an engine that ignored the reason
+        entirely looked identical to one that read it.
+
+        That gap matters because the whole point of #366 is naming the cause an
+        operator can act on. An engine that reports `underpowered` work as
+        CONFOUNDED sends them hunting a confound that was never there, which is
+        the same class of defect as the understatement it replaced -- a status
+        asserting something the evidence does not support.
+
+        The verdicts here are seeded `('inadmissible', 'underpowered')`, which
+        `AblationRunner._snapshot_admissibility` returns when the Null
+        accumulator is below the A47 floor. `confound_events` rows are still
+        present, so this also pins that the engine reads the verdict's own
+        reason rather than the presence of a confound event elsewhere.
+        """
+        rt: sqlite3.Connection | None = None
+        try:
+            report, rt = _aggregate(evidence_db, tmp_path, inadmissibility_reason="underpowered")
+            assert len(report.clauses) == 1
+            clause = report.clauses[0]
+            assert clause.status != ClauseStatus.CONFOUNDED, (
+                f"UNDERPOWERED_READS_AS_CONFOUNDED: every verdict for clause "
+                f"{CLAUSE_ID!r} was discarded as 'underpowered', but the status is "
+                f"CONFOUNDED. The engine is counting inadmissible verdicts without "
+                f"reading why they were discarded, so it names a cause the evidence "
+                f"does not support."
+            )
+            assert clause.status == ClauseStatus.UNMEASURED, (
+                f"expected UNMEASURED for a non-confound discard; got {clause.status!r}"
             )
         finally:
             if rt is not None:

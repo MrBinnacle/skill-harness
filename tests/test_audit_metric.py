@@ -142,6 +142,7 @@ def make_sample(
         scorer_name=scorer_name,
         score_value=score,
         invoked_skill=condition == "full",
+        exposed_skill=condition == "full",
         output_text=f"output-{condition}-{epoch}",
         subject_model="openrouter/anthropic/claude-haiku-4.5",
         harness_pin_json=PIN_JSON,

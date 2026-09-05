@@ -2,7 +2,7 @@
 
 **Severity:** `WRONG_NUMBER`
 **Ticket:** #348 (e2e detector); repair: #366
-**Status:** open — detector landed; repair not yet built
+**Status:** RESOLVED 2026-09-01 by #366 — detector landed, repair built, xfail removed
 **Harness:** `tests/test_confound_status_e2e.py`
 **Report:** this document
 **Master seed:** not applicable (deterministic DB seeding, no RNG)
@@ -76,6 +76,38 @@ path.  The engine's `all_confounded_flag` can never be true.
 The admissible VIEW's `affected_clause_id` filtering is an open research
 question (migration 0003 comment) and is not settled by this finding.
 
+### What the fix actually changed (#366, 2026-09-01)
+
+**Option 2 was taken, and it was forced rather than preferred.** `docs/INVARIANTS.md`
+#3 is a locked invariant: `admissibility_state` is a write-time snapshot, never
+recomputed at read time. Option 1 would move the decision out of the runner's
+write path. Deriving evidence-admissibility facts from `confound_events` during
+aggregation is that recomputation. The runner already resolves the question at
+write time and stores the answer in `inadmissibility_reason`, so the engine now
+reads it.
+
+A second defect sat in the flag's own condition and is not described above. It
+required `(total - inadmissible) > 0` -- "some admissible existed" -- which a
+fully confounded clause can never satisfy, because every confounded verdict is
+written inadmissible. The comment above it always stated the intended rule as
+`admissible_count == 0 AND confounded > 0`; the implementation contradicted its
+own comment and made the flag false in precisely the case it existed to detect.
+
+The detector's fixture was also not runner-shaped: it wrote
+`admissibility_state='inadmissible'` while leaving `inadmissibility_reason`
+NULL, a pairing the runner never emits. Corrected in the same change, and
+corroborated rather than assumed -- `tests/ablation/test_runner.py` asserts
+against the REAL runner that a confounded verdict carries
+`admissibility_state = 'inadmissible' AND inadmissibility_reason = 'confounded'`.
+
+A clause mixing confounded and otherwise-inadmissible verdicts now reads
+CONFOUNDED. Naming a cause the operator can act on beats a generic
+`inadmissible` that hides it; `confounded_verdict_count` still travels on the
+report vector for anyone who needs the split.
+
+The admissible VIEW's `affected_clause_id` question stays open. It was not
+touched, and the detector's green half still pins that behaviour.
+
 ---
 
 ## Detection wiring
@@ -98,5 +130,7 @@ question (migration 0003 comment) and is not settled by this finding.
 PYTHONHASHSEED=0 python -m pytest tests/test_confound_status_e2e.py -xvs
 ```
 
-Expected: one passed (primary exclusion pin), one XFAIL (status is
+Before #366: one passed (primary exclusion pin), one XFAIL (status is
 `UNMEASURED(inadmissible)`, not `CONFOUNDED`).
+
+After #366: two passed. The xfail is removed and the assertions are unchanged.

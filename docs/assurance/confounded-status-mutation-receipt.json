@@ -1,0 +1,111 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C1\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176",
+        "tests_collected": 1,
+        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+      },
+      "description": "stop reading the persisted inadmissibility_reason, so CONFOUNDED is unreachable again",
+      "killing_assertions": [
+        "tests/test_confound_status_e2e.py::TestConfoundStatusE2E::test_confound_events_produce_confounded_status"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C1\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "1ca87a4b8e91888e0ac95f3d3fd3667fc2cfe7947a42378b2dc34327b7a07d43",
+        "tests_collected": 1,
+        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+      },
+      "mutant_id": "M-C1",
+      "notes": [],
+      "obligation": "366-reason-read",
+      "selection": [
+        "tests/test_confound_status_e2e.py::TestConfoundStatusE2E::test_confound_events_produce_confounded_status"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C2\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176",
+        "tests_collected": 1,
+        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+      },
+      "description": "invert the survivor gate: fire CONFOUNDED only when admissible work DID survive",
+      "killing_assertions": [
+        "tests/test_confound_status_e2e.py::TestConfoundStatusE2E::test_confound_events_produce_confounded_status"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C2\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "f6df02db54d045f13107eae21e9f9819fed9b47bc886a35f60509d26c4e7c38a",
+        "tests_collected": 1,
+        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+      },
+      "mutant_id": "M-C2",
+      "notes": [],
+      "obligation": "366-flag-condition",
+      "selection": [
+        "tests/test_confound_status_e2e.py::TestConfoundStatusE2E::test_confound_events_produce_confounded_status"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C3\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176",
+        "tests_collected": 2,
+        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+      },
+      "description": "count every inadmissible verdict except scorer_error as confounded, so an underpowered clause reports as confounded",
+      "killing_assertions": [
+        "tests/test_confound_status_e2e.py::TestConfoundStatusE2E::test_underpowered_discard_does_not_read_as_confounded"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C3\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "27522577ab820d9ee848816da2d16ef53b3166af84e6873ed635f07cf9fbe9ba",
+        "tests_collected": 2,
+        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+      },
+      "mutant_id": "M-C3",
+      "notes": [],
+      "obligation": "366-reason-read",
+      "selection": [
+        "tests/test_confound_status_e2e.py::TestConfoundStatusE2E::test_underpowered_discard_does_not_read_as_confounded",
+        "tests/test_confound_status_e2e.py::TestConfoundStatusE2E::test_confound_events_produce_confounded_status"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "src/skill_harness/aggregation/engine.py": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176"
+  },
+  "production_tree_digest_before": {
+    "src/skill_harness/aggregation/engine.py": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.1",
+  "target_digests": {
+    "src/skill_harness/aggregation/engine.py": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176"
+  },
+  "target_files": [
+    "src/skill_harness/aggregation/engine.py"
+  ]
+}

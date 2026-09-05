@@ -60,38 +60,116 @@ and covers that section only. This page stays the citable surface for every kind
 
 ## Findings
 
+### [`docs/findings/gitpull-cost-basis-unregisterable.md`](findings/gitpull-cost-basis-unregisterable.md)
+
+- **Claims:** The rebuilt `gitpull` cost basis `#420` asks for cannot be
+  registered at the design's own `n`. Computed through `project_pair_usd`, the
+  measured run gives $1.10765200 per pair (input 539,011, output 2,963), so
+  n = 32 costs $35.444864 and its rounded-up cap $35.45 breaches the $35.00
+  ceiling DC-12 enforces; since DC-12 also fails a cap below the record's own
+  worst case, the valid interval `[worst_case, 35.00]` is empty at n = 32. The
+  control reproduces `RAT-0001` §6 exactly ($0.72974200 at the registered
+  tokens), so the disagreement is in the tokens and not the arithmetic. The
+  cache-aware alternative has no projector: `project_pair_usd` carries no cache
+  term by design, `project_calibration_cost` models a judge prefix rather than
+  a Gate-2 pair, and DC-9 bans hand arithmetic. The original projection was
+  conservative in dollars and wrong in tokens at once — roughly sevenfold
+  over-priced, 1.524 under-counted — so the cap held for a reason unrelated to
+  the basis being sound.
+- **Refuses to claim:** Any choice among the three paths that would make a
+  record registerable (reduce `n` to 31, raise the $35 ceiling, build a
+  cache-aware pair projector) — the fork is stated and deliberately not taken;
+  that 98.6 percent cache-read share generalises beyond the single run that
+  measured it; that n = 31 preserves power over the registered H1 region (no
+  power recomputation was run); any change to `RAT-0001`'s registered fields;
+  and any figure for a task family other than `gitpull` at this prompt and
+  fixture.
+
 ### [`docs/findings/confound-status-silent-understatement.md`](findings/confound-status-silent-understatement.md)
 
-- **Claims:** CONFOUNDED is unreachable: the runner writes confounded
-  verdicts as `inadmissible`, the admissible VIEW excludes them on state
-  alone, and the engine's `all_confounded_flag` joins confound events
-  against admissible rows only, so it is always false; measured on the
+- **Claims:** CONFOUNDED was unreachable: the runner wrote confounded
+  verdicts as `inadmissible`, the admissible VIEW excluded them on state
+  alone, and the engine's `all_confounded_flag` joined confound events
+  against admissible rows only, so it was always false; measured on the
   detector fixture (status UNMEASURED/inadmissible, `vector.confounded=0`).
-  Primary-confounded rows verifiably never enter aggregation. Repair is
-  #366.
+  Primary-confounded rows verifiably never enter aggregation. RESOLVED by
+  #366: the engine reads the `inadmissibility_reason` the runner already
+  persists, which `docs/INVARIANTS.md` #3 forces by forbidding read-time
+  recomputation of evidence admissibility.
 - **Refuses to claim:** That any historical report understated a confound
-  (no production re-scan was run); which layer is authoritative for the
-  fix (that is #366's design call).
+  (no production re-scan was run); that the admissible VIEW's
+  `affected_clause_id` filtering question is settled (it was not touched);
+  that a clause mixing confounded and otherwise-inadmissible verdicts is
+  wholly confounded — it reads CONFOUNDED, and the split stays available in
+  `confounded_verdict_count`.
 
 ### [`docs/findings/halfupdate-tie-sensitivity.md`](findings/halfupdate-tie-sensitivity.md)
 
 - **Claims:** Under half-update (Tie=0.5, n+=1) the posterior converges to
   Beta(1+w+t/2, 1+l+t/2); measured at w=8, l=0, t=16: P(rate>0.60)=0.726
   (INCONCLUSIVE) where a drop-ties recompute gives 0.990 (PASSED), with
-  posterior-mean shifts up to 0.178. Decision ticket: #368.
-- **Refuses to claim:** Which encoding is the right estimand (that is a
-  pre-registered methodological choice, #368); that any minted production
-  verdict flipped (no re-scan was run).
+  posterior-mean shifts up to 0.178. The estimand was RULED on #368
+  (2026-08-31): the discordant table is the estimand of record, half-update
+  stays as the interim heuristic, and the measured sensitivity is recorded in
+  `docs/INVARIANTS.md` §8.
+- **Refuses to claim:** That the error is monotone dilution toward 0.5 — a
+  sweep found 80,011 grid points where half-update RAISES P(rate>0.60); that
+  the PASS-gate zero holds beyond the swept grid (w, l <= 60, t <= 80); that
+  any minted production verdict flipped (no re-scan was run); that the
+  0.60/0.95/0.05 thresholds transfer to the conditional parameter unexamined.
+
+### [`docs/findings/d4-prompt-leak-into-null-arm.md`](findings/d4-prompt-leak-into-null-arm.md)
+
+- **Claims:** A fourth leak direction, D4 — the task prompt states or points at
+  the rule the skill supplies, so the Null arm is coached. Audited over all
+  eight screen fixtures: 4 LEAK (`gitpull`, `appendonly`, `bayes`, `judgegate`),
+  4 CLEAN (`tiebreak`, `dependabot`, `docx`, `microrun` root). Causation shown
+  by A/B on `gitpull` holding fixture bytes, oracle, epochs and provider fixed
+  and varying only the prompt: `p0` 1.000 (3/3) signposted against 0.000 (0/3)
+  de-leaked. Second, independent ground for voiding the same rows: all four
+  backfilled screens carry pin `2f76c933...` (2026-07-10) where the same
+  `HarnessPin.capture(...)` arguments now produce `706cbaea...`.
+- **Refuses to claim:** That the `git-pull-rebase-trap` skill arm's 1.000 (3/3)
+  against 0.000 (0/3) is a verdict of record — it is unpaired, so it yields no
+  discordant table, carries no registered estimand, ran on
+  `openrouter/anthropic/claude-sonnet-4.5` rather than the pinned subject, and
+  is n=3 per arm (Fisher one-sided p ~ 0.05); that any minted production verdict
+  changed (no re-scan was run); that no pin-currency check exists anywhere in
+  the repository — the supporting grep covers `src/` only and was not run
+  against `tests/`; that the 4 CLEAN fixtures are free of D1/D2/D3, which this
+  audit did not re-judge.
+
+### [`docs/findings/pi-c-detector-blind-to-description-channel.md`](findings/pi-c-detector-blind-to-description-channel.md)
+
+- **Claims:** Paired k=8 on `git-pull-rebase-trap`, one pin both arms
+  (`5324feef...`), de-leaked prompt: discordant epochs x=6 of 8, d-hat 0.75,
+  Jeffreys 95% interval [0.408, 0.944], GO at the pre-stated x >= 5; Null arm
+  0/8. The write-time gate refused the pair with `ZeroInvocationError`: zero
+  Skill tool calls across the Full arm under detector `v1-skill-tool-call`. The
+  trajectories show no Skill call and no `SKILL.md` read in either arm, and a
+  Full arm that merged in 6 of 8 epochs where every Null epoch rebased. The
+  mounted skill acted through its frontmatter description in the skill listing,
+  a channel the detector does not observe. The refusal is correct under the #46
+  contract; the contract does not cover the channel.
+- **Refuses to claim:** That `git-pull-rebase-trap` is KEEP (no admissible
+  store row, no direction field in the registered micro-run template, no sized
+  run); that the subject is the registered direct-Anthropic one (the run used
+  OpenRouter, declared before launch, same route and pin in both arms); that
+  6/8 is the skill's ceiling (two epochs rebased with the description present);
+  that a description-only effect is detectable from a transcript.
 
 ### [`docs/findings/paired-ingest-nan-score-silent-tie.md`](findings/paired-ingest-nan-score-silent-tie.md)
 
-- **Claims:** A NaN `score_value` flows through `_score_to_float` and
-  `_observation` scores it 0.5, recording a missing measurement as a tie;
-  reproduced deterministically (a beneficial pair with one NaN epoch writes
-  observations [0.5, 1.0, 1.0]); repair is #363.
+- **Claims:** A NaN `score_value` flowed through `_score_to_float` and
+  `_observation` scored it 0.5, recording a missing measurement as a tie;
+  reproduced deterministically (a beneficial pair with one NaN epoch wrote
+  observations [0.5, 1.0, 1.0]). RESOLVED by #363 at commit `210ac93`:
+  `ParsedSample.score_value` carries `allow_inf_nan=False` and
+  `_score_to_float` raises on a non-finite value.
 - **Refuses to claim:** That any production `.eval` log has carried a NaN
   score (no historical re-scan was run); that any minted verdict was diluted
-  in practice.
+  in practice; that the repair reaches a caller which constructs neither
+  `ParsedSample` nor calls `_score_to_float`.
 
 ### [`docs/findings/paired-ingest-boundary-undetectables.md`](findings/paired-ingest-boundary-undetectables.md)
 
@@ -460,14 +538,150 @@ The deterministic falsification receipt for the `0.3.0` assurance release gate
   the 0.2.x patch line is in scope for the assurance checks; that the gate is
   tamper-proof rather than blocked-by-default.
 
+### [`docs/assurance/issue-174-bottom-line-receipt.md`](assurance/issue-174-bottom-line-receipt.md)
+
+- **Claims:** The Phase 7 close-out's bottom-line paragraph is published verbatim
+  as a comment on issue #174, at comment id `5496638740`, posted 2026-09-01, with
+  the paragraph digesting to `sha256:5d270dbd`. Before #354 the issue had zero
+  comments and the assertion that checks this skipped in CI for want of a
+  credential, so the close-out claimed a published finding that was not
+  published. A credential-free check now enforces the claim against this receipt.
+- **Refuses to claim:** That the bottom line was published on the close-out date
+  — it was posted sixteen days after issue #174 was closed, and the comment says
+  so; that the original comment ever existed (the timeline carries no
+  `commented` event, and GitHub emits none for a deletion, so both readings
+  survive); that the remote comment is currently intact, which only the
+  credentialed check sees and which does not run in CI; that any figure inside
+  the paragraph is correct — those carry their own receipts listed on this page.
+
+### [`docs/assurance/confounded-status-mutation-receipt.md`](assurance/confounded-status-mutation-receipt.md)
+
+The mutation receipt for the #366 CONFOUNDED repair, generated by
+`scripts/mutation_receipt.py --select 366` into
+[`confounded-status-mutation-receipt.json`](assurance/confounded-status-mutation-receipt.json).
+
+- **Claims:** Three named mutants of `src/skill_harness/aggregation/engine.py`
+  were each run in its own git worktree under Python 3.13.1 against the file at
+  `sha256:c64986c3`, and all three were KILLED by named test nodes: dropping the
+  read of the persisted `inadmissibility_reason`, inverting the survivor gate so
+  CONFOUNDED fires only when admissible work survived, and counting every
+  inadmissible verdict except `scorer_error` as confounded. The third SURVIVED on
+  the first campaign, which measured a fixture monoculture — every fixture
+  discarded for confound, so an engine ignoring the reason looked identical to
+  one reading it — and it is killed here by the test written from that survival.
+  Each case asserted a clean baseline passing first with nonzero collection, the
+  imported `module.__file__` resolving inside its own worktree, differing source
+  digests, a mutant that imports, and a byte-unchanged production tree.
+- **Refuses to claim:** A mutation score — three hand-chosen mutants cannot
+  support one; adequacy of the aggregation suite as a whole; that any historical
+  report understated a confound (no production re-scan was run); that the
+  admissible VIEW's `affected_clause_id` question is settled (untouched); that
+  M-C3 discriminates any reason beyond `confounded` from `underpowered`.
+
+### [`docs/assurance/nan-score-refusal-mutation-receipt.md`](assurance/nan-score-refusal-mutation-receipt.md)
+
+The mutation receipt for the #363 non-finite score refusal, generated by
+`scripts/mutation_receipt.py` into
+[`nan-score-refusal-mutation-receipt.json`](assurance/nan-score-refusal-mutation-receipt.json).
+
+- **Claims:** Three named mutants of `src/skill_harness/subject/ingest.py` were
+  each run in its own git worktree under Python 3.13.1 (first at commit
+  `210ac93`; regenerated 2026-09-01 at `ae9ab3c` after #387 rewrote the module
+  and aligned exposure config_json with the #388 delivery reader; same three
+  kills), and
+  all three were KILLED by named test nodes: removing `allow_inf_nan=False`
+  from `ParsedSample.score_value` (killed by the item 8 paired detector and by
+  the model-layer unit test), disabling the `math.isfinite` guard in
+  `_score_to_float`, and narrowing that guard to NaN so an infinity passes. Each
+  case asserted its clean baseline passed first with nonzero collection, that
+  the imported `module.__file__` resolved inside its own worktree, that the
+  source digests differed, that the mutant imported, and that the production
+  tree was byte-unchanged afterwards.
+- **Refuses to claim:** A mutation score — three hand-chosen mutants cannot
+  support one; adequacy of the test suite as a whole; that a non-finite score
+  has ever appeared in a production `.eval` log (no historical re-scan was run);
+  that a third write path to `oracle_verdicts.observation`, if one exists, is
+  covered.
+
+### [`docs/assurance/exposure-refusal-mutation-receipt.md`](assurance/exposure-refusal-mutation-receipt.md)
+
+The mutation receipt for the two #387 refusal predicates at paired ingest (the
+#384 ruling: treatment = exposure, invocation = stratifier), generated by
+`scripts/mutation_receipt.py --select 387` into
+[`exposure-refusal-mutation-receipt.json`](assurance/exposure-refusal-mutation-receipt.json).
+
+- **Claims:** Two named mutants of `src/skill_harness/subject/ingest.py` were
+  each run in its own git worktree at commit `fb3b91b` under Python 3.13.1
+  against the file at `sha256:1eaefbae`, and both were KILLED by named test
+  nodes: emptying the set behind predicate (a) so an unexposed Full-arm epoch
+  writes, and emptying the channel-(c) half of predicate (b) so an exposed
+  Null-arm epoch writes while the #46 invocation half stays. Each case asserted
+  its clean baseline passed first with two tests collected, that the imported
+  `module.__file__` resolved inside its own worktree, that the source digests
+  differed, that the mutant imported, and that the production tree was
+  byte-unchanged afterwards.
+- **Refuses to claim:** A mutation score — two hand-chosen mutants cannot
+  support one; adequacy of the ingest suite as a whole; anything about the v2
+  exposure detector itself (`detect_skill_exposure`), which the parse-level
+  tests pin and this receipt does not; that the #46 invocation half of
+  predicate (b) is re-attested here (its 0/22 fixture is pinned separately).
+
+### [`docs/assurance/paired-gate2-mutation-receipt.md`](assurance/paired-gate2-mutation-receipt.md)
+
+The mutation receipt for the #389 ratification binding and count-mismatch
+refusal at the paired-lane Gate-2 read surface, generated by
+`scripts/mutation_receipt.py --select 389` into
+[`paired-gate2-mutation-receipt.json`](assurance/paired-gate2-mutation-receipt.json).
+
+- **Claims:** Two named mutants of `src/skill_harness/cli/paired_gate2.py`
+  were each run in its own git worktree at commit `be86b77` under Python
+  3.13.15 against the file at `sha256:8abfb41b`, and both were KILLED by named
+  test nodes: forcing `record.status != "RATIFIED"` to false so a DRAFT record
+  is accepted (killed by `test_draft_record_refused`), and forcing
+  `total_pairs != design.n_pairs` to false so k=8 pairs are read against an
+  n=32 design (killed by `test_pilot_k8_vs_design_n32`). Each case asserted
+  its clean baseline passed first with one test collected, that the imported
+  `module.__file__` resolved inside its own worktree, that the source digests
+  differed, that the mutant imported, and that the production tree was
+  byte-unchanged afterwards. Regenerated 2026-09-03 for #421 after `be86b77`
+  added the `#403`-amendment hazard refusal to the same module; the two `#389`
+  anchors were still present and both kills held. The hazard refusal itself is
+  pinned by `TestHazardNotRecorded`, `TestHazardNotMet` and
+  `TestHazardPositivePath` and is not a mutant in this receipt.
+- **Refuses to claim:** A mutation score — two hand-chosen mutants cannot
+  support one; adequacy of the paired Gate-2 test suite as a whole; that the
+  ratification-record field-mismatch path is covered here (covered by
+  `TestMissingDesignFields` and `TestSkillIdMismatch` in
+  `test_cli_paired_gate2.py`); that every CLI output format is tested here
+  (formatting is pinned by the tests in `test_cli_paired_gate2.py`).
+
 ---
 
 ## Ratifications
 
 Forward-looking `RAT-*.md` records bind pre-spend ablation launches (see
-[`docs/ratifications/README.md`](ratifications/README.md)). **None are on disk
-yet** — the completeness glob is `docs/ratifications/RAT-*.md`, so the first
-ratification file must gain an entry here in the same change.
+[`docs/ratifications/README.md`](ratifications/README.md)). The completeness glob is
+`docs/ratifications/RAT-*.md`; every record gains an entry here in the same change.
+
+### [`docs/ratifications/RAT-0001-git-pull-rebase-trap.md`](ratifications/RAT-0001-git-pull-rebase-trap.md)
+
+- **Claims:** DRAFT, unsigned. The Gate-2 row-pick for one sized paired run of
+  `git-pull-rebase-trap`, copied field for field from Amendment 4 of the v0.2
+  pre-registration (commit `9264b04`): `gamma = 0.90`, `delta_min = 0.20`,
+  `q_min = 0.70`, `n = 32`, `alpha[cert] = 0.0161`, power `0.826` at the binding
+  H1 point; worst-case cost $23.351744 from `project_pair_usd` at `claude-sonnet-5`
+  list price on the 2026-09-01 calibrated tokens per pair, `hard_cap_usd = 23.36`
+  rounded up to the cent; self-certified with the verbatim disclosure line and
+  the 21-day expiry arithmetic (expires 2026-09-22). The only act left in it is
+  the operator's signature, and that act is a spend authorization of up to
+  $23.36, stated in one sentence in section 9.
+- **Refuses to claim:** That any spend is authorized while the status line reads
+  DRAFT (the gate refuses it by construction, mutant M-R1); that the row is the
+  cheapest conforming one (that is `gamma = 0.85, n = 26` at $18.97, recorded and
+  not chosen); that the pre-spend token re-measurement will hold (if tokens per
+  pair re-measure above about 470k the row breaches the cap and the run does not
+  launch); that the SME branch was deliberated (it was not; the #45 clock never
+  started).
 
 ---
 
@@ -497,7 +711,15 @@ Verdict and sub-reason strings use the
 - **Refuses to claim:** `CUT` with `cut_sub_reason=subsumed`; a transformative
   lift measurement; standing/fired token costs (not_instrumented).
 
-### [`docs/sers/receipts/reclass-git-pull-rebase-trap.json`](sers/receipts/reclass-git-pull-rebase-trap.json)
+### [`docs/sers/receipts/superseded/reclass-git-pull-rebase-trap.json`](sers/receipts/superseded/reclass-git-pull-rebase-trap.json)
+
+- **Superseded 2026-09-01** by `gitpull-paired-k8-2026-09-01.json`, itself
+  superseded 2026-09-02 by
+  [`gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/superseded/gitpull-paired-k8-2026-09-01-detector-v2.json).
+  The site publishes one receipt per skill and refuses to choose between two,
+  so the older receipt moved out of the published directory and stays in the
+  tree unedited. Its `p0=1.00` screen row is D4-voided: the prompt it ran on
+  named the skill's rule (`docs/findings/d4-prompt-leak-into-null-arm.md`).
 
 - **Claims:** `verdict=CANT_TELL_YET`, `cut_sub_reason=null`,
   `unmeasured_sub_reason=null`; `value_class=trap-discipline`;
@@ -514,6 +736,76 @@ Verdict and sub-reason strings use the
 - **Refuses to claim:** A production-skill KEEP; that any real library skill has
   cleared the full keep lane; standing cost as part of the KEEP claim
   (not_instrumented).
+
+### [`docs/sers/receipts/superseded/gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/superseded/gitpull-paired-k8-2026-09-01-detector-v2.json)
+
+- **Superseded 2026-09-03** by
+  [`gitpull-paired-n32-2026-09-03-sized.json`](sers/receipts/gitpull-paired-n32-2026-09-03-sized.json).
+  The site publishes one receipt per skill; the file moved out of the
+  published directory unedited and stays the GO datum the sized run was
+  sized on.
+- **Claims:** `verdict=CANT_TELL_YET`, `cut_sub_reason=null`,
+  `unmeasured_sub_reason=underpowered`; `value_class=trap-discipline`;
+  `wrong_instrument=false`; `sers_version=1.2.0` with a `delivery` block;
+  evidence admissibility **admissible** — the same 2026-09-01 pair re-ingested
+  under detector v2 (#387) as run `0cc7fce87e70`, 8 samples per arm, one pin
+  (`5324feef...`) across both arms. `delivery.channel=description_only`:
+  description exposure 8/8 in the Full arm and 0/8 in the Null arm, Skill tool
+  invocations 0/8 (\(\hat\pi_c = 0.00\), 95% CI \([0.000, 0.369]\)). Paired
+  cells full_only=6, null_only=0, both_pass=0, both_fail=2. Measurements carried
+  forward unchanged from the superseded receipt: `null_pass_rate` 0/8,
+  `discordance_rate` 6/8 with the Jeffreys interval in `detail`, `go_nogo=GO`.
+  Supersedes `superseded/gitpull-paired-k8-2026-09-01.json`, whose
+  `inadmissible` status was an instrument defect and not a property of the
+  evidence.
+- **Refuses to claim:** `KEEP` — k=8 is a Stage-1 micro-run and a GO datum for
+  the sized run, which is why the sub-reason is `underpowered`; a win direction
+  (withheld per the registered micro-run template); a Gate-2 verdict — the #389
+  paired-lane read binds to a RATIFIED design record and `docs/ratifications/`
+  holds none, so no read was performed against this run; the registered
+  direct-Anthropic subject (ran on OpenRouter); standing or fired token costs
+  (not_instrumented / not_applicable, the body never loaded).
+
+### [`docs/sers/receipts/gitpull-paired-n32-2026-09-03-sized.json`](sers/receipts/gitpull-paired-n32-2026-09-03-sized.json)
+
+- **Claims:** `verdict=CANT_TELL_YET`, `cut_sub_reason=null`,
+  `unmeasured_sub_reason=null`; `value_class=trap-discipline`;
+  `wrong_instrument=false`; `sers_version=1.2.0`; evidence admissibility
+  **admissible** under the 0.4.1 oracle metric identity — run `0700d089…`,
+  n=32 both arms. Lattice `both_pass=32, full_only=0, null_only=0,
+  both_fail=0`; signed delta 0.000, 95% CI [-0.107, 0.107]; `pi_c` 24/32 =
+  0.75, 95% CI [0.566, 0.885]. `delivery.channel=body_and_description`;
+  exposure 32/32; `go_nogo=NOT_APPLICABLE` (RAT-0001 registers no GO/NO-GO
+  gate).
+- **Refuses to claim:** `KEEP` or `CUT`; that the trap was avoided — 0 of 32
+  Null epochs and 0 of 32 Full epochs ran the hazard action, so the run
+  carries no information about the trap-discipline estimand under the #403
+  ruling of 2026-09-03; standing, fired, or aux token costs
+  (not_instrumented).
+
+### [`docs/sers/receipts/superseded/gitpull-paired-k8-2026-09-01.json`](sers/receipts/superseded/gitpull-paired-k8-2026-09-01.json)
+
+- **Superseded 2026-09-02** by
+  [`gitpull-paired-k8-2026-09-01-detector-v2.json`](sers/receipts/superseded/gitpull-paired-k8-2026-09-01-detector-v2.json).
+  It recorded the same measurements as **inadmissible** because detector v1
+  observed only Skill tool calls and could not see the description channel the
+  effect arrived through. The #384 ruling made exposure the treatment and pi_c a
+  stratifier; the pair then ingested without refusal. The file moved out of the
+  published directory unedited.
+
+- **Claims:** `verdict=CANT_TELL_YET`, `cut_sub_reason=null`,
+  `unmeasured_sub_reason=inadmissible`; `value_class=trap-discipline`;
+  `wrong_instrument=true`; `sers_version=1.1.0` with a live-minted
+  `subject_identity`; `null_pass_rate` 0/8, `discordance_rate` 6/8 with the
+  Jeffreys interval in `detail`, `go_nogo=GO`; evidence admissibility
+  `inadmissible` on `ZeroInvocationError` (zero detected invocations, detector
+  v1). Source prose: the description-channel finding above. Supersedes
+  `superseded/reclass-git-pull-rebase-trap.json` (2026-07-20), whose screen row
+  is D4-voided.
+- **Refuses to claim:** `KEEP`; a win direction (withheld per the registered
+  micro-run template); the registered direct-Anthropic subject (ran on
+  OpenRouter); standing or fired token costs (not_instrumented /
+  not_applicable, the body never loaded).
 
 ---
 

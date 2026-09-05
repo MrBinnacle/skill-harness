@@ -29,7 +29,8 @@ checked against the code enums in CI.
 ### `sers_version`
 
 Vocabulary generation of the receipt. Receipts that disagree on
-`sers_version` are not comparable. Supported values: `"1.0.0"`, `"1.1.0"`.
+`sers_version` are not comparable. Supported values: `"1.0.0"`, `"1.1.0"`,
+`"1.2.0"`, `"1.3.0"`.
 
 ### `skill_name`
 
@@ -92,11 +93,33 @@ Skill value kind. Members mirror `ValueClass`:
 | `calibration` | Makes a measurement trustworthy; same wrong-instrument rule as trap-discipline. |
 | `null` | Unclassified — guard defaults to withhold `CUT`. |
 
+### `outcome_type`
+
+Scoring-oracle kind the record authorises (#424). Members mirror the
+registered set in `ratification.py`:
+
+| Value | Meaning |
+| --- | --- |
+| `pass_fail` | Legacy conjunction oracle (Full pass AND Null fail). |
+| `invariant` | Split oracle: invariant_oracle (I) + completion_oracle (C). |
+
+`null` on `pass_fail` records (absent from the record). Required for
+trap-discipline; refused by name when absent.
+
 ### `wrong_instrument`
 
 Optional boolean. `true` when a path **withheld** a `CUT` because
-`value_class` is not `transformative-lift`. Routes the cell to the
-field-evidence lane. Never `true` on a `KEEP` or `CUT`.
+`value_class` is not `transformative-lift`. Never `true` on a `KEEP` or `CUT`.
+
+**The field-evidence lane this flag names is UNBUILT.** It was deferred on
+2026-09-02 under [#335](https://github.com/MrBinnacle/skill-harness/issues/335)
+rather than built, because a lane whose only members are wrong-instrument
+withholds needs the false-green outcome variable defined first, and that
+variable does not exist
+([#403](https://github.com/MrBinnacle/skill-harness/issues/403)). Nothing in this
+repository consumes `wrong_instrument` today. Read it as a recorded reason for
+a withheld verdict, not as a pointer to a destination. Receipts minted before that date carry summary text promising the
+lane; they are append-only evidence and are not rewritten.
 
 ### `declared_synthetic_control`
 
@@ -132,6 +155,42 @@ Each leg is either `{ "tokens": <non-negative int> }` or
 `{ "refusal": "unmeasured" | "not_applicable" | "not_instrumented", ... }`.
 A missing leg, a negative count, or a free-typed excuse is non-conforming.
 
+### `delivery` (required from `sers_version` 1.2.0)
+
+Value-delivery attribution: which of the skill's two products carried the
+measured value. Required when `sers_version` is `1.2.0`; absent on `1.0.0`
+and `1.1.0` receipts.
+
+The delivery block carries three required fields:
+
+| Field | Shape | Meaning |
+| --- | --- | --- |
+| `channel` | enum: `description_only`, `body_and_description`, `not_instrumented` | Which product carried the value. |
+| `exposure` | `{ "value": 0..1, "passes"?, "epochs"? }` or refusal | Exposure rate in the treated arm. |
+| `pi_c` | `{ "invocations", "trials", "hat", "ci_low", "ci_high", "confidence", "detector" }` or refusal | Invocation rate with Clopper-Pearson interval. |
+
+The receipt field is `hat`. Ingest's `config_json` records the same figure as
+`pi_c_hat`; the mint path renames on read and does not recompute.
+
+Channel vocabulary:
+
+| Value | Meaning |
+| --- | --- |
+| `description_only` | The standing description was read; the body was never loaded (`pi_c.hat = 0` with full exposure). |
+| `body_and_description` | Invocations are present; the body was read in addition to the description. |
+| `not_instrumented` | Receipts minted before detector v2; no delivery measurement available. |
+
+Cross-field rules:
+- `channel: description_only` requires `pi_c.hat == 0` (or `pi_c` as a refusal).
+- `channel: body_and_description` requires `pi_c.invocations > 0` (or `pi_c` as a refusal).
+
+Each sub-block (`exposure`, `pi_c`) is either a measured object or a typed
+refusal — never a null number. The refusal vocabulary is
+`"not_instrumented" | "not_applicable"`.
+
+The receipt minting path reads `pi_c` and `exposure` from the run's
+`config_json` and never recomputes them.
+
 ### `instrument_identity`
 
 Generation stamp so any figure carries the generation that produced it.
@@ -157,6 +216,18 @@ either `{ "value": 0..1, "passes"?, "epochs"?, "detail"? }` or
 `go_nogo` is the pre-stated apparatus gate when one was registered
 (`GO` / `NO_GO` / `NOT_APPLICABLE`).
 
+New in 1.3.0 — trap-discipline measurement keys (#424):
+
+| Field | Meaning |
+| --- | --- |
+| `hazard_entry_null` | Null-arm hazard-entry rate: fraction of Null epochs where the hazard pattern was entered. |
+| `hazard_entry_full` | Full-arm hazard-entry rate: fraction of Full epochs where the hazard pattern was entered. |
+| `null_completion_rate` | Null-arm completion rate: fraction of Null epochs where the completion oracle scored pass. |
+| `full_completion_rate` | Full-arm completion rate: fraction of Full epochs where the completion oracle scored pass. |
+| `silent_violation_rate` | Silent violation rate: fraction of epochs where completion held but invariant failed (C=1, I=0). |
+
+Each is a `rate_or_refusal`. Absent on 1.2.0 and earlier receipts.
+
 ### `source`
 
 Pointer at the prose source of record.
@@ -178,8 +249,9 @@ from `measurements` / `cost`.
 ### `subject_identity` (required from `sers_version` 1.1.0)
 
 Provenance block identifying the subject under test. Absent on 1.0.0
-hand-encoded receipts; required when `sers_version` is `1.1.0`. Populate via
-`skill_harness.sers.build_subject_identity` — do not free-type the fields.
+hand-encoded receipts; required when `sers_version` is `1.1.0` or `1.2.0`.
+Populate via `skill_harness.sers.build_subject_identity` — do not free-type
+the fields.
 
 | Field | Meaning |
 | --- | --- |
@@ -211,7 +283,10 @@ The harness asserts:
 | `synthetic-control-keep-2026-07-27.json` | `KEEP` (declared synthetic control) | `README.md` / `docs/FAQ.md` |
 | `double-ceiling-nogo-2026-07-09.json` | `CANT_TELL_YET` (NO-GO / structurally unmeasured) | `docs/case-studies/double-ceiling-structurally-unmeasured.md` |
 | `reclass-append-only-evidence-design.json` | `CANT_TELL_YET` (wrong instrument, calibration) | `README.md` + `docs/observations/OBS-0005-*.md` |
-| `reclass-git-pull-rebase-trap.json` | `CANT_TELL_YET` (wrong instrument, trap-discipline) | `README.md` |
+| `gitpull-paired-n32-2026-09-03-sized.json` | `CANT_TELL_YET` (unresolved, trap-discipline; sized paired run n=32 under RAT-0001; the Null arm never met the hazard, `delivery.channel=body_and_description`) | `docs/ratifications/RAT-0001-git-pull-rebase-trap.md` |
+| `superseded/gitpull-paired-k8-2026-09-01-detector-v2.json` | `CANT_TELL_YET` (underpowered, trap-discipline; admissible under detector v2; paired k=8, GO on discordance, `delivery.channel=description_only`); superseded 2026-09-03 by the sized-run receipt; it stays the GO datum that run was sized on | `docs/findings/pi-c-detector-blind-to-description-channel.md` |
+| `superseded/gitpull-paired-k8-2026-09-01.json` | `CANT_TELL_YET` (inadmissible, wrong instrument, trap-discipline; refused at write time on zero detected invocations under detector v1); superseded 2026-09-02 | `docs/findings/pi-c-detector-blind-to-description-channel.md` |
+| `superseded/reclass-git-pull-rebase-trap.json` | `CANT_TELL_YET` (wrong instrument, trap-discipline); superseded 2026-09-01, screen row D4-voided | `README.md` |
 
 A 1.1.0 mint of the synthetic-control KEEP (same measurements, harness-populated
 `subject_identity`) lives at

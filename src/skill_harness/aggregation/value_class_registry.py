@@ -1,4 +1,4 @@
-"""Per-skill ``value_class`` registration — the classify-the-11 source (#77).
+"""Per-skill ``value_class`` registration — the portfolio classification source (#77).
 
 The screen instrument (``screen_verdict``) measures TRANSFORMATIVE LIFT only. Its
 ``p0 above the bar → CUT(subsumed)`` mapping is a category error for any skill whose
@@ -20,18 +20,14 @@ pre-registry historical screens with ``scope = None``; #41 bans retrofitting any
 onto them. ``value_class`` is therefore an independent registration keyed by skill
 name, exactly as ``ValueClass``'s docstring requires.
 
-Classification of the real portfolio (S172 operator classification, recorded #77):
-
-  transformative-lift : 0   — the screen instrument has zero current customers.
-  calibration         : 3   — evaluation/measurement-soundness skills.
-  trap-discipline     : 8   — point-guards against a specific wrong action.
-
 The empty transformative-lift class TRIPS the signed S2-kill criterion (the F6
 sign-off, S166): ship the classification + CAN'T-TELL-YET/field surface, do NOT
 build the S3 board apparatus for zero customers.
 
 A skill_name absent from this map resolves to ``None`` (unclassified) → the guard's
-honest default (CAN'T-TELL-YET, never a false CUT). All 11 portfolio skills are present.
+honest default (CAN'T-TELL-YET, never a false CUT). The map is measured by
+``tests/test_value_class_registry.py`` against a pinned list of
+``(skill_name, value_class, retired_on)`` triples (#422).
 """
 
 from __future__ import annotations
@@ -43,22 +39,23 @@ from skill_harness.aggregation.verdict import ValueClass
 # ---------------------------------------------------------------------------
 
 SKILL_VALUE_CLASS: dict[str, ValueClass] = {
-    # --- calibration (3): make a measurement/evaluation trustworthy -----------
+    # --- calibration: make a measurement/evaluation trustworthy ---------------
     "bayesian-eval-discipline": ValueClass.CALIBRATION,
     "llm-judge-calibration": ValueClass.CALIBRATION,
     "append-only-evidence-design": ValueClass.CALIBRATION,
-    # --- trap-discipline (8): guard against one specific wrong action ---------
+    # --- trap-discipline: guard against one specific wrong action -------------
     "git-pull-rebase-trap": ValueClass.TRAP_DISCIPLINE,
-    "sqlite-tie-break-red-test-trap": ValueClass.TRAP_DISCIPLINE,
+    "sqlite-tie-break-red-test-trap": ValueClass.TRAP_DISCIPLINE,  # retired 2026-07-10; RETIRED.md
     "github-pages-deploy-verification": ValueClass.TRAP_DISCIPLINE,
     "subagent-research-reliability": ValueClass.TRAP_DISCIPLINE,
     "downstream-instruction-framing": ValueClass.TRAP_DISCIPLINE,
     "closure-mode-at-boundaries": ValueClass.TRAP_DISCIPLINE,
-    "skill-necessity-gate": ValueClass.TRAP_DISCIPLINE,
+    "skill-necessity-gate": ValueClass.TRAP_DISCIPLINE,  # retired 2026-08-31; RETIRED.md
     "parallel-review-disposition-schema": ValueClass.TRAP_DISCIPLINE,
-    # --- transformative-lift (0): intentionally empty (S2-kill fires) ---------
+    "mock-masked-stub-trap": ValueClass.TRAP_DISCIPLINE,
+    # --- transformative-lift: intentionally empty (S2-kill fires) -------------
 }
-"""The 11-skill portfolio classification. transformative-lift is deliberately empty:
+"""The portfolio classification. transformative-lift is deliberately empty:
 no current skill is one the transformative-lift screen can validly CUT. Adjust a
 single entry to reclassify a skill — the operator owns the value call; this is the
 recorded default."""

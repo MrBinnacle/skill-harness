@@ -21,7 +21,7 @@
   "properties": {
     "sers_version": {
       "type": "string",
-      "enum": ["1.0.0", "1.1.0"],
+      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0"],
       "description": "SERS vocabulary generation. Receipts from different sers_version values are not comparable."
     },
     "skill_name": {
@@ -58,6 +58,11 @@
       "type": ["string", "null"],
       "enum": ["transformative-lift", "trap-discipline", "calibration", null],
       "description": "Skill value kind. Screen-path CUT(subsumed) is valid only for transformative-lift; other classes route above-bar p0 to CANT_TELL_YET (wrong instrument). null = unclassified."
+    },
+    "outcome_type": {
+      "type": ["string", "null"],
+      "enum": ["pass_fail", "invariant", null],
+      "description": "The scoring-oracle kind the record authorises. pass_fail = legacy conjunction oracle; invariant = split invariant + completion oracle. Required for trap-discipline; null on pass_fail records."
     },
     "wrong_instrument": {
       "type": "boolean",
@@ -147,6 +152,26 @@
           "type": "string",
           "enum": ["GO", "NO_GO", "NOT_APPLICABLE"],
           "description": "Pre-stated GO/NO-GO apparatus gate when one was registered."
+        },
+        "hazard_entry_null": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Null-arm hazard-entry rate: the fraction of Null epochs where the hazard pattern was entered."
+        },
+        "hazard_entry_full": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Full-arm hazard-entry rate: the fraction of Full epochs where the hazard pattern was entered."
+        },
+        "null_completion_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Null-arm completion rate: the fraction of Null epochs where the completion oracle scored pass."
+        },
+        "full_completion_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Full-arm completion rate: the fraction of Full epochs where the completion oracle scored pass."
+        },
+        "silent_violation_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Silent violation rate: the fraction of epochs where completion held but invariant failed (C=1, I=0)."
         }
       }
     },
@@ -215,6 +240,112 @@
           "description": "Which arms ran: 'null', 'full', or both."
         }
       }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Value-delivery attribution: which of the skill's two products (description or body) carried the measured value. Required from sers_version 1.2.0 onward; absent on 1.0.0 and 1.1.0 receipts.",
+      "required": ["channel", "exposure", "pi_c"],
+      "properties": {
+        "exposure": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["value"],
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "passes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "epochs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["refusal"],
+              "properties": {
+                "refusal": {
+                  "type": "string",
+                  "enum": ["not_instrumented", "not_applicable"]
+                },
+                "detail": { "type": "string" }
+              }
+            }
+          ],
+          "description": "Exposure rate in the treated arm: the fraction of epochs where the skill's description was present in the agent's context (the treatment under #384). Distinct from pi_c (invocation / body load). 'value' is the rate; 'passes' and 'epochs' are optional counts."
+        },
+        "pi_c": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["invocations", "trials", "hat", "ci_low", "ci_high", "confidence", "detector"],
+              "properties": {
+                "invocations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "trials": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "hat": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "ci_low": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "ci_high": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "confidence": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "exclusiveMaximum": 1
+                },
+                "detector": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["refusal"],
+              "properties": {
+                "refusal": {
+                  "type": "string",
+                  "enum": ["not_instrumented", "not_applicable"]
+                },
+                "detail": { "type": "string" }
+              }
+            }
+          ],
+          "description": "Invocation rate over the treated (Full) arm with Clopper-Pearson interval. 'hat' is the point estimate; 'ci_low' and 'ci_high' bound the interval. 'detector' names the versioned detector that produced the invocations count."
+        },
+        "channel": {
+          "type": "string",
+          "enum": ["description_only", "body_and_description", "not_instrumented"],
+          "description": "Which of the skill's two products carried the measured value. 'description_only' = the standing description line was read but the body was never loaded (pi_c = 0 with full exposure); 'body_and_description' = invocations are present so the body was read; 'not_instrumented' = receipts minted before detector v2."
+        }
+      }
     }
   },
   "allOf": [
@@ -250,6 +381,90 @@
       },
       "then": {
         "required": ["subject_identity"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.2.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.3.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "delivery": {
+            "properties": { "channel": { "const": "description_only" } },
+            "required": ["channel"]
+          }
+        },
+        "required": ["delivery"]
+      },
+      "then": {
+        "properties": {
+          "delivery": {
+            "properties": {
+              "pi_c": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": { "hat": { "const": 0 } },
+                    "required": ["hat"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": { "refusal": { "type": "string" } },
+                    "required": ["refusal"]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "delivery": {
+            "properties": { "channel": { "const": "body_and_description" } },
+            "required": ["channel"]
+          }
+        },
+        "required": ["delivery"]
+      },
+      "then": {
+        "properties": {
+          "delivery": {
+            "properties": {
+              "pi_c": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": { "invocations": { "type": "integer", "minimum": 1 } },
+                    "required": ["invocations"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": { "refusal": { "type": "string" } },
+                    "required": ["refusal"]
+                  }
+                ]
+              }
+            }
+          }
+        }
       }
     }
   ],

@@ -166,7 +166,11 @@ class RatRecord(BaseModel):
 
     Only the load-bearing fields are mirrored (#47: the full eleven-field
     checklist lives as prose in the record body; the front-matter carries
-    exactly what the gate and DC-12 consume mechanically).
+    exactly what the gate and DC-12 consume mechanically).  Gate-2 records
+    may additionally carry the dual-MME and gamma fields that the paired-lane
+    Gate-2 read uses to reconstruct the registered design. Those knobs have
+    no defaults here: a missing value stays None, and the reader refuses by
+    name rather than authoring the Amendment-4 recommended row at parse time.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
@@ -183,6 +187,38 @@ class RatRecord(BaseModel):
     cost_provenance: str
     sme_status: str
     ratified_date: str
+    gamma: float | None = None
+    delta_min: float | None = None
+    q_min: float | None = None
+    #: #421: the hazard action pattern the trap-discipline read matches against
+    #: every bash tool-call command in an epoch. Registered on the record the way
+    #: the oracle knobs are, so a later run cannot quietly change what "entered"
+    #: means. Optional alone only when both hazard fields are absent (a record
+    #: that predates them); when either is present both are required together.
+    hazard_action: str | None = None
+    #: #421: the minimum Null-arm hazard-entry rate a trap-discipline read will
+    #: accept. Half-open (0, 1]. Must be >= delta_min when delta_min is set: a
+    #: floor below the minimum detectable effect cannot certify BENEFIT. Paired
+    #: with hazard_action — one without the other is refused at parse.
+    hazard_floor: float | None = None
+    #: #421: the subject model the pilot ran, so a sized run on a different
+    #: subject cannot launch silently. Optional at parse time (existing records
+    #: without it still parse); required at every preflight_sized_run call
+    #: (refuses by name when missing — not gated on evidence_db).
+    pilot_subject_model: str | None = None
+    #: #421: a dated block waiving a pilot_subject_model / priced-subject
+    #: mismatch. Present iff pilot_subject_model differs from the priced subject
+    #: and the transfer is authorised. Names the reason and the measurement.
+    subject_change_waiver: dict[str, str] | None = None
+    #: #424: the scoring-oracle kind the record authorises. ``pass_fail`` is the
+    #: legacy conjunction oracle (Full pass AND Null fail); ``invariant`` is the
+    #: split oracle (invariant_oracle I + completion_oracle C). Required for
+    #: trap-discipline; absent on pass_fail records.
+    outcome_type: str | None = None
+    #: #424: the completion-rate margin the decision rule compares against.
+    #: ``delta_min`` when absent — the minimum detectable effect the record
+    #: already registered, so the completion margin inherits the same bar.
+    completion_margin: float | None = None
 
 
 def _cents(usd: float) -> int:
@@ -263,6 +299,137 @@ def parse_rat_record(path: Path) -> RatRecord:
             f"disclosure line {DISCLOSURE_LINE!r} (#45 via #47)"
         )
 
+    gamma_value: float | None = None
+    gamma_raw = fields.get("gamma")
+    if gamma_raw is not None:
+        if isinstance(gamma_raw, bool) or not isinstance(gamma_raw, (int, float)):
+            raise RatificationError(f"{path.name}: field 'gamma' must be numeric")
+        gamma_value = float(gamma_raw)
+        if not 0.5 < gamma_value < 1.0:
+            raise RatificationError(f"{path.name}: gamma must lie in (0.5, 1); got {gamma_value}")
+    delta_min_value: float | None = None
+    delta_min_raw = fields.get("delta_min")
+    if delta_min_raw is not None:
+        if isinstance(delta_min_raw, bool) or not isinstance(delta_min_raw, (int, float)):
+            raise RatificationError(f"{path.name}: field 'delta_min' must be numeric")
+        delta_min_value = float(delta_min_raw)
+        if not 0.0 < delta_min_value < 1.0:
+            raise RatificationError(
+                f"{path.name}: delta_min must lie in (0, 1); got {delta_min_value}"
+            )
+    q_min_value: float | None = None
+    q_min_raw = fields.get("q_min")
+    if q_min_raw is not None:
+        if isinstance(q_min_raw, bool) or not isinstance(q_min_raw, (int, float)):
+            raise RatificationError(f"{path.name}: field 'q_min' must be numeric")
+        q_min_value = float(q_min_raw)
+        if not 0.5 < q_min_value < 1.0:
+            raise RatificationError(f"{path.name}: q_min must lie in (0.5, 1); got {q_min_value}")
+
+    # #421: hazard_action + hazard_floor — required together when either is
+    # present. hazard_action is a regex matched against bash tool-call commands;
+    # hazard_floor is the minimum Null-arm entry rate a trap-discipline read
+    # accepts. A record without both predates the fields.
+    hazard_action_value: str | None = None
+    hazard_action_raw = fields.get("hazard_action")
+    if hazard_action_raw is not None:
+        if not isinstance(hazard_action_raw, str) or not hazard_action_raw.strip():
+            raise RatificationError(
+                f"{path.name}: field 'hazard_action' must be a non-empty string"
+            )
+        try:
+            re.compile(hazard_action_raw)
+        except re.error as exc:
+            raise RatificationError(
+                f"{path.name}: field 'hazard_action' is not a valid regular expression: {exc}"
+            ) from exc
+        hazard_action_value = hazard_action_raw
+
+    hazard_floor_value: float | None = None
+    hazard_floor_raw = fields.get("hazard_floor")
+    if hazard_floor_raw is not None:
+        if isinstance(hazard_floor_raw, bool) or not isinstance(hazard_floor_raw, (int, float)):
+            raise RatificationError(f"{path.name}: field 'hazard_floor' must be numeric")
+        hazard_floor_value = float(hazard_floor_raw)
+        if not 0.0 < hazard_floor_value <= 1.0:
+            raise RatificationError(
+                f"{path.name}: hazard_floor must lie in (0, 1]; got {hazard_floor_value}"
+            )
+
+    if (hazard_action_value is None) ^ (hazard_floor_value is None):
+        present = "hazard_action" if hazard_action_value is not None else "hazard_floor"
+        missing = "hazard_floor" if hazard_action_value is not None else "hazard_action"
+        raise RatificationError(
+            f"{path.name}: field {present!r} is set but {missing!r} is missing; "
+            f"hazard_action and hazard_floor are required together (#421)"
+        )
+    if (
+        hazard_floor_value is not None
+        and delta_min_value is not None
+        and hazard_floor_value < delta_min_value
+    ):
+        raise RatificationError(
+            f"{path.name}: hazard_floor {hazard_floor_value} is below delta_min "
+            f"{delta_min_value}; a floor below the minimum detectable effect "
+            f"cannot certify BENEFIT (#421)"
+        )
+
+    # #421: pilot_subject_model — the subject the pilot ran, so a sized run on
+    # a different subject cannot launch silently. Optional at parse time;
+    # preflight_sized_run refuses by name when it is missing.
+    pilot_subject_model_value: str | None = None
+    pilot_subject_model_raw = fields.get("pilot_subject_model")
+    if pilot_subject_model_raw is not None:
+        if not isinstance(pilot_subject_model_raw, str) or not pilot_subject_model_raw.strip():
+            raise RatificationError(
+                f"{path.name}: field 'pilot_subject_model' must be a non-empty string"
+            )
+        pilot_subject_model_value = pilot_subject_model_raw
+
+    # #421: subject_change_waiver — a dated block authorising a
+    # pilot_subject_model / priced-subject mismatch. A nested front-matter block.
+    subject_change_waiver_value: dict[str, str] | None = None
+    subject_change_waiver_raw = fields.get("subject_change_waiver")
+    if subject_change_waiver_raw is not None:
+        if not isinstance(subject_change_waiver_raw, dict):
+            raise RatificationError(
+                f"{path.name}: field 'subject_change_waiver' must be a nested block"
+            )
+        subject_change_waiver_value = {str(k): str(v) for k, v in subject_change_waiver_raw.items()}
+
+    # #424: outcome_type — the scoring-oracle kind the record authorises.
+    # ``pass_fail`` is the legacy conjunction oracle; ``invariant`` is the
+    # split oracle (invariant_oracle I + completion_oracle C). Optional alone;
+    # required at evaluate-paired time for trap-discipline (refused by name
+    # when absent).
+    _OUTCOME_TYPES = frozenset({"pass_fail", "invariant"})
+    outcome_type_value: str | None = None
+    outcome_type_raw = fields.get("outcome_type")
+    if outcome_type_raw is not None:
+        if not isinstance(outcome_type_raw, str) or not outcome_type_raw.strip():
+            raise RatificationError(f"{path.name}: field 'outcome_type' must be a non-empty string")
+        if outcome_type_raw not in _OUTCOME_TYPES:
+            raise RatificationError(
+                f"{path.name}: outcome_type {outcome_type_raw!r} not in {sorted(_OUTCOME_TYPES)}"
+            )
+        outcome_type_value = outcome_type_raw
+
+    # #424: completion_margin — the completion-rate margin the decision rule
+    # compares against. Absent means delta_min (the minimum detectable effect
+    # the record already registered). Half-open [0, 1).
+    completion_margin_value: float | None = None
+    completion_margin_raw = fields.get("completion_margin")
+    if completion_margin_raw is not None:
+        if isinstance(completion_margin_raw, bool) or not isinstance(
+            completion_margin_raw, (int, float)
+        ):
+            raise RatificationError(f"{path.name}: field 'completion_margin' must be numeric")
+        completion_margin_value = float(completion_margin_raw)
+        if not 0.0 <= completion_margin_value < 1.0:
+            raise RatificationError(
+                f"{path.name}: completion_margin must lie in [0, 1); got {completion_margin_value}"
+            )
+
     return RatRecord(
         rat_id=rat_id,
         status=status,
@@ -276,6 +443,15 @@ def parse_rat_record(path: Path) -> RatRecord:
         cost_provenance=cost_provenance,
         sme_status=sme_status,
         ratified_date=_require_str(fields, "ratified_date", "RAT", path),
+        gamma=gamma_value,
+        delta_min=delta_min_value,
+        q_min=q_min_value,
+        hazard_action=hazard_action_value,
+        hazard_floor=hazard_floor_value,
+        pilot_subject_model=pilot_subject_model_value,
+        subject_change_waiver=subject_change_waiver_value,
+        outcome_type=outcome_type_value,
+        completion_margin=completion_margin_value,
     )
 
 
