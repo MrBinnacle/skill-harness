@@ -562,6 +562,30 @@ and covers that section only. This page stays the citable surface for every kind
   been performed and v2 section 5 keeps the branch unmerged until one is; anything about the
   fresh root, which does not yet exist.
 
+### [`docs/assurance/ebmom-v2-one-per-world-mutation-receipt.md`](assurance/ebmom-v2-one-per-world-mutation-receipt.md)
+
+- **Claims:** Mutant 3 of v2 section 7 - the one-decision-per-world selection replaced by all
+  decisions, restoring the test that treats clause decisions as independent - is KILLED at
+  `16da76b` by
+  `tests/test_ebmom_acceptance_matrix_v2.py::test_mutant_3_two_correlated_false_decisions_do_not_reject`,
+  measured by `scripts/mutation_receipt.py` in its own git worktree at a fixed commit with
+  production never mutated in place, recording both worktree HEADs, the `module.__file__`
+  actually imported, clean and mutant source digests, that the digests differ, that the mutant
+  compiles, that the clean baseline passed first with nonzero collection, and that the production
+  tree was byte-unchanged afterwards. The selection carries three node ids so the receipt shows
+  which assertion moved and which did not: only the kill assertion failed, while the positive
+  control (the retired all-decision test REJECTING the same fixture, two false of two, exact
+  binomial p = 0.0025) and the guard (the fixture being one world carrying two decisions) stayed
+  green under the mutant, which excludes both an inert fixture and a kill through the wrong
+  mechanism.
+- **Refuses to claim:** Any mutation score, or that one mutant is a campaign - mutants 1, 2 and 4
+  of section 7 are measured elsewhere with #444 collecting all four; anything about any
+  registered regime's cells, the fixture being synthetic and two decisions wide; that the
+  selection has the right POWER, only the right level, section 2.1 stating separately what is
+  discarded and why the remaining power is judged sufficient; that the candidate passes the
+  acceptance matrix, since no confirmatory run has been performed and v2 section 5 keeps the
+  branch unmerged until one is.
+
 ### [`docs/assurance/dependency-audit.md`](assurance/dependency-audit.md)
 
 - **Claims:** The command CI runs (`python -m pip_audit --local`, pip-audit 2.10.1,
