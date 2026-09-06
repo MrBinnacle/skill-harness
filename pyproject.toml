@@ -45,13 +45,16 @@ dependencies = [
   # scipy>=1.11: EB-MoM hierarchical fit + BH-FDR fallback (A53, Track E.2).
   # Already present transitively via statsmodels; direct pin per Phase 1.1 supply-chain audit.
   "scipy>=1.11",
-  # numpy>=1.24: the admission-conditioned parametric bootstrap on the admitted
-  # path of aggregation/fit.py (pre-registration v2 section 4). Declared for the
-  # same reason scipy above is: it is an install-time requirement of scipy and so
-  # was already resolved into every environment, and src/ now IMPORTS it directly.
-  # An undeclared direct import is a dependency the resolver cannot see, not an
-  # absent one. This adds no package to the tree.
-  "numpy>=1.24",
+  # numpy is NOT listed here, and src/skill_harness/aggregation/fit.py imports it
+  # directly. That is deliberate and it is a gate's ruling, not an oversight:
+  # tests/test_assurance_manifest_161.py locks the runtime Requires-Dist set to
+  # the pre-#161 names and admits zero additions, and #442 is not the ticket that
+  # reopens a ratified dependency manifest. numpy resolves into every environment
+  # regardless, as an install-time requirement of the scipy pinned above, and it
+  # is already declared in the dev extra. The residual exposure is real and
+  # small: if scipy ever stopped requiring numpy, this package would import a
+  # module its own metadata does not name. Raise that with the manifest, not
+  # here.
   # tiktoken: offline tokenizer for Verbosity metric (A35). Version-pinned to cl100k_base
   # encoding which is stable across 0.x series; DO NOT upgrade without re-running
   # bit-equality corpus and updating IMPLEMENTATION_HASH in verbosity.py.
