@@ -27,6 +27,7 @@ from skill_harness.population import (
     build_population_record,
     interpret,
     population_digest,
+    population_report,
     posix_relative_ids,
     require_valid_population,
 )
@@ -167,6 +168,31 @@ def test_an_invalid_population_is_uninterpretable_even_when_the_detector_failed(
     """
     record = build_population_record(["a", "b"], declared=["a", "b", "c"])
     assert interpret(record, ["a: missing claims line"]) is PopulationVerdict.UNINTERPRETABLE
+
+
+# --- the four fields, reported together ------------------------------------
+
+
+def test_the_report_carries_the_four_fields_453_asks_for() -> None:
+    """Item 1 of the ticket lists count, ids, digest AND verdict."""
+    report = population_report(build_population_record(["a"], declared=["a"]), [])
+    assert {"population_count", "population_ids", "population_digest", "verdict"} <= set(report)
+    assert report["verdict"] == str(PopulationVerdict.PASS)
+
+
+def test_the_report_cannot_state_a_verdict_the_population_does_not_license() -> None:
+    """The verdict is computed here, not supplied, so the two cannot disagree.
+
+    A consumer stitching as_dict() and its own verdict together by hand would be
+    free to report PASS beside a population that was never established. That is
+    the defect this ticket exists to prevent, so the payload does not offer the
+    seam.
+    """
+    invalid = build_population_record(["a", "b"], declared=["a", "b", "c"])
+    assert population_report(invalid, [])["verdict"] == str(PopulationVerdict.UNINTERPRETABLE)
+    assert population_report(invalid, ["a: broken"])["verdict"] == str(
+        PopulationVerdict.UNINTERPRETABLE
+    )
 
 
 # --- fail closed -----------------------------------------------------------

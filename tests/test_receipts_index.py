@@ -56,6 +56,7 @@ from skill_harness.population import (
     PopulationVerdict,
     build_population_record,
     interpret,
+    population_report,
     posix_relative_ids,
     require_valid_population,
 )
@@ -119,6 +120,17 @@ def _declared_receipt_ids(index_text: str) -> tuple[str, ...]:
     deliberate: a narrow regex that only matched the registered directories
     would silently drop an index entry pointing somewhere unexpected, which is
     one of the disagreements this population check exists to surface.
+
+    Known limitation. The declaration surface is unstructured prose, so a path
+    mentioned incidentally -- in a sentence about a receipt rather than as its
+    entry -- enters the declared set on shape alone. No such mention exists
+    today. The consequence would be a spurious ``missing`` member and a refusal
+    to interpret, which fails safe: it stops a run rather than passing one it
+    should not have.
+
+    Revisit if: such a mention lands, or the index gains machine-readable entry
+    markers. Either makes the declaration a structured manifest rather than a
+    regex over prose, and the manifest is the better surface once one exists.
     """
     named = set(re.findall(r"docs/[A-Za-z0-9._/-]+\.(?:md|json)", index_text))
     return tuple(sorted(rel for rel in named if _matches_a_receipt_spec(rel)))
@@ -215,11 +227,16 @@ def test_the_analyzed_population_is_the_declared_population() -> None:
     require_valid_population(record, "the receipts-index control")
 
 
-def test_a_valid_population_and_a_clean_index_is_reported_as_a_pass() -> None:
-    """The verdict layer, exercised on the real corpus rather than only in unit tests."""
+def test_the_control_reports_all_four_fields_with_its_verdict() -> None:
+    """#453 item 1: count, ids, digest and verdict, reported together.
+
+    The verdict comes from population_report rather than from a separate call,
+    so the reported verdict is always the one this population licenses.
+    """
     index_text = _INDEX.read_text(encoding="utf-8")
-    record = _population(index_text)
-    assert interpret(record, _contract_failures(index_text)) is PopulationVerdict.PASS
+    report = population_report(_population(index_text), _contract_failures(index_text))
+    assert {"population_count", "population_ids", "population_digest", "verdict"} <= set(report)
+    assert report["verdict"] == str(PopulationVerdict.PASS)
 
 
 def test_every_receipt_file_is_indexed() -> None:

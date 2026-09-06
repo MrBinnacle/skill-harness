@@ -103,6 +103,7 @@ __all__ = [
     "build_population_record",
     "interpret",
     "population_digest",
+    "population_report",
     "posix_relative_ids",
     "require_valid_population",
 ]
@@ -127,7 +128,14 @@ class PopulationVerdict(StrEnum):
 
 
 class UninterpretableSubReason(StrEnum):
-    """Why a control refused to interpret its own result."""
+    """Why a control refused to interpret its own result.
+
+    One member today, and it is an enum rather than the bare
+    ``population_valid`` boolean for two reasons: it puts a stable typed token
+    in ``as_dict``, which is what makes two controls' records comparable
+    without reading either control; and it follows ``UnmeasuredSubReason``
+    rather than introducing a second way of saying the same thing one layer up.
+    """
 
     POPULATION_INVALID = "population_invalid"
 
@@ -300,6 +308,20 @@ def interpret(record: PopulationRecord, detector_failures: Sequence[str]) -> Pop
     if not record.population_valid:
         return PopulationVerdict.UNINTERPRETABLE
     return PopulationVerdict.FAIL if detector_failures else PopulationVerdict.PASS
+
+
+def population_report(
+    record: PopulationRecord, detector_failures: Sequence[str]
+) -> dict[str, object]:
+    """The four fields #453 asks a control to record, emitted from one call.
+
+    The record on its own carries the population; the verdict needs the
+    detector's outcome as well, so a consumer that stitched the two together by
+    hand would be free to report a verdict the population does not license.
+    Producing both here removes that freedom: the verdict in this payload is
+    always :func:`interpret`'s, computed against the population beside it.
+    """
+    return {**record.as_dict(), "verdict": str(interpret(record, detector_failures))}
 
 
 def _checked_ids(ids: Iterable[str]) -> list[str]:
