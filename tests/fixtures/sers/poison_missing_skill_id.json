@@ -19,7 +19,7 @@
   "source": { "prose_path": "README.md" },
   "summary": "Poison: sers_version 1.1.0 but subject_identity omits required skill_id.",
   "subject_identity": {
-    "harness_version": "0.2.3",
+    "harness_version": "0.3.0",
     "metric_version": "0.3.0",
     "implementation_hash": "aabbccddee0011223344556677889900aabbccddee0011223344556677889900",
     "arms": "null"

@@ -20,7 +20,7 @@
   "summary": "Poison: sers_version 1.2.0 but no delivery block (required from 1.2.0).",
   "subject_identity": {
     "skill_id": "aabbccddee0011223344556677889900aabbccddeeff00112233445566778899",
-    "harness_version": "0.2.3",
+    "harness_version": "0.3.0",
     "metric_version": "0.3.0",
     "implementation_hash": "aabbccddee0011223344556677889900aabbccddeeff00112233445566778899",
     "arms": ["null", "full"]
