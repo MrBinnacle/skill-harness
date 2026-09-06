@@ -57,16 +57,26 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Any, cast
 
 # scripts/ is not a package. Run as `python scripts/ebmom_form_b_reproduction.py`,
 # which puts this directory on sys.path[0] and resolves the harness beside it.
 from ebmom_acceptance_matrix import (
+    FAIL_P,
+    PASS_P,
     REGIMES,
+    V2_CANDIDATE_COLUMN,
+    V2_COLUMNS,
+    V2_PATHS,
+    V2_ROWS,
     WIN_RATE_THRESHOLD,
     Regime,
     decision,
     derive_seed,
     draw_world,
+    oracle_self_check,
+    score_regime_v2,
+    v2_regime_report,
 )
 
 from skill_harness.aggregation import fit as fit_module
@@ -178,6 +188,15 @@ class PrototypeSeed:
         self.regime_name = regime_name
         self.world = 0
 
+    def set_world(self, world: int) -> None:
+        """Point the seeder at the world about to be scored.
+
+        The world is not derivable from the clauses, which is the whole reason
+        the two seeds differ, so the caller has to say which world it drew
+        before the fit runs.
+        """
+        self.world = world
+
     def __call__(self, _clauses: list[ClauseObservations]) -> int:
         material = f"{self.root}|{self.regime_name}|{self.world}|pb"
         return int.from_bytes(hashlib.sha256(material.encode("utf-8")).digest()[:8], "big")
@@ -238,6 +257,361 @@ def compare(built: dict[str, object], expected_regime: dict[str, object], column
     return differences
 
 
+# --- the v2 reproduction: parts (a), (b) and (c) of the S417 amendment -------
+#
+# Amendment of record: skill-harness#442, the S417 comment, and the "Ruled
+# S417" paragraph at the end of v2 section 9. For every reproduction against a
+# prototype dump:
+#
+#   (a) PORT IDENTITY, FROZEN. Under --prototype-seed production reproduces the
+#       dump with zero differing cells. One differing cell is a port defect.
+#   (b) PRODUCTION-SEED REPORT, required and reported, never a kill. The cells
+#       under the seed production is obliged to use, beside the dump, with every
+#       differing cell listed and its direction, and the per-clause flip listing
+#       at that R.
+#   (c) THE FREEZE CONDITION of v2 section 4, evaluated once under the
+#       production seed on the same pre-committed worlds, with section 4's own
+#       consequence and no new one. A rejection is REPORTED with its cell, G and
+#       g; this script does not decide its consequence.
+#
+# Why (a) and (b) are two different claims and not one softened claim. The
+# prototype seeds each world's admitted-path draws from
+# `<root>|<regime>|<world>|pb`, which a harness can compute because it knows
+# which world it drew. `fit_skill` never receives the world and, under the
+# frozen v1 section 3 rule, seeds from `<canonical clause encoding>|pb`.
+# Different integers draw different streams, so a clause whose averaged tail
+# sits near 0.05 or 0.95 lands on either side. (a) holds the stream fixed and
+# therefore says something about the ARITHMETIC; (b) says what the code that
+# ships actually does. Only (a) can be a kill, because only (a) is about the
+# port.
+
+FLIP_BAND = 0.03  # near-cut band the S417 flip diagnostic reports against
+
+# Dump field -> cell field. The dumps name the four compared quantities as
+# rescore405.py printed them; the harness names them as v2 section 2.2 does.
+DUMP_FIELDS: dict[str, str] = {
+    "count": "false",
+    "of": "decisions",
+    "worlds": "G",
+    "false_worlds": "g",
+}
+
+
+class FlipRecorder:
+    """Per-clause decisions under one seed, kept only for the admitted worlds.
+
+    Refused worlds cannot flip: the admitted-path seed is the only thing that
+    moves between the two runs and the refused path does not draw from it. The
+    recorder asserts that rather than assuming it, by keeping the path it saw.
+    """
+
+    def __init__(self) -> None:
+        self.tails: dict[int, list[float]] = {}
+        self.paths: dict[int, str] = {}
+        self.clause_ids: dict[int, list[str]] = {}
+        self.truths: dict[int, list[float]] = {}
+
+    def __call__(
+        self,
+        world: int,
+        path: str,
+        clauses: list[ClauseObservations],
+        truths: list[float],
+        tails: list[float],
+    ) -> None:
+        self.paths[world] = path
+        if path != "admitted":
+            return
+        self.tails[world] = list(tails)
+        self.clause_ids[world] = [clause.clause_id for clause in clauses]
+        self.truths[world] = list(truths)
+
+
+def flip_listing(production: FlipRecorder, prototype: FlipRecorder) -> dict[str, object]:
+    """Every admitted clause whose DECISION differs between the two seeds.
+
+    Reports both tails, the truth, and the clause's distance to the nearer cut
+    under the production seed, which is the reading the cross-family seat asked
+    for: a flip that sits at 0.0021 from a cut is the Monte Carlo error of an
+    averaged tail landing on the other side, and a flip far from either cut
+    would be a different finding entirely.
+    """
+    flips: list[dict[str, object]] = []
+    near_cut = 0
+    admitted_clauses = 0
+    max_gap = 0.0
+    for world in sorted(production.tails):
+        if production.paths[world] != prototype.paths[world]:
+            raise AssertionError(
+                f"world {world} reached {production.paths[world]!r} under the production "
+                f"seed and {prototype.paths[world]!r} under the prototype's. Admission "
+                "must not depend on the admitted-path seed; the reproduction is invalid."
+            )
+        clause_ids = production.clause_ids[world]
+        truths = production.truths[world]
+        for clause_id, truth, production_tail, prototype_tail in zip(
+            clause_ids, truths, production.tails[world], prototype.tails[world], strict=True
+        ):
+            admitted_clauses += 1
+            max_gap = max(max_gap, abs(production_tail - prototype_tail))
+            distance = min(abs(production_tail - FAIL_P), abs(production_tail - PASS_P))
+            if distance <= FLIP_BAND:
+                near_cut += 1
+            production_decision = decision(production_tail)
+            prototype_decision = decision(prototype_tail)
+            if production_decision == prototype_decision:
+                continue
+            flips.append(
+                {
+                    "world": world,
+                    "clause": clause_id,
+                    "truth": round(float(truth), 4),
+                    "truth_exceeds_threshold": bool(truth > WIN_RATE_THRESHOLD),
+                    "production": {
+                        "tail": round(production_tail, 6),
+                        "decision": production_decision,
+                    },
+                    "prototype": {
+                        "tail": round(prototype_tail, 6),
+                        "decision": prototype_decision,
+                    },
+                    "distance_to_cut_production": round(distance, 6),
+                }
+            )
+    return {
+        "admitted_worlds": len(production.tails),
+        "admitted_clauses": admitted_clauses,
+        "near_cut_band": FLIP_BAND,
+        "near_cut_clauses": near_cut,
+        "flips": len(flips),
+        "max_abs_tail_gap": round(max_gap, 6),
+        "flip_detail": flips,
+    }
+
+
+def cells_against_dump(
+    report: dict[str, object], expected_regime: dict[str, Any]
+) -> tuple[dict[str, object], list[str]]:
+    """Compare every column's per-path cells and the vs-oracle excesses against a dump.
+
+    Returns (built cells keyed as the dump keys them, one line per difference).
+    A difference line carries the DIRECTION as well as the two values, because
+    "five cells differ" and "five cells differ by one decision each, all
+    upward" are not the same finding.
+    """
+    built: dict[str, object] = {}
+    differences: list[str] = []
+    estimators = cast("dict[str, dict[str, Any]]", report["estimators"])
+    for column in V2_COLUMNS:
+        rows = estimators[column]
+        expected_column = expected_regime["estimators"].get(column)
+        column_cells: dict[str, object] = {}
+        for path in (*V2_PATHS, "pooled"):
+            for row in V2_ROWS:
+                name = f"row{row}_{'false_pass' if row == '5c' else 'false_fail'}_{path}"
+                cell = rows[name]
+                column_cells[name] = {
+                    dump_field: cell[cell_field] for dump_field, cell_field in DUMP_FIELDS.items()
+                }
+                if expected_column is None:
+                    continue
+                want = expected_column.get(name)
+                if want is None:
+                    differences.append(f"{column}.{name}: absent from the expected file")
+                    continue
+                for dump_field, cell_field in DUMP_FIELDS.items():
+                    got = cell[cell_field]
+                    if got != want[dump_field]:
+                        direction = "+" if got > want[dump_field] else "-"
+                        differences.append(
+                            f"{column}.{name}.{dump_field}: built={got} "
+                            f"expected={want[dump_field]} ({direction}"
+                            f"{abs(got - want[dump_field])})"
+                        )
+        built[column] = column_cells
+
+    excess = cast("dict[str, list[int]]", report["excess_over_main_vs_oracle"])
+    expected_excess = expected_regime.get("excess_over_main_vs_oracle", {})
+    for column in V2_COLUMNS:
+        want_excess = expected_excess.get(column)
+        if want_excess is None:
+            continue
+        if list(excess[column]) != list(want_excess):
+            differences.append(
+                f"{column}.excess_over_main_vs_oracle: built={excess[column]} "
+                f"expected={list(want_excess)}"
+            )
+    if "admitted" in expected_regime and report["admitted"] != expected_regime["admitted"]:
+        differences.append(
+            f"admitted: built={report['admitted']} expected={expected_regime['admitted']}"
+        )
+    return built, differences
+
+
+def freeze_condition(report: dict[str, object], world_range: tuple[int, int]) -> dict[str, object]:
+    """Part (c): v2 section 4's condition on the pre-committed worlds, production seed.
+
+    Reported, not decided. v2 section 4 owns the consequence of a rejection and
+    section 9's S417 ruling says so in terms: a rejection here resumes section
+    4's sequence; it is not a new kill and this script does not invent one.
+    """
+    cells: dict[str, object] = {}
+    rejecting: list[str] = []
+    estimators = cast("dict[str, dict[str, Any]]", report["estimators"])
+    for column in V2_COLUMNS:
+        for path in V2_PATHS:
+            for row in V2_ROWS:
+                name = f"row{row}_{'false_pass' if row == '5c' else 'false_fail'}_{path}"
+                cell = estimators[column][name]
+                cells[f"{column}.{name}"] = {
+                    "false": cell["false"],
+                    "decisions": cell["decisions"],
+                    "G": cell["G"],
+                    "g": cell["g"],
+                    "selected_false": cell["selected_false"],
+                    "rejects_at": cell.get("rejects_at"),
+                    "p_value": cell["p_value"],
+                    "testable": cell["testable"],
+                    "verdict": (
+                        "not testable"
+                        if not cell["testable"]
+                        else ("REJECTS" if cell["rejects"] else "passes")
+                    ),
+                    "world_block_bound": cell["world_block_bound"]["bound_lower_99"],
+                }
+                if column == V2_CANDIDATE_COLUMN and cell["rejects"]:
+                    rejecting.append(name)
+    return {
+        "world_range": list(world_range),
+        "seed_mode": "production",
+        "cells": cells,
+        "candidate_rejecting_cells": rejecting,
+        "oracle_self_check": oracle_self_check([report]),
+        "consequence": (
+            "v2 section 4 owns the consequence. A rejection resumes that section's "
+            "sequence; it is not a new kill and nothing here decides it."
+        ),
+    }
+
+
+def run_v2_reproduction(
+    expected_path: Path,
+    root_seed: str,
+    replicates: int,
+    regimes: list[str],
+    freeze_range: tuple[int, int] | None,
+) -> dict[str, object]:
+    """Score every wanted regime twice and assemble parts (a), (b) and (c)."""
+    expected_bytes = expected_path.read_bytes()
+    expected = json.loads(expected_bytes.decode("utf-8"))
+    if expected.get("root_seed") != root_seed:
+        raise SystemExit(
+            f"REFUSE: {expected_path.name} was produced under root "
+            f"{expected.get('root_seed')!r}, not {root_seed!r}. Comparing cells across "
+            "roots compares two different sets of worlds."
+        )
+    if expected.get("replicates") != replicates:
+        raise SystemExit(
+            f"REFUSE: {expected_path.name} has R={expected.get('replicates')!r}, "
+            f"not {replicates!r}."
+        )
+
+    report: dict[str, object] = {
+        "specification": "docs/assurance/ebmom-peel-preregistration-amendment-v2.md",
+        "amendment_of_record": "skill-harness#442, the S417 comment; v2 section 9",
+        "root_seed": root_seed,
+        "replicates": replicates,
+        "is_confirmatory": False,
+        "expected_file": expected_path.name,
+        "expected_sha256": hashlib.sha256(expected_bytes).hexdigest(),
+        "compared_fields": sorted(DUMP_FIELDS),
+        "python": sys.version.split()[0],
+        "regimes": {},
+    }
+
+    port_differences = 0
+    production_differences = 0
+    for regime in REGIMES:
+        if regime.name not in regimes:
+            continue
+        started = time.time()
+        production_flips = FlipRecorder()
+        production_scored = score_regime_v2(
+            regime, root_seed, replicates, after_world=production_flips
+        )
+        production_report = v2_regime_report(production_scored)
+
+        seeder = PrototypeSeed(root_seed, regime.name)
+        prototype_flips = FlipRecorder()
+        original = fit_module._admitted_bootstrap_seed
+        try:
+            fit_module._admitted_bootstrap_seed = seeder  # type: ignore[assignment]
+            prototype_scored = score_regime_v2(
+                regime,
+                root_seed,
+                replicates,
+                before_world=seeder.set_world,
+                after_world=prototype_flips,
+            )
+        finally:
+            fit_module._admitted_bootstrap_seed = original  # type: ignore[assignment]
+        prototype_report = v2_regime_report(prototype_scored)
+
+        expected_regime = expected["regimes"][regime.name]
+        port_cells, port_diffs = cells_against_dump(prototype_report, expected_regime)
+        production_cells, production_diffs = cells_against_dump(production_report, expected_regime)
+        port_differences += len(port_diffs)
+        production_differences += len(production_diffs)
+
+        entry: dict[str, object] = {
+            "seconds": round(time.time() - started, 1),
+            "port_identity_prototype_seed": {
+                "cells": port_cells,
+                "differences": port_diffs,
+                "reproduces": not port_diffs,
+            },
+            "production_seed": {
+                "cells": production_cells,
+                "differences": production_diffs,
+                "agrees_with_dump": not production_diffs,
+                "flip_listing": flip_listing(production_flips, prototype_flips),
+            },
+            "acceptance_matrix_production_seed": production_report,
+        }
+        if freeze_range is not None:
+            low, high = freeze_range
+            if low >= replicates:
+                entry["freeze_condition"] = {
+                    "world_range": [low, high],
+                    "note": (
+                        f"the range starts at world {low} and this run scored "
+                        f"{replicates}; the condition is not evaluated here"
+                    ),
+                }
+            else:
+                entry["freeze_condition"] = freeze_condition(
+                    v2_regime_report(production_scored, low, min(high, replicates)),
+                    (low, min(high, replicates)),
+                )
+        cast("dict[str, object]", report["regimes"])[regime.name] = entry
+
+        print(
+            f"[{regime.name}] admitted {production_scored.admitted}/{replicates} "
+            f"in {entry['seconds']}s  port diffs {len(port_diffs)}  "
+            f"production diffs {len(production_diffs)}",
+            flush=True,
+        )
+        for line in port_diffs:
+            print(f"   PORT DIFF {line}", flush=True)
+        for line in production_diffs:
+            print(f"   PRODUCTION-SEED DIFF {line}", flush=True)
+
+    report["port_identity_differences"] = port_differences
+    report["port_identity_holds"] = port_differences == 0
+    report["production_seed_differences"] = production_differences
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Reproduce a prototype column from production.")
     parser.add_argument(
@@ -270,7 +644,30 @@ def main(argv: list[str] | None = None) -> int:
         choices=sorted(COLUMNS),
         help="prototype column to reproduce; see COLUMNS for what each one is.",
     )
+    parser.add_argument(
+        "--v2",
+        action="store_true",
+        help=(
+            "run the full v2 reproduction instead of the single-column compare: "
+            "every column's per-path cells under BOTH seeds, the flip listing, "
+            "and the freeze condition. Parts (a), (b) and (c) of the S417 "
+            "amendment. Exit code 0 when part (a) holds, 1 otherwise -- (b) and "
+            "(c) are reported and never gate the exit code."
+        ),
+    )
+    parser.add_argument(
+        "--freeze-range",
+        default=None,
+        help=(
+            "LO:HI, half-open, absolute world numbers. Part (c) of the S417 "
+            "amendment: 500:1000 for a R = 1000 run, 1000:4000 for the "
+            "low_heterogeneity R = 4000 run. --v2 only."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.v2:
+        return _main_v2(args)
 
     expected_path = Path(args.expected)
     expected_bytes = expected_path.read_bytes()
@@ -353,6 +750,50 @@ def main(argv: list[str] | None = None) -> int:
         print(f"REFUSE: {total_differences} cell(s) differ from {expected_path.name}")
         return 1
     print(f"reproduces {expected_path.name} on {len(wanted)} regime(s), column {args.column}")
+    return 0
+
+
+def _main_v2(args: argparse.Namespace) -> int:
+    """Parts (a), (b) and (c) against one prototype dump.
+
+    The exit code carries part (a) and nothing else. (b) is required and
+    reported and is never a kill, and (c)'s consequence belongs to v2 section 4;
+    folding either into the exit code would turn a reported finding into a gate
+    the amendment does not authorise.
+    """
+    freeze_range: tuple[int, int] | None = None
+    if args.freeze_range is not None:
+        low, high = (int(part) for part in args.freeze_range.split(":"))
+        freeze_range = (low, high)
+
+    report = run_v2_reproduction(
+        expected_path=Path(args.expected),
+        root_seed=args.root_seed,
+        replicates=args.replicates,
+        regimes=args.regime or [regime.name for regime in REGIMES],
+        freeze_range=freeze_range,
+    )
+
+    payload = json.dumps(report, indent=2, sort_keys=True)
+    if args.out == "-":
+        print(payload)
+    else:
+        Path(args.out).write_text(payload + "\n", encoding="utf-8", newline="\n")
+        print(f"wrote {args.out}")
+
+    if not report["port_identity_holds"]:
+        print(
+            f"REFUSE: part (a) failed. {report['port_identity_differences']} cell(s) "
+            f"differ from {report['expected_file']} under the injected prototype seed. "
+            "That is a PORT DEFECT, not a seed difference."
+        )
+        return 1
+    print(
+        f"part (a) holds: zero differing cells against {report['expected_file']} under "
+        f"the injected prototype seed. Part (b) reports "
+        f"{report['production_seed_differences']} differing cell(s) under the "
+        "production seed, which is reported and is not a kill."
+    )
     return 0
 
 
