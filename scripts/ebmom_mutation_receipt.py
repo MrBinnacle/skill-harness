@@ -304,9 +304,22 @@ def main(argv: list[str] | None = None) -> int:
         .strip()
     )
 
+    target_rel_posix = str(TARGET_REL).replace("\\", "/")
     report = {
         "commit_under_test": commit,
-        "target_file": str(TARGET_REL).replace("\\", "/"),
+        "commit_under_test_is_informational": (
+            "A rebase rewrites this and later commits move HEAD past it. The"
+            " authoritative pin is target_digests; currency is checked against those."
+        ),
+        # `target_files`/`target_digests` rather than the `target_file` string this
+        # script emitted until 2026-09-06. The currency gate in
+        # `tests/test_mutation_receipt.py` reads `target_digests` and treats its
+        # absence as a failure rather than a skip, so that a receipt written by an
+        # older generator cannot opt out of the gate silently. This generator was
+        # that older generator: its receipt was the one carrying no digests, and it
+        # is the shape that changed here, not the measurement.
+        "target_files": [target_rel_posix],
+        "target_digests": {target_rel_posix: tree_digest_after},
         "production_tree_digest_before": tree_digest_before,
         "production_tree_digest_after": tree_digest_after,
         "production_tree_unchanged": tree_digest_before == tree_digest_after and still_clean == "",
