@@ -3,6 +3,17 @@
 **Standard:** #341. **Specification:** `docs/assurance/ebmom-peel-preregistration-amendment.md`
 section 6. **Generator:** `scripts/ebmom_mutation_receipt.py`. **Machine-readable record:**
 `docs/assurance/ebmom-gate-mutation-receipt.json`.
+**Pinned by content, not by commit:** `src/skill_harness/aggregation/fit.py` at
+`sha256:51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866`.
+**Commit at generation:** `142fb7da552f` — informational only; currency is checked against the
+digest above by `tests/test_mutation_receipt.py`.
+
+Regenerated 2026-09-06 against the `fit.py` that ships. The receipt of 2026-09-02 measured the
+file at `sha256:b0e0822ddd64`, which the admitted-path work of #442 and #443 has since moved, and
+it recorded no `target_digests` at all, so the currency gate could not read it. All seven
+verdicts below are unchanged from that run: the mutants were re-run against the current file and
+reached the same outcomes, each killed by the same named assertion. M-A3 survives now as it
+survived then.
 
 Each case runs in its **own git worktree** at a fixed commit. Production is never mutated in
 place. `PYTHONPATH` pins every case to its own sources, because the editable install would
@@ -28,8 +39,9 @@ tree is byte-unchanged afterwards.
 | M-B4 | B | hold each clause's tie count fixed at its observed value (the superseded null's tie treatment; redefined 2026-09-02) | **KILLED** | `test_aggregation_fit.py::TestFitSkillEbmom::test_tie_propensity_heterogeneity_is_admitted` |
 
 **The survivor is preserved as a finding.** It is not folded into a score, and no mutation
-score is reported: seven hand-chosen mutants cannot support one. Re-run 2026-09-02 on a clean
-tree after the null was amended; `commit_under_test` and `production_tree_unchanged` are in the
+score is reported: seven hand-chosen mutants cannot support one. Re-run on a clean
+tree 2026-09-02 after the null was amended, and again 2026-09-06 against the `fit.py` that
+ships; `commit_under_test`, `target_digests` and `production_tree_unchanged` are in the
 JSON. M-B4 changed meaning with the amendment; both its definitions are recorded below.
 
 ## The mechanization caught a live regression on its first run
