@@ -758,7 +758,11 @@ Reports are emitted in two formats via `--format=rich|json` (default `rich` for 
 - `diff skill` report: `"1.0.0"` — independent schema; additive bumps track only diff-report-specific field changes.
 
 **Required top-level keys:**
-`report_schema_version, skill_id, generated_at_utc, harness_version, aggregation_method ∈ {ebmom_hierarchical, bh_fdr_fallback, unpooled}, aggregation_provenance, clauses[], vector (Passed/Failed/Confounded/Unmeasured/Coverage/Contribution), coverage, contribution`.
+`report_schema_version, skill_id, generated_at_utc, harness_version, aggregation_method ∈ {ebmom_hierarchical, bounded_pooling_refused, unpooled}, aggregation_provenance, clauses[], vector (Passed/Failed/Confounded/Unmeasured/Coverage/Contribution), coverage, contribution`.
+
+**`bounded_pooling_refused` replaced `bh_fdr_fallback` on 2026-09-05**, on the unmerged `agent/issue-360` branch only, under section 3 of `docs/assurance/ebmom-peel-preregistration-amendment-v2.md`, which retired BH-FDR on the refused path. The name changed because the old one asserted a procedure the run no longer performs, and a report is a receipt.
+
+⚠ **A wire-format version bump is owed and has NOT been taken.** Replacing an enum value is not an additive change, so `report_schema_version` should move off `"1.2.0"` before any report produced by this branch is published or compared against one that is not. It is deliberately not taken here: the branch stays unmerged until the confirmatory run of v2 section 5, and a version bump would make every development report on the branch incomparable with the ones already recorded against it. The bump is owed at the point the branch merges. Tracked on `#441`.
 
 **Per-clause fields:**
 `clause_id, status, sub_reason (when UNMEASURED), posterior_mean, credible_interval_95, p_win_gt_threshold, frozen_case_count_at_current_metric_version, metric_id_per_axis, metric_version_per_axis, ablation_operator_hash, run_ids_aggregated`.
@@ -771,7 +775,11 @@ Reports are emitted in two formats via `--format=rich|json` (default `rich` for 
 
 **`aggregation_provenance` required sub-keys (when `aggregation_method = ebmom_hierarchical`):** `alpha_hat, beta_hat, sample_mean, sample_var, K_clauses, pythonhashseed`.
 
-**`aggregation_provenance` required sub-keys (when `aggregation_method = bh_fdr_fallback`):** `fallback_reason ∈ {var_below_threshold, alpha_hat_nonpositive, beta_hat_nonpositive, unknown}`, `attempted = {alpha_hat, beta_hat, sample_mean, sample_var}` (the EB-MoM attempt that failed), `q_value` (BH-FDR q parameter, default 0.05), `pythonhashseed`.
+**`aggregation_provenance` required sub-keys (when `aggregation_method = bounded_pooling_refused`):** `fallback_reason ∈ {latent_variance_not_identified, var_below_threshold, alpha_le_zero, beta_le_zero}`, `attempted = {alpha_hat, beta_hat, sample_mean, sample_var, sample_var_raw, sampling_var, latent_var_raw, heterogeneity_test}` (the EB-MoM attempt that failed, and the admission test that refused it), `k_clauses`, `pythonhashseed`, and `bounded_pooling = {form, mu, v_bound, c_bound, reverted_to_unpooled, unpooled_revert_count, spec}`.
+
+`form` is `"B"`. `v_bound` is the admission test's own critical order statistic, and equals `attempted.heterogeneity_test.critical_order_statistic` by construction — that identity is what makes the estimator continuous across the admission boundary. `c_bound` is `mu (1 - mu) / v_bound - 1`, or `null` when that yields no proper Beta, in which case `reverted_to_unpooled` is true and the posteriors are the unpooled `Beta(1 + w, 1 + n - w)`. `unpooled_revert_count` is 0 or 1 for a single fit and exists so a harness can sum the column across worlds without re-deriving it from a flag.
+
+`q_value` is GONE from this method's provenance. BH-FDR does not run on this path, and recording its parameter would name a procedure the fit did not perform.
 
 **`aggregation_provenance` required sub-keys (when `aggregation_method = unpooled`):** `K_clauses, k_min_for_eb` (= 10), `pythonhashseed`.
 

@@ -16,9 +16,13 @@ Tests:
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import sqlite3
+import sys
 from pathlib import Path
+from types import ModuleType
+from typing import ClassVar
 
 import pytest
 
@@ -27,8 +31,36 @@ from skill_harness.aggregation import (
     aggregate_skill,
 )
 from skill_harness.aggregation.errors import MalformedRunConfig, PreconditionError
+from skill_harness.aggregation.fit import ClauseObservations, fit_skill
 from skill_harness.aggregation.report import to_json_bytes
 from skill_harness.storage.migrations import open_evidence, open_runtime
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_acceptance_matrix() -> ModuleType:
+    """Import scripts/ebmom_acceptance_matrix.py by path.
+
+    scripts/ carries no __init__.py and is not a package, so the harness is
+    loaded the way tests/test_repo_description_check.py loads its script. It is
+    imported rather than restated because v2 section 2.3 is an identity between
+    production and THIS harness: a local copy of the locked rule could drift
+    from the harness while the identity test kept passing.
+    """
+    path = _REPO_ROOT / "scripts" / "ebmom_acceptance_matrix.py"
+    spec = importlib.util.spec_from_file_location("ebmom_acceptance_matrix", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    # dataclasses resolves a frozen class through sys.modules while the module
+    # body is still executing, so the entry has to exist BEFORE exec_module.
+    # Without it collection dies inside @dataclass with an AttributeError that
+    # names nothing about the real cause.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_MATRIX = _load_acceptance_matrix()
 
 # ---------------------------------------------------------------------------
 # Test constants
@@ -1740,67 +1772,91 @@ class TestZeroClausesPreconditionError:
 
 
 # ---------------------------------------------------------------------------
-# Tests: B1 — BH-FDR fallback must be consulted, not just computed
+# Tests: v2 section 2.3 — the refused path decides the same way in
+# production and in the harness (and B1 has no method left to gate)
 # ---------------------------------------------------------------------------
 
 
-class TestBhFdrFallbackConsumption:
-    """B1: when fit_skill() falls back to BH-FDR, PASSED must require the clause
-    to have survived the FDR-corrected test (bh_fdr_passes), not just the raw
-    uncorrected p_win_gt_threshold>=0.95 crossing.
+class TestRefusedPathProductionFaithfulness:
+    """v2 section 2.3: production and the harness must decide a refused world
+    the same way, and the fixture that proves it is a test that must pass.
+
+    Until pre-registration v2 section 3 (FROZEN 2026-09-05) this class held the
+    B1 case: when fit_skill fell back to BH-FDR, PASSED had to require the
+    clause to survive the FDR-corrected test rather than the raw 0.95 crossing
+    alone. v2 section 3 retired BH-FDR on that path, so the fit publishes no
+    FDR selection any more and there is nothing for B1 to consult. B1 itself is
+    not gone: derive_clause_status still blocks PASSED on bh_fdr_pass=False and
+    tests/test_aggregation_status.py still pins that, so a future method that
+    reinstates an FDR gate is still honoured. What changed is that no method
+    sets one.
+
+    The replacement obligation is stronger, and it is the one v2 section 2.3
+    binds the build to: the acceptance-matrix harness scores the refused path
+    by the locked rule on the posteriors fit_skill returns, and production
+    reaches a clause status through engine and status. If those two disagree,
+    the confirmatory run measures a procedure production does not run, and the
+    run is void. So the disagreement is a test failure here.
     """
 
-    def test_bh_fdr_rejected_clause_not_passed_despite_raw_threshold(self, tmp_path: Path) -> None:
-        """K=30 bimodal clauses (24 pure-loss + 5 pure-win) force EB-MoM
-        alpha_le_zero convergence failure -> bh_fdr_fallback (a pure {0,1} split
-        always has sample variance == mean*(1-mean), so alpha_hat computes to
-        exactly 0 regardless of split ratio). A 30th 'target' clause (8/8 wins,
-        Beta(9,1)) has raw p_win_gt_threshold ~= 0.9899 - comfortably over the
-        0.95 raw PASS bar, and n=8 clears N_MIN - but its BH-corrected p-value
-        (~0.0101) sorts after the 5 strongly-significant win clauses (whose
-        larger n=10 gives an even smaller p-value) and lands at rank 6 of 30,
-        where the BH cutoff (6/30*q=0.01) is JUST below it. Verified standalone:
-        fit_skill() on these exact (w,n) pairs puts 'target' outside
-        bh_fdr_passes (size 5 = only the win clauses).
+    # The locked rule returns PASS / FAIL / UNDECIDED; the status machine
+    # returns PASSED / FAILED / UNMEASURED. This is the whole of the mapping,
+    # and it holds only once the fixture removes every OTHER reason the status
+    # machine has to refuse: enough admissible evidence, a current frozen case,
+    # a scoreable axis, a completed run.
+    _EQUIVALENT_STATUS: ClassVar[dict[str, str]] = {
+        "PASS": "PASSED",
+        "FAIL": "FAILED",
+        "UNDECIDED": "UNMEASURED",
+    }
 
-        Before B1: engine.py never consults bh_fdr_passes, so target reaches
-        PASSED via the raw threshold alone (with a frozen case present).
-        After B1: target must NOT be PASSED.
-        """
+    # (w, n) per clause. Two worlds, chosen so that between them the fixture
+    # exercises all three decisions rather than one repeated twelve times: a
+    # pooled fit homogenises by construction, so a single world tends to land
+    # every clause on the same side of the rule.
+    _PASS_WORLD = [(8.0, 10)] * 6 + [(9.0, 10)] * 3 + [(7.0, 10)] * 3
+    _FAIL_WORLD = [(21.0, 40)] * 4 + [(23.0, 40)] * 4 + [(19.0, 40)] * 4
+
+    def _seed_world(
+        self, ev: sqlite3.Connection, pairs: list[tuple[float, int]]
+    ) -> list[ClauseObservations]:
+        """Write one world into evidence and return it as the ClauseObservations
+        the harness fits directly."""
+        insert_skill(ev)
+        insert_metric_version(ev)
+        insert_run(ev, family_size=1)
+
+        observations: list[ClauseObservations] = []
+        counter = 0
+        for index, (w, n) in enumerate(pairs):
+            clause_id = f"clause-{index:02d}"
+            insert_clause(ev, clause_id=clause_id, clause_index=index)
+            for i in range(n):
+                sa, sb = f"sa-{counter}", f"sb-{counter}"
+                insert_sample(ev, sa, clause_id=clause_id, condition="full", sample_index=i)
+                insert_sample(ev, sb, clause_id=clause_id, condition="ablated", sample_index=i)
+                insert_verdict(
+                    ev,
+                    verdict_id=f"v-{counter}",
+                    clause_id=clause_id,
+                    sample_a_id=sa,
+                    sample_b_id=sb,
+                    observation=1.0 if i < int(w) else 0.0,
+                )
+                counter += 1
+            insert_frozen_case(ev, frozen_case_id=f"fc-{index:02d}", clause_id=clause_id)
+            observations.append(ClauseObservations.bernoulli(clause_id=clause_id, w=w, n=n))
+        return observations
+
+    @pytest.mark.parametrize("world", ["pass_world", "fail_world"])
+    def test_engine_and_harness_agree_on_every_clause_of_a_refused_world(
+        self, tmp_path: Path, world: str
+    ) -> None:
+        pairs = self._PASS_WORLD if world == "pass_world" else self._FAIL_WORLD
         ev, rt = open_both(tmp_path)
         try:
-            insert_skill(ev)
-            insert_metric_version(ev)
-            insert_run(ev, family_size=1)
+            observations = self._seed_world(ev, pairs)
             insert_run_progress(rt, state="completed")
-
-            target_id = "clause-target"
-            counter = {"n": 0}
-
-            def _seed_clause(clause_id: str, index: int, w: int, n: int) -> None:
-                insert_clause(ev, clause_id=clause_id, clause_index=index)
-                for i in range(n):
-                    vid = counter["n"]
-                    counter["n"] += 1
-                    sa, sb = f"sa-{vid}", f"sb-{vid}"
-                    insert_sample(ev, sa, clause_id=clause_id, condition="full", sample_index=i)
-                    insert_sample(ev, sb, clause_id=clause_id, condition="ablated", sample_index=i)
-                    obs = 1.0 if i < w else 0.0
-                    insert_verdict(
-                        ev,
-                        verdict_id=f"v-{vid}",
-                        clause_id=clause_id,
-                        sample_a_id=sa,
-                        sample_b_id=sb,
-                        observation=obs,
-                    )
-
-            for i in range(24):
-                _seed_clause(f"clause-loss-{i}", i, w=0, n=10)
-            for i in range(5):
-                _seed_clause(f"clause-win-{i}", 24 + i, w=10, n=10)
-            _seed_clause(target_id, 29, w=8, n=8)
-            insert_frozen_case(ev, frozen_case_id="fc-target", clause_id=target_id)
 
             report = aggregate_skill(
                 SKILL_ID,
@@ -1809,29 +1865,76 @@ class TestBhFdrFallbackConsumption:
                 harness_version=_HARNESS_VER,
                 generated_at_utc=_GEN_AT,
             )
-
-            assert report.aggregation_method == "bh_fdr_fallback", (
-                f"Fixture must trigger BH-FDR fallback, got {report.aggregation_method!r}"
-            )
-            target_clause = next(c for c in report.clauses if c.clause_id == target_id)
-            assert target_clause.p_win_gt_threshold >= 0.95, (
-                "Fixture invariant broken: target's raw p_win_gt_threshold must "
-                f"cross 0.95, got {target_clause.p_win_gt_threshold!r}"
-            )
-            assert target_clause.n_verdicts >= 8, (
-                "Fixture invariant broken: target's n must clear N_MIN=8 so the "
-                "underpowered rule doesn't mask the BH-FDR gating being tested, "
-                f"got n_verdicts={target_clause.n_verdicts!r}"
-            )
-            assert target_clause.status != "PASSED", (
-                "B1: target crosses the raw 0.95 threshold but must NOT survive "
-                "BH-FDR correction (rank 6 of 30; p-value ~0.0101 does not clear "
-                f"its BH cutoff of 0.01) — got status={target_clause.status!r}. "
-                "bh_fdr_passes is not being consulted (B1 regression)."
-            )
         finally:
             ev.close()
             rt.close()
+
+        assert report.aggregation_method == "bounded_pooling_refused", (
+            "the fixture must reach the REFUSED path, or this proves nothing about "
+            f"it; got {report.aggregation_method!r}"
+        )
+
+        # The harness fits the same world directly and decides by the locked
+        # rule. `decision` is imported from the acceptance-matrix script rather
+        # than restated here: a restatement could drift from the harness while
+        # this test kept passing, which is the failure the fixture exists to
+        # catch.
+        harness_fit = fit_skill(observations)
+        harness = {
+            post.clause_id: _MATRIX.decision(post.p_win_gt_threshold)
+            for post in harness_fit.posteriors
+        }
+
+        assert harness_fit.aggregation_method == report.aggregation_method
+        assert harness_fit.bh_fdr_passes is None, (
+            "a refused fit publishes no FDR selection under v2 section 3; a non-None "
+            "set here would let production gate a pooled decision on a correction "
+            "computed from the unpooled posterior"
+        )
+
+        disagreements = []
+        for clause in report.clauses:
+            expected = self._EQUIVALENT_STATUS[harness[clause.clause_id]]
+            if clause.status != expected:
+                disagreements.append(
+                    f"{clause.clause_id}: engine={clause.status} "
+                    f"harness={harness[clause.clause_id]} (expected {expected}) "
+                    f"p_win={clause.p_win_gt_threshold:.6f}"
+                )
+        assert not disagreements, (
+            "PRODUCTION_AND_HARNESS_DISAGREE on a refused world. v2 section 2.3 makes "
+            "this fixture a gate: a harness that scores a procedure production does not "
+            "run is not a confirmatory harness, and a run under that harness is void. "
+            + "; ".join(disagreements)
+        )
+
+        # Not vacuous: the world must actually decide something.
+        kinds = {harness[c.clause_id] for c in report.clauses}
+        assert kinds - {"UNDECIDED"}, (
+            f"world {world!r} decided nothing; the identity would hold vacuously: {kinds}"
+        )
+
+    def test_the_two_worlds_between_them_exercise_all_three_decisions(self) -> None:
+        """The parametrized identity above is only as good as its coverage.
+
+        A fixture that landed every clause on UNDECIDED would satisfy the
+        identity while testing neither the PASS gate nor the FAIL gate. The
+        coverage is asserted separately, so a later edit to either world that
+        collapses it to one decision fails here rather than silently hollowing
+        out the case above.
+        """
+        seen: set[str] = set()
+        for pairs in (self._PASS_WORLD, self._FAIL_WORLD):
+            observations = [
+                ClauseObservations.bernoulli(clause_id=f"clause-{i:02d}", w=w, n=n)
+                for i, (w, n) in enumerate(pairs)
+            ]
+            result = fit_skill(observations)
+            assert result.aggregation_method == "bounded_pooling_refused"
+            seen |= {_MATRIX.decision(post.p_win_gt_threshold) for post in result.posteriors}
+        assert seen == {"PASS", "FAIL", "UNDECIDED"}, (
+            f"the two refused worlds must cover all three decisions, got {sorted(seen)}"
+        )
 
 
 # ---------------------------------------------------------------------------

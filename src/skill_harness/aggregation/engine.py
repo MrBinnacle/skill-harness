@@ -357,14 +357,17 @@ def aggregate_skill(
         # travels on the report vector for anyone who needs the split.
         all_confounded_flag = total > 0 and admissible_count == 0 and confounded > 0
 
-        # B1: resolve BH-FDR gate for this clause when the skill fit fell back to
-        # BH-FDR. None (not that method) leaves the raw threshold ungated.
+        # B1: resolve the FDR gate for this clause from whatever the fit
+        # published. Pre-registration v2 section 3 (FROZEN 2026-09-05) retired
+        # BH-FDR on the refused path, so no fit method sets `bh_fdr_passes` any
+        # more and this resolves to None on every clause: the refused path now
+        # pools under form B and is decided by the same locked rule the
+        # admitted path uses. The lookup is kept keyed on `bh_fdr_passes`
+        # rather than on a method name so that a receipt produced before the
+        # retirement, or a future method that reinstates an FDR gate, is still
+        # honoured rather than silently ignored.
         bh_fdr_pass: bool | None = None
-        if (
-            fit_result is not None
-            and fit_result.aggregation_method == "bh_fdr_fallback"
-            and fit_result.bh_fdr_passes is not None
-        ):
+        if fit_result is not None and fit_result.bh_fdr_passes is not None:
             bh_fdr_pass = clause_id in fit_result.bh_fdr_passes
 
         # Build state machine input

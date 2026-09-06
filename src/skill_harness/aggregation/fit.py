@@ -1,4 +1,4 @@
-"""Empirical-Bayes Method-of-Moments hierarchical fit + BH-FDR fallback (A53).
+"""Empirical-Bayes Method-of-Moments hierarchical fit + bounded-pooling refusal (A53).
 
 Two-level model:
   Level 1 (per-clause): posterior Beta(1 + w_k, 1 + n_k - w_k) where w_k is
@@ -20,9 +20,33 @@ Without the peel the recovered concentration deflates by roughly n/(n+c+1).
 Admission: a hierarchical fit is attempted only when the peeled latent variance
   is distinguishable from zero by a one-sided bootstrap test (see
   HETEROGENEITY_TEST_ALPHA). Otherwise it is refused as
-  latent_variance_not_identified and BH-FDR runs instead.
+  latent_variance_not_identified.
+
+REFUSAL, form B (pre-registration v2 section 3, FROZEN 2026-09-05):
+  A refused fit still pools. It does not fall back to the unpooled per-clause
+  posterior under BH-FDR: that fallback broke its own FAIL promise wherever it
+  fired, 251 of 251 false decisions in the registered tie_heavy_null regime at
+  R = 1000. The concentration is instead bounded by the admission test's own
+  critical order statistic, which provenance already carries:
+
+      v_bound = heterogeneity_test.critical_order_statistic
+      c_bound = mu (1 - mu) / v_bound - 1
+      posterior_k = Beta(mu c_bound + w_k, (1 - mu) c_bound + n_k - w_k)
+
+  and every clause is decided by the same locked rule the admitted path uses.
+  A non-positive c_bound reverts to the unpooled Beta(1 + w, 1 + n - w); the
+  revert is typed and counted in provenance. Because v_bound is the boundary
+  the admission test measured the observed statistic against, the estimator is
+  continuous across that boundary: a fit admitted at the boundary and a fit
+  refused at the boundary shrink identically.
+
+  BH-FDR is RETIRED on this path by the same section, as a design choice. It
+  was a multiplicity brake on unpooled posteriors; on a pooled posterior it is
+  a different multiplicity story bolted onto one path. What bounds correlated
+  false PASSes now is the per-path false-PASS kill of v2 section 2.
+
 Convergence failure (alpha_hat <= 0 or beta_hat <= 0, or the admission test
-  refuses): fall back to BH-FDR at q=0.05.
+  refuses): the bounded-pooling refusal above.
 
 Determinism: the admission bootstrap is seeded from a digest of the
 observations themselves, so identical input yields an identical verdict on
@@ -75,7 +99,21 @@ HETEROGENEITY_TEST_ALPHA: float = 0.05
 HETEROGENEITY_BOOTSTRAP_B: int = 999
 
 # BH-FDR significance level (A9).
+#
+# RETIRED FROM THE DECISION PATH, pre-registration v2 section 3 (FROZEN
+# 2026-09-05). `fit_skill` no longer calls `_bh_fdr`: a refused fit pools under
+# form B and every clause is decided by the locked rule. The constant and the
+# `_bh_fdr` helper are retained ONLY as the subject of the registered detector
+# for falsification-plan item 1, which measures the calibration of the
+# `1 - posterior mass` transform. Neither has a production caller. Do not add
+# one without superseding v2 section 3.
 BH_FDR_Q: float = 0.05
+
+# Bounded-pooling form. "B" is the form the pre-committed selection rule landed
+# on under both tests (v2 section 3): v_bound is the admission test's critical
+# order statistic, which makes the estimator continuous across the admission
+# boundary. Recorded in provenance so a receipt names the form it ran.
+BOUNDED_POOLING_FORM: str = "B"
 
 
 # ---------------------------------------------------------------------------
@@ -144,14 +182,23 @@ class FitResult:
     """Outcome of a skill-level EB-MoM fit.
 
     aggregation_method:
-        "ebmom_hierarchical" | "bh_fdr_fallback" | "unpooled"
+        "ebmom_hierarchical" | "bounded_pooling_refused" | "unpooled"
+
+        "bounded_pooling_refused" replaced "bh_fdr_fallback" when v2 section 3
+        retired BH-FDR on the refused path. The name states what ran: the
+        admission test refused, and the fit pooled at the bound instead. A
+        receipt that still said "bh_fdr_fallback" would name a procedure the
+        run did not perform.
     aggregation_provenance:
         Method-specific dict for JSON serialisation (A53).
     posteriors:
         Per-clause posterior summaries.
     bh_fdr_passes:
-        For bh_fdr_fallback only — set of clause_ids where p_adj < q.
-        For other methods: None (decision delegated to status machine).
+        ALWAYS None since v2 section 3 retired BH-FDR. No method sets it. The
+        field is retained so a reader of an older receipt still has the shape
+        to compare against, and so the status machine's `bh_fdr_pass` input
+        keeps a declared source; consumers must treat None as "no FDR gate
+        applies", which is now every case.
     """
 
     aggregation_method: str
@@ -207,6 +254,13 @@ def _bh_fdr(p_values: list[float], q: float) -> frozenset[int]:
     """Benjamini-Hochberg FDR correction.
 
     Returns the set of indices (into p_values) that pass at q level.
+
+    NO PRODUCTION CALLER since pre-registration v2 section 3 (FROZEN
+    2026-09-05) retired BH-FDR on the refused path. It is retained as the
+    subject of the registered detector for falsification-plan item 1, which
+    measures whether `1 - posterior mass` behaves as a valid null p-value.
+    That question is still worth an answer, and the answer is what would have
+    to change before any caller is added back.
     """
     k = len(p_values)
     if k == 0:
@@ -224,6 +278,36 @@ def _bh_fdr(p_values: list[float], q: float) -> frozenset[int]:
     return frozenset(indexed[:largest_rank])
 
 
+def _bounded_pooling_concentration(mu: float, v_bound: float) -> float | None:
+    """Form-B concentration from the admission bound, or None to revert.
+
+    c_bound = mu (1 - mu) / v_bound - 1, the moment inversion evaluated at the
+    admission test's critical order statistic rather than at the observed
+    latent variance. Returns None when the inversion does not yield a proper
+    Beta, in which case the caller reverts to the unpooled posterior and counts
+    the revert.
+
+    Three ways it returns None, all of them arithmetic rather than statistical:
+
+      v_bound <= VAR_FLOOR   the division is unstable, the same guard _ebmom
+                             applies to the observed variance. VAR_FLOOR is an
+                             epsilon, never an admission rule.
+      c_bound <= 0           the bound exceeds the maximum variance a Beta with
+                             mean mu can carry, so no Beta matches the moments.
+      mu c <= 0 or           a degenerate mean (0 or 1) leaves one Beta
+      (1 - mu) c <= 0        parameter at zero, which is not a distribution.
+
+    Matches `bounded_c` in the vendored reference `rescore405.py`, which
+    produced v2 section 0's cand_bpB numbers, guard for guard.
+    """
+    if v_bound <= VAR_FLOOR:
+        return None
+    c = mu * (1.0 - mu) / v_bound - 1.0
+    if c <= 0.0 or mu * c <= 0.0 or (1.0 - mu) * c <= 0.0:
+        return None
+    return c
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -237,7 +321,8 @@ def fit_skill(
     Selects method in priority order:
       1. UNPOOLED when K < K_MIN_FOR_EB (10).
       2. EB-MoM hierarchical when convergence succeeds.
-      3. BH-FDR fallback when EB-MoM fails to converge.
+      3. Bounded-pooling refusal (form B) when the admission test refuses or
+         EB-MoM fails to converge.
 
     Raises ValueError naming the clause when any clause has n <= 0 or w outside [0, n].
 
@@ -319,7 +404,7 @@ def fit_skill(
         alpha_hat, beta_hat = _ebmom(sample_mean, max(latent_var_raw, 0.0))
     except ConvergenceFailure as exc:
         # -------------------------------------------------------------------
-        # BH-FDR FALLBACK
+        # BOUNDED-POOLING REFUSAL, form B (v2 section 3)
         # -------------------------------------------------------------------
         fallback_reason = exc.reason
         attempted = {
@@ -335,31 +420,58 @@ def fit_skill(
             "latent_var_raw": latent_var_raw,
             "heterogeneity_test": heterogeneity_test,
         }
-        logger.warning(
-            "EB-MoM convergence failure (%s): falling back to BH-FDR at q=%.2f.",
-            fallback_reason,
-            BH_FDR_Q,
-        )
-        # Compute unpooled p_exceeds for BH-FDR
-        unpooled_posteriors = _build_unpooled_posteriors(clauses)
-        p_exceeds_list = [cp.p_win_gt_threshold for cp in unpooled_posteriors]
+        # v_bound is the boundary the admission test just measured the observed
+        # statistic against. Reusing it, rather than a separately estimated
+        # upper bound, is what makes the estimator continuous at the admission
+        # boundary: at the boundary the refused concentration below and the
+        # admitted _ebmom concentration are the same number.
+        mu = sample_mean
+        v_bound = float(heterogeneity_test["critical_order_statistic"])
+        c_bound = _bounded_pooling_concentration(mu, v_bound)
+        reverted = c_bound is None
 
-        # BH-FDR: "passes" when the adjusted threshold is met.
-        # We invert: p_value = 1 - p_exceeds (null: rate <= 0.60).
-        p_values = [1.0 - p for p in p_exceeds_list]
-        passing_indices = _bh_fdr(p_values, BH_FDR_Q)
-        passing_clause_ids = frozenset(unpooled_posteriors[i].clause_id for i in passing_indices)
+        if c_bound is None:
+            logger.warning(
+                "Admission refused (%s): bounded pooling reverted to UNPOOLED "
+                "(mu=%.6f, v_bound=%.3e yields no proper Beta).",
+                fallback_reason,
+                mu,
+                v_bound,
+            )
+            posteriors = _build_unpooled_posteriors(clauses)
+        else:
+            logger.warning(
+                "Admission refused (%s): pooling at the admission bound "
+                "(form %s, mu=%.6f, v_bound=%.3e, c_bound=%.6f).",
+                fallback_reason,
+                BOUNDED_POOLING_FORM,
+                mu,
+                v_bound,
+                c_bound,
+            )
+            posteriors = _build_shrunken_posteriors(clauses, mu * c_bound, (1.0 - mu) * c_bound)
 
         return FitResult(
-            aggregation_method="bh_fdr_fallback",
+            aggregation_method="bounded_pooling_refused",
             aggregation_provenance={
-                "q": BH_FDR_Q,
                 "k_clauses": k,
                 "fallback_reason": fallback_reason,
                 "attempted": attempted,
+                "bounded_pooling": {
+                    "form": BOUNDED_POOLING_FORM,
+                    "mu": mu,
+                    "v_bound": v_bound,
+                    "c_bound": c_bound,
+                    "reverted_to_unpooled": reverted,
+                    # A COUNT, not only a flag: one fit contributes 0 or 1, and
+                    # a harness summing the column over worlds gets the revert
+                    # count v2 section 3 requires without re-deriving it from a
+                    # boolean.
+                    "unpooled_revert_count": 1 if reverted else 0,
+                    "spec": ("docs/assurance/ebmom-peel-preregistration-amendment-v2.md section 3"),
+                },
             },
-            posteriors=unpooled_posteriors,
-            bh_fdr_passes=passing_clause_ids,
+            posteriors=posteriors,
         )
 
     # -------------------------------------------------------------------

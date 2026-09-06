@@ -1,12 +1,14 @@
-"""Null-world FDR calibration of the BH-FDR fallback (falsification plan item 1, #343).
+"""Null-world FDR calibration of the retired BH-FDR transform (falsification item 1, #343).
 
 Registered condition (docs/assurance/falsification-plan.md item 1): when EB-MoM
-fails to converge, ``fit_skill`` builds ``p_values = [1.0 - p_exceeds]`` from the
-Bayesian posterior mass ``P(rate > 0.60 | data)`` and hands the list to
+failed to converge, ``fit_skill`` built ``p_values = [1.0 - p_exceeds]`` from the
+Bayesian posterior mass ``P(rate > 0.60 | data)`` and handed the list to
 Benjamini-Hochberg at ``q = BH_FDR_Q``. BH assumes valid null p-values --
 super-uniform on [0, 1] under the null. If the transform is not that, the
-realised false-discovery rate among declared passes can exceed the nominal q,
-and a false PASS crosses the locked 0.95 gate and mints KEEP.
+realised false-discovery rate among declared passes can exceed the nominal q.
+
+The past tense is load-bearing. ``fit_skill`` stopped making that call on
+2026-09-05; see the section below and item 1 of the plan.
 
 PRE-REGISTRATION -- written before any simulation was run, per #343.
 
@@ -27,15 +29,32 @@ Every simulated clause is null, so every declared pass is a false discovery
 The empirical FDR is the fraction of simulated skills whose ``bh_fdr_passes``
 is non-empty.
 
-Reaching the production branch
-------------------------------
-``_ebmom`` is monkeypatched to raise ``ConvergenceFailure`` so that every
-simulated skill takes the real fallback branch inside the real ``fit_skill``:
-the posterior construction, the ``1.0 - p`` inversion, and the ``_bh_fdr`` call
-executed are the production lines in ``aggregation/fit.py``. Forcing the
-trigger rather than engineering natural convergence failures avoids
-conditioning the null distribution on the failure event; validity of the
-p-value transform is an unconditional property of the transform.
+Reaching the transform
+----------------------
+Until 2026-09-05 this section read "Reaching the production branch", and
+``_ebmom`` was monkeypatched to raise ``ConvergenceFailure`` so every simulated
+skill took the real fallback branch inside the real ``fit_skill``.
+
+Pre-registration v2 section 3 (FROZEN 2026-09-05) retired BH-FDR on that
+branch: a refused fit now pools at the admission bound and publishes no FDR
+selection, so forcing the failure reaches bounded pooling and ``bh_fdr_passes``
+is None. The old harness would have measured a realised FDR of zero on every
+design and passed for the wrong reason -- a detector satisfied by the absence
+of the thing it watches.
+
+The transform is therefore driven directly: ``_build_unpooled_posteriors``,
+their ``P(rate > 0.60)``, the ``1.0 - p`` inversion and ``_bh_fdr``, all
+production functions in ``aggregation/fit.py``. Forcing the trigger rather than
+engineering natural convergence failures avoided conditioning the null
+distribution on the failure event; validity of the p-value transform is an
+unconditional property of the transform, which is why the measurement survives
+the loss of the caller.
+
+What was LOST, stated plainly: the registered condition no longer ends in a
+false PASS, because no production path consumes ``_bh_fdr``. The damage clause
+of falsification-plan item 1 is therefore no longer live, and the row records
+that. What is retained is the measurement that would have to be re-read before
+any caller is added back.
 
 Design sweep
 ------------
@@ -83,14 +102,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from skill_harness.aggregation import fit as fit_module
-from skill_harness.aggregation.errors import ConvergenceFailure
 from skill_harness.aggregation.fit import (
     BH_FDR_Q,
     WIN_RATE_THRESHOLD,
     ClauseObservations,
     _bh_fdr,
-    fit_skill,
+    _build_unpooled_posteriors,
 )
 
 SEED: int = 20260901
@@ -102,57 +119,64 @@ NULL_RATE: float = WIN_RATE_THRESHOLD  # boundary case of the composite null rat
 DESIGNS: tuple[tuple[int, int], ...] = ((10, 10), (20, 50), (40, 25))
 
 
-def _force_convergence_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Route every fit_skill call through the production BH-FDR fallback branch."""
+def _null_world_transform_pvalues(
+    k_clauses: int, n_trials: int, rng: np.random.Generator
+) -> list[list[float]]:
+    """One p-vector per simulated null-world skill, through the real transform.
 
-    def _raise(sample_mean: float, sample_var: float) -> tuple[float, float]:
-        raise ConvergenceFailure(
-            reason="alpha_le_zero",
-            alpha_hat=-1.0,
-            beta_hat=1.0,
-            sample_mean=sample_mean,
-            sample_var=sample_var,
-        )
+    The transform is the production one, line for line: the unpooled posteriors
+    _build_unpooled_posteriors returns, their P(rate > 0.60), and the 1 - p
+    inversion. What is no longer available is a production CALLER for it.
+    Pre-registration v2 section 3 (FROZEN 2026-09-05) retired BH-FDR on the
+    refused path, so fit_skill pools at the admission bound and publishes no
+    FDR selection; forcing a ConvergenceFailure now reaches bounded pooling,
+    not this transform.
 
-    monkeypatch.setattr(fit_module, "_ebmom", _raise)
-
-
-def _empirical_null_fdr(k_clauses: int, n_trials: int, rng: np.random.Generator) -> float:
-    """Fraction of null-world skills where the production fallback declares >= 1 pass."""
-    skills_with_false_discovery = 0
+    That is a real weakening of this detector and it is recorded rather than
+    hidden. Under #341 the honest states for a registered row are "the detector
+    exists and fires" or "REGISTERED WITHOUT DETECTOR, with the reason". This
+    row keeps the first state for the transform and loses the claim that the
+    transform is on a production path: the condition it registers can no longer
+    reach a KEEP, because nothing downstream consumes the result. The row in
+    docs/assurance/falsification-plan.md says so.
+    """
+    vectors: list[list[float]] = []
     for _ in range(N_SIMS):
         wins = rng.binomial(n_trials, NULL_RATE, size=k_clauses)
         clauses = [
             ClauseObservations.bernoulli(clause_id=f"c{i}", w=float(w), n=n_trials)
             for i, w in enumerate(wins)
         ]
-        result = fit_skill(clauses)
-        assert result.aggregation_method == "bh_fdr_fallback", (
-            f"simulation must take the fallback branch, got {result.aggregation_method!r}"
-        )
-        if result.bh_fdr_passes:
-            skills_with_false_discovery += 1
-    return skills_with_false_discovery / N_SIMS
+        posteriors = _build_unpooled_posteriors(clauses)
+        vectors.append([1.0 - post.p_win_gt_threshold for post in posteriors])
+    return vectors
+
+
+def _empirical_null_fdr(k_clauses: int, n_trials: int, rng: np.random.Generator) -> float:
+    """Fraction of null-world skills where the transform declares >= 1 pass."""
+    vectors = _null_world_transform_pvalues(k_clauses, n_trials, rng)
+    return sum(1 for p_values in vectors if _bh_fdr(p_values, BH_FDR_Q)) / len(vectors)
 
 
 @pytest.mark.parametrize(("k_clauses", "n_trials"), DESIGNS)
-def test_null_world_fdr_within_nominal_q(
-    k_clauses: int, n_trials: int, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Realised null-world FDR of the production fallback stays within the bound.
+def test_null_world_fdr_within_nominal_q(k_clauses: int, n_trials: int) -> None:
+    """Realised null-world FDR of the transform stays within the bound.
 
     The null, the boundary-case choice, N_SIMS, and FDR_BOUND (justified from
-    both ends) are pre-registered in the module docstring.
+    both ends) are pre-registered in the module docstring and are unchanged.
+    What changed is where the transform is reached from: v2 section 3 retired
+    its production caller, so the posteriors and the inversion are driven
+    directly rather than through a forced ConvergenceFailure inside fit_skill.
     """
-    _force_convergence_failure(monkeypatch)
     rng = np.random.default_rng(SEED + k_clauses)  # distinct, fixed stream per design
     fdr = _empirical_null_fdr(k_clauses, n_trials, rng)
     assert fdr <= FDR_BOUND, (
         f"NULL_WORLD_FDR_EXCEEDS_NOMINAL: realised FDR {fdr:.4f} > bound {FDR_BOUND}"
         f" (nominal q={BH_FDR_Q}) at design K={k_clauses}, n={n_trials}."
-        f" The quantity fit_skill feeds to _bh_fdr (1 - posterior mass) is not"
-        f" behaving as a valid null p-value: false PASSes cross the locked 0.95"
-        f" gate more often than the q it promises."
+        f" The quantity fed to _bh_fdr (1 - posterior mass) is not behaving as a"
+        f" valid null p-value. No production path consumes it since v2 section 3,"
+        f" so this no longer implies a false PASS; it does mean the transform must"
+        f" not be given a caller again in this state."
     )
 
 

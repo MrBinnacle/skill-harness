@@ -102,6 +102,27 @@ _PAIRED_GATE2 = "src/skill_harness/cli/paired_gate2.py"
 _PAIRED_GATE2_MODULE = "skill_harness.cli.paired_gate2"
 _DRAFT_REFUSED = "tests/test_cli_paired_gate2.py::TestUnratifiedDesign::test_draft_record_refused"
 _COUNT_MISMATCH = "tests/test_cli_paired_gate2.py::TestCountMismatch::test_pilot_k8_vs_design_n32"
+# #441: mutant 1 of section 7 of the superseding pre-registration
+# (docs/assurance/ebmom-peel-preregistration-amendment-v2.md), FROZEN 2026-09-05.
+_FIT = "src/skill_harness/aggregation/fit.py"
+_FIT_MODULE = "skill_harness.aggregation.fit"
+_FORM_B_KILL = (
+    "tests/test_aggregation_fit_bounded_pooling.py"
+    "::test_mutant_1_tie_heavy_null_refused_false_fail_rate"
+)
+# Carried in the same selection so the receipt shows, by name, which assertions
+# moved and which did not. The control must reject under BOTH the clean tree and
+# the mutant -- if it ever went green, the kill above would be passing on an
+# empty cell rather than on a pooled one. The refusal guard must likewise stay
+# green: a mutant that made the regime ADMITTED would empty the refused cell and
+# look like a kill for the wrong reason.
+_FORM_B_CONTROL = (
+    "tests/test_aggregation_fit_bounded_pooling.py"
+    "::test_control_unpooled_refused_path_rejects_on_the_same_worlds"
+)
+_FORM_B_REFUSAL_GUARD = (
+    "tests/test_aggregation_fit_bounded_pooling.py::test_the_regime_reaches_the_refused_path_at_all"
+)
 
 MUTANTS: tuple[Mutant, ...] = (
     Mutant(
@@ -207,6 +228,17 @@ MUTANTS: tuple[Mutant, ...] = (
         "    if total_pairs != design.n_pairs:",
         "    if False:  # mutant: count mismatch accepted",
         (_COUNT_MISMATCH,),
+    ),
+    Mutant(
+        "M-V1",
+        "v2-section-7",
+        "mutant 1: pooling removed on the refused path, reverting to the unpooled "
+        "posterior the pre-registration retired",
+        _FIT,
+        _FIT_MODULE,
+        "        c_bound = _bounded_pooling_concentration(mu, v_bound)",
+        "        c_bound = None  # mutant: pooling removed on the refused path",
+        (_FORM_B_KILL, _FORM_B_CONTROL, _FORM_B_REFUSAL_GUARD),
     ),
 )
 

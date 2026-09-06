@@ -124,7 +124,11 @@ class SkillReport:
     skill_id: str
     generated_at_utc: str  # ISO8601 — caller-supplied; never datetime.now() here
     harness_version: str
-    aggregation_method: str  # "ebmom_hierarchical" | "bh_fdr_fallback" | "unpooled"
+    # "ebmom_hierarchical" | "bounded_pooling_refused" | "unpooled".
+    # "bounded_pooling_refused" replaced "bh_fdr_fallback" when pre-registration
+    # v2 section 3 retired BH-FDR on the refused path (docs/PRD.md carries the
+    # owed schema-version bump, which is deliberately not taken on this branch).
+    aggregation_method: str
     aggregation_provenance: dict[str, object]
     clauses: tuple[ClauseReport, ...]
     vector: VectorSummary
