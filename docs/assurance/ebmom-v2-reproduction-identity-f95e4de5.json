@@ -1,0 +1,101 @@
+{
+  "execution_identity": {
+    "branch_sha": "8cdda6ffb27418d3943bd5558ad2a8ddb8acd92b",
+    "command_lines": [
+      "PYTHONPATH=<worktree>/src PYTHONHASHSEED=0 PYTHONUTF8=1 python scripts/ebmom_form_b_reproduction.py --v2 --expected <steering>/docs/research/ebmom-405-rescore-S411/proto-pb-all-R1000-f95e4de5.json --replicates 1000 --root-seed f95e4de5d261feb7815743abd181105a856ac4a9e79d14f8805146e2d9a42a8a --freeze-range 500:1000 --out docs/assurance/ebmom-v2-reproduction-R1000-f95e4de5.json",
+      "PYTHONPATH=<worktree>/src PYTHONHASHSEED=0 PYTHONUTF8=1 python scripts/ebmom_form_b_reproduction.py --v2 --expected <steering>/docs/research/ebmom-405-rescore-S411/proto-pb-low_heterogeneity-R4000-f95e4de5.json --replicates 4000 --root-seed f95e4de5d261feb7815743abd181105a856ac4a9e79d14f8805146e2d9a42a8a --regime low_heterogeneity --freeze-range 1000:4000 --out docs/assurance/ebmom-v2-reproduction-R4000-low_heterogeneity-f95e4de5.json"
+    ],
+    "harness_file": "scripts/ebmom_acceptance_matrix.py",
+    "harness_sha256": "84ee23c6a71a2ec18215486e9578f1dbfda0d64cf1afbf2220c39f5fad72105c",
+    "numpy": "2.5.1",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.1",
+    "raw_output_manifest": {
+      "ebmom-v2-reproduction-R1000-f95e4de5.json": "9a4cd2d998cbe03de6fe8457e2fc21cd58de66c54a841e0706e39951a36c19e8",
+      "ebmom-v2-reproduction-R4000-low_heterogeneity-f95e4de5.json": "1594dc52142d12e4508dfb867ad5defc9261d9ddc14b15b75a04ca8039bc95fd"
+    },
+    "raw_output_manifest_sha256": "98bebabac7b4a327dbb8b9a4d3b6728c4d450272cd69cb5f8cfc7ba472da9e89",
+    "replicates_per_output": {
+      "ebmom-v2-reproduction-R1000-f95e4de5.json": 1000,
+      "ebmom-v2-reproduction-R4000-low_heterogeneity-f95e4de5.json": 4000
+    },
+    "root_seed": [
+      "f95e4de5d261feb7815743abd181105a856ac4a9e79d14f8805146e2d9a42a8a"
+    ],
+    "scipy": "1.18.0",
+    "seed_derivation": "every seed is the first eight bytes, big-endian, of SHA-256 over a '|'-joined label path beginning with the root: the world draw uses <root>|<regime>|<world>; the one-per-world kill selection uses <root>|<regime>|<world>|<row>; the world-block bound uses <root label>|<regime>|<column>|<path>|<row>, where the label carries the world range on a sub-range so a sub-range is not a subset of the full run's draws",
+    "verifier_file": "scripts/ebmom_form_b_reproduction.py",
+    "verifier_sha256": "fe1d146fe4ffee5cfcfa6d21ee67c81a96fd7964f048ab0d12bb094b285e3400"
+  },
+  "is_confirmatory": false,
+  "measurement_identity": {
+    "acceptance_matrix": "v2 section 5: rows 1 to 4 from v1; rows 5c and 6c per path under the section 2.1 exact test; 5c* and 6c* for the oracle as a harness self-check; rows 5, 6 and 7 against the oracle reported with the paired excess; row 8 the world-block bound; row 9 the reliability table; row 10 the production-faithfulness fixture",
+    "alpha": 0.05,
+    "amendment_v1_sha256": "2c9689785efea6e39e12580fa3454da4c2e0974e5f8e17e00c89b149d856aaf3",
+    "amendment_v2_sha256": "8bb6a4c9030c13fe77a138699a824f7784166ebb6d7a2e2fec699e59f08a1176",
+    "candidate_column": "cand_pb",
+    "estimator_definition_file": "src/skill_harness/aggregation/fit.py",
+    "estimator_definition_sha256": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866",
+    "fail_p": 0.05,
+    "kill_criterion": "v2 section 5: any rejection in any 5c or 6c cell, on either path, in any registered regime rejects the candidate. Rollback state is main. A cell with no decisions of its kind is not testable and is never passed.",
+    "kill_null_p": 0.05,
+    "kill_test_level": 0.01,
+    "oracle_definition": "ebmom_acceptance_matrix.oracle_decisions: the exact tie-model posterior Beta(a_true + W, b_true + L) on the decisive rate for a tie regime with heterogeneity, the moment-matched Beta otherwise, and the degenerate 0-or-1 verdict where the true latent variance is zero",
+    "pass_p": 0.95,
+    "registered_regimes": {
+      "benign_large_n": {
+        "a_true": 6.5,
+        "b_true": 3.5,
+        "decisive_threshold": 0.6,
+        "homogeneous_p": null,
+        "k_clauses": 200,
+        "n_trials": 100,
+        "tie_rate": 0.0,
+        "true_latent_variance": 0.020681818181818183
+      },
+      "low_heterogeneity": {
+        "a_true": 65.0,
+        "b_true": 35.0,
+        "decisive_threshold": 0.6,
+        "homogeneous_p": null,
+        "k_clauses": 200,
+        "n_trials": 25,
+        "tie_rate": 0.0,
+        "true_latent_variance": 0.0022524752475247523
+      },
+      "small_n_bite": {
+        "a_true": 13.0,
+        "b_true": 7.0,
+        "decisive_threshold": 0.6,
+        "homogeneous_p": null,
+        "k_clauses": 200,
+        "n_trials": 10,
+        "tie_rate": 0.0,
+        "true_latent_variance": 0.010833333333333334
+      },
+      "tie_heavy_null": {
+        "a_true": 1.0,
+        "b_true": 1.0,
+        "decisive_threshold": 0.6666666666666666,
+        "homogeneous_p": 0.75,
+        "k_clauses": 200,
+        "n_trials": 25,
+        "tie_rate": 0.4,
+        "true_latent_variance": 0.0
+      },
+      "tie_heavy_signal": {
+        "a_true": 15.0,
+        "b_true": 5.0,
+        "decisive_threshold": 0.6666666666666666,
+        "homogeneous_p": null,
+        "k_clauses": 200,
+        "n_trials": 25,
+        "tie_rate": 0.4,
+        "true_latent_variance": 0.003214285714285714
+      }
+    },
+    "registered_replicates": 1000,
+    "world_block_bound_B": 999
+  },
+  "specification": "docs/assurance/ebmom-peel-preregistration-amendment.md section 8, carried unchanged by v2 section 8"
+}

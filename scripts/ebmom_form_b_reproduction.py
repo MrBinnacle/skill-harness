@@ -389,6 +389,74 @@ def flip_listing(production: FlipRecorder, prototype: FlipRecorder) -> dict[str,
     }
 
 
+# The per-clause flip table is the largest thing this script produces -- 2,836
+# rows at R = 1000 -- and it lives in a SIDECAR file beside the report, for the
+# same reason proto_pb.py keeps its per-world table out of its summary: a report
+# a reader opens should not be mostly one table, and the repository's
+# check-added-large-files hook refuses a 500 KB artefact. Rows rather than
+# objects, with the field order declared once, is the encoding the prototype
+# dumps already use.
+FLIP_FIELDS: tuple[str, ...] = (
+    "world",
+    "clause",
+    "truth",
+    "truth_exceeds_threshold",
+    "production_tail",
+    "production_decision",
+    "prototype_tail",
+    "prototype_decision",
+    "distance_to_cut_production",
+)
+
+
+def _flip_row(flip: dict[str, Any]) -> list[Any]:
+    return [
+        flip["world"],
+        flip["clause"],
+        flip["truth"],
+        flip["truth_exceeds_threshold"],
+        flip["production"]["tail"],
+        flip["production"]["decision"],
+        flip["prototype"]["tail"],
+        flip["prototype"]["decision"],
+        flip["distance_to_cut_production"],
+    ]
+
+
+def split_flip_details(report: dict[str, object]) -> tuple[dict[str, object], dict[str, object]]:
+    """Move every regime's per-clause flip rows out of the report into a sidecar.
+
+    Returns (report without the rows, sidecar document). The report keeps the
+    whole aggregate -- flip count, admitted clauses, near-cut count, the band and
+    the largest tail movement -- and gains the sidecar's filename, so nothing a
+    reader needs in order to interpret part (b) leaves the report.
+
+    A pure function of the report. That is what lets it be applied to a run's
+    output after the fact and give exactly the bytes a fresh run would write.
+    """
+    regimes = cast("dict[str, dict[str, Any]]", report["regimes"])
+    sidecar_regimes: dict[str, object] = {}
+    for name, entry in regimes.items():
+        listing = entry["production_seed"]["flip_listing"]
+        detail = listing.pop("flip_detail", [])
+        sidecar_regimes[name] = [_flip_row(flip) for flip in detail]
+        listing["flip_rows_in_sidecar"] = len(detail)
+    sidecar: dict[str, object] = {
+        "root_seed": report["root_seed"],
+        "replicates": report["replicates"],
+        "is_confirmatory": False,
+        "expected_file": report["expected_file"],
+        "flip_fields": list(FLIP_FIELDS),
+        "note": (
+            "Every admitted clause whose DECISION differs between the production "
+            "seed and the injected prototype seed. Part (b) of the S417 amendment; "
+            "reported, never a kill."
+        ),
+        "regimes": sidecar_regimes,
+    }
+    return report, sidecar
+
+
 def cells_against_dump(
     report: dict[str, object], expected_regime: dict[str, Any]
 ) -> tuple[dict[str, object], list[str]]:
@@ -773,6 +841,17 @@ def _main_v2(args: argparse.Namespace) -> int:
         regimes=args.regime or [regime.name for regime in REGIMES],
         freeze_range=freeze_range,
     )
+
+    report, sidecar = split_flip_details(report)
+    if args.out != "-":
+        sidecar_path = Path(args.out).with_name(Path(args.out).stem + "-flips.json")
+        report["flip_detail_file"] = sidecar_path.name
+        sidecar_path.write_text(
+            json.dumps(sidecar, indent=1, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        print(f"wrote {sidecar_path}")
 
     payload = json.dumps(report, indent=2, sort_keys=True)
     if args.out == "-":

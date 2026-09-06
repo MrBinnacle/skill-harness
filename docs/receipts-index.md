@@ -586,6 +586,53 @@ and covers that section only. This page stays the citable surface for every kind
   acceptance matrix, since no confirmatory run has been performed and v2 section 5 keeps the
   branch unmerged until one is.
 
+### [`docs/assurance/ebmom-v2-reproduction-R1000-f95e4de5.md`](assurance/ebmom-v2-reproduction-R1000-f95e4de5.md)
+
+- **Claims:** Parts (a), (b) and (c) of the S417 amendment against
+  `proto-pb-all-R1000-f95e4de5.json` (SHA-256 recorded), all five registered regimes at R = 1000
+  on the burned root, 9,428.5 s. (a) PORT IDENTITY HOLDS: under the injected prototype seed
+  production reproduces the dump with ZERO differing cells in every regime, all four columns,
+  both paths, both rows, the pooled rows and the vs-oracle excesses. (b) Under the production
+  seed 39 cells differ, every one of them `cand_pb`, driven by 2,836 near-cut flips in 740,800
+  admitted clause decisions with a largest absolute tail movement of 0.0381; `cand_bpB`, `oracle`
+  and `main` agree cell for cell, which is what the S417 ruling predicts of columns that do not
+  draw the admitted-path stream. (c) v2 section 4's freeze condition on worlds 500 to 999 under
+  the production seed rejects NO candidate cell in any regime and the oracle self-check passes
+  every one of the 11 testable cells. Reported beside each cell: false over decisions, `G`, `g`,
+  the selected-false count, the rejecting count, the p-value, the world-block bound and the
+  reliability table. `main` independently reproduces v2 section 6's written prediction to the
+  decimal (admitted 6c 40.3 percent false in `low_heterogeneity`, 12.4 percent in
+  `small_n_bite`). Receipt identity, both halves of v1 section 8 plus the v2 SHA:
+  `ebmom-v2-reproduction-identity-f95e4de5.json`.
+- **Refuses to claim:** That the candidate reproduces `cand_pb` under its OWN seed - it does not,
+  and the S417 amendment is why that is reported rather than treated as a defect; any
+  confirmatory result or verdict on the candidate, the root being burned development evidence
+  seen in full before every choice v2 records, with the fresh root not yet generated and v2
+  section 5 keeping the branch unmerged; the consequence of part (c), which v2 section 4 owns and
+  which nothing triggered; that the `low_heterogeneity` admitted 6c cell is evidence of anything,
+  since at `G = 1` no selection could have rejected it and the harness prints that rather than
+  leaving it to be inferred; any verdict on `main`.
+
+### [`docs/assurance/ebmom-v2-reproduction-R4000-low_heterogeneity-f95e4de5.md`](assurance/ebmom-v2-reproduction-R4000-low_heterogeneity-f95e4de5.md)
+
+- **Claims:** The same three parts against `proto-pb-low_heterogeneity-R4000-f95e4de5.json`
+  (SHA-256 recorded), `low_heterogeneity` at R = 4000 on the burned root, 5,718.3 s. (a) PORT
+  IDENTITY HOLDS: zero differing cells under the injected prototype seed, all four columns. (b)
+  Eleven `cand_pb` cells differ under the production seed, with every one of the 2,458 flips in
+  565,000 admitted clause decisions sitting within 0.0038 of a decision cut and no clause moving
+  by more than 0.0379; the flips are close to symmetric at the PASS cut (1,299 UNDECIDED to PASS,
+  1,157 PASS to UNDECIDED, 2 FAIL to UNDECIDED). (c) The S414 extension of the freeze condition,
+  worlds 1,000 to 3,999 under the production seed, rejects no cell: the admitted 6c cell is 1
+  false of 7 selected across 7 decision-bearing worlds, `p = 0.302`, with a rejecting count of 3,
+  so it passes WITH POWER - a replication of the S414 result (`1 / 5`, `p = 0.226`) on a second
+  stream. The oracle self-check passes both testable cells.
+- **Refuses to claim:** That the candidate reproduces `cand_pb` under its own seed; any
+  confirmatory result; the consequence of part (c), which belongs to v2 section 4; that the
+  admitted 6c cell is safe - over the full 4,000 worlds it is 2 false of 8 selected against a
+  rejecting count of 3, one selection from rejecting, which the receipt states rather than
+  buries, and v2 section 5 rates a pass in a cell that small as weak evidence; any verdict on
+  `main`, whose two 6c cells fail decisively on the same worlds.
+
 ### [`docs/assurance/dependency-audit.md`](assurance/dependency-audit.md)
 
 - **Claims:** The command CI runs (`python -m pip_audit --local`, pip-audit 2.10.1,

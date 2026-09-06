@@ -1,0 +1,6422 @@
+{
+  "amendment_of_record": "skill-harness#442, the S417 comment; v2 section 9",
+  "compared_fields": [
+    "count",
+    "false_worlds",
+    "of",
+    "worlds"
+  ],
+  "expected_file": "proto-pb-all-R1000-f95e4de5.json",
+  "expected_sha256": "624ed720d4bb5609285f5de87fd9fefa6ffd3831667eef41f89e566a5a7cc70d",
+  "flip_detail_file": "ebmom-v2-reproduction-R1000-f95e4de5-flips.json",
+  "is_confirmatory": false,
+  "port_identity_differences": 0,
+  "port_identity_holds": true,
+  "production_seed_differences": 39,
+  "python": "3.13.1",
+  "regimes": {
+    "benign_large_n": {
+      "acceptance_matrix_production_seed": {
+        "admission_rate": 1.0,
+        "admitted": 1000,
+        "estimators": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 93023,
+              "false": 578,
+              "g": 428,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.00621351708717199,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.005537813047732722,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 93023,
+              "false": 578,
+              "g": 428,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.00621351708717199,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0056408986683603715,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 36424,
+              "false": 299,
+              "g": 250,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.008208873270371184,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.007056423826456076,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 36424,
+              "false": 299,
+              "g": 250,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.008208873270371184,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.007076696084592475,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 68,
+              "wrong_fail": 1094,
+              "wrong_pass": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 93026,
+              "false": 578,
+              "g": 428,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.006213316707157139,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.00557977145427479,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 93026,
+              "false": 578,
+              "g": 428,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.006213316707157139,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.005629064087218142,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 36322,
+              "false": 291,
+              "g": 246,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.008011673366004075,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.006990697418395993,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 36322,
+              "false": 291,
+              "g": 246,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.008011673366004075,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.006961902920131503,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 65,
+              "wrong_fail": 992,
+              "wrong_pass": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 93040,
+              "false": 578,
+              "g": 428,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.0062123817712811695,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.005609137327524379,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 93040,
+              "false": 578,
+              "g": 428,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.0062123817712811695,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.005605586219510883,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 37151,
+              "false": 333,
+              "g": 273,
+              "note": "",
+              "p_value": 0.9999999999994758,
+              "passes": true,
+              "rate": 0.008963419558019972,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 10,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.007748170945708809,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 37151,
+              "false": 333,
+              "g": 273,
+              "note": "",
+              "p_value": 0.9999999999994758,
+              "passes": true,
+              "rate": 0.008963419558019972,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 10,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.00777959599753199,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 51,
+              "wrong_fail": 1821,
+              "wrong_pass": 0
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 93091,
+              "false": 581,
+              "g": 431,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.006241204842573396,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.005645950509210965,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 93091,
+              "false": 581,
+              "g": 431,
+              "note": "",
+              "p_value": 0.9999999999999868,
+              "passes": true,
+              "rate": 0.006241204842573396,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 8,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0056224467856374975,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 35330,
+              "false": 232,
+              "g": 212,
+              "note": "",
+              "p_value": 0.9999999999999982,
+              "passes": true,
+              "rate": 0.006566657231814322,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 7,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.005560625071290065,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 35330,
+              "false": 232,
+              "g": 212,
+              "note": "",
+              "p_value": 0.9999999999999982,
+              "passes": true,
+              "rate": 0.006566657231814322,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 7,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.005608221595923364,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 0,
+              "wrong_fail": 0,
+              "wrong_pass": 0
+            }
+          }
+        },
+        "excess_over_main_vs_oracle": {
+          "cand_bpB": [
+            0,
+            -727,
+            17
+          ],
+          "cand_pb": [
+            0,
+            -829,
+            14
+          ],
+          "main": [
+            0,
+            0,
+            0
+          ],
+          "oracle": [
+            0,
+            -1821,
+            -51
+          ]
+        },
+        "fallback_reasons": {},
+        "is_subrange": false,
+        "regime": "benign_large_n",
+        "relative_bias_latent_raw": 0.0001005405979836028,
+        "reliability": {
+          "cand_pb": [
+            {
+              "bin_hi": 0.1,
+              "bin_lo": 0.0,
+              "exceed": 686,
+              "frequency": 0.016317404438524297,
+              "n": 42041
+            },
+            {
+              "bin_hi": 0.2,
+              "bin_lo": 0.1,
+              "exceed": 1414,
+              "frequency": 0.14742988218121156,
+              "n": 9591
+            },
+            {
+              "bin_hi": 0.3,
+              "bin_lo": 0.2,
+              "exceed": 1140,
+              "frequency": 0.2345679012345679,
+              "n": 4860
+            },
+            {
+              "bin_hi": 0.4,
+              "bin_lo": 0.3,
+              "exceed": 2650,
+              "frequency": 0.35446762974852863,
+              "n": 7476
+            },
+            {
+              "bin_hi": 0.5,
+              "bin_lo": 0.4,
+              "exceed": 2284,
+              "frequency": 0.46122778675282716,
+              "n": 4952
+            },
+            {
+              "bin_hi": 0.6,
+              "bin_lo": 0.5,
+              "exceed": 2445,
+              "frequency": 0.5449075105861377,
+              "n": 4487
+            },
+            {
+              "bin_hi": 0.7,
+              "bin_lo": 0.6,
+              "exceed": 5457,
+              "frequency": 0.6644344332156338,
+              "n": 8213
+            },
+            {
+              "bin_hi": 0.8,
+              "bin_lo": 0.7,
+              "exceed": 4295,
+              "frequency": 0.7524526979677646,
+              "n": 5708
+            },
+            {
+              "bin_hi": 0.9,
+              "bin_lo": 0.8,
+              "exceed": 9191,
+              "frequency": 0.8405121170553269,
+              "n": 10935
+            },
+            {
+              "bin_hi": 1.0,
+              "bin_lo": 0.9,
+              "exceed": 100466,
+              "frequency": 0.9875070033517795,
+              "n": 101737
+            }
+          ],
+          "main": [
+            {
+              "bin_hi": 0.1,
+              "bin_lo": 0.0,
+              "exceed": 736,
+              "frequency": 0.0173241690989549,
+              "n": 42484
+            },
+            {
+              "bin_hi": 0.2,
+              "bin_lo": 0.1,
+              "exceed": 1457,
+              "frequency": 0.14957396571193923,
+              "n": 9741
+            },
+            {
+              "bin_hi": 0.3,
+              "bin_lo": 0.2,
+              "exceed": 1079,
+              "frequency": 0.24759063790729693,
+              "n": 4358
+            },
+            {
+              "bin_hi": 0.4,
+              "bin_lo": 0.3,
+              "exceed": 2790,
+              "frequency": 0.3567774936061381,
+              "n": 7820
+            },
+            {
+              "bin_hi": 0.5,
+              "bin_lo": 0.4,
+              "exceed": 2117,
+              "frequency": 0.4673289183222958,
+              "n": 4530
+            },
+            {
+              "bin_hi": 0.6,
+              "bin_lo": 0.5,
+              "exceed": 2451,
+              "frequency": 0.5447877306068015,
+              "n": 4499
+            },
+            {
+              "bin_hi": 0.7,
+              "bin_lo": 0.6,
+              "exceed": 5817,
+              "frequency": 0.6665520797524923,
+              "n": 8727
+            },
+            {
+              "bin_hi": 0.8,
+              "bin_lo": 0.7,
+              "exceed": 3926,
+              "frequency": 0.7590873936581594,
+              "n": 5172
+            },
+            {
+              "bin_hi": 0.9,
+              "bin_lo": 0.8,
+              "exceed": 9351,
+              "frequency": 0.8418257111991357,
+              "n": 11108
+            },
+            {
+              "bin_hi": 1.0,
+              "bin_lo": 0.9,
+              "exceed": 100304,
+              "frequency": 0.9876232018195961,
+              "n": 101561
+            }
+          ]
+        },
+        "replicates": 1000,
+        "true_latent_variance": 0.020681818181818183,
+        "unpooled_reverts": 0,
+        "world_range": [
+          0,
+          1000
+        ]
+      },
+      "freeze_condition": {
+        "candidate_rejecting_cells": [],
+        "cells": {
+          "cand_bpB.row5c_false_pass_admitted": {
+            "G": 500,
+            "decisions": 46323,
+            "false": 284,
+            "g": 207,
+            "p_value": 0.9999998316984495,
+            "rejects_at": 38,
+            "selected_false": 5,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.005270006506180872
+          },
+          "cand_bpB.row5c_false_pass_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_bpB.row6c_false_fail_admitted": {
+            "G": 500,
+            "decisions": 18135,
+            "false": 152,
+            "g": 130,
+            "p_value": 0.9999990818191732,
+            "rejects_at": 38,
+            "selected_false": 6,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.006809500083042684
+          },
+          "cand_bpB.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_pb.row5c_false_pass_admitted": {
+            "G": 500,
+            "decisions": 46321,
+            "false": 284,
+            "g": 207,
+            "p_value": 0.9999998316984495,
+            "rejects_at": 38,
+            "selected_false": 5,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.005316849658511282
+          },
+          "cand_pb.row5c_false_pass_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_pb.row6c_false_fail_admitted": {
+            "G": 500,
+            "decisions": 18084,
+            "false": 147,
+            "g": 127,
+            "p_value": 0.9999990818191732,
+            "rejects_at": 38,
+            "selected_false": 6,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.006541745204568134
+          },
+          "cand_pb.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "main.row5c_false_pass_admitted": {
+            "G": 500,
+            "decisions": 46326,
+            "false": 284,
+            "g": 207,
+            "p_value": 0.9999998316984495,
+            "rejects_at": 38,
+            "selected_false": 5,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.005224345881796487
+          },
+          "main.row5c_false_pass_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "main.row6c_false_fail_admitted": {
+            "G": 500,
+            "decisions": 18489,
+            "false": 171,
+            "g": 144,
+            "p_value": 0.9999837318467703,
+            "rejects_at": 38,
+            "selected_false": 8,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.007638136511375948
+          },
+          "main.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "oracle.row5c_false_pass_admitted": {
+            "G": 500,
+            "decisions": 46350,
+            "false": 285,
+            "g": 208,
+            "p_value": 0.9999998316984495,
+            "rejects_at": 38,
+            "selected_false": 5,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.005217503328037102
+          },
+          "oracle.row5c_false_pass_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "oracle.row6c_false_fail_admitted": {
+            "G": 500,
+            "decisions": 17614,
+            "false": 124,
+            "g": 112,
+            "p_value": 0.9999999753245206,
+            "rejects_at": 38,
+            "selected_false": 4,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.005485400834238044
+          },
+          "oracle.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          }
+        },
+        "consequence": "v2 section 4 owns the consequence. A rejection resumes that section's sequence; it is not a new kill and nothing here decides it.",
+        "oracle_self_check": {
+          "consequence": "a failing oracle cell voids that regime's result and is a harness defect",
+          "failing_cells": [],
+          "passes": true,
+          "testable_cells": 2
+        },
+        "seed_mode": "production",
+        "world_range": [
+          500,
+          1000
+        ]
+      },
+      "port_identity_prototype_seed": {
+        "cells": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93023,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93023,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 299,
+              "false_worlds": 250,
+              "of": 36424,
+              "worlds": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "count": 299,
+              "false_worlds": 250,
+              "of": 36424,
+              "worlds": 1000
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93028,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93028,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 293,
+              "false_worlds": 247,
+              "of": 36330,
+              "worlds": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "count": 293,
+              "false_worlds": 247,
+              "of": 36330,
+              "worlds": 1000
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93040,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93040,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 333,
+              "false_worlds": 273,
+              "of": 37151,
+              "worlds": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "count": 333,
+              "false_worlds": 273,
+              "of": 37151,
+              "worlds": 1000
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "count": 581,
+              "false_worlds": 431,
+              "of": 93091,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 581,
+              "false_worlds": 431,
+              "of": 93091,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 232,
+              "false_worlds": 212,
+              "of": 35330,
+              "worlds": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "count": 232,
+              "false_worlds": 212,
+              "of": 35330,
+              "worlds": 1000
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          }
+        },
+        "differences": [],
+        "reproduces": true
+      },
+      "production_seed": {
+        "agrees_with_dump": false,
+        "cells": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93023,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93023,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 299,
+              "false_worlds": 250,
+              "of": 36424,
+              "worlds": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "count": 299,
+              "false_worlds": 250,
+              "of": 36424,
+              "worlds": 1000
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93026,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93026,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 291,
+              "false_worlds": 246,
+              "of": 36322,
+              "worlds": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "count": 291,
+              "false_worlds": 246,
+              "of": 36322,
+              "worlds": 1000
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93040,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 578,
+              "false_worlds": 428,
+              "of": 93040,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 333,
+              "false_worlds": 273,
+              "of": 37151,
+              "worlds": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "count": 333,
+              "false_worlds": 273,
+              "of": 37151,
+              "worlds": 1000
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "count": 581,
+              "false_worlds": 431,
+              "of": 93091,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 581,
+              "false_worlds": 431,
+              "of": 93091,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 232,
+              "false_worlds": 212,
+              "of": 35330,
+              "worlds": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "count": 232,
+              "false_worlds": 212,
+              "of": 35330,
+              "worlds": 1000
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          }
+        },
+        "differences": [
+          "cand_pb.row5c_false_pass_admitted.of: built=93026 expected=93028 (-2)",
+          "cand_pb.row6c_false_fail_admitted.count: built=291 expected=293 (-2)",
+          "cand_pb.row6c_false_fail_admitted.of: built=36322 expected=36330 (-8)",
+          "cand_pb.row6c_false_fail_admitted.false_worlds: built=246 expected=247 (-1)",
+          "cand_pb.row5c_false_pass_pooled.of: built=93026 expected=93028 (-2)",
+          "cand_pb.row6c_false_fail_pooled.count: built=291 expected=293 (-2)",
+          "cand_pb.row6c_false_fail_pooled.of: built=36322 expected=36330 (-8)",
+          "cand_pb.row6c_false_fail_pooled.false_worlds: built=246 expected=247 (-1)",
+          "cand_pb.excess_over_main_vs_oracle: built=[0, -829, 14] expected=[0, -821, 12]"
+        ],
+        "flip_listing": {
+          "admitted_clauses": 200000,
+          "admitted_worlds": 1000,
+          "flip_rows_in_sidecar": 76,
+          "flips": 76,
+          "max_abs_tail_gap": 0.004158,
+          "near_cut_band": 0.03,
+          "near_cut_clauses": 26514
+        }
+      },
+      "seconds": 3105.2
+    },
+    "low_heterogeneity": {
+      "acceptance_matrix_production_seed": {
+        "admission_rate": 0.687,
+        "admitted": 687,
+        "estimators": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "G": 687,
+              "clusters": 687,
+              "decisions": 24302,
+              "false": 831,
+              "g": 395,
+              "note": "",
+              "p_value": 0.9853534130838131,
+              "passes": true,
+              "rate": 0.03419471648423998,
+              "rejects": false,
+              "rejects_at": 49,
+              "selected_false": 23,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.030894508552254684,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 40553,
+              "false": 1604,
+              "g": 639,
+              "note": "",
+              "p_value": 0.9693356099520729,
+              "passes": true,
+              "rate": 0.039553177323502574,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 38,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.03703606831794523,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 313,
+              "clusters": 313,
+              "decisions": 16251,
+              "false": 773,
+              "g": 244,
+              "note": "",
+              "p_value": 0.6033532007434775,
+              "passes": true,
+              "rate": 0.04756630361208541,
+              "rejects": false,
+              "rejects_at": 26,
+              "selected_false": 15,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.04291815444934537,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 4,
+              "clusters": 4,
+              "decisions": 4,
+              "false": 3,
+              "g": 3,
+              "note": "",
+              "p_value": 0.00048125,
+              "passes": false,
+              "rate": 0.75,
+              "rejects": true,
+              "rejects_at": 3,
+              "selected_false": 3,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 12
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 4,
+              "clusters": 4,
+              "decisions": 4,
+              "false": 3,
+              "g": 3,
+              "note": "",
+              "p_value": 0.00048125,
+              "passes": false,
+              "rate": 0.75,
+              "rejects": true,
+              "rejects_at": 3,
+              "selected_false": 3,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 18
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 7553,
+              "wrong_fail": 4,
+              "wrong_pass": 7862
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "G": 687,
+              "clusters": 687,
+              "decisions": 21688,
+              "false": 676,
+              "g": 362,
+              "note": "",
+              "p_value": 0.9762210606586837,
+              "passes": true,
+              "rate": 0.03116931021763187,
+              "rejects": false,
+              "rejects_at": 49,
+              "selected_false": 24,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.027974368783473605,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 37939,
+              "false": 1449,
+              "g": 606,
+              "note": "",
+              "p_value": 0.956651809393092,
+              "passes": true,
+              "rate": 0.03819288858430639,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 39,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.03566913248150639,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 313,
+              "clusters": 313,
+              "decisions": 16251,
+              "false": 773,
+              "g": 244,
+              "note": "",
+              "p_value": 0.6033532007434775,
+              "passes": true,
+              "rate": 0.04756630361208541,
+              "rejects": false,
+              "rejects_at": 26,
+              "selected_false": 15,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.04319353490316288,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 1,
+              "clusters": 1,
+              "decisions": 1,
+              "false": 1,
+              "g": 1,
+              "note": "",
+              "p_value": 0.05,
+              "passes": true,
+              "rate": 1.0,
+              "rejects": false,
+              "rejects_at": null,
+              "selected_false": 1,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 363
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 1,
+              "clusters": 1,
+              "decisions": 1,
+              "false": 1,
+              "g": 1,
+              "note": "",
+              "p_value": 0.05,
+              "passes": true,
+              "rate": 1.0,
+              "rejects": false,
+              "rejects_at": null,
+              "selected_false": 1,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 360
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 8543,
+              "wrong_fail": 1,
+              "wrong_pass": 6238
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "G": 687,
+              "clusters": 687,
+              "decisions": 17353,
+              "false": 453,
+              "g": 294,
+              "note": "",
+              "p_value": 0.999700809211555,
+              "passes": true,
+              "rate": 0.026104996254249984,
+              "rejects": false,
+              "rejects_at": 49,
+              "selected_false": 17,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.02305558765745984,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 24096,
+              "false": 645,
+              "g": 434,
+              "note": "",
+              "p_value": 0.9999980602879706,
+              "passes": true,
+              "rate": 0.02676792828685259,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 22,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.024114511691884458,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 313,
+              "clusters": 313,
+              "decisions": 6743,
+              "false": 192,
+              "g": 140,
+              "note": "",
+              "p_value": 0.9995844196059532,
+              "passes": true,
+              "rate": 0.02847397300904642,
+              "rejects": false,
+              "rejects_at": 26,
+              "selected_false": 5,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.023585609792506346,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 340,
+              "clusters": 340,
+              "decisions": 504,
+              "false": 203,
+              "g": 176,
+              "note": "",
+              "p_value": 9.737935552837794e-90,
+              "passes": false,
+              "rate": 0.4027777777777778,
+              "rejects": true,
+              "rejects_at": 28,
+              "selected_false": 141,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.3518930957683742,
+                "fails": true,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 415,
+              "clusters": 415,
+              "decisions": 588,
+              "false": 230,
+              "g": 203,
+              "note": "",
+              "p_value": 3.3024598738102646e-101,
+              "passes": false,
+              "rate": 0.391156462585034,
+              "rejects": true,
+              "rejects_at": 33,
+              "selected_false": 165,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.3474025974025974,
+                "fails": true,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 75,
+              "clusters": 75,
+              "decisions": 84,
+              "false": 27,
+              "g": 27,
+              "note": "",
+              "p_value": 1.25724806379394e-13,
+              "passes": false,
+              "rate": 0.32142857142857145,
+              "rejects": true,
+              "rejects_at": 10,
+              "selected_false": 24,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.21176470588235294,
+                "fails": true,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 16148,
+              "wrong_fail": 588,
+              "wrong_pass": 0
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "G": 687,
+              "clusters": 687,
+              "decisions": 28525,
+              "false": 987,
+              "g": 512,
+              "note": "",
+              "p_value": 0.9629230737940218,
+              "passes": true,
+              "rate": 0.03460122699386503,
+              "rejects": false,
+              "rejects_at": 49,
+              "selected_false": 25,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.03186989498249708,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 40244,
+              "false": 1410,
+              "g": 744,
+              "note": "",
+              "p_value": 0.7853170780140897,
+              "passes": true,
+              "rate": 0.03503627869993042,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 45,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.03270459007430602,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 313,
+              "clusters": 313,
+              "decisions": 11719,
+              "false": 423,
+              "g": 232,
+              "note": "",
+              "p_value": 0.1584678458930487,
+              "passes": true,
+              "rate": 0.03609522996842734,
+              "rejects": false,
+              "rejects_at": 26,
+              "selected_false": 20,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.03180298458778439,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 0,
+              "wrong_fail": 0,
+              "wrong_pass": 0
+            }
+          }
+        },
+        "excess_over_main_vs_oracle": {
+          "cand_bpB": [
+            7862,
+            -584,
+            -8595
+          ],
+          "cand_pb": [
+            6238,
+            -587,
+            -7605
+          ],
+          "main": [
+            0,
+            0,
+            0
+          ],
+          "oracle": [
+            0,
+            -588,
+            -16148
+          ]
+        },
+        "fallback_reasons": {
+          "latent_variance_not_identified": 313
+        },
+        "is_subrange": false,
+        "regime": "low_heterogeneity",
+        "relative_bias_latent_raw": -0.017522127619781714,
+        "reliability": {
+          "cand_pb": [
+            {
+              "bin_hi": 0.1,
+              "bin_lo": 0.0,
+              "exceed": 6,
+              "frequency": 0.35294117647058826,
+              "n": 17
+            },
+            {
+              "bin_hi": 0.2,
+              "bin_lo": 0.1,
+              "exceed": 61,
+              "frequency": 0.3546511627906977,
+              "n": 172
+            },
+            {
+              "bin_hi": 0.3,
+              "bin_lo": 0.2,
+              "exceed": 317,
+              "frequency": 0.49608763693270735,
+              "n": 639
+            },
+            {
+              "bin_hi": 0.4,
+              "bin_lo": 0.3,
+              "exceed": 858,
+              "frequency": 0.5153153153153153,
+              "n": 1665
+            },
+            {
+              "bin_hi": 0.5,
+              "bin_lo": 0.4,
+              "exceed": 2167,
+              "frequency": 0.5850431965442765,
+              "n": 3704
+            },
+            {
+              "bin_hi": 0.6,
+              "bin_lo": 0.5,
+              "exceed": 4717,
+              "frequency": 0.6488308115543329,
+              "n": 7270
+            },
+            {
+              "bin_hi": 0.7,
+              "bin_lo": 0.6,
+              "exceed": 10441,
+              "frequency": 0.7226605758582503,
+              "n": 14448
+            },
+            {
+              "bin_hi": 0.8,
+              "bin_lo": 0.7,
+              "exceed": 22658,
+              "frequency": 0.7827679126649624,
+              "n": 28946
+            },
+            {
+              "bin_hi": 0.9,
+              "bin_lo": 0.8,
+              "exceed": 50240,
+              "frequency": 0.8576598723070095,
+              "n": 58578
+            },
+            {
+              "bin_hi": 1.0,
+              "bin_lo": 0.9,
+              "exceed": 79255,
+              "frequency": 0.9372523976774163,
+              "n": 84561
+            }
+          ],
+          "main": [
+            {
+              "bin_hi": 0.1,
+              "bin_lo": 0.0,
+              "exceed": 899,
+              "frequency": 0.45937659683188553,
+              "n": 1957
+            },
+            {
+              "bin_hi": 0.2,
+              "bin_lo": 0.1,
+              "exceed": 3115,
+              "frequency": 0.5571454122697191,
+              "n": 5591
+            },
+            {
+              "bin_hi": 0.3,
+              "bin_lo": 0.2,
+              "exceed": 5288,
+              "frequency": 0.6431525176356118,
+              "n": 8222
+            },
+            {
+              "bin_hi": 0.4,
+              "bin_lo": 0.3,
+              "exceed": 8274,
+              "frequency": 0.7097881101484087,
+              "n": 11657
+            },
+            {
+              "bin_hi": 0.5,
+              "bin_lo": 0.4,
+              "exceed": 8766,
+              "frequency": 0.7684081346423562,
+              "n": 11408
+            },
+            {
+              "bin_hi": 0.6,
+              "bin_lo": 0.5,
+              "exceed": 10673,
+              "frequency": 0.7796201607012417,
+              "n": 13690
+            },
+            {
+              "bin_hi": 0.7,
+              "bin_lo": 0.6,
+              "exceed": 19515,
+              "frequency": 0.8249144016570148,
+              "n": 23657
+            },
+            {
+              "bin_hi": 0.8,
+              "bin_lo": 0.7,
+              "exceed": 25469,
+              "frequency": 0.8696646861981834,
+              "n": 29286
+            },
+            {
+              "bin_hi": 0.9,
+              "bin_lo": 0.8,
+              "exceed": 39966,
+              "frequency": 0.9152658819218614,
+              "n": 43666
+            },
+            {
+              "bin_hi": 1.0,
+              "bin_lo": 0.9,
+              "exceed": 48755,
+              "frequency": 0.9584988007706523,
+              "n": 50866
+            }
+          ]
+        },
+        "replicates": 1000,
+        "true_latent_variance": 0.0022524752475247523,
+        "unpooled_reverts": 0,
+        "world_range": [
+          0,
+          1000
+        ]
+      },
+      "freeze_condition": {
+        "candidate_rejecting_cells": [],
+        "cells": {
+          "cand_bpB.row5c_false_pass_admitted": {
+            "G": 347,
+            "decisions": 11919,
+            "false": 402,
+            "g": 198,
+            "p_value": 0.8279517238677949,
+            "rejects_at": 28,
+            "selected_false": 14,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.029302766525898475
+          },
+          "cand_bpB.row5c_false_pass_refused": {
+            "G": 153,
+            "decisions": 8011,
+            "false": 409,
+            "g": 126,
+            "p_value": 0.2368590479471047,
+            "rejects_at": 16,
+            "selected_false": 10,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0447328455060058
+          },
+          "cand_bpB.row6c_false_fail_admitted": {
+            "G": 2,
+            "decisions": 2,
+            "false": 2,
+            "g": 2,
+            "p_value": 0.0025000000000000005,
+            "rejects_at": 2,
+            "selected_false": 2,
+            "testable": true,
+            "verdict": "REJECTS",
+            "world_block_bound": 0.0
+          },
+          "cand_bpB.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_pb.row5c_false_pass_admitted": {
+            "G": 347,
+            "decisions": 10859,
+            "false": 335,
+            "g": 184,
+            "p_value": 0.7527295718752937,
+            "rejects_at": 28,
+            "selected_false": 15,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.027029572424185345
+          },
+          "cand_pb.row5c_false_pass_refused": {
+            "G": 153,
+            "decisions": 8011,
+            "false": 409,
+            "g": 126,
+            "p_value": 0.2368590479471047,
+            "rejects_at": 16,
+            "selected_false": 10,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.04493276484093145
+          },
+          "cand_pb.row6c_false_fail_admitted": {
+            "G": 1,
+            "decisions": 1,
+            "false": 1,
+            "g": 1,
+            "p_value": 0.05,
+            "rejects_at": null,
+            "selected_false": 1,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "cand_pb.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "main.row5c_false_pass_admitted": {
+            "G": 347,
+            "decisions": 8745,
+            "false": 238,
+            "g": 158,
+            "p_value": 0.9910403565110164,
+            "rejects_at": 28,
+            "selected_false": 9,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.022780308923213692
+          },
+          "main.row5c_false_pass_refused": {
+            "G": 153,
+            "decisions": 3332,
+            "false": 107,
+            "g": 74,
+            "p_value": 0.9505552019569801,
+            "rejects_at": 16,
+            "selected_false": 4,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.025826446280991736
+          },
+          "main.row6c_false_fail_admitted": {
+            "G": 171,
+            "decisions": 265,
+            "false": 109,
+            "g": 94,
+            "p_value": 1.529742461534257e-49,
+            "rejects_at": 17,
+            "selected_false": 74,
+            "testable": true,
+            "verdict": "REJECTS",
+            "world_block_bound": 0.35039370078740156
+          },
+          "main.row6c_false_fail_refused": {
+            "G": 28,
+            "decisions": 32,
+            "false": 10,
+            "g": 10,
+            "p_value": 5.646901284012168e-06,
+            "rejects_at": 6,
+            "selected_false": 9,
+            "testable": true,
+            "verdict": "REJECTS",
+            "world_block_bound": 0.13793103448275862
+          },
+          "oracle.row5c_false_pass_admitted": {
+            "G": 347,
+            "decisions": 14534,
+            "false": 522,
+            "g": 265,
+            "p_value": 0.8279517238677949,
+            "rejects_at": 28,
+            "selected_false": 14,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.032440436128684885
+          },
+          "oracle.row5c_false_pass_refused": {
+            "G": 153,
+            "decisions": 5704,
+            "false": 233,
+            "g": 119,
+            "p_value": 0.14547624800684797,
+            "rejects_at": 16,
+            "selected_false": 11,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0345873786407767
+          },
+          "oracle.row6c_false_fail_admitted": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "oracle.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          }
+        },
+        "consequence": "v2 section 4 owns the consequence. A rejection resumes that section's sequence; it is not a new kill and nothing here decides it.",
+        "oracle_self_check": {
+          "consequence": "a failing oracle cell voids that regime's result and is a harness defect",
+          "failing_cells": [],
+          "passes": true,
+          "testable_cells": 2
+        },
+        "seed_mode": "production",
+        "world_range": [
+          500,
+          1000
+        ]
+      },
+      "port_identity_prototype_seed": {
+        "cells": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "count": 831,
+              "false_worlds": 395,
+              "of": 24302,
+              "worlds": 687
+            },
+            "row5c_false_pass_pooled": {
+              "count": 1604,
+              "false_worlds": 639,
+              "of": 40553,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 773,
+              "false_worlds": 244,
+              "of": 16251,
+              "worlds": 313
+            },
+            "row6c_false_fail_admitted": {
+              "count": 3,
+              "false_worlds": 3,
+              "of": 4,
+              "worlds": 4
+            },
+            "row6c_false_fail_pooled": {
+              "count": 3,
+              "false_worlds": 3,
+              "of": 4,
+              "worlds": 4
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "count": 666,
+              "false_worlds": 360,
+              "of": 21607,
+              "worlds": 687
+            },
+            "row5c_false_pass_pooled": {
+              "count": 1439,
+              "false_worlds": 604,
+              "of": 37858,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 773,
+              "false_worlds": 244,
+              "of": 16251,
+              "worlds": 313
+            },
+            "row6c_false_fail_admitted": {
+              "count": 1,
+              "false_worlds": 1,
+              "of": 1,
+              "worlds": 1
+            },
+            "row6c_false_fail_pooled": {
+              "count": 1,
+              "false_worlds": 1,
+              "of": 1,
+              "worlds": 1
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "count": 453,
+              "false_worlds": 294,
+              "of": 17353,
+              "worlds": 687
+            },
+            "row5c_false_pass_pooled": {
+              "count": 645,
+              "false_worlds": 434,
+              "of": 24096,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 192,
+              "false_worlds": 140,
+              "of": 6743,
+              "worlds": 313
+            },
+            "row6c_false_fail_admitted": {
+              "count": 203,
+              "false_worlds": 176,
+              "of": 504,
+              "worlds": 340
+            },
+            "row6c_false_fail_pooled": {
+              "count": 230,
+              "false_worlds": 203,
+              "of": 588,
+              "worlds": 415
+            },
+            "row6c_false_fail_refused": {
+              "count": 27,
+              "false_worlds": 27,
+              "of": 84,
+              "worlds": 75
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "count": 987,
+              "false_worlds": 512,
+              "of": 28525,
+              "worlds": 687
+            },
+            "row5c_false_pass_pooled": {
+              "count": 1410,
+              "false_worlds": 744,
+              "of": 40244,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 423,
+              "false_worlds": 232,
+              "of": 11719,
+              "worlds": 313
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          }
+        },
+        "differences": [],
+        "reproduces": true
+      },
+      "production_seed": {
+        "agrees_with_dump": false,
+        "cells": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "count": 831,
+              "false_worlds": 395,
+              "of": 24302,
+              "worlds": 687
+            },
+            "row5c_false_pass_pooled": {
+              "count": 1604,
+              "false_worlds": 639,
+              "of": 40553,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 773,
+              "false_worlds": 244,
+              "of": 16251,
+              "worlds": 313
+            },
+            "row6c_false_fail_admitted": {
+              "count": 3,
+              "false_worlds": 3,
+              "of": 4,
+              "worlds": 4
+            },
+            "row6c_false_fail_pooled": {
+              "count": 3,
+              "false_worlds": 3,
+              "of": 4,
+              "worlds": 4
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "count": 676,
+              "false_worlds": 362,
+              "of": 21688,
+              "worlds": 687
+            },
+            "row5c_false_pass_pooled": {
+              "count": 1449,
+              "false_worlds": 606,
+              "of": 37939,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 773,
+              "false_worlds": 244,
+              "of": 16251,
+              "worlds": 313
+            },
+            "row6c_false_fail_admitted": {
+              "count": 1,
+              "false_worlds": 1,
+              "of": 1,
+              "worlds": 1
+            },
+            "row6c_false_fail_pooled": {
+              "count": 1,
+              "false_worlds": 1,
+              "of": 1,
+              "worlds": 1
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "count": 453,
+              "false_worlds": 294,
+              "of": 17353,
+              "worlds": 687
+            },
+            "row5c_false_pass_pooled": {
+              "count": 645,
+              "false_worlds": 434,
+              "of": 24096,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 192,
+              "false_worlds": 140,
+              "of": 6743,
+              "worlds": 313
+            },
+            "row6c_false_fail_admitted": {
+              "count": 203,
+              "false_worlds": 176,
+              "of": 504,
+              "worlds": 340
+            },
+            "row6c_false_fail_pooled": {
+              "count": 230,
+              "false_worlds": 203,
+              "of": 588,
+              "worlds": 415
+            },
+            "row6c_false_fail_refused": {
+              "count": 27,
+              "false_worlds": 27,
+              "of": 84,
+              "worlds": 75
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "count": 987,
+              "false_worlds": 512,
+              "of": 28525,
+              "worlds": 687
+            },
+            "row5c_false_pass_pooled": {
+              "count": 1410,
+              "false_worlds": 744,
+              "of": 40244,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 423,
+              "false_worlds": 232,
+              "of": 11719,
+              "worlds": 313
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          }
+        },
+        "differences": [
+          "cand_pb.row5c_false_pass_admitted.count: built=676 expected=666 (+10)",
+          "cand_pb.row5c_false_pass_admitted.of: built=21688 expected=21607 (+81)",
+          "cand_pb.row5c_false_pass_admitted.false_worlds: built=362 expected=360 (+2)",
+          "cand_pb.row5c_false_pass_pooled.count: built=1449 expected=1439 (+10)",
+          "cand_pb.row5c_false_pass_pooled.of: built=37939 expected=37858 (+81)",
+          "cand_pb.row5c_false_pass_pooled.false_worlds: built=606 expected=604 (+2)",
+          "cand_pb.excess_over_main_vs_oracle: built=[6238, -587, -7605] expected=[6240, -587, -7522]"
+        ],
+        "flip_listing": {
+          "admitted_clauses": 137400,
+          "admitted_worlds": 687,
+          "flip_rows_in_sidecar": 751,
+          "flips": 751,
+          "max_abs_tail_gap": 0.036084,
+          "near_cut_band": 0.03,
+          "near_cut_clauses": 33421
+        }
+      },
+      "seconds": 1565.2
+    },
+    "small_n_bite": {
+      "acceptance_matrix_production_seed": {
+        "admission_rate": 0.979,
+        "admitted": 979,
+        "estimators": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "G": 962,
+              "clusters": 962,
+              "decisions": 13936,
+              "false": 608,
+              "g": 331,
+              "note": "",
+              "p_value": 0.9457734277098067,
+              "passes": true,
+              "rate": 0.04362801377726751,
+              "rejects": false,
+              "rejects_at": 65,
+              "selected_false": 38,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.039440022740193294,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 979,
+              "clusters": 979,
+              "decisions": 14156,
+              "false": 626,
+              "g": 334,
+              "note": "",
+              "p_value": 0.9577365100299032,
+              "passes": true,
+              "rate": 0.04422153150607516,
+              "rejects": false,
+              "rejects_at": 66,
+              "selected_false": 38,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.03986491447030321,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 17,
+              "clusters": 17,
+              "decisions": 220,
+              "false": 18,
+              "g": 3,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.08181818181818182,
+              "rejects": false,
+              "rejects_at": 4,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 229,
+              "clusters": 229,
+              "decisions": 369,
+              "false": 22,
+              "g": 22,
+              "note": "",
+              "p_value": 0.1752776475025362,
+              "passes": true,
+              "rate": 0.05962059620596206,
+              "rejects": false,
+              "rejects_at": 21,
+              "selected_false": 15,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.033419023136246784,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 229,
+              "clusters": 229,
+              "decisions": 369,
+              "false": 22,
+              "g": 22,
+              "note": "",
+              "p_value": 0.1752776475025362,
+              "passes": true,
+              "rate": 0.05962059620596206,
+              "rejects": false,
+              "rejects_at": 21,
+              "selected_false": 15,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.031609195402298854,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 90,
+              "wrong_fail": 299,
+              "wrong_pass": 7702
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "G": 963,
+              "clusters": 963,
+              "decisions": 13599,
+              "false": 588,
+              "g": 323,
+              "note": "",
+              "p_value": 0.9269042849156722,
+              "passes": true,
+              "rate": 0.043238473417163026,
+              "rejects": false,
+              "rejects_at": 66,
+              "selected_false": 39,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.03907113896056027,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 980,
+              "clusters": 980,
+              "decisions": 13819,
+              "false": 606,
+              "g": 326,
+              "note": "",
+              "p_value": 0.9421840090883915,
+              "passes": true,
+              "rate": 0.04385266661842391,
+              "rejects": false,
+              "rejects_at": 67,
+              "selected_false": 39,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.03928704047530635,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 17,
+              "clusters": 17,
+              "decisions": 220,
+              "false": 18,
+              "g": 3,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.08181818181818182,
+              "rejects": false,
+              "rejects_at": 4,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 160,
+              "clusters": 160,
+              "decisions": 261,
+              "false": 16,
+              "g": 16,
+              "note": "",
+              "p_value": 0.2801253109509975,
+              "passes": true,
+              "rate": 0.06130268199233716,
+              "rejects": false,
+              "rejects_at": 16,
+              "selected_false": 10,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0299625468164794,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 160,
+              "clusters": 160,
+              "decisions": 261,
+              "false": 16,
+              "g": 16,
+              "note": "",
+              "p_value": 0.2801253109509975,
+              "passes": true,
+              "rate": 0.06130268199233716,
+              "rejects": false,
+              "rejects_at": 16,
+              "selected_false": 10,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.03125,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 89,
+              "wrong_fail": 200,
+              "wrong_pass": 7355
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "G": 979,
+              "clusters": 979,
+              "decisions": 26495,
+              "false": 1328,
+              "g": 716,
+              "note": "",
+              "p_value": 0.402029494833956,
+              "passes": true,
+              "rate": 0.050122664653708245,
+              "rejects": false,
+              "rejects_at": 66,
+              "selected_false": 51,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.046694230550392596,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 26903,
+              "false": 1350,
+              "g": 731,
+              "note": "",
+              "p_value": 0.4058160732043493,
+              "passes": true,
+              "rate": 0.05018027729249526,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 52,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.04672687915204897,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 21,
+              "clusters": 21,
+              "decisions": 408,
+              "false": 22,
+              "g": 15,
+              "note": "",
+              "p_value": 0.659438373711885,
+              "passes": true,
+              "rate": 0.05392156862745098,
+              "rejects": false,
+              "rejects_at": 5,
+              "selected_false": 1,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.03125,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 952,
+              "clusters": 952,
+              "decisions": 3510,
+              "false": 437,
+              "g": 347,
+              "note": "",
+              "p_value": 1.441875835573651e-25,
+              "passes": false,
+              "rate": 0.1245014245014245,
+              "rejects": true,
+              "rejects_at": 65,
+              "selected_false": 132,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.11114213906729964,
+                "fails": true,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 969,
+              "clusters": 969,
+              "decisions": 3536,
+              "false": 439,
+              "g": 349,
+              "note": "",
+              "p_value": 2.475832305407626e-25,
+              "passes": false,
+              "rate": 0.12415158371040724,
+              "rejects": true,
+              "rejects_at": 66,
+              "selected_false": 133,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.11202031602708803,
+                "fails": true,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 17,
+              "clusters": 17,
+              "decisions": 26,
+              "false": 2,
+              "g": 2,
+              "note": "",
+              "p_value": 0.5818796647808226,
+              "passes": true,
+              "rate": 0.07692307692307693,
+              "rejects": false,
+              "rejects_at": 4,
+              "selected_false": 1,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 0,
+              "wrong_fail": 3456,
+              "wrong_pass": 20369
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "G": 979,
+              "clusters": 979,
+              "decisions": 6445,
+              "false": 156,
+              "g": 147,
+              "note": "",
+              "p_value": 0.9999912836191029,
+              "passes": true,
+              "rate": 0.02420480993017843,
+              "rejects": false,
+              "rejects_at": 66,
+              "selected_false": 23,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.019856422789063695,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 999,
+              "clusters": 999,
+              "decisions": 6534,
+              "false": 157,
+              "g": 148,
+              "note": "",
+              "p_value": 0.9999951695477995,
+              "passes": true,
+              "rate": 0.024028160391796755,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 23,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.019717435180872534,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 20,
+              "clusters": 20,
+              "decisions": 89,
+              "false": 1,
+              "g": 1,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.011235955056179775,
+              "rejects": false,
+              "rejects_at": 5,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 79,
+              "clusters": 79,
+              "decisions": 80,
+              "false": 4,
+              "g": 4,
+              "note": "",
+              "p_value": 0.5615298060773287,
+              "passes": true,
+              "rate": 0.05,
+              "rejects": false,
+              "rejects_at": 10,
+              "selected_false": 4,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 79,
+              "clusters": 79,
+              "decisions": 80,
+              "false": 4,
+              "g": 4,
+              "note": "",
+              "p_value": 0.5615298060773287,
+              "passes": true,
+              "rate": 0.05,
+              "rejects": false,
+              "rejects_at": 10,
+              "selected_false": 4,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 0,
+              "wrong_fail": 0,
+              "wrong_pass": 0
+            }
+          }
+        },
+        "excess_over_main_vs_oracle": {
+          "cand_bpB": [
+            -12667,
+            -3157,
+            90
+          ],
+          "cand_pb": [
+            -13014,
+            -3256,
+            89
+          ],
+          "main": [
+            0,
+            0,
+            0
+          ],
+          "oracle": [
+            -20369,
+            -3456,
+            0
+          ]
+        },
+        "fallback_reasons": {
+          "latent_variance_not_identified": 21
+        },
+        "is_subrange": false,
+        "regime": "small_n_bite",
+        "relative_bias_latent_raw": -0.014677608555599728,
+        "reliability": {
+          "cand_pb": [
+            {
+              "bin_hi": 0.1,
+              "bin_lo": 0.0,
+              "exceed": 117,
+              "frequency": 0.10034305317324185,
+              "n": 1166
+            },
+            {
+              "bin_hi": 0.2,
+              "bin_lo": 0.1,
+              "exceed": 756,
+              "frequency": 0.18625277161862527,
+              "n": 4059
+            },
+            {
+              "bin_hi": 0.3,
+              "bin_lo": 0.2,
+              "exceed": 1756,
+              "frequency": 0.27566718995290423,
+              "n": 6370
+            },
+            {
+              "bin_hi": 0.4,
+              "bin_lo": 0.3,
+              "exceed": 3727,
+              "frequency": 0.3520687700736822,
+              "n": 10586
+            },
+            {
+              "bin_hi": 0.5,
+              "bin_lo": 0.4,
+              "exceed": 7307,
+              "frequency": 0.4660076530612245,
+              "n": 15680
+            },
+            {
+              "bin_hi": 0.6,
+              "bin_lo": 0.5,
+              "exceed": 9574,
+              "frequency": 0.5253223593964335,
+              "n": 18225
+            },
+            {
+              "bin_hi": 0.7,
+              "bin_lo": 0.6,
+              "exceed": 19073,
+              "frequency": 0.6406139791085883,
+              "n": 29773
+            },
+            {
+              "bin_hi": 0.8,
+              "bin_lo": 0.7,
+              "exceed": 26754,
+              "frequency": 0.7501892717942966,
+              "n": 35663
+            },
+            {
+              "bin_hi": 0.9,
+              "bin_lo": 0.8,
+              "exceed": 37238,
+              "frequency": 0.8448972183146526,
+              "n": 44074
+            },
+            {
+              "bin_hi": 1.0,
+              "bin_lo": 0.9,
+              "exceed": 32163,
+              "frequency": 0.9348622253226369,
+              "n": 34404
+            }
+          ],
+          "main": [
+            {
+              "bin_hi": 0.1,
+              "bin_lo": 0.0,
+              "exceed": 2097,
+              "frequency": 0.201654005192807,
+              "n": 10399
+            },
+            {
+              "bin_hi": 0.2,
+              "bin_lo": 0.1,
+              "exceed": 3463,
+              "frequency": 0.3559095580678314,
+              "n": 9730
+            },
+            {
+              "bin_hi": 0.3,
+              "bin_lo": 0.2,
+              "exceed": 2668,
+              "frequency": 0.35658914728682173,
+              "n": 7482
+            },
+            {
+              "bin_hi": 0.4,
+              "bin_lo": 0.3,
+              "exceed": 13519,
+              "frequency": 0.5106905409489272,
+              "n": 26472
+            },
+            {
+              "bin_hi": 0.5,
+              "bin_lo": 0.4,
+              "exceed": 1108,
+              "frequency": 0.51415313225058,
+              "n": 2155
+            },
+            {
+              "bin_hi": 0.6,
+              "bin_lo": 0.5,
+              "exceed": 22768,
+              "frequency": 0.655250813019829,
+              "n": 34747
+            },
+            {
+              "bin_hi": 0.7,
+              "bin_lo": 0.6,
+              "exceed": 2903,
+              "frequency": 0.6564902758932609,
+              "n": 4422
+            },
+            {
+              "bin_hi": 0.8,
+              "bin_lo": 0.7,
+              "exceed": 33243,
+              "frequency": 0.785682210299922,
+              "n": 42311
+            },
+            {
+              "bin_hi": 0.9,
+              "bin_lo": 0.8,
+              "exceed": 15179,
+              "frequency": 0.8792793836528993,
+              "n": 17263
+            },
+            {
+              "bin_hi": 1.0,
+              "bin_lo": 0.9,
+              "exceed": 41517,
+              "frequency": 0.9222106221817454,
+              "n": 45019
+            }
+          ]
+        },
+        "replicates": 1000,
+        "true_latent_variance": 0.010833333333333334,
+        "unpooled_reverts": 0,
+        "world_range": [
+          0,
+          1000
+        ]
+      },
+      "freeze_condition": {
+        "candidate_rejecting_cells": [],
+        "cells": {
+          "cand_bpB.row5c_false_pass_admitted": {
+            "G": 477,
+            "decisions": 7207,
+            "false": 310,
+            "g": 174,
+            "p_value": 0.9667400031744197,
+            "rejects_at": 37,
+            "selected_false": 16,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.03690998902305159
+          },
+          "cand_bpB.row5c_false_pass_refused": {
+            "G": 7,
+            "decisions": 147,
+            "false": 16,
+            "g": 1,
+            "p_value": 1.0,
+            "rejects_at": 3,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "cand_bpB.row6c_false_fail_admitted": {
+            "G": 107,
+            "decisions": 168,
+            "false": 9,
+            "g": 9,
+            "p_value": 0.1673138385774034,
+            "rejects_at": 12,
+            "selected_false": 8,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.01764705882352941
+          },
+          "cand_bpB.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_pb.row5c_false_pass_admitted": {
+            "G": 479,
+            "decisions": 7089,
+            "false": 296,
+            "g": 168,
+            "p_value": 0.9681634931368975,
+            "rejects_at": 37,
+            "selected_false": 16,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.03614297145905575
+          },
+          "cand_pb.row5c_false_pass_refused": {
+            "G": 7,
+            "decisions": 147,
+            "false": 16,
+            "g": 1,
+            "p_value": 1.0,
+            "rejects_at": 3,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "cand_pb.row6c_false_fail_admitted": {
+            "G": 79,
+            "decisions": 120,
+            "false": 7,
+            "g": 7,
+            "p_value": 0.20286356620772125,
+            "rejects_at": 10,
+            "selected_false": 6,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.014705882352941176
+          },
+          "cand_pb.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "main.row5c_false_pass_admitted": {
+            "G": 489,
+            "decisions": 13179,
+            "false": 655,
+            "g": 354,
+            "p_value": 0.7231926959928836,
+            "rejects_at": 37,
+            "selected_false": 22,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.045457972107048626
+          },
+          "main.row5c_false_pass_refused": {
+            "G": 11,
+            "decisions": 207,
+            "false": 10,
+            "g": 8,
+            "p_value": 0.43119990772354,
+            "rejects_at": 4,
+            "selected_false": 1,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.020202020202020204
+          },
+          "main.row6c_false_fail_admitted": {
+            "G": 479,
+            "decisions": 1742,
+            "false": 206,
+            "g": 165,
+            "p_value": 1.3202620873446077e-11,
+            "rejects_at": 37,
+            "selected_false": 62,
+            "testable": true,
+            "verdict": "REJECTS",
+            "world_block_bound": 0.09977324263038549
+          },
+          "main.row6c_false_fail_refused": {
+            "G": 8,
+            "decisions": 12,
+            "false": 1,
+            "g": 1,
+            "p_value": 1.0,
+            "rejects_at": 3,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "oracle.row5c_false_pass_admitted": {
+            "G": 489,
+            "decisions": 3237,
+            "false": 80,
+            "g": 77,
+            "p_value": 0.9999985493272289,
+            "rejects_at": 37,
+            "selected_false": 6,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.018873762376237623
+          },
+          "oracle.row5c_false_pass_refused": {
+            "G": 10,
+            "decisions": 47,
+            "false": 0,
+            "g": 0,
+            "p_value": 1.0,
+            "rejects_at": 4,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "oracle.row6c_false_fail_admitted": {
+            "G": 43,
+            "decisions": 44,
+            "false": 2,
+            "g": 2,
+            "p_value": 0.6404551139699828,
+            "rejects_at": 7,
+            "selected_false": 2,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "oracle.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          }
+        },
+        "consequence": "v2 section 4 owns the consequence. A rejection resumes that section's sequence; it is not a new kill and nothing here decides it.",
+        "oracle_self_check": {
+          "consequence": "a failing oracle cell voids that regime's result and is a harness defect",
+          "failing_cells": [],
+          "passes": true,
+          "testable_cells": 3
+        },
+        "seed_mode": "production",
+        "world_range": [
+          500,
+          1000
+        ]
+      },
+      "port_identity_prototype_seed": {
+        "cells": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "count": 608,
+              "false_worlds": 331,
+              "of": 13936,
+              "worlds": 962
+            },
+            "row5c_false_pass_pooled": {
+              "count": 626,
+              "false_worlds": 334,
+              "of": 14156,
+              "worlds": 979
+            },
+            "row5c_false_pass_refused": {
+              "count": 18,
+              "false_worlds": 3,
+              "of": 220,
+              "worlds": 17
+            },
+            "row6c_false_fail_admitted": {
+              "count": 22,
+              "false_worlds": 22,
+              "of": 369,
+              "worlds": 229
+            },
+            "row6c_false_fail_pooled": {
+              "count": 22,
+              "false_worlds": 22,
+              "of": 369,
+              "worlds": 229
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "count": 579,
+              "false_worlds": 320,
+              "of": 13446,
+              "worlds": 963
+            },
+            "row5c_false_pass_pooled": {
+              "count": 597,
+              "false_worlds": 323,
+              "of": 13666,
+              "worlds": 980
+            },
+            "row5c_false_pass_refused": {
+              "count": 18,
+              "false_worlds": 3,
+              "of": 220,
+              "worlds": 17
+            },
+            "row6c_false_fail_admitted": {
+              "count": 16,
+              "false_worlds": 16,
+              "of": 267,
+              "worlds": 164
+            },
+            "row6c_false_fail_pooled": {
+              "count": 16,
+              "false_worlds": 16,
+              "of": 267,
+              "worlds": 164
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "count": 1328,
+              "false_worlds": 716,
+              "of": 26495,
+              "worlds": 979
+            },
+            "row5c_false_pass_pooled": {
+              "count": 1350,
+              "false_worlds": 731,
+              "of": 26903,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 22,
+              "false_worlds": 15,
+              "of": 408,
+              "worlds": 21
+            },
+            "row6c_false_fail_admitted": {
+              "count": 437,
+              "false_worlds": 347,
+              "of": 3510,
+              "worlds": 952
+            },
+            "row6c_false_fail_pooled": {
+              "count": 439,
+              "false_worlds": 349,
+              "of": 3536,
+              "worlds": 969
+            },
+            "row6c_false_fail_refused": {
+              "count": 2,
+              "false_worlds": 2,
+              "of": 26,
+              "worlds": 17
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "count": 156,
+              "false_worlds": 147,
+              "of": 6445,
+              "worlds": 979
+            },
+            "row5c_false_pass_pooled": {
+              "count": 157,
+              "false_worlds": 148,
+              "of": 6534,
+              "worlds": 999
+            },
+            "row5c_false_pass_refused": {
+              "count": 1,
+              "false_worlds": 1,
+              "of": 89,
+              "worlds": 20
+            },
+            "row6c_false_fail_admitted": {
+              "count": 4,
+              "false_worlds": 4,
+              "of": 80,
+              "worlds": 79
+            },
+            "row6c_false_fail_pooled": {
+              "count": 4,
+              "false_worlds": 4,
+              "of": 80,
+              "worlds": 79
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          }
+        },
+        "differences": [],
+        "reproduces": true
+      },
+      "production_seed": {
+        "agrees_with_dump": false,
+        "cells": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "count": 608,
+              "false_worlds": 331,
+              "of": 13936,
+              "worlds": 962
+            },
+            "row5c_false_pass_pooled": {
+              "count": 626,
+              "false_worlds": 334,
+              "of": 14156,
+              "worlds": 979
+            },
+            "row5c_false_pass_refused": {
+              "count": 18,
+              "false_worlds": 3,
+              "of": 220,
+              "worlds": 17
+            },
+            "row6c_false_fail_admitted": {
+              "count": 22,
+              "false_worlds": 22,
+              "of": 369,
+              "worlds": 229
+            },
+            "row6c_false_fail_pooled": {
+              "count": 22,
+              "false_worlds": 22,
+              "of": 369,
+              "worlds": 229
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "count": 588,
+              "false_worlds": 323,
+              "of": 13599,
+              "worlds": 963
+            },
+            "row5c_false_pass_pooled": {
+              "count": 606,
+              "false_worlds": 326,
+              "of": 13819,
+              "worlds": 980
+            },
+            "row5c_false_pass_refused": {
+              "count": 18,
+              "false_worlds": 3,
+              "of": 220,
+              "worlds": 17
+            },
+            "row6c_false_fail_admitted": {
+              "count": 16,
+              "false_worlds": 16,
+              "of": 261,
+              "worlds": 160
+            },
+            "row6c_false_fail_pooled": {
+              "count": 16,
+              "false_worlds": 16,
+              "of": 261,
+              "worlds": 160
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "count": 1328,
+              "false_worlds": 716,
+              "of": 26495,
+              "worlds": 979
+            },
+            "row5c_false_pass_pooled": {
+              "count": 1350,
+              "false_worlds": 731,
+              "of": 26903,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 22,
+              "false_worlds": 15,
+              "of": 408,
+              "worlds": 21
+            },
+            "row6c_false_fail_admitted": {
+              "count": 437,
+              "false_worlds": 347,
+              "of": 3510,
+              "worlds": 952
+            },
+            "row6c_false_fail_pooled": {
+              "count": 439,
+              "false_worlds": 349,
+              "of": 3536,
+              "worlds": 969
+            },
+            "row6c_false_fail_refused": {
+              "count": 2,
+              "false_worlds": 2,
+              "of": 26,
+              "worlds": 17
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "count": 156,
+              "false_worlds": 147,
+              "of": 6445,
+              "worlds": 979
+            },
+            "row5c_false_pass_pooled": {
+              "count": 157,
+              "false_worlds": 148,
+              "of": 6534,
+              "worlds": 999
+            },
+            "row5c_false_pass_refused": {
+              "count": 1,
+              "false_worlds": 1,
+              "of": 89,
+              "worlds": 20
+            },
+            "row6c_false_fail_admitted": {
+              "count": 4,
+              "false_worlds": 4,
+              "of": 80,
+              "worlds": 79
+            },
+            "row6c_false_fail_pooled": {
+              "count": 4,
+              "false_worlds": 4,
+              "of": 80,
+              "worlds": 79
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          }
+        },
+        "differences": [
+          "cand_pb.row5c_false_pass_admitted.count: built=588 expected=579 (+9)",
+          "cand_pb.row5c_false_pass_admitted.of: built=13599 expected=13446 (+153)",
+          "cand_pb.row5c_false_pass_admitted.false_worlds: built=323 expected=320 (+3)",
+          "cand_pb.row6c_false_fail_admitted.of: built=261 expected=267 (-6)",
+          "cand_pb.row6c_false_fail_admitted.worlds: built=160 expected=164 (-4)",
+          "cand_pb.row5c_false_pass_pooled.count: built=606 expected=597 (+9)",
+          "cand_pb.row5c_false_pass_pooled.of: built=13819 expected=13666 (+153)",
+          "cand_pb.row5c_false_pass_pooled.false_worlds: built=326 expected=323 (+3)",
+          "cand_pb.row6c_false_fail_pooled.of: built=261 expected=267 (-6)",
+          "cand_pb.row6c_false_fail_pooled.worlds: built=160 expected=164 (-4)",
+          "cand_pb.excess_over_main_vs_oracle: built=[-13014, -3256, 89] expected=[-13160, -3250, 96]"
+        ],
+        "flip_listing": {
+          "admitted_clauses": 195800,
+          "admitted_worlds": 979,
+          "flip_rows_in_sidecar": 759,
+          "flips": 759,
+          "max_abs_tail_gap": 0.026774,
+          "near_cut_band": 0.03,
+          "near_cut_clauses": 24241
+        }
+      },
+      "seconds": 1193.2
+    },
+    "tie_heavy_null": {
+      "acceptance_matrix_production_seed": {
+        "admission_rate": 0.039,
+        "admitted": 39,
+        "estimators": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "G": 39,
+              "clusters": 39,
+              "decisions": 3075,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 7,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 123541,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 961,
+              "clusters": 961,
+              "decisions": 120466,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 65,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 76459,
+              "wrong_fail": 0,
+              "wrong_pass": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "G": 39,
+              "clusters": 39,
+              "decisions": 1771,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 7,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 122237,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 961,
+              "clusters": 961,
+              "decisions": 120466,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 65,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 77763,
+              "wrong_fail": 0,
+              "wrong_pass": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "G": 39,
+              "clusters": 39,
+              "decisions": 500,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 7,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 994,
+              "clusters": 994,
+              "decisions": 8895,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 67,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 955,
+              "clusters": 955,
+              "decisions": 8395,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 65,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 191105,
+              "wrong_fail": 0,
+              "wrong_pass": 0
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "G": 39,
+              "clusters": 39,
+              "decisions": 7800,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 7,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 200000,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 961,
+              "clusters": 961,
+              "decisions": 192200,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 65,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 0,
+              "wrong_fail": 0,
+              "wrong_pass": 0
+            }
+          }
+        },
+        "excess_over_main_vs_oracle": {
+          "cand_bpB": [
+            0,
+            0,
+            -114646
+          ],
+          "cand_pb": [
+            0,
+            0,
+            -113342
+          ],
+          "main": [
+            0,
+            0,
+            0
+          ],
+          "oracle": [
+            0,
+            0,
+            -191105
+          ]
+        },
+        "fallback_reasons": {
+          "latent_variance_not_identified": 961
+        },
+        "is_subrange": false,
+        "regime": "tie_heavy_null",
+        "relative_bias_latent_raw": null,
+        "reliability": {
+          "cand_pb": [
+            {
+              "bin_hi": 0.1,
+              "bin_lo": 0.0,
+              "exceed": 0,
+              "frequency": null,
+              "n": 0
+            },
+            {
+              "bin_hi": 0.2,
+              "bin_lo": 0.1,
+              "exceed": 0,
+              "frequency": null,
+              "n": 0
+            },
+            {
+              "bin_hi": 0.3,
+              "bin_lo": 0.2,
+              "exceed": 0,
+              "frequency": null,
+              "n": 0
+            },
+            {
+              "bin_hi": 0.4,
+              "bin_lo": 0.3,
+              "exceed": 0,
+              "frequency": null,
+              "n": 0
+            },
+            {
+              "bin_hi": 0.5,
+              "bin_lo": 0.4,
+              "exceed": 0,
+              "frequency": null,
+              "n": 0
+            },
+            {
+              "bin_hi": 0.6,
+              "bin_lo": 0.5,
+              "exceed": 2,
+              "frequency": 1.0,
+              "n": 2
+            },
+            {
+              "bin_hi": 0.7,
+              "bin_lo": 0.6,
+              "exceed": 44,
+              "frequency": 1.0,
+              "n": 44
+            },
+            {
+              "bin_hi": 0.8,
+              "bin_lo": 0.7,
+              "exceed": 552,
+              "frequency": 1.0,
+              "n": 552
+            },
+            {
+              "bin_hi": 0.9,
+              "bin_lo": 0.8,
+              "exceed": 12737,
+              "frequency": 1.0,
+              "n": 12737
+            },
+            {
+              "bin_hi": 1.0,
+              "bin_lo": 0.9,
+              "exceed": 186665,
+              "frequency": 1.0,
+              "n": 186665
+            }
+          ],
+          "main": [
+            {
+              "bin_hi": 0.1,
+              "bin_lo": 0.0,
+              "exceed": 0,
+              "frequency": null,
+              "n": 0
+            },
+            {
+              "bin_hi": 0.2,
+              "bin_lo": 0.1,
+              "exceed": 34,
+              "frequency": 1.0,
+              "n": 34
+            },
+            {
+              "bin_hi": 0.3,
+              "bin_lo": 0.2,
+              "exceed": 295,
+              "frequency": 1.0,
+              "n": 295
+            },
+            {
+              "bin_hi": 0.4,
+              "bin_lo": 0.3,
+              "exceed": 1266,
+              "frequency": 1.0,
+              "n": 1266
+            },
+            {
+              "bin_hi": 0.5,
+              "bin_lo": 0.4,
+              "exceed": 4191,
+              "frequency": 1.0,
+              "n": 4191
+            },
+            {
+              "bin_hi": 0.6,
+              "bin_lo": 0.5,
+              "exceed": 11412,
+              "frequency": 1.0,
+              "n": 11412
+            },
+            {
+              "bin_hi": 0.7,
+              "bin_lo": 0.6,
+              "exceed": 26162,
+              "frequency": 1.0,
+              "n": 26162
+            },
+            {
+              "bin_hi": 0.8,
+              "bin_lo": 0.7,
+              "exceed": 48384,
+              "frequency": 1.0,
+              "n": 48384
+            },
+            {
+              "bin_hi": 0.9,
+              "bin_lo": 0.8,
+              "exceed": 70128,
+              "frequency": 1.0,
+              "n": 70128
+            },
+            {
+              "bin_hi": 1.0,
+              "bin_lo": 0.9,
+              "exceed": 38128,
+              "frequency": 1.0,
+              "n": 38128
+            }
+          ]
+        },
+        "replicates": 1000,
+        "true_latent_variance": 0.0,
+        "unpooled_reverts": 0,
+        "world_range": [
+          0,
+          1000
+        ]
+      },
+      "freeze_condition": {
+        "candidate_rejecting_cells": [],
+        "cells": {
+          "cand_bpB.row5c_false_pass_admitted": {
+            "G": 18,
+            "decisions": 1450,
+            "false": 0,
+            "g": 0,
+            "p_value": 1.0,
+            "rejects_at": 5,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "cand_bpB.row5c_false_pass_refused": {
+            "G": 482,
+            "decisions": 60914,
+            "false": 0,
+            "g": 0,
+            "p_value": 1.0,
+            "rejects_at": 37,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "cand_bpB.row6c_false_fail_admitted": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_bpB.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_pb.row5c_false_pass_admitted": {
+            "G": 18,
+            "decisions": 890,
+            "false": 0,
+            "g": 0,
+            "p_value": 1.0,
+            "rejects_at": 5,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "cand_pb.row5c_false_pass_refused": {
+            "G": 482,
+            "decisions": 60914,
+            "false": 0,
+            "g": 0,
+            "p_value": 1.0,
+            "rejects_at": 37,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "cand_pb.row6c_false_fail_admitted": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_pb.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "main.row5c_false_pass_admitted": {
+            "G": 18,
+            "decisions": 236,
+            "false": 0,
+            "g": 0,
+            "p_value": 1.0,
+            "rejects_at": 5,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "main.row5c_false_pass_refused": {
+            "G": 478,
+            "decisions": 4248,
+            "false": 0,
+            "g": 0,
+            "p_value": 1.0,
+            "rejects_at": 37,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "main.row6c_false_fail_admitted": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "main.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "oracle.row5c_false_pass_admitted": {
+            "G": 18,
+            "decisions": 3600,
+            "false": 0,
+            "g": 0,
+            "p_value": 1.0,
+            "rejects_at": 5,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "oracle.row5c_false_pass_refused": {
+            "G": 482,
+            "decisions": 96400,
+            "false": 0,
+            "g": 0,
+            "p_value": 1.0,
+            "rejects_at": 37,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "oracle.row6c_false_fail_admitted": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "oracle.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          }
+        },
+        "consequence": "v2 section 4 owns the consequence. A rejection resumes that section's sequence; it is not a new kill and nothing here decides it.",
+        "oracle_self_check": {
+          "consequence": "a failing oracle cell voids that regime's result and is a harness defect",
+          "failing_cells": [],
+          "passes": true,
+          "testable_cells": 2
+        },
+        "seed_mode": "production",
+        "world_range": [
+          500,
+          1000
+        ]
+      },
+      "port_identity_prototype_seed": {
+        "cells": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 3075,
+              "worlds": 39
+            },
+            "row5c_false_pass_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 123541,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 120466,
+              "worlds": 961
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 1762,
+              "worlds": 39
+            },
+            "row5c_false_pass_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 122228,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 120466,
+              "worlds": 961
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 500,
+              "worlds": 39
+            },
+            "row5c_false_pass_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 8895,
+              "worlds": 994
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 8395,
+              "worlds": 955
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 7800,
+              "worlds": 39
+            },
+            "row5c_false_pass_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 200000,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 192200,
+              "worlds": 961
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          }
+        },
+        "differences": [],
+        "reproduces": true
+      },
+      "production_seed": {
+        "agrees_with_dump": false,
+        "cells": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 3075,
+              "worlds": 39
+            },
+            "row5c_false_pass_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 123541,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 120466,
+              "worlds": 961
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 1771,
+              "worlds": 39
+            },
+            "row5c_false_pass_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 122237,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 120466,
+              "worlds": 961
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 500,
+              "worlds": 39
+            },
+            "row5c_false_pass_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 8895,
+              "worlds": 994
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 8395,
+              "worlds": 955
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 7800,
+              "worlds": 39
+            },
+            "row5c_false_pass_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 200000,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 192200,
+              "worlds": 961
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          }
+        },
+        "differences": [
+          "cand_pb.row5c_false_pass_admitted.of: built=1771 expected=1762 (+9)",
+          "cand_pb.row5c_false_pass_pooled.of: built=122237 expected=122228 (+9)",
+          "cand_pb.excess_over_main_vs_oracle: built=[0, 0, -113342] expected=[0, 0, -113333]"
+        ],
+        "flip_listing": {
+          "admitted_clauses": 7800,
+          "admitted_worlds": 39,
+          "flip_rows_in_sidecar": 139,
+          "flips": 139,
+          "max_abs_tail_gap": 0.038104,
+          "near_cut_band": 0.03,
+          "near_cut_clauses": 3638
+        }
+      },
+      "seconds": 1676.0
+    },
+    "tie_heavy_signal": {
+      "acceptance_matrix_production_seed": {
+        "admission_rate": 1.0,
+        "admitted": 1000,
+        "estimators": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "G": 999,
+              "clusters": 999,
+              "decisions": 22722,
+              "false": 338,
+              "g": 222,
+              "note": "",
+              "p_value": 0.9999999965364501,
+              "passes": true,
+              "rate": 0.01487545110465628,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 16,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.012564171845447177,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 999,
+              "clusters": 999,
+              "decisions": 22722,
+              "false": 338,
+              "g": 222,
+              "note": "",
+              "p_value": 0.9999999965364501,
+              "passes": true,
+              "rate": 0.01487545110465628,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 16,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.01272475795297372,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 36244,
+              "wrong_fail": 0,
+              "wrong_pass": 877
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "G": 998,
+              "clusters": 998,
+              "decisions": 22744,
+              "false": 322,
+              "g": 226,
+              "note": "",
+              "p_value": 0.9999999964075161,
+              "passes": true,
+              "rate": 0.014157580021104467,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 16,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.012176491732566498,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 998,
+              "clusters": 998,
+              "decisions": 22744,
+              "false": 322,
+              "g": 226,
+              "note": "",
+              "p_value": 0.9999999964075161,
+              "passes": true,
+              "rate": 0.014157580021104467,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 16,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.012243053986898577,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 36017,
+              "wrong_fail": 0,
+              "wrong_pass": 672
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 17345,
+              "false": 162,
+              "g": 145,
+              "note": "",
+              "p_value": 0.9999999999397184,
+              "passes": true,
+              "rate": 0.009339867396944364,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 13,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0077204388459975615,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 17345,
+              "false": 162,
+              "g": 145,
+              "note": "",
+              "p_value": 0.9999999999397184,
+              "passes": true,
+              "rate": 0.009339867396944364,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 13,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.007591757520406416,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 77,
+              "clusters": 77,
+              "decisions": 81,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 10,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 77,
+              "clusters": 77,
+              "decisions": 81,
+              "false": 0,
+              "g": 0,
+              "note": "",
+              "p_value": 1.0,
+              "passes": true,
+              "rate": 0.0,
+              "rejects": false,
+              "rejects_at": 10,
+              "selected_false": 0,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 40667,
+              "wrong_fail": 2,
+              "wrong_pass": 2
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 57908,
+              "false": 1293,
+              "g": 722,
+              "note": "",
+              "p_value": 0.9992808027197848,
+              "passes": true,
+              "rate": 0.02232852110243835,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 30,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.02093148589210897,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "G": 1000,
+              "clusters": 1000,
+              "decisions": 57908,
+              "false": 1293,
+              "g": 722,
+              "note": "",
+              "p_value": 0.9992808027197848,
+              "passes": true,
+              "rate": 0.02232852110243835,
+              "rejects": false,
+              "rejects_at": 68,
+              "selected_false": 30,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.020812015470264834,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row5c_false_pass_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_admitted": {
+              "G": 170,
+              "clusters": 170,
+              "decisions": 181,
+              "false": 2,
+              "g": 2,
+              "note": "",
+              "p_value": 0.998375494813183,
+              "passes": true,
+              "rate": 0.011049723756906077,
+              "rejects": false,
+              "rejects_at": 17,
+              "selected_false": 2,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_pooled": {
+              "G": 170,
+              "clusters": 170,
+              "decisions": 181,
+              "false": 2,
+              "g": 2,
+              "note": "",
+              "p_value": 0.998375494813183,
+              "passes": true,
+              "rate": 0.011049723756906077,
+              "rejects": false,
+              "rejects_at": 17,
+              "selected_false": 2,
+              "testable": true,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": 0.0,
+                "fails": false,
+                "undefined_resamples": 0
+              },
+              "worlds_in_range": 1000
+            },
+            "row6c_false_fail_refused": {
+              "G": 0,
+              "clusters": 0,
+              "decisions": 0,
+              "false": 0,
+              "g": 0,
+              "note": "no decisions of this kind on this path; not testable",
+              "p_value": null,
+              "passes": null,
+              "rate": null,
+              "rejects": false,
+              "selected_false": null,
+              "testable": false,
+              "world_block_bound": {
+                "B": 999,
+                "bound_lower_99": null,
+                "fails": null,
+                "undefined_resamples": null
+              },
+              "worlds_in_range": 1000
+            },
+            "vs_oracle": {
+              "abstention": 0,
+              "wrong_fail": 0,
+              "wrong_pass": 0
+            }
+          }
+        },
+        "excess_over_main_vs_oracle": {
+          "cand_bpB": [
+            875,
+            -2,
+            -4423
+          ],
+          "cand_pb": [
+            670,
+            -2,
+            -4650
+          ],
+          "main": [
+            0,
+            0,
+            0
+          ],
+          "oracle": [
+            -2,
+            -2,
+            -40667
+          ]
+        },
+        "fallback_reasons": {},
+        "is_subrange": false,
+        "regime": "tie_heavy_signal",
+        "relative_bias_latent_raw": 9.497308766091301e-05,
+        "reliability": {
+          "cand_pb": [
+            {
+              "bin_hi": 0.1,
+              "bin_lo": 0.0,
+              "exceed": 0,
+              "frequency": 0.0,
+              "n": 9
+            },
+            {
+              "bin_hi": 0.2,
+              "bin_lo": 0.1,
+              "exceed": 1,
+              "frequency": 0.0078125,
+              "n": 128
+            },
+            {
+              "bin_hi": 0.3,
+              "bin_lo": 0.2,
+              "exceed": 50,
+              "frequency": 0.09541984732824428,
+              "n": 524
+            },
+            {
+              "bin_hi": 0.4,
+              "bin_lo": 0.3,
+              "exceed": 263,
+              "frequency": 0.1774628879892038,
+              "n": 1482
+            },
+            {
+              "bin_hi": 0.5,
+              "bin_lo": 0.4,
+              "exceed": 1001,
+              "frequency": 0.28364975913856616,
+              "n": 3529
+            },
+            {
+              "bin_hi": 0.6,
+              "bin_lo": 0.5,
+              "exceed": 3246,
+              "frequency": 0.40732839754046934,
+              "n": 7969
+            },
+            {
+              "bin_hi": 0.7,
+              "bin_lo": 0.6,
+              "exceed": 9142,
+              "frequency": 0.5537921007996123,
+              "n": 16508
+            },
+            {
+              "bin_hi": 0.8,
+              "bin_lo": 0.7,
+              "exceed": 24562,
+              "frequency": 0.7161976964572095,
+              "n": 34295
+            },
+            {
+              "bin_hi": 0.9,
+              "bin_lo": 0.8,
+              "exceed": 57930,
+              "frequency": 0.864910866254591,
+              "n": 66978
+            },
+            {
+              "bin_hi": 1.0,
+              "bin_lo": 0.9,
+              "exceed": 66113,
+              "frequency": 0.9640555280118989,
+              "n": 68578
+            }
+          ],
+          "main": [
+            {
+              "bin_hi": 0.1,
+              "bin_lo": 0.0,
+              "exceed": 18,
+              "frequency": 0.038876889848812095,
+              "n": 463
+            },
+            {
+              "bin_hi": 0.2,
+              "bin_lo": 0.1,
+              "exceed": 279,
+              "frequency": 0.1437403400309119,
+              "n": 1941
+            },
+            {
+              "bin_hi": 0.3,
+              "bin_lo": 0.2,
+              "exceed": 1137,
+              "frequency": 0.2675294117647059,
+              "n": 4250
+            },
+            {
+              "bin_hi": 0.4,
+              "bin_lo": 0.3,
+              "exceed": 2815,
+              "frequency": 0.3867289462838302,
+              "n": 7279
+            },
+            {
+              "bin_hi": 0.5,
+              "bin_lo": 0.4,
+              "exceed": 5990,
+              "frequency": 0.5182557535905866,
+              "n": 11558
+            },
+            {
+              "bin_hi": 0.6,
+              "bin_lo": 0.5,
+              "exceed": 10908,
+              "frequency": 0.6398404504927264,
+              "n": 17048
+            },
+            {
+              "bin_hi": 0.7,
+              "bin_lo": 0.6,
+              "exceed": 18872,
+              "frequency": 0.7519623859425429,
+              "n": 25097
+            },
+            {
+              "bin_hi": 0.8,
+              "bin_lo": 0.7,
+              "exceed": 31083,
+              "frequency": 0.8478029621143932,
+              "n": 36663
+            },
+            {
+              "bin_hi": 0.9,
+              "bin_lo": 0.8,
+              "exceed": 46162,
+              "frequency": 0.9289063286044874,
+              "n": 49695
+            },
+            {
+              "bin_hi": 1.0,
+              "bin_lo": 0.9,
+              "exceed": 45044,
+              "frequency": 0.9790896839542669,
+              "n": 46006
+            }
+          ]
+        },
+        "replicates": 1000,
+        "true_latent_variance": 0.003214285714285714,
+        "unpooled_reverts": 0,
+        "world_range": [
+          0,
+          1000
+        ]
+      },
+      "freeze_condition": {
+        "candidate_rejecting_cells": [],
+        "cells": {
+          "cand_bpB.row5c_false_pass_admitted": {
+            "G": 499,
+            "decisions": 10925,
+            "false": 162,
+            "g": 108,
+            "p_value": 0.9999831042360964,
+            "rejects_at": 38,
+            "selected_false": 8,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.011400037686074995
+          },
+          "cand_bpB.row5c_false_pass_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_bpB.row6c_false_fail_admitted": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_bpB.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_pb.row5c_false_pass_admitted": {
+            "G": 499,
+            "decisions": 11012,
+            "false": 158,
+            "g": 111,
+            "p_value": 0.9999831042360964,
+            "rejects_at": 38,
+            "selected_false": 8,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.011403671425922492
+          },
+          "cand_pb.row5c_false_pass_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_pb.row6c_false_fail_admitted": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "cand_pb.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "main.row5c_false_pass_admitted": {
+            "G": 500,
+            "decisions": 8615,
+            "false": 87,
+            "g": 74,
+            "p_value": 0.9999990818191732,
+            "rejects_at": 38,
+            "selected_false": 6,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.00732728541521284
+          },
+          "main.row5c_false_pass_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "main.row6c_false_fail_admitted": {
+            "G": 43,
+            "decisions": 45,
+            "false": 0,
+            "g": 0,
+            "p_value": 1.0,
+            "rejects_at": 7,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "main.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "oracle.row5c_false_pass_admitted": {
+            "G": 500,
+            "decisions": 28820,
+            "false": 664,
+            "g": 368,
+            "p_value": 0.944084439510806,
+            "rejects_at": 38,
+            "selected_false": 18,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.021036892798776036
+          },
+          "oracle.row5c_false_pass_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          },
+          "oracle.row6c_false_fail_admitted": {
+            "G": 92,
+            "decisions": 96,
+            "false": 0,
+            "g": 0,
+            "p_value": 1.0,
+            "rejects_at": 11,
+            "selected_false": 0,
+            "testable": true,
+            "verdict": "passes",
+            "world_block_bound": 0.0
+          },
+          "oracle.row6c_false_fail_refused": {
+            "G": 0,
+            "decisions": 0,
+            "false": 0,
+            "g": 0,
+            "p_value": null,
+            "rejects_at": null,
+            "selected_false": null,
+            "testable": false,
+            "verdict": "not testable",
+            "world_block_bound": null
+          }
+        },
+        "consequence": "v2 section 4 owns the consequence. A rejection resumes that section's sequence; it is not a new kill and nothing here decides it.",
+        "oracle_self_check": {
+          "consequence": "a failing oracle cell voids that regime's result and is a harness defect",
+          "failing_cells": [],
+          "passes": true,
+          "testable_cells": 2
+        },
+        "seed_mode": "production",
+        "world_range": [
+          500,
+          1000
+        ]
+      },
+      "port_identity_prototype_seed": {
+        "cells": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "count": 338,
+              "false_worlds": 222,
+              "of": 22722,
+              "worlds": 999
+            },
+            "row5c_false_pass_pooled": {
+              "count": 338,
+              "false_worlds": 222,
+              "of": 22722,
+              "worlds": 999
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "count": 338,
+              "false_worlds": 231,
+              "of": 23009,
+              "worlds": 999
+            },
+            "row5c_false_pass_pooled": {
+              "count": 338,
+              "false_worlds": 231,
+              "of": 23009,
+              "worlds": 999
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "count": 162,
+              "false_worlds": 145,
+              "of": 17345,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 162,
+              "false_worlds": 145,
+              "of": 17345,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 81,
+              "worlds": 77
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 81,
+              "worlds": 77
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "count": 1293,
+              "false_worlds": 722,
+              "of": 57908,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 1293,
+              "false_worlds": 722,
+              "of": 57908,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 2,
+              "false_worlds": 2,
+              "of": 181,
+              "worlds": 170
+            },
+            "row6c_false_fail_pooled": {
+              "count": 2,
+              "false_worlds": 2,
+              "of": 181,
+              "worlds": 170
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          }
+        },
+        "differences": [],
+        "reproduces": true
+      },
+      "production_seed": {
+        "agrees_with_dump": false,
+        "cells": {
+          "cand_bpB": {
+            "row5c_false_pass_admitted": {
+              "count": 338,
+              "false_worlds": 222,
+              "of": 22722,
+              "worlds": 999
+            },
+            "row5c_false_pass_pooled": {
+              "count": 338,
+              "false_worlds": 222,
+              "of": 22722,
+              "worlds": 999
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "cand_pb": {
+            "row5c_false_pass_admitted": {
+              "count": 322,
+              "false_worlds": 226,
+              "of": 22744,
+              "worlds": 998
+            },
+            "row5c_false_pass_pooled": {
+              "count": 322,
+              "false_worlds": 226,
+              "of": 22744,
+              "worlds": 998
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "main": {
+            "row5c_false_pass_admitted": {
+              "count": 162,
+              "false_worlds": 145,
+              "of": 17345,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 162,
+              "false_worlds": 145,
+              "of": 17345,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 81,
+              "worlds": 77
+            },
+            "row6c_false_fail_pooled": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 81,
+              "worlds": 77
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          },
+          "oracle": {
+            "row5c_false_pass_admitted": {
+              "count": 1293,
+              "false_worlds": 722,
+              "of": 57908,
+              "worlds": 1000
+            },
+            "row5c_false_pass_pooled": {
+              "count": 1293,
+              "false_worlds": 722,
+              "of": 57908,
+              "worlds": 1000
+            },
+            "row5c_false_pass_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            },
+            "row6c_false_fail_admitted": {
+              "count": 2,
+              "false_worlds": 2,
+              "of": 181,
+              "worlds": 170
+            },
+            "row6c_false_fail_pooled": {
+              "count": 2,
+              "false_worlds": 2,
+              "of": 181,
+              "worlds": 170
+            },
+            "row6c_false_fail_refused": {
+              "count": 0,
+              "false_worlds": 0,
+              "of": 0,
+              "worlds": 0
+            }
+          }
+        },
+        "differences": [
+          "cand_pb.row5c_false_pass_admitted.count: built=322 expected=338 (-16)",
+          "cand_pb.row5c_false_pass_admitted.of: built=22744 expected=23009 (-265)",
+          "cand_pb.row5c_false_pass_admitted.worlds: built=998 expected=999 (-1)",
+          "cand_pb.row5c_false_pass_admitted.false_worlds: built=226 expected=231 (-5)",
+          "cand_pb.row5c_false_pass_pooled.count: built=322 expected=338 (-16)",
+          "cand_pb.row5c_false_pass_pooled.of: built=22744 expected=23009 (-265)",
+          "cand_pb.row5c_false_pass_pooled.worlds: built=998 expected=999 (-1)",
+          "cand_pb.row5c_false_pass_pooled.false_worlds: built=226 expected=231 (-5)",
+          "cand_pb.excess_over_main_vs_oracle: built=[670, -2, -4650] expected=[768, -2, -4817]"
+        ],
+        "flip_listing": {
+          "admitted_clauses": 200000,
+          "admitted_worlds": 1000,
+          "flip_rows_in_sidecar": 1111,
+          "flips": 1111,
+          "max_abs_tail_gap": 0.033996,
+          "near_cut_band": 0.03,
+          "near_cut_clauses": 47752
+        }
+      },
+      "seconds": 1888.9
+    }
+  },
+  "replicates": 1000,
+  "root_seed": "f95e4de5d261feb7815743abd181105a856ac4a9e79d14f8805146e2d9a42a8a",
+  "specification": "docs/assurance/ebmom-peel-preregistration-amendment-v2.md"
+}
