@@ -157,14 +157,14 @@ _SPLIT_KILL = (
     "tests/test_ebmom_acceptance_matrix_v2.py"
     "::test_mutant_2_low_heterogeneity_refused_cell_carries_its_own_G"
 )
-# The control requires the pooled cell to be STRICTLY larger than either path's,
-# so a per-path cell that happened to equal the pooled one could not carry the
-# kill. The guard requires the two fixture worlds to reach different paths: a
-# mutant that sent both down one path would empty a cell and look like a kill
-# for a reason that has nothing to do with the split.
+# The control requires the POOLED cell to be unchanged: pooling loses the path
+# and never the decisions, so it stays green under the mutant. If the mutant had
+# emptied the fixture rather than pooling it, the kill would go red for a reason
+# that has nothing to do with the split and this control would go red with it.
+# The guard requires the two fixture worlds to reach different paths.
 _SPLIT_CONTROL = (
     "tests/test_ebmom_acceptance_matrix_v2.py"
-    "::test_control_the_pooled_cell_differs_from_both_per_path_cells"
+    "::test_control_the_pooled_tally_keeps_every_decision_either_way"
 )
 _SPLIT_PATH_GUARD = (
     "tests/test_ebmom_acceptance_matrix_v2.py::test_the_fixture_worlds_reach_both_paths"

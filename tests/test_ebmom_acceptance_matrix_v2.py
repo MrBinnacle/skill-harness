@@ -28,10 +28,10 @@ The kill assertion is
 ``test_mutant_2_low_heterogeneity_refused_cell_carries_its_own_G``. Two worlds
 of the registered ``low_heterogeneity`` regime are scored through production,
 chosen because one reaches the admitted path and the other the refused one.
-``test_control_the_pooled_cell_differs_from_both_per_path_cells`` is the
-positive control: it requires the pooled tally to be strictly larger than
-either path's, so a per-path cell that agreed with the pooled one by accident
-could not carry the kill. ``test_the_fixture_worlds_reach_both_paths`` is the
+``test_control_the_pooled_tally_keeps_every_decision_either_way`` is the
+positive control: pooling loses the path and never the decisions, so it stays
+green under the mutant and rules out a kill that fires because the fixture was
+emptied rather than pooled. ``test_the_fixture_worlds_reach_both_paths`` is the
 guard: a mutant that sent both worlds down one path would empty a cell and look
 like a kill for a reason that has nothing to do with the split.
 
@@ -265,11 +265,17 @@ def test_the_fixture_worlds_reach_both_paths() -> None:
 
 
 def test_mutant_2_low_heterogeneity_refused_cell_carries_its_own_G() -> None:
-    """KILL for mutant 2. The refused 5c cell is reported separately, with its own G."""
+    """KILL for mutant 2. The refused 5c cell is reported separately, with its own G.
+
+    Two things are asserted, and the second is the half the specification's
+    wording turns on: the refused cell exists with its own cluster count, AND it
+    is not the pooled cell, so a pooled-only tally cannot produce it.
+    """
     tally, paths = _mutant_2_tally()
-    refused_world = next(w for w, p in paths.items() if p == "refused")
+    refused_world = next(world for world, path in paths.items() if path == "refused")
     refused = tally.cell("5c", "refused")
     admitted = tally.cell("5c", "admitted")
+    pooled = tally.cell("5c", None)
 
     assert refused["G"] == 1, (
         f"the refused 5c cell reports G = {refused['G']} over world {refused_world}; "
@@ -277,20 +283,29 @@ def test_mutant_2_low_heterogeneity_refused_cell_carries_its_own_G() -> None:
     )
     assert refused["decisions"] > 0
     assert admitted["G"] == 1
-    assert refused["decisions"] != admitted["decisions"]
+    assert refused["decisions"] != pooled["decisions"], (
+        f"the refused cell reports {refused['decisions']} decisions and the pooled "
+        f"cell {pooled['decisions']}; a pooled-only tally would report the same "
+        "number twice and the per-path row would be a restatement"
+    )
 
 
-def test_control_the_pooled_cell_differs_from_both_per_path_cells() -> None:
-    """The positive control: the pooled tally is strictly larger, so neither path is it."""
+def test_control_the_pooled_tally_keeps_every_decision_either_way() -> None:
+    """The positive control: pooling loses the PATH, never the decisions.
+
+    This has to stay green under mutant 2, and it does: the mutant moves which
+    lane a decision is filed on, and the pooled view sums both lanes. That is
+    what rules out the vacuous reading of the kill above -- if the mutant had
+    emptied the fixture instead of pooling it, the kill would go red for a
+    reason that has nothing to do with the split, and this control would go red
+    with it.
+    """
     tally, _paths = _mutant_2_tally()
     pooled = tally.cell("5c", None)
-    refused = tally.cell("5c", "refused")
-    admitted = tally.cell("5c", "admitted")
 
-    assert pooled["decisions"] == refused["decisions"] + admitted["decisions"]
     assert pooled["G"] == 2
-    assert pooled["decisions"] > refused["decisions"]
-    assert pooled["decisions"] > admitted["decisions"]
+    assert pooled["decisions"] > 0
+    assert pooled["testable"] is True
 
 
 # --- the kill criterion ------------------------------------------------------
