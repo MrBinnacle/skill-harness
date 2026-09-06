@@ -513,6 +513,31 @@ and covers that section only. This page stays the citable surface for every kind
   or fails the v2 section 5 kill rows, which need a confirmatory run that has not been performed;
   that any number here is confirmatory, the root being a development smoke.
 
+### [`docs/assurance/ebmom-v2-class2-mutation-receipt.md`](assurance/ebmom-v2-class2-mutation-receipt.md)
+
+- **Claims:** Mutant 4 of v2 section 7 - the admission-conditioned parametric bootstrap removed
+  from the admitted path and the plug-in posterior restored - is KILLED at `60a6548` by
+  `tests/test_aggregation_fit_admitted_bootstrap.py::test_mutant_4_low_heterogeneity_admitted_false_fail_rate`,
+  measured by `scripts/mutation_receipt.py` in its own git worktree at a fixed commit with
+  production never mutated in place, recording both worktree HEADs, the `module.__file__`
+  actually imported, clean and mutant source digests, that the digests differ, that the mutant
+  compiles, that the clean baseline passed first with nonzero collection, and that the production
+  tree was byte-unchanged afterwards. The selection carries three node ids so the receipt shows
+  which assertion moved and which did not: only the kill assertion failed, while the positive
+  control (the plug-in posterior REJECTING the same registered test on the same four fits, three
+  false of four, exact binomial p = 4.8e-4) and the admission guard (all four worlds reaching
+  `ebmom_hierarchical`) stayed green under the mutant, which excludes both an empty-cell kill and
+  a kill through the wrong mechanism. The mutation leaves the bootstrap running and discards its
+  result, so nothing but the decision path can account for the kill.
+- **Refuses to claim:** Any mutation score, or that one mutant is a campaign - mutants 1, 2 and 3
+  of section 7 are measured elsewhere (#441, #443) with #444 collecting all four; that the
+  admitted 6c cell's MEMBERSHIP was re-derived, since the four worlds come from v2 section 0.5's
+  `find_fail_worlds.py` scan and this receipt re-derives only the decisions on them, the control
+  being what makes the borrowed membership falsifiable; that the mechanism is calibrated, the cell
+  being four decisions where v2 section 5 rates a pass as weak evidence; that the mechanism passes
+  the acceptance matrix, since no confirmatory run has been performed and v2 section 5 keeps the
+  branch unmerged until one is; anything about the fresh root, which does not yet exist.
+
 ### [`docs/assurance/dependency-audit.md`](assurance/dependency-audit.md)
 
 - **Claims:** The command CI runs (`python -m pip_audit --local`, pip-audit 2.10.1,

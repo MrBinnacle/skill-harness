@@ -4,31 +4,31 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-20gf_p3f\\M-V1\\src\\skill_harness\\aggregation\\fit.py",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-1gbnv6_0\\M-V4\\src\\skill_harness\\aggregation\\fit.py",
         "source_digest": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866",
         "tests_collected": 3,
         "worktree_head": "60a654887b8d954ff0b848dfa12e8f21faa7339c"
       },
-      "description": "mutant 1: pooling removed on the refused path, reverting to the unpooled posterior the pre-registration retired",
+      "description": "mutant 4: the admission-conditioned bootstrap removed from the admitted path, restoring the plug-in posterior the mechanism replaced",
       "killing_assertions": [
-        "tests/test_aggregation_fit_bounded_pooling.py::test_mutant_1_tie_heavy_null_refused_false_fail_rate"
+        "tests/test_aggregation_fit_admitted_bootstrap.py::test_mutant_4_low_heterogeneity_admitted_false_fail_rate"
       ],
       "mutant": {
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-20gf_p3f\\M-V1\\src\\skill_harness\\aggregation\\fit.py",
-        "source_digest": "18d000e1696badcd9001100d7c8c6aa7cb7b1a002ef918bcc90f1f4784af5556",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-1gbnv6_0\\M-V4\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "88262303a125cef414545905b4a6fc4134326a749151613d4c1744d15614f595",
         "tests_collected": 3,
         "worktree_head": "60a654887b8d954ff0b848dfa12e8f21faa7339c"
       },
-      "mutant_id": "M-V1",
+      "mutant_id": "M-V4",
       "notes": [],
-      "obligation": "v2-section-7-mutant-1",
+      "obligation": "v2-section-7-mutant-4",
       "selection": [
-        "tests/test_aggregation_fit_bounded_pooling.py::test_mutant_1_tie_heavy_null_refused_false_fail_rate",
-        "tests/test_aggregation_fit_bounded_pooling.py::test_control_unpooled_refused_path_rejects_on_the_same_worlds",
-        "tests/test_aggregation_fit_bounded_pooling.py::test_the_regime_reaches_the_refused_path_at_all"
+        "tests/test_aggregation_fit_admitted_bootstrap.py::test_mutant_4_low_heterogeneity_admitted_false_fail_rate",
+        "tests/test_aggregation_fit_admitted_bootstrap.py::test_control_plugin_admitted_path_rejects_on_the_same_worlds",
+        "tests/test_aggregation_fit_admitted_bootstrap.py::test_the_four_named_worlds_reach_the_admitted_path"
       ],
       "verdict": "KILLED"
     }

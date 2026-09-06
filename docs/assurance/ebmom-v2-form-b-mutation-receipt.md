@@ -2,7 +2,7 @@
 
 **Standard:** #341. **Specification:** `docs/assurance/ebmom-peel-preregistration-amendment-v2.md`
 section 7, mutant 1, FROZEN 2026-09-05 (S414). **Ticket:** #441, under #360.
-**Generator:** `scripts/mutation_receipt.py --select v2-section-7`.
+**Generator:** `scripts/mutation_receipt.py --select v2-section-7-mutant-1`.
 **Machine-readable record:** `docs/assurance/ebmom-v2-form-b-mutation-receipt.json`.
 
 This receipt covers **one** of the four mutants section 7 registers. Mutants 2 and 3 belong to
@@ -40,8 +40,16 @@ that it compiles and that the two source digests differ.
 |---|---|---|---|---|
 | M-V1 | v2 section 7, mutant 1 | pooling removed on the refused path (revert to unpooled) | **KILLED** | `tests/test_aggregation_fit_bounded_pooling.py::test_mutant_1_tie_heavy_null_refused_false_fail_rate` |
 
-Measured at `d39440d`, Python 3.13.1, `fit.py` at
-`0f5250afd95a92b5ad43865d48ddc4a6a0ae1ca692273fd8cf34c4cce266022f`. Clean baseline passed first
+**REGENERATED at `60a6548` (#442).** The first generation measured `d39440d`, `fit.py` at
+`0f5250afd95a92b5ad43865d48ddc4a6a0ae1ca692273fd8cf34c4cce266022f`, and that receipt went stale
+the moment #442 changed `fit.py` on the admitted path -- which is the currency gate working, not
+a defect. The mutant, the selection and the verdict are unchanged; the numbers below were
+re-measured against the shipping tree. The obligation string became `v2-section-7-mutant-1` so
+each mutant of section 7 stays regenerable on its own now that two of them target the same file;
+`--select v2-section-7` still selects the whole section for the collecting receipt #444 owns.
+
+Measured at `60a6548`, Python 3.13.1, `fit.py` at
+`51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866`. Clean baseline passed first
 with 3 tests collected; the mutant collected the same 3 and exited 1. The production tree was
 byte-unchanged afterwards.
 
@@ -99,4 +107,5 @@ result.
 - The numbers quoted are R = 41 under a throwaway root seed, chosen to show the mutant is
   detectable. They are not the R = 1000 figures section 7 cites, and they are not evidence about
   the fresh root, which does not yet exist.
-- It says nothing about the admitted path. That is #442's mutant 4.
+- It says nothing about the admitted path. That is #442's mutant 4, whose receipt is
+  `docs/assurance/ebmom-v2-class2-mutation-receipt.md`.
