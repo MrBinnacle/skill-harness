@@ -152,3 +152,9 @@ all 5,000 replicate-regimes.
 - **Does not claim** the `low_heterogeneity` admitted 6c cell is evidence of anything. At `G = 1`
   no selection could have rejected it, which the receipt prints rather than leaves to be worked
   out.
+- **Does not claim** that the JSON is byte-reproducible from this tree. Each regime carries a
+  `seconds` field — a wall-clock duration, which changes on every run by construction. #452
+  removed that field from the generator after this receipt was written. The field is retained
+  here, is **not canonical**, and carries **no evidentiary weight**; regenerating the file is one
+  controlled step that has not been taken. A diff of this receipt against a fresh run of the
+  fixed generator differs in the `seconds` fields and, per the #452 measurement, in nothing else.
