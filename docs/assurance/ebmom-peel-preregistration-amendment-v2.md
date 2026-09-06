@@ -829,6 +829,34 @@ receipt carries both identities of v1 section 8, plus this document's SHA.
   are written. Section 7's fourth mutant is owed by the build. The build's acceptance includes
   reproducing `proto-pb-all-R1000-f95e4de5.json`'s per-path cells at R = 1000 on the burned root,
   so that what the fresh root tests is the mechanism that was measured.
+- **Ruled S417 (2026-09-06), and it amends the line above; overturnable by the maintainer.** The
+  "reproducing per-path cells" clause cannot be met by the mechanism this document requires, at any R.
+  `proto_pb.py` seeds each world's draws from `<root>|<regime>|<world>|pb`; `fit_skill` never receives the
+  world and, under v1 section 3, seeds from `<canonical clause encoding>|pb`. Different integers draw
+  different streams, and a clause whose averaged tail sits near 0.05 or 0.95 lands on either side.
+  Measured at R = 40 on the smoke root: 5 of 20 cells differ under the production seed and 0 of 20
+  under the injected prototype seed; every flipped clause sits within 0.0021 of a cut and no clause in
+  16,000 moves by more than 0.0221 (steering repository,
+  `docs/research/ebmom-405-rescore-S411/seed-flip-diagnostic-R40-S417.md`). The line's purpose stands
+  and is served by three parts, applied to every reproduction against a prototype dump (#442, #443,
+  #444): **(a)** port identity, FROZEN: under the generator's `--prototype-seed` substitution production
+  reproduces the dump with zero differing cells, and one differing cell is a port defect; **(b)** the
+  production-seed cells are reported beside the dump with every differing cell listed and the per-clause
+  flip listing repeated, never a kill; **(c)** the freeze condition of section 4 is evaluated once under
+  the production seed on the same pre-committed worlds (500 to 999 of every regime; 1,000 to 3,999 of
+  `low_heterogeneity` under the S414 rule) inside the R = 1000 and R = 4000 runs #443 owes, with section
+  4's own consequence and no new one. Part (c) is a ruled addition, not one the seed conflict entails:
+  cross-family review split on it, one seat holding that without it a build could pass the port test
+  while its own stream fails the freeze worlds, the other that it is a replication of the S414 experiment
+  on a second stream and that a kill on it treats seed luck as a law of the mechanism. The recorded
+  alternative is to report (c) as replication evidence beside the S414 result without a consequence.
+  The columns that do not draw the admitted-path stream (`cand_bpB`, `oracle`, `main`, the vs-oracle
+  excesses) stay cell for cell. Amendment of record: skill-harness#442, the S417 comment. *Revisit if:*
+  the injected-seed run differs in any cell at any R (the port is wrong; none of this applies); the
+  production-seed run rejects a freeze cell under section 2.1 (section 4's consequence applies and its
+  sequence resumes); the maintainer rules (c) carries no consequence (the alternative above becomes the
+  rule); or the maintainer rules dump identity must hold under the production seed (the dumps are
+  regenerated under the clause seed and this ruling is withdrawn).
 
 ---
 
