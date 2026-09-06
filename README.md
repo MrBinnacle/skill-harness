@@ -218,8 +218,8 @@ skill-harness run ablation <skill_id> --execute       # the with/without compari
 skill-harness run evaluate-skill <skill_id>           # aggregate to a verdict
 ```
 
-`ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`. Every `run` subcommand is dry-run by
-default; `--execute` is required to spend, and a per-run cap and a daily cap sit on top.
+`ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`. Every `run` subcommand is dry-run by default;
+`--execute` is required to spend, and a per-run cap and a daily cap sit on top.
 `skill init` is the exception: clause extraction is a model call in both modes, and
 `--execute` decides only whether the result is persisted to the evidence DB. Without a key
 it exits 1 before any call.

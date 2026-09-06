@@ -327,8 +327,7 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         registered_texts=(
             RegisteredText(
                 "README.md",
-                "Every command that can spend money is dry-run by default; "
-                "`--execute` is required to spend",
+                "Every `run` subcommand is dry-run by default; `--execute` is required to spend",
             ),
             RegisteredText(
                 "docs/INVARIANTS.md",
