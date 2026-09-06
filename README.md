@@ -273,7 +273,7 @@ supports.
 - [The observation ledger](https://github.com/MrBinnacle/skill-harness/blob/main/docs/observations/README.md)
   — per-record screen history, annotated rather than rewritten.
 
-Status: v0.2.3 on PyPI. Not every older screen record is yet in the evidence store; the
+Status: v0.3.0 on PyPI. Not every older screen record is yet in the evidence store; the
 observation ledger shows the evidence behind each record.
 
 MIT licensed. Issues and PRs welcome:
