@@ -1293,7 +1293,7 @@
           "near_cut_clauses": 26514
         }
       },
-      "seconds": 3105.2
+      "seconds": 2985.6
     },
     "low_heterogeneity": {
       "acceptance_matrix_production_seed": {
@@ -2576,7 +2576,7 @@
           "near_cut_clauses": 33421
         }
       },
-      "seconds": 1565.2
+      "seconds": 1249.0
     },
     "small_n_bite": {
       "acceptance_matrix_production_seed": {
@@ -3865,7 +3865,7 @@
           "near_cut_clauses": 24241
         }
       },
-      "seconds": 1193.2
+      "seconds": 1057.0
     },
     "tie_heavy_null": {
       "acceptance_matrix_production_seed": {
@@ -5137,7 +5137,7 @@
           "near_cut_clauses": 3638
         }
       },
-      "seconds": 1676.0
+      "seconds": 1659.4
     },
     "tie_heavy_signal": {
       "acceptance_matrix_production_seed": {
@@ -6413,7 +6413,7 @@
           "near_cut_clauses": 47752
         }
       },
-      "seconds": 1888.9
+      "seconds": 1869.8
     }
   },
   "replicates": 1000,

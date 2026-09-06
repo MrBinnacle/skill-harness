@@ -1,6 +1,6 @@
 {
   "execution_identity": {
-    "branch_sha": "8cdda6ffb27418d3943bd5558ad2a8ddb8acd92b",
+    "branch_sha": "36dcc2283a45c3ac6a6190f9b67767348bc9afe6",
     "command_lines": [
       "PYTHONPATH=<worktree>/src PYTHONHASHSEED=0 PYTHONUTF8=1 python scripts/ebmom_form_b_reproduction.py --v2 --expected <steering>/docs/research/ebmom-405-rescore-S411/proto-pb-all-R1000-f95e4de5.json --replicates 1000 --root-seed f95e4de5d261feb7815743abd181105a856ac4a9e79d14f8805146e2d9a42a8a --freeze-range 500:1000 --out docs/assurance/ebmom-v2-reproduction-R1000-f95e4de5.json",
       "PYTHONPATH=<worktree>/src PYTHONHASHSEED=0 PYTHONUTF8=1 python scripts/ebmom_form_b_reproduction.py --v2 --expected <steering>/docs/research/ebmom-405-rescore-S411/proto-pb-low_heterogeneity-R4000-f95e4de5.json --replicates 4000 --root-seed f95e4de5d261feb7815743abd181105a856ac4a9e79d14f8805146e2d9a42a8a --regime low_heterogeneity --freeze-range 1000:4000 --out docs/assurance/ebmom-v2-reproduction-R4000-low_heterogeneity-f95e4de5.json"
@@ -11,10 +11,10 @@
     "platform": "Windows-11-10.0.26200-SP0",
     "python": "3.13.1",
     "raw_output_manifest": {
-      "ebmom-v2-reproduction-R1000-f95e4de5.json": "9a4cd2d998cbe03de6fe8457e2fc21cd58de66c54a841e0706e39951a36c19e8",
-      "ebmom-v2-reproduction-R4000-low_heterogeneity-f95e4de5.json": "1594dc52142d12e4508dfb867ad5defc9261d9ddc14b15b75a04ca8039bc95fd"
+      "ebmom-v2-reproduction-R1000-f95e4de5.json": "266541014e70874ebb767b926470d995933132c3fa0f8c24e391c2f0ef7a9f3e",
+      "ebmom-v2-reproduction-R4000-low_heterogeneity-f95e4de5.json": "7f974bd3cb6f40e82c3111b70fd2369b718a8b7683c3a4a428254fe5da6c15f9"
     },
-    "raw_output_manifest_sha256": "98bebabac7b4a327dbb8b9a4d3b6728c4d450272cd69cb5f8cfc7ba472da9e89",
+    "raw_output_manifest_sha256": "ace9daf024956fb9677bd1a041e003d06bc0b3940af87840577231383d56cb31",
     "replicates_per_output": {
       "ebmom-v2-reproduction-R1000-f95e4de5.json": 1000,
       "ebmom-v2-reproduction-R4000-low_heterogeneity-f95e4de5.json": 4000
