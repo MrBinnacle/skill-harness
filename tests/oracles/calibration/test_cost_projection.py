@@ -30,6 +30,7 @@ from skill_harness.oracles.calibration.cost_projection import (  # noqa: E402
     CostProjection,
     project_calibration_cost,
     project_pair_usd,
+    project_pair_usd_cache_aware,
     project_trial_usd,
 )
 
@@ -500,3 +501,205 @@ class TestPairAndTrialProjections:
             output_tokens_per_trial=29456,
         )
         assert usd == pytest.approx(0.7938065)
+
+
+# ------------------------------------------------------------------
+# #436: cache-aware pair projector — reduction control + class pricing
+# ------------------------------------------------------------------
+
+
+class TestCacheAwarePairProjector:
+    """#436: project_pair_usd_cache_aware prices each token class from
+    PRICE_PER_MTOK and reproduces project_pair_usd at share zero (the
+    reduction control — #40(c) worst-case discipline is a special case)."""
+
+    def test_reduction_control_at_share_zero_sonnet(self) -> None:
+        """At cache_read_share=0.0 with cache_read=0 and cache_write=0,
+        the cache-aware projector reproduces project_pair_usd exactly —
+        all input tokens priced at full input rate, no cache discount."""
+        worst_case = project_pair_usd(
+            "claude-sonnet-4-6",
+            input_tokens_per_pair=200_000,
+            output_tokens_per_pair=4_000,
+        )
+        cache_aware = project_pair_usd_cache_aware(
+            "claude-sonnet-4-6",
+            input_tokens=200_000,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            output_tokens=4_000,
+            cache_read_share=0.0,
+        )
+        assert cache_aware == pytest.approx(worst_case)
+
+    def test_reduction_control_at_share_zero_haiku(self) -> None:
+        """Reduction control on a second model — haiku 4.5."""
+        worst_case = project_pair_usd(
+            "claude-haiku-4-5",
+            input_tokens_per_pair=100_000,
+            output_tokens_per_pair=2_000,
+        )
+        cache_aware = project_pair_usd_cache_aware(
+            "claude-haiku-4-5",
+            input_tokens=100_000,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            output_tokens=2_000,
+            cache_read_share=0.0,
+        )
+        assert cache_aware == pytest.approx(worst_case)
+
+    def test_cache_read_tokens_priced_at_cache_read_rate(self) -> None:
+        """Cache-read tokens use the cache_read rate, not the input rate.
+        Sonnet 4.6: input=$3/M, cache_read=$0.30/M.
+        100k input + 100k cache_read + 0 cache_write + 4k output:
+        = 100k*3/M + 100k*0.30/M + 4k*15/M = 0.30 + 0.03 + 0.06 = 0.39"""
+        usd = project_pair_usd_cache_aware(
+            "claude-sonnet-4-6",
+            input_tokens=100_000,
+            cache_read_tokens=100_000,
+            cache_write_tokens=0,
+            output_tokens=4_000,
+            cache_read_share=0.5,
+        )
+        assert usd == pytest.approx(0.39)
+
+    def test_cache_write_tokens_priced_at_cache_write_rate(self) -> None:
+        """Cache-write tokens use the cache_write rate.
+        Sonnet 4.6: cache_write=$3.75/M.
+        0 input + 0 cache_read + 50k cache_write + 2k output:
+        = 50k*3.75/M + 2k*15/M = 0.1875 + 0.03 = 0.2175"""
+        usd = project_pair_usd_cache_aware(
+            "claude-sonnet-4-6",
+            input_tokens=0,
+            cache_read_tokens=0,
+            cache_write_tokens=50_000,
+            output_tokens=2_000,
+            cache_read_share=0.0,
+        )
+        assert usd == pytest.approx(0.2175)
+
+    def test_all_four_classes_combined(self) -> None:
+        """All four token classes priced independently from PRICE_PER_MTOK.
+        Sonnet 4.6: input=$3, output=$15, cache_write=$3.75, cache_read=$0.30 per MTok.
+        10k*3/M + 20k*0.30/M + 5k*3.75/M + 3k*15/M
+        = 0.03 + 0.006 + 0.01875 + 0.045 = 0.09975"""
+        usd = project_pair_usd_cache_aware(
+            "claude-sonnet-4-6",
+            input_tokens=10_000,
+            cache_read_tokens=20_000,
+            cache_write_tokens=5_000,
+            output_tokens=3_000,
+            cache_read_share=2 / 3,
+        )
+        assert usd == pytest.approx(0.09975)
+
+    def test_unknown_model_raises_not_defaults(self) -> None:
+        """A cache-aware projection must never silently price the wrong model."""
+        with pytest.raises(KeyError):
+            project_pair_usd_cache_aware(
+                "claude-nonexistent",
+                input_tokens=1000,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                output_tokens=100,
+                cache_read_share=0.0,
+            )
+
+    def test_negative_tokens_rejected(self) -> None:
+        """Negative token counts in any class are rejected."""
+        with pytest.raises(ValueError):
+            project_pair_usd_cache_aware(
+                "claude-sonnet-4-6",
+                input_tokens=-1,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                output_tokens=100,
+                cache_read_share=0.0,
+            )
+        with pytest.raises(ValueError):
+            project_pair_usd_cache_aware(
+                "claude-sonnet-4-6",
+                input_tokens=0,
+                cache_read_tokens=-1,
+                cache_write_tokens=0,
+                output_tokens=100,
+                cache_read_share=0.0,
+            )
+        with pytest.raises(ValueError):
+            project_pair_usd_cache_aware(
+                "claude-sonnet-4-6",
+                input_tokens=0,
+                cache_read_tokens=0,
+                cache_write_tokens=-1,
+                output_tokens=100,
+                cache_read_share=0.0,
+            )
+        with pytest.raises(ValueError):
+            project_pair_usd_cache_aware(
+                "claude-sonnet-4-6",
+                input_tokens=0,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                output_tokens=-1,
+                cache_read_share=0.0,
+            )
+
+    def test_cache_read_share_is_metadata(self) -> None:
+        """The cache_read_share argument is a declared input, not used in the
+        cost calculation — different shares with the same token split produce
+        the same USD (the share is recorded alongside, not applied to price).
+        Caller applies the share when splitting tokens into classes; the
+        projector prices the classes it is given."""
+        usd_a = project_pair_usd_cache_aware(
+            "claude-sonnet-4-6",
+            input_tokens=100_000,
+            cache_read_tokens=50_000,
+            cache_write_tokens=10_000,
+            output_tokens=2_000,
+            cache_read_share=0.3,
+        )
+        usd_b = project_pair_usd_cache_aware(
+            "claude-sonnet-4-6",
+            input_tokens=100_000,
+            cache_read_tokens=50_000,
+            cache_write_tokens=10_000,
+            output_tokens=2_000,
+            cache_read_share=0.9,
+        )
+        assert usd_a == pytest.approx(usd_b)
+
+    def test_cache_read_share_out_of_range_rejected(self) -> None:
+        """cache_read_share outside [0.0, 1.0] is rejected."""
+        with pytest.raises(ValueError, match="cache_read_share"):
+            project_pair_usd_cache_aware(
+                "claude-sonnet-4-6",
+                input_tokens=1_000,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                output_tokens=100,
+                cache_read_share=1.5,
+            )
+        with pytest.raises(ValueError, match="cache_read_share"):
+            project_pair_usd_cache_aware(
+                "claude-sonnet-4-6",
+                input_tokens=1_000,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                output_tokens=100,
+                cache_read_share=-0.1,
+            )
+
+    def test_sonnet_5_all_cache_classes(self) -> None:
+        """Sonnet 5 pricing: input=$2, output=$10, cache_write=$2.50, cache_read=$0.20.
+        486212.75*2/M + 1000*0.20/M + 500*2.50/M + 54777.625*10/M
+        = 0.9724255 + 0.0002 + 0.00125 + 0.54777625 = 1.52165175"""
+        usd = project_pair_usd_cache_aware(
+            "claude-sonnet-5",
+            input_tokens=486_212.75,
+            cache_read_tokens=1_000,
+            cache_write_tokens=500,
+            output_tokens=54_777.625,
+            cache_read_share=0.002,
+        )
+        assert usd == pytest.approx(1.52165175)

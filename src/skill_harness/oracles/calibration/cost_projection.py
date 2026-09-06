@@ -334,3 +334,77 @@ def project_trial_usd(
     :raises ValueError: If a token count is negative.
     """
     return _project_tokens_usd(model_id, input_tokens_per_trial, output_tokens_per_trial)
+
+
+# ---------------------------------------------------------------------------
+# #436: cache-aware pair projector — prices each token class from PRICE_PER_MTOK
+# ---------------------------------------------------------------------------
+
+
+def project_pair_usd_cache_aware(
+    model_id: str,
+    *,
+    input_tokens: float,
+    cache_read_tokens: float,
+    cache_write_tokens: float,
+    output_tokens: float,
+    cache_read_share: float,
+) -> float:
+    """Cache-aware projected USD for ONE Gate-2 evaluation pair (#436).
+
+    Prices each token class (input, cache_read, cache_write, output) from
+    the canonical PRICE_PER_MTOK table at the class-specific rate.  The
+    ``cache_read_share`` is a *declared* input — not computed from the
+    token counts — recording the assumed fraction of future input tokens
+    served from cache; it is metadata for the record, not an arithmetic
+    input to this projection.
+
+    At ``cache_read_share=0.0`` with ``cache_read_tokens=0`` and
+    ``cache_write_tokens=0``, this reproduces :func:`project_pair_usd`
+    exactly (the #40(c) worst-case rule is a special case).
+
+    DC-9: rates live from PRICE_PER_MTOK — no hard-coded per-pair dollar
+    constant.
+
+    :param model_id: Subject model in the canonical pricing table.
+    :param input_tokens: Uncached input tokens (paid at input rate), >= 0.
+    :param cache_read_tokens: Tokens served from cache (paid at cache_read
+        rate), >= 0.
+    :param cache_write_tokens: Tokens written to cache (paid at
+        cache_write rate), >= 0.
+    :param output_tokens: Output tokens (paid at output rate), >= 0.
+    :param cache_read_share: Declared fraction of input tokens expected to
+        be cache-read in future runs (0.0 .. 1.0).  Recorded alongside the
+        projection; not used in the cost arithmetic.
+    :returns: Projected USD per pair.
+    :raises KeyError: If the model is not in the canonical pricing table.
+    :raises ValueError: If any token count is negative.
+    """
+    if input_tokens < 0 or cache_read_tokens < 0 or cache_write_tokens < 0 or output_tokens < 0:
+        raise ValueError(
+            f"token counts must be >= 0; got input={input_tokens}, "
+            f"cache_read={cache_read_tokens}, cache_write={cache_write_tokens}, "
+            f"output={output_tokens}"
+        )
+    if not (0.0 <= cache_read_share <= 1.0):
+        raise ValueError(f"cache_read_share must be in [0.0, 1.0]; got {cache_read_share}")
+    price_key = resolve_price_key(model_id)
+    try:
+        rates = PRICE_PER_MTOK[price_key]
+    except KeyError:
+        raise KeyError(model_id) from None
+    # Verify all four price classes exist — refuse a model without them
+    # rather than defaulting (the #40(c) cap-projection discipline).
+    for cls in ("input", "cache_read", "cache_write", "output"):
+        if cls not in rates:
+            raise KeyError(f"model {model_id!r} missing price class {cls!r} in PRICE_PER_MTOK")
+    return round(
+        (
+            input_tokens * rates["input"]
+            + cache_read_tokens * rates["cache_read"]
+            + cache_write_tokens * rates["cache_write"]
+            + output_tokens * rates["output"]
+        )
+        / 1e6,
+        8,
+    )
