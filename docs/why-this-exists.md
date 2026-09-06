@@ -62,15 +62,20 @@ every break into a standing rule, and then build the same honesty into the tool.
 
 ## The size of the detour
 
-Measured on 2026-09-02: **152 commits of collection against 511 commits of machinery built
+Measured on 2026-09-05: **160 commits of collection against 537 commits of machinery built
 to find out whether the collection is worth anything.**
 
-Both numbers move. This page carried the 2026-08-15 measurement — 71 against 323 — for
-eighteen days, during which the collection more than doubled and the machinery gained 188
-commits. A reader who ran the commands below during that window got numbers that did not
-match the ones above them. The durable figure is the **ratio**, which has stayed between
-three and five to one across every measurement taken; the absolute counts are stale the day
-after they are written.
+Both numbers move, and this page has now been wrong about them twice. It carried the
+2026-08-15 measurement — 71 against 323 — for eighteen days, then the 2026-09-02
+measurement — 152 against 511 — for three. A reader who ran the commands below during
+either window got numbers that did not match the ones above them. Both corrections were
+made by a person noticing, which is not a mechanism, so the derivation now runs on a
+schedule: `scripts/check_commit_claim_drift.py` reads the figures and the commands off this
+page, clones both repositories fresh, and fails when either figure has moved. It runs weekly
+rather than on every commit, because the counts rise with every merge and an exact-equality
+gate on every push would fail on the merge that landed it. The durable figure is the
+**ratio**, which has stayed between three and five to one across every measurement taken;
+the absolute counts are stale the day after they are written.
 
 The basis is a fresh clone at `HEAD` — what a plain `git clone` gets you —
 so you can land on the same figures yourself, give or take what has merged since:

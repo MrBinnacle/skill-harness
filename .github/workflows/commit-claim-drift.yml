@@ -1,0 +1,57 @@
+# Commit-claim drift check - catches a dated public measurement going stale
+# while its shape lock stays green (steering repo issue 61).
+#
+# docs/why-this-exists.md states how many commits the collection and this
+# instrument each carry, with a measurement date and the two shell commands a
+# reader can run to reproduce the figures. tests/test_readme_origin_223.py
+# locks the SHAPE of that claim - a date, two integers, the two commands - and
+# deliberately not the values, because locking the values made the guard
+# backwards: it could not tell a stale figure from a fresh one, and the only
+# thing it could stop was someone correcting the figure. A shape lock cannot
+# detect staleness. This workflow is what detects it.
+#
+# scripts/check_commit_claim_drift.py is deliberately NOT added to ci.yml, for
+# two reasons.
+#
+# First, the same reason repo-description-sync.yml states: ci.yml's drift-check
+# job (scripts/drift_check.py) is hermetic by design, and this check clones two
+# remote repositories. It cannot be hermetic.
+#
+# Second, and specific to this check: the figures it compares are commit counts
+# that rise with every merge, including the merge that lands a correction. An
+# exact-equality check on ci.yml's push-to-main trigger would therefore fail on
+# the very commit that fixed the page, and on every push afterwards. That is a
+# gate no one can ever hold green, which trains its readers to ignore it. For
+# the same reason this workflow carries no `push` trigger of its own.
+#
+# A red run here means the page is stale, which is true and is the signal. The
+# remedy is to re-derive with the page's own commands and update both figures
+# and the date together, in one commit.
+#
+# Cadence: weekly. The drift is real but slow to matter - the durable figure the
+# page relies on is the ratio, which has held between three and five to one
+# across every measurement taken. Revisit if the weekly correction proves to
+# cost more than the dated claim is worth, in which case issue 61's direction 3
+# (retire the dated form and keep the derivation commands) is the exit, rather
+# than a weaker version of this check.
+name: commit claim drift
+
+on:
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  commit-claim-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Run commit claim drift check
+        run: python scripts/check_commit_claim_drift.py
