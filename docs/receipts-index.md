@@ -492,6 +492,27 @@ and covers that section only. This page stays the citable surface for every kind
   root `SMOKE_NOT_CONFIRMATORY` rather than the R = 1000 figures section 7 cites; anything
   whatever about the admitted path or about the fresh root, which does not yet exist.
 
+### [`docs/assurance/ebmom-class2-reproduction-R40-SMOKE_NO.md`](assurance/ebmom-class2-reproduction-R40-SMOKE_NO.md)
+
+- **Claims:** The built `fit_skill`, scored through `scripts/ebmom_form_b_reproduction.py
+  --column cand_pb` at R = 40 on the throwaway root `SMOKE_NOT_CONFIRMATORY`, reproduces 15 of
+  the 20 per-path cells of the `cand_pb` column of `proto-pb-all-R40-SMOKE_NO.json` (five
+  regimes, both paths, rows 5c and 6c, compared on false count, decision count, `G` and `g`),
+  and reproduces ALL 20 when the same production code is driven with the prototype's own draw
+  seed. Every refused-path cell agrees in every regime, `tie_heavy_null` refusing all 40
+  replicates, so the admitted-path mechanism left the refused path untouched. The five that
+  differ under production's own seed are all admitted-path, in `small_n_bite` (6c decision count
+  9 against 8) and `tie_heavy_signal` (5c count 7 against 6, of 864 against 854), and the
+  diagnostic run isolates the seed as the whole of the difference: the prototype seeds from
+  `<root>|<regime>|<world>|pb`, which `fit_skill` cannot compute, so the frozen derivation gives
+  it `<canonical clause encoding>|pb` and a different stream.
+- **Refuses to claim:** That the built candidate reproduces `cand_pb` under its own seed — it
+  does not, in two regimes, and #442's acceptance criterion asking for that is recorded NOT MET
+  as written rather than reinterpreted; anything about R = 1000 or R = 4000, which the harness
+  ticket owns and where a one-decision difference may or may not persist; that any cell passes
+  or fails the v2 section 5 kill rows, which need a confirmatory run that has not been performed;
+  that any number here is confirmatory, the root being a development smoke.
+
 ### [`docs/assurance/dependency-audit.md`](assurance/dependency-audit.md)
 
 - **Claims:** The command CI runs (`python -m pip_audit --local`, pip-audit 2.10.1,

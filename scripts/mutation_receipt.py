@@ -123,6 +123,29 @@ _FORM_B_CONTROL = (
 _FORM_B_REFUSAL_GUARD = (
     "tests/test_aggregation_fit_bounded_pooling.py::test_the_regime_reaches_the_refused_path_at_all"
 )
+# #442: mutant 4 of the same section. Its obligation is per-mutant rather than
+# per-section because both mutants target fit.py, so any change to fit.py moves
+# BOTH receipts' digests and each has to be regenerable on its own. `--select`
+# matches on a prefix, so `v2-section-7` still selects the whole section for the
+# collecting receipt #444 owns.
+_CLASS2_KILL = (
+    "tests/test_aggregation_fit_admitted_bootstrap.py"
+    "::test_mutant_4_low_heterogeneity_admitted_false_fail_rate"
+)
+# Carried in the same selection so the receipt shows, by name, which assertions
+# moved and which did not. The control must reject under BOTH trees: it scores
+# the plug-in explicitly, so if it ever went green the kill above would be
+# passing on a cell the plug-in no longer fills. The admission guard must
+# likewise stay green -- a mutant that made these four worlds REFUSED would
+# empty the admitted cell and look like a kill for the wrong reason.
+_CLASS2_CONTROL = (
+    "tests/test_aggregation_fit_admitted_bootstrap.py"
+    "::test_control_plugin_admitted_path_rejects_on_the_same_worlds"
+)
+_CLASS2_ADMISSION_GUARD = (
+    "tests/test_aggregation_fit_admitted_bootstrap.py"
+    "::test_the_four_named_worlds_reach_the_admitted_path"
+)
 
 MUTANTS: tuple[Mutant, ...] = (
     Mutant(
@@ -231,7 +254,7 @@ MUTANTS: tuple[Mutant, ...] = (
     ),
     Mutant(
         "M-V1",
-        "v2-section-7",
+        "v2-section-7-mutant-1",
         "mutant 1: pooling removed on the refused path, reverting to the unpooled "
         "posterior the pre-registration retired",
         _FIT,
@@ -239,6 +262,20 @@ MUTANTS: tuple[Mutant, ...] = (
         "        c_bound = _bounded_pooling_concentration(mu, v_bound)",
         "        c_bound = None  # mutant: pooling removed on the refused path",
         (_FORM_B_KILL, _FORM_B_CONTROL, _FORM_B_REFUSAL_GUARD),
+    ),
+    Mutant(
+        "M-V4",
+        "v2-section-7-mutant-4",
+        "mutant 4: the admission-conditioned bootstrap removed from the admitted "
+        "path, restoring the plug-in posterior the mechanism replaced",
+        _FIT,
+        _FIT_MODULE,
+        "    posteriors = _build_shrunken_posteriors(\n"
+        "        clauses, alpha_hat, beta_hat, tail_probabilities=tail_probabilities\n"
+        "    )",
+        "    posteriors = _build_shrunken_posteriors(clauses, alpha_hat, beta_hat)"
+        "  # mutant: plug-in restored",
+        (_CLASS2_KILL, _CLASS2_CONTROL, _CLASS2_ADMISSION_GUARD),
     ),
 )
 

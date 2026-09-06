@@ -45,6 +45,13 @@ dependencies = [
   # scipy>=1.11: EB-MoM hierarchical fit + BH-FDR fallback (A53, Track E.2).
   # Already present transitively via statsmodels; direct pin per Phase 1.1 supply-chain audit.
   "scipy>=1.11",
+  # numpy>=1.24: the admission-conditioned parametric bootstrap on the admitted
+  # path of aggregation/fit.py (pre-registration v2 section 4). Declared for the
+  # same reason scipy above is: it is an install-time requirement of scipy and so
+  # was already resolved into every environment, and src/ now IMPORTS it directly.
+  # An undeclared direct import is a dependency the resolver cannot see, not an
+  # absent one. This adds no package to the tree.
+  "numpy>=1.24",
   # tiktoken: offline tokenizer for Verbosity metric (A35). Version-pinned to cl100k_base
   # encoding which is stable across 0.x series; DO NOT upgrade without re-running
   # bit-equality corpus and updating IMPLEMENTATION_HASH in verbosity.py.

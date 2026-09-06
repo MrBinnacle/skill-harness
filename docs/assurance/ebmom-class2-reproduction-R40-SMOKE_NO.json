@@ -1,0 +1,188 @@
+{
+  "compared_fields": [
+    "count",
+    "of",
+    "worlds",
+    "false_worlds"
+  ],
+  "expected_column": "cand_pb",
+  "expected_column_meaning": "form B on refusal, admission-conditioned bootstrap on the admitted path",
+  "expected_file": "proto-pb-all-R40-SMOKE_NO.json",
+  "expected_sha256": "8192de6d56bfece4d7f2f0e212a7a2f3d66b77629f2de4e301ea424694ec55a0",
+  "is_confirmatory": false,
+  "prototype_seed_injected": false,
+  "python": "3.13.1",
+  "regimes": {
+    "benign_large_n": {
+      "admitted": 40,
+      "agrees": true,
+      "built": {
+        "row5c_false_pass_admitted": {
+          "count": 19,
+          "false_worlds": 17,
+          "of": 3699,
+          "worlds": 40
+        },
+        "row5c_false_pass_refused": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        },
+        "row6c_false_fail_admitted": {
+          "count": 13,
+          "false_worlds": 11,
+          "of": 1527,
+          "worlds": 40
+        },
+        "row6c_false_fail_refused": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        }
+      },
+      "differences": [],
+      "unpooled_reverts": 0
+    },
+    "low_heterogeneity": {
+      "admitted": 27,
+      "agrees": true,
+      "built": {
+        "row5c_false_pass_admitted": {
+          "count": 35,
+          "false_worlds": 15,
+          "of": 932,
+          "worlds": 27
+        },
+        "row5c_false_pass_refused": {
+          "count": 32,
+          "false_worlds": 11,
+          "of": 574,
+          "worlds": 13
+        },
+        "row6c_false_fail_admitted": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        },
+        "row6c_false_fail_refused": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        }
+      },
+      "differences": [],
+      "unpooled_reverts": 0
+    },
+    "small_n_bite": {
+      "admitted": 40,
+      "agrees": false,
+      "built": {
+        "row5c_false_pass_admitted": {
+          "count": 18,
+          "false_worlds": 12,
+          "of": 523,
+          "worlds": 40
+        },
+        "row5c_false_pass_refused": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        },
+        "row6c_false_fail_admitted": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 9,
+          "worlds": 6
+        },
+        "row6c_false_fail_refused": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        }
+      },
+      "differences": [
+        "row6c_false_fail_admitted.of: built=9 expected=8",
+        "row6c_false_fail_admitted.worlds: built=6 expected=5"
+      ],
+      "unpooled_reverts": 0
+    },
+    "tie_heavy_null": {
+      "admitted": 0,
+      "agrees": true,
+      "built": {
+        "row5c_false_pass_admitted": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        },
+        "row5c_false_pass_refused": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 5311,
+          "worlds": 40
+        },
+        "row6c_false_fail_admitted": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        },
+        "row6c_false_fail_refused": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        }
+      },
+      "differences": [],
+      "unpooled_reverts": 0
+    },
+    "tie_heavy_signal": {
+      "admitted": 40,
+      "agrees": false,
+      "built": {
+        "row5c_false_pass_admitted": {
+          "count": 7,
+          "false_worlds": 6,
+          "of": 864,
+          "worlds": 40
+        },
+        "row5c_false_pass_refused": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        },
+        "row6c_false_fail_admitted": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        },
+        "row6c_false_fail_refused": {
+          "count": 0,
+          "false_worlds": 0,
+          "of": 0,
+          "worlds": 0
+        }
+      },
+      "differences": [
+        "row5c_false_pass_admitted.count: built=7 expected=6",
+        "row5c_false_pass_admitted.of: built=864 expected=854",
+        "row5c_false_pass_admitted.false_worlds: built=6 expected=5"
+      ],
+      "unpooled_reverts": 0
+    }
+  },
+  "replicates": 40,
+  "reproduces": false,
+  "root_seed": "SMOKE_NOT_CONFIRMATORY",
+  "total_differences": 5
+}

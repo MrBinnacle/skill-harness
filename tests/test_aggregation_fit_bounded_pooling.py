@@ -138,6 +138,25 @@ def _pin_boundary(
 
 
 class TestAdmissionBoundaryContinuity:
+    """Continuity of the SHRINKAGE, which is what v2 section 3 claims.
+
+    Section 3's continuity argument is about the pooled posterior: "a fit
+    admitted at the boundary and a fit refused at the boundary shrink
+    identically", because form B inverts the moment map at the same critical
+    order statistic the admitted branch would have inverted at. That property is
+    unchanged and is asserted below on `posterior_alpha` and `posterior_beta`.
+
+    The DECISION quantity is a different matter since v2 section 4 landed
+    (#442). The admitted path no longer decides on the tail of that posterior; it
+    decides on the tail averaged over admission-conditioned draws of the
+    hyperparameters, and the refused path plugs in. So `p_win_gt_threshold` IS
+    discontinuous at the admission boundary, by construction, and the case below
+    asserts that rather than the equality it used to assert. This is a real
+    consequence of section 4 and it is recorded here rather than left for a
+    reader to discover: the continuity that motivated form B's selection is the
+    shrinkage's, and it does not extend to the decision.
+    """
+
     def test_shrinkage_matches_exactly_at_the_admission_boundary(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -160,7 +179,39 @@ class TestAdmissionBoundaryContinuity:
                 f"admitted alpha {lhs.posterior_alpha!r} != refused {rhs.posterior_alpha!r}"
             )
             assert lhs.posterior_beta == rhs.posterior_beta
-            assert lhs.p_win_gt_threshold == rhs.p_win_gt_threshold
+            assert lhs.posterior_mean == rhs.posterior_mean
+            assert lhs.credible_interval_lo == rhs.credible_interval_lo
+            assert lhs.credible_interval_hi == rhs.credible_interval_hi
+
+    def test_the_decision_quantity_is_discontinuous_at_the_boundary(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The section 4 consequence, asserted rather than left implicit.
+
+        The same data on the two sides of the admission verdict yields the same
+        posterior and a DIFFERENT decision probability, because the admitted side
+        integrates over hyperparameter uncertainty and the refused side plugs in.
+        If this ever stopped being true, the mechanism would have stopped
+        reaching the admitted decision, and the equality above would be hiding
+        it.
+        """
+        clauses = _heterogeneous_clauses()
+
+        _pin_boundary(monkeypatch, admitted=True, scale=1.0)
+        admitted = fit_skill(clauses)
+        _pin_boundary(monkeypatch, admitted=False, scale=1.0)
+        refused = fit_skill(clauses)
+
+        differing = [
+            lhs.clause_id
+            for lhs, rhs in zip(admitted.posteriors, refused.posteriors, strict=True)
+            if lhs.p_win_gt_threshold != rhs.p_win_gt_threshold
+        ]
+        assert differing, (
+            "the admitted and refused decision probabilities agree on every clause "
+            "at the admission boundary, so the admission-conditioned bootstrap is not "
+            "reaching the admitted decision"
+        )
 
     def test_shrinkage_is_continuous_just_above_and_just_below(
         self, monkeypatch: pytest.MonkeyPatch
@@ -172,6 +223,12 @@ class TestAdmissionBoundaryContinuity:
         statistic falls short, the fit is refused, and it inverts at the
         boundary. As the gap closes the two must converge, and at a relative
         gap of 1e-9 they agree to well inside 1e-6.
+
+        The comparison is of the POSTERIOR, not of the decision probability. See
+        this class's docstring: since v2 section 4 the admitted path decides on
+        an integrated tail and the refused path on a plug-in tail, so the two
+        decision probabilities do not converge as the gap closes and asserting
+        that they do would be asserting the mechanism away.
         """
         clauses = _heterogeneous_clauses()
         eps = 1e-9
@@ -187,7 +244,7 @@ class TestAdmissionBoundaryContinuity:
         for lhs, rhs in zip(just_above.posteriors, just_below.posteriors, strict=True):
             assert lhs.posterior_alpha == pytest.approx(rhs.posterior_alpha, rel=1e-6)
             assert lhs.posterior_beta == pytest.approx(rhs.posterior_beta, rel=1e-6)
-            assert lhs.p_win_gt_threshold == pytest.approx(rhs.p_win_gt_threshold, abs=1e-6)
+            assert lhs.posterior_mean == pytest.approx(rhs.posterior_mean, abs=1e-6)
 
     def test_a_wider_gap_moves_the_estimator_so_the_agreement_is_not_trivial(
         self, monkeypatch: pytest.MonkeyPatch

@@ -17,6 +17,29 @@ observed rates carries within-clause sampling noise as well as true
 heterogeneity, and the noise is peeled off before the moment map is inverted.
 Without the peel the recovered concentration deflates by roughly n/(n+c+1).
 
+ADMITTED PATH, mechanism class 2 (pre-registration v2 section 4, FROZEN
+  2026-09-05): the probability the pass rule is applied to is NOT the plug-in
+  sf(0.60) of that posterior. It is the same tail probability averaged over
+  S = 200 draws of the hyperparameters from the finite-sample distribution the
+  fitted model implies, conditioned on the event that admitted the fit:
+
+      theta_j ~ Beta(alpha_hat, beta_hat), K of them
+      one synthetic world under them, preserving each clause's n_k and the
+        pooled tie fraction
+      (mu_s, latent_s) = the moments fit_skill computes on that world
+      keep the draw when latent_s > heterogeneity_test.critical_order_statistic
+      c_s = mu_s (1 - mu_s) / latent_s - 1, non-positive dropped and counted
+      P_k = mean_s P(theta > 0.60 | Beta(mu_s c_s + w_k,
+                                         (1 - mu_s) c_s + n_k - w_k))
+
+  The plug-in spends the uncertainty in (alpha_hat, beta_hat) as if it were
+  zero. v2 section 0.5 reads the cost off four worlds where the fitted
+  concentration lands at half the truth or less and a clause with 4 to 6 wins
+  of 25 against a true mean above 0.60 is under-shrunk into a FAIL whose tail
+  sits a hair under 0.05. Draw-budget exhaustion and the plug-in fallback are
+  typed and counted in provenance under `admitted_bootstrap`; nothing about a
+  short or empty average is silent.
+
 Admission: a hierarchical fit is attempted only when the peeled latent variance
   is distinguishable from zero by a one-sided bootstrap test (see
   HETEROGENEITY_TEST_ALPHA). Otherwise it is refused as
@@ -48,10 +71,11 @@ REFUSAL, form B (pre-registration v2 section 3, FROZEN 2026-09-05):
 Convergence failure (alpha_hat <= 0 or beta_hat <= 0, or the admission test
   refuses): the bounded-pooling refusal above.
 
-Determinism: the admission bootstrap is seeded from a digest of the
-observations themselves, so identical input yields an identical verdict on
-every host and every run. PYTHONHASHSEED=0 already pinned by caller
-environment.
+Determinism: the admission bootstrap AND the admitted path's
+admission-conditioned bootstrap are each seeded from a digest of the
+observations themselves, under distinct labels so the two streams differ, so
+identical input yields an identical verdict on every host and every run.
+PYTHONHASHSEED=0 already pinned by caller environment.
 
 scipy.stats.beta.sf is the probability evaluation primitive (mirror of
 ablation/stopping.py pattern).
@@ -64,7 +88,9 @@ import logging
 import math
 import random
 from dataclasses import dataclass
+from typing import Any
 
+import numpy as np
 from scipy.stats import beta as beta_dist  # type: ignore[import-untyped]
 
 from skill_harness.aggregation.errors import ConvergenceFailure
@@ -114,6 +140,48 @@ BH_FDR_Q: float = 0.05
 # order statistic, which makes the estimator continuous across the admission
 # boundary. Recorded in provenance so a receipt names the form it ran.
 BOUNDED_POOLING_FORM: str = "B"
+
+# ---------------------------------------------------------------------------
+# Mechanism class 2 on the ADMITTED path: the admission-conditioned parametric
+# bootstrap (pre-registration v2 section 4, FROZEN 2026-09-05).
+#
+# An admitted fit no longer decides each clause on the plug-in posterior
+# Beta(alpha_hat + w_k, beta_hat + n_k - w_k). The plug-in treats the fitted
+# hyperprior as if it were known, and v2 section 0.5 reads the cost off four
+# worlds: the latent variance overshoots by 1.5 to 2.3 times, the fitted
+# concentration lands at half the truth or less, and a clause that drew 4 to 6
+# wins of 25 against a true mean above 0.60 is under-shrunk into a FAIL whose
+# tail sits a hair under 0.05. The decision quantity becomes the clause tail
+# probability averaged over draws of the hyperparameters from the finite-sample
+# distribution the fitted model itself implies, CONDITIONED on the event that
+# admitted the fit.
+#
+# The draws are conditioned rather than merely truncated because admission is
+# what selected this fit: the sampling distribution of (mu, latent) given
+# admission is the one the decision is exposed to, and it is not the
+# unconditional one. Class 1 (`proto_hu.py`) approximated it with a truncated
+# normal and left two of the four worlds failing; class 2 replaces the
+# approximation with the model's own draws.
+#
+# What this does NOT do, stated because it bounds what a pass here means: the
+# draws are centred at the fitted values, so the mechanism captures the SHAPE of
+# the sampling distribution and corrects no winner's-curse bias in the point
+# estimate.
+ADMITTED_BOOTSTRAP_DRAWS: int = 200
+
+# Candidate draws per block, and the ceiling on blocks. Admission conditioning
+# can reject most of a block, so the budget is bounded rather than a while-loop:
+# a fit whose admission event is severe must terminate and SAY it terminated
+# early, which is what the `exhausted` and `fell_back_to_plugin` counters in
+# provenance are for.
+ADMITTED_BOOTSTRAP_BLOCK: int = 400
+ADMITTED_BOOTSTRAP_MAX_BLOCKS: int = 40
+
+# The label that separates this stream from the admission bootstrap's. Both
+# derive from the same canonical clause encoding under the frozen v1 section 3
+# procedure; without a distinct label the two would share a seed and the
+# mechanism would resample the stream the admission test already consumed.
+ADMITTED_BOOTSTRAP_LABEL: str = "pb"
 
 
 # ---------------------------------------------------------------------------
@@ -308,6 +376,238 @@ def _bounded_pooling_concentration(mu: float, v_bound: float) -> float | None:
     return c
 
 
+def _admitted_bootstrap_seed(clauses: list[ClauseObservations]) -> int:
+    """Seed for the admission-conditioned bootstrap, from the data and a label.
+
+    Same frozen derivation as `_bootstrap_seed` (v1 section 3): the canonical
+    clause encoding, SHA-256, first eight bytes big-endian. The label
+    ADMITTED_BOOTSTRAP_LABEL is appended under the frozen field separator so
+    this stream and the admission test's are distinct functions of the same
+    data. `fit_skill` promises determinism and this mechanism samples, so the
+    seed must be a function of the input and nothing else.
+
+    The label cannot collide with a clause field: the canonical encoding always
+    ends with a `float.hex()` value, which never ends in the label's bytes.
+    """
+    material = _canonical_input_bytes(clauses) + (
+        _SEED_FIELD_SEP + ADMITTED_BOOTSTRAP_LABEL
+    ).encode("utf-8")
+    return int.from_bytes(hashlib.sha256(material).digest()[:8], "big")
+
+
+def _bootstrap_moments(
+    w: np.ndarray[Any, np.dtype[np.float64]],
+    sum_sq: np.ndarray[Any, np.dtype[np.float64]],
+    n: np.ndarray[Any, np.dtype[np.float64]],
+) -> tuple[np.ndarray[Any, np.dtype[np.float64]], np.ndarray[Any, np.dtype[np.float64]]]:
+    """Recompute (sample_mean, latent_var_raw) as `fit_skill` does, over draws.
+
+    Row-for-row the arithmetic of `fit_skill` plus `_mean_sampling_variance`,
+    vectorised over synthetic worlds:
+
+        rates          = w / n
+        sample_var     = sum((r - mean)^2) / (k - 1)      UNBIASED, /(k-1)
+        sampling_var_k = (sum_sq_k - n_k r_k^2) / ((n_k - 1) n_k)
+        latent_raw     = sample_var - mean_k(sampling_var_k)   UNCLIPPED
+
+    The peel is retained unclipped here for the same reason `fit_skill` retains
+    it unclipped: the admission comparison below reads it as-is, and clipping
+    the negative tail onto zero would bias the retained value upward.
+
+    TWO GUARDS the reference `proto_pb.py::_moments` does not carry, both taken
+    from `_mean_sampling_variance` because production must survive data the
+    registered regimes do not contain:
+
+      max(within_ss, 0)   float error can push an exactly-zero within-clause sum
+                          of squares slightly negative; a genuine negative is
+                          impossible, since sum_sq >= n r^2 for every real sample
+                          by Cauchy-Schwarz, with equality when the clause's
+                          observations are all identical.
+      max(n - 1, 1)       a clause with n = 1 carries no within-clause
+                          information and would divide by zero. within_ss is 0 by
+                          construction there, so the clause contributes nothing
+                          rather than a nan. Reached in production and by the
+                          property tests; not reached by any registered regime,
+                          whose n is 10, 25 or 100.
+
+    Neither guard can change a reproduction of the prototype: on the registered
+    regimes both are no-ops, which the four-decimal reproduction in
+    tests/test_aggregation_fit_admitted_bootstrap.py measures rather than
+    assumes.
+    """
+    r = w / n
+    mu = r.mean(axis=1)
+    sample_var = r.var(axis=1, ddof=1)
+    within_ss = np.maximum(sum_sq - n * r * r, 0.0)
+    sampling_var = (within_ss / (np.maximum(n - 1.0, 1.0) * n)).mean(axis=1)
+    return mu, sample_var - sampling_var
+
+
+def _draw_bootstrap_worlds(
+    rng: np.random.Generator,
+    thetas: np.ndarray[Any, np.dtype[np.float64]],
+    n: np.ndarray[Any, np.dtype[np.float64]],
+    tie: float,
+) -> tuple[np.ndarray[Any, np.dtype[np.float64]], np.ndarray[Any, np.dtype[np.float64]]]:
+    """One synthetic world per row of `thetas`, in the {0, 0.5, 1} alphabet.
+
+    Returns (w, sum_sq) so the caller can recompute the peel from the same
+    sufficient statistics production reads. The observation model is the one the
+    lane operates on: each trial is a tie with probability `tie`, else a
+    decisive win with probability p_k.
+
+    The fitted hyperprior is over the ENCODED clause mean
+    theta_k = 0.5 t + (1 - t) p_k, so a drawn theta_k is inverted per clause,
+
+        p_k = (theta_k - 0.5 t) / (1 - t)
+
+    at the pooled tie fraction the observed data carry. That is
+    `_draw_null_clause`'s model generalised from one pooled mean to one mean per
+    clause. On tie-free data (`tie == 0`) it reduces exactly to the binomial
+    draw, and sum_sq == w there because 0^2 = 0 and 1^2 = 1.
+    """
+    counts = n.astype(int)
+    if tie <= 0.0:
+        wins = rng.binomial(counts, np.clip(thetas, 0.0, 1.0))
+        return wins.astype(float), wins.astype(float)
+    ties = rng.binomial(counts, tie)
+    decisive = counts - ties
+    p_decisive = np.clip((thetas - 0.5 * tie) / (1.0 - tie), 0.0, 1.0)
+    wins = rng.binomial(decisive, p_decisive)
+    return wins + 0.5 * ties, wins + 0.25 * ties
+
+
+def _plugin_tail_probabilities(
+    clauses: list[ClauseObservations],
+    alpha_hat: float,
+    beta_hat: float,
+) -> list[float]:
+    """P(rate > threshold) on the plug-in shrunken posterior, per clause."""
+    return [
+        float(beta_dist.sf(WIN_RATE_THRESHOLD, alpha_hat + cl.w, beta_hat + (cl.n - cl.w)))
+        for cl in clauses
+    ]
+
+
+def _admission_conditioned_probs(
+    clauses: list[ClauseObservations],
+    alpha_hat: float,
+    beta_hat: float,
+    critical_order_statistic: float,
+    seed: int,
+) -> tuple[list[float], dict[str, object]]:
+    """Clause tail probabilities under the admission-conditioned bootstrap.
+
+    Specification: pre-registration v2 section 4 (FROZEN 2026-09-05). Reference
+    implementation: `pb_probs` in
+    docs/assurance/reference/ebmom-class2-S414/proto_pb.py, which produced every
+    number v2 sections 0.3 to 0.7 record. This is the same procedure inside
+    production.
+
+    Per block of ADMITTED_BOOTSTRAP_BLOCK candidate draws:
+
+        theta_j     ~ Beta(alpha_hat, beta_hat), K of them
+        one synthetic world under those means, preserving every clause's n_k and
+          the pooled tie fraction the observed data carry
+        (mu_s, latent_s) = the moments fit_skill computes on that world
+        KEEP the draw when latent_s > critical_order_statistic
+        c_s = mu_s (1 - mu_s) / latent_s - 1, non-positive dropped and counted
+
+    stopping once ADMITTED_BOOTSTRAP_DRAWS draws are kept or the block budget is
+    spent. The returned probability per clause is
+
+        P_k = mean_s P(theta > WIN_RATE_THRESHOLD |
+                       Beta(mu_s c_s + w_k, (1 - mu_s) c_s + n_k - w_k))
+
+    on the OBSERVED (w_k, n_k). The caller decides by the locked rule on P_k.
+
+    Returns (probabilities, diagnostics). The diagnostics are counts, not a
+    summary: `drawn`, `kept`, `below_crit`, `nonpositive_c`, `exhausted`,
+    `fell_back_to_plugin` and `used`, all of which reach provenance. A run that
+    kept nothing has nothing to average and returns the PLUG-IN probabilities
+    with `fell_back_to_plugin` true, rather than inventing a decision; a run
+    that kept some but fewer than S averages what it kept and says so through
+    `exhausted`. Both are typed outcomes and neither is silent.
+    """
+    k = len(clauses)
+    n_vec = np.array([cl.n for cl in clauses], dtype=float)
+    w_obs = np.array([cl.w for cl in clauses], dtype=float)
+    n_block = np.broadcast_to(n_vec, (ADMITTED_BOOTSTRAP_BLOCK, k))
+    tie = _pooled_null(clauses).tie
+
+    rng = np.random.default_rng(seed)
+    kept_mu: list[np.ndarray[Any, np.dtype[np.float64]]] = []
+    kept_c: list[np.ndarray[Any, np.dtype[np.float64]]] = []
+    n_kept = 0
+    n_drawn = 0
+    n_below_crit = 0
+    n_nonpositive_c = 0
+    for _ in range(ADMITTED_BOOTSTRAP_MAX_BLOCKS):
+        if n_kept >= ADMITTED_BOOTSTRAP_DRAWS:
+            break
+        thetas = rng.beta(alpha_hat, beta_hat, size=(ADMITTED_BOOTSTRAP_BLOCK, k))
+        w_s, sq_s = _draw_bootstrap_worlds(rng, thetas, n_block, tie)
+        mu_s, latent_s = _bootstrap_moments(w_s, sq_s, n_block)
+        n_drawn += ADMITTED_BOOTSTRAP_BLOCK
+        admitted = latent_s > critical_order_statistic
+        n_below_crit += int((~admitted).sum())
+        mu_s, latent_s = mu_s[admitted], latent_s[admitted]
+        # A kept draw has latent_s > critical_order_statistic, and that boundary
+        # is a bootstrap order statistic which is positive in every observed
+        # case but is not positive BY CONSTRUCTION. If it were not, a kept draw
+        # could carry latent_s == 0 and the inversion would return an infinity
+        # that passes `c_s > 0` and turns the clause probability into a nan. The
+        # errstate and the isfinite term below exclude that, and neither can
+        # alter a reproduction: the draws they drop are exactly the draws that
+        # would otherwise put a nan into the average.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            c_s = mu_s * (1.0 - mu_s) / latent_s - 1.0
+        proper = (c_s > 0.0) & np.isfinite(c_s) & (mu_s > 0.0) & (mu_s < 1.0)
+        n_nonpositive_c += int((~proper).sum())
+        mu_s, c_s = mu_s[proper], c_s[proper]
+        if mu_s.size:
+            kept_mu.append(mu_s)
+            kept_c.append(c_s)
+            n_kept += int(mu_s.size)
+
+    diagnostics: dict[str, object] = {
+        "mechanism": "admission_conditioned_parametric_bootstrap",
+        "spec": "docs/assurance/ebmom-peel-preregistration-amendment-v2.md section 4",
+        "s_target": ADMITTED_BOOTSTRAP_DRAWS,
+        "block": ADMITTED_BOOTSTRAP_BLOCK,
+        "max_blocks": ADMITTED_BOOTSTRAP_MAX_BLOCKS,
+        "seed": seed,
+        "drawn": n_drawn,
+        "kept": n_kept,
+        "below_crit": n_below_crit,
+        "nonpositive_c": n_nonpositive_c,
+        "exhausted": n_kept < ADMITTED_BOOTSTRAP_DRAWS,
+    }
+    if n_kept == 0:
+        # No admissible draw inside the budget. The mechanism has nothing to
+        # average over, so the decision falls back to the plug-in posterior and
+        # the fallback is COUNTED. Inventing a decision from an empty average is
+        # the failure this branch exists to make impossible.
+        logger.warning(
+            "Admission-conditioned bootstrap kept 0 of %d draws (crit=%.3e): "
+            "falling back to the plug-in posterior, counted in provenance.",
+            n_drawn,
+            critical_order_statistic,
+        )
+        diagnostics["fell_back_to_plugin"] = True
+        diagnostics["used"] = 0
+        return _plugin_tail_probabilities(clauses, alpha_hat, beta_hat), diagnostics
+    diagnostics["fell_back_to_plugin"] = False
+
+    mus = np.concatenate(kept_mu)[:ADMITTED_BOOTSTRAP_DRAWS]
+    cs = np.concatenate(kept_c)[:ADMITTED_BOOTSTRAP_DRAWS]
+    diagnostics["used"] = int(mus.size)
+    alphas = mus[:, None] * cs[:, None] + w_obs[None, :]
+    betas = (1.0 - mus[:, None]) * cs[:, None] + (n_vec - w_obs)[None, :]
+    probs = beta_dist.sf(WIN_RATE_THRESHOLD, alphas, betas).mean(axis=0)
+    return [float(p) for p in probs], diagnostics
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -326,7 +626,11 @@ def fit_skill(
 
     Raises ValueError naming the clause when any clause has n <= 0 or w outside [0, n].
 
-    The function is deterministic (no random sampling — EB-MoM is closed-form).
+    The function is DETERMINISTIC but no longer sampling-free. EB-MoM itself is
+    closed-form; the admission test and, on the admitted path, the
+    admission-conditioned bootstrap both resample. Both streams are seeded from
+    the canonical clause encoding under the frozen v1 section 3 derivation, so
+    the same clauses give the same verdict on every host and every run.
     """
     for clause in clauses:
         if clause.n <= 0:
@@ -477,7 +781,23 @@ def fit_skill(
     # -------------------------------------------------------------------
     # EB-MoM SUCCESS — build shrunken posteriors
     # -------------------------------------------------------------------
-    posteriors = _build_shrunken_posteriors(clauses, alpha_hat, beta_hat)
+    #
+    # The hyperprior is fitted, not known. Deciding on the plug-in posterior
+    # spends the uncertainty in (alpha_hat, beta_hat) as if it were zero, and v2
+    # section 0.5 measures what that costs on the admitted path. The tail
+    # probability each clause is decided on is therefore averaged over draws of
+    # the hyperparameters from the finite-sample distribution the fitted model
+    # implies, conditioned on the admission event that selected this fit.
+    tail_probabilities, bootstrap_diagnostics = _admission_conditioned_probs(
+        clauses,
+        alpha_hat,
+        beta_hat,
+        float(heterogeneity_test["critical_order_statistic"]),
+        _admitted_bootstrap_seed(clauses),
+    )
+    posteriors = _build_shrunken_posteriors(
+        clauses, alpha_hat, beta_hat, tail_probabilities=tail_probabilities
+    )
     return FitResult(
         aggregation_method="ebmom_hierarchical",
         aggregation_provenance={
@@ -489,6 +809,7 @@ def fit_skill(
             "latent_var_raw": latent_var_raw,
             "heterogeneity_test": heterogeneity_test,
             "k_clauses": k,
+            "admitted_bootstrap": bootstrap_diagnostics,
         },
         posteriors=posteriors,
     )
@@ -816,13 +1137,39 @@ def _build_shrunken_posteriors(
     clauses: list[ClauseObservations],
     alpha_hat: float,
     beta_hat: float,
+    tail_probabilities: list[float] | None = None,
 ) -> tuple[ClausePosterior, ...]:
-    """Compute shrunken posterior Beta(alpha_hat + w_k, beta_hat + n_k - w_k) per clause."""
+    """Compute shrunken posterior Beta(alpha_hat + w_k, beta_hat + n_k - w_k) per clause.
+
+    `tail_probabilities`, when given, REPLACES `p_win_gt_threshold` with a tail
+    probability computed elsewhere, one per clause in clause order. The admitted
+    path passes the admission-conditioned bootstrap's P_k there (v2 section 4).
+
+    What that means for a reader of the result, stated because it is a real
+    inconsistency and not an oversight: on that path
+
+        p_win_gt_threshold != sf(WIN_RATE_THRESHOLD, posterior_alpha, posterior_beta)
+
+    by construction. P_k is the tail of a MIXTURE over S hyperparameter draws and
+    no single Beta carries it. The reported (posterior_alpha, posterior_beta) are
+    the plug-in posterior the mechanism integrates around -- retained rather than
+    replaced by an invented single Beta, because a moment-matched stand-in would
+    be a distribution the run never used. Provenance names the mechanism and
+    carries its draw counts, and
+    `tests/test_aggregation_fit_admitted_bootstrap.py` pins the divergence so it
+    cannot be quietly closed by a later change to either side.
+    """
+    if tail_probabilities is not None and len(tail_probabilities) != len(clauses):
+        raise ValueError(
+            f"tail_probabilities has {len(tail_probabilities)} entries for {len(clauses)} clauses"
+        )
     results: list[ClausePosterior] = []
-    for cl in clauses:
+    for index, cl in enumerate(clauses):
         alpha = alpha_hat + cl.w
         beta = beta_hat + (cl.n - cl.w)
         mean, lo, hi, p = _posterior_stats(alpha, beta)
+        if tail_probabilities is not None:
+            p = tail_probabilities[index]
         results.append(
             ClausePosterior(
                 clause_id=cl.clause_id,

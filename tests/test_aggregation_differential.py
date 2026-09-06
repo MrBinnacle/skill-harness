@@ -45,6 +45,7 @@ from __future__ import annotations
 import logging
 import math
 from statistics import NormalDist
+from typing import Any
 
 import numpy as np
 from numpy.testing import assert_allclose
@@ -59,6 +60,7 @@ from skill_harness.aggregation.fit import (
     VAR_FLOOR,
     WIN_RATE_THRESHOLD,
     ClauseObservations,
+    FitResult,
     _bh_fdr,
     fit_skill,
 )
@@ -355,6 +357,49 @@ def _effect_per_cost_inputs(
 # ---------------------------------------------------------------------------
 
 
+def _check_admitted_bootstrap_tail(
+    result: FitResult, plugin_tail: np.ndarray[Any, np.dtype[np.float64]], seed_index: int
+) -> None:
+    """What an independent reference can say about the class-2 tail.
+
+    Not the value: that would mean reproducing a seeded resampling stream, which
+    is cloning rather than an independent check, and this file refuses that for
+    the admission bootstrap for the same reason. What is checkable is that the
+    number is a probability, that the mechanism actually reached the decision
+    rather than the plug-in reaching it silently, and that provenance's own draw
+    counts are internally consistent with the mode it reports.
+    """
+    diagnostics = result.aggregation_provenance["admitted_bootstrap"]
+    assert isinstance(diagnostics, dict)
+    got = np.array([p.p_win_gt_threshold for p in result.posteriors])
+    assert np.all((got >= 0.0) & (got <= 1.0)), (
+        f"class-2 tail outside [0, 1] at seed_index={seed_index}: {got}"
+    )
+    assert int(diagnostics["used"]) <= int(diagnostics["s_target"])
+    assert int(diagnostics["kept"]) + int(diagnostics["below_crit"]) + int(
+        diagnostics["nonpositive_c"]
+    ) == int(diagnostics["drawn"]), (
+        f"admitted_bootstrap draw counts do not add up at seed_index={seed_index}: {diagnostics}"
+    )
+    if diagnostics["fell_back_to_plugin"]:
+        assert_allclose(
+            got,
+            plugin_tail,
+            rtol=0.0,
+            atol=TOL_FIT_SKILL,
+            err_msg=(
+                "the counted plug-in fallback must return the plug-in tail exactly, "
+                f"seed_index={seed_index}"
+            ),
+        )
+        return
+    assert int(diagnostics["used"]) > 0
+    assert not np.allclose(got, plugin_tail, rtol=0.0, atol=TOL_FIT_SKILL), (
+        "the admitted path reported the plug-in tail while claiming not to have "
+        f"fallen back, seed_index={seed_index}: the mechanism did not reach the decision"
+    )
+
+
 class TestFitSkillDifferential:
     """``fit_skill`` vs independent Beta / MoM / statsmodels BH-FDR."""
 
@@ -471,7 +516,20 @@ class TestFitSkillDifferential:
                         exp_means = np.array([s[0] for s in exp_stats])
                         exp_lo = np.array([s[1] for s in exp_stats])
                         exp_hi = np.array([s[2] for s in exp_stats])
+                        # p_win_gt_threshold on the admitted path is NOT the tail
+                        # of the reported Beta since v2 section 4: it is the same
+                        # tail averaged over S admission-conditioned draws of the
+                        # hyperparameters. An independent reference cannot be
+                        # written for it -- reproducing a seeded resampling
+                        # procedure is cloning, which is the reason this test
+                        # already branches on production's method rather than
+                        # re-deriving admission. What CAN be cross-checked without
+                        # cloning is asserted in _check_admitted_bootstrap_tail
+                        # below, and the plug-in tail is kept as the reference the
+                        # mechanism must have moved away from.
                         exp_p = np.array([s[3] for s in exp_stats])
+                        _check_admitted_bootstrap_tail(result, exp_p, seed_i)
+                        exp_p = got_p
 
                 # rtol=0, atol=TOL_FIT_SKILL (1e-12) — fit_skill posterior band
                 assert_allclose(
