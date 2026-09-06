@@ -109,9 +109,7 @@ def gate2_stopping_decision(
     :raises ValueError: If any count is negative or all counts are zero.
     """
     if wins < 0 or losses < 0 or ties < 0:
-        raise ValueError(
-            f"counts must be >= 0; got wins={wins}, losses={losses}, ties={ties}"
-        )
+        raise ValueError(f"counts must be >= 0; got wins={wins}, losses={losses}, ties={ties}")
     if wins + losses + ties == 0:
         raise ValueError("at least one observation is required")
 
