@@ -1,0 +1,52 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-603h91f6\\M-V1\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "0f5250afd95a92b5ad43865d48ddc4a6a0ae1ca692273fd8cf34c4cce266022f",
+        "tests_collected": 3,
+        "worktree_head": "d39440d8eff73999a53d1b192fb6f5f9d2ef9fcb"
+      },
+      "description": "mutant 1: pooling removed on the refused path, reverting to the unpooled posterior the pre-registration retired",
+      "killing_assertions": [
+        "tests/test_aggregation_fit_bounded_pooling.py::test_mutant_1_tie_heavy_null_refused_false_fail_rate"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-603h91f6\\M-V1\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "fb4acf98c7baa461fabca6a4f82e64f4d071d5d096a88ed457a786427ebcb646",
+        "tests_collected": 3,
+        "worktree_head": "d39440d8eff73999a53d1b192fb6f5f9d2ef9fcb"
+      },
+      "mutant_id": "M-V1",
+      "notes": [],
+      "obligation": "v2-section-7",
+      "selection": [
+        "tests/test_aggregation_fit_bounded_pooling.py::test_mutant_1_tie_heavy_null_refused_false_fail_rate",
+        "tests/test_aggregation_fit_bounded_pooling.py::test_control_unpooled_refused_path_rejects_on_the_same_worlds",
+        "tests/test_aggregation_fit_bounded_pooling.py::test_the_regime_reaches_the_refused_path_at_all"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "d39440d8eff73999a53d1b192fb6f5f9d2ef9fcb",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "src/skill_harness/aggregation/fit.py": "0f5250afd95a92b5ad43865d48ddc4a6a0ae1ca692273fd8cf34c4cce266022f"
+  },
+  "production_tree_digest_before": {
+    "src/skill_harness/aggregation/fit.py": "0f5250afd95a92b5ad43865d48ddc4a6a0ae1ca692273fd8cf34c4cce266022f"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.1",
+  "target_digests": {
+    "src/skill_harness/aggregation/fit.py": "0f5250afd95a92b5ad43865d48ddc4a6a0ae1ca692273fd8cf34c4cce266022f"
+  },
+  "target_files": [
+    "src/skill_harness/aggregation/fit.py"
+  ]
+}

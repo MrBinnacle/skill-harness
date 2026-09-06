@@ -468,6 +468,30 @@ and covers that section only. This page stays the citable surface for every kind
   mechanism's form is final — section 4 marks it "revisable in form, frozen in kind," and the
   third mechanism class was never run.
 
+### [`docs/assurance/ebmom-v2-form-b-mutation-receipt.md`](assurance/ebmom-v2-form-b-mutation-receipt.md)
+
+- **Claims:** Mutant 1 of v2 section 7 — pooling removed on the refused path, reverting to the
+  unpooled posterior the pre-registration retired — is KILLED at `d39440d` by
+  `tests/test_aggregation_fit_bounded_pooling.py::test_mutant_1_tie_heavy_null_refused_false_fail_rate`,
+  measured by `scripts/mutation_receipt.py` in its own git worktree at a fixed commit with
+  production never mutated in place, recording both worktree HEADs, the `module.__file__`
+  actually imported, clean and mutant source digests, that the digests differ, that the mutant
+  compiles, that the clean baseline passed first with nonzero collection, and that the
+  production tree was byte-unchanged afterwards. The selection carries three node ids so the
+  receipt shows which assertion moved and which did not: only the kill assertion failed, while
+  the positive control (the retired unpooled fallback REJECTING the same registered test on the
+  same worlds) and the refusal guard (all 41 replicates refused) stayed green under the mutant,
+  which excludes both an empty-cell kill and a kill through the wrong mechanism. The regime
+  makes every FAIL false by construction: `tie_heavy_null` is homogeneous at a true encoded mean
+  of 0.65 against a 0.60 threshold.
+- **Refuses to claim:** Any mutation score, or that one mutant is a campaign — mutants 2, 3 and
+  4 of section 7 are not measured here and belong to #443, #443 and #442, with #444 collecting
+  all four; that form B passes the acceptance matrix, since no confirmatory run has been
+  performed and v2 section 5 keeps the branch unmerged until one is; that its numbers are
+  results rather than a detectability demonstration, since they are R = 41 under the throwaway
+  root `SMOKE_NOT_CONFIRMATORY` rather than the R = 1000 figures section 7 cites; anything
+  whatever about the admitted path or about the fresh root, which does not yet exist.
+
 ### [`docs/assurance/dependency-audit.md`](assurance/dependency-audit.md)
 
 - **Claims:** The command CI runs (`python -m pip_audit --local`, pip-audit 2.10.1,
