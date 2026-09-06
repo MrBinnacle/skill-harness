@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C1\\src\\skill_harness\\aggregation\\engine.py",
-        "source_digest": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-jf6h92sd\\M-C1\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "2cdb46d63fab5f682c62ec9327635fdcaf1f07f98799538b4270d4e26cfd9363",
         "tests_collected": 1,
-        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+        "worktree_head": "a8b906811185ffed7de43ef5e98b89be3b96d772"
       },
       "description": "stop reading the persisted inadmissibility_reason, so CONFOUNDED is unreachable again",
       "killing_assertions": [
@@ -17,10 +17,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C1\\src\\skill_harness\\aggregation\\engine.py",
-        "source_digest": "1ca87a4b8e91888e0ac95f3d3fd3667fc2cfe7947a42378b2dc34327b7a07d43",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-jf6h92sd\\M-C1\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "faf1b1f399c7b0c817e7dca37cd1f205ec03feda951145922c269cc72ab8c20a",
         "tests_collected": 1,
-        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+        "worktree_head": "a8b906811185ffed7de43ef5e98b89be3b96d772"
       },
       "mutant_id": "M-C1",
       "notes": [],
@@ -34,10 +34,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C2\\src\\skill_harness\\aggregation\\engine.py",
-        "source_digest": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-jf6h92sd\\M-C2\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "2cdb46d63fab5f682c62ec9327635fdcaf1f07f98799538b4270d4e26cfd9363",
         "tests_collected": 1,
-        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+        "worktree_head": "a8b906811185ffed7de43ef5e98b89be3b96d772"
       },
       "description": "invert the survivor gate: fire CONFOUNDED only when admissible work DID survive",
       "killing_assertions": [
@@ -47,10 +47,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C2\\src\\skill_harness\\aggregation\\engine.py",
-        "source_digest": "f6df02db54d045f13107eae21e9f9819fed9b47bc886a35f60509d26c4e7c38a",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-jf6h92sd\\M-C2\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "9fbc1ecb5624e624b7837e514c462ebfe945193a75d9006cf7f62c4564cc7fb1",
         "tests_collected": 1,
-        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+        "worktree_head": "a8b906811185ffed7de43ef5e98b89be3b96d772"
       },
       "mutant_id": "M-C2",
       "notes": [],
@@ -64,10 +64,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C3\\src\\skill_harness\\aggregation\\engine.py",
-        "source_digest": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-jf6h92sd\\M-C3\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "2cdb46d63fab5f682c62ec9327635fdcaf1f07f98799538b4270d4e26cfd9363",
         "tests_collected": 2,
-        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+        "worktree_head": "a8b906811185ffed7de43ef5e98b89be3b96d772"
       },
       "description": "count every inadmissible verdict except scorer_error as confounded, so an underpowered clause reports as confounded",
       "killing_assertions": [
@@ -77,10 +77,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-5046wxp6\\M-C3\\src\\skill_harness\\aggregation\\engine.py",
-        "source_digest": "27522577ab820d9ee848816da2d16ef53b3166af84e6873ed635f07cf9fbe9ba",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-jf6h92sd\\M-C3\\src\\skill_harness\\aggregation\\engine.py",
+        "source_digest": "9bc4bab9d6fb1327c46c8f5e68dfc7ae7eb1fcd5b6f4a640d0ad81e1a1050996",
         "tests_collected": 2,
-        "worktree_head": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c"
+        "worktree_head": "a8b906811185ffed7de43ef5e98b89be3b96d772"
       },
       "mutant_id": "M-C3",
       "notes": [],
@@ -92,18 +92,18 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "e1bfe205ab20eb829a9e5756c1828b16f3bd5c2c",
+  "commit_under_test": "a8b906811185ffed7de43ef5e98b89be3b96d772",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "src/skill_harness/aggregation/engine.py": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176"
+    "src/skill_harness/aggregation/engine.py": "2cdb46d63fab5f682c62ec9327635fdcaf1f07f98799538b4270d4e26cfd9363"
   },
   "production_tree_digest_before": {
-    "src/skill_harness/aggregation/engine.py": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176"
+    "src/skill_harness/aggregation/engine.py": "2cdb46d63fab5f682c62ec9327635fdcaf1f07f98799538b4270d4e26cfd9363"
   },
   "production_tree_unchanged": true,
   "python": "3.13.1",
   "target_digests": {
-    "src/skill_harness/aggregation/engine.py": "c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176"
+    "src/skill_harness/aggregation/engine.py": "2cdb46d63fab5f682c62ec9327635fdcaf1f07f98799538b4270d4e26cfd9363"
   },
   "target_files": [
     "src/skill_harness/aggregation/engine.py"
