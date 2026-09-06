@@ -147,6 +147,44 @@ _CLASS2_ADMISSION_GUARD = (
     "::test_the_four_named_worlds_reach_the_admitted_path"
 )
 
+# #443: mutants 2 and 3 of the same section. Both target the acceptance-matrix
+# harness rather than fit.py, so their obligations are separate again: a change
+# to scripts/ebmom_acceptance_matrix.py moves both digests and each has to be
+# regenerable on its own.
+_MATRIX = "scripts/ebmom_acceptance_matrix.py"
+_MATRIX_MODULE = "ebmom_acceptance_matrix"
+_SPLIT_KILL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_mutant_2_low_heterogeneity_refused_cell_carries_its_own_G"
+)
+# The control requires the pooled cell to be STRICTLY larger than either path's,
+# so a per-path cell that happened to equal the pooled one could not carry the
+# kill. The guard requires the two fixture worlds to reach different paths: a
+# mutant that sent both down one path would empty a cell and look like a kill
+# for a reason that has nothing to do with the split.
+_SPLIT_CONTROL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_control_the_pooled_cell_differs_from_both_per_path_cells"
+)
+_SPLIT_PATH_GUARD = (
+    "tests/test_ebmom_acceptance_matrix_v2.py::test_the_fixture_worlds_reach_both_paths"
+)
+_SELECTION_KILL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_mutant_3_two_correlated_false_decisions_do_not_reject"
+)
+# The control requires the RETIRED all-decision test to reject on the same
+# fixture. If it ever went green the kill above would be passing because the
+# fixture cannot fire, not because the selection absorbs the correlation. The
+# guard pins the fixture's shape: one world, two decisions.
+_SELECTION_CONTROL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_control_the_all_decision_test_rejects_on_the_same_fixture"
+)
+_SELECTION_SHAPE_GUARD = (
+    "tests/test_ebmom_acceptance_matrix_v2.py::test_the_fixture_is_one_world_carrying_two_decisions"
+)
+
 MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M-N1",
@@ -277,6 +315,28 @@ MUTANTS: tuple[Mutant, ...] = (
         "  # mutant: plug-in restored",
         (_CLASS2_KILL, _CLASS2_CONTROL, _CLASS2_ADMISSION_GUARD),
     ),
+    Mutant(
+        "M-V2",
+        "v2-section-7-mutant-2",
+        "mutant 2: the per-path split removed, so every decision is tallied on one "
+        "lane and the refused-path cell cannot be reported at all",
+        _MATRIX,
+        _MATRIX_MODULE,
+        "        lane = path",
+        '        lane = "admitted"  # mutant: per-path split removed, rows pooled',
+        (_SPLIT_KILL, _SPLIT_CONTROL, _SPLIT_PATH_GUARD),
+    ),
+    Mutant(
+        "M-V3",
+        "v2-section-7-mutant-3",
+        "mutant 3: the one-decision-per-world selection replaced by all decisions, "
+        "restoring the test that treats clause decisions as independent",
+        _MATRIX,
+        _MATRIX_MODULE,
+        "        trials, trial_false = clusters, sum(1 for value in selected if value == 1)",
+        "        trials, trial_false = decisions, false_total  # mutant: all decisions",
+        (_SELECTION_KILL, _SELECTION_CONTROL, _SELECTION_SHAPE_GUARD),
+    ),
 )
 
 
@@ -316,7 +376,11 @@ def _env(root: Path | None = None) -> dict[str, str]:
     """
     env = {**os.environ, "PYTHONHASHSEED": "0", "PYTHONUTF8": "1"}
     if root is not None:
-        env["PYTHONPATH"] = str(root / "src")
+        # scripts/ joins src/ because #443's mutants target the acceptance-matrix
+        # harness, which lives there and is not a package. Without it the compile
+        # and isolation assertions cannot import the mutated module at all, and
+        # the case would be recorded as INVALID_ISOLATION rather than measured.
+        env["PYTHONPATH"] = os.pathsep.join([str(root / "src"), str(root / "scripts")])
     return env
 
 
