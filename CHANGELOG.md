@@ -7,7 +7,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-06
+
+The first release since 2026-08-15. It carries 194 commits from `main`. The
+reason to cut it is the first entry under Fixed: the package PyPI serves as
+0.2.3 exits 1 on a cp1252 Windows console when it runs the README's own
+documented command. The fix has been on `main` since 2026-08-31.
+
+The minor bump, not a patch, records two facts. The SERS receipt schema moved
+from 1.0.0 to 1.3.0 in this range, which is a wire-format change for anything
+that reads receipts. And `scripts/release_gate.py` defines the 0.3 line as
+"the assurance phase is closed and its lane has run green" (G7, G8); both
+checks pass at this version, so the number says what the gate says. No commit
+in the range carries a `BREAKING CHANGE:` marker.
+
+### Fixed
+- **Windows: the CLI no longer crashes on a cp1252 console** (#321, fix in
+  #322). The CLI entry point reconfigures `stdout` and `stderr` to UTF-8 before
+  any output. v0.2.3 raised `UnicodeEncodeError` on the right-arrow glyph in
+  the offline audit table and exited 1 mid-output with a traceback. Measured
+  2026-09-06 from two clean virtual environments on the same console: the PyPI
+  0.2.3 build fails, a build from `main` exits 0.
+- **A core install can import `skill_harness.sitegen`** (#415, fix in #425).
+  `jsonschema` was imported at module top level but was not a runtime
+  dependency, so `import skill_harness.sitegen` failed on a plain
+  `pip install skill-harness`. It now loads lazily behind the new `[sitegen]`
+  extra and the error names the extra to install.
+- **`screen profile --skills-root` enumerates a category-nested skills tree**
+  (#101, fix in #380). It scanned one level only, so a collection grouped by
+  category enumerated zero cards and silently blanked the description-cost
+  column. It now descends one extra level where the direct child has no
+  `SKILL.md`.
+- **Screen verdicts refuse rows measured under a different harness pin**
+  (#382, fix in #398). Admissible screens captured under another pin had
+  contributed to `p0` with no staleness signal. `StalePinError` names both
+  fingerprints; `screen verdict --fresh-pin` triggers the check.
+- **Aggregation refuses malformed evidence instead of computing on it:** wins
+  above observations (#232), empty fit observations (#231), a non-finite score
+  at the model layer (#375). `CONFOUNDED` is reachable again by reading the
+  persisted reason (#376); the wrong-instrument withhold no longer promises a
+  lane that does not exist (#404); walled-off partitions stay out of the
+  exclusion read and inadmissible evidence is named inadmissible, not absent
+  (#247).
+- **Verdict wording:** `budget_exhausted` is reported as itself, not as
+  underpowered; `_is_unmeasured` answers `UNMEASURED`, not `CANT_TELL_YET`
+  (#259). The `evaluate-paired` command checks the runner-declared oracle
+  identity, not the card digest (#417), and the oracle metric identity is
+  0.4.1 after the module move (#416).
+- **Cost:** an unpriced model is refused rather than charged at Sonnet 4.6
+  rates (#339); the provider-prefixed `subject_model` the store records is
+  priced (#332); `claude-sonnet-5` is in the price table, with a drift guard
+  (#301).
+- **Vacuity render guard:** kept on the kind-precision publishing path (#236);
+  reads the aggregate as a number rather than as digits inside one, and loops
+  the citable registry (#237). The percent-claim detector was reverted from the
+  render backstop after its baseline was executed rather than chosen (#238).
+- The generation-1 calibration receipt's off-by-one denominator (#320); the
+  guard reports a source line rather than an offset into a blob (#259); a
+  supersession path for `screen_runs` (#410); the backfill manifest is
+  re-runnable so a grown manifest reaches the live store (#434); the CI
+  `all-green` job no longer depends on a job it had dropped (#319).
+
 ### Added
+- **SERS 1.1.0, 1.2.0 and 1.3.0.** 1.1.0 adds the `subject_identity` block
+  (`skill_id`, `harness_version`, oracle `metric_version` and
+  `implementation_hash`, arms) with an omit-`skill_id` poison fixture (#300).
+  1.2.0 adds the additive `delivery` block recording which of a skill's two
+  products carried the value: `channel`, `exposure`, `pi_c` (#392). 1.3.0 adds
+  the split-oracle outcome variable and its decision rule (#424; that ticket
+  stays open on one negative control, recorded in the commit). Older receipts
+  validate unchanged; the `sers_version` enum lists all four.
+- **`[sitegen]` extra** for the receipts site generator, the only home of the
+  `jsonschema` dependency (#425). The receipts site moved onto the declared
+  bench design system and the paper receipt body retired (#318); linkcheck now
+  covers the generated site, not only the prose (#290).
+- **Gate-2 matched-evidence bridge:** matched observation ids bind to the
+  result (#246), ledger exclusions on decisions with typed matched refusals
+  (#247), E2 evidence binding and a compiled pre-spend binding (#263), a
+  paired-lane Path C Gate-2 read under a ratified design (#396), and a
+  cache-aware pair projector with the cache-read share declared rather than
+  observed (#445).
+- **Detector v2:** exposure is the treatment at paired ingest and `pi_c` a
+  recorded stratifier (#393, ruling in #384). The 2026-09-01
+  `git-pull-rebase-trap` pair was re-ingested under it and its receipt
+  superseded (#397).
+- **Paired-run apparatus:** a pre-spend launch gate for the sized paired run
+  (#411); skill frontmatter normalised at the harness boundary with corpus
+  coverage reported (#413); the hazard writer connected to the reader through
+  a two-arm block model with a round-trip control (#429); three deterministic
+  checks so the assumptions RAT-0001 Amendment 2 exposed cannot reach a signed
+  record (#427). RAT-0001 itself: drafted, ratified, amended twice, run once,
+  decided `UNRESOLVED` (#406 to #418).
+- **Citable calibration registry** with preserved supersession notes; an
+  ambiguous calibration receipt raises (#235).
+- **Executable evaluator contracts** (#294).
+- **Assurance phase closed** (#174): close-out figures, residual risks and
+  drift contracts recorded; a Linux assurance container definition (#371); the
+  ten registered detectors exist and run (#353 to #369), including null-world
+  FDR calibration of the BH-FDR fallback (#359) and EB-MoM recovery against a
+  known hyperprior (#361).
+- **Screens:** the OBS-0007 gitpull screen joins the backfill manifest and
+  voided screens render as `VOIDED` in prior measurements (#433); the D4 reason
+  records what was compared and a half-specified manifest entry is refused
+  (#401, #426).
+- **Docs of record:** `CONTEXT.md` domain glossary wired as the vocabulary of
+  record; a one-page architecture map measured 2026-08-31 (#372); an ADR for
+  the architecture-admission rule and its three applications (#296); the
+  `why-this-exists.md` commit-count claim is derived at check time (#439) and
+  checked on a schedule rather than as a CI gate (#446).
 - **Repo description sync check** verifies the live GitHub repository "About"
   text against `pyproject.toml`'s `[project].description`, byte for byte.
   `tests/test_structural_bans.py` already pinned the `pyproject.toml` side of
@@ -31,6 +138,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/drift_check.py`, so its checks can be exercised against a seeded
   tree; the version checked is always the version that tree declares.
   Falsification receipt: `docs/assurance/release-gate-red-206.md`.
+
+### Changed
+- **README states the spend rule per command.** It said every command that can
+  spend is dry-run by default. `skill init` calls the extractor model in both modes
+  and `--execute` gates only persistence; a stranger test on 2026-09-06 ran it without
+  `--execute` and observed a live request. The README now says so, and its quoted
+  audit output is the verbatim 0.3.0 output rather than an abridged paraphrase.
+- **Dependency floors.** `anthropic>=1.2.0` (was `>=0.87`); `openai>=2.41,<4`
+  (was `<3`); dev: `mypy>=2.3.1`, `pytest-socket>=0.8.1`. Dependabot bumps of
+  pinned dev and CI actions throughout the range.
+- The README body was rewritten from the record, the unsupported row count
+  corrected and pinned (#316); the origin question is stated in the ratified
+  framing on both public surfaces (#323); `pyproject.toml`'s description
+  changed with it and the live GitHub About text is checked against it daily.
+- Repository style surfaces for maintainers: `DESIGN.md` declares one system
+  with a token-conformance test (#312); six Vale prose rules with fixtures and
+  a warning-level CI job (#317); the literal-humanist prose register is the
+  repo voice in `AGENTS.md`.
 
 ## [0.2.3] — 2026-08-15
 
@@ -633,7 +758,8 @@ Initial scaffold. Pre-alpha — schema realized and trigger-enforced, CLI surfac
 ### Security
 - `anthropic` pin tightened from `>=0.39` to `>=0.87` to enforce post-patch for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool CVEs, 2026-03-31)
 
-[Unreleased]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/MrBinnacle/skill-harness/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.0...v0.2.1
