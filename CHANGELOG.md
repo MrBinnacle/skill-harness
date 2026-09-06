@@ -140,6 +140,11 @@ in the range carries a `BREAKING CHANGE:` marker.
   Falsification receipt: `docs/assurance/release-gate-red-206.md`.
 
 ### Changed
+- **README states the spend rule per command.** It said every command that can
+  spend is dry-run by default. `skill init` calls the extractor model in both modes
+  and `--execute` gates only persistence; a stranger test on 2026-09-06 ran it without
+  `--execute` and observed a live request. The README now says so, and its quoted
+  audit output is the verbatim 0.3.0 output rather than an abridged paraphrase.
 - **Dependency floors.** `anthropic>=1.2.0` (was `>=0.87`); `openai>=2.41,<4`
   (was `<3`); dev: `mypy>=2.3.1`, `pytest-socket>=0.8.1`. Dependabot bumps of
   pinned dev and CI actions throughout the range.
