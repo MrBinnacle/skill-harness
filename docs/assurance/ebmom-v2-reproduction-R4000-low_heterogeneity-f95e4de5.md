@@ -156,3 +156,9 @@ as a shape.
 - **Does not claim** the admitted 6c cell is safe. At `2 / 8` over the full range it is one
   selection from rejecting, and v2 section 5 is explicit that a pass in a cell that small is weak
   evidence.
+- **Does not claim** that the JSON is byte-reproducible from this tree. The regime carries a
+  `seconds` field — a wall-clock duration, which changes on every run by construction. #452
+  removed that field from the generator after this receipt was written. The field is retained
+  here, is **not canonical**, and carries **no evidentiary weight**; regenerating the file is one
+  controlled step that has not been taken. A diff of this receipt against a fresh run of the
+  fixed generator differs in the `seconds` field and, per the #452 measurement, in nothing else.

@@ -631,8 +631,18 @@ def run_v2_reproduction(
         port_differences += len(port_diffs)
         production_differences += len(production_diffs)
 
+        # Wall time goes to stdout, never into the JSON: a committed receipt has
+        # to be byte-reproducible from the same tree, and a timing field makes
+        # every re-run differ for a reason that is not about the measurement.
+        # The v1 single-column path in main() carries the same comment verbatim
+        # and has always obeyed it; #452 is where v2 had regressed it, with the
+        # rule and its violation twelve lines apart in one file.
+        # tests/test_ebmom_reproduction_receipt_determinism.py now enforces it,
+        # because stating it only as a comment is what let the regression
+        # through.
+        elapsed = time.time() - started
+
         entry: dict[str, object] = {
-            "seconds": round(time.time() - started, 1),
             "port_identity_prototype_seed": {
                 "cells": port_cells,
                 "differences": port_diffs,
@@ -665,7 +675,7 @@ def run_v2_reproduction(
 
         print(
             f"[{regime.name}] admitted {production_scored.admitted}/{replicates} "
-            f"in {entry['seconds']}s  port diffs {len(port_diffs)}  "
+            f"in {elapsed:.1f}s  port diffs {len(port_diffs)}  "
             f"production diffs {len(production_diffs)}",
             flush=True,
         )
