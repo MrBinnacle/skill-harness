@@ -281,6 +281,45 @@ and the `_extract_skill_description` path would need a new channel for that solv
 Spec: skill-harness #384 (the ruling, Amendment 3 of v0.2-preregistration.md,
 landed by #386).
 
+## 11. Population integrity for enumeration-driven controls
+
+An enumeration-driven control — one that discovers its own inputs by globbing a
+directory, walking a tree, or reading a register — MUST record the cardinality and
+the stable identity of the population it actually submitted to its detector, and
+MUST fail closed when that population cannot be established as the declared
+population.
+
+A population failure is reported as `UNINTERPRETABLE`, never as `PASS` and never as
+an ordinary `FAIL`:
+
+```
+population_valid = false   ->   verdict = UNINTERPRETABLE     (correct)
+population_valid = false   ->   verdict = PASS                (the defect)
+population_valid = false   ->   verdict = FAIL                (a false finding)
+```
+
+`PASS` and `FAIL` are both object-level claims about the subject, and neither is
+available when the analysed universe is unknown. This is the discipline §3 already
+applies to inadmissible evidence, one layer down: a detector saying "no defect found
+in the cases I received" may not become "no defect exists" unless the system proves
+it received the complete declared population.
+
+The rule that generates this: **a downstream result cannot repair an upstream
+validity failure.** A perfect assertion cannot repair an incomplete population.
+
+Enforced in:
+- `src/skill_harness/population.py` — the record, the digest canonicalisation, the
+  verdict, and `require_valid_population`.
+- `tests/test_receipts_index.py` — the first consumer, checking the receipt files on
+  disk against the receipts `docs/receipts-index.md` declares, in both directions.
+
+The contract is stated here and in code because it was violated by a control that
+carried its rule only as a comment. Population metadata is independently testable,
+including a negative control in which an expected member is omitted and the CONTROL
+fails while the detector correctly passes over what it received.
+
+Spec: skill-harness #453; the instance that produced it is #444.
+
 ---
 
 Re-pointed from "CLAUDE.md" to this file across `src/` and `tests/` (F5, then the
