@@ -60,7 +60,8 @@ today.
 The output below is from that command on the committed fixture
 `tests/fixtures/sers/declared-synthetic-positive-control/SKILL.md`, run on 2026-09-06 at
 v0.3.0 in a 100-column terminal. Two lines are removed: `source:` (a local absolute path) and
-`sha256:`. Everything else is verbatim.
+`sha256:`, and the Summary line's trailing pointer to `docs/concepts/why-unmeasured.md` is
+dropped so the line renders whole. Everything else is verbatim.
 
 ```text
 OFFLINE AUDIT — no API calls, no cost
@@ -97,8 +98,7 @@ router listing line (see standing-cost-unparseable).
 other documentation files beside the skill (progressive disclosure); 0 when the skill directory has
 none.
 
-Summary: 2 pass · 1 warn — UNMEASURED is a recorded state, not a failure
-(docs/concepts/why-unmeasured.md).
+Summary: 2 pass · 1 warn — UNMEASURED is a recorded state, not a failure.
 Clause evidence: UNMEASURED (no_extraction: clause evidence requires an extraction output; produce
 one with skill init --out <file>)
 ```
