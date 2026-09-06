@@ -538,6 +538,27 @@ and covers that section only. This page stays the citable surface for every kind
   the acceptance matrix, since no confirmatory run has been performed and v2 section 5 keeps the
   branch unmerged until one is; anything about the fresh root, which does not yet exist.
 
+### [`docs/assurance/ebmom-v2-section-7-mutation-receipts.md`](assurance/ebmom-v2-section-7-mutation-receipts.md)
+
+- **Claims:** That the four mutants registered in v2 section 7 have four mutation receipts in
+  `docs/assurance/`, and names for each one the mutant, its id, the receipt, the file it targets,
+  the verdict and the assertion that killed it. Every row was checked against the receipts and
+  against the tree when written: all four verdicts are KILLED, and all four killing assertions
+  exist under the names given. It is an index over receipts, so its authority is entirely
+  borrowed - each receipt is the evidence for its own row.
+- **Refuses to claim:** Any digest, deliberately - each receipt pins the files it measured in its
+  own `target_digests`, and `tests/test_mutation_receipt.py` holds that pin honest against both
+  the live tree and the receipt's own prose, so a digest copied into an index would be guarded by
+  neither and could go stale in silence while both tests stayed green. That four is a mutation
+  score or a campaign result. That the other mutation receipts in the same directory are section 7
+  mutants - they are not, and a reader counting files there will get a larger number. That the
+  EB-MoM gate receipt's one SURVIVED case is a failure, it being a preserved finding. That the
+  mechanism passes the acceptance matrix, since no confirmatory run has been performed and v2
+  section 5 keeps the branch unmerged until one is. Anything about the fresh root, which does not
+  yet exist and is the maintainer's to generate. That the index is self-policing: no test checks
+  it is complete against section 7, so a mutant added or removed there leaves this page wrong and
+  silent.
+
 ### [`docs/assurance/ebmom-v2-per-path-split-mutation-receipt.md`](assurance/ebmom-v2-per-path-split-mutation-receipt.md)
 
 - **Claims:** Mutant 2 of v2 section 7 - the per-path split removed, so every decision is
