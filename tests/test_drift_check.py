@@ -285,12 +285,18 @@ def test_missing_enforcement_pointer_blocks(tmp_path: Path) -> None:
 
 
 def test_spend_gating_sentence_mutation_blocks(tmp_path: Path) -> None:
+    """#469: the registered sentence is now the scoped claim, not the blanket one.
+
+    The wording this mutates changed because the old registered sentence was
+    false for two of the three `run` subcommands, and registering it made DC-6
+    hold the false version in place.
+    """
     root = _make_tree(tmp_path)
     _mutate(
         root,
         "README.md",
-        "dry-run by default",
-        "dry-run by preference",
+        "the only subcommand that spends",
+        "one of several subcommands that spend",
     )
     r = _run(root)
     assert r.returncode == 1

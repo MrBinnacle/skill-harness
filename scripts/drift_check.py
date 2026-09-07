@@ -414,14 +414,23 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
     LiveRow(
         dc_id="DC-6",
         summary="spend-gating sentence registered (README + INVARIANTS) + enforcement pointer live",
+        # #469: the sentence registered here until 2026-09-07 was "Every `run` subcommand
+        # is dry-run by default; `--execute` is required to spend". It was false for two
+        # of the three `run` subcommands, and registering it meant this contract held the
+        # false version in place: DC-6 reddened on a correction and stayed green on the
+        # error. The registered copy is now the scoped claim, which is what the invariant
+        # was always about -- spending takes an explicit opt-in, on the commands that can
+        # spend. tests/test_readme_run_dry_run_469.py reads the click commands and fails
+        # if the subcommand flag sets stop matching this wording.
         registered_texts=(
             RegisteredText(
                 "README.md",
-                "Every `run` subcommand is dry-run by default; `--execute` is required to spend",
+                "`run ablation` is the only subcommand that spends",
             ),
             RegisteredText(
                 "docs/INVARIANTS.md",
-                "`--execute` is required before the command performs writes or makes LLM API calls",
+                "Every command that writes to the evidence store or makes an LLM API call "
+                "defaults to\ndry-run, and `--execute` is required before it does either",
             ),
         ),
         live_pointers=("src/skill_harness/cli/main.py",),

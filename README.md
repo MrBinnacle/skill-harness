@@ -221,11 +221,24 @@ skill-harness run ablation <skill_id> --execute \
 skill-harness run evaluate-skill <skill_id>           # aggregate to a verdict
 ```
 
-`ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`. Every `run` subcommand is dry-run by default;
-`--execute` is required to spend, and a per-run cap and a daily cap sit on top.
-`skill init` is the exception: clause extraction is a model call in both modes, and
-`--execute` decides only whether the result is persisted to the evidence DB. Without a key
-it exits 1 before any call.
+`ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`. Which command spends is a per-subcommand
+property, not a blanket one:
+
+| Command | Default behaviour | What changes it |
+| --- | --- | --- |
+| `skill init` | clause extraction is a model call in both modes | `--execute` decides only whether the result is persisted to the evidence DB. Without a key it exits 1 before any call. |
+| `run ablation` | dry-run: no calls, no cost | `--execute` opts in to spending, under a per-run cap and a daily cap |
+| `run evaluate-skill` | aggregates stored evidence and makes no model call | `--dry-run` reports what it would aggregate and stops |
+| `run evaluate-paired` | read-only: no writes and no API calls | nothing; it declares neither flag |
+
+`run ablation` is the only subcommand that spends.
+
+The snippet also writes into the directory you run it from. `skill init` creates
+`evidence.db` and `runtime.db` in your current directory, and it creates them before the
+API-key check — so they appear even on the run that exits 1 with no key, in both dry-run and
+`--execute` mode. `run ablation` and `run evaluate-skill` default to those same two paths
+(`--evidence-db` and `--runtime-db`, both shown in `--help`). Pass either flag to put the
+databases somewhere else.
 
 `run ablation --execute` additionally requires `--ratification`, `--task-family`, and
 `--estimand`: a RATIFIED decision record in
