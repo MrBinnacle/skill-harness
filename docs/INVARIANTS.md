@@ -25,8 +25,20 @@ Spec: `docs/PRD.md` §14 "Pass Rule".
 
 ## 2. Pipeline safety (dry-run default)
 
-Every `run` subcommand, plus `calibrate` and `freeze`, defaults to dry-run;
-`--execute` is required before the command performs writes or makes LLM API calls.
+Every command that writes to the evidence store or makes an LLM API call defaults to
+dry-run, and `--execute` is required before it does either. That set is `run ablation`,
+`calibrate` and `freeze`.
+
+The other `run` subcommands do neither, so no `--execute` gate applies to them and none
+exists: `run evaluate-skill` opens the evidence database read-only through
+`open_evidence_readonly` and aggregates stored verdicts, with an inverted `--dry-run`
+opt-out; `run evaluate-paired` declares neither flag and makes no writes and no API calls.
+`skill init` is gated differently again — clause extraction is a model call in both modes,
+and `--execute` decides only whether the result is persisted.
+
+Stated this way because the previous wording ("every `run` subcommand ... defaults to
+dry-run") was false for two of the three, and the drift contract that pins this sentence was
+holding the false version in place ([#469](https://github.com/MrBinnacle/skill-harness/issues/469)).
 
 Enforced in: `src/skill_harness/cli/main.py` (dry-run gating on every mutating command).
 
