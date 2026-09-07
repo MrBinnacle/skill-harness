@@ -49,6 +49,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,6 +59,17 @@ class WordListManifestError(Exception):
     """The vendored words_to_avoid manifest is missing, unparseable, or shaped
     wrong. Raised by ``read_word_list_manifest`` and reported as a DC-16
     failure -- an unreadable expectation is a refusal to report, never a pass."""
+
+
+class WordListSelectionError(Exception):
+    """``git ls-files`` could not name the tracked set. Raised by
+    ``iter_word_list_files`` and reported as a DC-16 failure.
+
+    The check REFUSES here rather than falling back to a filesystem walk. A
+    walk over a tree git cannot describe scans a different set of files under
+    the same row name, and a scan that returns nothing because git errored
+    would print as a clean run. Both are worse than a red row that names the
+    reason (#471)."""
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +167,7 @@ class CacheAwareContract:
 @dataclass(frozen=True)
 class WordListBan:
     """DC-16 (#462): the collection's ``words_to_avoid`` list, vendored into
-    ``manifest_path``, refused in every markdown file in the tree.
+    ``manifest_path``, refused in every markdown file this repository TRACKS.
 
     The manifest carries the words AND a digest of them. The check recomputes
     that digest from the array it just read, so editing the array without
@@ -166,12 +178,10 @@ class WordListBan:
 
     Matching is whole-word and case-insensitive, with a hyphen counting as a
     word character: ``earn`` must not fire on "learn", and ``unlock`` must not
-    fire on "unlocked". ``excluded_dirs`` are directory NAMES pruned anywhere
-    in the walk; ``excluded_paths`` are repo-relative posix paths, each stated
-    with its reason in the row below."""
+    fire on "unlocked". ``excluded_paths`` are repo-relative posix paths,
+    each stated with its reason in the row below."""
 
     manifest_path: str
-    excluded_dirs: frozenset[str]
     excluded_paths: tuple[str, ...]
 
 
@@ -231,40 +241,28 @@ file here, in that PR, with a dated note). Printed even when empty."""
 _OC_BAN_ROOTS = ("src/skill_harness/oc",)
 _OC_BAN_EXEMPTIONS = frozenset({"src/skill_harness/oc/crosschecks.py"})
 
-# DC-16 scope (#462): every markdown file in the tree, which is what the
-# operator's 2026-09-06 ruling binds -- one voice across all repositories,
-# every line of prose under the same rules.
+# DC-16 scope (#462, corrected by #471): every markdown file this repository
+# TRACKS, which is what the operator's 2026-09-06 ruling binds -- one voice
+# across all repositories, every line of prose under the same rules. The
+# ruling binds the prose this repository publishes, and the tracked set is
+# exactly the prose a commit here can change.
+#
+# The selection was a filesystem walk until #471. The walk pruned directory
+# NAMES (.private, .git, the caches, .venv, node_modules, build, dist,
+# htmlcov, site) and consulted neither .gitignore nor the index, so it reached
+# whatever a working clone happened to hold. Measured on a working clone at
+# origin/main: 264 failures, 261 of them under a gitignored .sandcastle/
+# worktree and 3 in a gitignored CLAUDE.md, none of them prose any commit here
+# publishes. The same run was green in CI, which clones only tracked content.
+# A gate that is red by default on a developer machine over files its reader
+# cannot act on is a gate that gets muted, which is the cost the digest half
+# of this same contract already wrote down
+# (MrBinnacle/skills@main:assets/tokens.json, copy.words_to_avoid_digest).
+#
+# The pruned-directory list is gone rather than extended. Every name on it was
+# a hand-maintained guess at "generated, vendored, or not ours", and git
+# already answers that question exactly.
 _WORD_LIST_MANIFEST = "assets/words_to_avoid.json"
-
-# Directory names pruned anywhere in the walk.
-#   .private        the gitignored working archive. It is the sole local copy
-#                   of 2.9 GB of material, it has no remote, and no commit
-#                   here publishes a byte of it, so it is not prose this
-#                   repository publishes.
-#   .git and the caches, virtualenvs and build trees below are generated or
-#                   vendored: no commit here authors their markdown, and a
-#                   dependency's README would redden a local run over prose
-#                   nobody in this repository wrote.
-_WORD_LIST_PRUNED_DIRS = frozenset(
-    {
-        ".private",
-        ".git",
-        "__pycache__",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        ".hypothesis",
-        ".tox",
-        ".eggs",
-        ".venv",
-        "venv",
-        "node_modules",
-        "build",
-        "dist",
-        "htmlcov",
-        "site",
-    }
-)
 
 # Individual files, each with the reason it is out of scope. Kept minimal the
 # way _PUBLIC_COPY_EXCLUDED is: tests/test_drift_check.py proves every entry
@@ -654,11 +652,10 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         dc_id="DC-16",
         summary=(
             "words_to_avoid: the collection's 15-word list, vendored with its digest, "
-            "refused in every markdown file in the tree (#462)"
+            "refused in every markdown file this repository tracks (#462, #471)"
         ),
         word_list_ban=WordListBan(
             manifest_path=_WORD_LIST_MANIFEST,
-            excluded_dirs=_WORD_LIST_PRUNED_DIRS,
             excluded_paths=_WORD_LIST_EXCLUDED_PATHS,
         ),
     ),
@@ -813,23 +810,59 @@ def word_list_pattern(words: list[str]) -> re.Pattern[str]:
     return re.compile(rf"(?<![\w-])(?:{alternatives})(?![\w-])", re.IGNORECASE)
 
 
+WORD_LIST_SELECTION_COMMAND: tuple[str, ...] = ("git", "ls-files", "-z", "--", "*.md")
+"""How DC-16 names the files it scans. Printed on every run (F7): a check whose
+scope came from somewhere else would be a different check under the same row
+name, so the selection is stated rather than described."""
+
+
+def tracked_markdown_paths(root: Path) -> list[str]:
+    """The repo-relative posix paths of every markdown file git tracks under
+    ``root``.
+
+    ``git ls-files`` reads the index. It makes no network call and needs no
+    remote, so the check stays hermetic and stays valid in the per-commit
+    gate. ``-z`` gives NUL-separated output, which also turns off git's
+    ``core.quotePath`` escaping, so a path with a space or a non-ASCII
+    character arrives verbatim.
+
+    Raises ``WordListSelectionError`` when git is absent, when ``root`` is not
+    a repository, or when the command fails for any other reason."""
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, no shell, no user input
+            list(WORD_LIST_SELECTION_COMMAND),
+            cwd=str(root),
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise WordListSelectionError(
+            f"cannot select the scanned set: {' '.join(WORD_LIST_SELECTION_COMMAND)} "
+            f"could not be run in {root}: {exc}"
+        ) from exc
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip() or "(no stderr)"
+        raise WordListSelectionError(
+            f"cannot select the scanned set: {' '.join(WORD_LIST_SELECTION_COMMAND)} "
+            f"exited {result.returncode} in {root}: {detail}"
+        )
+    listing = result.stdout.decode("utf-8", errors="replace")
+    return [rel for rel in listing.split("\0") if rel]
+
+
 def iter_word_list_files(root: Path, ban: WordListBan) -> list[Path]:
-    """Every markdown file in the tree, minus the pruned directories and the
-    named exclusions. Sorted, so the failure list is stable across platforms."""
+    """Every markdown file this repository tracks, minus the named exclusions.
+
+    Sorted, so the failure list is stable across platforms. A tracked path git
+    lists but the working tree does not hold (a checkout mid-operation, a
+    sparse checkout) is dropped here rather than read: the row reports drift in
+    prose, and a file that is not on disk carries none."""
     excluded = {rel.lower() for rel in ban.excluded_paths}
-    found: list[Path] = []
-    stack = [root]
-    while stack:
-        current = stack.pop()
-        for entry in current.iterdir():
-            if entry.is_dir():
-                if entry.name not in ban.excluded_dirs:
-                    stack.append(entry)
-            elif (
-                entry.suffix.lower() == ".md"
-                and entry.relative_to(root).as_posix().lower() not in excluded
-            ):
-                found.append(entry)
+    found = [
+        root / rel
+        for rel in tracked_markdown_paths(root)
+        if rel.lower() not in excluded and (root / rel).is_file()
+    ]
     return sorted(found)
 
 
@@ -850,7 +883,14 @@ def _check_word_list_ban(root: Path, ban: WordListBan) -> list[str]:
         )
 
     pattern = word_list_pattern(words)
-    for path in iter_word_list_files(root, ban):
+    try:
+        scanned = iter_word_list_files(root, ban)
+    except WordListSelectionError as exc:
+        # A refusal, not a pass. An empty scan and a scan that never ran print
+        # identically unless the second one says so.
+        failures.append(str(exc))
+        return failures
+    for path in scanned:
         rel = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8", errors="replace")
         for lineno, line in enumerate(text.splitlines(), start=1):
@@ -1094,16 +1134,20 @@ def main(argv: list[str] | None = None) -> int:
     for rel in sorted(all_exemptions):
         print(f"  EXEMPT   {rel}")
 
-    # Same F7 reason: DC-16 scans every markdown file in the tree, so the
-    # files it does NOT scan are printed rather than left to the table.
+    # Same F7 reason: DC-16 claims a scope, so the scope is printed rather
+    # than left to the table -- BOTH halves of it. The selection line names
+    # the command that chose the files (#471: a walk and a tracked-set read
+    # are different checks, and a reader cannot tell them apart from a row
+    # summary), and the exclusion lines name what the selection then dropped.
     for row in LIVE_ROWS:
-        if row.word_list_ban is None:
+        word_ban = row.word_list_ban
+        if word_ban is None:
             continue
-        ban = row.word_list_ban
-        print(f"{row.dc_id} markdown scan exclusions (immutable records + generated trees):")
-        for rel in ban.excluded_paths:
+        selection = " ".join(WORD_LIST_SELECTION_COMMAND)
+        print(f"{row.dc_id} markdown scan selection: {selection} (the tracked set)")
+        print(f"{row.dc_id} markdown scan exclusions (immutable records, tracked but not scanned):")
+        for rel in word_ban.excluded_paths:
             print(f"  EXCLUDE  {rel}")
-        print(f"  EXCLUDE  directories named: {', '.join(sorted(ban.excluded_dirs))}")
 
     if report.total_failures:
         print(f"DRIFT CHECK: BLOCKED - {report.total_failures} contract violation(s) listed above.")

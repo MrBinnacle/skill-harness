@@ -95,13 +95,50 @@ def _run(root: Path | None = None) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _git(root: Path, *args: str) -> None:
+    """Run one git command in the synthetic tree, failing loudly.
+
+    ``core.excludesFile`` is pointed at an empty file so a developer's global
+    ignore rules cannot change which fixture files land in the index: the
+    tracked set is the thing under test in every DC-16 case below, and a
+    fixture whose contents depend on the machine running it measures nothing."""
+    empty_excludes = root.parent / "empty-global-excludes"
+    empty_excludes.touch()
+    subprocess.run(
+        ["git", "-c", f"core.excludesFile={empty_excludes}", *args],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
 def _make_tree(tmp_path: Path) -> Path:
+    """A synthetic tree that is a real git repository with every live surface
+    TRACKED.
+
+    DC-16 selects the files it scans with ``git ls-files`` (#471), so a
+    synthetic tree with no index is a tree DC-16 refuses to scan rather than a
+    tree it finds clean. The fixture stages the surfaces; it does not commit
+    them, because ``git ls-files`` reads the index and a commit would add a
+    required identity the fixture has no reason to invent."""
     root = tmp_path / "tree"
     for rel in _LIVE_SURFACES:
         dst = root / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(_REPO_ROOT / rel, dst)
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
     return root
+
+
+def _write_tracked(root: Path, rel: str, text: str) -> None:
+    """Write a file into the synthetic tree and stage it, so DC-16's tracked-set
+    selection reaches it."""
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    _git(root, "add", "--", rel)
 
 
 def _mutate(root: Path, rel: str, old: str, new: str) -> None:
@@ -920,8 +957,8 @@ def test_dc16_poison_markdown_blocks(tmp_path: Path) -> None:
     """The poison fixture. One listed word in one markdown file, and the row
     reddens naming the file and the line."""
     root = _make_tree(tmp_path)
-    (root / "docs" / "poison.md").write_text(
-        "This paragraph is decoration.\nThe guard is load-bearing.\n", encoding="utf-8"
+    _write_tracked(
+        root, "docs/poison.md", "This paragraph is decoration.\nThe guard is load-bearing.\n"
     )
     r = _run(root)
     assert r.returncode == 1, r.stdout + r.stderr
@@ -933,8 +970,8 @@ def test_dc16_clean_markdown_is_green(tmp_path: Path) -> None:
     """The control for the poison above: the same file, the same sentence, the
     listed word replaced by the concrete noun it stood for."""
     root = _make_tree(tmp_path)
-    (root / "docs" / "poison.md").write_text(
-        "This paragraph is decoration.\nThe guard is what refuses here.\n", encoding="utf-8"
+    _write_tracked(
+        root, "docs/poison.md", "This paragraph is decoration.\nThe guard is what refuses here.\n"
     )
     r = _run(root)
     assert r.returncode == 0, r.stdout + r.stderr
@@ -942,7 +979,7 @@ def test_dc16_clean_markdown_is_green(tmp_path: Path) -> None:
 
 def test_dc16_matches_case_insensitively(tmp_path: Path) -> None:
     root = _make_tree(tmp_path)
-    (root / "docs" / "poison.md").write_text("## Load-Bearing seams\n", encoding="utf-8")
+    _write_tracked(root, "docs/poison.md", "## Load-Bearing seams\n")
     r = _run(root)
     assert r.returncode == 1
     assert any("DC-16" in line and "Load-Bearing" in line for line in r.stdout.splitlines())
@@ -953,10 +990,11 @@ def test_dc16_does_not_fire_on_words_that_merely_contain_one(tmp_path: Path) -> 
     'unlock', and 'load-bearing' contains 'earing' -- none of them is a hit.
     Without this the row would redden on ordinary prose and get muted."""
     root = _make_tree(tmp_path)
-    (root / "docs" / "ordinary.md").write_text(
+    _write_tracked(
+        root,
+        "docs/ordinary.md",
         "We learn from unlocked doors, yearning for earnest robustness.\n"
         "Curatorial powerlessness is unlockable but never seamlessly earnable.\n",
-        encoding="utf-8",
     )
     r = _run(root)
     assert r.returncode == 0, r.stdout + r.stderr
@@ -989,25 +1027,75 @@ def test_dc16_excluded_path_is_not_scanned(tmp_path: Path) -> None:
     tests/test_words_to_avoid_ban.py, which asserts every excluded file really
     carries a hit."""
     root = _make_tree(tmp_path)
-    (root / "CHANGELOG.md").write_text("- the guard is load-bearing\n", encoding="utf-8")
+    _write_tracked(root, "CHANGELOG.md", "- the guard is load-bearing\n")
     r = _run(root)
     assert r.returncode == 0, r.stdout + r.stderr
 
 
-def test_dc16_pruned_directory_is_not_scanned(tmp_path: Path) -> None:
+def test_dc16_scans_only_the_tracked_set(tmp_path: Path) -> None:
+    """The #471 regression control. Three markdown files, one listed word each,
+    differing only in what git knows about them:
+
+      tracked/   staged, so a commit here publishes it   -> in scope
+      untracked/ on disk, never added                    -> out of scope
+      ignored/   matched by .gitignore                   -> out of scope
+
+    The assertion names the file rather than only counting the failures. A
+    count of one is satisfied by a scan that reports the wrong file, which is
+    the failure this control exists to see. Before the fix DC-16 walked the
+    filesystem, so all three reddened the row; on a working clone that meant
+    264 failures locally against 0 in CI, and a gate a reader learns to mute."""
     root = _make_tree(tmp_path)
-    (root / ".private").mkdir()
-    (root / ".private" / "note.md").write_text("load-bearing\n", encoding="utf-8")
+    _write_tracked(root, ".gitignore", "ignored/\n")
+    _write_tracked(root, "tracked/note.md", "The guard is load-bearing.\n")
+    (root / "untracked").mkdir()
+    (root / "untracked" / "note.md").write_text("The guard is load-bearing.\n", encoding="utf-8")
+    (root / "ignored").mkdir()
+    (root / "ignored" / "note.md").write_text("The guard is load-bearing.\n", encoding="utf-8")
+
     r = _run(root)
-    assert r.returncode == 0, r.stdout + r.stderr
+
+    assert r.returncode == 1, r.stdout + r.stderr
+    dc16_failures = [
+        line
+        for line in r.stdout.splitlines()
+        if line.strip().startswith("FAIL DC-16:") and "words_to_avoid" in line
+    ]
+    assert any("tracked/note.md:1" in line for line in dc16_failures), r.stdout
+    assert not any("untracked/note.md" in line for line in dc16_failures), r.stdout
+    assert not any("ignored/note.md" in line for line in dc16_failures), r.stdout
+    assert len(dc16_failures) == 1, r.stdout
 
 
-def test_dc16_prints_its_exclusions_on_a_green_run(tmp_path: Path) -> None:
+def test_dc16_refuses_when_the_tracked_set_cannot_be_read(tmp_path: Path) -> None:
+    """No index, no scan, and the row says so.
+
+    A tree git cannot describe is not a clean tree. Falling back to a
+    filesystem walk here would run a different check under the same row name,
+    and reporting an empty scan would print as a pass -- the exact shape of
+    failure DC-16's manifest lane already refuses (#471)."""
+    root = _make_tree(tmp_path)
+    # Renamed, not deleted. Git marks its loose object files read-only, and
+    # shutil.rmtree on Windows raises PermissionError on the first one.
+    (root / ".git").rename(root / "git-directory-moved-aside")
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "DC-16" in line and "cannot select the scanned set" in line for line in fail_lines
+    ), r.stdout
+
+
+def test_dc16_prints_its_scope_on_a_green_run(tmp_path: Path) -> None:
     """F7 visibility, the same reason the structural exemptions are printed:
-    DC-16 claims every markdown file in the tree, so the files it does not
-    scan are printed rather than left to the table."""
+    DC-16 claims a scope, so both halves of it are printed -- the command that
+    selects the files, and the tracked files that selection then drops."""
     r = _run(_make_tree(tmp_path))
     assert r.returncode == 0
+    assert any(
+        line.startswith("DC-16 markdown scan selection:") and "git ls-files" in line
+        for line in r.stdout.splitlines()
+    ), r.stdout
     exclude_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("EXCLUDE")]
     for rel in (
         "CHANGELOG.md",
@@ -1016,4 +1104,3 @@ def test_dc16_prints_its_exclusions_on_a_green_run(tmp_path: Path) -> None:
         "docs/findings/v0.2-reaim-gate.md",
     ):
         assert any(rel in line for line in exclude_lines), r.stdout
-    assert any(".private" in line for line in exclude_lines), r.stdout
