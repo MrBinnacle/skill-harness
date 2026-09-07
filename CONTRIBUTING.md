@@ -53,7 +53,7 @@ Every feature and bugfix follows RED → GREEN → REFACTOR:
 
 PRs that add code without tests are rejected. PRs that disable tests to make code pass are rejected. PRs that add tests *after* the implementation are accepted but flagged for review.
 
-### Append-only invariant is load-bearing
+### The append-only invariant constrains every evidence write
 
 Code that writes to evidence tables MUST go through the repository APIs in `src/skill_harness/storage/`. Direct SQL against `oracle_verdicts`, `samples`, `frozen_cases`, `calibration_events`, or `confound_events` from anywhere else in the codebase is a bug.
 

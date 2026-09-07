@@ -95,7 +95,7 @@ event and belongs in the same category.
 | `bayesian-eval-discipline` | `CANT_TELL_YET`, admissible | INADMISSIBLE — `apparatus_void: D4 prompt leak` |
 | `sqlite-tie-break-red-test-trap` | `CANT_TELL_YET`, admissible | stands on D4; see the stale-pin ground below |
 
-This distinction is load-bearing for a reader, not bookkeeping.
+This distinction changes what a reader concludes; it is not bookkeeping.
 `CANT_TELL_YET` beside a skill that demonstrably works reads as doubt cast on
 the skill. `apparatus_void` reads as the system discarding its own bad reading.
 The first damages a public claim; the second is the behaviour the programme

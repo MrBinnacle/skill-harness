@@ -588,7 +588,7 @@ Human-labeled frozen pair set.
 
 **Re-calibration cadence:** every 90 days OR at the next model version bump (whichever first).
 
-Calibration is axis-specific. No cross-axis inheritance allowed (load-bearing invariant — see CLAUDE.md Oracle tiering).
+Calibration is axis-specific. No cross-axis inheritance allowed (a locked invariant — see CLAUDE.md Oracle tiering).
 
 ---
 
@@ -721,7 +721,7 @@ SELECT version, implementation_hash FROM metric_versions
  LIMIT 1
 ```
 
-The `audited + validity_passed` filter is load-bearing, and its two flags are distinct: `mechanical_validity_test_passed` records the outcome of §12.1's mechanical-validity audit gate, while `audited` records the separate operator act defined below. A metric_version missing either flag must NOT be considered current.
+The `audited + validity_passed` filter decides which metric_version counts as current, and its two flags are distinct: `mechanical_validity_test_passed` records the outcome of §12.1's mechanical-validity audit gate, while `audited` records the separate operator act defined below. A metric_version missing either flag must NOT be considered current.
 
 **The audited flip (normative).** `audited = 1` on a metric_versions row attests: a deliberate operator act (`audit-metric`) registered this metric implementation, hash-pinned against the shipped module at execution time. It is an operator-attested, hash-pinned registration — NOT a claim of independent construct-validity review. The act requires a non-empty operator-typed attestation string (`--attest "<text>"`), echoed in its dry-run and execute output; it defaults to dry-run and writes only on `--execute`. No act flips audited on an existing row (append-only); a store whose row was minted unaudited requires re-ingest into a store audited first. Attester identity lives in the operator's commit trail, not the DB (`registered_at` already captures when). The schema layer cannot prevent a hand-crafted INSERT from forging `audited = 1` — the semantic is act-enforced only.
 
@@ -877,7 +877,7 @@ A new production reference outside this list fails the hook; `tests/test_structu
 
 # 17a. Threat Model (informal)
 
-**Trust partition.** `evidence.db` is append-only, audited, load-bearing. `runtime.db` is mutable by design. Compromise of `runtime.db` (`current_calibration` rewrite is the load-bearing target) affects only FUTURE verdicts because past verdicts have already snapshotted `admissibility_state` at write time (§6) and `oracle_verdicts` is append-only. Symmetry between the two DBs is NOT a design goal.
+**Trust partition.** `evidence.db` is append-only, audited, the trust anchor. `runtime.db` is mutable by design. Compromise of `runtime.db` (`current_calibration` rewrite is the attacker's target) affects only FUTURE verdicts because past verdicts have already snapshotted `admissibility_state` at write time (§6) and `oracle_verdicts` is append-only. Symmetry between the two DBs is NOT a design goal.
 
 **Filesystem substitution boundary.** Append-only triggers + SHA-256 migration ledger defend against in-process unauthorized writes (developer error, SQL-injection-style mutation, library bug). They do NOT defend against an attacker who replaces the entire `evidence.db` file at the filesystem layer — the SHA ledger checks file contents against an SHA recorded inside the same DB, so a whole-DB substitution supplies both the data and the baseline. v0.1 assumes filesystem integrity (local-trust). File-replacement detection deferred to v0.2 (D6 `db_identity`).
 

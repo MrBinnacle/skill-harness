@@ -40,6 +40,7 @@ _LIVE_IDS = (
     "DC-12",
     "DC-14",
     "DC-15",
+    "DC-16",
     "AC-1",
 )
 _PLANNED_IDS = ("DC-13",)
@@ -74,6 +75,9 @@ _LIVE_SURFACES = (
     "docs/assurance/calibration-report.md",
     "docs/ratifications/README.md",
     "README.md",
+    # DC-16 reads the vendored word list; without it every synthetic tree
+    # would fail on a missing manifest instead of the lane under test.
+    "assets/words_to_avoid.json",
 )
 
 
@@ -896,3 +900,114 @@ def test_ac1_does_not_fire_on_promoting_the_cs_in_the_json_dict(tmp_path: Path) 
     )
     r = _run(root)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+# ---------------------------------------------------------------------------
+# DC-16 (#462): the collection's words_to_avoid list, refused in every markdown
+# file in the tree. The poison fixture is written into a synthetic tree rather
+# than committed: a committed markdown file carrying a listed word would make
+# the live tree red, which is the state this row exists to refuse.
+# ---------------------------------------------------------------------------
+
+
+def test_dc16_poison_markdown_blocks(tmp_path: Path) -> None:
+    """The poison fixture. One listed word in one markdown file, and the row
+    reddens naming the file and the line."""
+    root = _make_tree(tmp_path)
+    (root / "docs" / "poison.md").write_text(
+        "This paragraph is decoration.\nThe guard is load-bearing.\n", encoding="utf-8"
+    )
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-16" in line and "docs/poison.md:2" in line for line in fail_lines), r.stdout
+
+
+def test_dc16_clean_markdown_is_green(tmp_path: Path) -> None:
+    """The control for the poison above: the same file, the same sentence, the
+    listed word replaced by the concrete noun it stood for."""
+    root = _make_tree(tmp_path)
+    (root / "docs" / "poison.md").write_text(
+        "This paragraph is decoration.\nThe guard is what refuses here.\n", encoding="utf-8"
+    )
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc16_matches_case_insensitively(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path)
+    (root / "docs" / "poison.md").write_text("## Load-Bearing seams\n", encoding="utf-8")
+    r = _run(root)
+    assert r.returncode == 1
+    assert any("DC-16" in line and "Load-Bearing" in line for line in r.stdout.splitlines())
+
+
+def test_dc16_does_not_fire_on_words_that_merely_contain_one(tmp_path: Path) -> None:
+    """Whole-word, hyphen-aware. 'learn' contains 'earn', 'unlocked' contains
+    'unlock', and 'load-bearing' contains 'earing' -- none of them is a hit.
+    Without this the row would redden on ordinary prose and get muted."""
+    root = _make_tree(tmp_path)
+    (root / "docs" / "ordinary.md").write_text(
+        "We learn from unlocked doors, yearning for earnest robustness.\n"
+        "Curatorial powerlessness is unlockable but never seamlessly earnable.\n",
+        encoding="utf-8",
+    )
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc16_digest_mismatch_blocks(tmp_path: Path) -> None:
+    """Editing the vendored array without editing its digest is drift, caught
+    here rather than waiting for the scheduled cross-repository read."""
+    root = _make_tree(tmp_path)
+    _mutate(root, "assets/words_to_avoid.json", '"robust"', '"robust",\n    "invented"')
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-16" in line and "recorded sha256" in line for line in fail_lines), r.stdout
+
+
+def test_dc16_missing_manifest_blocks(tmp_path: Path) -> None:
+    """An unreadable expectation is a refusal to report, never a pass."""
+    root = _make_tree(tmp_path)
+    (root / "assets" / "words_to_avoid.json").unlink()
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-16" in line and "missing" in line for line in fail_lines), r.stdout
+
+
+def test_dc16_excluded_path_is_not_scanned(tmp_path: Path) -> None:
+    """CHANGELOG.md is named in the exclusion list, so a listed word there does
+    not redden the row. The exclusion is proved minimal in
+    tests/test_words_to_avoid_ban.py, which asserts every excluded file really
+    carries a hit."""
+    root = _make_tree(tmp_path)
+    (root / "CHANGELOG.md").write_text("- the guard is load-bearing\n", encoding="utf-8")
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc16_pruned_directory_is_not_scanned(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path)
+    (root / ".private").mkdir()
+    (root / ".private" / "note.md").write_text("load-bearing\n", encoding="utf-8")
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc16_prints_its_exclusions_on_a_green_run(tmp_path: Path) -> None:
+    """F7 visibility, the same reason the structural exemptions are printed:
+    DC-16 claims every markdown file in the tree, so the files it does not
+    scan are printed rather than left to the table."""
+    r = _run(_make_tree(tmp_path))
+    assert r.returncode == 0
+    exclude_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("EXCLUDE")]
+    for rel in (
+        "CHANGELOG.md",
+        "docs/PLAN.md",
+        "docs/findings/v0.2-preregistration.md",
+        "docs/findings/v0.2-reaim-gate.md",
+    ):
+        assert any(rel in line for line in exclude_lines), r.stdout
+    assert any(".private" in line for line in exclude_lines), r.stdout

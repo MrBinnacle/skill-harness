@@ -37,7 +37,7 @@ the two parsers are a deliberate differential pair.
   signing flow below. Everything below the status line changes only by
   **dated amendment blocks, never edits** (house convention from
   `docs/findings/v0.2-preregistration.md`).
-- **Front-matter:** the machine-parseable mirror of the load-bearing fields —
+- **Front-matter:** the machine-parseable mirror of the gated fields —
   exactly what the gate and DC-12 consume. The full eleven-field checklist
   lives as prose sections (see the template). The `cost_provenance` field
   must name the live cost_projection function that produced the cost block:

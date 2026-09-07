@@ -20,7 +20,7 @@ q_min: 0.70
 
 Copy this file to `RAT-NNNN-<skill-slug>.md` (next free number) and fill every
 section. The front-matter above is the machine-parseable mirror of the
-load-bearing fields — the gate and drift row DC-12 consume it; keep it in
+gated fields — the gate and drift row DC-12 consume it; keep it in
 lock-step with the prose. The `estimand` value must be a registered name
 (`treatment-policy` or `hypothetical`, per the semantics registry). For a
 Gate-1 record set `gate: gate1` and `cost_provenance: project_trial_usd`.
