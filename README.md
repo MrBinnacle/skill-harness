@@ -211,8 +211,8 @@ reclassified both to CAN'T-TELL-YET
 pre-guard CUTs stay in the record as dated output, not edited into agreement.
 
 The other half of the lane has never run: a paired run sizing how much a skill helps once the model
-is known to need help. By design it launches only when a screen returns a sub-1 pass rate, and none
-has.
+is known to need help. By design a sized benefit run launches only when a screen returns a sub-1
+pass rate, and none has.
 
 ## Running a paid measurement
 
