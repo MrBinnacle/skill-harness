@@ -214,7 +214,10 @@ sub-1 pass rate, and none has.
 
 ```bash
 skill-harness skill init path/to/SKILL.md --execute   # extract testable claims
-skill-harness run ablation <skill_id> --execute       # the with/without comparison
+skill-harness run ablation <skill_id>                 # dry-run first: no calls, no cost
+skill-harness run ablation <skill_id> --execute \
+  --ratification docs/ratifications/RAT-NNNN-<skill-slug>.md \
+  --task-family <family> --estimand <treatment-policy|hypothetical>
 skill-harness run evaluate-skill <skill_id>           # aggregate to a verdict
 ```
 
@@ -223,6 +226,17 @@ skill-harness run evaluate-skill <skill_id>           # aggregate to a verdict
 `skill init` is the exception: clause extraction is a model call in both modes, and
 `--execute` decides only whether the result is persisted to the evidence DB. Without a key
 it exits 1 before any call.
+
+`run ablation --execute` additionally requires `--ratification`, `--task-family`, and
+`--estimand`: a RATIFIED decision record in
+[`docs/ratifications/`](https://github.com/MrBinnacle/skill-harness/tree/main/docs/ratifications/)
+that pre-authorizes the spend, the task family the run evaluates, and the registered estimand,
+all of which must match the record's own scope fields ([#47](https://github.com/MrBinnacle/skill-harness/issues/47)).
+This ratification preflight refuses before any model call and before the API-key check —
+a run with no `--ratification` given exits with `ratification preflight refused --execute
+[record-missing]`, not a key error. Dry-run is exempt; the ratification directory's own
+[README](https://github.com/MrBinnacle/skill-harness/blob/main/docs/ratifications/README.md)
+documents the record shape.
 Reproduction scripts:
 [`examples/`](https://github.com/MrBinnacle/skill-harness/tree/main/examples/).
 
