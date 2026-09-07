@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **README "Measuring for real" snippet now shows what `run ablation --execute`
+  actually requires** (#460). `--execute` also needs `--ratification`,
+  `--task-family`, and `--estimand`; the ratification preflight refuses before
+  any model call and before the API-key check, which the prior wording did not
+  say.
+- **CHANGELOG 0.3.0 entry for #424 corrected.** The ticket did not stay open on
+  the negative control; it closed 2026-09-04 once the control was re-seeded to
+  satisfy the #403 ruling's qualified-fixture precondition (#432). The 0.3.0
+  section otherwise unchanged.
+
 ## [0.3.0] — 2026-09-06
 
 The first release since 2026-08-15. It carries 194 commits from `main`. The
@@ -74,9 +85,12 @@ in the range carries a `BREAKING CHANGE:` marker.
   `implementation_hash`, arms) with an omit-`skill_id` poison fixture (#300).
   1.2.0 adds the additive `delivery` block recording which of a skill's two
   products carried the value: `channel`, `exposure`, `pi_c` (#392). 1.3.0 adds
-  the split-oracle outcome variable and its decision rule (#424; that ticket
-  stays open on one negative control, recorded in the commit). Older receipts
-  validate unchanged; the `sers_version` enum lists all four.
+  the split-oracle outcome variable and its decision rule (#424; the one
+  negative control that first reached CANT_TELL_YET instead of CUT(harmful)
+  was traced to a seed that violated the #403 ruling's qualified-fixture
+  precondition, not to the ruling or to Gate-2 — re-seeded on the Full arm
+  against a qualified Null in #432, and the ticket closed 2026-09-04). Older
+  receipts validate unchanged; the `sers_version` enum lists all four.
 - **`[sitegen]` extra** for the receipts site generator, the only home of the
   `jsonschema` dependency (#425). The receipts site moved onto the declared
   bench design system and the paper receipt body retired (#318); linkcheck now
