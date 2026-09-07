@@ -160,7 +160,7 @@ module, computed by `subject/implementation_identity.py`:
   `__doc__`, so a threshold, prompt or rubric can live in one, and a
   docstring-blind digest would report a changed rubric as "no behaviour change".
 - Executable code, constants, annotations, decorators, defaults, **type comments**
-  (`type_comments=True` is load-bearing, not incidental), control flow and imports
+  (`type_comments=True` is required, not incidental), control flow and imports
   all remain identity-bearing. Source-location metadata is excluded.
 - Unparseable source, an unreviewed AST node type, or a digest recorded under a
   different algorithm version all **fail closed**.

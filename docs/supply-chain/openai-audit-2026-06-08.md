@@ -200,8 +200,8 @@ Add to the project delta or the subject-call module docstring:
 > a re-fire of the supply-chain audit + a values-decision gate.
 > Rationale: these surfaces match the archetype family of the two 2026-03
 > `anthropic` Memory Tool CVEs (file paths, persistent state, async/streaming
-> protocols); they are not load-bearing for the harness's chat-completions
-> evaluation path.
+> protocols); the harness's chat-completions evaluation path does not
+> depend on them.
 
 Optional structural enforcement (parallels A28's grep-ban pattern):
 add a pre-commit/CI grep that fails if `openai.beta` or `openai.resources.realtime`

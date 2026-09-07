@@ -101,7 +101,7 @@ All synthetic (2026-09-01 logs are private):
 `test_mutation_unexposed_full_refusal_removes_predicate` (line 1078): monkey-patches
 `_validate_pair` to set `exposed_skill=True` on all Full samples before the original
 validation runs. The assertion `result.run_id` (write succeeded) turns from pass to
-fail without the predicate — proving it is load-bearing. The original predicate is then
+fail without the predicate — proving the refusal depends on it. The original predicate is then
 verified to still block the same pair.
 
 `test_mutation_null_contamination_refusal_removes_predicate` (line 1128): monkey-patches

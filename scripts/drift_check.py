@@ -46,10 +46,19 @@ Exit code 0 = no drift; 1 = at least one contract violated (each listed).
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+class WordListManifestError(Exception):
+    """The vendored words_to_avoid manifest is missing, unparseable, or shaped
+    wrong. Raised by ``read_word_list_manifest`` and reported as a DC-16
+    failure -- an unreadable expectation is a refusal to report, never a pass."""
+
 
 # ---------------------------------------------------------------------------
 # Check vocabulary — the small set of check kinds rows are assembled from
@@ -144,6 +153,29 @@ class CacheAwareContract:
 
 
 @dataclass(frozen=True)
+class WordListBan:
+    """DC-16 (#462): the collection's ``words_to_avoid`` list, vendored into
+    ``manifest_path``, refused in every markdown file in the tree.
+
+    The manifest carries the words AND a digest of them. The check recomputes
+    that digest from the array it just read, so editing the array without
+    editing the digest is drift caught here, per-commit and hermetic. The
+    OTHER direction -- the collection editing its list while this copy stands
+    still -- needs a cross-repository read, so it runs on a schedule in
+    ``scripts/words_to_avoid_drift_check.py`` instead.
+
+    Matching is whole-word and case-insensitive, with a hyphen counting as a
+    word character: ``earn`` must not fire on "learn", and ``unlock`` must not
+    fire on "unlocked". ``excluded_dirs`` are directory NAMES pruned anywhere
+    in the walk; ``excluded_paths`` are repo-relative posix paths, each stated
+    with its reason in the row below."""
+
+    manifest_path: str
+    excluded_dirs: frozenset[str]
+    excluded_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class LiveRow:
     dc_id: str
     summary: str
@@ -155,6 +187,7 @@ class LiveRow:
     import_ban: ImportScanBan | None = None
     rat_ledger: RatLedgerContract | None = None
     cache_aware_contract: CacheAwareContract | None = None
+    word_list_ban: WordListBan | None = None
 
 
 @dataclass(frozen=True)
@@ -197,6 +230,63 @@ file here, in that PR, with a dated note). Printed even when empty."""
 # allowlist entry.
 _OC_BAN_ROOTS = ("src/skill_harness/oc",)
 _OC_BAN_EXEMPTIONS = frozenset({"src/skill_harness/oc/crosschecks.py"})
+
+# DC-16 scope (#462): every markdown file in the tree, which is what the
+# operator's 2026-09-06 ruling binds -- one voice across all repositories,
+# every line of prose under the same rules.
+_WORD_LIST_MANIFEST = "assets/words_to_avoid.json"
+
+# Directory names pruned anywhere in the walk.
+#   .private        the gitignored working archive. It is the sole local copy
+#                   of 2.9 GB of material, it has no remote, and no commit
+#                   here publishes a byte of it, so it is not prose this
+#                   repository publishes.
+#   .git and the caches, virtualenvs and build trees below are generated or
+#                   vendored: no commit here authors their markdown, and a
+#                   dependency's README would redden a local run over prose
+#                   nobody in this repository wrote.
+_WORD_LIST_PRUNED_DIRS = frozenset(
+    {
+        ".private",
+        ".git",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".hypothesis",
+        ".tox",
+        ".eggs",
+        ".venv",
+        "venv",
+        "node_modules",
+        "build",
+        "dist",
+        "htmlcov",
+        "site",
+    }
+)
+
+# Individual files, each with the reason it is out of scope. Kept minimal the
+# way _PUBLIC_COPY_EXCLUDED is: tests/test_drift_check.py proves every entry
+# hides a real hit, so an entry that stops carrying one has to go.
+_WORD_LIST_EXCLUDED_PATHS = (
+    # A dated record of what shipped. Its entries describe releases made
+    # before the 2026-09-06 ruling, in the wording used at the time; a
+    # changelog rewritten after the fact stops being a record of the release.
+    "CHANGELOG.md",
+    # The three immutable historical records that carry a listed word. The
+    # house convention is dated amendment blocks, never edits
+    # (docs/ratifications/README.md, quoting docs/findings/v0.2-preregistration.md),
+    # and tests/test_structural_bans.py already exempts these same files from
+    # the public-copy scan on the same grounds: they preserve the wording used
+    # when the plan and the gate were registered, and rewriting that wording
+    # retroactively falsifies the record. Two of the hits are the registered
+    # decision statement itself -- "which skills ... earn their slot" is the
+    # question v0.2 was pre-registered to answer.
+    "docs/PLAN.md",
+    "docs/findings/v0.2-preregistration.md",
+    "docs/findings/v0.2-reaim-gate.md",
+)
 
 LIVE_ROWS: tuple[LiveRow, ...] = (
     LiveRow(
@@ -551,6 +641,18 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
             share_field="cache_read_share",
         ),
     ),
+    LiveRow(
+        dc_id="DC-16",
+        summary=(
+            "words_to_avoid: the collection's 15-word list, vendored with its digest, "
+            "refused in every markdown file in the tree (#462)"
+        ),
+        word_list_ban=WordListBan(
+            manifest_path=_WORD_LIST_MANIFEST,
+            excluded_dirs=_WORD_LIST_PRUNED_DIRS,
+            excluded_paths=_WORD_LIST_EXCLUDED_PATHS,
+        ),
+    ),
 )
 
 PLANNED_ROWS: tuple[PlannedRow, ...] = (
@@ -651,6 +753,100 @@ def _check_token_ban(root: Path, ban: TokenBan) -> list[str]:
         for lineno, line in enumerate(text.splitlines(), start=1):
             if pattern.search(line):
                 failures.append(f"banned term {ban.term!r} at {rel}:{lineno}")
+    return failures
+
+
+def canonical_word_list_digest(words: list[str]) -> str:
+    """The canonical digest of a words_to_avoid array.
+
+    ``sha256`` over ``json.dumps(words, separators=(",",":")).encode()``. The
+    collection computes it the same way over the same array, which is what
+    makes the two comparable. Recomputed from the array on both sides rather
+    than read from a published field: a published digest would be a second
+    source of truth, and a second source of truth cannot catch itself lying."""
+    return hashlib.sha256(json.dumps(words, separators=(",", ":")).encode()).hexdigest()
+
+
+def read_word_list_manifest(path: Path) -> tuple[list[str], str]:
+    """Return ``(words, recorded_digest)`` from a vendored manifest.
+
+    Raises ``WordListManifestError`` when the file is missing, unparseable, or
+    shaped wrong. ``scripts/words_to_avoid_drift_check.py`` reads the same
+    manifest through this function, so both guards agree on what the file is."""
+    if not path.is_file():
+        raise WordListManifestError(f"{path}: vendored word list missing")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise WordListManifestError(f"{path}: unparseable JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise WordListManifestError(f"{path}: top level is not an object")
+    words = payload.get("words")
+    if not isinstance(words, list) or not all(isinstance(word, str) for word in words):
+        raise WordListManifestError(f"{path}: 'words' is not an array of strings")
+    if not words:
+        raise WordListManifestError(f"{path}: 'words' is empty (the ban has nothing to refuse)")
+    recorded = payload.get("sha256")
+    if not isinstance(recorded, str):
+        raise WordListManifestError(f"{path}: 'sha256' is absent or not a string")
+    return [str(word) for word in words], recorded
+
+
+def word_list_pattern(words: list[str]) -> re.Pattern[str]:
+    """Whole-word, case-insensitive, hyphen-aware.
+
+    A hyphen counts as a word character on both sides, so ``earn`` does not
+    fire on "learn" or "re-earn-ish", and ``unlock`` does not fire on
+    "unlocked". Python's ``\\b`` treats a hyphen as a boundary, which would
+    make ``earn`` fire inside "load-bearing"; the explicit look-arounds are
+    what keep the two rules from matching each other's words."""
+    alternatives = "|".join(re.escape(word) for word in sorted(words, key=len, reverse=True))
+    return re.compile(rf"(?<![\w-])(?:{alternatives})(?![\w-])", re.IGNORECASE)
+
+
+def iter_word_list_files(root: Path, ban: WordListBan) -> list[Path]:
+    """Every markdown file in the tree, minus the pruned directories and the
+    named exclusions. Sorted, so the failure list is stable across platforms."""
+    excluded = {rel.lower() for rel in ban.excluded_paths}
+    found: list[Path] = []
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        for entry in current.iterdir():
+            if entry.is_dir():
+                if entry.name not in ban.excluded_dirs:
+                    stack.append(entry)
+            elif (
+                entry.suffix.lower() == ".md"
+                and entry.relative_to(root).as_posix().lower() not in excluded
+            ):
+                found.append(entry)
+    return sorted(found)
+
+
+def _check_word_list_ban(root: Path, ban: WordListBan) -> list[str]:
+    manifest = root / ban.manifest_path
+    try:
+        words, recorded = read_word_list_manifest(manifest)
+    except WordListManifestError as exc:
+        return [str(exc)]
+
+    failures: list[str] = []
+    recomputed = canonical_word_list_digest(words)
+    if recomputed != recorded:
+        failures.append(
+            f"{ban.manifest_path}: recorded sha256 {recorded} does not match "
+            f"{recomputed} recomputed from 'words' - the list was edited without "
+            "its digest, or the digest without its list"
+        )
+
+    pattern = word_list_pattern(words)
+    for path in iter_word_list_files(root, ban):
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for match in pattern.finditer(line):
+                failures.append(f"words_to_avoid: {match.group(0)!r} at {rel}:{lineno}")
     return failures
 
 
@@ -821,6 +1017,8 @@ def _run_row(root: Path, row: LiveRow) -> list[str]:
         failures.extend(_check_rat_ledger(root, row.rat_ledger))
     if row.cache_aware_contract is not None:
         failures.extend(_check_cache_aware(root, row.cache_aware_contract))
+    if row.word_list_ban is not None:
+        failures.extend(_check_word_list_ban(root, row.word_list_ban))
     return failures
 
 
@@ -886,6 +1084,17 @@ def main(argv: list[str] | None = None) -> int:
     print("Structural scan exemptions (definition sites + scan machinery, not allowlist entries):")
     for rel in sorted(all_exemptions):
         print(f"  EXEMPT   {rel}")
+
+    # Same F7 reason: DC-16 scans every markdown file in the tree, so the
+    # files it does NOT scan are printed rather than left to the table.
+    for row in LIVE_ROWS:
+        if row.word_list_ban is None:
+            continue
+        ban = row.word_list_ban
+        print(f"{row.dc_id} markdown scan exclusions (immutable records + generated trees):")
+        for rel in ban.excluded_paths:
+            print(f"  EXCLUDE  {rel}")
+        print(f"  EXCLUDE  directories named: {', '.join(sorted(ban.excluded_dirs))}")
 
     if report.total_failures:
         print(f"DRIFT CHECK: BLOCKED - {report.total_failures} contract violation(s) listed above.")

@@ -1,7 +1,7 @@
 # Architecture map
 
 A one-page orientation for working on this codebase: what the modules are, how
-the measurement pipeline flows through them, and which seams are load-bearing.
+the measurement pipeline flows through them, and which seams to treat carefully.
 Structural statistics come from a GitNexus call-graph index measured on
 2026-08-31 (9,409 symbols, 16,148 edges, 348 clusters, 238 execution flows at
 that day's HEAD); everything else is verifiable by reading the named files.
@@ -78,7 +78,7 @@ Cluster inventory from the index (symbol counts and cohesion as measured on
 (Smaller clusters omitted; `gitnexus://repo/skill-harness/clusters` lists all
 348 when the local index is present.)
 
-## Load-bearing seams
+## Seams the detectors pin
 
 The falsification plan (`docs/assurance/falsification-plan.md`) registered ten
 ways this instrument could be wrong while green; as of 2026-08-31 every row
@@ -124,7 +124,7 @@ those detectors pin are the ones to treat carefully when editing:
   two-place edit.
 - An interactive version of everything in this page: index the repo with
   GitNexus (`npx gitnexus analyze`) and use `query`/`impact`/`context`; this
-  page is the curated, committed distillation and does not require that
+  page is the hand-written, committed distillation and does not require that
   tooling.
 
 *Revisit if:* a module is added or a lane re-routed (update the picture), the

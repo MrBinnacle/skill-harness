@@ -29,7 +29,7 @@ docs/sers/     What SERS currently is.
 research/      Whether what SERS currently is represents a distinct and useful contribution.
 ```
 
-This distinction is load-bearing. `docs/sers/` remains the specification. Nothing here revises it
+This distinction decides which document governs. `docs/sers/` remains the specification. Nothing here revises it
 until a dated finding warrants a change, and any such change is traceable to the finding.
 
 SERS is a proposed reporting specification. It is not described as a standard in this repository.

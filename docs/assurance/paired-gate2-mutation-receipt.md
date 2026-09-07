@@ -71,11 +71,11 @@ guard can no longer fire. A mutant that deleted the entire block would also remo
 use of the error path and risk a lint-shaped kill rather than a behavioural one.
 
 M-R1 is deliberately narrow: only the status check is removed, not the file-existence check
-or the field-mismatch checks. This shows the RATIFIED gate is load-bearing independently of
-the other checks.
+or the field-mismatch checks. This shows the RATIFIED status check is what refuses here,
+independently of the other checks.
 
 M-R2 is deliberately narrow: only the count comparison is removed, not the paired_cells
-lookup or the design construction. This shows the count-mismatch guard is load-bearing
+lookup or the design construction. This shows the count-mismatch guard is what refuses here,
 independently of the data-reading path.
 
 ## What this receipt refuses to claim
@@ -92,5 +92,5 @@ A case whose verdict is `ANCHOR_ABSENT`, `INVALID_BASELINE`, `INVALID_ISOLATION`
 `STILLBORN` or `UNKNOWN` measured nothing, so the generator exits non-zero and names it.
 `SURVIVED` is deliberately not in that set: a preserved survivor is a finding.
 
-*Revisit if:* the paired read moves off `paired_gate2_read`, or a third load-bearing guard
+*Revisit if:* the paired read moves off `paired_gate2_read`, or a third guard that refuses alone
 lands at the seam without a case here.
