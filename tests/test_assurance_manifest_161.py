@@ -60,6 +60,50 @@ def _parse_requirement_name(req: str) -> str:
     return re.split(r"[<>=!~]", bare, maxsplit=1)[0].strip().lower()
 
 
+_EXACT_RELEASE = re.compile(r"\d+(?:\.\d+)*")
+
+
+def _ci_requirement_line(package: str) -> str | None:
+    """The raw requirements-ci.txt line for a package, whatever operator it uses.
+
+    Deliberately NOT derived from `_ci_pinned_names`, which keeps only `==`
+    lines. Asserting "this is an exact pin" against that dict is vacuous: a
+    ranged requirement is filtered out before the assertion can see it, and the
+    case then fails on the unrelated "missing pin" check with a message that
+    says the requirement is absent when it is present and loose.
+    """
+    for line in (_REPO_ROOT / "requirements-ci.txt").read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("-"):
+            continue
+        if _parse_requirement_name(stripped) == package.lower():
+            return stripped
+    return None
+
+
+def _version_tuple(version: str) -> tuple[int, ...]:
+    """Numeric release segments, for an ordering comparison.
+
+    Only release segments are read. A pre-release or local suffix would not be
+    an exact release pin, and `_EXACT_RELEASE` rejects it before this is called.
+    """
+    return tuple(int(part) for part in version.split("."))
+
+
+def _dev_extra_floor(package: str) -> str | None:
+    """The `>=` floor the pyproject dev extra declares for a package, if any."""
+    data = _load_pyproject()
+    project = cast(dict[str, Any], data["project"])
+    extras = cast(dict[str, list[str]], project["optional-dependencies"])
+    for requirement in extras["dev"]:
+        if _parse_requirement_name(requirement) != package.lower():
+            continue
+        match = re.search(r">=\s*(\d+(?:\.\d+)*)", requirement)
+        if match:
+            return match.group(1)
+    return None
+
+
 def _ci_pinned_names() -> dict[str, str]:
     """name -> version for non-comment, non-editable pins in requirements-ci.txt."""
     out: dict[str, str] = {}
@@ -88,10 +132,51 @@ def test_dev_extra_declares_numerical_and_hygiene_packages() -> None:
 def test_requirements_ci_mirrors_dev_manifest_pins() -> None:
     """requirements-ci.txt pins every newly-declared host/CI test-time package."""
     pins = _ci_pinned_names()
+    # Absent and present-but-loose are different faults with different repairs,
+    # and `pins` cannot tell them apart: it is built from `==` lines only, so a
+    # ranged requirement is filtered out and reports as missing. Read the raw
+    # line, then say which of the two it is.
     for pkg in _DEV_EXTRA_REQUIRED:
+        line = _ci_requirement_line(pkg)
+        assert line is not None, f"requirements-ci.txt states no requirement for {pkg}"
+        assert "==" in line, (
+            f"requirements-ci.txt states {pkg} as {line!r}, which is not a pin. "
+            f"Every host/CI test-time package is pinned with '==' so two runs of "
+            f"one commit resolve the same releases."
+        )
         assert pkg.lower() in pins, f"requirements-ci.txt missing pin for {pkg}"
-    # Hygiene pin from the supply-chain receipt on #161.
-    assert pins["pytest-randomly"] == "4.1.0"
+
+    # Hygiene from the supply-chain receipt on #161: the CI file pins an EXACT
+    # version, so a CI run is reproducible and an upstream release cannot change
+    # what a green tick means.
+    #
+    # The version itself is NOT frozen here. It read `== "4.1.0"` until
+    # 2026-09-07, and what that asserted was one release rather than the pinning
+    # property this test is named for: it went red on the routine bump to 5.0.0
+    # with 2,660 other tests passing, so the only thing standing between the
+    # repository and its own dependency update was the assertion meant to guard
+    # it. A literal cannot tell a considered upgrade from an accident, and it
+    # blocks the correction it should be waving through.
+    #
+    # What must hold instead, and does discriminate: the pin exists, it is an
+    # exact release, and it satisfies the floor `pyproject.toml` declares.
+    # The loop above already proved the requirement is present and uses `==`, so
+    # those are not re-asserted here: a second copy could never fire, and an
+    # assertion that cannot fail is one a later reader trusts for nothing. What
+    # is left to check is the version itself.
+    pinned = pins["pytest-randomly"]
+    assert _EXACT_RELEASE.fullmatch(pinned), (
+        f"requirements-ci.txt pins pytest-randomly=={pinned!r}, which is not a "
+        f"plain release. A pre-release or local-version pin makes the CI matrix "
+        f"depend on a build that can be yanked or replaced."
+    )
+    floor = _dev_extra_floor("pytest-randomly")
+    assert floor is not None, "pyproject dev extra must declare a pytest-randomly floor"
+    assert _version_tuple(pinned) >= _version_tuple(floor), (
+        f"requirements-ci.txt pins pytest-randomly=={pinned}, below the "
+        f">={floor} floor pyproject.toml declares. The two files disagree about "
+        f"the minimum, and the CI file is the one that runs."
+    )
 
 
 def test_requirements_assurance_container_exists_with_header_and_pins() -> None:
