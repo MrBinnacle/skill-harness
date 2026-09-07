@@ -13,8 +13,10 @@ directly:
    is an unearned carve-out, and the same discipline
    ``test_public_copy_exclusion_list_is_minimal`` applies to the public-copy
    scan.
-3. Every tracked markdown file is scanned. The row claims the whole tree; a
-   walk that quietly misses a directory would leave the claim unmeasured.
+3. The scanned set is EXACTLY the tracked markdown minus the declared
+   exclusions. The row claims the tracked set, and both directions of that
+   claim are measured against git's own list: a file the scan misses, and a
+   file the scan reaches that no commit here publishes (#471).
 
 ``scripts/`` carries no ``__init__.py`` and is not a package, so the module is
 loaded from its path -- the same seam
@@ -155,29 +157,47 @@ def _tracked_markdown() -> list[str]:
     return [rel for rel in result.stdout.split("\0") if rel]
 
 
-def test_scan_covers_every_tracked_markdown_file() -> None:
-    """The row claims every markdown file in the tree. This measures that
-    claim against git's own list.
+def test_scan_is_exactly_the_tracked_markdown_minus_the_exclusions() -> None:
+    """The row claims every markdown file this repository TRACKS. This measures
+    that claim against git's own list, in both directions.
 
-    The assertion is one-directional on purpose: every TRACKED file must be
-    scanned, while the walk may also reach an untracked one. That direction is
-    stricter than the claim, and it keeps the test from failing on a working
-    tree that happens to hold a scratch note."""
+    Both directions matter, and #471 is why. The assertion used to be
+    one-directional -- every tracked file must be scanned, while the walk was
+    allowed to reach more -- and that slack was exactly where the defect lived:
+    the walk reached 261 markdown files inside a gitignored worktree and three
+    inside a gitignored CLAUDE.md, and this test could not see any of it. An
+    untracked file in the scan is now a failure, not licence."""
     ban = _dc16_ban()
     scanned = {
         path.relative_to(_REPO_ROOT).as_posix()
         for path in _drift_check.iter_word_list_files(_REPO_ROOT, ban)
     }
     excluded = set(ban.excluded_paths)
-    pruned = ban.excluded_dirs
-    missed = [
-        rel
-        for rel in _tracked_markdown()
-        if rel not in excluded
-        and not any(part in pruned for part in Path(rel).parts[:-1])
-        and rel not in scanned
-    ]
+    expected = {rel for rel in _tracked_markdown() if rel not in excluded}
+    missed = sorted(expected - scanned)
+    extra = sorted(scanned - expected)
     assert missed == [], f"tracked markdown outside the DC-16 scan: {missed}"
+    assert extra == [], f"untracked or excluded markdown inside the DC-16 scan: {extra}"
+
+
+def test_scan_selection_refuses_outside_a_repository(tmp_path: Path) -> None:
+    """A tree git cannot describe is a refusal, never an empty clean scan.
+
+    The alternative -- fall back to a filesystem walk -- would run a different
+    check under the same row name, which is what #471 found DC-16 doing on
+    every working clone."""
+    inside_a_repo = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        cwd=str(tmp_path),
+        check=False,
+    )
+    if inside_a_repo.returncode == 0:
+        pytest.skip("the temp directory is itself inside a repository; the refusal cannot fire")
+    (tmp_path / "note.md").write_text("the guard is load-bearing\n", encoding="utf-8")
+    with pytest.raises(_drift_check.WordListSelectionError) as caught:
+        _drift_check.iter_word_list_files(tmp_path, _dc16_ban())
+    assert "cannot select the scanned set" in str(caught.value)
 
 
 def test_the_live_tree_has_no_hit() -> None:
