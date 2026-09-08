@@ -24,9 +24,14 @@ The thing that grades an arm's output. Three tiers: Tier 1 mechanical, Tier 2 hu
 **Evidence admissibility**:
 The gate deciding whether an observation may feed aggregation at all. Always written with the qualifier — the bare word is ambiguous and the public-copy guard enforces the qualified form.
 
+**Population integrity**:
+The requirement on an **enumeration-driven control** — one that discovers its own inputs by globbing a directory, walking a tree, or reading a register. Such a control must record the cardinality and stable identity of the cases it actually submitted to its detector, and must refuse to interpret its result when that set cannot be established as the declared set. A present negative control is not an exercised one: a detector can execute perfectly over the wrong universe.
+_Avoid_: reading `UNINTERPRETABLE` as a severity between `PASS` and `FAIL`. It is a refusal to make an object-level claim at all — the discipline **Verdict**'s `CANT_TELL_YET` applies to a skill, one layer down and applied to a run.
+
 **Verdict**:
-`KEEP`, `CUT`, or `CANT_TELL_YET` — exactly the members of the code enum. `CUT` carries a mandatory sub-reason (`subsumed`, `no_lift`, `harmful`); a non-`CUT` verdict carries none. A verdict is measured or refused, never manufactured.
+`KEEP`, `CUT`, or `CANT_TELL_YET` — exactly the members of the `Verdict` enum in code, and a claim about a **skill**. `CUT` carries a mandatory sub-reason (`subsumed`, `no_lift`, `harmful`); a non-`CUT` verdict carries none. A verdict is measured or refused, never manufactured.
 _Avoid_: the retired KEEP/CUT/UNMEASURED marketing frame — claim states are broader than that triad.
+_Avoid_ also: reading this triad as the repository's only verdict vocabulary. A control reports `PASS`, `FAIL` or `UNINTERPRETABLE` about its own run, from the separate `PopulationVerdict` enum under **Population integrity** above. The two are disjoint, they describe different subjects, and they never mix.
 
 **Typed refusal**:
 The core rule of the reporting standard: **a missing number is a typed refusal, never an invented score.** Every numeric field is a measured value or a refusal object with a closed vocabulary; there is no third path.
@@ -60,3 +65,4 @@ Two separate facts about a skill: whether the collection admits it (the library'
 - A **Skill** decomposes into **Clauses**; each test runs the three **Conditions** and yields directional **Measurements** graded by an **Oracle**.
 - Only observations passing **evidence admissibility** feed aggregation; aggregation yields a **Verdict** or a **typed refusal**, recorded as a **Receipt** under **SERS**.
 - The **declared synthetic control** validates the apparatus that produces those verdicts; the **matched-evidence bridge** is the seam that turns stored evidence into them.
+- An **enumeration-driven control** reports on its own run under **Population integrity**, never on a skill. A control that cannot establish the population it examined refuses rather than passing, because a downstream result cannot repair an upstream validity failure.
