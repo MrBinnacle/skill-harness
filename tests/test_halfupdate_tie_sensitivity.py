@@ -26,6 +26,7 @@ import pytest
 from skill_harness.ablation.stopping import (
     BetaBinomialAccumulator,
     StopDecision,
+    legacy_halfupdate_decision,
 )
 
 # ---------------------------------------------------------------------------
@@ -80,28 +81,23 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("win-heavy-many-ties", wins=8, losses=0, ties=16),
 )
 
-# Measured exceedances / verdict flips under the production accumulator.
-# Strict xfail: if a fix lands and the assertion starts passing, the suite
-# goes red until the mark is removed. Runtime pytest.xfail() is not a substitute.
-_XFAIL_MEAN_SHIFT: Final[frozenset[str]] = frozenset(
-    {
-        "win-heavy-few-ties",
-        "win-heavy-many-ties",
-    }
-)
-_XFAIL_P_SENSITIVITY: Final[frozenset[str]] = frozenset(
-    {
-        "many-ties",
-        "tie-dominated",
-        "win-heavy-many-ties",
-    }
-)
-_XFAIL_VERDICT: Final[frozenset[str]] = frozenset(
-    {
-        "win-heavy-few-ties",
-        "win-heavy-many-ties",
-    }
-)
+# Registered exceedances / verdict flips under the production accumulator.
+#
+# ALL THREE ARE NOW EMPTY (#368, Path C). The production accumulator
+# conditions on the discordant table, so a tie no longer moves the posterior
+# and every scenario below agrees with its drop-ties recompute exactly. The
+# seven marks that stood here were removed one at a time, each only after the
+# assertion it covered began to pass and with its bound unchanged, which is
+# the acceptance the ruling required.
+#
+# The machinery is kept rather than deleted. Strict xfail is how this file
+# reports a regression that is understood and measured rather than one that
+# is merely red, and re-registering a scenario is the intended way to record
+# a future exceedance. An empty set here is a claim: nothing on the fixture
+# grid currently exceeds a registered bound.
+_XFAIL_MEAN_SHIFT: Final[frozenset[str]] = frozenset()
+_XFAIL_P_SENSITIVITY: Final[frozenset[str]] = frozenset()
+_XFAIL_VERDICT: Final[frozenset[str]] = frozenset()
 
 
 def _xfail_mark(
@@ -258,15 +254,32 @@ class TestHalfUpdateTieSensitivity:
         )
 
     def test_fixture_proves_detector_fires(self) -> None:
-        """Positive control: an extreme scenario exceeds every documented bound.
+        """Positive control: the extreme fixture exceeds every documented bound.
 
-        Asserts the registered condition is present under the production
-        accumulator. If a future encoding change collapses the divergence below
-        the bounds, this test goes red and the fixture must be revisited — it
-        does not silently pass on a vacuous detector.
+        REPOINTED BY #368, and the reason is the point of the control.
+
+        This test used to compare the production accumulator against the
+        drop-ties oracle. Path C made the production accumulator condition on
+        the discordant table, so those two arms now agree exactly and the
+        divergence is identically zero. Left as it was, the control would
+        have gone red; loosened, it would have passed on a measurement of
+        nothing. Its own docstring pre-registered this outcome -- "if a future
+        encoding change collapses the divergence below the bounds, this test
+        goes red and the fixture must be revisited" -- and this is that
+        revision.
+
+        The subject is now the SUPERSEDED half-update arithmetic
+        (``legacy_halfupdate_decision``), which is what the bounds were
+        always about. The bounds themselves are unchanged. The control still
+        answers the question it was built to answer: is the gap between the
+        two encodings large enough to move a shipped verdict? It fires on the
+        same fixture, at the same thresholds, and it still fails loudly if
+        that gap ever closes for a reason other than this migration -- which
+        would mean the superseded arithmetic had been quietly altered, or the
+        fixture had drifted off the region where the encodings disagree.
         """
         # Extreme scenario: 7 wins, 1 loss, 30 ties (n=38 < N_MAX).
-        hu = _halfupdate(7, 1, 30)
+        hu = legacy_halfupdate_decision(7, 1, 30)
         dt = _dropties(7, 1)
 
         hu_p = hu.p_win_rate_exceeds_threshold
@@ -287,6 +300,29 @@ class TestHalfUpdateTieSensitivity:
             f"scenario (7w, 1l, 30t). half-update mean={hu_mean:.6f}, "
             f"drop-ties mean={dt_mean:.6f}"
         )
+
+    def test_production_accumulator_no_longer_dilutes(self) -> None:
+        """The migration's own claim, asserted rather than assumed.
+
+        The control above proves the superseded encoding still diverges. This
+        one proves the PRODUCTION path no longer does, on the same extreme
+        fixture. Without it the suite could go green on an accumulator that
+        had merely stopped being exercised.
+        """
+        prod = _halfupdate(7, 1, 30)
+        dt = _dropties(7, 1)
+
+        assert prod.posterior_alpha == dt.posterior_alpha
+        assert prod.posterior_beta == dt.posterior_beta
+        assert prod.p_win_rate_exceeds_threshold == dt.p_win_rate_exceeds_threshold
+        assert prod.stopping_reason == dt.stopping_reason
+        # The ties are recorded, not discarded: Path C reads them back out to
+        # apply the effect-size floor (see ablation/path_c.py).
+        assert prod.n_ties == 30
+        assert prod.n_discordant == 8
+        assert prod.n_samples == 38
+        # And the superseded weight stays reconstructible from the decision.
+        assert prod.w_accumulator == 7.0 + 0.5 * 30
 
     def test_zero_ties_arms_are_identical(self) -> None:
         """With zero ties the two arms must agree exactly (sanity control)."""

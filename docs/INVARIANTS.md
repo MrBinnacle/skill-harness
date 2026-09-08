@@ -8,21 +8,41 @@ invariants that matter; `docs/PRD.md` remains the full specification.
 
 ## 1. Pass rule (locked)
 
-A clause PASSES when `P(win_rate > 0.60) >= 0.95` on the posterior, computed from a
-`Beta(1,1)` prior updated to `Beta(1+w, 1+n-w)` (Win = 1.0, Tie = 0.5, Loss = 0.0
-half-update encoding). FAIL when `P(win_rate > 0.60) <= 0.05`.
+A clause PASSES when `P(rate > 0.60) >= 0.95` on the posterior, computed from a
+`Beta(1,1)` prior. FAIL when `P(rate > 0.60) <= 0.05`.
+
+**The posterior is now built from the DISCORDANT TABLE** — `Beta(1 + x_f, 1 + x_n)`,
+where `x_f` is the comparisons Full won and `x_n` the comparisons the ablated
+condition won. The parameter is therefore `q = P(Full wins | discordant)`.
+Ties are recorded and do not enter it (#368 Path C, landed 2026-09-08; §8).
+
+Until #368 the posterior was `Beta(1+w, 1+n-w)` with `w` the blended
+half-update weight (Win = 1.0, Tie = 0.5, Loss = 0.0). **On a clause with no
+ties the two are the same arithmetic** — `x_f = w` and `x_n = n - w` — so the
+locked thresholds continue to mean what they meant wherever the blended rate
+and the conditional rate coincide. They diverge only on clauses that recorded
+ties, which is the footprint of the defect §8 records.
+
+**The thresholds above are NOT the whole decision for a tie-bearing clause.**
+`0.60/0.95/0.05` were calibrated against the blended rate, and §8 rules that
+they do not transfer unexamined to the conditional parameter. A clause carrying
+ties is decided by the registered Gate-2 three-sided rule on its realised
+discordant table (`ablation/path_c.py`), which reads `gamma`, `delta_min` and
+`q_min` from a ratification record rather than from any constant in the tree.
+The scalar rule above governs the sequential *stopping schedule*; it is not by
+itself a licence to ship a clause whose net lift is below the registered
+`delta_min`.
 
 Enforced in:
-- `src/skill_harness/aggregation/fit.py::WIN_RATE_THRESHOLD = 0.60`
+- `src/skill_harness/aggregation/fit.py::WIN_RATE_THRESHOLD = 0.60` (the
+  DIAGNOSTIC clause-aggregation lane, which still uses the blended half-update
+  weight — see the scope note in §8)
 - `src/skill_harness/ablation/stopping.py::WIN_RATE_THRESHOLD/PASS_PROB_THRESHOLD/FAIL_PROB_THRESHOLD = 0.60/0.95/0.05`
+- `src/skill_harness/ablation/path_c.py` (the registered Gate-2 route; holds no
+  threshold literals, and `tests/test_ablation_path_c.py` asserts it holds none)
 - `src/skill_harness/aggregation/status.py::PASS_PROB_THRESHOLD/FAIL_PROB_THRESHOLD = 0.95/0.05`
 
-The half-update encoding is **provisional**, and its measured sensitivity is
-recorded in §8. Read the two together: the thresholds above were calibrated against
-the blended rate, and §8 records that the blended rate is not the estimand of record.
-
-Spec: `docs/PRD.md` §14 "Pass Rule".
-
+Spec: `docs/PRD.md` §14 "Pass Rule"; skill-harness #368.
 ## 2. Pipeline safety (dry-run default)
 
 Every command that writes to the evidence store or makes an LLM API call defaults to
@@ -141,7 +161,7 @@ the synthetic no-leak proof (#94) are **not yet built**.
 
 Spec: skill-harness #89 (task-frontier MVP), spine #84 unit 2.
 
-## 8. Tie encoding: estimand of record, and the measured error of the interim heuristic
+## 8. Tie encoding: estimand of record, and the migration that landed it
 
 **The estimand of record is the DISCORDANT TABLE** — the McNemar/sign-test
 convention. Concordant pairs carry no directional information about a paired
@@ -150,11 +170,18 @@ paired-binary literature, and it is what Gate 2 (`oc/gate2.py`) already requires
 Ruled 2026-08-31 on #368, after items 3 (#345) and 5 (#347) measured the same
 deviation from two sides.
 
-**Half-update (Win=1.0, Tie=0.5, Loss=0.0, `n += 1`) remains the operational
-stopping heuristic in the interim.** Under it the posterior converges to
-`Beta(1+w+t/2, 1+l+t/2)`, so the mean is pulled toward 0.50 as the tie count grows.
-Measured on the win-heavy fixture: `w=8, l=0, t=16` gives `P(rate > 0.60) = 0.726`
-(INCONCLUSIVE) where drop-ties gives `0.990` (PASSED); posterior-mean shift up to
+**Path C is BUILT (#368, 2026-09-08).** The ablation lane's sequential
+accumulator conditions on the discordant table, and a tie-bearing clause is
+decided by the registered Gate-2 three-sided rule. What follows records the
+interim heuristic it replaced, because the reasoning is still load-bearing and
+one half of it was wrong.
+
+### What the interim heuristic was, and what it did
+
+Half-update (Win=1.0, Tie=0.5, Loss=0.0, `n += 1`) converged to
+`Beta(1+w+t/2, 1+l+t/2)`, pulling the mean toward 0.50 as the tie count grew.
+Measured on the win-heavy fixture: `w=8, l=0, t=16` gave `P(rate > 0.60) = 0.726`
+(INCONCLUSIVE) where drop-ties gave `0.990` (PASSED); posterior-mean shift up to
 0.178.
 
 **The "dilution is always toward 0.5" argument is FALSE, and is recorded here
@@ -164,41 +191,90 @@ because the ruling first asserted it.** A sweep over `w, l in [0, 60]`,
 Worst observed: `w=0, l=2, t=7`, `0.0996` against `0.0640`. The error is not
 monotone and must not be described as such.
 
-**What survives is narrower, and it is a receipt rather than an argument:**
+**What survived was narrower, and it is a receipt rather than an argument:**
 
 | Gate | Measured on the grid above |
 |---|---|
-| PASS (`P >= 0.95`) | **Zero** grid points where ties push a clause across the gate that drop-ties keeps below it. A false KEEP cannot be minted by tie encoding anywhere on that grid. |
+| PASS (`P >= 0.95`) | **Zero** grid points where ties push a clause across the gate that drop-ties keeps below it. A false KEEP could not be minted by tie encoding anywhere on that grid. |
 | FAIL (`P <= 0.05`) | **Three** grid points where a drop-ties-FAILED clause escapes the gate (first: `w=0, l=3, t=5`, `0.0527` against `0.0256`). All three escape to INCONCLUSIVE, never to PASS. |
 
-So the cost is a **delayed** verdict — a measurement-time cost — and not a
-claim-integrity cost. That asymmetry is the entire justification for keeping the
-interim heuristic, and it is bounded by the grid, not proven in general.
+That one-sided-safety is why the heuristic was allowed to stand while the
+migration was unbuilt. It is not a reason to keep it now that the migration
+exists: a delayed verdict is still a cost, and the receipt bounded it only on
+the swept grid.
 
-**The locked 0.60/0.95/0.05 thresholds do NOT transfer unexamined** to the
-conditional parameter `P(full wins | discordant)`. They were calibrated against the
-blended rate. Re-deriving them is part of the migration and must be pre-registered
-before any production run consumes the result.
+### What Path C actually changed
+
+Two changes, at one seam, and the second is the one that is easy to miss.
+
+**(a) The posterior conditions on the discordant table.**
+`BetaBinomialAccumulator` records `(x_f, x_n, ties)` and updates
+`Beta(1 + x_f, 1 + x_n)`. `delta_to_observation` is UNCHANGED and still returns
+0.5 for a tie: the encoding was never the defect, because a tie is a real,
+correctly-labelled outcome. The defect was crediting it to both sides of the
+posterior. N_MAX still counts total comparisons, because a tie costs a sample;
+N_MIN now counts discordant comparisons, because a tie is not evidence about `q`.
+
+**(b) Conditioning ALONE would have opened a new hole, so it is not the whole
+migration.** `q = P(Full wins | discordant)` cannot see how often a direction
+occurs at all. A clause that wins 7 of the 8 comparisons it did not tie, having
+tied 30, has `Beta(8, 2)` and a net lift of 0.158. The scalar rule passes it.
+This is exactly the practical-significance inversion the previous version of
+this section named in its Revisit-if clause, and the sizing frontier now reaches
+it: at `d = 0.2` the minimum detectable `q` is 0.97, a net lift of 0.188, under
+the registered `delta_min` of 0.20.
+
+`ablation/path_c.py` closes it by routing the realised table through
+`gate2_decide`. Gate 2's Dirichlet pools the two tie cells, so the tie count
+returns as evidence about the discordance rate `d` — which is what it always
+was — and the decision is made on the net lift `delta = d(2q - 1)` against the
+registered margin. The ablation lane's undifferentiated tie fits that pooling
+exactly, because Gate 2 never needs the both-pass / both-fail split.
+
+**The locked 0.60/0.95/0.05 thresholds still do NOT transfer unexamined** to the
+conditional parameter, and Path C does not transfer them. It consumes `gamma`,
+`delta_min` and `q_min` from a ratification record by reference and holds no
+threshold literal of its own.
+
+### What Path C does NOT claim
+
+It takes `n_pairs` from the REALISED comparison count, not from the ratification
+record's `n`. The ablation lane is sequential with a variable stopping point, so
+it has no fixed N to match a registered one. The consequence is stated rather
+than hidden: **the operating characteristics of a registered fixed-N Gate-2
+design are not the operating characteristics of this lane.** A clause decided
+here inherits the registered thresholds, not the registered design's error
+rates. `gate2_oc` describes the fixed-N design; nothing in the ablation lane
+does.
 
 Enforced in / recorded by:
-- `src/skill_harness/aggregation/fit.py`, `ablation/stopping.py` (the half-update
-  encoding this section qualifies)
+- `src/skill_harness/ablation/stopping.py` (the discordant accumulator, and
+  `legacy_halfupdate_decision`, the superseded arithmetic kept addressable so
+  the detector below retains a live subject)
+- `src/skill_harness/ablation/path_c.py` (the registered Gate-2 route)
+- `src/skill_harness/ablation/sizing.py` (the exact DP, moved to the same rule)
 - `docs/findings/halfupdate-tie-sensitivity.md` (the finding and its fixtures)
-- `tests/test_halfupdate_tie_sensitivity.py` (strict xfails, held until the
-  encodings agree — they are NOT loosened to go green)
+- `tests/test_halfupdate_tie_sensitivity.py` (the seven strict xfails are
+  RESOLVED and their marks removed, bounds unchanged; the positive control is
+  re-pointed at `legacy_halfupdate_decision` so it still measures a real gap)
+- `tests/test_ablation_path_c.py` (thresholds by reference; the refusal when a
+  record omits one; the tie-heavy clause held below the floor)
+- `docs/assurance/path-c-tie-encoding-mutation-receipt.md` (#341 mutation receipt)
 
-Scope: this section documents a measured sensitivity and a ruling. The migration
-itself — routing tie-heavy clause decisions through the Gate-2 discordant machinery
-(Path C) — is **not built**.
+Scope: this section governs the production matched-efficacy path and Gate 2. It
+does **not** settle what the diagnostic clause-aggregation lane (`fit_skill`,
+`aggregation/engine.py`, #360/#405) measures heterogeneity in; that lane keeps
+`sum_sq` and the blended half-update weight under its own amendment, and #368
+did not touch it.
 
-*Revisit if:* a production design exceeds the swept grid (`w, l > 60` or `t > 80`),
-in which case re-run the sweep before relying on the PASS-gate zero; or a tie-heavy
-axis shows the practical-significance inversion, where rare-but-real wins are drowned
-by ties in a way that matters operationally — that is an effect-size floor question
-for the Gate-2 net-lift bounds, not a reason to resurrect the blended rate.
+*Revisit if:* a production design exceeds the swept grid (`w, l > 60` or
+`t > 80`) AND the superseded heuristic is being relied on for a comparison, in
+which case re-run the sweep; or the ablation lane acquires a fixed-N design, at
+which point `n_pairs` should come from the ratification record and this
+section's "does not claim" paragraph is what expires.
 
-Spec: skill-harness #368 (ruling and its amendment), #347 (item 5 detector), #345.
-
+Spec: skill-harness #368 (ruling, its amendment, and the Path C build), #347
+(item 5 detector), #345.
 ## 9. The model pin is provenance, not a staleness badge
 
 Every newly-minted verdict carries an `ArticleFingerprint` — `mint_oracle_verdict`
