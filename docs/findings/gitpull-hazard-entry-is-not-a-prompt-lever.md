@@ -206,7 +206,7 @@ Item 2's deliverable exists. Whether it works does not, and cannot be settled wi
 
 The 2026-09-08 comment on `#419` sequences the cluster as `#438` → item 2 → `#420` re-measures
 the basis on the repaired task and signs the row → item 3. **Item 2 delivers a candidate, not a
-qualified task**, and the difference is load-bearing for the two tickets downstream:
+qualified task**, and the difference decides what the two tickets downstream are actually waiting on:
 
 - **`#420` would be signing a row against a task that has not been shown to enter the trap.** If
   the screen returns `h0 = 0`, the next lever is the fixture, a rebuild regenerates every SHA, and
