@@ -93,6 +93,7 @@ actually buys.
 | `src/skill_harness/ablation/__init__.py` | 0 | 0 | not mutated | n/a | no branches |
 | `src/skill_harness/ablation/confound.py` | 28 | 1 | 92.9% | 96.4% | OK |
 | `src/skill_harness/ablation/operator.py` | 6 | 3 | 52.0% | 50.0% | BELOW 80% |
+| `src/skill_harness/ablation/path_c.py` | 4 | 0 | absent | 100.0% | BELOW 80% |
 | `src/skill_harness/ablation/reconciler.py` | 2 | 0 | 81.3% | 100.0% | OK |
 | `src/skill_harness/ablation/render.py` | 6 | 1 | 65.9% | 83.3% | BELOW 80% |
 | `src/skill_harness/ablation/runner.py` | 84 | 17 | 79.6% | 79.8% | BELOW 80% |
