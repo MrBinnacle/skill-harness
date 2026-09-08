@@ -8,13 +8,15 @@ invariants that matter; `docs/PRD.md` remains the full specification.
 
 ## 1. Pass rule (locked)
 
-A clause PASSES when `P(rate > 0.60) >= 0.95` on the posterior, computed from a
-`Beta(1,1)` prior. FAIL when `P(rate > 0.60) <= 0.05`.
+A clause PASSES when `P(win_rate > 0.60) >= 0.95` on the posterior, computed from
+a `Beta(1,1)` prior. FAIL when `P(win_rate > 0.60) <= 0.05`. The thresholds are
+unchanged and are quoted here verbatim; DC-1 checks that copy against the code.
 
-**The posterior is now built from the DISCORDANT TABLE** — `Beta(1 + x_f, 1 + x_n)`,
-where `x_f` is the comparisons Full won and `x_n` the comparisons the ablated
-condition won. The parameter is therefore `q = P(Full wins | discordant)`.
-Ties are recorded and do not enter it (#368 Path C, landed 2026-09-08; §8).
+**What `win_rate` NAMES has changed.** The posterior is now built from the
+DISCORDANT TABLE — `Beta(1 + x_f, 1 + x_n)`, where `x_f` is the comparisons Full
+won and `x_n` the comparisons the ablated condition won — so `win_rate` denotes
+the conditional rate `q = P(Full wins | discordant)`. Ties are recorded and do
+not enter it (#368 Path C, landed 2026-09-08; §8).
 
 Until #368 the posterior was `Beta(1+w, 1+n-w)` with `w` the blended
 half-update weight (Win = 1.0, Tie = 0.5, Loss = 0.0). **On a clause with no
@@ -177,8 +179,8 @@ stated exactly below.** The ablation lane's sequential accumulator conditions on
 the discordant table on every run. A Gate-2 decision on the realised table is
 computed per clause **when the run supplies a RATIFIED record**, carried on
 `ClauseResult.path_c`, with the ratification id recorded in `runs.config_json`.
-What follows records the interim heuristic it replaced, because the reasoning is
-still load-bearing and one half of it was wrong.
+What follows records the interim heuristic it replaced, because that reasoning
+still decides things here and one half of it was wrong.
 
 ### What the interim heuristic was, and what it did
 
