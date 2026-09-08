@@ -50,6 +50,11 @@ GUARDED_FUNCTIONS: Final[frozenset[str]] = frozenset({"screen_verdict", "matched
 
 VALUE_CLASS_KEYWORD: Final[str] = "value_class"
 
+# Directory names skipped when selecting modules, matched against the path RELATIVE to
+# the scanned root. Anchoring matters: a build worktree lives under a `.sandcastle`
+# directory, so an absolute-path test excludes every file in the tree being scanned.
+_EXCLUDED_DIRECTORY_NAMES: Final[frozenset[str]] = frozenset({"__pycache__", ".sandcastle"})
+
 # Production modules permitted to call a guarded function without naming a value class.
 # Empty by intent. A reviewed entry belongs here only when the call genuinely has no subject
 # identity in scope AND threading one down is impossible; record why beside it, because an
@@ -85,13 +90,26 @@ def _describe_value(node: ast.expr) -> str:
     return ast.unparse(node)
 
 
-def _production_modules() -> list[Path]:
-    """Return every tracked production module, skipping caches and build artefacts."""
+def _python_modules_under(root: Path) -> list[Path]:
+    """Return every Python module under `root`, skipping caches and nested build trees.
+
+    The exclusion is anchored at `root` rather than tested against the absolute path.
+    Builds run in worktrees at `<repo>/.sandcastle/worktrees/agent-issue-<n>/`, which puts
+    `.sandcastle` in the absolute path of every file here, so an absolute-path test excluded
+    the whole tree: the scan returned nothing and this module went green while guarding no
+    call site at all. What the exclusion is for is caches and nested build trees *inside* the
+    tree being scanned, and that is a property of the path relative to the root.
+    """
     return sorted(
         path
-        for path in SRC_ROOT.rglob("*.py")
-        if "__pycache__" not in path.parts and ".sandcastle" not in path.parts
+        for path in root.rglob("*.py")
+        if not (_EXCLUDED_DIRECTORY_NAMES & set(path.relative_to(root).parts))
     )
+
+
+def _production_modules() -> list[Path]:
+    """Return every tracked production module, skipping caches and build artefacts."""
+    return _python_modules_under(SRC_ROOT)
 
 
 def _guarded_calls() -> list[tuple[Path, int, str, ast.Call]]:
@@ -121,6 +139,46 @@ def test_the_scan_finds_the_guarded_calls_at_all() -> None:
         f"{sorted(GUARDED_FUNCTIONS)}. Either the functions were renamed and this guard "
         "needs updating, or the scan stopped walking production sources. A guard that "
         "matches nothing passes everything."
+    )
+
+
+def test_module_selection_is_not_defeated_by_the_checkout_location(tmp_path: Path) -> None:
+    """A checkout that itself sits under an excluded directory name must still be scanned.
+
+    Builds run in worktrees at `<repo>/.sandcastle/worktrees/agent-issue-<n>/`. A filter that
+    tested the absolute path's components excluded every file in such a tree, so the scan
+    returned nothing and every assertion in this module passed while checking no call site.
+    The failure is reachable by location rather than by a code change, which is what makes it
+    worth a case of its own: nothing a maintainer does to the production tree can provoke it.
+    """
+    root = tmp_path / ".sandcastle" / "worktrees" / "agent-issue-447" / "src"
+    (root / "pkg").mkdir(parents=True)
+    live = root / "pkg" / "live.py"
+    live.write_text("x = 1\n", encoding="utf-8")
+
+    cached = root / "pkg" / "__pycache__" / "stale.py"
+    cached.parent.mkdir()
+    cached.write_text("x = 2\n", encoding="utf-8")
+
+    nested_build = root / ".sandcastle" / "worktrees" / "old" / "copy.py"
+    nested_build.parent.mkdir(parents=True)
+    nested_build.write_text("x = 3\n", encoding="utf-8")
+
+    found = _python_modules_under(root)
+
+    assert live in found, (
+        f"the scan skipped {live}, which is a production module, because an ancestor of the "
+        "scanned root is named '.sandcastle'. The exclusion must be anchored at the root: a "
+        "scan that returns nothing inside a build worktree passes every assertion in this "
+        "module while guarding nothing."
+    )
+    assert cached not in found, (
+        f"the scan picked up {cached}. The __pycache__ exclusion must still apply to "
+        "directories inside the scanned tree."
+    )
+    assert nested_build not in found, (
+        f"the scan picked up {nested_build}. A nested build tree inside the scanned root "
+        "must still be excluded; narrowing the filter must not quietly delete the exclusion."
     )
 
 
