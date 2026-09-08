@@ -116,6 +116,36 @@ _UNDECIDED_COUNT_DETECTOR = (
 )
 
 
+# #368 Path C: the ablation lane's discordant route.
+_STOPPING = "src/skill_harness/ablation/stopping.py"
+_STOPPING_MODULE = "skill_harness.ablation.stopping"
+_PATH_C = "src/skill_harness/ablation/path_c.py"
+_PATH_C_MODULE = "skill_harness.ablation.path_c"
+_TIE_VERDICT_DETECTOR = (
+    "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity"
+    "::test_stopping_decision_agreement"
+)
+_TIE_MEAN_DETECTOR = (
+    "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity"
+    "::test_production_accumulator_no_longer_dilutes"
+)
+_EVIDENCE_BAR_DETECTOR = (
+    "tests/ablation/test_stopping.py::TestBetaBinomialAccumulator"
+    "::test_ties_cannot_buy_a_clause_past_the_evidence_bar"
+)
+_EFFECT_FLOOR_DETECTOR = (
+    "tests/test_ablation_path_c.py::TestDecideClause"
+    "::test_ties_reach_the_decision_rather_than_being_discarded"
+)
+_TIE_HEAVY_DETECTOR = (
+    "tests/test_ablation_path_c.py::TestDecideClause"
+    "::test_tie_heavy_win_is_held_below_the_effect_floor"
+)
+_UNREGISTERED_DETECTOR = (
+    "tests/test_ablation_path_c.py::TestRegisteredThresholds"
+    "::test_missing_threshold_refuses_rather_than_defaulting"
+)
+
 MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M-N1",
@@ -254,6 +284,51 @@ MUTANTS: tuple[Mutant, ...] = (
         "    if total_pairs != design.n_pairs:",
         "    if False:  # mutant: count mismatch accepted",
         (_COUNT_MISMATCH,),
+    ),
+    # #368 Path C: the discordant accumulator and the registered Gate-2 route.
+    Mutant(
+        "M-T1",
+        "368-discordant-posterior",
+        "restore the half-update posterior: ties are credited to both sides again, "
+        "which is the WRONG_NUMBER defect #347 measured",
+        _STOPPING,
+        _STOPPING_MODULE,
+        "        return 1.0 + float(self._x_f), 1.0 + float(self._x_n)",
+        "        return 1.0 + self.w, 1.0 + (float(self.n) - self.w)",
+        (_TIE_VERDICT_DETECTOR, _TIE_MEAN_DETECTOR),
+    ),
+    Mutant(
+        "M-T2",
+        "368-evidence-bar",
+        "point the N_MIN evidence gate at the TOTAL comparison count, so ties buy a "
+        "clause past the bar on too few directional comparisons",
+        _STOPPING,
+        _STOPPING_MODULE,
+        "        if self.n_discordant < N_MIN:",
+        "        if self.n < N_MIN:",
+        (_EVIDENCE_BAR_DETECTOR,),
+    ),
+    Mutant(
+        "M-T3",
+        "368-effect-floor",
+        "size the Gate-2 design by the DISCORDANT count, discarding the tie cell and "
+        "collapsing Path C to a plain drop-ties recompute with no effect-size floor",
+        _PATH_C,
+        _PATH_C_MODULE,
+        "    n_pairs = max(decision.n_samples, 1)",
+        "    n_pairs = max(decision.n_discordant, 1)",
+        (_EFFECT_FLOOR_DETECTOR, _TIE_HEAVY_DETECTOR),
+    ),
+    Mutant(
+        "M-T4",
+        "368-thresholds-by-reference",
+        "accept a record that omits a Gate-2 threshold, so an unregistered decision "
+        "is made under a defaulted value while looking registered",
+        _PATH_C,
+        _PATH_C_MODULE,
+        "    if missing:",
+        "    if False:  # mutant: missing threshold defaulted rather than refused",
+        (_UNREGISTERED_DETECTOR,),
     ),
 )
 

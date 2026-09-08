@@ -17,6 +17,7 @@ from skill_harness.ablation.stopping import (
     N_INC,
     N_MAX,
     N_MIN,
+    PASS_PROB_THRESHOLD,
     BetaBinomialAccumulator,
     StoppingReason,
     next_check_at,
@@ -73,17 +74,58 @@ class TestBetaBinomialAccumulator:
         assert acc.n == 1
 
     def test_posterior_metadata_in_decision(self) -> None:
-        """StopDecision carries posterior alpha, beta, and p."""
+        """StopDecision carries posterior alpha, beta, and p.
+
+        Rewritten by #368. This test previously asserted the half-update
+        result for an all-ties run: alpha = beta = 1 + N_MIN * 0.5, a
+        posterior sharply concentrated at 0.5 built entirely out of
+        comparisons that carried no direction. That is the defect the ruling
+        named, so the expectation moves with the rule rather than the rule
+        being held to the expectation.
+
+        N_MIN ties now leave the prior untouched: no directional evidence
+        arrived, so the posterior still says nothing.
+        """
         acc = BetaBinomialAccumulator()
         for _ in range(N_MIN):
-            acc.add(0.5)  # ties -- inconclusive signal
+            acc.add(0.5)  # ties -- no directional signal
         decision = acc.check_stop()
-        # posterior_alpha = 1 + w = 1 + N_MIN*0.5
-        expected_alpha = 1.0 + N_MIN * 0.5
-        expected_beta = 1.0 + N_MIN * 0.5
-        assert abs(decision.posterior_alpha - expected_alpha) < 1e-9
-        assert abs(decision.posterior_beta - expected_beta) < 1e-9
+        assert decision.posterior_alpha == 1.0
+        assert decision.posterior_beta == 1.0
         assert 0 < decision.p_win_rate_exceeds_threshold < 1
+        # The ties are counted, and they hold the run below the evidence bar.
+        assert decision.n_samples == N_MIN
+        assert decision.n_ties == N_MIN
+        assert decision.n_discordant == 0
+        assert not decision.should_stop
+        # The superseded blended weight remains reconstructible.
+        assert decision.w_accumulator == N_MIN * 0.5
+
+    def test_ties_cannot_buy_a_clause_past_the_evidence_bar(self) -> None:
+        """N_MIN counts DISCORDANT comparisons, not total ones (#368).
+
+        5 wins, 0 losses, 3 ties. The conditional posterior is Beta(6, 1) and
+        P(q > 0.60) = 0.9533, over the PASS threshold. The total comparison
+        count is 8, which equals N_MIN. If the evidence gate read that total,
+        this clause would PASS on five directional comparisons, with three
+        ties making up the difference.
+
+        Ties are not evidence about q, so they must not advance the bar. The
+        run continues instead. This is the control for the N_MIN half of the
+        migration: it fails if the gate is ever repointed at n_samples.
+        """
+        acc = BetaBinomialAccumulator()
+        for _ in range(5):
+            acc.add(1.0)
+        for _ in range(3):
+            acc.add(0.5)
+        decision = acc.check_stop()
+
+        assert decision.n_samples == N_MIN  # the total reaches the bar ...
+        assert decision.n_discordant == 5  # ... the evidence does not
+        assert decision.p_win_rate_exceeds_threshold > PASS_PROB_THRESHOLD
+        assert not decision.should_stop
+        assert decision.stopping_reason is None
 
     def test_rejects_invalid_observation(self) -> None:
         """add() raises ValueError for non-{0.0, 0.5, 1.0} values."""
