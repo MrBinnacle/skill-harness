@@ -11,7 +11,9 @@ Exit-code contract:
 from __future__ import annotations
 
 import re
+import tempfile
 from pathlib import Path
+from typing import Final
 
 import pytest
 from click.testing import CliRunner
@@ -503,6 +505,57 @@ def test_aux_cost_counts_sibling_documentation(tmp_path: Path) -> None:
     assert report.aux_cost_calibrated == round(expected_raw * STANDING_COST_CALIBRATION_FACTOR)
 
 
+# ---------------------------------------------------------------------------
+# Symlink capability
+# ---------------------------------------------------------------------------
+# The two tests below need to create symlinks. Creating one on Windows requires a privilege
+# the account may not hold, and a host without it is not a host where the code is wrong: a
+# failure there is a claim about the code that the run cannot support. The pair was carried
+# across sessions as "pre-existing on this host", which is prose standing in for a mechanism,
+# and a gate with two permanently red cases teaches its readers to scan past red.
+#
+# The capability is probed by attempting a symlink, not by comparing `os.name`, because it is
+# a privilege setting rather than a property of the platform: the same Windows host acquires
+# it by enabling Developer Mode. Where the attempt succeeds the tests run unchanged and can
+# still fail, which is the property that keeps the skip from becoming an invisible hole.
+
+
+def _symlink_capability_failure() -> str | None:
+    """Return why this host cannot create symlinks, or None when it can.
+
+    Both link forms are attempted because the tests below create each: a directory symlink
+    and a file symlink.
+    """
+    with tempfile.TemporaryDirectory() as probe_root:
+        probe = Path(probe_root)
+        target_dir = probe / "target-dir"
+        target_dir.mkdir()
+        target_file = probe / "target-file"
+        target_file.write_text("probe\n", encoding="utf-8")
+        try:
+            (probe / "link-dir").symlink_to(target_dir, target_is_directory=True)
+            (probe / "link-file").symlink_to(target_file)
+        except OSError as exc:
+            return (
+                "this host cannot create symlinks, so the behaviour under test cannot be set "
+                f"up: {exc}. On Windows the missing privilege is SeCreateSymbolicLinkPrivilege, "
+                "held by an account running with Developer Mode enabled or elevated. This is a "
+                "privilege setting rather than a property of the platform, which is why it is "
+                "probed by attempting a symlink. Where symlinks can be created these tests run "
+                "and can still fail."
+            )
+    return None
+
+
+_SYMLINK_UNAVAILABLE: Final[str | None] = _symlink_capability_failure()
+
+_requires_symlinks = pytest.mark.skipif(
+    _SYMLINK_UNAVAILABLE is not None,
+    reason=_SYMLINK_UNAVAILABLE or "",
+)
+
+
+@_requires_symlinks
 def test_aux_cost_skill_dir_via_symlink_counted_once(tmp_path: Path) -> None:
     """Skill directory reached through a symlink is counted once (no double-count)."""
     from skill_harness.oracles.tier1.verbosity import count_tokens
@@ -524,6 +577,7 @@ def test_aux_cost_skill_dir_via_symlink_counted_once(tmp_path: Path) -> None:
     assert via_link.aux_cost_raw == via_real.aux_cost_raw
 
 
+@_requires_symlinks
 def test_aux_cost_does_not_follow_symlinks_outward(tmp_path: Path) -> None:
     """Outward symlinks from the skill dir must not pull in foreign docs."""
     from skill_harness.oracles.tier1.verbosity import count_tokens
