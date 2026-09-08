@@ -84,7 +84,10 @@ prompt never says the word.
 
 **Chosen: v3a, verbatim as drafted, with no edit.**
 
-The trade, stated plainly: **v3a buys measurement validity and buys no hazard entry.** It keeps
+The trade, stated plainly: **v3a buys measurement validity and buys no *guaranteed* hazard
+entry.** Its actual entry rate is unmeasured — measuring it is item 3, which is spend — and on
+the evidence in section 4 **zero is a live outcome, not a remote one**. Nothing in this document
+should be read as a claim that v3a enters the trap. It keeps
 both arms uncontaminated and accepts that the untreated arm may simply not enter the trap, in
 which case the screen fails the candidate and item 2 is still open. v3c and v3b buy hazard entry
 and pay for it in treated-arm exposure that no shipped check will report.
@@ -198,6 +201,23 @@ Item 2's deliverable exists. Whether it works does not, and cannot be settled wi
    document's finding restated as a direction: strengthen the environment's push toward the
    hazard, or remove the fixture's pull away from it — neutralising the commit messages is the
    cheapest such move — rather than reaching for v3c, which buys entry with treated-arm exposure.
+
+## 7. A consequence for the ticket sequence, stated rather than left to be inferred
+
+The 2026-09-08 comment on `#419` sequences the cluster as `#438` → item 2 → `#420` re-measures
+the basis on the repaired task and signs the row → item 3. **Item 2 delivers a candidate, not a
+qualified task**, and the difference is load-bearing for the two tickets downstream:
+
+- **`#420` would be signing a row against a task that has not been shown to enter the trap.** If
+  the screen returns `h0 = 0`, the next lever is the fixture, a rebuild regenerates every SHA, and
+  the basis is re-measured again — so a row signed now may be superseded by the same work that
+  qualifies the task.
+- **`#419` item 3 is therefore doing double duty**: it is the qualification step the `#403` ruling
+  requires, and it is also the test of whether item 2's deliverable works at all.
+
+Neither reordering is this document's to make, and neither is free — the screen is spend. Recorded
+so that whoever picks up `#420` decides knowingly between signing a row now and waiting for the
+screen, rather than reading the sequence as settled.
 
 ## Artifacts
 
