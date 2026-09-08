@@ -777,6 +777,10 @@ def run_ablation(
         probe_redundancy=probe_redundancy,
         evidence_db=evidence_db,
         runtime_db=runtime_db,
+        # #368 Path C: the same record the preflight above just accepted supplies
+        # the registered Gate-2 thresholds. Threaded rather than re-read, so the
+        # thresholds a clause is decided under are the ones the gate approved.
+        ratification_path=ratification_path,
     )
 
 
@@ -1115,6 +1119,7 @@ def _execute_ablation_run(
     evidence_db: Path,
     runtime_db: Path,
     daily_cap: float = 20.0,
+    ratification_path: Path | None = None,
 ) -> list[Any]:
     """Execute the live ablation run and return clause results.
 
@@ -1178,6 +1183,11 @@ def _execute_ablation_run(
                 clauses=clauses,
                 user_message=user_message,
                 max_usd=max_usd,
+                # #368 Path C: supplies the registered Gate-2 thresholds. On a
+                # dry run or a run without --ratification this is None, and every
+                # clause result then records that the effect-size floor was not
+                # applied rather than reading as though it had been.
+                ratification_path=ratification_path,
             )
 
     return results
@@ -1364,6 +1374,7 @@ def _cmd_execute(
     probe_redundancy: bool,
     evidence_db: Path,
     runtime_db: Path,
+    ratification_path: Path | None = None,
 ) -> None:
     """Execute the live ablation run and render the results report.
 
@@ -1424,6 +1435,7 @@ def _cmd_execute(
             resume_run_id=resume_run_id,
             evidence_db=evidence_db,
             runtime_db=runtime_db,
+            ratification_path=ratification_path,
         )
     except BudgetAbortedError as exc:
         raise click.ClickException(

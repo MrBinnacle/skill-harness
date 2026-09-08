@@ -253,3 +253,119 @@ class TestThresholdProvenance:
 
         real = registered_thresholds(RAT_0001)
         assert (t.gamma, t.delta_min, t.q_min) != (real.gamma, real.delta_min, real.q_min)
+
+
+class TestRunnerWiring:
+    """Path C must be REACHED by the production runner, not merely importable.
+
+    A code review of this migration found the module complete, tested, and
+    called by nothing, while the invariant document already claimed a
+    tie-bearing clause was decided by it. These tests exist so that gap cannot
+    reopen silently: they assert the wiring, not the arithmetic.
+    """
+
+    def test_run_ablation_accepts_a_ratification_reference(self) -> None:
+        """The runner's entry point takes the record Path C consumes."""
+        import inspect
+
+        from skill_harness.ablation.runner import AblationRunner
+
+        params = inspect.signature(AblationRunner.run_ablation).parameters
+        assert "ratification_path" in params
+
+    def test_run_config_records_the_ratification_id(self) -> None:
+        """#368 acceptance: the id reaches the runner config, hence config_json.
+
+        A stored run must say which registration its clause decisions were made
+        under. Without this a reader cannot retrieve the thresholds that
+        produced a verdict.
+        """
+        import json
+
+        from skill_harness.ablation.runner import RunConfig
+
+        config = RunConfig(
+            run_id="r1",
+            skill_id="s1",
+            clauses=[],
+            subject_model="claude-sonnet-4-6",
+            user_message="m",
+            ratification_id="RAT-0001",
+            ratification_path="docs/ratifications/RAT-0001-git-pull-rebase-trap.md",
+        )
+        payload = json.loads(config.to_json())
+        assert payload["ratification_id"] == "RAT-0001"
+        assert payload["ratification_path"].endswith("RAT-0001-git-pull-rebase-trap.md")
+
+        # The key is present even with no record, so an unregistered run is
+        # distinguishable from a row written before the field existed.
+        bare = RunConfig(
+            run_id="r2",
+            skill_id="s1",
+            clauses=[],
+            subject_model="claude-sonnet-4-6",
+            user_message="m",
+        )
+        bare_payload = json.loads(bare.to_json())
+        assert "ratification_id" in bare_payload
+        assert bare_payload["ratification_id"] is None
+
+        # And it survives a round trip.
+        assert RunConfig.from_json(config.to_json()).ratification_id == "RAT-0001"
+
+    def test_absent_ratification_is_a_typed_refusal_not_a_silence(self) -> None:
+        """A clause with no registered thresholds must SAY so.
+
+        This is the failure mode the whole module guards: a missing Path C
+        decision and a Path C decision of BENEFIT must never render the same
+        way. ClauseResult.path_c is None here, and the reason field is what
+        stops a reader treating that as the floor having been cleared.
+        """
+        from skill_harness.ablation.runner import ClauseResult
+        from skill_harness.ablation.stopping import StoppingReason
+
+        result = ClauseResult(
+            clause_id="c1",
+            stopping_reason=StoppingReason.PASSED,
+            stop_decision=_run(8, 0, 16),
+            samples_collected=24,
+            length_confounded=False,
+            path_c=None,
+            path_c_unavailable_reason="no_ratification_reference",
+        )
+        assert result.path_c is None
+        assert result.path_c_unavailable_reason == "no_ratification_reference"
+
+    def test_the_decision_helper_is_reached_from_a_stop_decision(self) -> None:
+        """The runner's own helper turns a StopDecision into a Path C result.
+
+        Exercises AblationRunner._decide_path_c directly rather than through a
+        paid sampling loop: the wiring under test is the thresholds-to-decision
+        step, and no subject call is needed to prove it runs.
+        """
+        from skill_harness.ablation.runner import AblationRunner
+
+        runner = AblationRunner.__new__(AblationRunner)
+        runner._path_c_thresholds = registered_thresholds(RAT_0001)
+        runner._path_c_unavailable_reason = None
+
+        decision = _run(8, 0, 16)
+        result, reason = runner._decide_path_c(decision)
+
+        assert reason is None
+        assert result is not None
+        assert result.ratification_id == "RAT-0001"
+        # The scalar rule PASSES this clause; the registered floor does not.
+        assert decision.stopping_reason is not None
+        assert result.decision is not Gate2Decision.BENEFIT
+
+    def test_unresolved_thresholds_are_reported_not_defaulted(self) -> None:
+        from skill_harness.ablation.runner import AblationRunner
+
+        runner = AblationRunner.__new__(AblationRunner)
+        runner._path_c_thresholds = None
+        runner._path_c_unavailable_reason = "unregistered_thresholds"
+
+        result, reason = runner._decide_path_c(_run(8, 0, 0))
+        assert result is None
+        assert reason == "unregistered_thresholds"

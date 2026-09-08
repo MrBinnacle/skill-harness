@@ -34,6 +34,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, NoReturn
 
 from skill_harness.ablation.confound import (
@@ -46,6 +47,13 @@ from skill_harness.ablation.confound import (
     get_default_tier1_scorers,
 )
 from skill_harness.ablation.operator import AblationOperator
+from skill_harness.ablation.path_c import (
+    PathCResult,
+    RegisteredGate2Thresholds,
+    UnregisteredThresholdsError,
+    decide_clause,
+    registered_thresholds,
+)
 from skill_harness.ablation.reconciler import reconcile_run_cost
 from skill_harness.ablation.render import ConditionRenderer
 from skill_harness.ablation.stopping import (
@@ -170,6 +178,19 @@ class RunConfig:
     family_size: int = 0
     """K x |axes| — set by runner after building the clause list (A49)."""
 
+    ratification_id: str | None = None
+    """The RAT id whose Gate-2 thresholds this run's Path C decisions consume.
+
+    #368 acceptance: the ratification reference is recorded in the runner's
+    config and therefore in ``runs.config_json``, so a stored run says which
+    registration its clause decisions were made under. ``None`` records that no
+    registered thresholds were available and no Path C decision was made -- a
+    typed absence, not a default.
+    """
+
+    ratification_path: str | None = None
+    """Repository path of that record, for retrieval. Provenance, not a key."""
+
     stopping_reasons: dict[str, str] = field(default_factory=dict)
     """Maps clause_id -> stopping_reason.
 
@@ -203,6 +224,14 @@ class RunConfig:
                 "n_max": self.n_max,
                 "max_usd": self.max_usd,
                 "family_size": self.family_size,
+                # #368 acceptance: the ratification reference travels into
+                # runs.config_json, so a stored run names the registration its
+                # Path C clause decisions were made under. Written even when
+                # None, because "no registered thresholds" is a fact about the
+                # run and an absent key would be indistinguishable from an old
+                # row that predates the field.
+                "ratification_id": self.ratification_id,
+                "ratification_path": self.ratification_path,
                 "stopping_reasons": self.stopping_reasons,
             },
             sort_keys=True,
@@ -223,6 +252,8 @@ class RunConfig:
             n_max=d.get("n_max", N_MAX),
             max_usd=d.get("max_usd", 5.0),
             family_size=d.get("family_size", 0),
+            ratification_id=d.get("ratification_id"),
+            ratification_path=d.get("ratification_path"),
             stopping_reasons=d.get("stopping_reasons", {}),
         )
 
@@ -257,6 +288,30 @@ class ClauseResult:
     verdict; ``None`` for genuinely verdictless paths (BLOCKER-1 tier2_uncalibrated,
     QUAL-1 length_confounded). Enables ``freeze <verdict_id>`` to be discovered
     directly from the ablation report output.
+    """
+
+    path_c: PathCResult | None = None
+    """The registered Gate-2 decision on this clause's realised discordant table.
+
+    #368 Path C. The scalar stopping rule above reports the conditional win rate
+    q; it cannot see how often a direction occurred at all, so it will PASS a
+    clause whose net lift is below the registered delta_min. This field carries
+    the decision that can see it.
+
+    ``None`` whenever Path C could not run, and ``path_c_unavailable_reason``
+    then says why. It is never None to mean "no objection".
+    """
+
+    path_c_unavailable_reason: str | None = None
+    """Why ``path_c`` is None, as a typed refusal rather than a silence.
+
+    Values: 'no_ratification_reference' (the run supplied none, so no registered
+    thresholds exist to decide against), 'unregistered_thresholds' (the record
+    was supplied but does not carry them), or 'no_sampling' (the clause never
+    reached the sampling loop, so there is no table to decide on).
+
+    A reader that finds ``path_c`` None MUST NOT read it as a clause clearing the
+    effect-size floor. It means the floor was not applied.
     """
 
 
@@ -354,6 +409,11 @@ class AblationRunner:
         )
         self._max_retries = max_retries
         self._retry_delay_s = retry_delay_s
+        # #368 Path C: resolved per run_ablation() call. Declared here so the
+        # types are explicit and a clause decision cannot read an attribute the
+        # runner never set.
+        self._path_c_thresholds: RegisteredGate2Thresholds | None = None
+        self._path_c_unavailable_reason: str | None = "no_ratification_reference"
         self._null_floor = null_floor
 
     # ------------------------------------------------------------------
@@ -368,6 +428,7 @@ class AblationRunner:
         max_usd: float = 5.0,
         subject_model: str = "claude-sonnet-4-6",
         run_id: str | None = None,
+        ratification_path: Path | str | None = None,
     ) -> list[ClauseResult]:
         """Execute a full ablation run for all clauses in a skill.
 
@@ -377,6 +438,9 @@ class AblationRunner:
         :param max_usd: Per-run budget cap in USD (A12, A42).
         :param subject_model: Model ID for subject calls.
         :param run_id: Optional run ID (generated if None).
+        :param ratification_path: Optional RATIFIED record supplying the Gate-2
+            thresholds for Path C (#368). When None, no Path C decision is made
+            and every ClauseResult records why, rather than reading as clear.
         :returns: List of ClauseResult (one per clause).
         :raises BudgetAbortedError: If the budget cap is exceeded.
         """
@@ -398,6 +462,19 @@ class AblationRunner:
         axes = {c.axis for c in clauses}
         family_size = len(clauses) * len(axes)  # K x |axes| (A49)
 
+        # #368 Path C: resolve the registered Gate-2 thresholds ONCE, before any
+        # spend. A record that does not carry them is refused here rather than
+        # part-way through a paid run, and the refusal is recorded on every
+        # clause result instead of leaving the decision silently unmade.
+        self._path_c_thresholds = None
+        self._path_c_unavailable_reason = "no_ratification_reference"
+        if ratification_path is not None:
+            try:
+                self._path_c_thresholds = registered_thresholds(ratification_path)
+                self._path_c_unavailable_reason = None
+            except UnregisteredThresholdsError:
+                self._path_c_unavailable_reason = "unregistered_thresholds"
+
         run_config = RunConfig(
             run_id=run_id,
             skill_id=skill_id,
@@ -406,6 +483,10 @@ class AblationRunner:
             user_message=user_message,
             max_usd=max_usd,
             family_size=family_size,
+            ratification_id=(
+                self._path_c_thresholds.ratification_id if self._path_c_thresholds else None
+            ),
+            ratification_path=(str(ratification_path) if ratification_path is not None else None),
         )
 
         # Compute total samples_planned: per clause = N_MAX x 3 conditions (pessimistic)
@@ -700,6 +781,7 @@ class AblationRunner:
                     samples_collected=0,
                     length_confounded=False,
                     unmeasured_reason="tier2_uncalibrated",
+                    path_c_unavailable_reason="no_sampling",
                 ),
             )
 
@@ -725,6 +807,7 @@ class AblationRunner:
                     samples_collected=0,
                     length_confounded=True,
                     unmeasured_reason="length_confounded",
+                    path_c_unavailable_reason="no_sampling",
                 ),
             )
 
@@ -1029,6 +1112,8 @@ class AblationRunner:
 
         samples_collected_ref[0] = samples_collected
 
+        path_c_result, path_c_reason = self._decide_path_c(stop_decision)
+
         return (
             samples_collected,
             ClauseResult(
@@ -1038,8 +1123,25 @@ class AblationRunner:
                 samples_collected=acc.n,
                 length_confounded=False,
                 verdict_id=last_verdict_id,  # CF-E3-1: UUID of last written verdict
+                path_c=path_c_result,
+                path_c_unavailable_reason=path_c_reason,
             ),
         )
+
+    def _decide_path_c(self, stop_decision: StopDecision) -> tuple[PathCResult | None, str | None]:
+        """Apply the registered Gate-2 rule to a clause's realised table (#368).
+
+        Returns ``(None, reason)`` whenever no registered thresholds are
+        available. The reason is carried rather than dropped, because a missing
+        Path C decision and a Path C decision of BENEFIT are not the same thing
+        and must never render the same way.
+
+        :param stop_decision: The clause's final stop decision.
+        :returns: (PathCResult or None, unavailable-reason or None).
+        """
+        if self._path_c_thresholds is None:
+            return None, self._path_c_unavailable_reason
+        return decide_clause(stop_decision, self._path_c_thresholds), None
 
     # ------------------------------------------------------------------
     # Budget management (A42)

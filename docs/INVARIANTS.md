@@ -28,7 +28,9 @@ ties, which is the footprint of the defect §8 records.
 they do not transfer unexamined to the conditional parameter. A clause carrying
 ties is decided by the registered Gate-2 three-sided rule on its realised
 discordant table (`ablation/path_c.py`), which reads `gamma`, `delta_min` and
-`q_min` from a ratification record rather than from any constant in the tree.
+`q_min` from a ratification record rather than from any constant in the tree -
+**and only when the run supplies such a record**; without one no Gate-2 decision
+is made and the clause result says so in as many words (section 8).
 The scalar rule above governs the sequential *stopping schedule*; it is not by
 itself a licence to ship a clause whose net lift is below the registered
 `delta_min`.
@@ -170,11 +172,13 @@ paired-binary literature, and it is what Gate 2 (`oc/gate2.py`) already requires
 Ruled 2026-08-31 on #368, after items 3 (#345) and 5 (#347) measured the same
 deviation from two sides.
 
-**Path C is BUILT (#368, 2026-09-08).** The ablation lane's sequential
-accumulator conditions on the discordant table, and a tie-bearing clause is
-decided by the registered Gate-2 three-sided rule. What follows records the
-interim heuristic it replaced, because the reasoning is still load-bearing and
-one half of it was wrong.
+**Path C is BUILT (#368, 2026-09-08), and what it does and does not cover is
+stated exactly below.** The ablation lane's sequential accumulator conditions on
+the discordant table on every run. A Gate-2 decision on the realised table is
+computed per clause **when the run supplies a RATIFIED record**, carried on
+`ClauseResult.path_c`, with the ratification id recorded in `runs.config_json`.
+What follows records the interim heuristic it replaced, because the reasoning is
+still load-bearing and one half of it was wrong.
 
 ### What the interim heuristic was, and what it did
 
@@ -247,18 +251,45 @@ here inherits the registered thresholds, not the registered design's error
 rates. `gate2_oc` describes the fixed-N design; nothing in the ablation lane
 does.
 
+### What is wired, and the two places it stops
+
+**Wired on every run:** the accumulator's discordant posterior. It has no
+configuration and no opt-out.
+
+**Wired only with a ratification reference:** the Gate-2 decision.
+`run ablation --execute --ratification <record>` threads the record the
+mechanical preflight already accepted through to the runner, which resolves the
+thresholds once before any spend. **Without one there are no registered
+thresholds and no decision is made** - `ClauseResult.path_c` is `None` and
+`path_c_unavailable_reason` says which of `no_ratification_reference`,
+`unregistered_thresholds` or `no_sampling` applies. That absence is a typed
+refusal. A reader must not read it as a clause clearing the effect-size floor.
+
+**NOT wired: the report surface.** The rendered ablation report still shows the
+scalar `StoppingReason`, so a clause that PASSES the scalar rule and fails the
+registered floor prints as PASSED. The Gate-2 decision exists on the result
+object and is not yet displayed. Until it is, the rendered report is not a claim
+about registered net lift, and this paragraph is the reason.
+
 Enforced in / recorded by:
 - `src/skill_harness/ablation/stopping.py` (the discordant accumulator, and
   `legacy_halfupdate_decision`, the superseded arithmetic kept addressable so
   the detector below retains a live subject)
 - `src/skill_harness/ablation/path_c.py` (the registered Gate-2 route)
+- `src/skill_harness/ablation/runner.py` (`run_ablation(ratification_path=...)`,
+  `_decide_path_c`, and the `ratification_id` written into `config_json`)
+- `src/skill_harness/cli/main.py` (threads `--ratification` from the preflight
+  through to the runner)
 - `src/skill_harness/ablation/sizing.py` (the exact DP, moved to the same rule)
 - `docs/findings/halfupdate-tie-sensitivity.md` (the finding and its fixtures)
 - `tests/test_halfupdate_tie_sensitivity.py` (the seven strict xfails are
   RESOLVED and their marks removed, bounds unchanged; the positive control is
   re-pointed at `legacy_halfupdate_decision` so it still measures a real gap)
 - `tests/test_ablation_path_c.py` (thresholds by reference; the refusal when a
-  record omits one; the tie-heavy clause held below the floor)
+  record omits one; the tie-heavy clause held below the floor; and
+  `TestRunnerWiring`, which asserts the runner REACHES this module - a code
+  review of this migration found the module complete, tested, and called by
+  nothing, while this section already claimed otherwise)
 - `docs/assurance/path-c-tie-encoding-mutation-receipt.md` (#341 mutation receipt)
 
 Scope: this section governs the production matched-efficacy path and Gate 2. It

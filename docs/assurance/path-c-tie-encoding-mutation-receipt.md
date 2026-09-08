@@ -113,6 +113,12 @@ It makes **no empirical claim about the effect of the migration on any real skil
 No paid measurement was run. Whether any shipped verdict changes is #419's and
 #420's question, not this receipt's.
 
+It does not claim the Gate-2 decision is SURFACED. The four mutants cover the
+decision being computed correctly and reached by the runner; the rendered
+ablation report still prints the scalar `StoppingReason`, which §8 records as the
+remaining wiring step. A receipt about a decision is not a receipt about a
+display.
+
 ## The generator refuses rather than exiting green
 
 A case whose verdict is `ANCHOR_ABSENT`, `INVALID_BASELINE`, `INVALID_ISOLATION`,
