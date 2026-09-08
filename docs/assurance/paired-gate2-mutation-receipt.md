@@ -4,10 +4,20 @@
 **Generator:** `scripts/mutation_receipt.py --select 389`. **Machine-readable record:**
 `docs/assurance/paired-gate2-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/cli/paired_gate2.py` at
-`sha256:2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31`.
-**Commit at generation:** `6fe71b6` — informational only. A rebase
+`sha256:fd0adf9ca96ef6f0455aa526edb6a80a33ca906821e6cb0cde539644ed971f57`.
+**Commit at generation:** `c7e43bf` — informational only. A rebase
 rewrites it and later commits move HEAD past it, so currency is checked against the digest
 above by `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
+
+**Regenerated 2026-09-08 for #438.** Commit `c7e43bf` added the `HAZARD_UNDECIDED` refusal and
+made `_arm_entered_msg` render an arm's undecided epochs, which moved `paired_gate2.py` bytes and
+made the `#424` digest pin stale. The undecided refusal is a separate control with its own pinning
+tests (`TestHazardUndecided`, four cases: the refusal, an explicit zero, a pre-#438 block carrying
+no `undecided` key at all, and the Full arm's rendering); it is not a mutant in this receipt, which
+attests only to the two `#389` guards. The instrument change underneath it has its own receipt at
+`docs/assurance/hazard-entry-segmentation-mutation-receipt.md`. Both `#389` mutants were re-run by
+the same generator; both anchors were still present and both kills held, by the same detectors. The
+results table below was re-measured, not carried.
 
 **Regenerated 2026-09-04 for #424.** The completion non-inferiority guard and
 `outcome_type` refusal moved `paired_gate2.py` bytes. Both `#389` mutants were
