@@ -390,7 +390,16 @@ def _identity_rows(receipt: Mapping[str, Any]) -> list[str]:
     rows: list[str] = []
     for key in ("extractor_model", "prompt_fingerprint", "schema_fingerprint"):
         value = identity.get(key)
-        text = value if isinstance(value, str) else ABSENT_TEXT
+        if isinstance(value, str):
+            text = value
+        elif isinstance(value, Mapping) and isinstance(value.get("refusal"), str):
+            # A declined pin is not a missing one (#479). extractor_model may be
+            # refused when no model-based extraction stage ran, and rendering that
+            # as ABSENT_TEXT would report a receipt that says something as one that
+            # says nothing.
+            text = f"refused: {value['refusal']}"
+        else:
+            text = ABSENT_TEXT
         rows.append(f"<dt>{safe(key)}</dt><dd><code>{safe(text)}</code></dd>")
     return rows
 

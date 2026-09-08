@@ -21,7 +21,7 @@
   "properties": {
     "sers_version": {
       "type": "string",
-      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0"],
+      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0"],
       "description": "SERS vocabulary generation. Receipts from different sers_version values are not comparable."
     },
     "skill_name": {
@@ -107,9 +107,25 @@
       "required": ["extractor_model", "prompt_fingerprint", "schema_fingerprint"],
       "properties": {
         "extractor_model": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Extractor (or subject) model pin that produced the figures."
+          "description": "Extractor model pin: the model that READ the run artifacts and produced the figures. From sers_version 1.4.0 this names the extraction stage only, never the subject under test — the subject is subject_identity.subject_model. Where no model-based extraction stage ran (a deterministic oracle scored the epochs), record a typed refusal rather than repeating the subject pin. On receipts at 1.3.0 and earlier this field was documented as 'extractor (or subject)': it carries one pin for two roles and which role it names is not machine-readable. Read those receipts through source.prose_path.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["refusal"],
+              "properties": {
+                "refusal": {
+                  "type": "string",
+                  "enum": ["not_applicable", "not_instrumented"]
+                },
+                "detail": { "type": "string" }
+              }
+            }
+          ]
         },
         "prompt_fingerprint": {
           "type": "string",
@@ -225,6 +241,11 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$",
           "description": "SHA-256 hex of the oracle module source at ingest time."
+        },
+        "subject_model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Subject model pin: the model that EXECUTED the epochs, and whose behaviour with and without the skill was compared. Together with skill_id it identifies what was measured. Required from sers_version 1.4.0; absent on 1.3.0 and earlier receipts, where no field recorded it and it cannot be recovered from the receipt alone."
         },
         "arms": {
           "oneOf": [
@@ -399,6 +420,20 @@
       },
       "then": {
         "required": ["subject_identity", "delivery"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.4.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"],
+        "properties": {
+          "subject_identity": {
+            "required": ["subject_model"]
+          }
+        }
       }
     },
     {

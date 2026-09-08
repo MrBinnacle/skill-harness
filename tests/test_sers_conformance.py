@@ -340,3 +340,190 @@ def test_fresh_subject_identity_mint_hashes_the_live_oracle_module() -> None:
         " implementation_hash that is not a digest of the oracle module's current"
         " bytes, so a minted receipt would name an oracle that is not the one running."
     )
+
+
+# ---------------------------------------------------------------------------
+# Subject / extractor role split (#479)
+# ---------------------------------------------------------------------------
+#
+# Before 1.4.0 the only model pin on a receipt was
+# ``instrument_identity.extractor_model``, documented as "Extractor (or subject)
+# model pin". One field named two instruments answering two different questions,
+# and which one it named was not machine-readable. A reader asking "was this
+# measured on the model it claims?" had to read the schema definition to learn the
+# field was overloaded, and then still could not answer it.
+#
+# 1.4.0 splits the roles: ``subject_identity.subject_model`` names the model that
+# executed the epochs, and ``extractor_model`` narrows to the extraction stage
+# alone. The tests below hold both halves of that split, and the freeze on the
+# receipts minted before it.
+
+
+def _v14_instance() -> dict[str, Any]:
+    """A minimal conforming 1.4.0 instance, built rather than stored.
+
+    Deliberately not a fixture file. Every stored receipt in this repository is a
+    record of a measurement that happened, and a 1.4.0 file would have to assert a
+    ``subject_model`` for a run whose role assignment nobody recorded. Building the
+    shape here proves the schema accepts the split without minting a document that
+    could be mistaken for a receipt of record.
+    """
+    return {
+        "sers_version": "1.4.0",
+        "skill_name": "role-split-shape",
+        "verdict": "CANT_TELL_YET",
+        "cut_sub_reason": None,
+        "unmeasured_sub_reason": "no_data",
+        "value_class": None,
+        "evidence_admissibility": {"status": "not_applicable"},
+        "cost": {
+            "standing_tokens": {"refusal": "not_applicable"},
+            "fired_tokens": {"refusal": "not_applicable"},
+            "aux_tokens": {"refusal": "not_applicable"},
+        },
+        "instrument_identity": {
+            "extractor_model": {"refusal": "not_applicable"},
+            "prompt_fingerprint": "a",
+            "schema_fingerprint": "b",
+        },
+        "delivery": {
+            "channel": "not_instrumented",
+            "exposure": {"refusal": "not_instrumented"},
+            "pi_c": {"refusal": "not_instrumented"},
+        },
+        "source": {"prose_path": "README.md"},
+        "summary": "Shape instance for the 1.4.0 subject/extractor role split.",
+        "subject_identity": {
+            "skill_id": "aabbccddee0011223344556677889900aabbccddee0011223344556677889900",
+            "harness_version": "0.3.0",
+            "metric_version": "0.4.1",
+            "implementation_hash": (
+                "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+            ),
+            "arms": "null",
+            "subject_model": "anthropic/claude-sonnet-5",
+        },
+    }
+
+
+def test_v14_roles_split_instance_validates(sers_validator: Draft202012Validator) -> None:
+    """A 1.4.0 receipt naming both roles separately is accepted."""
+    sers_validator.validate(_v14_instance())
+
+
+def test_v14_accepts_a_named_extractor_alongside_the_subject(
+    sers_validator: Draft202012Validator,
+) -> None:
+    """The split is two pins, not a swap: both may be named, and they may differ."""
+    instance = _v14_instance()
+    instance["instrument_identity"]["extractor_model"] = "openai/gpt-5.6-sol"
+    sers_validator.validate(instance)
+    assert (
+        instance["subject_identity"]["subject_model"]
+        != instance["instrument_identity"]["extractor_model"]
+    )
+
+
+def test_poison_missing_subject_model_v14_is_red(sers_validator: Draft202012Validator) -> None:
+    """1.4.0 subject_identity without subject_model must fail on that field (#479)."""
+    path = _POISON_DIR / "poison_missing_subject_model_v14.json"
+    assert path.is_file()
+    instance = _load_json(path)
+    assert instance["sers_version"] == "1.4.0"
+    assert "subject_model" not in instance["subject_identity"]
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "subject_model" in str(excinfo.value)
+
+
+def test_poison_extractor_model_open_refusal_is_red(
+    sers_validator: Draft202012Validator,
+) -> None:
+    """extractor_model may be refused, but only from the closed vocabulary (#479).
+
+    Free text in the refusal slot is how the overload would come back: a minter who
+    cannot say which model played which role narrates a guess instead of declining.
+    """
+    path = _POISON_DIR / "poison_extractor_model_open_refusal.json"
+    assert path.is_file()
+    instance = _load_json(path)
+    refusal = instance["instrument_identity"]["extractor_model"]["refusal"]
+    assert refusal not in {"not_applicable", "not_instrumented"}
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "extractor_model" in str(excinfo.value)
+
+
+def test_subject_model_is_not_required_before_v14(sers_validator: Draft202012Validator) -> None:
+    """The version gate carries the requirement, so older receipts still stand.
+
+    Every prior identity block landed the same way: subject_identity at 1.1.0,
+    delivery at 1.2.0, the trap keys at 1.3.0. Adding subject_model to
+    subject_identity's own required list would have retroactively invalidated every
+    1.1.0 to 1.3.0 receipt in the store.
+    """
+    instance = _v14_instance()
+    instance["sers_version"] = "1.3.0"
+    del instance["subject_identity"]["subject_model"]
+    sers_validator.validate(instance)
+
+
+def test_published_receipts_before_v14_carry_no_subject_model() -> None:
+    """The existing receipts are frozen, not migrated (#479).
+
+    A receipt is a dated record of a measurement that was made. Adding a
+    subject_model to one would assert which model played the subject role in a run
+    where no field recorded it, which is a fact nobody wrote down. On every receipt
+    in the store the recorded pin is consistent with the subject reading, but
+    consistent is not recorded, and an append-only store is exactly where that
+    difference matters. They stay as minted; the interpretation rule in
+    docs/sers/README.md tells a reader how to read them.
+
+    This control fails if a later change back-fills one, which is the moment that
+    decision should be taken deliberately rather than as a tidy-up.
+    """
+    offenders = []
+    for path in sorted(_RECEIPTS_DIR.rglob("*.json")):
+        instance = _load_json(path)
+        if instance.get("sers_version") == "1.4.0":
+            continue
+        if "subject_model" in instance.get("subject_identity", {}):
+            offenders.append(path.name)
+    assert not offenders, (
+        "RECEIPT_BACKFILLED: these pre-1.4.0 receipts gained a subject_model they were"
+        f" not minted with: {offenders}. The store is append-only; mint a new receipt"
+        " rather than editing a dated record."
+    )
+
+
+def test_schema_no_longer_documents_extractor_model_as_the_subject() -> None:
+    """The defect itself, held open (#479).
+
+    The whole issue was one sentence: "Extractor (or subject) model pin that
+    produced the figures." If that parenthetical returns the field is overloaded
+    again, and every other test here still passes, because nothing else reads it.
+    """
+    raw = _SCHEMA_PATH.read_text(encoding="utf-8")
+    assert "Extractor (or subject)" not in raw
+    identity = _load_json(_SCHEMA_PATH)["properties"]["instrument_identity"]["properties"]
+    assert "never the subject under test" in identity["extractor_model"]["description"]
+
+
+def test_build_subject_identity_records_the_subject_model() -> None:
+    """The mint helper carries the pin the caller supplies, and omits it otherwise."""
+    without = build_subject_identity(skill_md=_CONTROL_SKILL_MD, arms=["null", "full"])
+    assert "subject_model" not in without
+
+    with_pin = build_subject_identity(
+        skill_md=_CONTROL_SKILL_MD,
+        arms=["null", "full"],
+        subject_model="anthropic/claude-sonnet-5",
+    )
+    assert with_pin["subject_model"] == "anthropic/claude-sonnet-5"
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_build_subject_identity_refuses_a_blank_subject_model(blank: str) -> None:
+    """A blank pin is a manufactured record, not a missing one."""
+    with pytest.raises(ValueError, match="subject_model"):
+        build_subject_identity(skill_md=_CONTROL_SKILL_MD, arms="null", subject_model=blank)
