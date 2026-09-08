@@ -191,10 +191,16 @@ class RatRecord(BaseModel):
     delta_min: float | None = None
     q_min: float | None = None
     #: #421: the hazard action pattern the trap-discipline read matches against
-    #: every bash tool-call command in an epoch. Registered on the record the way
+    #: the bash tool-call commands in an epoch. Registered on the record the way
     #: the oracle knobs are, so a later run cannot quietly change what "entered"
     #: means. Optional alone only when both hazard fields are absent (a record
     #: that predates them); when either is present both are required together.
+    #: #438: the pattern is matched against each NORMALISED SIMPLE COMMAND -- one
+    #: command of a chain, quoting removed, argv joined by single spaces -- and no
+    #: longer against the whole command string one tool call carries. A pattern
+    #: may therefore anchor with ``^`` to mean "this command IS the hazard",
+    #: which is what the first registration could not say, and why it counted
+    #: explicit-strategy invocations as entries.
     hazard_action: str | None = None
     #: #421: the minimum Null-arm hazard-entry rate a trap-discipline read will
     #: accept. Half-open (0, 1]. Must be >= delta_min when delta_min is set: a
@@ -338,11 +344,23 @@ def parse_rat_record(path: Path) -> RatRecord:
                 f"{path.name}: field 'hazard_action' must be a non-empty string"
             )
         try:
-            re.compile(hazard_action_raw)
+            compiled_hazard = re.compile(hazard_action_raw)
         except re.error as exc:
             raise RatificationError(
                 f"{path.name}: field 'hazard_action' is not a valid regular expression: {exc}"
             ) from exc
+        # #438: a pattern that matches the empty string matches every command, so
+        # every epoch reads as a hazard entry and hazard_floor is satisfied by any
+        # run at all. That is the failure class #438 repaired -- a pattern that
+        # counts behaviour which is not the hazard -- in its total form. The ways
+        # to write it by accident are a bare `.*`, a trailing empty alternation,
+        # and a pattern whose every branch is optional.
+        if compiled_hazard.search("") is not None:
+            raise RatificationError(
+                f"{path.name}: field 'hazard_action' {hazard_action_raw!r} matches the "
+                f"empty string, so every bash command would count as a hazard entry "
+                f"and hazard_floor could not fail (#438)"
+            )
         hazard_action_value = hazard_action_raw
 
     hazard_floor_value: float | None = None

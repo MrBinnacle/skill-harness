@@ -47,11 +47,21 @@ _RUNNER_DECLARED_FIELDS: tuple[str, ...] = ("rat_id", "skill_id", "task_family",
 
 
 def _arm_entered_msg(hazard_block: dict[str, Any], arm: str) -> str:
-    """Render ``entered/epochs`` for one arm of the hazard block (#421)."""
+    """Render ``entered/epochs`` for one arm of the hazard block (#421).
+
+    #438: an arm carrying undecided epochs renders them too. An undecided epoch
+    is one whose bash commands the hazard instrument could not read, so it is
+    evidence of neither entry nor avoidance; leaving it out of the line would
+    show a rate the reader cannot check.
+    """
     arm_block = hazard_block.get(arm)
-    if isinstance(arm_block, dict):
-        return f"{arm_block.get('entered', '?')}/{arm_block.get('epochs', '?')}"
-    return "?"
+    if not isinstance(arm_block, dict):
+        return "?"
+    rendered = f"{arm_block.get('entered', '?')}/{arm_block.get('epochs', '?')}"
+    undecided = arm_block.get("undecided")
+    if isinstance(undecided, int) and undecided > 0:
+        rendered += f" ({undecided} undecided)"
+    return rendered
 
 
 def _check_runner_declaration(record: RatRecord, run_id: str, runner: object) -> None:
@@ -231,6 +241,25 @@ def paired_gate2_read(
             )
         null_entered = int(null_hazard.get("entered", 0) or 0)
         null_epochs = int(null_hazard.get("epochs", 0) or 0)
+        # #438: an epoch the hazard instrument could not read is not evidence
+        # that the trap was avoided. Counting it as a non-entry silently lowers
+        # the Null rate, which is the direction that makes a candidate look
+        # worse; counting it as an entry is the #438 defect itself. The read
+        # refuses instead, and names the number. A block written before #438
+        # carries no `undecided` key and reads 0 here, so this cannot fire
+        # retroactively on a run whose epochs were never classified.
+        null_undecided = int(null_hazard.get("undecided", 0) or 0)
+        if null_undecided > 0:
+            raise PairedGate2Refusal(
+                f"HAZARD_UNDECIDED: paired run {run_id!r} under {record.rat_id} "
+                f"records null.undecided = {null_undecided} of {null_epochs} epochs; "
+                f"the hazard instrument could not read every bash command in those "
+                f"epochs (an unterminated quote, or a heredoc whose body cannot be "
+                f"told apart from commands), so the Null-arm entry rate is not "
+                f"measured (#438). A trap-discipline read refuses rather than "
+                f"scoring an unread epoch as a trap avoided.",
+                exit_code=1,
+            )
         # Floor: record first (registered), then the block mirror written at launch.
         floor_raw = record.hazard_floor
         if floor_raw is None:

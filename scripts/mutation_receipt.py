@@ -103,6 +103,19 @@ _PAIRED_GATE2_MODULE = "skill_harness.cli.paired_gate2"
 _DRAFT_REFUSED = "tests/test_cli_paired_gate2.py::TestUnratifiedDesign::test_draft_record_refused"
 _COUNT_MISMATCH = "tests/test_cli_paired_gate2.py::TestCountMismatch::test_pilot_k8_vs_design_n32"
 
+_PAIRED_LAUNCH = "src/skill_harness/subject/paired_launch.py"
+_PAIRED_LAUNCH_MODULE = "skill_harness.subject.paired_launch"
+_SEGMENTATION_DETECTORS = (
+    "tests/test_paired_launch.py::TestSimpleCommands",
+    "tests/test_paired_launch.py::TestHazardCommandCases",
+)
+_UNDECIDED_DETECTOR = "tests/test_paired_launch.py::TestHazardCommandCases::test_case"
+_UNDECIDED_COUNT_DETECTOR = (
+    "tests/test_paired_launch.py::TestHazardUndecidedCounts"
+    "::test_an_unreadable_epoch_is_undecided_not_avoided"
+)
+
+
 MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M-N1",
@@ -186,6 +199,40 @@ MUTANTS: tuple[Mutant, ...] = (
         "s.epoch for s in null.samples if s.exposed_skill is True)",
         "    null_contaminated_exposed = sorted(s.epoch for s in null.samples if False)",
         (_NULL_EXPOSED_DETECTOR, _NULL_EXPOSED_SEAM_DETECTOR),
+    ),
+    Mutant(
+        "M-H1",
+        "438-simple-command-segmentation",
+        "stop segmenting a chained command: the whole tool-call string is matched as one "
+        "command again, which is the pre-#438 instrument",
+        _PAIRED_LAUNCH,
+        _PAIRED_LAUNCH_MODULE,
+        "    return tuple(stripped for stripped in (segment.strip() for segment in segments)"
+        " if stripped)",
+        "    return (command.strip(),) if command.strip() else ()  # mutant: no segmentation",
+        _SEGMENTATION_DETECTORS,
+    ),
+    Mutant(
+        "M-H2",
+        "438-undecided-whole-string",
+        "score an unsegmentable command as an avoidance: a heredoc or an unterminated quote "
+        "silently reads as the trap having been avoided",
+        _PAIRED_LAUNCH,
+        _PAIRED_LAUNCH_MODULE,
+        "    if segments is None:\n        return HazardVerdict.UNDECIDED",
+        "    if segments is None:\n        return HazardVerdict.AVOIDED  # mutant",
+        (_UNDECIDED_DETECTOR,),
+    ),
+    Mutant(
+        "M-H3",
+        "438-undecided-per-segment",
+        "score a command with an unreadable SEGMENT as an avoidance, keeping the "
+        "whole-string refusal so the loss is invisible in the common case",
+        _PAIRED_LAUNCH,
+        _PAIRED_LAUNCH_MODULE,
+        "    return HazardVerdict.UNDECIDED if undecided else HazardVerdict.AVOIDED",
+        "    return HazardVerdict.AVOIDED  # mutant: per-segment undecided dropped",
+        (_UNDECIDED_DETECTOR, _UNDECIDED_COUNT_DETECTOR),
     ),
     Mutant(
         "M-R1",
