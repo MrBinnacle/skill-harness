@@ -60,6 +60,36 @@ and covers that section only. This page stays the citable surface for every kind
 
 ## Findings
 
+### [`docs/findings/gitpull-hazard-entry-is-not-a-prompt-lever.md`](findings/gitpull-hazard-entry-is-not-a-prompt-lever.md)
+
+- **Claims:** `#419` item 2's two criteria — force the hazard action, and do
+  not name the strategy — are not jointly satisfiable at the prompt layer.
+  Every prompt-level route to hazard entry works by naming the action, and the
+  card's `description` begins with a use-before instruction naming that action,
+  so a prompt carrying the token hands the treated arm the card's own retrieval
+  cue; buying entry in the prompt therefore moves contamination from the
+  untreated arm to the treated arm rather than removing it, into a place
+  `check_d4_prompt_leak` does not look, since that check reads the prompt and
+  the fixture files a prompt names and does not model treatment-side retrieval.
+  Candidate v3a is selected as the task version that ships, because it is the
+  only one that moves the lever out of the prompt and into the environment.
+  Four things measured at $0: the digest-pinned sandbox image runs git 2.39.5
+  and hedges its suggestion, so the wording quoted in the drafting pass is the
+  host's git 2.55.0 and not the sandbox's; the rejection line states the
+  competing action plainly as `(fetch first)`; `check_d4_prompt_leak` reports
+  the new prompt clean prompt-only against three candidate rule strings,
+  identically to v2; and the card's `description` is byte-identical across its
+  `git-pull-rebase-trap` to `pull-rebase` rename, so this ticket's Revisit-if
+  has not fired.
+- **Refuses to claim:** That v3a enters the trap — its entry rate is
+  unmeasured, measuring it is item 3, which is spend, and zero is a live
+  outcome; any hazard rate, lift, or verdict for the card; that the untreated
+  arm's two-hop signpost through the fixture's commit messages was neutralised;
+  that the force-push failure mode was removed; that the per-pair token basis
+  is still the measured 539,011 under a shorter prompt; and any reordering of
+  `#419` item 3 against `#420`, which is stated as a fork and deliberately not
+  taken.
+
 ### [`docs/findings/gitpull-cost-basis-unregisterable.md`](findings/gitpull-cost-basis-unregisterable.md)
 
 - **Claims:** The rebuilt `gitpull` cost basis `#420` asks for cannot be
