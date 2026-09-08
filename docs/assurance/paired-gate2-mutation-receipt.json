@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-1u33spl2/M-R1/src/skill_harness/cli/paired_gate2.py",
-        "source_digest": "2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7wb6ofkn\\M-R1\\src\\skill_harness\\cli\\paired_gate2.py",
+        "source_digest": "fd0adf9ca96ef6f0455aa526edb6a80a33ca906821e6cb0cde539644ed971f57",
         "tests_collected": 1,
-        "worktree_head": "6fe71b6af9dce205a212973fd843e29a551f25cd"
+        "worktree_head": "c7e43bf4f5aad6df34b7191641c54c3af0386383"
       },
       "description": "remove the RATIFIED status check: a DRAFT record is accepted and the command proceeds to read the design",
       "killing_assertions": [
@@ -17,10 +17,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-1u33spl2/M-R1/src/skill_harness/cli/paired_gate2.py",
-        "source_digest": "3e2521fa96e16a3c8158464f49aac9349befbc3d9b01ab01a109966e448a82ff",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7wb6ofkn\\M-R1\\src\\skill_harness\\cli\\paired_gate2.py",
+        "source_digest": "94f82ca79395b31690c61da94309b40c2e55321aa4df8dcc1ff30c098368d777",
         "tests_collected": 1,
-        "worktree_head": "6fe71b6af9dce205a212973fd843e29a551f25cd"
+        "worktree_head": "c7e43bf4f5aad6df34b7191641c54c3af0386383"
       },
       "mutant_id": "M-R1",
       "notes": [],
@@ -34,10 +34,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-1u33spl2/M-R2/src/skill_harness/cli/paired_gate2.py",
-        "source_digest": "2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7wb6ofkn\\M-R2\\src\\skill_harness\\cli\\paired_gate2.py",
+        "source_digest": "fd0adf9ca96ef6f0455aa526edb6a80a33ca906821e6cb0cde539644ed971f57",
         "tests_collected": 1,
-        "worktree_head": "6fe71b6af9dce205a212973fd843e29a551f25cd"
+        "worktree_head": "c7e43bf4f5aad6df34b7191641c54c3af0386383"
       },
       "description": "remove the pair-count check: k=8 pairs are read against an n=32 design without refusal",
       "killing_assertions": [
@@ -47,10 +47,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-1u33spl2/M-R2/src/skill_harness/cli/paired_gate2.py",
-        "source_digest": "29481b95d0e35ec620e9a5cf3b2f8ddd783a63c8e14dc07513d49940c11208e9",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7wb6ofkn\\M-R2\\src\\skill_harness\\cli\\paired_gate2.py",
+        "source_digest": "aaac0ead14756f648fc40baf4d184171ed19ebcd68225caad3499efea0cf9144",
         "tests_collected": 1,
-        "worktree_head": "6fe71b6af9dce205a212973fd843e29a551f25cd"
+        "worktree_head": "c7e43bf4f5aad6df34b7191641c54c3af0386383"
       },
       "mutant_id": "M-R2",
       "notes": [],
@@ -61,18 +61,18 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "6fe71b6af9dce205a212973fd843e29a551f25cd",
+  "commit_under_test": "c7e43bf4f5aad6df34b7191641c54c3af0386383",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "src/skill_harness/cli/paired_gate2.py": "2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31"
+    "src/skill_harness/cli/paired_gate2.py": "fd0adf9ca96ef6f0455aa526edb6a80a33ca906821e6cb0cde539644ed971f57"
   },
   "production_tree_digest_before": {
-    "src/skill_harness/cli/paired_gate2.py": "2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31"
+    "src/skill_harness/cli/paired_gate2.py": "fd0adf9ca96ef6f0455aa526edb6a80a33ca906821e6cb0cde539644ed971f57"
   },
   "production_tree_unchanged": true,
-  "python": "3.13.15",
+  "python": "3.13.1",
   "target_digests": {
-    "src/skill_harness/cli/paired_gate2.py": "2fe23d268864fe2e58ab8908f15b4283b4d5387a281e4348b0f01a05e930be31"
+    "src/skill_harness/cli/paired_gate2.py": "fd0adf9ca96ef6f0455aa526edb6a80a33ca906821e6cb0cde539644ed971f57"
   },
   "target_files": [
     "src/skill_harness/cli/paired_gate2.py"

@@ -820,6 +820,11 @@ class TestHazardCommandCases:
             # -- the instrument cannot read it, and says so ------------------
             ('echo "unterminated', HazardVerdict.UNDECIDED),
             ("cat > note.txt <<'EOF'\ngit pull\nEOF", HazardVerdict.UNDECIDED),
+            # A trailing backslash segments cleanly and then defeats shlex, so
+            # this is the one shape that reaches the PER-SEGMENT undecided
+            # branch rather than the whole-string one above. Without it that
+            # branch has no detector and can be deleted without a test noticing.
+            ("echo foo\\", HazardVerdict.UNDECIDED),
         ],
     )
     def test_case(self, command: str, expected: HazardVerdict) -> None:
