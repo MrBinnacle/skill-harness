@@ -48,8 +48,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import sqlite3
 from collections.abc import Iterable
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final
 
@@ -67,15 +69,18 @@ __all__ = [
     "HazardArmBlock",
     "HazardBlock",
     "HazardEntry",
+    "HazardVerdict",
     "PairedLaunchRefusal",
     "PairedRunnerConfig",
     "attach_hazard_block",
+    "classify_hazard_command",
     "design_from_record",
     "hazard_entry_counts",
     "preflight_sized_run",
     "prior_measurements",
     "resolve_direct_subject",
     "runner_config_payload",
+    "simple_commands",
 ]
 
 ANTHROPIC_KEY_ENV: Final = "ANTHROPIC_API_KEY"
@@ -108,15 +113,24 @@ class PairedLaunchRefusal(Exception):
 class HazardArmBlock(BaseModel):
     """Per-arm hazard-entry counts from the runner block.
 
-    Records the number of epochs and how many entered the hazard for one arm.
-    ``pattern`` is not here — it lives on :class:`HazardBlock` at the block
-    level, matching the reader's key layout in ``cli/paired_gate2.py``.
+    Records the number of epochs, how many entered the hazard, and how many the
+    instrument could not decide, for one arm. ``pattern`` is not here — it lives
+    on :class:`HazardBlock` at the block level, matching the reader's key layout
+    in ``cli/paired_gate2.py``.
+
+    ``undecided`` defaults to zero so a runner block serialised before #438
+    still parses. A zero there means one of two different things — no
+    undecidable command, or a block written before the field existed — and the
+    reader in ``cli/paired_gate2.py`` cannot tell them apart. That ambiguity is
+    accepted because the pre-#438 counts are being rebuilt by #419 and #420
+    anyway; it is recorded here rather than left for a reader to discover.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
 
     epochs: int
     entered: int
+    undecided: int = 0
 
 
 class HazardBlock(BaseModel):
@@ -164,13 +178,34 @@ class PairedRunnerConfig(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# #421: hazard-entry counting — did the Null arm ever meet the hazard?
+# #421: hazard-entry counting -- did the Null arm ever meet the hazard?
 #
 # The oracle checks the outcome (ancestry preserved), not whether the hazard
 # was entered. A model that never runs the trap-entering command passes, and
 # the lattice is indistinguishable from "trap avoided". This counts bash
 # tool-call commands matching a registered pattern per epoch, so a
 # trap-discipline read can refuse when the Null arm never entered the hazard.
+#
+# #438: what the pattern is matched AGAINST is the instrument, and the first
+# version got it wrong. It matched the registered regex against the whole
+# command string a bash tool call carries. Agents in this corpus chain their
+# work -- `cd /root/project && git status && echo --- && git log ...` arrives
+# as ONE tool call -- so a regex over that string cannot see where one command
+# ends and the next begins, cannot tell a command from a quoted argument that
+# merely contains the same words, and cannot be bounded by a lookahead without
+# an approximation of `the rest of this command` such as `[^\n&|;]*`.
+#
+# The fix is to stop approximating. Each command string is split into simple
+# commands on unquoted `&&`, `||`, `;`, `|` and newlines, and each simple
+# command is normalised through `shlex` into its argv joined by single spaces.
+# The registered pattern is matched against that. A `^` in a registered pattern
+# therefore means `this command is the hazard`, which is the claim the record
+# is trying to make and which the blob form could not express.
+#
+# Three-valued by construction: a command the splitter cannot segment (an
+# unterminated quote, or a heredoc whose body cannot be told apart from
+# commands) is UNDECIDED, never a silent entry and never a silent avoidance.
+# The count travels out to the runner block so a reader sees it.
 # ---------------------------------------------------------------------------
 
 #: The bash tool function name in inspect_swe.claude_code transcripts.
@@ -179,6 +214,33 @@ class PairedRunnerConfig(BaseModel):
 #: still surfaces.
 HAZARD_BASH_TOOL: Final = "bash"
 
+#: Two-character operators that end a simple command. Checked before the
+#: single-character set so ``||`` is not read as a pipe and ``&&`` is not read
+#: as a background ``&``.
+_TWO_CHAR_SEPARATORS: Final = ("&&", "||")
+
+#: Single characters that end a simple command. A bare ``&`` is deliberately
+#: ABSENT: ``2>&1`` is far more common in this corpus than backgrounding, and
+#: splitting on it would cut a redirection in half. The cost is that
+#: ``foo & git pull`` reads as one simple command, so an anchored pattern will
+#: not see the pull. That is an undercount, and an undercount can only make the
+#: hazard refusal fire more often, never fabricate an entry.
+_ONE_CHAR_SEPARATORS: Final = (";", "|", "\n")
+
+
+class HazardVerdict(StrEnum):
+    """What the instrument concluded about one bash tool-call command.
+
+    ``ENTERED`` and ``AVOIDED`` are decisions. ``UNDECIDED`` is a refusal to
+    decide, and it exists so that an input the splitter cannot segment stays
+    visible instead of being scored as an avoidance, which is what a plain
+    boolean would have made it.
+    """
+
+    ENTERED = "entered"
+    AVOIDED = "avoided"
+    UNDECIDED = "undecided"
+
 
 class HazardEntry(BaseModel):
     """Per-arm hazard-entry count from one eval log.
@@ -186,7 +248,12 @@ class HazardEntry(BaseModel):
     ``pattern`` is the regex the count was matched against (recorded so a
     reader cannot mistake which hazard was counted). ``epochs`` is the number
     of epochs in the log. ``entered`` is the number of epochs where at least
-    one bash tool-call command matched the pattern.
+    one normalised simple command matched the pattern. ``undecided`` is the
+    number of epochs that did not enter and carried at least one command the
+    instrument could not read; those epochs are not evidence either way.
+
+    ``entered + undecided <= epochs`` holds by construction: an epoch that
+    entered is never also counted undecided.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
@@ -194,6 +261,7 @@ class HazardEntry(BaseModel):
     pattern: str
     epochs: int
     entered: int
+    undecided: int = 0
 
 
 def _bash_commands(messages: Iterable[object]) -> Iterable[str]:
@@ -203,7 +271,7 @@ def _bash_commands(messages: Iterable[object]) -> Iterable[str]:
     shape ``detect_skill_invocation`` reads (#46). A tool call counts when
     its function name case-insensitively matches ``HAZARD_BASH_TOOL`` and its
     arguments carry a ``command`` string. Any shape this scan does not
-    recognise is skipped — an undercount can only make the hazard refusal fire
+    recognise is skipped -- an undercount can only make the hazard refusal fire
     more, never fabricate an entry.
     """
     for message in messages:
@@ -220,29 +288,165 @@ def _bash_commands(messages: Iterable[object]) -> Iterable[str]:
                 yield command
 
 
+def simple_commands(command: str) -> tuple[str, ...] | None:
+    """Split one bash command string into its simple commands.
+
+    Walks the string once, tracking single quotes, double quotes and backslash
+    escapes, and cuts at every separator in :data:`_TWO_CHAR_SEPARATORS` or
+    :data:`_ONE_CHAR_SEPARATORS` that is not inside a quote. A backslash before
+    a newline is a line continuation and does not cut, because the continued
+    line is one command.
+
+    :param command: The raw ``arguments["command"]`` string from a bash tool
+        call.
+    :returns: The non-empty simple commands, whitespace-stripped, in order; or
+        ``None`` when the string cannot be segmented at all. ``None`` has two
+        causes, and both make every downstream claim about the string unsound
+        rather than merely imprecise:
+
+        * an unterminated quote, so the rest of the string is not what it looks
+          like;
+        * a heredoc (``<<``, but not the ``<<<`` here-string), whose body is
+          data this scan cannot tell apart from commands -- without this, a
+          ``git pull`` written INTO a file would be counted as one that ran.
+    """
+    segments: list[str] = []
+    buffer: list[str] = []
+    quote: str | None = None
+    index = 0
+    length = len(command)
+    while index < length:
+        char = command[index]
+        if quote == "'":
+            if char == "'":
+                quote = None
+            buffer.append(char)
+            index += 1
+            continue
+        if quote == '"':
+            if char == "\\" and index + 1 < length:
+                buffer.append(char)
+                buffer.append(command[index + 1])
+                index += 2
+                continue
+            if char == '"':
+                quote = None
+            buffer.append(char)
+            index += 1
+            continue
+        if char == "\\" and index + 1 < length:
+            buffer.append(char)
+            buffer.append(command[index + 1])
+            index += 2
+            continue
+        if char in ("'", '"'):
+            quote = char
+            buffer.append(char)
+            index += 1
+            continue
+        if command.startswith("<<<", index):
+            # A here-string is one line of data on the command itself, not a
+            # body the scan would have to skip. Consumed whole so its inner
+            # `<<` is not read as a heredoc on the next pass.
+            buffer.append(command[index : index + 3])
+            index += 3
+            continue
+        if command.startswith("<<", index):
+            return None
+        if command[index : index + 2] in _TWO_CHAR_SEPARATORS:
+            segments.append("".join(buffer))
+            buffer = []
+            index += 2
+            continue
+        if char in _ONE_CHAR_SEPARATORS:
+            segments.append("".join(buffer))
+            buffer = []
+            index += 1
+            continue
+        buffer.append(char)
+        index += 1
+    if quote is not None:
+        return None
+    segments.append("".join(buffer))
+    return tuple(stripped for stripped in (segment.strip() for segment in segments) if stripped)
+
+
+def _normalized_command(segment: str) -> str | None:
+    """Reduce one simple command to its argv joined by single spaces.
+
+    ``shlex`` strips quoting and collapses whitespace, so ``git   pull`` and
+    ``git pull`` normalise to the same string, and ``echo "git pull"``
+    normalises to ``echo git pull`` where an anchored pattern can no longer
+    mistake the argument for the command. Returns ``None`` when ``shlex``
+    refuses the segment, which the caller records as undecided.
+    """
+    try:
+        tokens = shlex.split(segment, comments=True)
+    except ValueError:
+        return None
+    return " ".join(tokens)
+
+
+def classify_hazard_command(command: str, pattern: str | re.Pattern[str]) -> HazardVerdict:
+    """Decide whether one bash tool-call command entered the hazard.
+
+    The command is segmented by :func:`simple_commands`, each segment is
+    normalised by :func:`_normalized_command`, and ``pattern`` is matched
+    against each normalised segment with :meth:`re.Pattern.search`.
+
+    :param command: The raw command string from one bash tool call.
+    :param pattern: The registered ``hazard_action`` regex, compiled or not.
+    :returns: :attr:`HazardVerdict.ENTERED` if any segment matched;
+        :attr:`HazardVerdict.UNDECIDED` if none matched and at least one
+        segment, or the whole string, could not be read; otherwise
+        :attr:`HazardVerdict.AVOIDED`.
+
+        A match wins over an undecidable sibling segment: the hazard was
+        entered somewhere inside that command whatever else the command did.
+    """
+    regex = re.compile(pattern) if isinstance(pattern, str) else pattern
+    segments = simple_commands(command)
+    if segments is None:
+        return HazardVerdict.UNDECIDED
+    undecided = False
+    for segment in segments:
+        normalized = _normalized_command(segment)
+        if normalized is None:
+            undecided = True
+            continue
+        if regex.search(normalized):
+            return HazardVerdict.ENTERED
+    return HazardVerdict.UNDECIDED if undecided else HazardVerdict.AVOIDED
+
+
 def hazard_entry_counts(
     eval_log_path: Path, pattern: str, *, skill_description: str = ""
 ) -> HazardEntry:
-    """Count epochs whose bash tool-call commands match ``pattern``.
+    """Count epochs whose bash tool-call commands entered the hazard.
 
     Reads one Inspect ``.eval`` log (needs the optional ``[inspect]`` extra,
-    lazily imported — same convention as :func:`parse_eval_log`) and returns
-    :class:`HazardEntry` with the pattern, the epoch count, and the number of
-    epochs where at least one bash command matched.
+    lazily imported -- same convention as :func:`parse_eval_log`) and returns
+    :class:`HazardEntry` with the pattern, the epoch count, the number of
+    epochs that entered, and the number that could not be decided.
+
+    An epoch enters when :func:`classify_hazard_command` returns
+    :attr:`HazardVerdict.ENTERED` for any of its bash commands. An epoch that
+    did not enter is undecided when any of its commands was undecidable.
 
     :param eval_log_path: Path to the ``.eval`` log.
-    :param pattern: A regular expression matched against every bash
-        tool-call command in each epoch (compiled here; a non-compiling
-        pattern is a caller bug, not a parse error).
+    :param pattern: A regular expression matched against each NORMALISED
+        SIMPLE COMMAND, not against the raw command string; see #438 and the
+        section comment above. Compiled here; a non-compiling pattern is a
+        caller bug, not a parse error.
     :param skill_description: Forwarded to ``read_eval_log``-shape parsing
         only when the underlying reader needs it; unused for the bash scan.
     :raises PairedLaunchRefusal: If the ``[inspect]`` extra is not installed.
-    :raises re.error: If ``pattern`` does not compile (caller bug — the
+    :raises re.error: If ``pattern`` does not compile (caller bug -- the
         record's ``hazard_action`` is validated at parse time).
     """
     try:
         from inspect_ai.log import read_eval_log
-    except ImportError as exc:  # pragma: no cover — exercised only sans extra
+    except ImportError as exc:  # pragma: no cover -- exercised only sans extra
         raise PairedLaunchRefusal(
             'hazard_entry_counts requires the optional extra: pip install "skill-harness[inspect]"'
         ) from exc
@@ -251,12 +455,16 @@ def hazard_entry_counts(
     log = read_eval_log(str(eval_log_path))
     epochs = 0
     entered = 0
+    undecided = 0
     for sample in log.samples or []:
         epochs += 1
         messages = getattr(sample, "messages", None) or ()
-        if any(regex.search(cmd) for cmd in _bash_commands(messages)):
+        verdicts = {classify_hazard_command(cmd, regex) for cmd in _bash_commands(messages)}
+        if HazardVerdict.ENTERED in verdicts:
             entered += 1
-    return HazardEntry(pattern=pattern, epochs=epochs, entered=entered)
+        elif HazardVerdict.UNDECIDED in verdicts:
+            undecided += 1
+    return HazardEntry(pattern=pattern, epochs=epochs, entered=entered, undecided=undecided)
 
 
 def attach_hazard_block(
@@ -278,8 +486,9 @@ def attach_hazard_block(
     :param config: The runner config produced by :func:`preflight_sized_run`.
     :param null_log: Path to the Null arm's ``.eval`` log.
     :param full_log: Path to the Full arm's ``.eval`` log.
-    :param pattern: The regex matched against bash tool-call commands
-        (``hazard_action`` from the ratification record).
+    :param pattern: The regex matched against each NORMALISED SIMPLE COMMAND
+        (``hazard_action`` from the ratification record). #438 changed what the
+        pattern is matched against; see :func:`hazard_entry_counts`.
     :param floor: The registered hazard floor (``hazard_floor`` from the
         ratification record).
     :param skill_description: Forwarded to :func:`hazard_entry_counts`.
@@ -292,8 +501,16 @@ def attach_hazard_block(
     block = HazardBlock(
         pattern=pattern,
         floor=floor,
-        null=HazardArmBlock(epochs=null_entry.epochs, entered=null_entry.entered),
-        full=HazardArmBlock(epochs=full_entry.epochs, entered=full_entry.entered),
+        null=HazardArmBlock(
+            epochs=null_entry.epochs,
+            entered=null_entry.entered,
+            undecided=null_entry.undecided,
+        ),
+        full=HazardArmBlock(
+            epochs=full_entry.epochs,
+            entered=full_entry.entered,
+            undecided=full_entry.undecided,
+        ),
     )
     return config.model_copy(update={"hazard": block})
 
