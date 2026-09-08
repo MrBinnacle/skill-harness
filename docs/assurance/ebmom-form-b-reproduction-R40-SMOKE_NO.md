@@ -91,8 +91,8 @@ replaced.
 Regenerating is affordable — the script is local Monte Carlo with no network or paid call — so
 this is not a cost refusal. It is a refusal to restate a superseded measurement as a current
 one. `#450`'s other branch, giving the script an explicit mode that scores the plug-in admitted
-path, would build new measurement machinery to keep an obsolete claim alive; that is outside
-this ticket and is not obviously worth doing.
+path, would add a maintained code path whose only consumer is a superseded claim. That is
+outside this ticket, and it carries an ongoing cost against no current measurement.
 
 ## What this receipt may and may not be cited for
 
