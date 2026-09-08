@@ -513,6 +513,31 @@ and covers that section only. This page stays the citable surface for every kind
   or fails the v2 section 5 kill rows, which need a confirmatory run that has not been performed;
   that any number here is confirmatory, the root being a development smoke.
 
+### [`docs/assurance/ebmom-form-b-reproduction-R40-SMOKE_NO.md`](assurance/ebmom-form-b-reproduction-R40-SMOKE_NO.md)
+
+- **Claims:** The twin of `ebmom-form-b-reproduction-R40-SMOKE_NO.json`, recording that receipt
+  as FROZEN at `#458` rather than regenerated. The receipt itself is a dated record of the state
+  at `d39440d`: production reproduced the prototype's `cand_bpB` column (form B on refusal,
+  plug-in on the admitted path) at R = 40 on `low_heterogeneity` and `tie_heavy_null`, on the
+  throwaway root `SMOKE_NOT_CONFIRMATORY`, with `total_differences` 0. Three measurements taken
+  2026-09-08 support the freeze: the receipt's `expected_file`
+  (`proto-pb-all-R40-SMOKE_NO.json`) is not in the repository; that dump embeds a wall-clock
+  `seconds` field per regime (`proto_pb.py:238`), so its pinned `expected_sha256` is
+  unreproducible - two regenerations differ from the pin and from each other, and are identical
+  once `seconds` is dropped; and the receipt's own command line, run against production on this
+  branch, exits 1 with exactly three differing cells, all in
+  `low_heterogeneity.row5c_false_pass_admitted`, with `tie_heavy_null` agreeing entirely. The
+  twin also records that the reference directory repaired under `#458` regenerates a `cand_bpB`
+  column matching the receipt's recorded `built` block on 32 of 32 compared fields.
+- **Refuses to claim:** Anything about production at or after `60a6548` - the receipt does not
+  assert current reproduction and must not be read as asserting it; that the three differing
+  cells are a regression, the differences being confined to the admitted path `#442`
+  deliberately changed while the refused path form B governs still agrees; that the receipt
+  could be regenerated into a current claim without new measurement machinery; anything
+  confirmatory, `is_confirmatory` being false and the root a development smoke; anything about
+  R = 1000 or R = 4000, which this receipt never measured; a keep/cut verdict or any result
+  about the estimator.
+
 ### [`docs/assurance/ebmom-v2-class2-mutation-receipt.md`](assurance/ebmom-v2-class2-mutation-receipt.md)
 
 - **Claims:** Mutant 4 of v2 section 7 - the admission-conditioned parametric bootstrap removed
