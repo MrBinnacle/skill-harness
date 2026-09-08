@@ -1,11 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="780" height="176" viewBox="0 0 780 176" role="img" aria-label="skill-harness — the skill eval that refuses to invent a score">
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="176" viewBox="0 0 780 176" role="img" aria-label="skill-harness. Compares one task with a skill and without it.">
   <style>.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}</style>
   <!-- readout frame: Surface fill, 2px Hairline stroke, radius 0 (DESIGN.md "Readout Frame") -->
   <rect x="1" y="1" width="778" height="174" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
-  <!-- wordmark -->
-  <text x="16" y="48" class="mono" font-size="21" fill="#6e7681">skill-harness</text>
-  <!-- command -->
-  <text x="16" y="96" class="mono" font-size="21"><tspan fill="#3fb950" font-weight="700">$ </tspan><tspan fill="#e6edf3">skill-harness run ablation </tspan><tspan fill="#6e7681">SKILL.md</tspan></text>
-  <!-- readout -->
-  <text x="16" y="144" class="mono" font-size="21"><tspan fill="#d29922" font-weight="700">&#8594; UNMEASURED</tspan><tspan fill="#8b949e"> — the skill eval that refuses to invent a score</tspan></text>
+  <!-- wordmark. Two text nodes, 48px apart (scale-6). The aria-label is the nodes' itertext joined with ". " (S427 R4) -->
+  <text x="16" y="72" class="mono" font-size="21" fill="#6e7681">skill-harness</text>
+  <!-- statement (footer role, Muted). 46 characters at 21px mono ends near x=596 on the 780 frame -->
+  <text x="16" y="120" class="mono" font-size="21" fill="#8b949e">Compares one task with a skill and without it.</text>
 </svg>
