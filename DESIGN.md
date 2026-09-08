@@ -1,6 +1,6 @@
 ---
 name: skill-harness
-description: The skill eval that refuses to invent a score.
+description: Compares one task with a skill and without it.
 # Declared system: Test Bench. Every `bench-*` token is declared for every surface.
 # NOTHING IS RETIRING ANY MORE. The three surface tickets each removed the tokens only they
 # drew: #310 the social preview's window chrome, #309 the banner pair's, #308 the paper receipt
@@ -181,7 +181,7 @@ never a brand colour.
 - **Prompt Green** (`#3fb950`, `bench-prompt`): the `$` on a command line, and confirmed
   success. Nothing else.
 - **Flagged Amber** (`#d29922`, `bench-flagged`): warning-class state. Carries `→ CUT` on the
-  social preview and `→ UNMEASURED` on the banner today.
+  social preview; carried `→ UNMEASURED` on the banner until S427.
 - **Can't-Tell Blue** (`#58a6ff`, `bench-cant-tell`): can't-tell, unmeasured or refused state.
   The refusal edge on the site. Declared here for the first time; no surface uses it on the
   tree today.
@@ -281,8 +281,8 @@ in the nav. Two primitives beyond the column: `dl` (the cost-beside-evidence gri
 met]
 
 **Assets.** Fixed viewBox compositions, `780x176` for banners and `1280x640` for the social
-preview with a 96px safe area. Composition: flat Primer-dark field, wordmark, one readout
-line, one footer. No verdict legend, no decorative data, no window chrome.
+preview with a 96px safe area. Composition: flat Primer-dark field, wordmark, one statement.
+No verdict legend, no decorative data, no window chrome.
 [design-taste-frontend §9.F "fake terminal", "decorative status dots", "middle-dot rationed";
 primer social-preview concept]
 
@@ -367,10 +367,10 @@ language is rectangles, 1px rules, 4px left edges and a 2px header underline.
 
 ### Readout Frame (assets)
 
-- Surface fill, 2px Hairline stroke, radius 0. Inside: the wordmark in Deep Muted, one command
-  line (`$` in Prompt Green, command in Ink, argument in Deep Muted), one readout line led by
-  `→` in the semantic colour its state names, one footer in Muted. No title bar, no dots, no
-  legend.
+- Surface fill, 2px Hairline stroke, radius 0. Inside: two lines, 48px apart. The wordmark in
+  Deep Muted, then one statement in Muted: `Compares one task with a skill and without it.`
+  The aria-label is the text nodes' itertext joined with `. ` (S427 R4), and the README alt
+  equals it. No command line, no state token, no title bar, no dots, no legend.
 
 ## Do's and Don'ts
 
@@ -457,16 +457,17 @@ Measured defects and open questions, recorded so a future pass does not rediscov
    therefore hides a completed retirement instead of failing on it, and the only defence is
    removing a token in the same change that stops drawing it.
 
-3. **The dark banner's verdict token draws from a different enum than the social preview's.**
-   `banner-dark.svg:10` renders `→ UNMEASURED` (a clause status, `aggregation/status.py:52`);
-   `social-preview.svg:14` renders `→ CUT` (a verdict, `aggregation/verdict.py:119`). Both are
-   current, and both survived #309 and #310 unchanged: the two tickets restyled the assets and
-   held every string, so the divergence is now purely a copy decision. It is an owner rung, and
-   the labelled candidates sit on #309 and #310.
+3. **Resolved S427: the banner no longer carries a state token.** Until S427 `banner-dark.svg`
+   rendered `→ UNMEASURED` (a clause status, `aggregation/status.py:52`) while
+   `social-preview.svg:14` renders `→ CUT` (a verdict, `aggregation/verdict.py:119`). The
+   banner token and its command line left under rule 7: no code path prints the arrow form, and
+   the command passed a filename where the CLI documents a skill id. The owner selected the
+   two-line form (Candidate A) from the labelled candidates in the S427 direction brief. The
+   social preview's `→ CUT` still awaits the owner's selection on #310.
 
 4. **The light/dark banner pair differs by one stroke attribute** (`#d0d7de` vs `#30363d`);
    both keep the dark interior, by the file's own comment. The naming does not carry the
-   intent. Since #309 the pair is one composition (wordmark, command, readout; three `<text>`
+   intent. Since #309 the pair is one composition (wordmark, statement; two `<text>`
    nodes; 21px `bench-command` size; radius 0) with two frame strokes. The #309 ticket
    carries the one-file `currentColor` proposal as a candidate; it was not applied, because
    the README's `<picture>` element selects a file per colour scheme and a single file would

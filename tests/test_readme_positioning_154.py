@@ -1,16 +1,22 @@
 """README positioning rewrite lock (#154 / #150 resolution).
 
 Pins external README behaviour only: retired front-door phrases gone, four-part
-section order, honest-maturity UNMEASURED lines with ticket links, banner
-tagline and status-block facts retained, drift-registered sentences intact.
+section order, honest-maturity UNMEASURED lines with ticket links, banner alt
+byte-equal to both SVG aria-labels and to the join of their text nodes, status-block
+facts retained, drift-registered sentences intact.
 """
 
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
-_README = Path(__file__).resolve().parents[1] / "README.md"
+_ROOT = Path(__file__).resolve().parents[1]
+_README = _ROOT / "README.md"
+_BANNERS = (_ROOT / "assets" / "banner-dark.svg", _ROOT / "assets" / "banner-light.svg")
+_SVG_TEXT = "{http://www.w3.org/2000/svg}text"
+_DASHES = (chr(0x2014), chr(0x2013))  # em dash, en dash
 
 
 def _readme() -> str:
@@ -23,9 +29,45 @@ def test_retired_front_door_phrases_absent() -> None:
     assert "first verdict" not in text
 
 
-def test_banner_tagline_survives() -> None:
-    text = _readme()
-    assert "the skill eval that refuses to invent a score" in text
+def _banner_alt(text: str) -> str:
+    picture = re.search(r"<picture>(.*?)</picture>", text, re.DOTALL)
+    assert picture is not None, "README has no <picture> banner element"
+    alt = re.search(r'<img[^>]*\salt="([^"]*)"', picture.group(1))
+    assert alt is not None, "banner <img> has no alt attribute"
+    return alt.group(1)
+
+
+def _label(svg: Path) -> str:
+    return ET.fromstring(svg.read_text(encoding="utf-8")).get("aria-label") or ""
+
+
+def _text_join(root: ET.Element) -> str:
+    """The label rule of record (S427 R4): each ``<text>`` node's itertext, stripped,
+    in document order; consecutive nodes joined with ``". "`` unless the earlier node
+    already ends in ``.``, ``?`` or ``!``, in which case with ``" "``."""
+    parts = ["".join(node.itertext()).strip() for node in root.iter(_SVG_TEXT)]
+    out = ""
+    for part in parts:
+        if out:
+            out += " " if out.endswith((".", "?", "!")) else ". "
+        out += part
+    return out
+
+
+def test_banner_alt_equals_svg_labels_and_text_join() -> None:
+    """Property lock, not a string pin: the alt, both aria-labels and each file's text
+    join are one byte string, with no em dash or en dash. Any future owner line passes;
+    a divergence, a returning dash, or a node added without entering the label fails."""
+    alt = _banner_alt(_readme())
+    for svg in _BANNERS:
+        root = ET.fromstring(svg.read_text(encoding="utf-8"))
+        label = root.get("aria-label")
+        assert label is not None, f"{svg.name}: root has no aria-label"
+        assert label == alt, f"{svg.name}: aria-label differs from README alt"
+        assert _text_join(root) == label, f"{svg.name}: aria-label differs from text join"
+    labels = {svg.name: _label(svg) for svg in _BANNERS}
+    for name, value in {"README alt": alt, **labels}.items():
+        assert not any(dash in value for dash in _DASHES), f"{name} carries an em or en dash"
 
 
 def test_four_part_section_order() -> None:
