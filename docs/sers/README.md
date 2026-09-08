@@ -30,7 +30,7 @@ checked against the code enums in CI.
 
 Vocabulary generation of the receipt. Receipts that disagree on
 `sers_version` are not comparable. Supported values: `"1.0.0"`, `"1.1.0"`,
-`"1.2.0"`, `"1.3.0"`.
+`"1.2.0"`, `"1.3.0"`, `"1.4.0"`.
 
 ### `skill_name`
 
@@ -198,14 +198,41 @@ Figures from different identities are **visibly non-comparable**.
 
 | Field | Meaning |
 | --- | --- |
-| `extractor_model` | Model pin (extractor or subject) that produced the figures. |
+| `extractor_model` | Model pin for the **extraction stage**: the model that read the run artifacts and produced the figures. Never the subject. Or a typed refusal. |
 | `prompt_fingerprint` | Fingerprint of the exact prompt/system bytes (typically SHA-256 hex). |
 | `schema_fingerprint` | Fingerprint of the tool schema or harness pin used. |
 
 Refusal semantics: instrument identity is **required**, not optional. A
 receipt without it cannot be validated. Legacy prose that predates the triple
-must still record the best available pins (subject model + harness fingerprint)
-rather than omit the object.
+must still record the best available pins rather than omit the object.
+
+`extractor_model` is either a non-empty string or
+`{ "refusal": "not_applicable" | "not_instrumented", "detail"? }`. A paired run
+scored by a deterministic oracle has no model-based extraction stage, and the
+refusal is how it says so. Repeating the subject pin here to fill the slot is
+non-conforming: it would record an extraction that did not happen.
+
+#### Which model was the subject? (`sers_version` 1.4.0 and the receipts before it)
+
+Through 1.3.0 this field was documented as *"Extractor (or subject) model pin
+that produced the figures"*. One field named two instruments answering two
+different questions, and which one it named was not recorded. That is
+[#479](https://github.com/MrBinnacle/skill-harness/issues/479).
+
+From 1.4.0 the roles are separate fields:
+
+| Question | Field |
+| --- | --- |
+| Which model was measured? | `subject_identity.subject_model` |
+| Which model produced the figures from the run artifacts? | `instrument_identity.extractor_model` |
+
+**Reading a receipt at 1.3.0 or earlier.** Its `extractor_model` carries one pin
+for both roles and the receipt does not say which. Do not infer the subject from
+it. Go to `source.prose_path`, which is the record that names what ran. Those
+receipts are **not back-filled**: each is a dated record of a measurement that was
+made, the store is append-only, and adding a `subject_model` to one would assert a
+role assignment nobody wrote down. `sers_version` is the field that tells a reader
+which generation's rules apply, and it is doing that job here.
 
 ### `measurements` (optional object)
 
@@ -249,7 +276,7 @@ from `measurements` / `cost`.
 ### `subject_identity` (required from `sers_version` 1.1.0)
 
 Provenance block identifying the subject under test. Absent on 1.0.0
-hand-encoded receipts; required when `sers_version` is `1.1.0` or `1.2.0`.
+hand-encoded receipts; required from `sers_version` 1.1.0 onward.
 Populate via `skill_harness.sers.build_subject_identity` — do not free-type
 the fields.
 
@@ -260,6 +287,18 @@ the fields.
 | `metric_version` | Oracle metric version (e.g. `0.3.0`). |
 | `implementation_hash` | SHA-256 hex of the oracle module source at mint/ingest time. |
 | `arms` | Which arms ran: `null`, `full`, or both as an array. |
+| `subject_model` | Model pin of the model that **executed the epochs**. Required from 1.4.0; absent before it. |
+
+`subject_model` sits here rather than in `instrument_identity` because it is a
+property of what was measured, not of what did the measuring. A skill is measured
+*on* a model: the `(skill_id, subject_model)` pair is the subject, and `arms` says
+which conditions that subject ran under. `instrument_identity` stamps the apparatus
+that produced the figures, which is a different instrument answering a different
+question.
+
+It is the one field in the block the harness cannot derive from a file on disk, so
+`build_subject_identity` takes it as an argument rather than computing it. A blank
+pin is refused: a blank is a manufactured record, not a missing one.
 
 ## Conformance
 
@@ -274,7 +313,11 @@ The harness asserts:
    are **equal** to the code enums (silent drift fails CI);
 3. poisoned fixtures under `tests/fixtures/sers/poison_*.json` **fail**
    validation (wrong verdict vocabulary, missing instrument identity, bare
-   gate term where the qualified term is required).
+   gate term where the qualified term is required, a 1.4.0 receipt whose
+   `subject_identity` omits `subject_model`, and a free-typed `extractor_model`
+   refusal outside the closed vocabulary);
+4. no receipt minted before 1.4.0 has gained a `subject_model`. The store is
+   append-only, so a back-fill is a rewritten record, not a repair.
 
 ## Hand-encoded v1 receipts
 
