@@ -421,9 +421,14 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         # spend. tests/test_readme_run_dry_run_469.py reads the click commands and fails
         # if the subcommand flag sets stop matching this wording.
         registered_texts=(
+            # Updated 2026-09-09 in the same change that landed `run pi-paired`
+            # (the #43 same-PR rule): the README's spend sentence now names BOTH
+            # spending subcommands; the registered copy tracks it. The mutation
+            # test in tests/test_drift_check.py mutates the shared substring
+            # "subcommand that spends" and stays valid under this wording.
             RegisteredText(
                 "README.md",
-                "`run ablation` is the only subcommand that spends",
+                "`run ablation` and `run pi-paired` are the subcommands that spend",
             ),
             RegisteredText(
                 "docs/INVARIANTS.md",

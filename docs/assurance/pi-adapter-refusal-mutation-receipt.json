@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-la51lfkw\\M-P1\\src\\skill_harness\\subject\\pi\\launcher.py",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-tx3eybl4\\M-P1\\src\\skill_harness\\subject\\pi\\launcher.py",
         "source_digest": "e2c59a26358834052978e07f58ebb66f69dd98105a74f33ed9331e27730bad7e",
         "tests_collected": 1,
-        "worktree_head": "9dc7a4ed97fe7b9746f063be9c5b032fea569e6b"
+        "worktree_head": "128c71e0d2621abf20c77212e7b855e1ebf74aca"
       },
       "description": "empty the cross-arm baseline check: a Full roster whose baseline differs from the Null roster launches as if the arms shared it",
       "killing_assertions": [
@@ -17,10 +17,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-la51lfkw\\M-P1\\src\\skill_harness\\subject\\pi\\launcher.py",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-tx3eybl4\\M-P1\\src\\skill_harness\\subject\\pi\\launcher.py",
         "source_digest": "464487b4d8c203541cfa2354604bfbb2f8551b3767d0e4ec9a953a4885ec9de9",
         "tests_collected": 1,
-        "worktree_head": "9dc7a4ed97fe7b9746f063be9c5b032fea569e6b"
+        "worktree_head": "128c71e0d2621abf20c77212e7b855e1ebf74aca"
       },
       "mutant_id": "M-P1",
       "notes": [],
@@ -34,10 +34,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-la51lfkw\\M-P2\\src\\skill_harness\\subject\\pi\\launcher.py",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-tx3eybl4\\M-P2\\src\\skill_harness\\subject\\pi\\launcher.py",
         "source_digest": "e2c59a26358834052978e07f58ebb66f69dd98105a74f33ed9331e27730bad7e",
         "tests_collected": 2,
-        "worktree_head": "9dc7a4ed97fe7b9746f063be9c5b032fea569e6b"
+        "worktree_head": "128c71e0d2621abf20c77212e7b855e1ebf74aca"
       },
       "description": "skip the declared-vs-live parser identity comparison, so an undeclared evidence pipeline spends and ingests as the declared one",
       "killing_assertions": [
@@ -47,10 +47,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-la51lfkw\\M-P2\\src\\skill_harness\\subject\\pi\\launcher.py",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-tx3eybl4\\M-P2\\src\\skill_harness\\subject\\pi\\launcher.py",
         "source_digest": "4cbc673d89decb22ed4363c03789520180dacd88c4b26c19ef7066f75d89b5ff",
         "tests_collected": 2,
-        "worktree_head": "9dc7a4ed97fe7b9746f063be9c5b032fea569e6b"
+        "worktree_head": "128c71e0d2621abf20c77212e7b855e1ebf74aca"
       },
       "mutant_id": "M-P2",
       "notes": [],
@@ -65,10 +65,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-la51lfkw\\M-P3\\src\\skill_harness\\subject\\pi\\parser.py",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-tx3eybl4\\M-P3\\src\\skill_harness\\subject\\pi\\parser.py",
         "source_digest": "f6d6f070736a7af2308cff48ddb9baed79d188aab93be2dec5a049f036c80f36",
         "tests_collected": 1,
-        "worktree_head": "9dc7a4ed97fe7b9746f063be9c5b032fea569e6b"
+        "worktree_head": "128c71e0d2621abf20c77212e7b855e1ebf74aca"
       },
       "description": "drop the second-model_change count guard, so a mid-epoch model change event passes as ordinary metadata when the subject string happens to match",
       "killing_assertions": [
@@ -78,10 +78,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-la51lfkw\\M-P3\\src\\skill_harness\\subject\\pi\\parser.py",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-tx3eybl4\\M-P3\\src\\skill_harness\\subject\\pi\\parser.py",
         "source_digest": "9244e952c782af8e70ebb557a65caf61b7eb8206495578d7c59925a794a62347",
         "tests_collected": 1,
-        "worktree_head": "9dc7a4ed97fe7b9746f063be9c5b032fea569e6b"
+        "worktree_head": "128c71e0d2621abf20c77212e7b855e1ebf74aca"
       },
       "mutant_id": "M-P3",
       "notes": [],
@@ -92,7 +92,7 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "9dc7a4ed97fe7b9746f063be9c5b032fea569e6b",
+  "commit_under_test": "128c71e0d2621abf20c77212e7b855e1ebf74aca",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
     "src/skill_harness/subject/pi/launcher.py": "e2c59a26358834052978e07f58ebb66f69dd98105a74f33ed9331e27730bad7e",

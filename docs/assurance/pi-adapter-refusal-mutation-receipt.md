@@ -8,8 +8,13 @@
 at `sha256:e2c59a26358834052978e07f58ebb66f69dd98105a74f33ed9331e27730bad7e` and
 `src/skill_harness/subject/pi/parser.py` at
 `sha256:f6d6f070736a7af2308cff48ddb9baed79d188aab93be2dec5a049f036c80f36`.
-**Commit at generation:** `9dc7a4e` — informational only; currency is checked
+**Commit at generation:** `128c71e` — informational only; currency is checked
 against the digests above by `tests/test_mutation_receipt.py`.
+
+**Regenerated 2026-09-09** after the driver-wiring arc (`b19793c`) moved
+launcher.py (`dc4b7656254f` to `e2c59a26358834`): all three mutants re-run,
+all three kills held by the same detectors. Earlier generation: `9dc7a4e`,
+same digests, after the container-boundary fix.
 
 Each case ran in its **own git worktree** at the recorded commit. Production was
 never mutated in place; the generator asserts the production tree is
