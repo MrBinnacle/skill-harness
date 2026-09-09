@@ -75,6 +75,16 @@ class Mutant:
 
 _ENGINE = "src/skill_harness/aggregation/engine.py"
 _ENGINE_MODULE = "skill_harness.aggregation.engine"
+_PI_LAUNCHER = "src/skill_harness/subject/pi/launcher.py"
+_PI_LAUNCHER_MODULE = "skill_harness.subject.pi.launcher"
+_PI_PARSER = "src/skill_harness/subject/pi/parser.py"
+_PI_PARSER_MODULE = "skill_harness.subject.pi.parser"
+_PI_SYMMETRY_DETECTOR = "tests/test_subject_pi.py::test_pair_symmetry_checks"
+_PI_IDENTITY_DETECTORS = (
+    "tests/test_subject_pi.py::test_verify_parser_identity_refuses_mismatch",
+    "tests/test_subject_pi.py::test_verify_parser_identity_accepts_live",
+)
+_PI_MIDEPOCH_DETECTOR = "tests/test_subject_pi.py::test_parse_refuses_mid_epoch_model_change"
 _CONFOUND_DETECTOR = (
     "tests/test_confound_status_e2e.py::TestConfoundStatusE2E"
     "::test_confound_events_produce_confounded_status"
@@ -329,6 +339,47 @@ MUTANTS: tuple[Mutant, ...] = (
         "    if missing:",
         "    if False:  # mutant: missing threshold defaulted rather than refused",
         (_UNREGISTERED_DETECTOR,),
+    ),
+    Mutant(
+        "M-P1",
+        "pi-roster-symmetry",
+        "empty the cross-arm baseline check: a Full roster whose baseline differs "
+        "from the Null roster launches as if the arms shared it",
+        _PI_LAUNCHER,
+        _PI_LAUNCHER_MODULE,
+        "    if full[:-1] != null:",
+        "    if False:  # mutant: cross-arm baseline asymmetry no longer refuses",
+        (_PI_SYMMETRY_DETECTOR,),
+    ),
+    Mutant(
+        "M-P2",
+        "pi-parser-identity",
+        "skip the declared-vs-live parser identity comparison, so an undeclared "
+        "evidence pipeline spends and ingests as the declared one",
+        _PI_LAUNCHER,
+        _PI_LAUNCHER_MODULE,
+        "    if declared is not None:",
+        "    if False:  # mutant: parser identity mismatch no longer refuses",
+        (_PI_IDENTITY_DETECTORS),
+    ),
+    Mutant(
+        "M-P3",
+        "pi-mid-epoch-identity",
+        "drop the second-model_change count guard, so a mid-epoch model change "
+        "event passes as ordinary metadata when the subject string happens to match",
+        _PI_PARSER,
+        _PI_PARSER_MODULE,
+        "        if i > 0:\n"
+        "            raise MidEpochIdentityChangeError(\n"
+        '                f"session carries {len(model_changes)} model_change entries; "\n'
+        '                "a mid-epoch change is an apparatus error, not metadata"\n'
+        "            )",
+        "        if False:  # mutant: the count guard no longer refuses\n"
+        "            raise MidEpochIdentityChangeError(\n"
+        '                f"session carries {len(model_changes)} model_change entries; "\n'
+        '                "a mid-epoch change is an apparatus error, not metadata"\n'
+        "            )",
+        (_PI_MIDEPOCH_DETECTOR,),
     ),
 )
 
