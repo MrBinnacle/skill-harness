@@ -69,7 +69,11 @@ from skill_harness.subject.pi.launcher import (
     verify_pair_symmetry,
     verify_parser_identity,
 )
-from skill_harness.subject.pi.parser import EpochSpec, build_parsed_log, parse_epoch
+from skill_harness.subject.pi.parser import (
+    EpochSpec,
+    build_parsed_log,
+    parse_epoch,
+)
 from skill_harness.subject.pi.pin import BaselineSkill, PiHarnessPin
 from skill_harness.subject.pi.roster import RosterEntry, build_roster
 
