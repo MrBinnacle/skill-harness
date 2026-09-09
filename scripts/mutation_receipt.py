@@ -400,12 +400,12 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M-R1",
         "mr-driver-identity-gate",
-        "the driver stops calling the parser-identity gate: an undeclared "
+        "the driver stops comparing the declared parser identity: an undeclared "
         "evidence pipeline passes the pre-spend gate and reaches spend",
         _PI_RUNNER,
         _PI_RUNNER_MODULE,
         "    parser = verify_parser_identity(spec.declared_parser_identity)",
-        "    parser = parser_identity()  # mutant: measure, never compare",
+        "    parser = verify_parser_identity(None)  # mutant: declared identity never compared",
         _PI_RUNNER_IDENTITY,
     ),
     Mutant(
