@@ -1,0 +1,150 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-2mro7ye1\\M-R1\\src\\skill_harness\\subject\\pi\\runner.py",
+        "source_digest": "8fcda34f8f60c4915d7d8f1fd155920ea29865162684b3c338ae4cdeeea451dc",
+        "tests_collected": 2,
+        "worktree_head": "b19793cdf6321a2d3a8b0b7098d942e2323590bb"
+      },
+      "description": "the driver stops calling the parser-identity gate: an undeclared evidence pipeline passes the pre-spend gate and reaches spend",
+      "killing_assertions": [
+        "tests/test_subject_pi_runner.py::test_parser_identity_mismatch_blocks_spend",
+        "tests/test_subject_pi_runner.py::test_valid_pair_runs_and_reaches_ingest"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-2mro7ye1\\M-R1\\src\\skill_harness\\subject\\pi\\runner.py",
+        "source_digest": "4007bc511fd46a01f00a1f2523ac91fb6500ffed3b88a9433d8664d857fc4c41",
+        "tests_collected": 2,
+        "worktree_head": "b19793cdf6321a2d3a8b0b7098d942e2323590bb"
+      },
+      "mutant_id": "M-R1",
+      "notes": [],
+      "obligation": "mr-driver-identity-gate",
+      "selection": [
+        "tests/test_subject_pi_runner.py::test_parser_identity_mismatch_blocks_spend",
+        "tests/test_subject_pi_runner.py::test_valid_pair_runs_and_reaches_ingest"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-2mro7ye1\\M-R2\\src\\skill_harness\\subject\\pi\\runner.py",
+        "source_digest": "8fcda34f8f60c4915d7d8f1fd155920ea29865162684b3c338ae4cdeeea451dc",
+        "tests_collected": 1,
+        "worktree_head": "b19793cdf6321a2d3a8b0b7098d942e2323590bb"
+      },
+      "description": "the nonzero-returncode refusal no longer fires: a crashed epoch is parsed and ingested as if it had run",
+      "killing_assertions": [
+        "tests/test_subject_pi_runner.py::test_nonzero_epoch_refuses_before_evidence"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-2mro7ye1\\M-R2\\src\\skill_harness\\subject\\pi\\runner.py",
+        "source_digest": "3f812fc5b5950179cdb6571abafd4329a1d2d00b9eda45436338b147b7629c5d",
+        "tests_collected": 1,
+        "worktree_head": "b19793cdf6321a2d3a8b0b7098d942e2323590bb"
+      },
+      "mutant_id": "M-R2",
+      "notes": [],
+      "obligation": "mr-driver-nonzero-epoch",
+      "selection": [
+        "tests/test_subject_pi_runner.py::test_nonzero_epoch_refuses_before_evidence"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-2mro7ye1\\M-R4\\src\\skill_harness\\subject\\pi\\launcher.py",
+        "source_digest": "e2c59a26358834052978e07f58ebb66f69dd98105a74f33ed9331e27730bad7e",
+        "tests_collected": 2,
+        "worktree_head": "b19793cdf6321a2d3a8b0b7098d942e2323590bb"
+      },
+      "description": "the version probe stops wrapping the container prefix: the pin names the host binary's version while the epoch runs the container's copy",
+      "killing_assertions": [
+        "tests/test_subject_pi_runner.py::test_runtime_version_is_measured_across_the_container_boundary",
+        "tests/test_subject_pi_runner.py::test_container_version_mismatch_refuses_before_any_epoch"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-2mro7ye1\\M-R4\\src\\skill_harness\\subject\\pi\\launcher.py",
+        "source_digest": "f1bf43556bae3290b22307b14b62f9f1fb526ae5a49b88c9651746be7540b46e",
+        "tests_collected": 2,
+        "worktree_head": "b19793cdf6321a2d3a8b0b7098d942e2323590bb"
+      },
+      "mutant_id": "M-R4",
+      "notes": [],
+      "obligation": "mr-container-version-probe",
+      "selection": [
+        "tests/test_subject_pi_runner.py::test_runtime_version_is_measured_across_the_container_boundary",
+        "tests/test_subject_pi_runner.py::test_container_version_mismatch_refuses_before_any_epoch"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-2mro7ye1\\M-R5\\src\\skill_harness\\subject\\pi\\runner.py",
+        "source_digest": "8fcda34f8f60c4915d7d8f1fd155920ea29865162684b3c338ae4cdeeea451dc",
+        "tests_collected": 2,
+        "worktree_head": "b19793cdf6321a2d3a8b0b7098d942e2323590bb"
+      },
+      "description": "the driver stops passing its container to the version probe: the helper stays correct and the measured version still names the host",
+      "killing_assertions": [
+        "tests/test_subject_pi_runner.py::test_runtime_version_is_measured_across_the_container_boundary",
+        "tests/test_subject_pi_runner.py::test_container_version_mismatch_refuses_before_any_epoch"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-2mro7ye1\\M-R5\\src\\skill_harness\\subject\\pi\\runner.py",
+        "source_digest": "18e5f9883aed1bf4370b68e357aaa1800da95fcb971bb8a4ac5ce7126da31bed",
+        "tests_collected": 2,
+        "worktree_head": "b19793cdf6321a2d3a8b0b7098d942e2323590bb"
+      },
+      "mutant_id": "M-R5",
+      "notes": [],
+      "obligation": "mr-driver-container-wiring",
+      "selection": [
+        "tests/test_subject_pi_runner.py::test_runtime_version_is_measured_across_the_container_boundary",
+        "tests/test_subject_pi_runner.py::test_container_version_mismatch_refuses_before_any_epoch"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "b19793cdf6321a2d3a8b0b7098d942e2323590bb",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "src/skill_harness/subject/pi/launcher.py": "e2c59a26358834052978e07f58ebb66f69dd98105a74f33ed9331e27730bad7e",
+    "src/skill_harness/subject/pi/runner.py": "8fcda34f8f60c4915d7d8f1fd155920ea29865162684b3c338ae4cdeeea451dc"
+  },
+  "production_tree_digest_before": {
+    "src/skill_harness/subject/pi/launcher.py": "e2c59a26358834052978e07f58ebb66f69dd98105a74f33ed9331e27730bad7e",
+    "src/skill_harness/subject/pi/runner.py": "8fcda34f8f60c4915d7d8f1fd155920ea29865162684b3c338ae4cdeeea451dc"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.1",
+  "target_digests": {
+    "src/skill_harness/subject/pi/launcher.py": "e2c59a26358834052978e07f58ebb66f69dd98105a74f33ed9331e27730bad7e",
+    "src/skill_harness/subject/pi/runner.py": "8fcda34f8f60c4915d7d8f1fd155920ea29865162684b3c338ae4cdeeea451dc"
+  },
+  "target_files": [
+    "src/skill_harness/subject/pi/launcher.py",
+    "src/skill_harness/subject/pi/runner.py"
+  ]
+}
