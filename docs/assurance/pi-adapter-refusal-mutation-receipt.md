@@ -5,10 +5,10 @@
 `ParsedEvalLog` seam. **Generator:** `scripts/mutation_receipt.py --select pi-`.
 **Machine-readable record:** `docs/assurance/pi-adapter-refusal-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/subject/pi/launcher.py`
-at `sha256:dc4b7656254f769f68980ffb74aa52463ef855e5a4e9f1deb7cfde5efa52345a` and
+at `sha256:e2c59a26358834052978e07f58ebb66f69dd98105a74f33ed9331e27730bad7e` and
 `src/skill_harness/subject/pi/parser.py` at
 `sha256:f6d6f070736a7af2308cff48ddb9baed79d188aab93be2dec5a049f036c80f36`.
-**Commit at generation:** `76f36ba` — informational only; currency is checked
+**Commit at generation:** `9dc7a4e` — informational only; currency is checked
 against the digests above by `tests/test_mutation_receipt.py`.
 
 Each case ran in its **own git worktree** at the recorded commit. Production was
