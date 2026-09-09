@@ -52,4 +52,4 @@ M-R1 needs `parser_identity` importable in runner.py so the mutant compiles
 — the import was added in `b19793c`; the live call site is unchanged.
 M-R4 and M-R5 pair deliberately: M-R4 mutates the helper and M-R5 mutates
 only the argument at the driver's call site, so the pair attests that both
-the mechanism AND the wiring to it are load-bearing, not one or the other.
+the mechanism AND the wiring to it matter, not one or the other.
