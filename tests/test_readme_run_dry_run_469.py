@@ -45,14 +45,24 @@ def _windows_naming(text: str, needle: str) -> list[str]:
     ]
 
 
-def test_the_run_group_holds_exactly_the_three_subcommands_the_readme_describes() -> None:
+def test_the_run_group_holds_exactly_the_subcommands_the_readme_describes() -> None:
     """A new `run` subcommand fails here until the README accounts for it."""
-    assert set(run.commands) == {"ablation", "evaluate-skill", "evaluate-paired"}
+    assert set(run.commands) == {
+        "ablation",
+        "evaluate-skill",
+        "evaluate-paired",
+        "pi-paired",
+    }
 
 
-def test_only_ablation_takes_execute() -> None:
-    """The spend opt-in exists on one subcommand of three."""
+def test_only_ablation_and_pi_paired_take_execute() -> None:
+    """The spend opt-in exists on the two subcommands that can spend.
+
+    `pi-paired` joined `ablation` here: without `--execute` it runs the
+    pre-spend gate and stops, so the flag is the spend boundary in both.
+    """
     assert "--execute" in _long_opts("ablation")
+    assert "--execute" in _long_opts("pi-paired")
     assert "--execute" not in _long_opts("evaluate-skill")
     assert "--execute" not in _long_opts("evaluate-paired")
 

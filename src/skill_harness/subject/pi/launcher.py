@@ -128,21 +128,45 @@ class LaunchResult:
     returncode: int
 
 
-def measure_pi_version(pi_bin: str) -> str:
-    """The live runtime version, measured from the binary — never assumed."""
+def measure_pi_version(pi_bin: str, *, container: ContainerSpec | None = None) -> str:
+    """The live runtime version, measured from the binary, never assumed.
+
+    Measured ACROSS THE SAME EXECUTION BOUNDARY the epoch will use. When
+    ``container`` is set the probe is wrapped in the same ``argv_prefix``
+    that ``run_epoch`` and ``run_oracle_command`` apply, so the version
+    pinned into the harness pin is the version of the binary that actually
+    runs.
+
+    Without the prefix the probe measures whatever ``pi_bin`` resolves to on
+    the HOST, while the epoch executes the container's copy. The pin would
+    then carry a runtime identity for a process that never ran: a silent
+    provenance error, because both values are real versions of a real Pi and
+    nothing downstream can tell them apart.
+
+    Fails closed. A probe that cannot run, exits nonzero, or prints nothing
+    raises rather than falling back to an assumed or host-measured value.
+    """
+    argv: list[str] = []
+    if container is not None:
+        argv.extend(container.argv_prefix)
+    argv.extend([pi_bin, "--version"])
+    where = "container" if container is not None else "host"
     try:
         proc = subprocess.run(  # noqa: S603 -- pi_bin is operator-pinned
-            [pi_bin, "--version"],
+            argv,
             capture_output=True,
             text=True,
             timeout=30,
             check=False,
         )
     except FileNotFoundError as exc:
-        raise PiExecutableNotFoundError(f"Pi binary not found: {pi_bin}") from exc
+        raise PiExecutableNotFoundError(
+            f"Pi binary not found on the {where} execution boundary: {pi_bin}"
+        ) from exc
     if proc.returncode != 0 or not proc.stdout.strip():
         raise PiExecutableNotFoundError(
-            f"{pi_bin} --version failed (rc={proc.returncode}): {proc.stderr.strip()}"
+            f"{pi_bin} --version failed on the {where} execution boundary "
+            f"(rc={proc.returncode}): {proc.stderr.strip()}"
         )
     return proc.stdout.strip().splitlines()[0].strip()
 

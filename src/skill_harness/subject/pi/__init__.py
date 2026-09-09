@@ -56,6 +56,16 @@ from skill_harness.subject.pi.parser import (
 )
 from skill_harness.subject.pi.pin import BaselineSkill, PiHarnessPin
 from skill_harness.subject.pi.roster import PiRosterError, RosterEntry, build_roster
+from skill_harness.subject.pi.runner import (
+    EpochExecutionError,
+    PairedRunSpec,
+    PiPairedRunError,
+    PreSpendValidation,
+    RuntimeVersionMismatchError,
+    run_paired_evaluation,
+    spec_from_config,
+    validate_pre_spend,
+)
 
 __all__ = [
     "EXPOSURE_REALIZATION_VERSION",
@@ -65,19 +75,24 @@ __all__ = [
     "PI_PARSER_VERSION",
     "BaselineSkill",
     "CaptureIncompleteError",
+    "EpochExecutionError",
     "EpochSpec",
     "LaunchResult",
     "LaunchSpec",
     "MidEpochIdentityChangeError",
+    "PairedRunSpec",
     "ParseReport",
     "ParserIdentityMismatchError",
     "PiExecutableNotFoundError",
     "PiHarnessPin",
     "PiLaunchError",
+    "PiPairedRunError",
     "PiParseError",
     "PiRosterError",
+    "PreSpendValidation",
     "RosterAttestationError",
     "RosterEntry",
+    "RuntimeVersionMismatchError",
     "build_parsed_log",
     "build_roster",
     "build_runner_block",
@@ -86,6 +101,9 @@ __all__ = [
     "parser_identity",
     "run_epoch",
     "run_oracle_command",
+    "run_paired_evaluation",
+    "spec_from_config",
+    "validate_pre_spend",
     "verify_pair_symmetry",
     "verify_parser_identity",
 ]
