@@ -5,14 +5,29 @@
 `launcher.py`. **Generator:** `scripts/mutation_receipt.py --select mr-`.
 **Machine-readable record:** `docs/assurance/pi-driver-wiring-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/subject/pi/runner.py`
-at `sha256:d9d583a165399631b19485ac260fb952dd8608b3772f83dd7446b0a8b5fabb3c` and
+at `sha256:8fcda34f8f60c4915d7d8f1fd155920ea29865162684b3c338ae4cdeeea451dc` and
 `src/skill_harness/subject/pi/launcher.py` at
 `sha256:e2c59a26358834052978e07f58ebb66f69dd98105a74f33ed9331e27730bad7e`.
-**Commit at generation:** `310466a` — informational only; currency is checked
-against the digests above by `tests/test_mutation_receipt.py`. The runner
-digest moved from the first generation's `8fcda34f8f60` by a line-ending
-normalization; no content changed. First-generation pin: `b19793c`,
-superseded with the M-R1 correction recorded below.
+**Commit at generation:** `66e5c16` — informational only; currency is checked
+against the digests above by `tests/test_mutation_receipt.py`.
+
+**A superseded generation attested a digest no other machine could
+reproduce.** The second generation pinned the runner at `d9d583a16539`, which
+is the SHA-256 of the working file as it then sat on a Windows checkout, with
+CRLF line endings. `.gitattributes` declares `*.py text eol=lf`, so git stores
+and checks out that file with LF, and its committed bytes hash to
+`8fcda34f8f60`. The content was identical either way; only the line endings
+differed. The receipt therefore attested bytes that existed on one machine and
+nowhere else, which is the opposite of what a content pin is for.
+
+The local suite could not see it, because the local working file was the CRLF
+one the receipt named. CI caught it on all four matrix cells at once, each
+reporting `STALE_RECEIPT ... attested d9d583a16539, live 8fcda34f8f60`. The
+generator hashes the working tree rather than the committed blob, so any
+receipt generated from a CRLF working file will name an unreproducible digest;
+that is a generator property, recorded here rather than repaired in this
+change. First-generation pin: `b19793c`, superseded with the M-R1 correction
+recorded below.
 
 ## Why this receipt exists
 
