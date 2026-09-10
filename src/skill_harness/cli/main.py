@@ -3339,5 +3339,95 @@ def run_evaluate_paired(
         raise SystemExit(exc.exit_code) from exc
 
 
+@run.command("pi-paired")
+@click.argument("config", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--execute",
+    is_flag=True,
+    help="Run the epochs and write evidence (default is a pre-spend dry-run).",
+)
+@click.option(
+    "--evidence-db",
+    type=click.Path(path_type=Path),
+    default=Path("evidence.db"),
+    show_default=True,
+    help="Path to evidence DB (only used with --execute).",
+)
+@click.option(
+    "--runtime-db",
+    type=click.Path(path_type=Path),
+    default=Path("runtime.db"),
+    show_default=True,
+    help="Path to runtime DB (only used with --execute).",
+)
+def run_pi_paired(config: Path, execute: bool, evidence_db: Path, runtime_db: Path) -> None:
+    """Run one Pi paired evaluation (Full vs Null) from a declared config.
+
+    The default is a dry-run of the pre-spend gate: parser identity, live
+    runtime version, both rosters, cross-arm symmetry and the arm-shared
+    pin. It launches no epoch and writes nothing, so the controls that
+    protect a sized run can be exercised for free before one is authorised.
+
+    With --execute the same gate runs first, then the epochs, then the
+    existing paired write path. A gate failure refuses before the first
+    subprocess starts; an epoch that exits nonzero, or a capture that does
+    not parse, refuses before any evidence is assembled.
+    """
+    from skill_harness.subject.pi.launcher import PiLaunchError
+    from skill_harness.subject.pi.roster import PiRosterError
+    from skill_harness.subject.pi.runner import (
+        PiPairedRunError,
+        run_paired_evaluation,
+        spec_from_config,
+        validate_pre_spend,
+    )
+
+    raw = json.loads(config.read_text(encoding="utf-8"))
+    try:
+        spec = spec_from_config(raw, base_dir=config.parent.resolve())
+    except KeyError as exc:
+        _console.print(f"[red]REFUSAL[/]: config is missing required key {exc}")
+        raise SystemExit(2) from exc
+
+    try:
+        validated = validate_pre_spend(spec)
+    except (PiPairedRunError, PiLaunchError, PiRosterError) as exc:
+        _console.print(f"[red]REFUSAL (pre-spend)[/]: {exc}")
+        _console.print("[yellow]No epoch was launched. Nothing was spent.[/]")
+        raise SystemExit(3) from exc
+
+    _console.print("[green]Pre-spend gate passed.[/]")
+    for name in validated.checks:
+        _console.print(f"  ok  {name}")
+    _console.print(f"  runtime version : {validated.runtime_version}")
+    _console.print(
+        f"  parser identity : {validated.parser['version']} "
+        f"({validated.parser['content_hash'][:16]})"
+    )
+    _console.print(f"  pin fingerprint : {validated.pin.fingerprint()}")
+    _console.print(f"  treatment       : {validated.treatment.name}")
+    _console.print(
+        f"  rosters         : full={[e.name for e in validated.full_roster]} "
+        f"null={[e.name for e in validated.null_roster]}"
+    )
+
+    if not execute:
+        _console.print(
+            f"[yellow]Dry-run: {spec.n_pairs} pair(s) NOT run, no evidence written. "
+            "Use --execute to spend.[/]"
+        )
+        return
+
+    with StorageContext(evidence_db, runtime_db) as ctx:
+        try:
+            result = run_paired_evaluation(spec, ctx.evidence_conn, validated=validated)
+        except (PiPairedRunError, PiLaunchError) as exc:
+            _console.print(f"[red]REFUSAL (apparatus)[/]: {exc}")
+            _console.print("[yellow]No evidence was written for this pair.[/]")
+            raise SystemExit(4) from exc
+
+    _console.print(f"[green]Pair written.[/] run_id={result.run_id}")
+
+
 if __name__ == "__main__":  # pragma: no cover
     cli()

@@ -51,7 +51,7 @@ Spec: `docs/PRD.md` §14 "Pass Rule"; skill-harness #368.
 
 Every command that writes to the evidence store or makes an LLM API call defaults to
 dry-run, and `--execute` is required before it does either. That set is `run ablation`,
-`calibrate` and `freeze`.
+`run pi-paired`, `calibrate` and `freeze`.
 
 The other `run` subcommands do neither, so no `--execute` gate applies to them and none
 exists: `run evaluate-skill` opens the evidence database read-only through

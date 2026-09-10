@@ -332,8 +332,8 @@ def test_spend_gating_sentence_mutation_blocks(tmp_path: Path) -> None:
     _mutate(
         root,
         "README.md",
-        "the only subcommand that spends",
-        "one of several subcommands that spend",
+        "are the subcommands that spend",
+        "are the subcommand that spends",
     )
     r = _run(root)
     assert r.returncode == 1

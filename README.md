@@ -234,8 +234,9 @@ not a blanket one:
 | `run ablation` | dry-run: no calls, no cost | `--execute` opts in to spending, under a per-run cap and a daily cap |
 | `run evaluate-skill` | aggregates stored evidence and makes no model call | `--dry-run` reports what it would aggregate and stops |
 | `run evaluate-paired` | read-only: no writes and no API calls | nothing; it declares neither flag |
+| `run pi-paired` | dry-run: runs the pre-spend gate only. It launches no epoch and writes nothing. | `--execute` opts in to running the Full and Null epochs and writing the pair |
 
-`run ablation` is the only subcommand that spends.
+`run ablation` and `run pi-paired` are the subcommands that spend.
 
 The snippet also writes into the directory you run it from. `skill init` creates `evidence.db` and
 `runtime.db` in your current directory, and it creates them before the API-key check, so they

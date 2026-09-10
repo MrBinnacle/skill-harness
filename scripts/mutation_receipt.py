@@ -75,6 +75,29 @@ class Mutant:
 
 _ENGINE = "src/skill_harness/aggregation/engine.py"
 _ENGINE_MODULE = "skill_harness.aggregation.engine"
+_PI_LAUNCHER = "src/skill_harness/subject/pi/launcher.py"
+_PI_LAUNCHER_MODULE = "skill_harness.subject.pi.launcher"
+_PI_PARSER = "src/skill_harness/subject/pi/parser.py"
+_PI_PARSER_MODULE = "skill_harness.subject.pi.parser"
+_PI_RUNNER = "src/skill_harness/subject/pi/runner.py"
+_PI_RUNNER_MODULE = "skill_harness.subject.pi.runner"
+_PI_RUNNER_IDENTITY = (
+    "tests/test_subject_pi_runner.py::test_parser_identity_mismatch_blocks_spend",
+    "tests/test_subject_pi_runner.py::test_valid_pair_runs_and_reaches_ingest",
+)
+_PI_RUNNER_NONZERO = (
+    "tests/test_subject_pi_runner.py::test_nonzero_epoch_refuses_before_evidence",
+)
+_PI_RUNNER_CONTAINER = (
+    "tests/test_subject_pi_runner.py::test_runtime_version_is_measured_across_the_container_boundary",
+    "tests/test_subject_pi_runner.py::test_container_version_mismatch_refuses_before_any_epoch",
+)
+_PI_SYMMETRY_DETECTOR = "tests/test_subject_pi.py::test_pair_symmetry_checks"
+_PI_IDENTITY_DETECTORS = (
+    "tests/test_subject_pi.py::test_verify_parser_identity_refuses_mismatch",
+    "tests/test_subject_pi.py::test_verify_parser_identity_accepts_live",
+)
+_PI_MIDEPOCH_DETECTOR = "tests/test_subject_pi.py::test_parse_refuses_mid_epoch_model_change"
 _CONFOUND_DETECTOR = (
     "tests/test_confound_status_e2e.py::TestConfoundStatusE2E"
     "::test_confound_events_produce_confounded_status"
@@ -329,6 +352,100 @@ MUTANTS: tuple[Mutant, ...] = (
         "    if missing:",
         "    if False:  # mutant: missing threshold defaulted rather than refused",
         (_UNREGISTERED_DETECTOR,),
+    ),
+    Mutant(
+        "M-P1",
+        "pi-roster-symmetry",
+        "empty the cross-arm baseline check: a Full roster whose baseline differs "
+        "from the Null roster launches as if the arms shared it",
+        _PI_LAUNCHER,
+        _PI_LAUNCHER_MODULE,
+        "    if full[:-1] != null:",
+        "    if False:  # mutant: cross-arm baseline asymmetry no longer refuses",
+        (_PI_SYMMETRY_DETECTOR,),
+    ),
+    Mutant(
+        "M-P2",
+        "pi-parser-identity",
+        "skip the declared-vs-live parser identity comparison, so an undeclared "
+        "evidence pipeline spends and ingests as the declared one",
+        _PI_LAUNCHER,
+        _PI_LAUNCHER_MODULE,
+        "    if declared is not None:",
+        "    if False:  # mutant: parser identity mismatch no longer refuses",
+        (_PI_IDENTITY_DETECTORS),
+    ),
+    Mutant(
+        "M-P3",
+        "pi-mid-epoch-identity",
+        "drop the second-model_change count guard, so a mid-epoch model change "
+        "event passes as ordinary metadata when the subject string happens to match",
+        _PI_PARSER,
+        _PI_PARSER_MODULE,
+        "        if i > 0:\n"
+        "            raise MidEpochIdentityChangeError(\n"
+        '                f"session carries {len(model_changes)} model_change entries; "\n'
+        '                "a mid-epoch change is an apparatus error, not metadata"\n'
+        "            )",
+        "        if False:  # mutant: the count guard no longer refuses\n"
+        "            raise MidEpochIdentityChangeError(\n"
+        '                f"session carries {len(model_changes)} model_change entries; "\n'
+        '                "a mid-epoch change is an apparatus error, not metadata"\n'
+        "            )",
+        (_PI_MIDEPOCH_DETECTOR,),
+    ),
+    # --- Pi driver wiring (runner.py): the controls exist in helpers; these
+    # cases prove the DRIVER calls them. A control nobody calls is dead code
+    # with a docstring, which is what the driver commit exists to close.
+    Mutant(
+        "M-R1",
+        "mr-driver-identity-gate",
+        "the driver stops comparing the declared parser identity: an undeclared "
+        "evidence pipeline passes the pre-spend gate and reaches spend",
+        _PI_RUNNER,
+        _PI_RUNNER_MODULE,
+        "    parser = verify_parser_identity(spec.declared_parser_identity)",
+        "    parser = verify_parser_identity(None)  # mutant: declared identity never compared",
+        _PI_RUNNER_IDENTITY,
+    ),
+    Mutant(
+        "M-R2",
+        "mr-driver-nonzero-epoch",
+        "the nonzero-returncode refusal no longer fires: a crashed epoch is "
+        "parsed and ingested as if it had run",
+        _PI_RUNNER,
+        _PI_RUNNER_MODULE,
+        "    if launch.returncode != 0:",
+        "    if False:  # mutant: a crashed epoch no longer refuses",
+        _PI_RUNNER_NONZERO,
+    ),
+    Mutant(
+        "M-R4",
+        "mr-container-version-probe",
+        "the version probe stops wrapping the container prefix: the pin names "
+        "the host binary's version while the epoch runs the container's copy",
+        _PI_LAUNCHER,
+        _PI_LAUNCHER_MODULE,
+        "    argv: list[str] = []\n"
+        "    if container is not None:\n"
+        "        argv.extend(container.argv_prefix)\n"
+        '    argv.extend([pi_bin, "--version"])',
+        "    argv: list[str] = []\n"
+        "    if False:  # mutant: the probe measures the host, not the container\n"
+        "        argv.extend(container.argv_prefix)\n"
+        '    argv.extend([pi_bin, "--version"])',
+        _PI_RUNNER_CONTAINER,
+    ),
+    Mutant(
+        "M-R5",
+        "mr-driver-container-wiring",
+        "the driver stops passing its container to the version probe: the "
+        "helper stays correct and the measured version still names the host",
+        _PI_RUNNER,
+        _PI_RUNNER_MODULE,
+        "    runtime_version = measure_pi_version(spec.pi_bin, container=spec.container)",
+        "    runtime_version = measure_pi_version(spec.pi_bin)  # mutant: container dropped",
+        _PI_RUNNER_CONTAINER,
     ),
 )
 
