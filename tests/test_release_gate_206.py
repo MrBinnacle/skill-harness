@@ -71,27 +71,30 @@ def _seed_tree(root: Path, version: str, banner_version: str | None = None) -> P
     return root
 
 
-def _gate_env(api_url: str) -> dict[str, str]:
+def _gate_env(api_url: str, token: str | None = None) -> dict[str, str]:
     """Gate environment: seeded API base, no inherited tag ref (G6).
 
     ``PYTHONIOENCODING`` pins the child's pipe encoding. Without it, a
     Windows child encodes stdout as cp1252, so the gate's em-dashes
     (0x97) crash ``_invoke``'s utf-8 decode inside the reader thread.
+    ``GITHUB_TOKEN`` is set only when ``token`` is given, never inherited.
     """
     env = os.environ | {
         "RELEASE_GATE_GITHUB_API_URL": api_url,
         "PYTHONIOENCODING": "utf-8",
     }
-    for tag_var in ("GITHUB_REF", "GITHUB_REF_NAME"):
-        env.pop(tag_var, None)
+    for inherited in ("GITHUB_REF", "GITHUB_REF_NAME", "GITHUB_TOKEN"):
+        env.pop(inherited, None)
+    if token is not None:
+        env["GITHUB_TOKEN"] = token
     return env
 
 
-def _invoke(root: Path, api_url: str) -> subprocess.CompletedProcess[str]:
+def _invoke(root: Path, api_url: str, token: str | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(GATE), "--root", str(root)],
         cwd=str(ROOT),
-        env=_gate_env(api_url),
+        env=_gate_env(api_url, token),
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -103,11 +106,19 @@ def _run_gate(
     root: Path,
     issue_states: dict[int, str],
     workflow_runs: list[dict[str, str]],
+    token: str | None = None,
+    seen_auth: list[str | None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run the gate against ``root`` with the GitHub answers seeded locally."""
+    """Run the gate against ``root`` with the GitHub answers seeded locally.
+
+    ``seen_auth``, when given, receives the Authorization header of every
+    request the gate makes (``None`` for a request without one).
+    """
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            if seen_auth is not None:
+                seen_auth.append(self.headers.get("Authorization"))
             if self.path == RUNS_PATH:
                 self._respond(200, {"workflow_runs": workflow_runs})
                 return
@@ -136,7 +147,7 @@ def _run_gate(
     thread = threading.Thread(target=server.serve_forever)
     thread.start()
     try:
-        return _invoke(root, f"http://127.0.0.1:{server.server_port}")
+        return _invoke(root, f"http://127.0.0.1:{server.server_port}", token)
     finally:
         server.shutdown()
         thread.join()
@@ -168,6 +179,28 @@ def test_zero_three_release_passes_when_assurance_is_closed_and_green(tmp_path: 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "RELEASE GATE: PASS" in result.stdout
     assert _failures(result) == []
+
+
+def test_the_assurance_reads_authenticate_when_a_token_is_present(tmp_path: Path) -> None:
+    """Unauthenticated reads share a 60-per-hour budget per runner IP, and a
+    shared CI runner exhausts it: main went red on 2026-09-10 with G7/G8
+    failing "HTTP Error 403: rate limit exceeded" on every read."""
+    root = _seed_tree(tmp_path / "tree", "0.3.0")
+    seen: list[str | None] = []
+    result = _run_gate(root, _closed(), [GREEN_RUN], token="seed-token", seen_auth=seen)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(seen) == len(ASSURANCE_ISSUES) + 1
+    assert set(seen) == {"Bearer seed-token"}
+
+
+def test_the_assurance_reads_send_no_credential_without_a_token(tmp_path: Path) -> None:
+    root = _seed_tree(tmp_path / "tree", "0.3.0")
+    seen: list[str | None] = []
+    result = _run_gate(root, _closed(), [GREEN_RUN], seen_auth=seen)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert seen and set(seen) == {None}
 
 
 def test_zero_three_release_is_blocked_while_an_assurance_issue_is_open(tmp_path: Path) -> None:
