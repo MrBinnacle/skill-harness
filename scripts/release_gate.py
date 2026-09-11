@@ -182,9 +182,17 @@ def _is_zero_three(version: str) -> bool:
 
 
 def _get_json(url: str) -> object:
-    """GET a JSON document. Raises OSError/ValueError on any failure."""
+    """GET a JSON document. Raises OSError/ValueError on any failure.
+
+    Authenticates with ``GITHUB_TOKEN`` when it is set: unauthenticated reads
+    share a 60-per-hour budget per IP, which shared CI runners exhaust.
+    """
+    headers = {"Accept": "application/vnd.github+json"}
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(  # noqa: S310 - fixed API origin or test localhost
-        url, headers={"Accept": "application/vnd.github+json"}
+        url, headers=headers
     )
     with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
         return json.load(response)

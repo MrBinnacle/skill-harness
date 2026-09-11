@@ -249,6 +249,8 @@ jobs:
       # safety, workflow SHA pins. Running it on every push/PR means a
       # stale surface is caught at review time, not tag time.
       - name: Run release gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/release_gate.py
 
   # NON-required (#172): additive supply-chain check. Branch-protection changes
