@@ -4,7 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    # Integration branches are gated too. A pull request into a long-lived
+    # agent/** branch runs the same gate a main-targeted one does, so defects
+    # stay attributable to the change that introduced them instead of surfacing
+    # together when the branch finally merges (#492).
+    branches: [main, 'agent/**']
   workflow_dispatch:
 
 concurrency:
