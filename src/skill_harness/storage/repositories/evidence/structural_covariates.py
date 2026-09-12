@@ -21,8 +21,7 @@ def append_structural_covariates(
 ) -> None:
     """Append one covariate row after normal sample ingest."""
     rows = conn.execute(
-        "SELECT sample_id FROM samples "
-        "WHERE run_id = ? AND condition = ? AND sample_index = ?",
+        "SELECT sample_id FROM samples WHERE run_id = ? AND condition = ? AND sample_index = ?",
         (run_id, condition, epoch),
     ).fetchall()
     if len(rows) != 1:

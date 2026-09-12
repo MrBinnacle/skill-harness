@@ -58,8 +58,7 @@ def _registered_path(value: str) -> str:
         or path.parts[0] == ".git"
     ):
         raise ValueError(
-            "registered path must be a normalized repository-relative path: "
-            f"{value!r}"
+            f"registered path must be a normalized repository-relative path: {value!r}"
         )
     return value
 
@@ -100,9 +99,7 @@ class StructuralRegistration(BaseModel):
 
     @field_validator("mechanical_check_argvs")
     @classmethod
-    def _mechanical_argvs(
-        cls, value: tuple[tuple[str, ...], ...]
-    ) -> tuple[tuple[str, ...], ...]:
+    def _mechanical_argvs(cls, value: tuple[tuple[str, ...], ...]) -> tuple[tuple[str, ...], ...]:
         return tuple(_argv(argv) for argv in value)
 
     @model_validator(mode="after")
