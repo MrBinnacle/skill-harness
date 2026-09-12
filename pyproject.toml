@@ -119,6 +119,13 @@ packages = ["src/skill_harness"]
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
+# #509: when one test phase runs past this many seconds, faulthandler dumps every
+# thread's stack to stderr, naming the running test's file and function. It does not
+# fail the test, so it cannot manufacture a red cell; it exists so a 25-minute CI
+# overrun names its cause instead of dying anonymously. 900s sits inside the Test
+# cell's ceiling (tests/test_ci_test_cell_attribution_509.py asserts that ordering)
+# and above the slowest legitimate module fixture measured under coverage (#510).
+faulthandler_timeout = 900
 addopts = [
   "-ra",
   "--strict-markers",
