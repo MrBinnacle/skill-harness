@@ -165,7 +165,14 @@ jobs:
         # (#187) runs in the dedicated calibration job below — do not fold it into this
         # 15m cell. The assurance lane (#168) runs on a schedule in assurance.yml for the
         # same reason: #170 alone specifies >=1h of fuzz, which no PR cell can absorb.
-        run: pytest -q --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing
+        #
+        # --durations (#509): an overrun used to die with GitHub's "exceeded the maximum
+        # execution time" and nothing else, so every overrun read as capacity and the
+        # ceiling above was raised twice on that reading. The slowest 25 phases over 1s
+        # now print with their node ids; faulthandler_timeout in pyproject.toml names
+        # the running test when a single phase hangs. tests/test_ci_test_cell_attribution_509.py
+        # reads this line and fails if either goes.
+        run: pytest -q --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing --durations=25 --durations-min=1.0
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
