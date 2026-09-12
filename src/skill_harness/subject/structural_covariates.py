@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import platform
 import re
@@ -186,12 +187,46 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return _run(repo, ("git", *args))
 
 
-def _snapshot(repo: Path) -> tuple[str, str]:
+def _dirty_paths(status_stdout: str) -> tuple[str, ...]:
+    """Every path named by a porcelain=v1 status line, renames resolved to the destination."""
+    paths: list[str] = []
+    for line in status_stdout.splitlines():
+        if len(line) < 4:
+            continue
+        entry = line[3:]
+        if " -> " in entry:
+            entry = entry.split(" -> ", 1)[1]
+        paths.append(entry.strip().strip('"'))
+    return tuple(sorted(set(paths)))
+
+
+def _snapshot(repo: Path) -> tuple[str, str, str]:
     head = _git(repo, "rev-parse", "HEAD")
     status = _git(repo, "status", "--porcelain=v1", "--untracked-files=all")
     if head.returncode != 0 or status.returncode != 0:
         raise StructuralCovariateError("candidate worktree state cannot be read")
-    return head.stdout.strip(), status.stdout
+
+    # HEAD and the status text alone cannot see a mutation to a file that was
+    # ALREADY dirty: rewriting the contents of a modified path leaves its status
+    # line byte-identical (" M src/app.py" before and after), so the comparison
+    # in collect_structural_covariates silently passed. That is the exact case
+    # this guard exists to catch, because a candidate worktree under measurement
+    # is dirty by construction. Hash the working-tree CONTENT of every path the
+    # status names, so the snapshot is sensitive to content and not only to
+    # which paths are dirty. Bounded to changed paths rather than the whole
+    # tree, and reading bytes keeps it correct for binary files, which a patch
+    # text would elide.
+    digest = hashlib.sha256()
+    for path in _dirty_paths(status.stdout):
+        digest.update(path.encode("utf-8", "surrogateescape"))
+        digest.update(b"\0")
+        target = repo / path
+        try:
+            digest.update(target.read_bytes() if target.is_file() else b"<not-a-file>")
+        except OSError:
+            digest.update(b"<unreadable>")
+        digest.update(b"\0")
+    return head.stdout.strip(), status.stdout, digest.hexdigest()
 
 
 def _path_is_allowed(path: str, allowed: str) -> bool:
