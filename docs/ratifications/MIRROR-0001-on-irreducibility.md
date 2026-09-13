@@ -35,7 +35,9 @@ parser do not read this file.
 ## Schema additions
 
 Each addition carries a `landed_as:` field naming the SERS schema key or source
-symbol that implements it, or the literal `UNLANDED` with a ticket number.
+symbol that implements it, or the literal `UNLANDED` with a ticket number. A
+declined addition carries a decline with its stated reason instead: that is a
+landed decision, not open work, so it must not keep an `UNLANDED` row.
 
 The causal chain is: eligible situation -> availability -> invocation ->
 adherence -> outcome. A SERS record should report each stage and name the
@@ -49,11 +51,17 @@ invocation did not occur.
 
 - `landed_as: UNLANDED #520`
 
-### 2. The tested component set
+### 2. The tested component set — Declined
 
 Which components of the skill were under test in this measurement.
 
-- `landed_as: UNLANDED #520`
+**Declined:** a costing pass found no enumeration of a skill's components
+anywhere in `src/`. The nearest neighbour is `delivery.channel`, which names
+which product carried the value, a different question. Landing the key before
+the vocabulary exists produces a list whose members nobody can validate.
+
+Revisit if a component vocabulary is decided anywhere, which makes this
+addition ordinary schema plumbing and lapses the decline immediately.
 
 ### 3. The implementation family and alternatives considered
 
@@ -62,11 +70,19 @@ considered.
 
 - `landed_as: UNLANDED #520`
 
-### 4. The cost vector and dominance rule
+### 4. The cost vector and dominance rule — Declined
 
 Cost dimensions and the rule for dominance comparison across realizations.
 
-- `landed_as: UNLANDED #520`
+**Declined:** the ratifying document gives this one sentence, listing no cost
+dimensions and no dominance rule. `git grep -niE "dominance|pareto|cost_vector|cost dimension" -- src/`
+returns nothing. The schema's existing `cost` object is a fixed token triple
+with no comparison logic. A schema shell could be added cheaply and would ship
+with every leg permanently refused, which is a place to put a rule rather than
+a rule.
+
+Revisit if cost dimensions and a dominance rule are specified, which lapses
+the decline.
 
 ### 5. The claim scope and disturbance set
 

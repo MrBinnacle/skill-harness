@@ -1375,6 +1375,11 @@ def test_dc17_real_mirror_names_source_and_six_unlanded_additions() -> None:
     additions, every UNLANDED row naming ONE ticket rather than drifting
     apart, and no row silently dropped. Which ticket is live is DC-17's job,
     and DC-17 reads it from the API.
+
+    #525 cleared UNLANDED from declined additions 2 and 4. Those two are still
+    accounted by heading; they no longer contribute a landed_as row, so the
+    remaining open work is four UNLANDED rows, not six. A decline is a landed
+    decision: leaving UNLANDED on it would re-break DC-17 when #520 closes.
     """
     path = _REPO_ROOT / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
     text = path.read_text(encoding="utf-8")
@@ -1393,10 +1398,61 @@ def test_dc17_real_mirror_names_source_and_six_unlanded_additions() -> None:
     for heading in expected_headings:
         assert heading in text, f"missing addition heading: {heading}"
     landed = re.findall(r"landed_as:\s*(.+?)\s*`", text)
-    assert len(landed) == 6, f"expected one landed_as per addition, got {landed}"
+    # Four still-open additions keep landed_as; declined 2 and 4 do not (#525).
+    assert len(landed) == 4, f"expected one landed_as per open addition, got {landed}"
     unlanded = [v for v in landed if v.startswith("UNLANDED ")]
     for value in unlanded:
         assert re.fullmatch(r"UNLANDED #\d+", value), f"malformed UNLANDED row: {value}"
     assert len(set(unlanded)) <= 1, (
         f"UNLANDED rows name more than one ticket, so closing one leaves the rest stale: {unlanded}"
     )
+
+
+def test_dc17_additions_2_and_4_declined_with_reason() -> None:
+    """AC (#525): additions 2 and 4 carry a decline with its stated reason,
+    not UNLANDED. Each decline names a reversal condition specific enough
+    that a reader can tell what would reverse it.
+
+    Pins external behaviour of the mirror record: the section is a decline
+    (not a deferral), the UNLANDED row is gone, and the reason states what
+    would lapse the decline. DC-17 is not modified; clearing the row is the
+    format change that keeps the check green with two fewer open-work rows.
+    """
+    path = _REPO_ROOT / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
+    text = path.read_text(encoding="utf-8")
+
+    def _section(heading: str) -> str:
+        """Return the text between one heading and the next ### or end."""
+        pattern = re.compile(rf"(^{re.escape(heading)}\b.*?)(?=^### |\Z)", re.MULTILINE | re.DOTALL)
+        m = pattern.search(text)
+        assert m, f"heading {heading!r} not found"
+        return m.group(1)
+
+    section_2 = _section("### 2. The tested component set")
+    section_4 = _section("### 4. The cost vector and dominance rule")
+
+    for heading, section in (
+        ("### 2. The tested component set", section_2),
+        ("### 4. The cost vector and dominance rule", section_4),
+    ):
+        assert re.search(r"Declined", section), f"{heading}: no 'Declined' in section prose"
+        assert re.search(r"Revisit if", section), (
+            f"{heading}: no reversal condition ('Revisit if') in section prose"
+        )
+        assert not re.search(r"landed_as:\s*UNLANDED", section), (
+            f"{heading}: still carries UNLANDED; a decline is a landed decision "
+            "and must clear the open-work row (#525, S445)"
+        )
+        assert not re.search(r"landed_as:", section), (
+            f"{heading}: carries a landed_as row; declined additions replace "
+            "landed_as with a stated decline, they do not point at a symbol"
+        )
+
+    assert "component vocabulary" in section_2, (
+        "addition 2 reason must name the missing component vocabulary"
+    )
+    assert "delivery.channel" in section_2, (
+        "addition 2 reason must name the nearest non-match (delivery.channel)"
+    )
+    assert "cost dimensions" in section_4, "addition 4 reason must name the missing cost dimensions"
+    assert "dominance rule" in section_4, "addition 4 reason must name the missing dominance rule"
