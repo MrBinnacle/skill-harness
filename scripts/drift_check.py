@@ -48,9 +48,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -1088,6 +1091,9 @@ def _check_cache_aware(root: Path, contract: CacheAwareContract) -> list[str]:
 _MIRROR_FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
 _MIRROR_LANDED_AS = re.compile(r"landed_as:\s*(.+?)\s*`", re.MULTILINE)
 _UNLANDED_RE = re.compile(r"^UNLANDED\s+#(\d+)$")
+_MIRROR_TICKET_API = "https://api.github.com/repos/MrBinnacle/skill-harness/issues"
+# Per-process cache so six UNLANDED rows naming the same ticket make one GET.
+_TICKET_STATE_CACHE: dict[str, bool | None] = {}
 
 
 def _check_mirror_records(root: Path, contract: MirrorRecordContract) -> list[str]:
@@ -1099,6 +1105,7 @@ def _check_mirror_records(root: Path, contract: MirrorRecordContract) -> list[st
     - A landed symbol does not exist under the search roots.
     - An UNLANDED row names a closed ticket.
     - The glob matches zero files (a check that scans nothing passes trivially).
+    - A MIRROR file has zero landed_as entries (same trivial-pass hole).
     """
     base = root / contract.ledger_dir
     if not base.is_dir():
@@ -1120,12 +1127,18 @@ def _check_mirror_records(root: Path, contract: MirrorRecordContract) -> list[st
         if block is None:
             failures.append(f"{rel}: no leading front-matter block")
             continue
-        for m in _MIRROR_LANDED_AS.finditer(text):
+        matches = list(_MIRROR_LANDED_AS.finditer(text))
+        if not matches:
+            failures.append(
+                f"{rel}: no landed_as: entries (a check that scans nothing passes trivially)"
+            )
+            continue
+        for m in matches:
             landed = m.group(1).strip()
-            unlaned_match = _UNLANDED_RE.match(landed)
-            if unlaned_match:
-                ticket_num = unlaned_match.group(1)
-                is_closed = _check_ticket_closed(root, ticket_num)
+            unlanded_match = _UNLANDED_RE.match(landed)
+            if unlanded_match:
+                ticket_num = unlanded_match.group(1)
+                is_closed = _check_ticket_closed(ticket_num)
                 if is_closed is True:
                     failures.append(f"{rel}: UNLANDED #{ticket_num} names a closed ticket")
             elif not _symbol_exists(root, landed, contract.search_roots):
@@ -1136,32 +1149,41 @@ def _check_mirror_records(root: Path, contract: MirrorRecordContract) -> list[st
     return failures
 
 
-def _check_ticket_closed(root: Path, ticket_num: str) -> bool | None:
-    """Check if a GitHub issue is closed. Returns True if closed, False if
-    open, None if the status cannot be determined."""
+def _check_ticket_closed(ticket_num: str) -> bool | None:
+    """True if the issue is closed, False if open, None if unread.
+
+    Uses the public GitHub issues API (same pattern as release_gate G7/G8),
+    not ``gh``: the drift-check CI job does not receive GITHUB_TOKEN, and
+    unauthenticated ``gh`` cannot read issue state, which left the closed-
+    ticket control dead on every green CI run. Public issue state is readable
+    without a token; GITHUB_TOKEN is attached when present so shared runners
+    do not burn the unauthenticated rate budget. Fail-open only when the
+    status cannot be read (network/API error) — never when the issue is
+    closed.
+    """
+    if ticket_num in _TICKET_STATE_CACHE:
+        return _TICKET_STATE_CACHE[ticket_num]
+    state: bool | None
     try:
-        result = subprocess.run(  # noqa: S603 - fixed argv, no shell, no user input
-            [  # noqa: S607 - partial path is intentional (gh on PATH)
-                "gh",
-                "issue",
-                "view",
-                ticket_num,
-                "--repo",
-                "MrBinnacle/skill-harness",
-                "--json",
-                "state",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            cwd=str(root),
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "skill-harness-drift-check",
+        }
+        token = os.environ.get("GITHUB_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        request = urllib.request.Request(  # noqa: S310 - fixed API origin
+            f"{_MIRROR_TICKET_API}/{ticket_num}",
+            headers=headers,
         )
-        if result.returncode != 0:
-            return None
-        data = json.loads(result.stdout)
-        return data.get("state") == "CLOSED"
-    except Exception:
-        return None
+        with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
+            data = json.load(response)
+        raw = data.get("state") if isinstance(data, dict) else None
+        state = None if not isinstance(raw, str) else raw.lower() == "closed"
+    except (OSError, urllib.error.URLError, urllib.error.HTTPError, ValueError, TypeError):
+        state = None
+    _TICKET_STATE_CACHE[ticket_num] = state
+    return state
 
 
 def _symbol_exists(root: Path, symbol: str, search_roots: tuple[str, ...]) -> bool:

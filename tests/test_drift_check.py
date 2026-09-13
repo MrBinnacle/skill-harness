@@ -17,12 +17,11 @@ tests/test_semantics.py — NOT an allowlist entry; the allowlist stays empty).
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPT = _REPO_ROOT / "scripts" / "drift_check.py"
@@ -1167,30 +1166,30 @@ def test_dc17_nonexistent_symbol_blocks(tmp_path: Path) -> None:
     )
 
 
-def test_dc17_unlaned_closed_ticket_blocks(tmp_path: Path) -> None:
+def test_dc17_unlanded_closed_ticket_blocks(tmp_path: Path) -> None:
     """Control: an UNLANDED row naming a closed ticket must turn DC-17 red.
 
-    Uses a known-closed issue (the repo's issue #1 is typically closed).
-    Skipped when gh is not authenticated — the check passes when ticket
-    status cannot be verified (fail-open on auth absence)."""
-    # Check if gh is available and authenticated
-    result = subprocess.run(
-        ["gh", "auth", "status"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        pytest.skip("gh not authenticated — cannot verify ticket status")
+    Uses the repo's issue #1 (closed). Reads issue state through the public
+    GitHub API — the same path CI exercises — so the control is not skipped
+    when ``gh`` is unauthenticated.
+    """
     root = _make_tree(tmp_path)
+    # Drop the live mirror (UNLANDED #514, open) so only the closed-ticket
+    # row is under test; otherwise a network miss on #1 could be masked by
+    # a green sibling file.
+    live = root / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
+    if live.exists():
+        live.unlink()
     _write_mirror_record(
         root,
         additions=("### Addition 1\n\n- `landed_as: UNLANDED #1`\n"),
     )
     r = _run(root)
-    assert r.returncode == 1
+    assert r.returncode == 1, r.stdout + r.stderr
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
-    assert any("DC-17" in line for line in fail_lines), r.stdout
+    assert any(
+        "DC-17" in line and "closed ticket" in line and "#1" in line for line in fail_lines
+    ), r.stdout
 
 
 def test_dc17_zero_mirror_files_blocks(tmp_path: Path) -> None:
@@ -1207,6 +1206,20 @@ def test_dc17_zero_mirror_files_blocks(tmp_path: Path) -> None:
     assert any("DC-17" in line and "no MIRROR-*.md files found" in line for line in fail_lines), (
         r.stdout
     )
+
+
+def test_dc17_mirror_with_zero_landed_as_blocks(tmp_path: Path) -> None:
+    """A MIRROR file with front-matter but no landed_as entries is the same
+    trivial-pass hole as an empty glob: DC-17 must refuse it."""
+    root = _make_tree(tmp_path)
+    live = root / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
+    if live.exists():
+        live.unlink()
+    _write_mirror_record(root, additions="### Addition 1\n\nNo landed_as field here.\n")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "no landed_as" in line for line in fail_lines), r.stdout
 
 
 def test_dc17_missing_ledger_dir_blocks(tmp_path: Path) -> None:
@@ -1246,3 +1259,27 @@ def test_dc17_multiple_additions_all_checked(tmp_path: Path) -> None:
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-17" in line and "TOTALLY_FAKE_SYMBOL" in line for line in fail_lines), r.stdout
+
+
+def test_dc17_real_mirror_names_source_and_six_unlanded_additions() -> None:
+    """AC pin: the committed On-Irreducibility mirror names the source page
+    and edit date, and lists all six additions as UNLANDED #514 — not
+    omitted, not fabricated as landed (#514)."""
+    path = _REPO_ROOT / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
+    text = path.read_text(encoding="utf-8")
+    assert 'source_page: "On Irreducibility"' in text
+    assert 'source_last_edited: "2026-08-11T17:33:55.553Z"' in text
+    assert "source_status: Done" in text
+    assert "source_verdict: HOLDS" in text
+    expected_headings = (
+        "### 1. Activation-chain stages and failure location",
+        "### 2. The tested component set",
+        "### 3. The implementation family and alternatives considered",
+        "### 4. The cost vector and dominance rule",
+        "### 5. The claim scope and disturbance set",
+        "### 6. The retest triggers and expiry state",
+    )
+    for heading in expected_headings:
+        assert heading in text, f"missing addition heading: {heading}"
+    landed = re.findall(r"landed_as:\s*(.+?)\s*`", text)
+    assert landed == ["UNLANDED #514"] * 6, landed
