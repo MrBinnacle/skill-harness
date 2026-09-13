@@ -210,24 +210,33 @@ def test_the_selection_filter_is_implemented_exactly_once() -> None:
     #447 fixed this shape in test_value_class_call_sites_static, and it came back because
     test_mint_path_allowlist carried its own copy that was never touched. The filter is now
     extracted to tests._module_selection; this test asserts the extraction is complete by
-    checking that no other module-level function in the test suite implements the same
-    directory-exclusion logic.
+    checking that no other function implements either form of the directory-exclusion
+    logic: the absolute-path form that caused #482, or a second relative-to form.
     """
     import ast
 
+    shared = (REPO_ROOT / "tests" / "_module_selection.py").resolve()
+    assert shared.is_file(), (
+        "tests/_module_selection.py is missing; the shared selection filter is the single "
+        "implementation this test requires."
+    )
+
+    # Absolute-path form: `".sandcastle" not in <name>.parts` — the #482 defect.
+    _absolute_sandcastle = re.compile(r"""["']\.sandcastle["']\s+not\s+in\s+\w+\.parts""")
+    # Relative-to form: rglob/glob + relative_to + .parts + exclusion set or sandcastle.
+    # The sole allowed site is tests/_module_selection.py.
+
     seen: list[str] = []
-    # Walk every .py file under tests/ and look for module-level functions that call
-    # .relative_to(.).parts with an exclusion set — the signature pattern of the filter.
-    for path in sorted(REPO_ROOT.rglob("*.py")):
-        if path.suffix != ".py":
+    for path in sorted((REPO_ROOT / "tests").rglob("*.py")):
+        if path.suffix != ".py" or "__pycache__" in path.parts:
+            continue
+        if path.resolve() == shared:
             continue
         try:
             source = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        if ".sandcastle" not in source and "_EXCLUDED_DIRECTORY_NAMES" not in source:
-            continue
-        if path.name in ("_module_selection.py", "test_mint_path_allowlist.py"):
+        if ".sandcastle" not in source and "EXCLUDED_DIRECTORY" not in source:
             continue
         try:
             tree = ast.parse(source, filename=str(path))
@@ -236,15 +245,23 @@ def test_the_selection_filter_is_implemented_exactly_once() -> None:
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
+            # This meta-test names both patterns; exclude only its own body.
+            if node.name == "test_the_selection_filter_is_implemented_exactly_once":
+                continue
             body_src = ast.get_source_segment(source, node)
             if body_src is None:
                 continue
+            rel = f"{path.relative_to(REPO_ROOT)}:{node.name}"
+            if _absolute_sandcastle.search(body_src):
+                seen.append(f"{rel}:absolute-path-.sandcastle-filter")
+                continue
             if (
-                ".relative_to(" in body_src
+                (".rglob(" in body_src or ".glob(" in body_src)
+                and ".relative_to(" in body_src
                 and ".parts" in body_src
                 and ("EXCLUDED" in body_src or ".sandcastle" in body_src)
             ):
-                seen.append(f"{path.relative_to(REPO_ROOT)}:{node.name}")
+                seen.append(f"{rel}:relative-to-exclusion-filter")
     assert not seen, (
         f"SELECTION_FILTER_DUPLICATED: found additional directory-exclusion filters in "
         f"{seen}. The shared implementation lives in tests._module_selection; remove the "
