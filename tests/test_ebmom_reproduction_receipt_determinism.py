@@ -108,12 +108,18 @@ class _FakeClock:
 
 
 def _expected_stub(tmp_path: Path) -> Path:
-    """A prototype dump that declares the run's root and R and compares nothing.
+    """A prototype dump that declares the run's root and R and compares no cells.
 
     ``run_v2_reproduction`` refuses a dump whose root seed or replicate count
-    disagrees with the run, and skips cell comparison for a column the dump does
-    not carry. An empty ``estimators`` therefore exercises the whole receipt
-    assembly while leaving the numbers to the estimator's own tests.
+    disagrees with the run. An empty ``estimators`` therefore exercises the whole
+    receipt assembly while leaving the numbers to the estimator's own tests.
+
+    Since the fail-closed fix, an absent column is RECORDED as a difference
+    rather than skipped, so a receipt built from this stub reports one difference
+    per column and ``port_identity_holds`` is False. That is the intended
+    reading: this stub compared nothing, and the receipt now says so. The
+    invariant this file is about is byte identity across two clocks, which holds
+    either way because both runs see the same stub.
     """
     path = tmp_path / "proto-pb-all-R2-SMOKE_NO.json"
     path.write_text(
@@ -249,3 +255,93 @@ def test_the_regime_entry_carries_no_duration_key(
             f"regime {name!r} carries a 'seconds' field in the canonical receipt; "
             "wall time belongs on stdout, per the v1 path's own comment"
         )
+
+
+def _agreeing_pair() -> tuple[dict[str, object], dict[str, Any]]:
+    """A report and a dump that agree in every cell, built from the module's own
+    column, path, row and field constants rather than a hand-copied shape.
+
+    The report keys each cell by the field name the estimator uses; the dump keys
+    the same value by the field name the prototype dump uses. ``DUMP_FIELDS`` is
+    the mapping between them, so reading it here keeps this fixture correct if
+    either vocabulary changes.
+    """
+    values = {"false": 1, "decisions": 2, "G": 3, "g": 4}
+    report_estimators: dict[str, dict[str, Any]] = {}
+    dump_estimators: dict[str, dict[str, Any]] = {}
+    for column in _REPRO.V2_COLUMNS:
+        report_rows: dict[str, Any] = {}
+        dump_rows: dict[str, Any] = {}
+        for path in (*_REPRO.V2_PATHS, "pooled"):
+            for row in _REPRO.V2_ROWS:
+                label = "false_pass" if row == "5c" else "false_fail"
+                name = f"row{row}_{label}_{path}"
+                report_rows[name] = dict(values)
+                dump_rows[name] = {
+                    dump_field: values[cell_field]
+                    for dump_field, cell_field in _REPRO.DUMP_FIELDS.items()
+                }
+        report_estimators[column] = report_rows
+        dump_estimators[column] = dump_rows
+    excess = {column: [0, 0] for column in _REPRO.V2_COLUMNS}
+    report: dict[str, object] = {
+        "estimators": report_estimators,
+        "excess_over_main_vs_oracle": excess,
+        "admitted": REPLICATES,
+    }
+    expected: dict[str, Any] = {
+        "estimators": dump_estimators,
+        "excess_over_main_vs_oracle": {k: list(v) for k, v in excess.items()},
+        "admitted": REPLICATES,
+    }
+    return report, expected
+
+
+def test_the_agreeing_pair_really_agrees() -> None:
+    """Guard for the two controls below.
+
+    If this fixture already reported a difference, a difference in either control
+    would prove nothing about the case that control is named for.
+    """
+    report, expected = _agreeing_pair()
+    _, differences = _REPRO.cells_against_dump(report, expected)
+    assert differences == [], (
+        "the fixture disagrees with its own dump, so neither control below can "
+        f"attribute a difference to the thing it drops: {differences}"
+    )
+
+
+def test_a_dump_omitting_a_column_is_a_difference_not_agreement() -> None:
+    """v2 section 9 part (a) is FROZEN and one differing cell is a port defect.
+
+    A column the dump did not carry was skipped silently, so a dump carrying no
+    columns at all produced zero differences and the caller set
+    ``port_identity_holds`` True having compared nothing. The absent-ROW path has
+    always reported a difference; only the column path failed open, and the one
+    fixture that reaches this function carries an empty ``estimators`` map.
+    """
+    report, expected = _agreeing_pair()
+    dropped = _REPRO.V2_COLUMNS[0]
+    del expected["estimators"][dropped]
+
+    _, differences = _REPRO.cells_against_dump(report, expected)
+
+    assert any(line.startswith(f"{dropped}:") for line in differences), (
+        f"a dump omitting column {dropped!r} reported no difference naming it, "
+        "so port_identity_holds would be True over a column nobody compared: "
+        f"{differences}"
+    )
+
+
+def test_a_dump_omitting_an_excess_is_a_difference_not_agreement() -> None:
+    """The vs-oracle excess path failed open the same way as the column path."""
+    report, expected = _agreeing_pair()
+    dropped = _REPRO.V2_COLUMNS[-1]
+    del expected["excess_over_main_vs_oracle"][dropped]
+
+    _, differences = _REPRO.cells_against_dump(report, expected)
+
+    assert any(line.startswith(f"{dropped}.excess_over_main_vs_oracle") for line in differences), (
+        f"a dump omitting the excess for {dropped!r} reported no difference "
+        f"naming it: {differences}"
+    )

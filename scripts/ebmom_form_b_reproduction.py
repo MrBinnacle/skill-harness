@@ -474,6 +474,13 @@ def cells_against_dump(
         rows = estimators[column]
         expected_column = expected_regime["estimators"].get(column)
         column_cells: dict[str, object] = {}
+        if expected_column is None:
+            # v2 section 9 part (a) is FROZEN and one differing cell is a port
+            # defect, so a column the dump does not carry is a difference, not
+            # agreement. The absent-ROW path below has always said so; this path
+            # used to skip silently, which let a dump with no columns at all
+            # report port_identity_holds: True having compared nothing.
+            differences.append(f"{column}: absent from the expected file")
         for path in (*V2_PATHS, "pooled"):
             for row in V2_ROWS:
                 name = f"row{row}_{'false_pass' if row == '5c' else 'false_fail'}_{path}"
@@ -503,6 +510,9 @@ def cells_against_dump(
     for column in V2_COLUMNS:
         want_excess = expected_excess.get(column)
         if want_excess is None:
+            differences.append(
+                f"{column}.excess_over_main_vs_oracle: absent from the expected file"
+            )
             continue
         if list(excess[column]) != list(want_excess):
             differences.append(
