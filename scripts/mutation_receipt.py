@@ -125,6 +125,88 @@ _PAIRED_GATE2 = "src/skill_harness/cli/paired_gate2.py"
 _PAIRED_GATE2_MODULE = "skill_harness.cli.paired_gate2"
 _DRAFT_REFUSED = "tests/test_cli_paired_gate2.py::TestUnratifiedDesign::test_draft_record_refused"
 _COUNT_MISMATCH = "tests/test_cli_paired_gate2.py::TestCountMismatch::test_pilot_k8_vs_design_n32"
+# #441: mutant 1 of section 7 of the superseding pre-registration
+# (docs/assurance/ebmom-peel-preregistration-amendment-v2.md), FROZEN 2026-09-05.
+_FIT = "src/skill_harness/aggregation/fit.py"
+_FIT_MODULE = "skill_harness.aggregation.fit"
+_FORM_B_KILL = (
+    "tests/test_aggregation_fit_bounded_pooling.py"
+    "::test_mutant_1_tie_heavy_null_refused_false_fail_rate"
+)
+# Carried in the same selection so the receipt shows, by name, which assertions
+# moved and which did not. The control must reject under BOTH the clean tree and
+# the mutant -- if it ever went green, the kill above would be passing on an
+# empty cell rather than on a pooled one. The refusal guard must likewise stay
+# green: a mutant that made the regime ADMITTED would empty the refused cell and
+# look like a kill for the wrong reason.
+_FORM_B_CONTROL = (
+    "tests/test_aggregation_fit_bounded_pooling.py"
+    "::test_control_unpooled_refused_path_rejects_on_the_same_worlds"
+)
+_FORM_B_REFUSAL_GUARD = (
+    "tests/test_aggregation_fit_bounded_pooling.py::test_the_regime_reaches_the_refused_path_at_all"
+)
+# #442: mutant 4 of the same section. Its obligation is per-mutant rather than
+# per-section because both mutants target fit.py, so any change to fit.py moves
+# BOTH receipts' digests and each has to be regenerable on its own. `--select`
+# matches on a prefix, so `v2-section-7` still selects the whole section for the
+# collecting receipt #444 owns.
+_CLASS2_KILL = (
+    "tests/test_aggregation_fit_admitted_bootstrap.py"
+    "::test_mutant_4_low_heterogeneity_admitted_false_fail_rate"
+)
+# Carried in the same selection so the receipt shows, by name, which assertions
+# moved and which did not. The control must reject under BOTH trees: it scores
+# the plug-in explicitly, so if it ever went green the kill above would be
+# passing on a cell the plug-in no longer fills. The admission guard must
+# likewise stay green -- a mutant that made these four worlds REFUSED would
+# empty the admitted cell and look like a kill for the wrong reason.
+_CLASS2_CONTROL = (
+    "tests/test_aggregation_fit_admitted_bootstrap.py"
+    "::test_control_plugin_admitted_path_rejects_on_the_same_worlds"
+)
+_CLASS2_ADMISSION_GUARD = (
+    "tests/test_aggregation_fit_admitted_bootstrap.py"
+    "::test_the_four_named_worlds_reach_the_admitted_path"
+)
+
+# #443: mutants 2 and 3 of the same section. Both target the acceptance-matrix
+# harness rather than fit.py, so their obligations are separate again: a change
+# to scripts/ebmom_acceptance_matrix.py moves both digests and each has to be
+# regenerable on its own.
+_MATRIX = "scripts/ebmom_acceptance_matrix.py"
+_MATRIX_MODULE = "ebmom_acceptance_matrix"
+_SPLIT_KILL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_mutant_2_low_heterogeneity_refused_cell_carries_its_own_G"
+)
+# The control requires the POOLED cell to be unchanged: pooling loses the path
+# and never the decisions, so it stays green under the mutant. If the mutant had
+# emptied the fixture rather than pooling it, the kill would go red for a reason
+# that has nothing to do with the split and this control would go red with it.
+# The guard requires the two fixture worlds to reach different paths.
+_SPLIT_CONTROL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_control_the_pooled_tally_keeps_every_decision_either_way"
+)
+_SPLIT_PATH_GUARD = (
+    "tests/test_ebmom_acceptance_matrix_v2.py::test_the_fixture_worlds_reach_both_paths"
+)
+_SELECTION_KILL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_mutant_3_two_correlated_false_decisions_do_not_reject"
+)
+# The control requires the RETIRED all-decision test to reject on the same
+# fixture. If it ever went green the kill above would be passing because the
+# fixture cannot fire, not because the selection absorbs the correlation. The
+# guard pins the fixture's shape: one world, two decisions.
+_SELECTION_CONTROL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_control_the_all_decision_test_rejects_on_the_same_fixture"
+)
+_SELECTION_SHAPE_GUARD = (
+    "tests/test_ebmom_acceptance_matrix_v2.py::test_the_fixture_is_one_world_carrying_two_decisions"
+)
 
 _PAIRED_LAUNCH = "src/skill_harness/subject/paired_launch.py"
 _PAIRED_LAUNCH_MODULE = "skill_harness.subject.paired_launch"
@@ -308,6 +390,53 @@ MUTANTS: tuple[Mutant, ...] = (
         "    if False:  # mutant: count mismatch accepted",
         (_COUNT_MISMATCH,),
     ),
+    Mutant(
+        "M-V1",
+        "v2-section-7-mutant-1",
+        "mutant 1: pooling removed on the refused path, reverting to the unpooled "
+        "posterior the pre-registration retired",
+        _FIT,
+        _FIT_MODULE,
+        "        c_bound = _bounded_pooling_concentration(mu, v_bound)",
+        "        c_bound = None  # mutant: pooling removed on the refused path",
+        (_FORM_B_KILL, _FORM_B_CONTROL, _FORM_B_REFUSAL_GUARD),
+    ),
+    Mutant(
+        "M-V4",
+        "v2-section-7-mutant-4",
+        "mutant 4: the admission-conditioned bootstrap removed from the admitted "
+        "path, restoring the plug-in posterior the mechanism replaced",
+        _FIT,
+        _FIT_MODULE,
+        "    posteriors = _build_shrunken_posteriors(\n"
+        "        clauses, alpha_hat, beta_hat, tail_probabilities=tail_probabilities\n"
+        "    )",
+        "    posteriors = _build_shrunken_posteriors(clauses, alpha_hat, beta_hat)"
+        "  # mutant: plug-in restored",
+        (_CLASS2_KILL, _CLASS2_CONTROL, _CLASS2_ADMISSION_GUARD),
+    ),
+    Mutant(
+        "M-V2",
+        "v2-section-7-mutant-2",
+        "mutant 2: the per-path split removed, so every decision is tallied on one "
+        "lane and the refused-path cell cannot be reported at all",
+        _MATRIX,
+        _MATRIX_MODULE,
+        "        lane = path",
+        '        lane = "admitted"  # mutant: per-path split removed, rows pooled',
+        (_SPLIT_KILL, _SPLIT_CONTROL, _SPLIT_PATH_GUARD),
+    ),
+    Mutant(
+        "M-V3",
+        "v2-section-7-mutant-3",
+        "mutant 3: the one-decision-per-world selection replaced by all decisions, "
+        "restoring the test that treats clause decisions as independent",
+        _MATRIX,
+        _MATRIX_MODULE,
+        "        trials, trial_false = clusters, sum(1 for value in selected if value == 1)",
+        "        trials, trial_false = decisions, false_total  # mutant: all decisions",
+        (_SELECTION_KILL, _SELECTION_CONTROL, _SELECTION_SHAPE_GUARD),
+    ),
     # #368 Path C: the discordant accumulator and the registered Gate-2 route.
     Mutant(
         "M-T1",
@@ -486,7 +615,11 @@ def _env(root: Path | None = None) -> dict[str, str]:
     """
     env = {**os.environ, "PYTHONHASHSEED": "0", "PYTHONUTF8": "1"}
     if root is not None:
-        env["PYTHONPATH"] = str(root / "src")
+        # scripts/ joins src/ because #443's mutants target the acceptance-matrix
+        # harness, which lives there and is not a package. Without it the compile
+        # and isolation assertions cannot import the mutated module at all, and
+        # the case would be recorded as INVALID_ISOLATION rather than measured.
+        env["PYTHONPATH"] = os.pathsep.join([str(root / "src"), str(root / "scripts")])
     return env
 
 

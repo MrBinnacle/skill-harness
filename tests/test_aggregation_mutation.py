@@ -429,8 +429,8 @@ class TestFitFieldFidelity:
         from skill_harness.aggregation.fit import ClauseObservations, fit_skill
 
         clauses = [
-            ClauseObservations(clause_id="a", w=3.0, n=8),
-            ClauseObservations(clause_id="b", w=5.0, n=8),
+            ClauseObservations.bernoulli(clause_id="a", w=3.0, n=8),
+            ClauseObservations.bernoulli(clause_id="b", w=5.0, n=8),
         ]
         result = fit_skill(clauses)
         by_id = {c.clause_id: c for c in result.posteriors}
@@ -458,7 +458,7 @@ class TestFitFieldFidelity:
     def test_unpooled_is_shrunken_false_not_none(self) -> None:
         from skill_harness.aggregation.fit import ClauseObservations, fit_skill
 
-        result = fit_skill([ClauseObservations(clause_id="a", w=1.0, n=2)])
+        result = fit_skill([ClauseObservations.bernoulli(clause_id="a", w=1.0, n=2)])
         assert result.posteriors[0].is_shrunken is False
 
     def test_shrunken_fit_preserves_w_and_n(self) -> None:
@@ -466,7 +466,9 @@ class TestFitFieldFidelity:
         from skill_harness.aggregation.fit import ClauseObservations, fit_skill
 
         # Spread means so EB-MoM converges (avoid var floor / alpha<=0).
-        clauses = [ClauseObservations(clause_id=f"c{i}", w=float(i), n=20) for i in range(10)]
+        clauses = [
+            ClauseObservations.bernoulli(clause_id=f"c{i}", w=float(i), n=20) for i in range(10)
+        ]
         result = fit_skill(clauses)
         assert result.aggregation_method == "ebmom_hierarchical"
         by_id = {c.clause_id: c for c in result.posteriors}

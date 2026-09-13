@@ -1,15 +1,16 @@
-"""Tests for aggregation/fit.py — EB-MoM hierarchical fit + BH-FDR fallback (A53).
+"""Tests for aggregation/fit.py — EB-MoM hierarchical fit + bounded-pooling refusal (A53).
 
 Coverage:
 - EB-MoM well-behaved case: K >= 10, valid alpha/beta, shrunken posteriors
 - EB-MoM: hand-checked simple case [(5,10),(6,10),(7,10)] + extended to K=10
-- Convergence failure: sample_var < 1e-6 → BH-FDR fallback
-- Convergence failure: alpha_hat <= 0 → BH-FDR fallback
+- Convergence failure: sample_var < 1e-6 → bounded-pooling refusal (form B)
+- Convergence failure: alpha_hat <= 0 → bounded-pooling refusal (form B)
 - Input precondition: a clause with n <= 0 is rejected on BOTH K paths (#231)
 - Input precondition: a clause with w outside [0, n] is rejected on BOTH K paths (#232)
 - UNPOOLED fallback: K < 10 → logged warning + unpooled posteriors
 - Pass/fail thresholds correct in posteriors
-- BH-FDR: correct clause IDs pass/fail after adjustment
+- The refused path publishes no FDR selection: v2 section 3 retired BH-FDR
+  there, and _bh_fdr is unit-tested as a helper with no production caller
 - Determinism: same inputs → same output bytes
 """
 
@@ -21,15 +22,18 @@ from collections.abc import Sequence
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from scipy.stats import beta as beta_dist  # type: ignore[import-untyped]
 
 from skill_harness.aggregation.errors import ConvergenceFailure
 from skill_harness.aggregation.fit import (
+    HETEROGENEITY_TEST_ALPHA,
     K_MIN_FOR_EB,
     VAR_FLOOR,
     ClauseObservations,
     ClausePosterior,
     FitResult,
     _bh_fdr,
+    _bootstrap_seed,
     _ebmom,
     fit_skill,
 )
@@ -40,7 +44,17 @@ from skill_harness.aggregation.fit import (
 
 
 def make_clauses(wn_pairs: Sequence[tuple[float, int]]) -> list[ClauseObservations]:
-    return [ClauseObservations(clause_id=f"c{i}", w=w, n=n) for i, (w, n) in enumerate(wn_pairs)]
+    # Hypothesis generates fractional w here, which in production would imply
+    # ties, and (w, n) alone does not determine sum_sq. For observations in
+    # [0, 1] the feasible range is w^2/n <= sum_sq <= w, so the tie-free
+    # extreme sum_sq = w is both valid and the MOST dispersed member of that
+    # set -- the hardest case for the sampling-variance peel. These properties
+    # assert only that the fit does not crash and returns valid Betas, so
+    # picking the adversarial end of the feasible set is the right default.
+    return [
+        ClauseObservations.bernoulli(clause_id=f"c{i}", w=w, n=n)
+        for i, (w, n) in enumerate(wn_pairs)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -124,8 +138,10 @@ class TestFitSkillObservationCountPrecondition:
 
     @pytest.mark.parametrize("k", [K_MIN_FOR_EB - 1, K_MIN_FOR_EB])
     def test_nonpositive_observation_count_rejected_before_method_selection(self, k: int) -> None:
-        clauses = [ClauseObservations(clause_id=f"c{i}", w=3.0, n=10) for i in range(k - 1)]
-        clauses.append(ClauseObservations(clause_id="unmeasured", w=0.0, n=0))
+        clauses = [
+            ClauseObservations.bernoulli(clause_id=f"c{i}", w=3.0, n=10) for i in range(k - 1)
+        ]
+        clauses.append(ClauseObservations.bernoulli(clause_id="unmeasured", w=0.0, n=0))
 
         with pytest.raises(ValueError, match="unmeasured") as exc_info:
             fit_skill(clauses)
@@ -164,8 +180,10 @@ class TestFitSkillWinWeightPrecondition:
 
     @pytest.mark.parametrize("k", [K_MIN_FOR_EB - 1, K_MIN_FOR_EB])
     def test_wins_above_observations_rejected_before_method_selection(self, k: int) -> None:
-        clauses = [ClauseObservations(clause_id=f"c{i}", w=3.0, n=10) for i in range(k - 1)]
-        clauses.append(ClauseObservations(clause_id="overcounted", w=11.0, n=10))
+        clauses = [
+            ClauseObservations.bernoulli(clause_id=f"c{i}", w=3.0, n=10) for i in range(k - 1)
+        ]
+        clauses.append(ClauseObservations.bernoulli(clause_id="overcounted", w=11.0, n=10))
 
         with pytest.raises(ValueError, match="overcounted") as exc_info:
             fit_skill(clauses)
@@ -182,7 +200,7 @@ class TestFitSkillWinWeightPrecondition:
         Beta(1 + w, ...) takes a non-positive FIRST parameter.
         """
         with pytest.raises(ValueError, match="undercounted"):
-            fit_skill([ClauseObservations(clause_id="undercounted", w=-1.0, n=10)])
+            fit_skill([ClauseObservations.bernoulli(clause_id="undercounted", w=-1.0, n=10)])
 
     def test_every_observation_a_win_is_admissible(self) -> None:
         """w == n is the boundary that must NOT raise: every observation a win.
@@ -190,7 +208,7 @@ class TestFitSkillWinWeightPrecondition:
         Guards the fix against over-rejection (``w < n``) — a real skill that
         wins every comparison must still be fittable.
         """
-        result = fit_skill([ClauseObservations(clause_id="perfect", w=10.0, n=10)])
+        result = fit_skill([ClauseObservations.bernoulli(clause_id="perfect", w=10.0, n=10)])
         assert result.posteriors[0].w == 10.0
         assert result.posteriors[0].posterior_beta > 0.0
 
@@ -261,14 +279,152 @@ class TestFitSkillEbmom:
         """
         # rates 0.3 .. 0.9, then padded to the K=10 EB floor at 0.8 — no rate
         # above 1.0, and no degenerate rate == 1.0.
-        pairs: list[tuple[float, int]] = [(3.0 + i, 10) for i in range(7)]
-        pairs += [(8.0, 10)] * 3
+        #
+        # n=50 rather than n=10 (#360). The rate STRUCTURE is unchanged; only
+        # the observation count per clause moved. At n=10 this spread is not
+        # separable from binomial noise around a common rate: latent variance
+        # 0.01956 against a null 95th percentile of 0.02067, so the
+        # heterogeneity test correctly refuses it and the fit never reaches the
+        # hierarchical path these tests exist to exercise. At n=50 the same
+        # heterogeneity is identified with a wide margin (0.03661 vs 0.00355).
+        # The refusal at n=10 is itself pinned by
+        # test_marginal_heterogeneity_is_refused_not_fitted below, so this
+        # change moves the INPUT that reaches the path under test rather than
+        # erasing the behaviour change that made it necessary.
+        pairs: list[tuple[float, int]] = [(15.0 + 5 * i, 50) for i in range(7)]
+        pairs += [(40.0, 50)] * 3
         return make_clauses(pairs)
 
     def test_ebmom_method_returned(self) -> None:
         clauses = self._make_k10_clauses_with_variance()
         result = fit_skill(clauses)
         assert result.aggregation_method == "ebmom_hierarchical"
+
+    def test_marginal_heterogeneity_is_refused_not_fitted(self) -> None:
+        """K=10, n=10, rates 0.3-0.9 is NOT identifiably heterogeneous (#360).
+
+        This is the fixture these tests used before the heterogeneity gate
+        landed, and it reached the hierarchical path. It no longer does, and
+        that is the intended behaviour change rather than a regression: with
+        ten clauses of ten trials, a 0.3-to-0.9 spread of observed rates is
+        inside what binomial noise around a single common rate produces. The
+        old code answered it with a hyperprior fitted to that noise.
+
+        Pinned here so the change is asserted somewhere. Widening the fixture
+        to n=50 to exercise the hierarchical path would otherwise delete the
+        evidence that the gate does anything.
+        """
+        pairs: list[tuple[float, int]] = [(3.0 + i, 10) for i in range(7)]
+        pairs += [(8.0, 10)] * 3
+        result = fit_skill(make_clauses(pairs))
+
+        assert result.aggregation_method == "bounded_pooling_refused"
+        prov = result.aggregation_provenance
+        assert prov["fallback_reason"] == "latent_variance_not_identified", (
+            f"expected a refusal on identification grounds, got {prov['fallback_reason']!r}"
+        )
+        # The refusal must be auditable: a reader has to be able to see the
+        # test that produced it, not just that something was refused.
+        attempted = prov["attempted"]
+        assert isinstance(attempted, dict)
+        test = attempted["heterogeneity_test"]
+        assert isinstance(test, dict)
+        for field in (
+            "statistic",
+            "p_boot",
+            "critical_order_statistic",
+            "exceed_count",
+            "null_encoded_mean",
+            "null_tie_fraction",
+            "alpha",
+            "bootstrap_b",
+            "bootstrap_seed",
+            "admitted",
+        ):
+            assert field in test, f"provenance is missing {field!r}"
+        assert test["admitted"] is False
+        # The decision rule is p_boot <= alpha, not a percentile comparison.
+        assert test["p_boot"] > HETEROGENEITY_TEST_ALPHA
+        assert test["alpha"] == HETEROGENEITY_TEST_ALPHA
+        # (1 + exceed) / (B + 1) exactly, so the level is achievable at finite B.
+        expected_p = (1.0 + test["exceed_count"]) / (test["bootstrap_b"] + 1.0)
+        assert test["p_boot"] == expected_p
+
+    def test_tie_propensity_heterogeneity_is_admitted(self) -> None:
+        """Heterogeneity in the ENCODED mean is admitted even when the decisive rate is common.
+
+        Pins the 2026-09-02 ruling on #360: the lane's heterogeneity target is
+        the encoded clause mean theta_k = 0.5 t_k + (1 - t_k) p_k, because
+        INVARIANTS section 1 decides each clause on the encoded rate. Ten
+        clauses with (wins, ties, losses) = (60, 20, 20) and ten with
+        (28, 60, 12) share a decisive rate near 0.73 but encode 0.70 against
+        0.58. A null that redraws ties at the pooled fraction admits this
+        world (p_boot 0.001); a null that holds each clause's tie count fixed
+        refuses it (p_boot 0.335), which is the superseded null and the
+        decisive-rate reading. The registered acceptance regimes cannot tell
+        those two nulls apart, so this fixture is where the ruling is pinned.
+        """
+        clauses = [
+            ClauseObservations(clause_id=f"a{i:02d}", w=70.0, n=100, sum_sq=65.0) for i in range(10)
+        ] + [
+            ClauseObservations(clause_id=f"b{i:02d}", w=58.0, n=100, sum_sq=43.0) for i in range(10)
+        ]
+        result = fit_skill(clauses)
+
+        assert result.aggregation_method == "ebmom_hierarchical"
+        test = result.aggregation_provenance["heterogeneity_test"]
+        assert isinstance(test, dict)
+        assert test["admitted"] is True
+        # 800 ties over 2000 observations, pooled over observations.
+        assert test["null_tie_fraction"] == 0.4
+        # 880 wins + 400 half-ties over 2000 observations.
+        assert test["null_encoded_mean"] == 0.64
+
+    def test_tie_free_null_reports_zero_tie_fraction(self) -> None:
+        """On tie-free data the pooled categorical null is the binomial null at the pooled rate."""
+        clauses = self._make_k10_clauses_with_variance()
+        test = fit_skill(clauses).aggregation_provenance["heterogeneity_test"]
+        assert isinstance(test, dict)
+        assert test["null_tie_fraction"] == 0.0
+
+    def test_admission_verdict_is_deterministic(self) -> None:
+        """The bootstrap must not make fit_skill non-deterministic (#360).
+
+        The seed is derived from the observations, so the same input gives the
+        same critical value and the same verdict on every run. A wall-clock or
+        global-RNG seed would make a published verdict irreproducible.
+        """
+        clauses = self._make_k10_clauses_with_variance()
+        first = fit_skill(clauses)
+        second = fit_skill(clauses)
+
+        assert first.aggregation_method == second.aggregation_method
+        t1 = first.aggregation_provenance["heterogeneity_test"]
+        t2 = second.aggregation_provenance["heterogeneity_test"]
+        assert isinstance(t1, dict) and isinstance(t2, dict)
+        assert t1["p_boot"] == t2["p_boot"]
+        assert t1["critical_order_statistic"] == t2["critical_order_statistic"]
+        assert t1["bootstrap_seed"] == t2["bootstrap_seed"]
+
+    def test_seed_covers_sum_sq_not_just_w_and_n(self) -> None:
+        """Two clause sets differing ONLY in tie composition are different data.
+
+        (clause_id, w, n) stopped being the complete input when route (b) added
+        sum_sq. If the digest ignored it, a tie-heavy set and a tie-free set at
+        the same (w, n) would share a bootstrap stream, which is a silent
+        collision between two different worlds.
+        """
+        tie_free = ClauseObservations(clause_id="c", w=5.0, n=10, sum_sq=5.0)
+        tie_heavy = ClauseObservations(clause_id="c", w=5.0, n=10, sum_sq=3.5)
+        assert tie_free.w == tie_heavy.w
+        assert tie_free.n == tie_heavy.n
+        assert _bootstrap_seed([tie_free]) != _bootstrap_seed([tie_heavy])
+
+    def test_canonical_encoding_is_order_independent(self) -> None:
+        """The digest sorts by clause_id, so input order cannot change a verdict."""
+        a = ClauseObservations.bernoulli(clause_id="a", w=3.0, n=10)
+        b = ClauseObservations.bernoulli(clause_id="b", w=7.0, n=10)
+        assert _bootstrap_seed([a, b]) == _bootstrap_seed([b, a])
 
     def test_provenance_fields_present(self) -> None:
         clauses = self._make_k10_clauses_with_variance()
@@ -336,51 +492,104 @@ class TestFitSkillEbmom:
 # ---------------------------------------------------------------------------
 
 
-class TestFitSkillBhFdrFallback:
+class TestFitSkillBoundedPoolingRefusal:
+    """The refused path under form B (pre-registration v2 section 3).
+
+    These cases were written against the BH-FDR fallback that the refused path
+    used until v2 section 3 retired it. The fixtures are unchanged; what they
+    assert moved with the procedure, so the record still shows which inputs
+    reach the refused path.
+    """
+
     def _make_degenerate_clauses(self) -> list[ClauseObservations]:
-        """K=10 clauses all with identical rate → sample_var < VAR_FLOOR → fallback."""
+        """K=10 clauses at one identical rate: no identified latent variance."""
         return make_clauses([(6, 10)] * 10)
 
-    def test_fallback_method_returned(self) -> None:
+    def test_refusal_method_returned(self) -> None:
         clauses = self._make_degenerate_clauses()
         result = fit_skill(clauses)
-        assert result.aggregation_method == "bh_fdr_fallback"
+        assert result.aggregation_method == "bounded_pooling_refused"
 
-    def test_fallback_provenance(self) -> None:
+    def test_refusal_provenance(self) -> None:
         clauses = self._make_degenerate_clauses()
         result = fit_skill(clauses)
         prov = result.aggregation_provenance
-        assert prov["q"] == 0.05
         assert prov["k_clauses"] == 10
         assert "fallback_reason" in prov
         assert "attempted" in prov
+        assert "q" not in prov, (
+            "BH-FDR is retired on the refused path (v2 section 3); a q in provenance "
+            "would name a parameter that no procedure in this fit used"
+        )
 
-    def test_fallback_posteriors_not_shrunken(self) -> None:
-        """BH-FDR uses unpooled posteriors."""
+        pooling = prov["bounded_pooling"]
+        assert isinstance(pooling, dict)
+        for field in (
+            "form",
+            "mu",
+            "v_bound",
+            "c_bound",
+            "reverted_to_unpooled",
+            "unpooled_revert_count",
+            "spec",
+        ):
+            assert field in pooling, f"bounded_pooling missing {field!r}: {pooling!r}"
+        assert pooling["form"] == "B"
+        attempted = prov["attempted"]
+        assert isinstance(attempted, dict)
+        het = attempted["heterogeneity_test"]
+        assert isinstance(het, dict)
+        assert pooling["v_bound"] == het["critical_order_statistic"], (
+            "v_bound must BE the critical order statistic of the admission test, not a "
+            "separately estimated bound; that identity is what makes the estimator "
+            "continuous across the admission boundary"
+        )
+
+    def test_refusal_posteriors_are_pooled_at_the_bound(self) -> None:
+        """A refused fit pools. It does not report the unpooled posterior."""
         clauses = self._make_degenerate_clauses()
         result = fit_skill(clauses)
-        assert all(not p.is_shrunken for p in result.posteriors)
+        prov = result.aggregation_provenance
+        pooling = prov["bounded_pooling"]
+        assert isinstance(pooling, dict)
+        assert pooling["reverted_to_unpooled"] is False
+        assert pooling["unpooled_revert_count"] == 0
+        assert all(p.is_shrunken for p in result.posteriors)
 
-    def test_bh_fdr_passes_not_none(self) -> None:
+        mu = float(pooling["mu"])
+        c_bound = float(pooling["c_bound"])
+        for post, cl in zip(result.posteriors, clauses, strict=True):
+            assert post.posterior_alpha == pytest.approx(mu * c_bound + cl.w)
+            assert post.posterior_beta == pytest.approx((1.0 - mu) * c_bound + (cl.n - cl.w))
+
+    def test_refusal_publishes_no_fdr_gate(self) -> None:
+        """bh_fdr_passes is None on the refused path, so nothing gates on it.
+
+        The status machine reads None as "no FDR gate applies". Publishing a
+        set here while the posteriors are pooled would let a consumer gate a
+        pooled decision on a correction computed from the unpooled posterior,
+        which is the mixture that v2 section 3 retires.
+        """
         clauses = self._make_degenerate_clauses()
         result = fit_skill(clauses)
-        assert result.bh_fdr_passes is not None
-        assert isinstance(result.bh_fdr_passes, frozenset)
+        assert result.bh_fdr_passes is None
 
-    def test_bh_fdr_with_strong_winner(self) -> None:
-        """Clause with very high p_exceeds should pass BH-FDR."""
-        # Mix: 9 identical clauses (degenerate → fallback), 1 strong clause
-        # But all-identical means K=10 with no variance → fallback
-        # To force fallback while having one high-p clause:
-        # use 9 at rate=0.6 (borderline) and 1 at rate=0.95
-        # But then variance won't be zero... use all-identical to force fallback
-        # then separately test BH logic
-        clauses = make_clauses([(6, 10)] * 10)
+    def test_pooling_concentrates_a_borderline_clause(self) -> None:
+        """Unpooled, w=6 of n=10 is Beta(7, 5) at P(theta > 0.60) near 0.5.
+
+        Pooled at the admission bound the same clause keeps that mean but takes
+        a tighter posterior, because ten clauses of ten trials agreeing on 0.6
+        is evidence about 0.6. The locked rule then decides on that posterior,
+        and nothing else does.
+        """
+        clauses = self._make_degenerate_clauses()
         result = fit_skill(clauses)
-        # w=6, n=10 → rate=0.6 → posterior Beta(7,5) → p = sf(0.6, 7, 5) ≈ 0.5
-        # p_value for BH = 1 - 0.5 = 0.5 → likely doesn't pass BH-FDR at q=0.05
-        # Result: none or few pass. Just check the type.
-        assert isinstance(result.bh_fdr_passes, frozenset)
+        unpooled_p = float(beta_dist.sf(0.60, 7.0, 5.0))
+        for post in result.posteriors:
+            assert post.posterior_alpha + post.posterior_beta > 12.0, (
+                "the pooled posterior must be more concentrated than Beta(7, 5)"
+            )
+            assert post.p_win_gt_threshold != unpooled_p
 
 
 # ---------------------------------------------------------------------------
@@ -428,35 +637,51 @@ class TestBhFdrDirect:
         result = _bh_fdr([], q=0.05)
         assert result == frozenset()
 
-    def test_fit_fallback_with_obvious_winner_clause_in_bh_fdr_passes(self) -> None:
-        """T3b: bimodal distribution → alpha_le_zero fallback fires AND winner in bh_fdr_passes.
+    def test_fit_refusal_decides_an_obvious_winner_by_the_locked_rule(self) -> None:
+        """T3b, re-pointed by v2 section 3: the winner is decided, not selected.
 
-        Strategy: 5 all-loss clauses (w=0, n=10) + 4 all-win clauses (w=10, n=10) + 1 winner.
-        Bimodal distribution (mean=0.5, var=mean*(1-mean)) makes alpha_hat → 0 → fallback.
-        The all-wins winner must appear in bh_fdr_passes (p ≈ 0 → survives BH correction).
+        Strategy is unchanged: 5 all-loss clauses (w=0, n=10) + 4 all-win
+        clauses (w=10, n=10) + 1 winner. The bimodal spread (mean 0.5, variance
+        mean*(1-mean)) drives alpha_hat to 0, so the fit refuses.
+
+        What changed is what happens next. The refused fit no longer publishes
+        a BH-FDR selection for a consumer to gate on; it pools at the admission
+        bound and hands every clause to the locked rule. The winner is judged
+        on its own pooled posterior, and against nine clauses that disagree
+        with it the pooling is what decides whether it clears the bar. Asserted
+        here as the posterior identity rather than as a PASS, because which
+        side of 0.95 it lands on is a property of the fixture, and pinning that
+        value would make the case unable to see its own staleness.
         """
-        # 5 pure-loss + 4 pure-win clauses → bimodal → alpha_hat = 0 → fallback
         clauses: list[ClauseObservations] = []
         for i in range(5):
-            clauses.append(ClauseObservations(clause_id=f"loss-{i}", w=0.0, n=10))
+            clauses.append(ClauseObservations.bernoulli(clause_id=f"loss-{i}", w=0.0, n=10))
         for i in range(4):
-            clauses.append(ClauseObservations(clause_id=f"win-{i}", w=10.0, n=10))
-        winner = ClauseObservations(clause_id="winner-clause", w=10.0, n=10)
+            clauses.append(ClauseObservations.bernoulli(clause_id=f"win-{i}", w=10.0, n=10))
+        winner = ClauseObservations.bernoulli(clause_id="winner-clause", w=10.0, n=10)
         clauses.append(winner)
         assert len(clauses) == 10  # K=10 to satisfy EB eligibility gate
 
         result = fit_skill(clauses)
 
-        # Verify fallback was triggered (alpha_le_zero from bimodal distribution)
-        assert result.aggregation_method == "bh_fdr_fallback", (
-            f"Expected bh_fdr_fallback, got {result.aggregation_method!r}"
+        assert result.aggregation_method == "bounded_pooling_refused", (
+            f"Expected bounded_pooling_refused, got {result.aggregation_method!r}"
         )
-        assert result.bh_fdr_passes is not None
+        assert result.aggregation_provenance["fallback_reason"] == "alpha_le_zero"
+        assert result.bh_fdr_passes is None, (
+            "a refused fit must publish no FDR selection: v2 section 3 retired it, and a "
+            f"non-None set would still gate the status machine, got {result.bh_fdr_passes!r}"
+        )
 
-        # The obvious winner (p_value ≈ 0) must be in bh_fdr_passes
-        assert "winner-clause" in result.bh_fdr_passes, (
-            f"winner-clause (all-wins) not in bh_fdr_passes={result.bh_fdr_passes!r}. "
-            "BH-FDR selection logic may be broken."
+        pooling = result.aggregation_provenance["bounded_pooling"]
+        assert isinstance(pooling, dict)
+        mu = float(pooling["mu"])
+        c_bound = float(pooling["c_bound"])
+        won = next(p for p in result.posteriors if p.clause_id == "winner-clause")
+        assert won.posterior_alpha == pytest.approx(mu * c_bound + 10.0)
+        assert won.posterior_beta == pytest.approx((1.0 - mu) * c_bound)
+        assert won.p_win_gt_threshold == pytest.approx(
+            float(beta_dist.sf(0.60, won.posterior_alpha, won.posterior_beta))
         )
 
 
@@ -508,7 +733,11 @@ def test_fit_skill_no_crash(wn_pairs: list[tuple[float, int]]) -> None:
     safe_pairs = [(min(w, float(n)), n) for w, n in wn_pairs]
     clauses = make_clauses(safe_pairs)
     result = fit_skill(clauses)
-    assert result.aggregation_method in ("ebmom_hierarchical", "bh_fdr_fallback", "unpooled")
+    assert result.aggregation_method in (
+        "ebmom_hierarchical",
+        "bounded_pooling_refused",
+        "unpooled",
+    )
     assert len(result.posteriors) == len(clauses)
 
 
@@ -745,11 +974,11 @@ def test_bh_fdr_single_failing_p_value() -> None:
 
 
 def _make_degenerate_clauses_k10() -> list[ClauseObservations]:
-    """K=10 clauses all identical → sample_var=0 < VAR_FLOOR → BH-FDR fallback."""
+    """K=10 clauses all identical: no identified latent variance, so the fit refuses."""
     return make_clauses([(6, 10)] * 10)
 
 
-def test_bh_fdr_fallback_reason_field() -> None:
+def test_refusal_reason_field() -> None:
     """M10: aggregation_provenance["fallback_reason"] must equal the ConvergenceFailure reason.
 
     Degenerate clauses (all identical) → var_between=0 → ConvergenceFailure(var_below_threshold).
@@ -757,10 +986,16 @@ def test_bh_fdr_fallback_reason_field() -> None:
     """
     clauses = _make_degenerate_clauses_k10()
     result = fit_skill(clauses)
-    assert result.aggregation_method == "bh_fdr_fallback"
+    assert result.aggregation_method == "bounded_pooling_refused"
     prov = result.aggregation_provenance
-    assert prov["fallback_reason"] == "var_below_threshold", (
-        f"Expected 'var_below_threshold', got {prov['fallback_reason']!r}"
+    # The reason string moved with #360, and the move is correct. Ten identical
+    # clauses have zero latent variance, so the admission test refuses them on
+    # IDENTIFICATION grounds before the magnitude guard is ever consulted.
+    # 'var_below_threshold' now names only the arithmetic-safety epsilon inside
+    # _ebmom, which this input no longer reaches. The mutation this test kills
+    # (fallback_reason set to None) is unaffected by which reason is expected.
+    assert prov["fallback_reason"] == "latent_variance_not_identified", (
+        f"Expected 'latent_variance_not_identified', got {prov['fallback_reason']!r}"
     )
 
 
@@ -770,7 +1005,7 @@ def test_bh_fdr_fallback_reason_field() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_bh_fdr_fallback_attempted_dict() -> None:
+def test_refusal_attempted_dict() -> None:
     """M11: aggregation_provenance["attempted"] must be a dict with the four expected keys.
 
     Mutation sets attempted=None → isinstance check fails → RED.
@@ -780,7 +1015,7 @@ def test_bh_fdr_fallback_attempted_dict() -> None:
     """
     clauses = _make_degenerate_clauses_k10()
     result = fit_skill(clauses)
-    assert result.aggregation_method == "bh_fdr_fallback"
+    assert result.aggregation_method == "bounded_pooling_refused"
     prov = result.aggregation_provenance
     attempted = prov["attempted"]
     assert isinstance(attempted, dict), f"Expected dict, got {type(attempted)!r}"
@@ -809,7 +1044,7 @@ def test_clause_observations_is_frozen() -> None:
 
     Under mutation (frozen=False), assignment succeeds → FrozenInstanceError not raised → RED.
     """
-    obs = ClauseObservations(clause_id="c1", w=5.0, n=10)
+    obs = ClauseObservations.bernoulli(clause_id="c1", w=5.0, n=10)
     with pytest.raises(dataclasses.FrozenInstanceError):
         obs.w = 99.9  # type: ignore[misc]
 
@@ -880,7 +1115,7 @@ def test_var_below_threshold_attempted_has_no_nan() -> None:
 
     clauses = make_clauses([(5, 10)] * 10)
     result = fit_skill(clauses)
-    assert result.aggregation_method == "bh_fdr_fallback"
+    assert result.aggregation_method == "bounded_pooling_refused"
     prov = result.aggregation_provenance
     attempted = prov["attempted"]
     assert isinstance(attempted, dict)

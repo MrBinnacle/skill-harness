@@ -94,9 +94,21 @@ jobs:
     # Jobs that do not install Vale leave this unset and skip those tests. It
     # belongs in THIS block: a second `env:` key on the same job is not a merge,
     # it silently replaces the first, so the variable would never have been set.
+    #
+    # COVERAGE_CORE=sysmon (#510): coverage.py collects through CPython's sys.monitoring
+    # API instead of its settrace callback. Measured on this branch's dominant fixture,
+    # tests/test_aggregation_fit_ebmom_recovery.py, with pytest -p no:randomly:
+    # 664s with the default core, 152s with sysmon, 142s with coverage off entirely.
+    # Instrumentation cost 522s and sysmon recovers 512 of them. The reported coverage is
+    # IDENTICAL across both coverage arms -- 10298 statements, 8825 missed, 14% -- which is
+    # what #510's third acceptance criterion requires, and is why the cell keeps --cov
+    # rather than dropping it. Requires Python 3.12+; the matrix is 3.12 and 3.13.
+    # Re-measure before enabling branch coverage: these runs are statement-only, and there
+    # is no [tool.coverage] table or .coveragerc in the repository.
     env:
       PYTHONHASHSEED: "0"
       SKILL_HARNESS_REQUIRE_VALE: "1"
+      COVERAGE_CORE: "sysmon"
     strategy:
       fail-fast: false
       matrix:

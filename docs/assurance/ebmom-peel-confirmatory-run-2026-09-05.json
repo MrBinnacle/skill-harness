@@ -1,0 +1,145 @@
+{
+  "alpha": 0.05,
+  "bias_tolerance": 0.1,
+  "is_confirmatory": true,
+  "kill_criterion_triggered": true,
+  "regimes": [
+    {
+      "added_abstention": {
+        "baseline": 0,
+        "candidate": 81,
+        "excess": 81
+      },
+      "admission_rate": 0.979,
+      "bias_within_tolerance": true,
+      "calibration": null,
+      "fallback_reasons": {
+        "latent_variance_not_identified": 21
+      },
+      "regime": "small_n_bite",
+      "relative_bias_latent_raw": -0.014677608555599728,
+      "true_latent_variance": 0.010833333333333334,
+      "wrong_fail": {
+        "baseline": 3456,
+        "candidate": 428,
+        "excess": -3028
+      },
+      "wrong_pass": {
+        "baseline": 20369,
+        "candidate": 7881,
+        "excess": -12488
+      }
+    },
+    {
+      "added_abstention": {
+        "baseline": 16148,
+        "candidate": 12313,
+        "excess": -3835
+      },
+      "admission_rate": 0.687,
+      "bias_within_tolerance": true,
+      "calibration": null,
+      "fallback_reasons": {
+        "latent_variance_not_identified": 313
+      },
+      "regime": "low_heterogeneity",
+      "relative_bias_latent_raw": -0.017522127619781714,
+      "true_latent_variance": 0.0022524752475247523,
+      "wrong_fail": {
+        "baseline": 588,
+        "candidate": 748,
+        "excess": 160
+      },
+      "wrong_pass": {
+        "baseline": 0,
+        "candidate": 2294,
+        "excess": 2294
+      }
+    },
+    {
+      "added_abstention": {
+        "baseline": 51,
+        "candidate": 68,
+        "excess": 17
+      },
+      "admission_rate": 1.0,
+      "bias_within_tolerance": true,
+      "calibration": null,
+      "fallback_reasons": {},
+      "regime": "benign_large_n",
+      "relative_bias_latent_raw": 0.0001005405979836028,
+      "true_latent_variance": 0.020681818181818183,
+      "wrong_fail": {
+        "baseline": 1821,
+        "candidate": 1094,
+        "excess": -727
+      },
+      "wrong_pass": {
+        "baseline": 0,
+        "candidate": 0,
+        "excess": 0
+      }
+    },
+    {
+      "added_abstention": {
+        "baseline": 191105,
+        "candidate": 188669,
+        "excess": -2436
+      },
+      "admission_rate": 0.039,
+      "bias_within_tolerance": null,
+      "calibration": {
+        "admitted": 39,
+        "calibrated": true,
+        "expected_rate": 0.05,
+        "p_value": 0.126877397685211,
+        "replicates": 1000,
+        "test_level": 0.01
+      },
+      "fallback_reasons": {
+        "latent_variance_not_identified": 961
+      },
+      "regime": "tie_heavy_null",
+      "relative_bias_latent_raw": null,
+      "true_latent_variance": 0.0,
+      "wrong_fail": {
+        "baseline": 0,
+        "candidate": 251,
+        "excess": 251
+      },
+      "wrong_pass": {
+        "baseline": 0,
+        "candidate": 0,
+        "excess": 0
+      }
+    },
+    {
+      "added_abstention": {
+        "baseline": 40667,
+        "candidate": 36244,
+        "excess": -4423
+      },
+      "admission_rate": 1.0,
+      "bias_within_tolerance": true,
+      "calibration": null,
+      "fallback_reasons": {},
+      "regime": "tie_heavy_signal",
+      "relative_bias_latent_raw": 9.497308766091301e-05,
+      "true_latent_variance": 0.003214285714285714,
+      "wrong_fail": {
+        "baseline": 2,
+        "candidate": 0,
+        "excess": -2
+      },
+      "wrong_pass": {
+        "baseline": 2,
+        "candidate": 877,
+        "excess": 875
+      }
+    }
+  ],
+  "registered_replicates": 1000,
+  "replicates": 1000,
+  "root_seed": "f95e4de5d261feb7815743abd181105a856ac4a9e79d14f8805146e2d9a42a8a",
+  "verdict": "REJECTED"
+}

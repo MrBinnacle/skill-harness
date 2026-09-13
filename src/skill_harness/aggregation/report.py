@@ -1,6 +1,6 @@
 """SkillReport dataclass + JSON serialisation (A60).
 
-Schema version: "1.4.0" (semver). v0.1 lifetime is 1.x additive-only.
+Schema version: "2.0.0" (semver). The v0.1 1.x additive-only run ends at 2.0.0 below.
   1.1.0 — A55 comparability axes (subject_model, user_message_sha256).
   1.2.0 — coverage_warnings field on VectorSummary (M3 pre-tag fix).
   1.3.0 — is_prior_only field on ClauseReport (B5 hostile-review fix): True when a
@@ -14,6 +14,10 @@ Schema version: "1.4.0" (semver). v0.1 lifetime is 1.x additive-only.
           sequential_confidence_sequence_95 (predictable-plugin betting CS, or null),
           interval_method, interval_status. Legacy credible_interval_95 keeps its
           exact Bayesian-posterior-only meaning for compatibility.
+  2.0.0 - the aggregation_method enum value bh_fdr_fallback is renamed to
+          bounded_pooling_refused (#360, #441). A rename is not additive, so the
+          rule below takes a major bump. Taken at the merge of agent/issue-360,
+          after the confirmatory run of pre-registration v2 section 5 reported.
 Any breaking change (field removal, type change, rename) requires:
   1. Major version bump.
   2. A ``diff skill`` consumer compatibility check (E.3 territory).
@@ -37,7 +41,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-REPORT_SCHEMA_VERSION = "1.4.0"
+REPORT_SCHEMA_VERSION = "2.0.0"
 
 # interval_status vocabulary (#187)
 INTERVAL_STATUS_VALID = "VALID"
@@ -120,11 +124,15 @@ class SkillReport:
     ``to_json_bytes()``. Rich/Markdown rendering is E.3 territory.
     """
 
-    report_schema_version: str  # always REPORT_SCHEMA_VERSION ("1.1.0")
+    report_schema_version: str  # always REPORT_SCHEMA_VERSION ("2.0.0")
     skill_id: str
     generated_at_utc: str  # ISO8601 — caller-supplied; never datetime.now() here
     harness_version: str
-    aggregation_method: str  # "ebmom_hierarchical" | "bh_fdr_fallback" | "unpooled"
+    # "ebmom_hierarchical" | "bounded_pooling_refused" | "unpooled".
+    # "bounded_pooling_refused" replaced "bh_fdr_fallback" when pre-registration
+    # v2 section 3 retired BH-FDR on the refused path. The rename is why
+    # REPORT_SCHEMA_VERSION is 2.0.0; docs/PRD.md section 16.1 carries the record.
+    aggregation_method: str
     aggregation_provenance: dict[str, object]
     clauses: tuple[ClauseReport, ...]
     vector: VectorSummary

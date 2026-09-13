@@ -308,6 +308,16 @@ _WORD_LIST_EXCLUDED_PATHS = (
     # quote and carries a listed word ("robust"). The record is append-only
     # by the same house convention, so the wording is immutable.
     "docs/ratifications/MIRROR-0001-on-irreducibility.md",
+    # The superseded v1 pre-registration, added to the repository by #534 as the
+    # record of what was registered on 2026-09-05 and then superseded by v2. It
+    # carries "robust" at line 103, in its statistical sense, inside the
+    # paragraph that refuses the median as a replacement estimator. Excluded on
+    # exactly the MIRROR-0001 ground above: a sealed record's wording is
+    # immutable, and rewording a registered document after its result is known
+    # is the failure this repository exists to refuse. The LIVE amendment,
+    # -v2.md, is deliberately NOT excluded: it governs, it can be amended by a
+    # dated block, and the ban must still reach it.
+    "docs/assurance/ebmom-peel-preregistration-amendment.md",
 )
 
 LIVE_ROWS: tuple[LiveRow, ...] = (

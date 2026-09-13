@@ -37,19 +37,38 @@ module or tool), not a vague intention.
 
 ### 1. BH-FDR fallback fed posterior masses as if they were frequentist p-values
 
-**Silent wrongness.** When EB-MoM fails to converge, `fit_skill` builds
+> **STATUS CHANGED 2026-09-05, on the unmerged `agent/issue-360` branch: the production
+> caller is gone.** Section 3 of `docs/assurance/ebmom-peel-preregistration-amendment-v2.md`
+> retired BH-FDR on the refused path. A refused fit now pools at the admission bound and
+> publishes no FDR selection, so nothing downstream consumes the transform and the damage
+> clause below — a false PASS crossing the locked gate and minting KEEP — can no longer
+> occur by this route. The detector still measures the transform; it no longer watches a
+> production path. Both halves of that are stated because the second is a real loss of
+> coverage and the row would otherwise read as unchanged. On `main`, where the branch has
+> not landed, the row stands as originally written.
+
+**Silent wrongness.** When EB-MoM failed to converge, `fit_skill` built
 `p_values = [1.0 - p_exceed]` from posterior mass
-`P(rate > 0.60 | data)` and runs Benjamini–Hochberg
+`P(rate > 0.60 | data)` and ran Benjamini–Hochberg
 (`src/skill_harness/aggregation/fit.py`). BH assumes valid null p-values.
-That transform is not one. A skill with many near-null clauses can still get
-`bh_fdr_fallback`, cross the locked 0.95 PASS gate, and mint KEEP via
+That transform is not one. A skill with many near-null clauses could still get
+the fallback, cross the locked 0.95 PASS gate, and mint KEEP via
 `paired_verdict` — or the inverse, false `FDR_CORRECTION_FAILED` — while
-existing fit tests stay green because they pin the algorithm on hand numbers
+existing fit tests stayed green because they pin the algorithm on hand numbers
 and the same transform.
 
 **Detection:** `tests/test_aggregation_fit_fdr_calibration.py` — null-world
 simulation (binomial / hierarchical nulls): empirical FDR among declared
 passes must stay ≤ the nominal q; failure means the p-input is not a p-value.
+The detector exists and fires (it carries both a calibrated negative control
+and a red-on-condition fixture). Since the retirement it drives
+`_build_unpooled_posteriors`, the `1 - p` inversion and `_bh_fdr` directly
+rather than through `fit_skill`, because forcing a convergence failure now
+reaches bounded pooling instead — under which the old harness would have
+measured a realised FDR of zero on every design and passed for the wrong
+reason. **What no longer holds is the claim that the measured path is a
+production path.** Re-establishing that claim is a precondition for giving
+`_bh_fdr` a caller again, not a consequence of doing so.
 
 ### 2. EB-MoM treats empirical rates as Beta draws (no sampling-variance peel)
 
