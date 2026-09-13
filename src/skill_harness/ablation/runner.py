@@ -77,6 +77,7 @@ from skill_harness.aggregation.status import UnmeasuredSubReason
 from skill_harness.oracles.tier1.axis_registry import MetricFn
 from skill_harness.storage.article_fingerprint import ArticleFingerprint
 from skill_harness.storage.models import (
+    ClauseRunOutcomeWrite,
     ConfoundEventWrite,
     CostLedgerWrite,
     OracleVerdictWrite,
@@ -87,7 +88,12 @@ from skill_harness.storage.models import (
 )
 from skill_harness.storage.repositories.evidence.confound_events import insert_confound_event
 from skill_harness.storage.repositories.evidence.oracle_verdicts import mint_oracle_verdict
-from skill_harness.storage.repositories.evidence.runs import complete_run, get_run_by_id, insert_run
+from skill_harness.storage.repositories.evidence.runs import (
+    complete_run,
+    get_run_by_id,
+    insert_clause_run_outcome,
+    insert_run,
+)
 from skill_harness.storage.repositories.evidence.samples import insert_sample
 from skill_harness.storage.repositories.runtime.cost_ledger import insert_cost_ledger_entry
 from skill_harness.storage.repositories.runtime.run_budget import (
@@ -275,12 +281,19 @@ class ClauseResult:
     length_confounded: bool
     """True if the operator could not meet tolerance (QUAL-1 — clause excluded)."""
 
-    unmeasured_reason: UnmeasuredSubReason | None = None
+    unmeasured_reason: str | None = None
     """Sub-reason when the clause is UNMEASURED before/without sampling (#503).
 
     The single source of truth for this vocabulary is ``UnmeasuredSubReason``
     in ``aggregation/status.py`` — nothing else defines refusal reasons. The
-    two pre-sampling refusal paths map to named members:
+    runner ALWAYS assigns a member of that enumeration here (never a free-form
+    string); the field stays ``str | None`` so an existing construction of a
+    ``ClauseResult`` with the literal value continues to type-check. The
+    vocabulary is enforced where it bites: the runner emits only enum members,
+    and the write model (``ClauseRunOutcomeWrite``) rejects a value outside the
+    enumeration before it reaches storage.
+
+    The two pre-sampling refusal paths map to named members:
       - BLOCKER-1 (not Tier-1-measurable) -> ``TIER2_UNCALIBRATED``
       - QUAL-1 (operator out of tolerance) -> ``LENGTH_CONFOUNDED``
     ``None`` for clauses that reach the sampling loop (their UNMEASURED
@@ -587,6 +600,9 @@ class AblationRunner:
                 clause_result = result[1]
                 clause_results.append(clause_result)
                 stopping_reasons[clause_spec.clause_id] = clause_result.stopping_reason.value
+                # #503: persist the refusal sub-reason (only refused clauses
+                # write a row; a measured clause keeps no reason).
+                self._persist_refusal_sub_reason(run_id, clause_result)
 
                 # Update run progress after each clause
                 with writer_transaction(self._runtime):
@@ -713,6 +729,8 @@ class AblationRunner:
                 )
                 samples_collected = result[0]
                 clause_results.append(result[1])
+                # #503: persist the refusal sub-reason (resume path mirrors run).
+                self._persist_refusal_sub_reason(run_id, result[1])
 
                 with writer_transaction(self._runtime):
                     update_run_progress(
@@ -748,6 +766,29 @@ class AblationRunner:
         )
 
         return clause_results
+
+    # ------------------------------------------------------------------
+    # #503 — persist a pre-sampling refusal's sub-reason to evidence storage.
+    # Only refused clauses (unmeasured_reason is not None) write a row; a
+    # measured clause keeps no reason (scope boundary: no back-fill).
+    # ------------------------------------------------------------------
+
+    def _persist_refusal_sub_reason(self, run_id: str, result: ClauseResult) -> None:
+        if result.unmeasured_reason is None:
+            return
+        # The runner always assigns an UnmeasuredSubReason member here; the
+        # write model validates membership against the live enumeration, so a
+        # non-member raises before reaching the DB.
+        with writer_transaction(self._evidence):
+            insert_clause_run_outcome(
+                self._evidence,
+                ClauseRunOutcomeWrite(
+                    run_id=run_id,
+                    clause_id=result.clause_id,
+                    unmeasured_sub_reason=result.unmeasured_reason,
+                    written_at=self._now(),
+                ),
+            )
 
     # ------------------------------------------------------------------
     # Core clause loop

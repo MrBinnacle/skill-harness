@@ -535,6 +535,49 @@ class FrozenCaseWrite(BaseModel):
         return _check_text(v, "failing_input_text")
 
 
+class ClauseRunOutcomeWrite(BaseModel):
+    """Insert shape for evidence.clause_run_outcomes (migration 1100, #503).
+
+    One row per (run, clause) the runner REFUSED before sampling. The
+    sub-reason is drawn from the single declared enumeration
+    ``UnmeasuredSubReason`` (aggregation/status.py) — nothing else defines
+    refusal reasons. A value outside that enumeration is rejected here rather
+    than stored: the validator reads the live enumeration, so a non-member
+    raises before any DB write.
+
+    A clause that reaches the sampling loop is NOT refused here; no row is
+    written for it. Historical runs recorded no reason and keep none (#503
+    scope boundary: no back-fill).
+    """
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    run_id: str
+    clause_id: str
+    unmeasured_sub_reason: str
+    written_at: str
+
+    @field_validator("run_id", "clause_id", "written_at")
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("unmeasured_sub_reason")
+    @classmethod
+    def known_sub_reason(cls, v: str) -> str:
+        from skill_harness.aggregation.status import UnmeasuredSubReason
+
+        valid = {member.value for member in UnmeasuredSubReason}
+        if v not in valid:
+            raise ValueError(
+                f"unmeasured_sub_reason must be one of {sorted(valid)} (members of "
+                f"UnmeasuredSubReason, the single source of truth for refusal reasons); "
+                f"got {v!r}"
+            )
+        return v
+
+
 # ---------------------------------------------------------------------------
 # Runtime-side write models
 # ---------------------------------------------------------------------------

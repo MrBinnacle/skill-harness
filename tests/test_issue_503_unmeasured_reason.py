@@ -27,6 +27,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -75,9 +76,9 @@ def _run_ablation(
     clause: object,
     run_id: str,
     response_factory: object | None = None,
-) -> object:
+) -> list[Any]:
     runner, _ = _make_runner(ev, rt, response_factory=response_factory)  # type: ignore[arg-type]
-    results = runner.run_ablation(
+    results: list[Any] = runner.run_ablation(
         skill_id=_SKILL_ID,
         clauses=[clause],  # type: ignore[list-item]
         user_message=_USER_MSG,
@@ -94,16 +95,19 @@ def _run_ablation(
 
 class TestRunnerLiteralsAreEnumMembers:
     def test_tier2_uncalibrated_is_a_member(self) -> None:
-        assert UnmeasuredSubReason.TIER2_UNCALIBRATED == "tier2_uncalibrated"
+        assert UnmeasuredSubReason.TIER2_UNCALIBRATED.value == "tier2_uncalibrated"
 
     def test_length_confounded_is_a_member(self) -> None:
-        assert UnmeasuredSubReason.LENGTH_CONFOUNDED == "length_confounded"
+        assert UnmeasuredSubReason.LENGTH_CONFOUNDED.value == "length_confounded"
 
     def test_the_two_literals_are_distinct_from_existing_members(self) -> None:
         members = {m for m in UnmeasuredSubReason}
         assert UnmeasuredSubReason.TIER2_UNCALIBRATED in members
         assert UnmeasuredSubReason.LENGTH_CONFOUNDED in members
-        assert UnmeasuredSubReason.TIER2_UNCALIBRATED is not UnmeasuredSubReason.MECHANICAL_VACUOUS
+        distinct = {UnmeasuredSubReason.TIER2_UNCALIBRATED, UnmeasuredSubReason.MECHANICAL_VACUOUS}
+        assert len(distinct) == 2, (
+            "TIER2_UNCALIBRATED must name a distinct case from MECHANICAL_VACUOUS"
+        )
 
 
 # ---------------------------------------------------------------------------
