@@ -73,6 +73,7 @@ from skill_harness.ablation.subject import (
     project_call_cost,
     sha256_of_output,
 )
+from skill_harness.aggregation.status import UnmeasuredSubReason
 from skill_harness.oracles.tier1.axis_registry import MetricFn
 from skill_harness.storage.article_fingerprint import ArticleFingerprint
 from skill_harness.storage.models import (
@@ -274,11 +275,16 @@ class ClauseResult:
     length_confounded: bool
     """True if the operator could not meet tolerance (QUAL-1 — clause excluded)."""
 
-    unmeasured_reason: str | None = None
-    """Sub-reason when the clause is UNMEASURED before/without sampling.
+    unmeasured_reason: UnmeasuredSubReason | None = None
+    """Sub-reason when the clause is UNMEASURED before/without sampling (#503).
 
-    Values: 'tier2_uncalibrated' (BLOCKER-1, not Tier-1-measurable),
-    'length_confounded' (QUAL-1, operator out of tolerance), or None.
+    The single source of truth for this vocabulary is ``UnmeasuredSubReason``
+    in ``aggregation/status.py`` — nothing else defines refusal reasons. The
+    two pre-sampling refusal paths map to named members:
+      - BLOCKER-1 (not Tier-1-measurable) -> ``TIER2_UNCALIBRATED``
+      - QUAL-1 (operator out of tolerance) -> ``LENGTH_CONFOUNDED``
+    ``None`` for clauses that reach the sampling loop (their UNMEASURED
+    sub-reason, if any, is derived at aggregation from the evidence).
     """
 
     verdict_id: str | None = None
@@ -780,7 +786,7 @@ class AblationRunner:
                     stop_decision=BetaBinomialAccumulator().check_stop(),
                     samples_collected=0,
                     length_confounded=False,
-                    unmeasured_reason="tier2_uncalibrated",
+                    unmeasured_reason=UnmeasuredSubReason.TIER2_UNCALIBRATED,
                     path_c_unavailable_reason="no_sampling",
                 ),
             )
@@ -806,7 +812,7 @@ class AblationRunner:
                     stop_decision=BetaBinomialAccumulator().check_stop(),
                     samples_collected=0,
                     length_confounded=True,
-                    unmeasured_reason="length_confounded",
+                    unmeasured_reason=UnmeasuredSubReason.LENGTH_CONFOUNDED,
                     path_c_unavailable_reason="no_sampling",
                 ),
             )
