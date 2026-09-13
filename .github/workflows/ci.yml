@@ -69,8 +69,10 @@ jobs:
     # 10 -> 15 (#56): the slow-marked full-grid frontier test pushed the
     # windows py3.13 cell to 9m20s against the old 10-minute ceiling (40s of
     # headroom); #57/#58 add more tests. Headroom, not license - if a cell
-    # ever needs >15, thin the slow lane instead (#40's logged even-n
-    # thinning clause), never bump blindly.
+    # ever needs >15, measure which tests dominate (see #510) and thin those,
+    # never bump blindly. The `slow` marker is advisory only: local deselection
+    # via -m 'not slow' (pyproject.toml). No CI job selects or deselects on it,
+    # so it is not a CI routing remedy and must not be called a lane here.
     #
     # 15 -> 25: NOT blind, and NOT suite growth. The SAME suite ran windows
     # py3.13 in 12m23s on one PR and 15m08s on another the same day - a ~23%
@@ -78,9 +80,9 @@ jobs:
     # The kill presents as conclusion "cancelled", indistinguishable from a
     # duplicate-run cancel until you read the job annotation ("exceeded the
     # maximum execution time"); it has now been misdiagnosed that way once.
-    # Thinning the slow lane here would delete real coverage to absorb runner
-    # variance, which is the wrong trade. The thinning clause above still
-    # governs genuine suite growth - measure which it is before bumping again.
+    # Deleting coverage to absorb runner variance is the wrong trade. The
+    # measure-then-thin clause above still governs genuine suite growth -
+    # measure which it is before bumping again.
     # Observed windows range at this pin: 10m10s - 15m08s. The sibling
     # calibration job, which runs shorter cells, already sits at 40.
     timeout-minutes: 25
