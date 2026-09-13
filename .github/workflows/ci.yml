@@ -69,8 +69,10 @@ jobs:
     # 10 -> 15 (#56): the slow-marked full-grid frontier test pushed the
     # windows py3.13 cell to 9m20s against the old 10-minute ceiling (40s of
     # headroom); #57/#58 add more tests. Headroom, not license - if a cell
-    # ever needs >15, thin the slow lane instead (#40's logged even-n
-    # thinning clause), never bump blindly.
+    # ever needs >15, measure which tests dominate (see #510) and thin those,
+    # never bump blindly. The `slow` marker is advisory only: local deselection
+    # via -m 'not slow' (pyproject.toml). No CI job selects or deselects on it,
+    # so it is not a CI routing remedy and must not be called a lane here.
     #
     # 15 -> 25: NOT blind, and NOT suite growth. The SAME suite ran windows
     # py3.13 in 12m23s on one PR and 15m08s on another the same day - a ~23%
@@ -78,9 +80,9 @@ jobs:
     # The kill presents as conclusion "cancelled", indistinguishable from a
     # duplicate-run cancel until you read the job annotation ("exceeded the
     # maximum execution time"); it has now been misdiagnosed that way once.
-    # Thinning the slow lane here would delete real coverage to absorb runner
-    # variance, which is the wrong trade. The thinning clause above still
-    # governs genuine suite growth - measure which it is before bumping again.
+    # Deleting coverage to absorb runner variance is the wrong trade. The
+    # measure-then-thin clause above still governs genuine suite growth -
+    # measure which it is before bumping again.
     # Observed windows range at this pin: 10m10s - 15m08s. The sibling
     # calibration job, which runs shorter cells, already sits at 40.
     timeout-minutes: 25
@@ -177,13 +179,13 @@ jobs:
         # (#187) runs in the dedicated calibration job below — do not fold it into this
         # 15m cell. The assurance lane (#168) runs on a schedule in assurance.yml for the
         # same reason: #170 alone specifies >=1h of fuzz, which no PR cell can absorb.
-        # --durations (#509) now carries onto this branch too. pyproject.toml records why it
-        # was held back: --durations prints at session end, a killed cell never reaches
-        # session end, and the flag lives in this file, which this PR was already editing.
-        # Both reasons lapse together. COVERAGE_CORE above is expected to let the cell finish,
-        # and a finishing cell is exactly the one whose durations table #510's first
-        # acceptance criterion asks to be quoted from a CI job log. It also brings this line
-        # into agreement with main, which tests/test_ci_test_cell_attribution_509.py pins there.
+        #
+        # --durations (#509): an overrun used to die with GitHub's "exceeded the maximum
+        # execution time" and nothing else, so every overrun read as capacity and the
+        # ceiling above was raised twice on that reading. The slowest 25 phases over 1s
+        # now print with their node ids; faulthandler_timeout in pyproject.toml names
+        # the running test when a single phase hangs. tests/test_ci_test_cell_attribution_509.py
+        # reads this line and fails if either goes.
         run: pytest -q --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing --durations=25 --durations-min=1.0
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
@@ -255,7 +257,15 @@ jobs:
       # Declarative contract table (#43/#53): pass-rule thresholds, sampling
       # schedule, token bans, estimand vocabulary, registered claim sentences.
       # Green output prints exactly what is covered — never more (F7).
+      # DC-17 reads issue state from api.github.com and now FAILS CLOSED when
+      # it cannot: "could not read" and "no problem found" are different
+      # findings. Unauthenticated, that lookup shares a 60-per-hour budget with
+      # every other job on the runner's IP, which is how PR #518 went red on
+      # exactly one of four cells. The token raises the budget and is the same
+      # one the release-gate job below already takes.
       - name: Run drift check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/drift_check.py
 
   release-gate:
@@ -272,6 +282,8 @@ jobs:
       # safety, workflow SHA pins. Running it on every push/PR means a
       # stale surface is caught at review time, not tag time.
       - name: Run release gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/release_gate.py
 
   # NON-required (#172): additive supply-chain check. Branch-protection changes

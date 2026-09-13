@@ -1,0 +1,7 @@
+extends: existence
+message: "Dashes: '%s' is not used here. Recast the sentence, or use a spaced hyphen."
+level: warning
+nonword: true
+tokens:
+  - '—'
+  - '–'

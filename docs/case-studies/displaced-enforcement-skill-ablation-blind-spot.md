@@ -5,7 +5,7 @@
 > loud, because it changes how you read a null. For a discipline whose
 > production reliability comes from a *hook* rather than from the model
 > reading the skill, ablating the skill measures only the part that was never
-> load-bearing. A flat result there is not evidence the discipline does
+> produced the reliability. A flat result there is not evidence the discipline does
 > nothing.
 
 ## What skill-ablation actually measures
@@ -41,7 +41,7 @@ present. So for a displaced-enforcement discipline:
   fires in production.
 
 A flat or noisy contrast is then the *expected* result — and it says nothing
-about the discipline's production value, because the load-bearing layer was
+about the discipline's production value, because the enforcement layer was
 never in the experiment. Reading that null as "the discipline is worthless"
 is the same category error the harness exists to prevent, wearing different
 clothes: it reports on what it did not measure.

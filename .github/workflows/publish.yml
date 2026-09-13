@@ -21,6 +21,8 @@ jobs:
       # (version lockstep, rolled CHANGELOG, README banner/render-safety,
       # SHA pins, tag match) is stale. See scripts/release_gate.py.
       - name: Run release gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/release_gate.py
 
   build:

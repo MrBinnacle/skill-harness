@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skill-harness"
-version = "0.2.3"
-description = "I wanted to know if you could tell if a skill was any good. This runs the same task with the skill and without it, and reports what can honestly be said about the difference - often \"not enough to call it\". A missing figure is a typed refusal, never an invented score. First-class Claude Code support."
+version = "0.3.0"
+description = "How do you KNOW if a 'skill' is any good - deterministically? This runs controlled skill-vs-no-skill experiments. It doesn't just ask, “Did the skill work?” It asks “Did we actually give the skill to the model, did the comparison remain fair, what changed, what did it cost, and do we have enough evidence to say that confidently?”"
 readme = "README.md"
 keywords = [
   "claude-code",
@@ -129,26 +129,12 @@ packages = ["src/skill_harness"]
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
-# #509, carried onto this integration branch by #510: when one test phase runs
-# past this many seconds, faulthandler dumps every thread's stack to stderr,
-# naming the running test's file and function. It does not fail the test, so it
-# cannot manufacture a red cell; it exists so a 25-minute CI overrun names its
-# cause instead of dying anonymously.
-#
-# This branch is where that matters. Every Test cell of PR #506 died at exactly
-# 25 minutes, and the annotation says only "exceeded the maximum execution
-# time". Without this key the kill is anonymous and #510 cannot be diagnosed at
-# all.
-#
-# Only faulthandler_timeout is carried here, not #509's --durations flag. A
-# killed cell never reaches session end, and --durations prints at session end,
-# so it emits nothing from precisely the run under investigation. It also lives
-# in .github/workflows/ci.yml, which PR #506 is already editing on its own
-# branch; adding it here would put two open changes on one file for no
-# diagnostic gain.
-#
-# 900s sits inside the Test cell's 25-minute ceiling and above the slowest
-# legitimate module fixture measured under coverage on main (#510).
+# #509: when one test phase runs past this many seconds, faulthandler dumps every
+# thread's stack to stderr, naming the running test's file and function. It does not
+# fail the test, so it cannot manufacture a red cell; it exists so a 25-minute CI
+# overrun names its cause instead of dying anonymously. 900s sits inside the Test
+# cell's ceiling (tests/test_ci_test_cell_attribution_509.py asserts that ordering)
+# and above the slowest legitimate module fixture measured under coverage (#510).
 faulthandler_timeout = 900
 addopts = [
   "-ra",
@@ -177,7 +163,10 @@ line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
 extend-exclude = [
-  "fuzz/corpus", "fuzz/crashes", "fuzz/artifacts",
+  "fuzz/corpus",
+  "fuzz/crashes",
+  "fuzz/artifacts",
+  "prototypes",
   # Vendored verbatim copies of the measured class-2 prototype (S414). They must stay
   # byte-identical to what produced amendment v2's numbers; lint would rewrite them.
   "docs/assurance/reference",

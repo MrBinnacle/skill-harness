@@ -105,6 +105,12 @@ probe("5 value_class as the string \"null\"", lambda r: r.update(value_class="nu
 
 Observed 2026-08-28: rows 1, 2 and 3 print `UNENFORCED`; rows 4 and 5 print `enforced`.
 
+Re-run 2026-09-08 against the schema as amended by
+[#479](https://github.com/MrBinnacle/skill-harness/issues/479): identical output, all five rows
+unchanged. That amendment touched the schema, the README and the conformance harness, which is
+this document's own *Revisit if* condition, so the table was re-measured rather than assumed to
+have survived. It measures prose-versus-schema divergences on fields #479 did not touch.
+
 ## What SERS requires today
 
 Read off the schema, which is the operative artifact.
@@ -115,8 +121,9 @@ Read off the schema, which is the operative artifact.
 `value_class` are required *keys* that may hold `null`; presence is mandatory, a value is not.
 
 **Optional:** `wrong_instrument`, `declared_synthetic_control`, `measurements`.
-`subject_identity` is optional on `1.0.0` and required on `1.1.0` and `1.2.0`.
-`delivery` is required on `1.2.0` and absent on `1.0.0` and `1.1.0`.
+`subject_identity` is optional on `1.0.0` and required from `1.1.0` onward.
+`delivery` is required from `1.2.0` onward and absent on `1.0.0` and `1.1.0`.
+`subject_identity.subject_model` is required on `1.4.0` and absent before it.
 
 **Closed vocabularies**, each checked for equality against the code enum in CI:
 
@@ -131,9 +138,10 @@ Read off the schema, which is the operative artifact.
 
 **Conditionals the schema enforces:** `cut_sub_reason` is a non-null member when
 `verdict` is `CUT`, and is `null` when `verdict` is `KEEP` or `CANT_TELL_YET`. When
-`sers_version` is `1.1.0` or `1.2.0`, `subject_identity` is required. When
-`sers_version` is `1.2.0`, `delivery` is required and must carry `channel`,
-`exposure`, and `pi_c`. Cross-field rules on `delivery.channel` (`description_only`
+`sers_version` is `1.1.0` or later, `subject_identity` is required. When
+`sers_version` is `1.2.0` or later, `delivery` is required and must carry `channel`,
+`exposure`, and `pi_c`. When `sers_version` is `1.4.0`, `subject_identity` must also
+carry `subject_model`. Cross-field rules on `delivery.channel` (`description_only`
 requires `pi_c.hat = 0`; `body_and_description` requires `pi_c.invocations > 0`)
 are schema-enforced. Every other cross-field rule in the README is prose only.
 
@@ -152,9 +160,19 @@ path reads `pi_c` and `exposure` from the run's `config_json` and never recomput
 **The gate term.** `evidence_admissibility` is the only permitted spelling. The bare form is
 rejected, and a poison fixture holds that line in CI.
 
-**Version semantics.** `sers_version` is one of `"1.0.0"`, `"1.1.0"`, or `"1.2.0"`. Receipts
-carrying different values are declared non-comparable. From `1.1.0`, `subject_identity` is
-required. From `1.2.0`, `delivery` is required.
+**Version semantics.** `sers_version` is one of `"1.0.0"`, `"1.1.0"`, `"1.2.0"`, `"1.3.0"`, or
+`"1.4.0"`. Receipts carrying different values are declared non-comparable. From `1.1.0`,
+`subject_identity` is required. From `1.2.0`, `delivery` is required. `1.3.0` adds the
+trap-discipline measurement keys. `1.4.0` requires `subject_identity.subject_model`.
+
+**The two model roles (1.4.0).** Through `1.3.0` the only model pin on a receipt was
+`instrument_identity.extractor_model`, documented as naming the extractor *or* the subject. One
+field carried two roles and did not record which, so a receipt could not answer the question a
+receipt exists to answer: was this measured on the model it claims? From `1.4.0` the subject is
+`subject_identity.subject_model` and `extractor_model` names the extraction stage alone, refusable
+from a closed vocabulary when no model-based extraction ran. Receipts minted before `1.4.0` are
+**not back-filled** -- each is a dated record, the store is append-only, and their role assignment
+was never written down. Read those through `source.prose_path`.
 
 ## What this document does not settle
 

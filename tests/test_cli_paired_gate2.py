@@ -539,13 +539,23 @@ def _hazard_block(
     full_entered: int = 4,
     full_epochs: int = 32,
     floor: float = _HAZARD_FLOOR,
+    null_undecided: int | None = None,
+    full_undecided: int | None = None,
 ) -> dict[str, Any]:
-    return {
-        "pattern": _HAZARD_PATTERN,
-        "floor": floor,
-        "full": {"epochs": full_epochs, "entered": full_entered},
-        "null": {"epochs": null_epochs, "entered": null_entered},
-    }
+    """A recorded hazard block.
+
+    #438: passing ``None`` for an arm's ``undecided`` omits the key entirely,
+    which is what a block serialised before #438 looks like. That is not the
+    same input as an explicit zero, and the difference is what the retroactivity
+    control below rests on.
+    """
+    null: dict[str, Any] = {"epochs": null_epochs, "entered": null_entered}
+    full: dict[str, Any] = {"epochs": full_epochs, "entered": full_entered}
+    if null_undecided is not None:
+        null["undecided"] = null_undecided
+    if full_undecided is not None:
+        full["undecided"] = full_undecided
+    return {"pattern": _HAZARD_PATTERN, "floor": floor, "full": full, "null": null}
 
 
 def _write_rat_with_hazard(
@@ -568,6 +578,139 @@ def _write_rat_with_hazard(
     )
     # delta_min is required for floor >= delta_min; _write_rat already sets 0.20.
     path.write_text(text, encoding="utf-8")
+
+
+class TestHazardUndecided:
+    """#438: an epoch the hazard instrument could not read is not an avoidance.
+
+    The instrument reads bash command strings. Some it cannot read at all -- an
+    unterminated quote, or a heredoc whose body cannot be told apart from
+    commands. Scoring such an epoch as a non-entry quietly lowers the Null rate;
+    scoring it as an entry is the over-count this ticket repaired. The read
+    refuses instead, and names the number.
+    """
+
+    def test_undecided_null_epochs_refuse_under_trap_discipline(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """ARM: null.undecided = 2 under trap-discipline -> HAZARD_UNDECIDED (exit 1)."""
+        _seed_run(
+            evidence,
+            "run-hazard-undecided",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard=_hazard_block(null_entered=16, null_undecided=2, full_undecided=0),
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat_with_hazard(rat, n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-hazard-undecided",
+            str(rat),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert result.exit_code == 1
+        assert "HAZARD_UNDECIDED" in result.output
+        assert "2 of 32" in result.output
+
+    def test_control_zero_undecided_does_not_refuse(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """CONTROL: the same block with an explicit zero passes the same gate."""
+        _seed_run(
+            evidence,
+            "run-hazard-decided",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard=_hazard_block(null_entered=16, null_undecided=0, full_undecided=0),
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat_with_hazard(rat, n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-hazard-decided",
+            str(rat),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert "HAZARD_UNDECIDED" not in result.output
+
+    def test_control_a_pre_438_block_carries_no_undecided_key_and_is_not_refused(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """CONTROL: the refusal cannot fire retroactively.
+
+        A runner block written before #438 has no `undecided` key at all,
+        because its epochs were never classified three ways. Reading a missing
+        key as zero is the only reading available, and it must not turn every
+        older run into a refusal.
+        """
+        block = _hazard_block(null_entered=16)
+        assert "undecided" not in block["null"]
+        _seed_run(
+            evidence,
+            "run-hazard-pre438",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard=block,
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat_with_hazard(rat, n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-hazard-pre438",
+            str(rat),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert "HAZARD_UNDECIDED" not in result.output
+
+    def test_undecided_epochs_are_rendered_in_the_arm_line(
+        self, tmp_path: Path, evidence: sqlite3.Connection
+    ) -> None:
+        """The Full arm is never gated, so its undecided epochs must be VISIBLE."""
+        _seed_run(
+            evidence,
+            "run-hazard-full-undecided",
+            both_pass=32,
+            full_only=0,
+            null_only=0,
+            both_fail=0,
+            hazard=_hazard_block(null_entered=16, null_undecided=0, full_undecided=3),
+        )
+        rat = tmp_path / "RAT-0001-test.md"
+        _write_rat_with_hazard(rat, n=32)
+
+        result = _invoke(
+            "run",
+            "evaluate-paired",
+            "run-hazard-full-undecided",
+            str(rat),
+            "trap-discipline",
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+        )
+
+        assert "3 undecided" in result.output
 
 
 class TestHazardNotMet:

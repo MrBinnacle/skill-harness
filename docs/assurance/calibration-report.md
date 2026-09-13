@@ -237,4 +237,3 @@ PYTHONHASHSEED=0 python -m pytest tests/test_aggregation_calibration.py -q
 # Production CS dense grid (#187)
 PYTHONHASHSEED=0 python -m pytest tests/test_aggregation_cs_calibration.py -q -m calibration
 ```
-

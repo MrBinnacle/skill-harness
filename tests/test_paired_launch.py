@@ -12,6 +12,7 @@ here is one token wide and is asserted on both sides of it.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -23,12 +24,15 @@ from skill_harness.subject.paired_launch import (
     DIRECT_ROUTE,
     HAZARD_BASH_TOOL,
     HazardEntry,
+    HazardVerdict,
     PairedLaunchRefusal,
+    classify_hazard_command,
     design_from_record,
     hazard_entry_counts,
     preflight_sized_run,
     resolve_direct_subject,
     runner_config_payload,
+    simple_commands,
 )
 
 _TS = "2026-09-01T12:00:00+00:00"
@@ -359,6 +363,27 @@ def _fake_eval_log(
             )
         )
     return SimpleNamespace(samples=samples)
+
+
+def _patch_read_eval_log(monkeypatch: pytest.MonkeyPatch, fake: object) -> None:
+    """Make ``read_eval_log`` return ``fake``, with or without the inspect extra.
+
+    The same three-line dance the tests above inline. Factored out here because
+    the #438 cases below call it once per assertion and an inlined copy per case
+    would bury what each case is actually asserting.
+    """
+    if _INSPECT_INSTALLED:
+        import inspect_ai.log as inspect_log
+
+        monkeypatch.setattr(inspect_log, "read_eval_log", lambda path: fake)
+        return
+    import sys
+    import types
+
+    fake_mod = types.ModuleType("inspect_ai.log")
+    fake_mod.read_eval_log = lambda path: fake  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "inspect_ai", types.ModuleType("inspect_ai"))
+    monkeypatch.setitem(sys.modules, "inspect_ai.log", fake_mod)
 
 
 class TestHazardEntryCounts:
@@ -729,3 +754,301 @@ class TestPriorScreenVoidedByD4:
         open_evidence(db).close()
         lines = prior_measurements(parse_rat_record(RAT_0001), db, "claude-sonnet-5")
         assert not any("screen run" in line for line in lines)
+
+
+# ---------------------------------------------------------------------------
+# #438: what the hazard pattern is matched AGAINST
+#
+# The registered pattern used to be matched against the whole command string a
+# bash tool call carries, and the pattern registered for this family was
+# `git\s+pull`. Both halves were wrong together: an agent that types
+# `git pull --rebase` has chosen a strategy and has NOT walked into the trap,
+# and an agent that chains `cd /root/project && git status && ...` puts several
+# commands into one string that a blob regex cannot tell apart.
+#
+# The table below is the proof. It is written as cases rather than as reasoning
+# because the defect it repairs passed every gate this repository had: the count
+# was wrong, not the code path.
+# ---------------------------------------------------------------------------
+
+#: The pattern of record for the `git-pull-rebase-trap` family (RAT-0001
+#: Amendment 5). Read: a `git pull` that IS the command being run, and whose
+#: argument list carries no explicit rebase choice and no loud `--ff-only`
+#: guard. `--no-ff` is deliberately NOT exempt -- it is the founding incident's
+#: form, and `pull.rebase=true` silently ignores it.
+_GIT_PULL_HAZARD_ACTION = r"^git pull\b(?!.*\s(?:--rebase|--no-rebase|-r|--ff-only)(?:\s|=|$))"
+
+#: The pattern this ticket replaced, kept as the NEGATIVE CONTROL. Every case
+#: where the two disagree is a count the instrument used to get wrong.
+_NAIVE_HAZARD_ACTION = r"git\s+pull"
+
+#: The three integration commands the pilot Null arm actually ran, verbatim from
+#: the 2026-09-01 paired pilot log. All three are explicit-strategy pulls.
+_PILOT_NULL_PULL = "git pull --rebase origin main"
+
+#: The one real trap entry anywhere in the pilot corpus: Full arm, epoch 3.
+_PILOT_FULL_TRAP = "git pull --no-ff origin main"
+
+
+class TestHazardCommandCases:
+    """The case table for `classify_hazard_command` under the pattern of record."""
+
+    @pytest.mark.parametrize(
+        ("command", "expected"),
+        [
+            # -- the hazard, in the forms it is actually typed ---------------
+            ("git pull", HazardVerdict.ENTERED),
+            ("git pull origin main", HazardVerdict.ENTERED),
+            ("git   pull", HazardVerdict.ENTERED),
+            (_PILOT_FULL_TRAP, HazardVerdict.ENTERED),
+            ("cd /root/project && git pull", HazardVerdict.ENTERED),
+            ("cd /root/project; git pull origin main", HazardVerdict.ENTERED),
+            ("git pull 2>&1 | tee /tmp/out.log", HazardVerdict.ENTERED),
+            ("git pull \\\n  origin main", HazardVerdict.ENTERED),
+            # -- an explicit strategy is a choice, not a trap entry ----------
+            (_PILOT_NULL_PULL, HazardVerdict.AVOIDED),
+            ("git pull --no-rebase origin main", HazardVerdict.AVOIDED),
+            ("git pull -r", HazardVerdict.AVOIDED),
+            ("git pull --ff-only origin main", HazardVerdict.AVOIDED),
+            ("git pull --rebase=merges", HazardVerdict.AVOIDED),
+            ("git fetch origin && git pull --rebase && git push", HazardVerdict.AVOIDED),
+            # -- the words appear, the command does not ----------------------
+            ("echo 'git pull'", HazardVerdict.AVOIDED),
+            ('git commit -m "note: git pull is banned here"', HazardVerdict.AVOIDED),
+            ("git log --oneline | grep 'git pull'", HazardVerdict.AVOIDED),
+            ("git status # remember to git pull later", HazardVerdict.AVOIDED),
+            # -- the instrument cannot read it, and says so ------------------
+            ('echo "unterminated', HazardVerdict.UNDECIDED),
+            ("cat > note.txt <<'EOF'\ngit pull\nEOF", HazardVerdict.UNDECIDED),
+            # A trailing backslash segments cleanly and then defeats shlex, so
+            # this is the one shape that reaches the PER-SEGMENT undecided
+            # branch rather than the whole-string one above. Without it that
+            # branch has no detector and can be deleted without a test noticing.
+            ("echo foo\\", HazardVerdict.UNDECIDED),
+        ],
+    )
+    def test_case(self, command: str, expected: HazardVerdict) -> None:
+        assert classify_hazard_command(command, _GIT_PULL_HAZARD_ACTION) is expected
+
+    def test_the_naive_pattern_disagrees_on_every_explicit_strategy_form(self) -> None:
+        """The negative control: this is the over-count the ticket measured.
+
+        Each of these is rated MUST PASS by the card's own acceptance table. The
+        pattern that shipped counted all of them as hazard entries.
+        """
+        explicit = [
+            _PILOT_NULL_PULL,
+            "git pull --no-rebase origin main",
+            "git pull -r",
+            "git pull --ff-only origin main",
+        ]
+        for command in explicit:
+            naive = classify_hazard_command(command, _NAIVE_HAZARD_ACTION)
+            corrected = classify_hazard_command(command, _GIT_PULL_HAZARD_ACTION)
+            assert naive is HazardVerdict.ENTERED
+            assert corrected is HazardVerdict.AVOIDED
+
+    def test_a_match_wins_over_an_unreadable_sibling_command(self) -> None:
+        """A chain that pulls and also carries an unreadable command entered it.
+
+        The trailing backslash makes `echo foo\\` unsplittable by shlex while
+        the chain around it still segments, which is the only shape that reaches
+        the per-segment undecided branch. The pull happened; the verdict says so.
+        """
+        command = "git pull && echo foo\\"
+        assert classify_hazard_command(command, _GIT_PULL_HAZARD_ACTION) is HazardVerdict.ENTERED
+
+    def test_a_config_write_beside_the_pull_is_counted_as_an_entry(self) -> None:
+        """The genuinely ambiguous case, decided and stated rather than hidden.
+
+        `git config pull.rebase true && git pull` sets the strategy in config and
+        then runs a bare pull. Read one way the agent chose; read the other way
+        it typed exactly the command the card forbids.
+
+        The chosen behaviour is ENTERED, and the reason is a property of the
+        instrument rather than a judgement about the agent: this reads COMMANDS,
+        never repository state, so it cannot know what `pull.rebase` resolved to
+        at the moment of the pull. Every exemption it grants is therefore an
+        exemption written on the pull invocation itself. A config write is not.
+
+        This is stated as a limit, not a solve. The common form in the real
+        corpus is a config write in a SEPARATE tool call, which no per-command
+        instrument can see at all; correcting for it needs an epoch-state read
+        that this function deliberately does not do.
+        """
+        command = "git config pull.rebase true && git pull"
+        assert classify_hazard_command(command, _GIT_PULL_HAZARD_ACTION) is HazardVerdict.ENTERED
+
+    def test_a_strategy_set_on_the_git_invocation_is_not_an_entry(self) -> None:
+        """`git -c pull.rebase=false pull` names the strategy and is exempt.
+
+        Not by the exemption lookahead -- by the anchor. The command being run is
+        `git -c ...`, so an anchored pattern does not match it. The same anchor
+        means `git --no-pager pull`, which IS a bare pull, is missed as well.
+        That is an undercount, and an undercount can only make the qualification
+        gate refuse more often, never certify a candidate it should not.
+        """
+        assert (
+            classify_hazard_command("git -c pull.rebase=false pull", _GIT_PULL_HAZARD_ACTION)
+            is HazardVerdict.AVOIDED
+        )
+        assert (
+            classify_hazard_command("git --no-pager pull", _GIT_PULL_HAZARD_ACTION)
+            is HazardVerdict.AVOIDED
+        )
+
+
+class TestSimpleCommands:
+    """The segmenter underneath the case table."""
+
+    def test_splits_a_chain_on_every_unquoted_operator(self) -> None:
+        command = "cd /root/project && git status || echo no; git log | head -3"
+        assert simple_commands(command) == (
+            "cd /root/project",
+            "git status",
+            "echo no",
+            "git log",
+            "head -3",
+        )
+
+    def test_does_not_split_inside_quotes(self) -> None:
+        assert simple_commands("echo 'a && b; c | d'") == ("echo 'a && b; c | d'",)
+
+    def test_does_not_split_a_redirection_that_contains_an_ampersand(self) -> None:
+        """`2>&1` must survive. A bare `&` is not a separator for this reason."""
+        assert simple_commands("git pull 2>&1") == ("git pull 2>&1",)
+
+    def test_a_line_continuation_is_one_command(self) -> None:
+        assert simple_commands("git pull \\\n  origin main") == ("git pull \\\n  origin main",)
+
+    def test_an_unterminated_quote_is_unsegmentable(self) -> None:
+        assert simple_commands('echo "unterminated') is None
+
+    def test_a_heredoc_is_unsegmentable_but_a_here_string_is_not(self) -> None:
+        assert simple_commands("cat <<EOF\ngit pull\nEOF") is None
+        assert simple_commands("grep pull <<< 'git pull'") == ("grep pull <<< 'git pull'",)
+
+
+class TestHazardUndecidedCounts:
+    """An epoch the instrument cannot read is counted, not scored as avoided."""
+
+    def test_an_unreadable_epoch_is_undecided_not_avoided(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake = _fake_eval_log(
+            epochs=4,
+            hazard_commands=["cat > n.txt <<'EOF'\ngit pull\nEOF"],
+            non_hazard_commands=["git fetch origin main && git merge origin/main"],
+        )
+        _patch_read_eval_log(monkeypatch, fake)
+        entry = hazard_entry_counts(tmp_path / "null.eval", _GIT_PULL_HAZARD_ACTION)
+        assert entry.epochs == 4
+        assert entry.entered == 0
+        assert entry.undecided == 1
+
+    def test_control_the_same_epoch_shape_with_a_real_pull_enters(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The control beside the arm above: undecided is not simply always on."""
+        fake = _fake_eval_log(
+            epochs=4,
+            hazard_commands=["git pull origin main"],
+            non_hazard_commands=["git fetch origin main && git merge origin/main"],
+        )
+        _patch_read_eval_log(monkeypatch, fake)
+        entry = hazard_entry_counts(tmp_path / "null.eval", _GIT_PULL_HAZARD_ACTION)
+        assert entry.entered == 1
+        assert entry.undecided == 0
+
+    def test_the_pilot_null_arm_shape_reads_zero_not_three(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The defect, reproduced on the pilot Null arm's own commands.
+
+        Three of the pilot's eight Null epochs ran `git pull --rebase origin
+        main`. The shipped pattern read that as 3 of 8 entered. Zero of them met
+        the hazard.
+        """
+        fake = _fake_eval_log(
+            epochs=8,
+            hazard_commands=[_PILOT_NULL_PULL] * 3,
+            non_hazard_commands=["git rebase origin/main"],
+        )
+        _patch_read_eval_log(monkeypatch, fake)
+        naive = hazard_entry_counts(tmp_path / "null.eval", _NAIVE_HAZARD_ACTION)
+        assert naive.entered == 3
+        _patch_read_eval_log(monkeypatch, fake)
+        corrected = hazard_entry_counts(tmp_path / "null.eval", _GIT_PULL_HAZARD_ACTION)
+        assert corrected.entered == 0
+        assert corrected.undecided == 0
+
+    def test_the_pilot_full_arm_shape_keeps_its_one_real_entry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The positive control: the repair does not zero the count everywhere."""
+        fake = _fake_eval_log(
+            epochs=8,
+            hazard_commands=[
+                _PILOT_FULL_TRAP,
+                _PILOT_NULL_PULL,
+                "git pull --no-rebase origin main",
+            ],
+            non_hazard_commands=["git fetch origin && git merge --no-ff origin/main"],
+        )
+        _patch_read_eval_log(monkeypatch, fake)
+        entry = hazard_entry_counts(tmp_path / "null.eval", _GIT_PULL_HAZARD_ACTION)
+        assert entry.entered == 1
+        assert entry.undecided == 0
+
+
+#: Where the 2026-09-01 pilot and sized logs live. Gitignored, ~2.9G, no remote,
+#: and absent from every git worktree, so the test below can only run where the
+#: archive is checked out. `SKILL_HARNESS_GITPULL_LOG_DIR` points it elsewhere.
+_GITPULL_LOG_ENV = "SKILL_HARNESS_GITPULL_LOG_DIR"
+_GITPULL_LOG_DEFAULT = Path(__file__).resolve().parents[1] / ".private/microrun/batch1/gitpull"
+
+#: entered / undecided per log under the pattern of record, and the count the
+#: shipped pattern gave. Keyed on a filename substring. Measured 2026-09-08 by
+#: reading the logs; no model was called and nothing was spent.
+_PILOT_LOG_EXPECTATIONS: tuple[tuple[str, str, int, int], ...] = (
+    ("logs-stage1-paired", "null_3SiUbmkDQ9vnApkjbxNnbQ", 0, 3),
+    ("logs-stage1-paired", "full_6PHRM7FrxY57YAQ48k3Zkv", 1, 4),
+    ("logs-stage2-sized", "null_QXBt2fAgkETxQx2ktNgNiZ", 0, 0),
+    ("logs-stage2-sized", "full_DnHPqwD7uZH8Fgm2sg78fQ", 0, 0),
+    ("B_v2_deleaked", "null_hfzABDk9BDS9T385pCe5Nz", 0, 1),
+    ("C_full_deleaked", "full_2Rww35xXAa5MKQksPFjjzQ", 0, 2),
+)
+
+
+@pytest.mark.skipif(not _INSPECT_INSTALLED, reason="needs the [inspect] extra to read .eval logs")
+class TestPilotLogsUnderThePatternOfRecord:
+    """The pattern of record, measured against the real logs it was chosen for.
+
+    These logs are private and are not in the repository. Where they are absent
+    the test SKIPS with the path it looked for -- it never passes, because a
+    green tick on an unread fixture is exactly the reassurance this ticket was
+    filed about.
+    """
+
+    @staticmethod
+    def _log_dir() -> Path:
+        override = os.environ.get(_GITPULL_LOG_ENV)
+        directory = Path(override) if override else _GITPULL_LOG_DEFAULT
+        if not directory.is_dir():
+            pytest.skip(
+                f"pilot logs not present at {directory} "
+                f"(set {_GITPULL_LOG_ENV} to the gitpull log directory to run this)"
+            )
+        return directory
+
+    def test_counts_reproduce_and_the_shipped_pattern_over_counted(self) -> None:
+        directory = self._log_dir()
+        for subdir, stem, expected_entered, naive_entered in _PILOT_LOG_EXPECTATIONS:
+            matches = [p for p in directory.rglob("*.eval") if subdir in str(p) and stem in p.name]
+            assert len(matches) == 1, f"expected exactly one log for {subdir}/{stem}: {matches}"
+            log = matches[0]
+            corrected = hazard_entry_counts(log, _GIT_PULL_HAZARD_ACTION)
+            assert corrected.entered == expected_entered, f"{log.name} entered"
+            assert corrected.undecided == 0, f"{log.name} undecided"
+            naive = hazard_entry_counts(log, _NAIVE_HAZARD_ACTION)
+            assert naive.entered == naive_entered, f"{log.name} naive entered"

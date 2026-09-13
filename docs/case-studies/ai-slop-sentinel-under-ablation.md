@@ -24,7 +24,7 @@ cross-vendor measurement — was less informative than what replaced it.
 ## What I was trying to do
 
 `ai-slop-sentinel` is one of the active Claude Code skills I author. It
-asks the assistant to review AI-generated code against a curated "watch"
+asks the assistant to review AI-generated code against a hand-written "watch"
 of slop anti-patterns, citing the watch by entry for each flag. Phase 4.4
 of this project dogfooded it through the harness against
 `claude-sonnet-4-6`. The harness reported a vector. The vector showed all
@@ -191,7 +191,7 @@ holistic grade. No vibe score. No LLM judge as a source of truth.
 The relevant category is not "LLM eval framework." It is
 **AI agent self-audit infrastructure**: tooling whose job is to let a
 team running production AI agents audit, in a falsifiable way, whether
-the prompts/skills/system messages in the loop are load-bearing. The
+the prompts/skills/system messages in the loop change the outcome. The
 audit can produce a measurement. It can also refuse to produce one and
 publish the refusal. Both are valid outcomes; the second is what most
 of the field cannot represent in their data model.
@@ -213,7 +213,7 @@ by construction.** A holistic LLM judge cannot verify a clause-level
 claim it cannot mechanically check. A pairwise-preference judge can
 tell you which response is preferred; it cannot tell you whether the
 specific clause "cite the watch entry for each flagged finding" is
-load-bearing in producing the preferred response. The conflation
+what produces the preferred response. The conflation
 between those two questions is structural. It is in the framework, not
 the user.
 
@@ -296,7 +296,7 @@ Three classes of move would each produce a different deliverable:
    clauses for `ai-slop-sentinel` is straightforward engineering once
    the registry is extended; it is a deliberate choice to ship v0.1.0
    without that work done, because the discipline of refusing to
-   measure without a registered scorer is the load-bearing claim.
+   measure without a registered scorer is the claim v0.1.0 makes.
 2. **Calibrate a Tier-2 LLM judge for the relevant axes.** Per
    framework discipline, a Tier-2 judge is admissible only after it
    passes position-swap and length-control calibration on a labeled

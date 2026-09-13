@@ -424,6 +424,46 @@ class TestHazardAction:
         with pytest.raises(RatificationError, match="hazard_action"):
             parse_rat_record(_write_rat(tmp_path, text))
 
+    def test_hazard_action_matching_the_empty_string_refused(self, tmp_path: Path) -> None:
+        """#438: a pattern that matches everything makes hazard_floor unfailable.
+
+        `.*` matches every command, so every epoch reads as a hazard entry and
+        the registered floor is satisfied by any run at all. This is the #438
+        defect -- a pattern that counts behaviour which is not the hazard -- in
+        its total form, and it is caught at parse rather than at read.
+        """
+        text = _rat_text({"hazard_action": ".*", "hazard_floor": "0.20", "delta_min": "0.20"})
+        path = tmp_path / "RAT-0001-x.md"
+        path.write_text(text, encoding="utf-8")
+        with pytest.raises(RatificationError, match="matches the empty string"):
+            parse_rat_record(path)
+
+    def test_hazard_action_with_an_all_optional_branch_refused(self, tmp_path: Path) -> None:
+        """The same guard on the way it gets written by accident, not by intent."""
+        text = _rat_text(
+            {
+                "hazard_action": r"(?:git\s+pull)?",
+                "hazard_floor": "0.20",
+                "delta_min": "0.20",
+            }
+        )
+        path = tmp_path / "RAT-0001-y.md"
+        path.write_text(text, encoding="utf-8")
+        with pytest.raises(RatificationError, match="matches the empty string"):
+            parse_rat_record(path)
+
+    def test_control_the_pattern_of_record_parses(self, tmp_path: Path) -> None:
+        """CONTROL: the guard is not simply always on.
+
+        The pattern #438 registered for the git-pull-rebase-trap family is
+        anchored and cannot match an empty command, so it parses.
+        """
+        pattern = r"^git pull\b(?!.*\s(?:--rebase|--no-rebase|-r|--ff-only)(?:\s|=|$))"
+        text = _rat_text({"hazard_action": pattern, "hazard_floor": "0.40", "delta_min": "0.20"})
+        path = tmp_path / "RAT-0001-z.md"
+        path.write_text(text, encoding="utf-8")
+        assert parse_rat_record(path).hazard_action == pattern
+
     def test_hazard_action_empty_string_refused(self, tmp_path: Path) -> None:
         text = _rat_text({"hazard_action": "", "hazard_floor": "0.20", "delta_min": "0.20"})
         with pytest.raises(RatificationError, match="hazard_action"):

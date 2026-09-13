@@ -59,7 +59,7 @@ refusal can no longer fire. A mutant that deleted the `raise` would also remove 
 the error class in that block and risk a lint-shaped kill rather than a behavioural one.
 
 M-X2 is deliberately narrow. Predicate (b) has two halves, invocation (#46) and exposure
-(#387). Emptying only the exposure half is what shows the widening is load-bearing: under
+(#387). Emptying only the exposure half is what shows the refusal depends on the widening: under
 M-X2 an invoked Null epoch still refuses, and the two named tests go red only because an
 exposed-but-not-invoked Null epoch now writes.
 

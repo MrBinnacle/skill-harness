@@ -38,7 +38,7 @@ directly to `skill init`.
 ## What the skill contains
 
 `ai-slop-sentinel` is a code-review skill that instructs Claude to review
-AI-generated code against a curated watch of AI-slop anti-patterns, citing the watch
+AI-generated code against a hand-written watch of AI-slop anti-patterns, citing the watch
 by entry for each flag. It is the skill evaluated in the v0.1.0 case study at
 `docs/case-studies/ai-slop-sentinel-under-ablation.md`.
 

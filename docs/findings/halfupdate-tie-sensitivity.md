@@ -2,10 +2,12 @@
 
 **Severity:** `WRONG_NUMBER`  
 **Ticket:** #347 (detection); parent #341 item 5  
-**Status:** RULED, not yet migrated — detector landed with strict xfail; the estimand
-was ruled on #368 (2026-08-31) and the measured sensitivity is recorded in
-`docs/INVARIANTS.md` §8. The xfails stay until the encodings agree; they are not
-loosened to go green.  
+**Status:** RESOLVED (2026-09-08) — the estimand was ruled on #368 (2026-08-31) and
+the Path C migration landed on #368. The ablation lane now conditions on the
+discordant table, so the two encodings agree on every fixture scenario and all seven
+strict xfails were removed **with their bounds unchanged**, which is the acceptance
+the ruling required. `docs/INVARIANTS.md` §8 carries the landed state; the mutation
+receipt is `docs/assurance/path-c-tie-encoding-mutation-receipt.md`.  
 **Harness:** `tests/test_halfupdate_tie_sensitivity.py`  
 **Report:** this document
 
@@ -142,7 +144,10 @@ until the marks are removed.
 PYTHONHASHSEED=0 python -m pytest tests/test_halfupdate_tie_sensitivity.py -v
 ```
 
-Expected: 32 passed, 7 xfailed. The xfailed scenarios are:
+Expected **since the Path C migration**: all pass, zero xfailed.
+
+Before the migration this run reported `32 passed, 7 xfailed`, and the seven were:
+
 - `test_stopping_decision_agreement[win-heavy-few-ties]`
 - `test_stopping_decision_agreement[win-heavy-many-ties]`
 - `test_p_exceed_sensitivity_within_bound[many-ties]`
@@ -150,3 +155,17 @@ Expected: 32 passed, 7 xfailed. The xfailed scenarios are:
 - `test_p_exceed_sensitivity_within_bound[win-heavy-many-ties]`
 - `test_posterior_mean_shift_within_bound[win-heavy-few-ties]`
 - `test_posterior_mean_shift_within_bound[win-heavy-many-ties]`
+
+Each mark was removed only after the assertion it covered began to pass, one at a
+time, with `MAX_P_SENSITIVITY` and `MAX_POSTERIOR_MEAN_SHIFT` untouched.
+
+The file's positive control was re-pointed at `legacy_halfupdate_decision`, the
+superseded arithmetic kept addressable in `ablation/stopping.py`. Measured against
+the production path the divergence this document reports is now identically zero,
+and a positive control measuring zero is vacuous - it would pass forever without
+testing anything. Re-pointing it keeps it measuring the real gap between the two
+encodings, which is what the bounds were always about. The control's own docstring
+pre-registered exactly this revision.
+
+The sensitivity table above therefore still describes the superseded encoding
+faithfully. It is a record of what was wrong, not a description of what now runs.

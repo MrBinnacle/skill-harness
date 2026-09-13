@@ -46,10 +46,34 @@ Exit code 0 = no drift; 1 = at least one contract violated (each listed).
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import os
 import re
+import subprocess
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+class WordListManifestError(Exception):
+    """The vendored words_to_avoid manifest is missing, unparseable, or shaped
+    wrong. Raised by ``read_word_list_manifest`` and reported as a DC-16
+    failure -- an unreadable expectation is a refusal to report, never a pass."""
+
+
+class WordListSelectionError(Exception):
+    """``git ls-files`` could not name the tracked set. Raised by
+    ``iter_word_list_files`` and reported as a DC-16 failure.
+
+    The check REFUSES here rather than falling back to a filesystem walk. A
+    walk over a tree git cannot describe scans a different set of files under
+    the same row name, and a scan that returns nothing because git errored
+    would print as a clean run. Both are worse than a red row that names the
+    reason (#471)."""
+
 
 # ---------------------------------------------------------------------------
 # Check vocabulary — the small set of check kinds rows are assembled from
@@ -144,6 +168,43 @@ class CacheAwareContract:
 
 
 @dataclass(frozen=True)
+class MirrorRecordContract:
+    """DC-17 (#514): mirror records of ratified Notion pages live under
+    ``ledger_dir`` matching ``MIRROR-*.md``. Each addition carries a
+    ``landed_as:`` field naming the SERS schema key or source symbol
+    implementing it, or the literal ``UNLANDED`` with a ticket number.
+
+    The check fails when a landed symbol does not exist under ``docs/sers/``
+    or ``src/skill_harness/``, when an UNLANDED row names a closed ticket, or
+    when that ticket's state cannot be read at all. Zero records is drift: the
+    mirror surface going missing means the subsumption carrier is gone."""
+
+    ledger_dir: str
+    search_roots: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WordListBan:
+    """DC-16 (#462): the collection's ``words_to_avoid`` list, vendored into
+    ``manifest_path``, refused in every markdown file this repository TRACKS.
+
+    The manifest carries the words AND a digest of them. The check recomputes
+    that digest from the array it just read, so editing the array without
+    editing the digest is drift caught here, per-commit and hermetic. The
+    OTHER direction -- the collection editing its list while this copy stands
+    still -- needs a cross-repository read, so it runs on a schedule in
+    ``scripts/words_to_avoid_drift_check.py`` instead.
+
+    Matching is whole-word and case-insensitive, with a hyphen counting as a
+    word character: ``earn`` must not fire on "learn", and ``unlock`` must not
+    fire on "unlocked". ``excluded_paths`` are repo-relative posix paths,
+    each stated with its reason in the row below."""
+
+    manifest_path: str
+    excluded_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class LiveRow:
     dc_id: str
     summary: str
@@ -155,6 +216,8 @@ class LiveRow:
     import_ban: ImportScanBan | None = None
     rat_ledger: RatLedgerContract | None = None
     cache_aware_contract: CacheAwareContract | None = None
+    word_list_ban: WordListBan | None = None
+    mirror_record: MirrorRecordContract | None = None
 
 
 @dataclass(frozen=True)
@@ -197,6 +260,65 @@ file here, in that PR, with a dated note). Printed even when empty."""
 # allowlist entry.
 _OC_BAN_ROOTS = ("src/skill_harness/oc",)
 _OC_BAN_EXEMPTIONS = frozenset({"src/skill_harness/oc/crosschecks.py"})
+
+# DC-16 scope (#462, corrected by #471): every markdown file this repository
+# TRACKS, which is what the operator's 2026-09-06 ruling binds -- one voice
+# across all repositories, every line of prose under the same rules. The
+# ruling binds the prose this repository publishes, and the tracked set is
+# exactly the prose a commit here can change.
+#
+# The selection was a filesystem walk until #471. The walk pruned directory
+# NAMES (.private, .git, the caches, .venv, node_modules, build, dist,
+# htmlcov, site) and consulted neither .gitignore nor the index, so it reached
+# whatever a working clone happened to hold. Measured on a working clone at
+# origin/main: 264 failures, 261 of them under a gitignored .sandcastle/
+# worktree and 3 in a gitignored CLAUDE.md, none of them prose any commit here
+# publishes. The same run was green in CI, which clones only tracked content.
+# A gate that is red by default on a developer machine over files its reader
+# cannot act on is a gate that gets muted, which is the cost the digest half
+# of this same contract already wrote down
+# (MrBinnacle/skills@main:assets/tokens.json, copy.words_to_avoid_digest).
+#
+# The pruned-directory list is gone rather than extended. Every name on it was
+# a hand-maintained guess at "generated, vendored, or not ours", and git
+# already answers that question exactly.
+_WORD_LIST_MANIFEST = "assets/words_to_avoid.json"
+
+# Individual files, each with the reason it is out of scope. Kept minimal the
+# way _PUBLIC_COPY_EXCLUDED is: tests/test_drift_check.py proves every entry
+# hides a real hit, so an entry that stops carrying one has to go.
+_WORD_LIST_EXCLUDED_PATHS = (
+    # A dated record of what shipped. Its entries describe releases made
+    # before the 2026-09-06 ruling, in the wording used at the time; a
+    # changelog rewritten after the fact stops being a record of the release.
+    "CHANGELOG.md",
+    # The three immutable historical records that carry a listed word. The
+    # house convention is dated amendment blocks, never edits
+    # (docs/ratifications/README.md, quoting docs/findings/v0.2-preregistration.md),
+    # and tests/test_structural_bans.py already exempts these same files from
+    # the public-copy scan on the same grounds: they preserve the wording used
+    # when the plan and the gate were registered, and rewriting that wording
+    # retroactively falsifies the record. Two of the hits are the registered
+    # decision statement itself -- "which skills ... earn their slot" is the
+    # question v0.2 was pre-registered to answer.
+    "docs/PLAN.md",
+    "docs/findings/v0.2-preregistration.md",
+    "docs/findings/v0.2-reaim-gate.md",
+    # Mirror record of a ratified Notion page: the verdict block is a verbatim
+    # quote and carries a listed word ("robust"). The record is append-only
+    # by the same house convention, so the wording is immutable.
+    "docs/ratifications/MIRROR-0001-on-irreducibility.md",
+    # The superseded v1 pre-registration, added to the repository by #534 as the
+    # record of what was registered on 2026-09-05 and then superseded by v2. It
+    # carries "robust" at line 103, in its statistical sense, inside the
+    # paragraph that refuses the median as a replacement estimator. Excluded on
+    # exactly the MIRROR-0001 ground above: a sealed record's wording is
+    # immutable, and rewording a registered document after its result is known
+    # is the failure this repository exists to refuse. The LIVE amendment,
+    # -v2.md, is deliberately NOT excluded: it governs, it can be amended by a
+    # dated block, and the ban must still reach it.
+    "docs/assurance/ebmom-peel-preregistration-amendment.md",
+)
 
 LIVE_ROWS: tuple[LiveRow, ...] = (
     LiveRow(
@@ -324,15 +446,28 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
     LiveRow(
         dc_id="DC-6",
         summary="spend-gating sentence registered (README + INVARIANTS) + enforcement pointer live",
+        # #469: the sentence registered here until 2026-09-07 was "Every `run` subcommand
+        # is dry-run by default; `--execute` is required to spend". It was false for two
+        # of the three `run` subcommands, and registering it meant this contract held the
+        # false version in place: DC-6 reddened on a correction and stayed green on the
+        # error. The registered copy is now the scoped claim, which is what the invariant
+        # was always about -- spending takes an explicit opt-in, on the commands that can
+        # spend. tests/test_readme_run_dry_run_469.py reads the click commands and fails
+        # if the subcommand flag sets stop matching this wording.
         registered_texts=(
+            # Updated 2026-09-09 in the same change that landed `run pi-paired`
+            # (the #43 same-PR rule): the README's spend sentence now names BOTH
+            # spending subcommands; the registered copy tracks it. The mutation
+            # test in tests/test_drift_check.py mutates the shared substring
+            # "subcommand that spends" and stays valid under this wording.
             RegisteredText(
                 "README.md",
-                "Every command that can spend money is dry-run by default; "
-                "`--execute` is required to spend",
+                "`run ablation` and `run pi-paired` are the subcommands that spend",
             ),
             RegisteredText(
                 "docs/INVARIANTS.md",
-                "`--execute` is required before the command performs writes or makes LLM API calls",
+                "Every command that writes to the evidence store or makes an LLM API call "
+                "defaults to\ndry-run, and `--execute` is required before it does either",
             ),
         ),
         live_pointers=("src/skill_harness/cli/main.py",),
@@ -552,6 +687,28 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
             share_field="cache_read_share",
         ),
     ),
+    LiveRow(
+        dc_id="DC-16",
+        summary=(
+            "words_to_avoid: the collection's 15-word list, vendored with its digest, "
+            "refused in every markdown file this repository tracks (#462, #471)"
+        ),
+        word_list_ban=WordListBan(
+            manifest_path=_WORD_LIST_MANIFEST,
+            excluded_paths=_WORD_LIST_EXCLUDED_PATHS,
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-17",
+        summary=(
+            "mirror records: each MIRROR-*.md addition has a landed_as symbol "
+            "in docs/sers/ or src/skill_harness/, or UNLANDED with an open ticket (#514)"
+        ),
+        mirror_record=MirrorRecordContract(
+            ledger_dir="docs/ratifications",
+            search_roots=("docs/sers", "src/skill_harness"),
+        ),
+    ),
 )
 
 PLANNED_ROWS: tuple[PlannedRow, ...] = (
@@ -652,6 +809,143 @@ def _check_token_ban(root: Path, ban: TokenBan) -> list[str]:
         for lineno, line in enumerate(text.splitlines(), start=1):
             if pattern.search(line):
                 failures.append(f"banned term {ban.term!r} at {rel}:{lineno}")
+    return failures
+
+
+def canonical_word_list_digest(words: list[str]) -> str:
+    """The canonical digest of a words_to_avoid array.
+
+    ``sha256`` over ``json.dumps(words, separators=(",",":")).encode()``. The
+    collection computes it the same way over the same array, which is what
+    makes the two comparable. Recomputed from the array on both sides rather
+    than read from a published field: a published digest would be a second
+    source of truth, and a second source of truth cannot catch itself lying."""
+    return hashlib.sha256(json.dumps(words, separators=(",", ":")).encode()).hexdigest()
+
+
+def read_word_list_manifest(path: Path) -> tuple[list[str], str]:
+    """Return ``(words, recorded_digest)`` from a vendored manifest.
+
+    Raises ``WordListManifestError`` when the file is missing, unparseable, or
+    shaped wrong. ``scripts/words_to_avoid_drift_check.py`` reads the same
+    manifest through this function, so both guards agree on what the file is."""
+    if not path.is_file():
+        raise WordListManifestError(f"{path}: vendored word list missing")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise WordListManifestError(f"{path}: unparseable JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise WordListManifestError(f"{path}: top level is not an object")
+    words = payload.get("words")
+    if not isinstance(words, list) or not all(isinstance(word, str) for word in words):
+        raise WordListManifestError(f"{path}: 'words' is not an array of strings")
+    if not words:
+        raise WordListManifestError(f"{path}: 'words' is empty (the ban has nothing to refuse)")
+    recorded = payload.get("sha256")
+    if not isinstance(recorded, str):
+        raise WordListManifestError(f"{path}: 'sha256' is absent or not a string")
+    return [str(word) for word in words], recorded
+
+
+def word_list_pattern(words: list[str]) -> re.Pattern[str]:
+    """Whole-word, case-insensitive, hyphen-aware.
+
+    A hyphen counts as a word character on both sides, so ``earn`` does not
+    fire on "learn" or "re-earn-ish", and ``unlock`` does not fire on
+    "unlocked". Python's ``\\b`` treats a hyphen as a boundary, which would
+    make ``earn`` fire inside "load-bearing"; the explicit look-arounds are
+    what keep the two rules from matching each other's words."""
+    alternatives = "|".join(re.escape(word) for word in sorted(words, key=len, reverse=True))
+    return re.compile(rf"(?<![\w-])(?:{alternatives})(?![\w-])", re.IGNORECASE)
+
+
+WORD_LIST_SELECTION_COMMAND: tuple[str, ...] = ("git", "ls-files", "-z", "--", "*.md")
+"""How DC-16 names the files it scans. Printed on every run (F7): a check whose
+scope came from somewhere else would be a different check under the same row
+name, so the selection is stated rather than described."""
+
+
+def tracked_markdown_paths(root: Path) -> list[str]:
+    """The repo-relative posix paths of every markdown file git tracks under
+    ``root``.
+
+    ``git ls-files`` reads the index. It makes no network call and needs no
+    remote, so the check stays hermetic and stays valid in the per-commit
+    gate. ``-z`` gives NUL-separated output, which also turns off git's
+    ``core.quotePath`` escaping, so a path with a space or a non-ASCII
+    character arrives verbatim.
+
+    Raises ``WordListSelectionError`` when git is absent, when ``root`` is not
+    a repository, or when the command fails for any other reason."""
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, no shell, no user input
+            list(WORD_LIST_SELECTION_COMMAND),
+            cwd=str(root),
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise WordListSelectionError(
+            f"cannot select the scanned set: {' '.join(WORD_LIST_SELECTION_COMMAND)} "
+            f"could not be run in {root}: {exc}"
+        ) from exc
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip() or "(no stderr)"
+        raise WordListSelectionError(
+            f"cannot select the scanned set: {' '.join(WORD_LIST_SELECTION_COMMAND)} "
+            f"exited {result.returncode} in {root}: {detail}"
+        )
+    listing = result.stdout.decode("utf-8", errors="replace")
+    return [rel for rel in listing.split("\0") if rel]
+
+
+def iter_word_list_files(root: Path, ban: WordListBan) -> list[Path]:
+    """Every markdown file this repository tracks, minus the named exclusions.
+
+    Sorted, so the failure list is stable across platforms. A tracked path git
+    lists but the working tree does not hold (a checkout mid-operation, a
+    sparse checkout) is dropped here rather than read: the row reports drift in
+    prose, and a file that is not on disk carries none."""
+    excluded = {rel.lower() for rel in ban.excluded_paths}
+    found = [
+        root / rel
+        for rel in tracked_markdown_paths(root)
+        if rel.lower() not in excluded and (root / rel).is_file()
+    ]
+    return sorted(found)
+
+
+def _check_word_list_ban(root: Path, ban: WordListBan) -> list[str]:
+    manifest = root / ban.manifest_path
+    try:
+        words, recorded = read_word_list_manifest(manifest)
+    except WordListManifestError as exc:
+        return [str(exc)]
+
+    failures: list[str] = []
+    recomputed = canonical_word_list_digest(words)
+    if recomputed != recorded:
+        failures.append(
+            f"{ban.manifest_path}: recorded sha256 {recorded} does not match "
+            f"{recomputed} recomputed from 'words' - the list was edited without "
+            "its digest, or the digest without its list"
+        )
+
+    pattern = word_list_pattern(words)
+    try:
+        scanned = iter_word_list_files(root, ban)
+    except WordListSelectionError as exc:
+        # A refusal, not a pass. An empty scan and a scan that never ran print
+        # identically unless the second one says so.
+        failures.append(str(exc))
+        return failures
+    for path in scanned:
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for match in pattern.finditer(line):
+                failures.append(f"words_to_avoid: {match.group(0)!r} at {rel}:{lineno}")
     return failures
 
 
@@ -804,6 +1098,192 @@ def _check_cache_aware(root: Path, contract: CacheAwareContract) -> list[str]:
     return failures
 
 
+_MIRROR_FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
+_MIRROR_LANDED_AS = re.compile(r"landed_as:\s*(.+?)\s*`", re.MULTILINE)
+_UNLANDED_RE = re.compile(r"^UNLANDED\s+#(\d+)$")
+_MIRROR_TICKET_API = "https://api.github.com/repos/MrBinnacle/skill-harness/issues"
+# Per-process cache so six UNLANDED rows naming the same ticket make one GET.
+_TICKET_STATE_CACHE: dict[str, bool | None] = {}
+# Injected seam for the closed-ticket control. See _ticket_state_override.
+_TICKET_STATE_SEAM_ENV = "SKILL_HARNESS_TICKET_STATES"
+
+
+class _Sentinel:
+    """A distinguishable non-value, so 'not in the seam' and 'in the seam and
+    unreadable' stay two findings rather than one."""
+
+    __slots__ = ("_name",)
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return self._name
+
+
+_ABSENT = _Sentinel("_ABSENT")
+_UNREADABLE = _Sentinel("_UNREADABLE")
+
+
+def _check_mirror_records(root: Path, contract: MirrorRecordContract) -> list[str]:
+    """DC-17 (#514): each MIRROR-*.md addition carries a landed_as: field
+    naming the implementing symbol or UNLANDED with a ticket number.
+
+    Fails when:
+    - The ledger dir or its README is missing (registered surface gone).
+    - A landed symbol does not exist under the search roots.
+    - An UNLANDED row names a closed ticket, or its state cannot be read.
+    - The glob matches zero files (a check that scans nothing passes trivially).
+    - A MIRROR file has zero landed_as entries (same trivial-pass hole).
+    """
+    base = root / contract.ledger_dir
+    if not base.is_dir():
+        return [f"{contract.ledger_dir}: ledger dir missing (registered surface gone)"]
+    failures: list[str] = []
+    if not (base / "README.md").is_file():
+        failures.append(f"{contract.ledger_dir}/README.md missing (ledger conventions gone)")
+    mirror_files = sorted(base.glob("MIRROR-*.md"))
+    if not mirror_files:
+        failures.append(
+            f"{contract.ledger_dir}: no MIRROR-*.md files found "
+            "(a check that scans nothing passes trivially)"
+        )
+        return failures
+    for path in mirror_files:
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        block = _MIRROR_FRONTMATTER.match(text)
+        if block is None:
+            failures.append(f"{rel}: no leading front-matter block")
+            continue
+        matches = list(_MIRROR_LANDED_AS.finditer(text))
+        if not matches:
+            failures.append(
+                f"{rel}: no landed_as: entries (a check that scans nothing passes trivially)"
+            )
+            continue
+        for m in matches:
+            landed = m.group(1).strip()
+            unlanded_match = _UNLANDED_RE.match(landed)
+            if unlanded_match:
+                ticket_num = unlanded_match.group(1)
+                is_closed = _check_ticket_closed(ticket_num)
+                if is_closed is True:
+                    failures.append(f"{rel}: UNLANDED #{ticket_num} names a closed ticket")
+                elif is_closed is None:
+                    failures.append(
+                        f"{rel}: UNLANDED #{ticket_num} ticket state unreadable "
+                        "(the closed-ticket control could not run)"
+                    )
+            elif not _symbol_exists(root, landed, contract.search_roots):
+                failures.append(
+                    f"{rel}: landed_as {landed!r} does not exist under "
+                    f"{' or '.join(contract.search_roots)}"
+                )
+    return failures
+
+
+def _ticket_state_override(ticket_num: str) -> bool | _Sentinel:
+    """Read one ticket's state from the injected seam, or return ``_ABSENT``.
+
+    The seam exists so the closed-ticket CONTROL can be proven without a
+    network call. A control that reaches api.github.com proves the network
+    worked, not that a closed ticket blocks: PR #518 went red on exactly one
+    of four Test cells because the lookup failed there and nowhere else,
+    which reads as flakiness and invites a re-run.
+
+    ``SKILL_HARNESS_TICKET_STATES`` holds a JSON object mapping ticket number
+    to ``"open"``, ``"closed"`` or ``"unreadable"``. The key ``"*"`` sets the
+    state for every ticket the table does not name, so one variable can take
+    a whole test run off the network rather than each case listing the
+    tickets its fixture happens to carry. A malformed value is itself
+    unreadable rather than absent, so a typo in the seam cannot silently
+    restore the live lookup under a test that believes it is isolated.
+    """
+    raw = os.environ.get(_TICKET_STATE_SEAM_ENV)
+    if not raw:
+        return _ABSENT
+    try:
+        table = json.loads(raw)
+    except ValueError:
+        return _UNREADABLE
+    if not isinstance(table, dict):
+        return _UNREADABLE
+    if ticket_num in table:
+        value = table[ticket_num]
+    elif "*" in table:
+        value = table["*"]
+    else:
+        return _ABSENT
+    if value == "closed":
+        return True
+    if value == "open":
+        return False
+    return _UNREADABLE
+
+
+def _check_ticket_closed(ticket_num: str) -> bool | None:
+    """True if the issue is closed, False if open, None if unread.
+
+    Uses the public GitHub issues API (same pattern as release_gate G7/G8),
+    not ``gh``: unauthenticated ``gh`` cannot read issue state, which left the
+    closed-ticket control dead on every green CI run. GITHUB_TOKEN is attached
+    when present, and the drift-check job now receives it, so the lookup does
+    not spend the 60-per-hour unauthenticated budget a shared runner shares
+    with every other job on that IP.
+
+    ``None`` means the state could not be read. It is NOT a pass: the caller
+    treats it as a failure. "Could not read" and "no problem found" are
+    different findings and this function no longer collapses them.
+    """
+    override = _ticket_state_override(ticket_num)
+    if override is _UNREADABLE:
+        return None
+    if not isinstance(override, _Sentinel):
+        return override
+    if ticket_num in _TICKET_STATE_CACHE:
+        return _TICKET_STATE_CACHE[ticket_num]
+    state: bool | None
+    try:
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "skill-harness-drift-check",
+        }
+        token = os.environ.get("GITHUB_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        request = urllib.request.Request(  # noqa: S310 - fixed API origin
+            f"{_MIRROR_TICKET_API}/{ticket_num}",
+            headers=headers,
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
+            data = json.load(response)
+        raw = data.get("state") if isinstance(data, dict) else None
+        state = None if not isinstance(raw, str) else raw.lower() == "closed"
+    except (OSError, urllib.error.URLError, urllib.error.HTTPError, ValueError, TypeError):
+        state = None
+    _TICKET_STATE_CACHE[ticket_num] = state
+    return state
+
+
+def _symbol_exists(root: Path, symbol: str, search_roots: tuple[str, ...]) -> bool:
+    """Check if a symbol string exists as content in any file under the search roots."""
+    for search_root in search_roots:
+        base = root / search_root
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if symbol in text:
+                return True
+    return False
+
+
 def _run_row(root: Path, row: LiveRow) -> list[str]:
     failures: list[str] = []
     for site in row.value_sites:
@@ -822,6 +1302,10 @@ def _run_row(root: Path, row: LiveRow) -> list[str]:
         failures.extend(_check_rat_ledger(root, row.rat_ledger))
     if row.cache_aware_contract is not None:
         failures.extend(_check_cache_aware(root, row.cache_aware_contract))
+    if row.word_list_ban is not None:
+        failures.extend(_check_word_list_ban(root, row.word_list_ban))
+    if row.mirror_record is not None:
+        failures.extend(_check_mirror_records(root, row.mirror_record))
     return failures
 
 
@@ -887,6 +1371,21 @@ def main(argv: list[str] | None = None) -> int:
     print("Structural scan exemptions (definition sites + scan machinery, not allowlist entries):")
     for rel in sorted(all_exemptions):
         print(f"  EXEMPT   {rel}")
+
+    # Same F7 reason: DC-16 claims a scope, so the scope is printed rather
+    # than left to the table -- BOTH halves of it. The selection line names
+    # the command that chose the files (#471: a walk and a tracked-set read
+    # are different checks, and a reader cannot tell them apart from a row
+    # summary), and the exclusion lines name what the selection then dropped.
+    for row in LIVE_ROWS:
+        word_ban = row.word_list_ban
+        if word_ban is None:
+            continue
+        selection = " ".join(WORD_LIST_SELECTION_COMMAND)
+        print(f"{row.dc_id} markdown scan selection: {selection} (the tracked set)")
+        print(f"{row.dc_id} markdown scan exclusions (immutable records, tracked but not scanned):")
+        for rel in word_ban.excluded_paths:
+            print(f"  EXCLUDE  {rel}")
 
     if report.total_failures:
         print(f"DRIFT CHECK: BLOCKED - {report.total_failures} contract violation(s) listed above.")

@@ -1,0 +1,33 @@
+{
+  "sers_version": "1.4.0",
+  "skill_name": "poison-missing-subject-model",
+  "verdict": "CANT_TELL_YET",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": "no_data",
+  "value_class": null,
+  "evidence_admissibility": { "status": "not_applicable" },
+  "cost": {
+    "standing_tokens": { "refusal": "not_applicable" },
+    "fired_tokens": { "refusal": "not_applicable" },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": { "refusal": "not_applicable" },
+    "prompt_fingerprint": "a",
+    "schema_fingerprint": "b"
+  },
+  "delivery": {
+    "channel": "not_instrumented",
+    "exposure": { "refusal": "not_instrumented" },
+    "pi_c": { "refusal": "not_instrumented" }
+  },
+  "source": { "prose_path": "README.md" },
+  "summary": "Poison: sers_version 1.4.0 but subject_identity omits the required subject_model, so the receipt names no subject and a reader cannot tell which model was measured.",
+  "subject_identity": {
+    "skill_id": "aabbccddee0011223344556677889900aabbccddee0011223344556677889900",
+    "harness_version": "0.3.0",
+    "metric_version": "0.4.1",
+    "implementation_hash": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+    "arms": "null"
+  }
+}

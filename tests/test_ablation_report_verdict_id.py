@@ -19,6 +19,7 @@ from click.testing import CliRunner
 
 from skill_harness.ablation.runner import ClauseResult
 from skill_harness.ablation.stopping import StopDecision, StoppingReason
+from skill_harness.aggregation.status import UnmeasuredSubReason
 from skill_harness.cli.main import cli
 from tests.ratification_fixture import ratified_exec_args
 
@@ -201,6 +202,13 @@ class TestRealClauseResultRendersVerdictId:
             p_win_rate_exceeds_threshold=0.97,
             n_samples=11,
             w_accumulator=9.0,
+            # #368: the discordant table the posterior above is built from.
+            # Stated rather than defaulted, so this fixture cannot drift into
+            # asserting a posterior its own counts do not produce.
+            n_discordant=11,
+            x_full_wins=9,
+            x_ablated_wins=2,
+            n_ties=0,
         )
         expected_verdict_id = "cf-e3-1-real-uuid-12345678"
         real_result = ClauseResult(
@@ -248,6 +256,11 @@ class TestRealClauseResultRendersVerdictId:
             p_win_rate_exceeds_threshold=0.0,
             n_samples=0,
             w_accumulator=0.0,
+            # #368: an unmeasured clause has an empty table.
+            n_discordant=0,
+            x_full_wins=0,
+            x_ablated_wins=0,
+            n_ties=0,
         )
         real_result = ClauseResult(
             clause_id="real-clause-unmeasured",
@@ -255,7 +268,7 @@ class TestRealClauseResultRendersVerdictId:
             stop_decision=real_stop_decision,
             samples_collected=0,
             length_confounded=False,
-            unmeasured_reason="tier2_uncalibrated",
+            unmeasured_reason=UnmeasuredSubReason.TIER2_UNCALIBRATED,
             verdict_id=None,
         )
         assert real_result.verdict_id is None

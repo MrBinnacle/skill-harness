@@ -39,7 +39,7 @@ runs `073dd0da`, `19e85593`, `c3481f27`) produced:
 ```
 
 This is the §16 vector for v0.1's thesis-validation evidence. The finding is
-honest, falsifiable, and load-bearing: the harness correctly refused to call a
+honest, falsifiable, and the one the release depends on: the harness correctly refused to call a
 pass on a clause that did not empirically demonstrate signal. UNMEASURED (no
 admissible oracle) and FAILED (admissible verdicts that do not clear the pass
 threshold) are distinct, honest verdicts — not harness failures.

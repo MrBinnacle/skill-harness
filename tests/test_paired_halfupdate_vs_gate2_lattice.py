@@ -56,8 +56,9 @@ It does NOT assert that either estimand is wrong. They answer different question
 against is the two silently converging or silently drifting further apart without the change
 being noticed, and a reader concluding from a passing half-update that Gate 2 would agree.
 
-`paired_verdict`'s own docstring records that Path B has never fired to date, so nothing here
-claims to describe observed production behaviour.
+`paired_verdict`'s own docstring records that it has no production caller under
+`src/` and that the live paired verdict was hand-encoded under #403, so nothing
+here claims to describe observed production behaviour.
 """
 
 from __future__ import annotations

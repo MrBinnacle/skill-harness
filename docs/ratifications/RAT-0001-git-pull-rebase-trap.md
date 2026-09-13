@@ -305,6 +305,70 @@ projection purposes but not as the measurement of this run.
 2026-09-03 — the k=8 receipt section 2 names moved to `docs/sers/receipts/superseded/` in the same pull request; its bytes are unchanged.
 2026-09-03 — `run evaluate-paired 0700d089… RAT-0001-git-pull-rebase-trap.md trap-discipline` now returns `HAZARD_NOT_RECORDED` (exit 1) instead of `CANT_TELL_YET`, because the run's runner block predates the `hazard` field added by #421. The `CANT_TELL_YET` line in the decision table above is superseded; the correct reading of a run whose runner block never recorded whether the Null arm entered the hazard is `HAZARD_NOT_RECORDED`, not `CANT_TELL_YET`.
 
+### Amendment 5 — 2026-09-08: the hazard pattern of record, and why no `hazard_action` is set in the frontmatter yet
+
+This record's frontmatter carries no `hazard_action` and no `hazard_floor`. Until now that was an
+omission nobody had had to name. skill-harness#438 forces the question, because the pattern that
+would have been registered has been measured and found wrong.
+
+**The pattern that was in use, and what it counted.** The tests in `tests/test_cli_paired_gate2.py`
+carried `git\s+pull`, and `hazard_entry_counts` matched it against the whole command string each
+bash tool call carries. Both halves were wrong together. A pull with an explicit strategy —
+`--rebase`, `--no-rebase`, `-r`, `--ff-only` — matches that pattern, and the card's own acceptance
+table rates such a pull MUST PASS: intent is recorded, and it is not the trap. Matching against the
+whole string also cannot tell one command of a chain from the next, and cannot tell a command from
+a quoted argument that happens to contain the same words; agents in this corpus routinely put five
+commands into one tool call.
+
+**The pattern of record**, matched against each normalised simple command (#438 changed
+`hazard_entry_counts` to segment and normalise before matching, so `^` now means "this command is
+the hazard"):
+
+```
+^git pull\b(?!.*\s(?:--rebase|--no-rebase|-r|--ff-only)(?:\s|=|$))
+```
+
+`--no-ff` is deliberately not exempt. It is the founding incident's form, and `pull.rebase=true`
+silently ignores it.
+
+**Measured 2026-09-08 across every `.eval` log in the `gitpull` fixture directory.** Read-only. No
+model was called and nothing was spent.
+
+| log | epochs | entered, pattern of record | entered, `git\s+pull` |
+|---|---|---|---|
+| `logs-stage0/...null_E9uYtKBET...` | 3 | 0 | 0 |
+| `logs-stage0-ab/A_v1_signposted/...null_7GyunmNjQ...` | 3 | 0 | 0 |
+| `logs-stage0-ab/B_v2_deleaked/...null_hfzABDk9B...` | 3 | 0 | 1 |
+| `logs-stage0-ab/C_full_deleaked/...full_2Rww35xXA...` | 3 | 0 | 2 |
+| `logs-stage1-paired/...full_6PHRM7Frx...` | 8 | **1** | 4 |
+| `logs-stage1-paired/...null_3SiUbmkDQ...` | 8 | **0** | 3 |
+| `logs-stage2-sized/...full_DnHPqwD7u...` | 32 | 0 | 0 |
+| `logs-stage2-sized/...null_QXBt2fAgk...` | 32 | 0 | 0 |
+
+Undecided epochs: zero, in every log. The one entry anywhere in the corpus is the pilot Full arm,
+epoch 3, `git pull --no-ff origin main` — the trap, and it failed the oracle. This confirms
+Amendment 2's "ran `git pull`: 3" row for the pilot Null arm as literally true and substantively
+misleading: all three were `git pull --rebase origin main`.
+
+The eight logs here are the count measured at source. #438 says five and the S414 drafting pass
+enumerates seven; both undercount the directory.
+
+**Why the frontmatter is still empty.** `hazard_action` and `hazard_floor` are required together
+(#421), and `hazard_floor` is a number this record cannot honestly carry today. The floor has to be
+at or below a measured Null-arm entry rate, and the measured rate on the pattern of record is 0 of
+8. Registering a floor now would either be a figure nothing supports, or a figure the record's own
+pilot fails. The floor is an output of the qualification screen skill-harness#419 runs on a task
+version that actually forces the pull, priced by #420. It is registered when that screen produces
+it, in the same act.
+
+Recording the pattern here without the floor is the honest half: it fixes what "entered" means, so
+#419's screen has a settled instrument to read with, and it leaves the number to the measurement
+that produces it.
+
+*Revisit if:* #419's screen produces a Null-arm entry rate, at which point `hazard_action` and
+`hazard_floor` are registered together in the frontmatter above; or the task version changes such
+that the hazard is a different command, which makes the pattern above the wrong one.
+
 ## 11. Historical-classification obligation
 
 n/a — not the first Gate-1 row-pick (this is a Gate-2 record; the obligation attaches to the first

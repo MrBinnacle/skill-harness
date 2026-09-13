@@ -66,7 +66,7 @@ future design where task/skill content flows into oracle configuration.
 
 ### Trust partition between `evidence.db` and `runtime.db`
 
-`evidence.db` is append-only, audited, and load-bearing. `runtime.db` is mutable by design (in-flight progress, current calibration pointer, cost ledger). Compromise of `runtime.db` affects only FUTURE evidence rows via `current_calibration` snapshot at verdict write time; past evidence rows are bounded by the write-time-admissibility-snapshot rule above. **Symmetry between the two databases is NOT a design goal.** A future contributor proposing to "harden runtime.db with triggers for symmetry" is going in the wrong direction; the only append-only structure on the runtime side is `schema_migrations` (the META tamper-evidence ledger, see A21), which is structurally distinct from the operational tables (`run_progress`, `current_calibration`, `cost_ledger`).
+`evidence.db` is append-only, audited, and the trust anchor. `runtime.db` is mutable by design (in-flight progress, current calibration pointer, cost ledger). Compromise of `runtime.db` affects only FUTURE evidence rows via `current_calibration` snapshot at verdict write time; past evidence rows are bounded by the write-time-admissibility-snapshot rule above. **Symmetry between the two databases is NOT a design goal.** A future contributor proposing to "harden runtime.db with triggers for symmetry" is going in the wrong direction; the only append-only structure on the runtime side is `schema_migrations` (the META tamper-evidence ledger, see A21), which is structurally distinct from the operational tables (`run_progress`, `current_calibration`, `cost_ledger`).
 
 ### Filesystem substitution boundary
 

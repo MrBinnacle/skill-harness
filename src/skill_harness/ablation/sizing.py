@@ -87,23 +87,32 @@ class SizingResult:
 
 
 @cache
-def _p_exceeds(n: int, w2: int) -> float:
-    """P(win_rate > WIN_RATE_THRESHOLD) for posterior after n obs with 2w = w2."""
-    w = w2 / 2.0
-    return float(beta_dist.sf(WIN_RATE_THRESHOLD, 1.0 + w, 1.0 + (n - w)))
+def _p_exceeds(x_f: int, x_n: int) -> float:
+    """P(q > WIN_RATE_THRESHOLD) for the posterior after (x_f, x_n) discordant.
+
+    Mirrors ``BetaBinomialAccumulator._posterior``: Beta(1 + x_f, 1 + x_n).
+    Ties are absent from both, which is the #368 rule.
+    """
+    return float(beta_dist.sf(WIN_RATE_THRESHOLD, 1.0 + x_f, 1.0 + x_n))
 
 
 def _check_points() -> set[int]:
-    """Sample counts at which the runner performs a stop check (before N_MAX)."""
+    """TOTAL sample counts at which the runner performs a stop check (before N_MAX).
+
+    The schedule is driven by ``next_check_at``, which counts every
+    comparison including ties, because every comparison costs money. Whether
+    a check can CONCLUDE is a separate question answered by the N_MIN
+    discordant gate inside the loop below.
+    """
     return set(range(N_MIN, N_MAX, N_INC))
 
 
 def solve(discordance_rate: float, win_given_discordant: float) -> SizingResult:
     """Exactly solve the stopping rule's absorption profile for one (d, q).
 
-    :param discordance_rate: d in [0, 1] — per-epoch probability of a
+    :param discordance_rate: d in [0, 1] - per-epoch probability of a
         non-tie observation.
-    :param win_given_discordant: q in [0, 1] — P(Full wins | discordant).
+    :param win_given_discordant: q in [0, 1] - P(Full wins | discordant).
     :returns: SizingResult with exact absorption probabilities and E[N].
     :raises ValueError: If either parameter is outside [0, 1].
     """
@@ -114,22 +123,33 @@ def solve(discordance_rate: float, win_given_discordant: float) -> SizingResult:
     p_win, p_tie, p_loss = d * q, 1.0 - d, d * (1.0 - q)
     checks = _check_points()
 
-    # alive[w2] = probability of being un-absorbed with win-weight w2/2
-    alive: dict[int, float] = {0: 1.0}
+    # alive[(x_f, x_n)] = probability of being un-absorbed with that
+    # discordant table. Ties advance n without moving the state, which is
+    # exactly what they do to the posterior.
+    alive: dict[tuple[int, int], float] = {(0, 0): 1.0}
     p_pass = p_fail = p_unmeasured = expected_n = 0.0
 
     for n in range(1, N_MAX + 1):
-        stepped: dict[int, float] = {}
-        for w2, pr in alive.items():
-            for dw2, pp in ((2, p_win), (1, p_tie), (0, p_loss)):
+        stepped: dict[tuple[int, int], float] = {}
+        for (x_f, x_n), pr in alive.items():
+            for key, pp in (
+                ((x_f + 1, x_n), p_win),
+                ((x_f, x_n), p_tie),
+                ((x_f, x_n + 1), p_loss),
+            ):
                 if pp > 0.0:
-                    stepped[w2 + dw2] = stepped.get(w2 + dw2, 0.0) + pr * pp
+                    stepped[key] = stepped.get(key, 0.0) + pr * pp
         alive = stepped
 
         if n in checks:
-            surviving: dict[int, float] = {}
-            for w2, pr in alive.items():
-                p = _p_exceeds(n, w2)
+            surviving: dict[tuple[int, int], float] = {}
+            for (x_f, x_n), pr in alive.items():
+                # The N_MIN gate reads DISCORDANT comparisons, so a state
+                # that has spent n samples on mostly ties cannot conclude.
+                if x_f + x_n < N_MIN:
+                    surviving[(x_f, x_n)] = pr
+                    continue
+                p = _p_exceeds(x_f, x_n)
                 if p >= PASS_PROB_THRESHOLD:
                     p_pass += pr
                     expected_n += n * pr
@@ -137,12 +157,13 @@ def solve(discordance_rate: float, win_given_discordant: float) -> SizingResult:
                     p_fail += pr
                     expected_n += n * pr
                 else:
-                    surviving[w2] = pr
+                    surviving[(x_f, x_n)] = pr
             alive = surviving
 
-    # N_MAX: every surviving path absorbs (mirrors check_stop's hard cap).
-    for w2, pr in alive.items():
-        p = _p_exceeds(N_MAX, w2)
+    # N_MAX: every surviving path absorbs (mirrors check_stop's hard cap,
+    # which does NOT consult the N_MIN discordant gate).
+    for (x_f, x_n), pr in alive.items():
+        p = _p_exceeds(x_f, x_n)
         if p >= PASS_PROB_THRESHOLD:
             p_pass += pr
         elif p <= FAIL_PROB_THRESHOLD:

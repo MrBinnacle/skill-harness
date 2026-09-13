@@ -72,10 +72,31 @@ def test_minimum_detectable_q_at_full_discordance() -> None:
 
 
 def test_low_discordance_is_structurally_unmeasurable() -> None:
-    # Below roughly half discordance, no q <= 1.0 reaches 80% P(PASS)
-    # inside N_MAX — the finding that makes discordance rate the noise
-    # micro-run's primary estimand.
-    assert minimum_detectable_q(0.4) is None
+    """Rewritten by #368, because the migration MOVED this frontier.
+
+    Under the superseded half-update encoding the assertion here was
+    ``minimum_detectable_q(0.4) is None``: below roughly half discordance no q
+    at all reached 80% P(PASS) inside N_MAX. That was never a fact about how
+    much evidence a 40%-discordant axis carries. It was an artifact of the
+    encoding, which spent the sample budget crediting ties to both sides of
+    the posterior until nothing could clear the bar.
+
+    Conditioning on the discordant table removes the artifact and the
+    measurable region extends down to d = 0.2. The frontier does not vanish,
+    it moves, and the values below are its new location.
+
+    d = 0.1 remains genuinely unmeasurable: 40 samples yield about four
+    discordant comparisons, short of the N_MIN = 8 evidence bar, so no q
+    saves it. That is a structural limit rather than an encoding one, which
+    is why it did not move.
+
+    Note what this does NOT license. A detectable q at d = 0.2 is a statement
+    about the scalar rule's power, not a licence to ship the clause: the net
+    lift there is 0.188, below the registered delta_min, and Path C is what
+    stops it. See tests/test_ablation_path_c.py.
+    """
+    assert minimum_detectable_q(0.4) == pytest.approx(0.87)
+    assert minimum_detectable_q(0.2) == pytest.approx(0.97)
     assert minimum_detectable_q(0.1) is None
 
 
