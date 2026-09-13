@@ -88,7 +88,8 @@ The result is reported whichever way it lands. Section 5's kill criterion is unc
 
 ## Step 4. Reveal
 
-To be appended in its own commit, after this one is pushed.
+Landed. See `ebmom-peel-confirmatory-run-v2-2026-09-13-step4-reveal.md`. Both digest encodings
+recorded in step 3 were recomputed against the revealed root and both matched.
 
 ## Step 5. The run (once)
 
