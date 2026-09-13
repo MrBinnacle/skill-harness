@@ -165,12 +165,21 @@ def test_cli_audit_good_skill_exit_0(tmp_path: Path) -> None:
 
 
 def test_cli_audit_summary_matches_readme_and_names_unmeasured_as_state(tmp_path: Path) -> None:
+    """The rendered audit output moved off the README on 2026-09-13 (S447 ruling).
+
+    A move is a removal AND an arrival, so this lock follows the content to
+    ``docs/offline-audit-example.md`` instead of being retired with it. The
+    README's word ceiling is what the block could not fit under; the guard it
+    carried, that the rendered Summary line still equals the line the CLI
+    prints, is unchanged.
+    """
     path = write_skill(tmp_path, BLOCK_SCALAR_SKILL)
     result = CliRunner().invoke(cli, ["skill", "audit", str(path)])
     assert result.exit_code == 0, result.output
     summary_lines = result.output.split("Summary:", 1)[1].splitlines()
     summary = "Summary: " + " ".join(line.strip() for line in summary_lines[:2]).split(" (", 1)[0]
-    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+    rendered_path = Path(__file__).resolve().parent.parent / "docs" / "offline-audit-example.md"
+    readme = rendered_path.read_text(encoding="utf-8")
 
     readme_summary = next(line for line in readme.splitlines() if line.startswith("Summary:"))
     # The whole line, not just the tail after the em-dash. The tail-only

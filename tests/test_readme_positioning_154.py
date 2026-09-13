@@ -70,38 +70,39 @@ def test_banner_alt_equals_svg_labels_and_text_join() -> None:
         assert not any(dash in value for dash in _DASHES), f"{name} carries an em or en dash"
 
 
-def test_four_part_section_order() -> None:
-    """Document body order of record from #150: need, question, audit, refusal."""
+def test_five_question_section_order() -> None:
+    """Body order of record, superseding #150's four-part order (S447 ruling).
+
+    The owner's spec of 2026-09-11 puts the front page on five questions, in
+    this order, and says commands come last because a guard is easier to read
+    once the reader knows what it guards. That inverts #150's order, which put
+    the audit commands ahead of the refusal section. The guard is not loosened:
+    the same subjects must appear, the statement of need still leads, and the
+    order is still asserted.
+    """
     text = _readme()
-    # Status block is front-matter; body sections follow.
     need = re.search(
         r"^## .*(?:Why this exists|measurement problem|Why naive|trap)",
         text,
         re.MULTILINE | re.IGNORECASE,
     )
-    question = re.search(
-        r"^## .*(?:What does this skill cost|ratified question|The question)",
-        text,
-        re.MULTILINE | re.IGNORECASE,
+    problem = re.search(r"^## 1\. .*problem", text, re.MULTILINE | re.IGNORECASE)
+    does = re.search(r"^## 2\. .*instrument do", text, re.MULTILINE | re.IGNORECASE)
+    refusal = re.search(r"^## 3\. .*refuse", text, re.MULTILINE | re.IGNORECASE)
+    honest = re.search(r"^## 4\. .*(?:honest|integrity)", text, re.MULTILINE | re.IGNORECASE)
+    use = re.search(r"^## 5\. .*use it", text, re.MULTILINE | re.IGNORECASE)
+    named = (
+        ("statement of need", need),
+        ("question 1 (what problem)", problem),
+        ("question 2 (what it does)", does),
+        ("question 3 (what it refuses)", refusal),
+        ("question 4 (how it stays honest)", honest),
+        ("question 5 (how to use it)", use),
     )
-    audit = re.search(
-        r"^## .*(?:skill audit|offline|no API key|60-second|free offline)",
-        text,
-        re.MULTILINE | re.IGNORECASE,
-    )
-    refusal = re.search(
-        r"^## .*(?:evidence grade|refusal|UNMEASURED|KEEP.*CUT|What it (?:measures|refuses))",
-        text,
-        re.MULTILINE | re.IGNORECASE,
-    )
-    assert need is not None, "section 1 (statement of need) missing"
-    assert question is not None, "section 2 (ratified question) missing"
-    assert audit is not None, "section 3 (skill audit / free offline) missing"
-    assert refusal is not None, "section 4 (evidence grades / refusal) missing"
-    assert need.start() < question.start() < audit.start() < refusal.start(), (
-        f"section order wrong: need@{need.start()} question@{question.start()} "
-        f"audit@{audit.start()} refusal@{refusal.start()}"
-    )
+    for label, match in named:
+        assert match is not None, f"{label} missing"
+    starts = [match.start() for _, match in named if match is not None]
+    assert starts == sorted(starts), f"section order wrong: {starts}"
 
 
 def test_ratified_question_verbatim() -> None:
@@ -171,15 +172,25 @@ def test_noise_figure_carries_generation_or_receipt() -> None:
 
 
 def test_comparison_honest_guidance_and_prior_art_intact() -> None:
+    """Follows the content moved off the front page on 2026-09-13 (S447 ruling).
+
+    The neighbour comparison went to ``docs/other-tools-in-this-area.md`` and
+    the case-study list to ``docs/reading-guide.md``. Both halves are asserted:
+    the material still exists, and the README still points at it.
+    """
     text = _readme()
-    assert "if you want the most *featureful* skill benchmarking today" in text.lower() or (
-        "most *featureful* skill benchmarking today" in text
-    )
-    assert "skill-eval-harness" in text
-    assert "no first-mover" in text.lower() or "no first-mover" in text
-    assert "ai-slop-sentinel-under-ablation" in text
-    assert "double-ceiling-structurally-unmeasured" in text
-    assert "displaced-enforcement-skill-ablation-blind-spot" in text
+    neighbours = (_ROOT / "docs" / "other-tools-in-this-area.md").read_text(encoding="utf-8")
+    guide = (_ROOT / "docs" / "reading-guide.md").read_text(encoding="utf-8")
+
+    assert "most *featureful* skill benchmarking today" in neighbours
+    assert "skill-eval-harness" in neighbours
+    assert "no first-mover" in neighbours.lower()
+    assert "ai-slop-sentinel-under-ablation" in guide
+    assert "double-ceiling-structurally-unmeasured" in guide
+    assert "displaced-enforcement-skill-ablation-blind-spot" in guide
+
+    assert "docs/other-tools-in-this-area.md" in text
+    assert "docs/reading-guide.md" in text
 
 
 def test_skill_audit_names_cost_triple() -> None:

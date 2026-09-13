@@ -80,6 +80,9 @@ _LIVE_SURFACES = (
     "docs/ratifications/README.md",
     "docs/ratifications/MIRROR-0001-on-irreducibility.md",
     "README.md",
+    # DC-5's second registered site since 2026-09-13: the empirical record moved
+    # off the front page under the S447 ruling and the registration followed it.
+    "docs/what-the-instrument-has-found.md",
     # DC-16 reads the vendored word list; without it every synthetic tree
     # would fail on a missing manifest instead of the lane under test.
     "assets/words_to_avoid.json",
