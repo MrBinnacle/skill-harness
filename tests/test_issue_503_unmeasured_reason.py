@@ -28,7 +28,7 @@ import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -139,18 +139,38 @@ class TestRunnerYieldsEnumNotString:
     def test_length_confounded_refusal_yields_enum_member(
         self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
     ) -> None:
+        """Force QUAL-1 out-of-tolerance; assert enum member unconditionally.
+
+        Patching ``check_operator_length_tolerance`` makes the gate fire
+        regardless of tiktoken behaviour (same pattern as
+        ``test_confound.TestT2ForceLengthConfounded``). A bare
+        ``if result.length_confounded:`` guard would let this test pass without
+        ever checking the vocabulary.
+        """
         ev, rt = seeded_db_pair
-        # "Hi" is ~1 token; the [ABLATED] filler is 4 tokens, so tolerance=2 < 3
-        # delta -> out of tolerance -> length_confounded.
-        clause = _make_clause("clause-short-enum", "Hi", 0, "verbosity")
+        clause = _make_clause("clause-short-enum", "Be concise.", 0, "verbosity")
         _seed_clause(ev, clause)
 
-        results = _run_ablation(ev, rt, clause, "length-enum-run")
+        runner, _ = _make_runner(ev, rt)
+        with patch(
+            "skill_harness.ablation.runner.check_operator_length_tolerance",
+            return_value=(False, 1, 4, 2),
+        ):
+            results = runner.run_ablation(
+                skill_id=_SKILL_ID,
+                clauses=[clause],
+                user_message=_USER_MSG,
+                max_usd=10.0,
+                run_id="length-enum-run",
+            )
         result = results[0]
-        if result.length_confounded:
-            assert result.unmeasured_reason is not None
-            assert isinstance(result.unmeasured_reason, UnmeasuredSubReason)
-            assert result.unmeasured_reason is UnmeasuredSubReason.LENGTH_CONFOUNDED
+        assert result.length_confounded is True
+        assert result.unmeasured_reason is not None
+        assert isinstance(result.unmeasured_reason, UnmeasuredSubReason), (
+            "runner must carry the refusal reason as UnmeasuredSubReason, not a free-form string; "
+            f"got {type(result.unmeasured_reason).__name__}"
+        )
+        assert result.unmeasured_reason is UnmeasuredSubReason.LENGTH_CONFOUNDED
 
 
 # ---------------------------------------------------------------------------
@@ -213,20 +233,38 @@ class TestSubReasonReadableFromStorage:
     def test_length_confounded_refusal_sub_reason_persisted(
         self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
     ) -> None:
+        """Force QUAL-1; read the sub-reason back from storage unconditionally.
+
+        No ``pytest.skip`` and no ``if length_confounded`` guard: a green
+        result here means the row was written, not that the gate happened to
+        fire under the ambient tokenizer.
+        """
         from skill_harness.storage.repositories.evidence.runs import (
             list_clause_run_outcomes_for_run,
         )
 
         ev, rt = seeded_db_pair
-        clause = _make_clause("clause-short-persist", "Hi", 0, "verbosity")
+        clause = _make_clause("clause-short-persist", "Be concise.", 0, "verbosity")
         _seed_clause(ev, clause)
 
-        results = _run_ablation(ev, rt, clause, "length-persist-run")
-        if not results[0].length_confounded:
-            pytest.skip("operator was within tolerance on this run; no length refusal to persist")
+        runner, _ = _make_runner(ev, rt)
+        with patch(
+            "skill_harness.ablation.runner.check_operator_length_tolerance",
+            return_value=(False, 1, 4, 2),
+        ):
+            results = runner.run_ablation(
+                skill_id=_SKILL_ID,
+                clauses=[clause],
+                user_message=_USER_MSG,
+                max_usd=10.0,
+                run_id="length-persist-run",
+            )
+        assert results[0].length_confounded is True
+        assert results[0].unmeasured_reason is UnmeasuredSubReason.LENGTH_CONFOUNDED
 
         outcomes = list_clause_run_outcomes_for_run(ev, "length-persist-run")
-        assert len(outcomes) == 1
+        assert len(outcomes) == 1, f"expected one persisted outcome, got {outcomes}"
+        assert outcomes[0]["clause_id"] == clause.clause_id
         assert outcomes[0]["unmeasured_sub_reason"] == "length_confounded"
 
     def test_measured_clause_writes_no_outcome_row(

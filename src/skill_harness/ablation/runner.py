@@ -281,17 +281,13 @@ class ClauseResult:
     length_confounded: bool
     """True if the operator could not meet tolerance (QUAL-1 — clause excluded)."""
 
-    unmeasured_reason: str | None = None
+    unmeasured_reason: UnmeasuredSubReason | None = None
     """Sub-reason when the clause is UNMEASURED before/without sampling (#503).
 
-    The single source of truth for this vocabulary is ``UnmeasuredSubReason``
-    in ``aggregation/status.py`` — nothing else defines refusal reasons. The
-    runner ALWAYS assigns a member of that enumeration here (never a free-form
-    string); the field stays ``str | None`` so an existing construction of a
-    ``ClauseResult`` with the literal value continues to type-check. The
-    vocabulary is enforced where it bites: the runner emits only enum members,
-    and the write model (``ClauseRunOutcomeWrite``) rejects a value outside the
-    enumeration before it reaches storage.
+    Drawn from ``UnmeasuredSubReason`` in ``aggregation/status.py`` — the single
+    source of truth for this vocabulary. The runner assigns a member here, never
+    a free-form string. The write model (``ClauseRunOutcomeWrite``) rejects a
+    value outside the enumeration before it reaches storage.
 
     The two pre-sampling refusal paths map to named members:
       - BLOCKER-1 (not Tier-1-measurable) -> ``TIER2_UNCALIBRATED``
