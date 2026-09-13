@@ -72,13 +72,27 @@ def test_module_docstring_states_paired_verdict_has_no_production_caller() -> No
     )
 
 
+def test_path_a_does_not_claim_every_verdict_is_a_screen_outcome() -> None:
+    """Path A must not contradict Path B: once the sized paired receipt exists,
+    'every real verdict is a screen outcome' is false. Path A stays the dominant
+    path; it must not erase the hand-encoded paired verdict Path B now names."""
+    doc = _norm(_module_doc())
+    assert "every real verdict" not in doc, (
+        "Path A still claims every real verdict is a screen outcome"
+    )
+    assert "screen outcome" in doc or "screen outcomes" in doc
+
+
 def test_paired_verdict_docstring_states_it_is_uncalled_and_prospective() -> None:
     """AC: ``paired_verdict``'s own docstring states it has no production caller
     and that the live paired verdict was hand-encoded under #403, not minted
     here — so the mapping is prospective."""
     doc = _norm(_paired_doc())
-    assert "no production caller" in doc or "prospective" in doc, (
-        "paired_verdict docstring does not state the mapping is uncalled / prospective"
+    assert "no production caller" in doc, (
+        "paired_verdict docstring does not state it has no production caller"
+    )
+    assert "prospective" in doc, (
+        "paired_verdict docstring does not state the mapping is prospective"
     )
     assert "#403" in _paired_doc(), (
         "paired_verdict docstring does not name the #403 hazard-not-met ruling"
@@ -108,6 +122,11 @@ def test_the_cited_receipt_is_a_real_cant_tell_yet_hazard_not_met_record() -> No
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["verdict"] == "CANT_TELL_YET"
     assert payload["value_class"] == "trap-discipline"
+    null = payload["measurements"]["null_pass_rate"]
+    full = payload["measurements"]["full_pass_rate"]
+    assert null["passes"] == null["epochs"] == 32
+    assert full["passes"] == full["epochs"] == 32
+    assert null["value"] == 1.0 and full["value"] == 1.0
 
 
 def test_module_docstring_retains_the_firing_trigger_text() -> None:

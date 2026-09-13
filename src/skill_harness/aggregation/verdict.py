@@ -13,9 +13,10 @@ Two data paths feed a verdict (per the v0.2 pre-registration):
 
   Path A — Stage-0 Null screen (`p0`). Run the STOCK agent WITHOUT the skill on
     a domain task; `p0` = fraction of Null epochs that pass. This is the DOMINANT
-    path: every real verdict in the program to date is a screen outcome (the
-    per-record ledger in `docs/observations/` is canonical for those historical
-    records and their counts). `screen_verdict()` maps it.
+    path: the per-record ledger in `docs/observations/` is canonical for screen
+    outcomes and their counts. One live paired receipt exists (see Path B); it
+    was not a screen outcome and was not minted by `screen_verdict`.
+    `screen_verdict()` maps screen outcomes.
 
   Path B — paired Full-vs-Null (`ClauseStatus`). Launches only when the screen
     shows the skill has room to matter. FIRING TRIGGER: the first task whose Null
