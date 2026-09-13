@@ -1,0 +1,28 @@
+#503: persist the refusal sub-reason to evidence storage and reject out-of-enum values
+
+The runner recorded WHY a clause was refused (unmeasured_reason) only in one
+run's printed report; nothing in storage/ persisted it. After the run ended
+the reason could not be read back or audited.
+
+Add the append-only evidence table clause_run_outcomes (migration 1100), keyed
+by (run_id, clause_id), carrying unmeasured_sub_reason. One row per clause the
+runner refused BEFORE sampling; a measured clause keeps no row (scope: no
+back-fill of historical runs).
+
+  - storage/models.py: ClauseRunOutcomeWrite validates unmeasured_sub_reason
+    against the live UnmeasuredSubReason enumeration (single source of truth),
+    so a value outside the enumeration is rejected before any DB write. The
+    migration's SQL CHECK is a defence-in-depth floor naming the same literals.
+  - storage/repositories/evidence/runs.py: insert/list/get helpers live in
+    runs.py (the outcomes are children of a run) so the evidence repo module
+    count stays pinned at 13 (test_evidence_repo_surface). Insert is
+    INSERT OR IGNORE so a refused clause re-refuses deterministically on
+    resume (A40 idempotency) without a PRIMARY KEY conflict.
+  - ablation/runner.py: _persist_refusal_sub_reason writes the row for each
+    refused clause in both run_ablation and resume_ablation.
+  - docs/sers/sers.schema.json: the SERS unmeasured_sub_reason enum claims to
+    mirror UnmeasuredSubReason exactly; the conformance drift guard enforces
+    it, so the two new members are added here too.
+
+Criterion 1 (readable from storage) and criterion 3 (out-of-enum rejected)
+pinned by tests in tests/test_issue_503_unmeasured_reason.py.
