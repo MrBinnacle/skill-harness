@@ -248,6 +248,7 @@ def render_skill_page(
             gate_detail=safe(_gate_detail(receipt)),
             instrument_rows=_indent(_identity_rows(receipt), 10),
             source_rows=_indent(_source_rows(receipt), 10),
+            subject_identity_section=_subject_identity_section(receipt),
         )
     return render_page(
         title=f"{skill_name}: receipt",
@@ -464,6 +465,61 @@ def _delivery_section(receipt: Mapping[str, Any]) -> str:
                 parts.append(f"<p>exposure: {safe(text)}</p>")
     parts.append("</section>")
     return "\n".join(parts)
+
+
+def _subject_identity_section(receipt: Mapping[str, Any]) -> str:
+    """Render the subject identity section, or the compact pointer for pre-1.1.0 receipts.
+
+    A receipt with no ``subject_identity`` block (1.0.0) renders a one-line
+    pointer to the prose source. A receipt with the block but no
+    ``subject_model`` (1.1.0-1.3.0) renders all present fields and shows
+    ``subject_model`` as absent.
+    """
+    identity = receipt.get("subject_identity")
+    if not isinstance(identity, Mapping):
+        # Pre-1.1.0: no subject_identity block. Render a compact pointer.
+        prose = ""
+        source = receipt.get("source")
+        if isinstance(source, Mapping):
+            prose = _string_field(source, "prose_path", "")
+        pointer = "subject not recorded in this receipt"
+        if prose:
+            pointer += f"; the prose source may name it ({prose})"
+        return (
+            '<section aria-labelledby="subject-identity">\n'
+            '  <h2 id="subject-identity">Subject identity</h2>\n'
+            f'  <p class="absent">{safe(pointer)}</p>\n'
+            "</section>"
+        )
+    # 1.1.0+: render all subject_identity fields with absent/refusal discipline.
+    keys = (
+        "skill_id",
+        "harness_version",
+        "metric_version",
+        "implementation_hash",
+        "subject_model",
+        "arms",
+    )
+    rows: list[str] = []
+    for key in keys:
+        value = identity.get(key)
+        if isinstance(value, str):
+            text = value
+        elif isinstance(value, list):
+            text = ", ".join(str(item) for item in value)
+        elif isinstance(value, Mapping) and isinstance(value.get("refusal"), str):
+            text = f"refused: {value['refusal']}"
+        else:
+            text = ABSENT_TEXT
+        rows.append(f"<dt>{safe(key)}</dt><dd><code>{safe(text)}</code></dd>")
+    return (
+        '<section aria-labelledby="subject-identity">\n'
+        '  <h2 id="subject-identity">Subject identity</h2>\n'
+        '  <dl class="subject">\n'
+        f"{_indent(rows, 4)}\n"
+        "  </dl>\n"
+        "</section>"
+    )
 
 
 def _gate_status(receipt: Mapping[str, Any]) -> str:
