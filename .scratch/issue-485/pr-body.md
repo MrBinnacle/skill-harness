@@ -73,6 +73,16 @@ The narrative was also updated:
 - `narrative.dos`: removed "Refusal Ochre" reference and "receipt surfaces" reference; updated to match DESIGN.md's Do's.
 - `narrative.donts`: updated to match DESIGN.md's Don'ts, removing receipt-surface references.
 
+## Review corrections
+
+The first implement pass removed the retired tokens and re-derived components, but left three holes the ticket's "Done when" clause and the tree both require:
+
+1. **`bench-cant-tell` was missing from `colorMeta`.** The Refusal Block CSS drew `#58a6ff` after the ochre retirement, and Site Header focus uses the same literal, but the palette did not name the token. Declared now (`#58a6ff`, Can't-Tell Blue).
+2. **Site type faces were not added when `receipt-*` faces left.** DESIGN.md's replacements are `bench-prose`, `bench-h1`, `bench-h2`, `bench-figure`. Added to `typographyMeta`.
+3. **`The Mono-Carries-The-Claim Rule` still said "Serif is for prose only" and "both surfaces".** Rewritten to match DESIGN.md: mono for claims, system sans for prose.
+4. **Site Header links** now underline and carry a Can't-Tell Blue focus ring, matching `style.css` and DESIGN.md's Site Header rule.
+5. **Tests** now pin (a) every component CSS hex is in `colorMeta`, (b) no component draws serif or paper ground, (c) site faces and `bench-cant-tell` are present, (d) narrative no longer claims two systems or endorses serif.
+
 ## Gate
 
 ```
@@ -83,11 +93,5 @@ mypy --strict src/ tests/   — passed
 
 ## Files changed
 
-- `.impeccable/design.json` — removed receipt-* tokens, re-derived components, updated narrative
-- `tests/test_impeccable_design_snapshot_485.py` — new test file, 10 tests pinning all 4 acceptance criteria
-
-## Commit
-
-```
-800ebad fix(#485): remove retired paper surface from design snapshot
-```
+- `.impeccable/design.json` — removed receipt-* tokens, declared bench-cant-tell and site faces, re-derived components, updated narrative
+- `tests/test_impeccable_design_snapshot_485.py` — tests pinning all 4 acceptance criteria plus the review corrections

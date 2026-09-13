@@ -14,11 +14,16 @@
       "bench-muted": { "role": "neutral", "displayName": "Muted", "canonical": "#8b949e" },
       "bench-muted-deep": { "role": "neutral", "displayName": "Deep Muted", "canonical": "#6e7681" },
       "bench-prompt": { "role": "primary", "displayName": "Prompt Green", "canonical": "#3fb950" },
-      "bench-flagged": { "role": "secondary", "displayName": "Flagged Amber", "canonical": "#d29922" }
+      "bench-flagged": { "role": "secondary", "displayName": "Flagged Amber", "canonical": "#d29922" },
+      "bench-cant-tell": { "role": "secondary", "displayName": "Can't-Tell Blue", "canonical": "#58a6ff" }
     },
     "typographyMeta": {
       "bench-command": { "displayName": "Command", "purpose": "The invocation demonstrated on a bench asset." },
-      "bench-verdict": { "displayName": "Verdict", "purpose": "The largest text on any asset. Leads with an arrow." }
+      "bench-verdict": { "displayName": "Verdict", "purpose": "The largest text on any asset. Leads with an arrow." },
+      "bench-prose": { "displayName": "Prose", "purpose": "System sans for site body copy. No web font, no Inter." },
+      "bench-h1": { "displayName": "Page Title", "purpose": "One per page, names the page's subject." },
+      "bench-h2": { "displayName": "Section", "purpose": "Section heading. Carries the page's only 1px underline." },
+      "bench-figure": { "displayName": "Figure", "purpose": "Every number, identifier and claim-state token. Monospace, always." }
     },
     "shadows": [],
     "motion": [],
@@ -55,7 +60,7 @@
       "refersTo": "data-table",
       "description": "Collapsed 1px-ruled table. The head fill is the only fill in the entire stylesheet.",
       "html": "<table class=\"ds-table\"><caption>Cost beside evidence</caption><thead><tr><th>Clause</th><th>Status</th></tr></thead><tbody><tr><td>C1</td><td><span class=\"ds-figure\">UNMEASURED</span></td></tr></tbody></table>",
-      "css": ".ds-table { border-collapse: collapse; margin: 0.75rem 0 1rem; width: 100%; } .ds-table caption { text-align: left; font-weight: 700; padding-bottom: 0.3rem; } .ds-table th, .ds-table td { border: 1px solid #30363d; padding: 0.35rem 0.5rem; text-align: left; vertical-align: top; } .ds-table thead th { background: #010409; } .ds-figure { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }"
+      "css": ".ds-table { border-collapse: collapse; margin: 0.75rem 0 1rem; width: 100%; } .ds-table caption { text-align: left; font-weight: 700; padding-bottom: 0.3rem; } .ds-table th, .ds-table td { border: 1px solid #30363d; padding: 0.35rem 0.5rem; text-align: left; vertical-align: top; } .ds-table thead th { background: #010409; } .ds-figure { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace; font-size: 0.92em; font-variant-numeric: tabular-nums; }"
     },
     {
       "name": "Definition Grid",
@@ -63,7 +68,7 @@
       "refersTo": "definition-grid",
       "description": "Two-column grid pairing a term with its value. The workhorse for cost-beside-evidence.",
       "html": "<dl class=\"ds-dl\"><dt>Verdict</dt><dd><span class=\"ds-figure\">CANT_TELL_YET</span></dd><dt>Trials</dt><dd><span class=\"ds-figure\">26</span></dd></dl>",
-      "css": ".ds-dl { display: grid; grid-template-columns: minmax(10rem, max-content) 1fr; gap: 0.2rem 1rem; margin: 0.75rem 0 1.25rem; } .ds-dl dt { font-weight: 700; } .ds-dl dd { margin: 0; } .ds-figure { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }"
+      "css": ".ds-dl { display: grid; grid-template-columns: minmax(10rem, max-content) 1fr; gap: 0.2rem 1rem; margin: 0.75rem 0 1.25rem; } .ds-dl dt { font-weight: 700; } .ds-dl dd { margin: 0; } .ds-figure { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace; font-size: 0.92em; font-variant-numeric: tabular-nums; }"
     },
     {
       "name": "Site Header",
@@ -71,7 +76,7 @@
       "refersTo": "site-header",
       "description": "Wordmark plus horizontal nav, separated from content by the heaviest line on the page.",
       "html": "<header class=\"ds-header\"><p class=\"ds-wordmark\">skill-harness: published receipts</p><nav><ul><li><a href=\"#\">Schema</a></li><li><a href=\"#\">Receipts</a></li></ul></nav></header>",
-      "css": ".ds-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1.5rem; border-bottom: 2px solid #e6edf3; padding: 1.5rem 0 0.5rem; } .ds-wordmark { margin: 0; font-weight: 700; letter-spacing: 0.02em; } .ds-header nav ul { display: flex; gap: 1rem; margin: 0; padding: 0; list-style: none; } .ds-header a { color: inherit; }"
+      "css": ".ds-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1.5rem; border-bottom: 2px solid #e6edf3; padding: 1.5rem 0 0.5rem; } .ds-wordmark { margin: 0; font-weight: 700; letter-spacing: 0.02em; } .ds-header nav ul { display: flex; gap: 1rem; margin: 0; padding: 0; list-style: none; } .ds-header a { color: inherit; text-decoration: underline; } .ds-header a:focus-visible { outline: 2px solid #58a6ff; outline-offset: 0.25rem; }"
     },
     {
       "name": "Readout Frame",
@@ -93,9 +98,9 @@
       "Numbers appear only where a receipt supplies them."
     ],
     "rules": [
-      { "name": "The Refusal-Is-Louder Rule", "body": "A refusal gets a 4px left edge and font-weight 600. A measured figure gets neither. When a refusal and a measurement sit side by side, the refusal is the heavier element on the page. This inverts the usual treatment on purpose and it is the single most important rule in this system.", "section": "colors" },
+      { "name": "The Refusal-Is-Louder Rule", "body": "A refusal gets a 4px left edge in Can't-Tell Blue and font-weight 600. A measured figure gets neither. When a refusal and a measurement sit side by side, the refusal is the heavier element on the page. This inverts the usual treatment on purpose and it is the single most important rule in this system.", "section": "colors" },
       { "name": "The Borrowed-Ground Rule", "body": "The bench neutrals are GitHub Primer's own values. They are used so the assets sit native in the environment that renders them, not as an independent palette choice. Changing the ground means leaving that environment.", "section": "colors" },
-      { "name": "The Mono-Carries-The-Claim Rule", "body": "Every figure, token, command, identifier and evidence value is monospace on both surfaces. Serif is for prose only. If a reader could copy it into a terminal or cite it as a number, it is mono.", "section": "typography" },
+      { "name": "The Mono-Carries-The-Claim Rule", "body": "Every figure, token, command, identifier and evidence value is monospace. Prose is system sans. If a reader could copy it into a terminal or cite it as a number, it is mono.", "section": "typography" },
       { "name": "The No-Display-Face Rule", "body": "There is no display typeface and none is authorised. Scale and weight carry emphasis. A 52px mono verdict is this system's equivalent of a headline.", "section": "typography" },
       { "name": "The One-Column Rule", "body": "The published site is a single column at every width. Evidence is read top to bottom in the order the generator emitted it. No layout may reorder or parallelise it.", "section": "layout" },
       { "name": "The No-Shadow Rule", "body": "No shadow token exists and none may be added. If an element needs separation, give it a rule or a left edge. This is not a stylistic preference — a shadow implies a floating object, and nothing on an evidence surface floats.", "section": "elevation" }
