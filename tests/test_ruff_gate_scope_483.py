@@ -21,6 +21,8 @@ CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PRE_COMMIT_YML = REPO_ROOT / ".pre-commit-config.yaml"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 
+_RUFF_HOOK_IDS = ("ruff", "ruff-format")
+
 
 def _ci_ruff_paths() -> set[str]:
     """Directories passed to ``ruff check`` and ``ruff format --check`` in CI."""
@@ -33,29 +35,42 @@ def _ci_ruff_paths() -> set[str]:
     return paths
 
 
-def _pre_commit_ruff_files() -> str | None:
-    """The ``files:`` regex on the ruff hook in .pre-commit-config.yaml.
+def _pre_commit_ruff_files_by_hook() -> dict[str, str | None]:
+    """``files:`` regex per ruff hook id in .pre-commit-config.yaml.
 
-    Returns None when no ``files:`` key is present (meaning all files).
+    A missing ``files:`` key means the hook receives every path pre-commit
+    stages (effectively unrestricted relative to CI's explicit path list).
     """
     text = PRE_COMMIT_YML.read_text(encoding="utf-8")
-    # Locate the ruff repo block, then the ruff hook id, then its files: line.
     ruff_repo = re.search(
         r"repo: https://github.com/astral-sh/ruff-pre-commit\n(.*?)(?=^\s*- repo:|\Z)",
         text,
         re.MULTILINE | re.DOTALL,
     )
     if ruff_repo is None:
-        return None
+        return dict.fromkeys(_RUFF_HOOK_IDS)
+
     block = ruff_repo.group(1)
-    hook_match = re.search(r"^\s*- id: ruff\s*$", block, re.MULTILINE)
-    if hook_match is None:
-        return None
-    rest = block[hook_match.end() :]
-    next_hook = re.search(r"^\s*- id:", rest, re.MULTILINE)
-    window = rest[: next_hook.start()] if next_hook else rest
-    files_match = re.search(r"^\s*files:\s*(\S+)", window, re.MULTILINE)
-    return files_match.group(1) if files_match else None
+    out: dict[str, str | None] = {}
+    for hook_id in _RUFF_HOOK_IDS:
+        hook_match = re.search(rf"^\s*- id: {re.escape(hook_id)}\s*$", block, re.MULTILINE)
+        if hook_match is None:
+            out[hook_id] = None
+            continue
+        rest = block[hook_match.end() :]
+        next_hook = re.search(r"^\s*- id:", rest, re.MULTILINE)
+        window = rest[: next_hook.start()] if next_hook else rest
+        files_match = re.search(r"^\s*files:\s*(\S+)", window, re.MULTILINE)
+        out[hook_id] = files_match.group(1) if files_match else None
+    return out
+
+
+def _paths_from_files_regex(files_regex: str | None) -> set[str]:
+    """Directory names implied by a pre-commit ``files:`` regex, or a sentinel."""
+    if files_regex is None:
+        return {"<no files: restriction on pre-commit ruff hook>"}
+    dir_match = re.search(r"\(([^)]+)\)", files_regex)
+    return set(dir_match.group(1).split("|")) if dir_match else {files_regex}
 
 
 def _extend_exclude() -> set[str]:
@@ -66,38 +81,35 @@ def _extend_exclude() -> set[str]:
 
 
 def test_ruff_path_set_matches_between_gates() -> None:
-    """CI and pre-commit must lint the same directories.
+    """CI and both pre-commit ruff hooks must lint the same directories.
 
-    Fails when one gate adds a directory the other does not cover. The
-    assertion is equality of the extracted path sets, not a literal value,
-    so a deliberate change to what is linted survives as long as both
-    configs change together.
+    Fails when one gate adds a directory the other does not cover, or when
+    ``ruff`` and ``ruff-format`` disagree with each other. Equality of the
+    extracted path sets, not a literal value, so a deliberate change to what
+    is linted survives as long as both configs change together.
     """
     ci_paths = _ci_ruff_paths()
-    pre_commit_files = _pre_commit_ruff_files()
+    by_hook = _pre_commit_ruff_files_by_hook()
 
     assert ci_paths, (
         "no ruff path arguments found in CI -- "
         "expected 'ruff check <paths>' in .github/workflows/ci.yml"
     )
 
-    if pre_commit_files is None:
-        # No files: restriction means pre-commit lints everything ruff discovers.
-        # That can only match CI if extend-exclude restricts ruff to the same set.
-        # For this assertion, treat "all files minus extend-exclude" as the
-        # pre-commit path set and require it to equal CI's explicit set.
-        # In practice, adding files: ^(src|tests)/ is the cleaner fix.
-        # Use a sentinel that cannot equal ci_paths to force the assertion to fail.
-        pre_commit_paths = {"<no files: restriction on pre-commit ruff hook>"}
-    else:
-        # Extract directory names from the regex pattern (e.g. ^(src|tests)/).
-        dir_match = re.search(r"\(([^)]+)\)", pre_commit_files)
-        pre_commit_paths = set(dir_match.group(1).split("|")) if dir_match else {pre_commit_files}
+    hook_path_sets = {hook_id: _paths_from_files_regex(regex) for hook_id, regex in by_hook.items()}
 
-    assert ci_paths == pre_commit_paths, (
-        f"ruff path sets disagree: CI={sorted(ci_paths)}, "
-        f"pre-commit={sorted(pre_commit_paths)}. "
-        f"Both gates must lint the same directories."
+    for hook_id, paths in hook_path_sets.items():
+        assert paths == ci_paths, (
+            f"ruff path sets disagree: CI={sorted(ci_paths)}, "
+            f"pre-commit {hook_id}={sorted(paths)}. "
+            f"Both gates must lint the same directories."
+        )
+
+    distinct = {frozenset(paths) for paths in hook_path_sets.values()}
+    assert len(distinct) == 1, (
+        f"pre-commit ruff hooks disagree with each other: "
+        f"{ {k: sorted(v) for k, v in hook_path_sets.items()} }. "
+        f"ruff and ruff-format must share the same files: scope."
     )
 
 
