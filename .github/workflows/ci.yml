@@ -92,9 +92,21 @@ jobs:
     # Jobs that do not install Vale leave this unset and skip those tests. It
     # belongs in THIS block: a second `env:` key on the same job is not a merge,
     # it silently replaces the first, so the variable would never have been set.
+    #
+    # COVERAGE_CORE=sysmon (#510): coverage.py collects through CPython's sys.monitoring
+    # API instead of its settrace callback. Measured on this branch's dominant fixture,
+    # tests/test_aggregation_fit_ebmom_recovery.py, with pytest -p no:randomly:
+    # 664s with the default core, 152s with sysmon, 142s with coverage off entirely.
+    # Instrumentation cost 522s and sysmon recovers 512 of them. The reported coverage is
+    # IDENTICAL across both coverage arms -- 10298 statements, 8825 missed, 14% -- which is
+    # what #510's third acceptance criterion requires, and is why the cell keeps --cov
+    # rather than dropping it. Requires Python 3.12+; the matrix is 3.12 and 3.13.
+    # Re-measure before enabling branch coverage: these runs are statement-only, and there
+    # is no [tool.coverage] table or .coveragerc in the repository.
     env:
       PYTHONHASHSEED: "0"
       SKILL_HARNESS_REQUIRE_VALE: "1"
+      COVERAGE_CORE: "sysmon"
     strategy:
       fail-fast: false
       matrix:
@@ -165,7 +177,14 @@ jobs:
         # (#187) runs in the dedicated calibration job below — do not fold it into this
         # 15m cell. The assurance lane (#168) runs on a schedule in assurance.yml for the
         # same reason: #170 alone specifies >=1h of fuzz, which no PR cell can absorb.
-        run: pytest -q --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing
+        # --durations (#509) now carries onto this branch too. pyproject.toml records why it
+        # was held back: --durations prints at session end, a killed cell never reaches
+        # session end, and the flag lives in this file, which this PR was already editing.
+        # Both reasons lapse together. COVERAGE_CORE above is expected to let the cell finish,
+        # and a finishing cell is exactly the one whose durations table #510's first
+        # acceptance criterion asks to be quoted from a CI job log. It also brings this line
+        # into agreement with main, which tests/test_ci_test_cell_attribution_509.py pins there.
+        run: pytest -q --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing --durations=25 --durations-min=1.0
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
