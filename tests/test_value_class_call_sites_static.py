@@ -43,17 +43,14 @@ import ast
 from pathlib import Path
 from typing import Final
 
+from tests._module_selection import python_modules_under
+
 REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[1]
 SRC_ROOT: Final[Path] = REPO_ROOT / "src"
 
 GUARDED_FUNCTIONS: Final[frozenset[str]] = frozenset({"screen_verdict", "matched_gate2_verdict"})
 
 VALUE_CLASS_KEYWORD: Final[str] = "value_class"
-
-# Directory names skipped when selecting modules, matched against the path RELATIVE to
-# the scanned root. Anchoring matters: a build worktree lives under a `.sandcastle`
-# directory, so an absolute-path test excludes every file in the tree being scanned.
-_EXCLUDED_DIRECTORY_NAMES: Final[frozenset[str]] = frozenset({"__pycache__", ".sandcastle"})
 
 # Production modules permitted to call a guarded function without naming a value class.
 # Empty by intent. A reviewed entry belongs here only when the call genuinely has no subject
@@ -90,26 +87,9 @@ def _describe_value(node: ast.expr) -> str:
     return ast.unparse(node)
 
 
-def _python_modules_under(root: Path) -> list[Path]:
-    """Return every Python module under `root`, skipping caches and nested build trees.
-
-    The exclusion is anchored at `root` rather than tested against the absolute path.
-    Builds run in worktrees at `<repo>/.sandcastle/worktrees/agent-issue-<n>/`, which puts
-    `.sandcastle` in the absolute path of every file here, so an absolute-path test excluded
-    the whole tree: the scan returned nothing and this module went green while guarding no
-    call site at all. What the exclusion is for is caches and nested build trees *inside* the
-    tree being scanned, and that is a property of the path relative to the root.
-    """
-    return sorted(
-        path
-        for path in root.rglob("*.py")
-        if not (_EXCLUDED_DIRECTORY_NAMES & set(path.relative_to(root).parts))
-    )
-
-
 def _production_modules() -> list[Path]:
     """Return every tracked production module, skipping caches and build artefacts."""
-    return _python_modules_under(SRC_ROOT)
+    return python_modules_under(SRC_ROOT)
 
 
 def _guarded_calls() -> list[tuple[Path, int, str, ast.Call]]:
@@ -164,7 +144,7 @@ def test_module_selection_is_not_defeated_by_the_checkout_location(tmp_path: Pat
     nested_build.parent.mkdir(parents=True)
     nested_build.write_text("x = 3\n", encoding="utf-8")
 
-    found = _python_modules_under(root)
+    found = python_modules_under(root)
 
     assert live in found, (
         f"the scan skipped {live}, which is a production module, because an ancestor of the "
