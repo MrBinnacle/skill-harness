@@ -2,8 +2,10 @@
 
 Coverage:
 - to_json_dict produces all required top-level keys
-- report_schema_version = "1.4.0" (bumped in #187 for anytime-valid CS fields;
-  was "1.3.0" in B5 is_prior_only, "1.2.0" in M3, "1.1.0" in C1 per A60)
+- report_schema_version = "2.0.0" (major bump at the #360 merge: the
+  aggregation_method enum value bh_fdr_fallback was renamed, and a rename is
+  not additive; was "1.4.0" for the #187 anytime-valid CS fields, "1.3.0" in
+  B5 is_prior_only, "1.2.0" in M3, "1.1.0" in C1 per A60)
 - to_json_bytes is byte-stable for identical input
 - to_json_bytes is UTF-8 with trailing newline
 - Nested structures serialise correctly (tuples → lists, etc.)
@@ -114,17 +116,18 @@ class TestSchemaVersion:
         # 1.2.0 bumped in M3 pre-tag fix (coverage_warnings)
         # 1.3.0 bumped in B5 hostile-review fix (is_prior_only)
         # 1.4.0 bumped in #187 (anytime-valid CS fields)
-        assert REPORT_SCHEMA_VERSION == "1.4.0"
+        # 2.0.0 bumped at the #360 merge (bh_fdr_fallback renamed; #441)
+        assert REPORT_SCHEMA_VERSION == "2.0.0"
 
     def test_schema_version_in_dict(self) -> None:
         report = make_skill_report()
         d = to_json_dict(report)
-        assert d["report_schema_version"] == "1.4.0"
+        assert d["report_schema_version"] == "2.0.0"
 
     def test_schema_version_in_bytes(self) -> None:
         report = make_skill_report()
         data = json.loads(to_json_bytes(report))
-        assert data["report_schema_version"] == "1.4.0"
+        assert data["report_schema_version"] == "2.0.0"
 
 
 # ---------------------------------------------------------------------------

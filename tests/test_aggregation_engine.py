@@ -731,7 +731,8 @@ class TestHealthyAggregation:
             # 1.1.0 bumped in C1 fix-loop per A60 (A55 axes)
             # 1.2.0 bumped in M3 pre-tag fix (coverage_warnings)
             # 1.4.0 bumped in #187 (anytime-valid CS fields)
-            assert report.report_schema_version == "1.4.0"
+            # 2.0.0 bumped at the #360 merge (bh_fdr_fallback renamed; #441)
+            assert report.report_schema_version == "2.0.0"
         finally:
             ev.close()
             rt.close()

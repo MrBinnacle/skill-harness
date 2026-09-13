@@ -527,7 +527,8 @@ class TestEvaluateSkillAllPassed:
         assert "clauses" in report
         # 1.1.0 bumped in C1 A60; 1.2.0 bumped in M3 (coverage_warnings)
         # 1.4.0 bumped in #187 (anytime-valid CS fields)
-        assert report["report_schema_version"] == "1.4.0"
+        # 2.0.0 bumped at the #360 merge (bh_fdr_fallback renamed; #441)
+        assert report["report_schema_version"] == "2.0.0"
 
     def test_json_output_to_stdout_warnings_to_stderr(self, tmp_path: Path) -> None:
         """T8: --format=json stdout is clean JSON; warnings go to stderr (Click 8.2+ API).
