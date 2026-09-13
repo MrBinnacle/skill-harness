@@ -35,7 +35,9 @@ parser do not read this file.
 ## Schema additions
 
 Each addition carries a `landed_as:` field naming the SERS schema key or source
-symbol that implements it, or the literal `UNLANDED` with a ticket number.
+symbol that implements it, or the literal `UNLANDED` with a ticket number. A
+declined addition carries a decline with its stated reason instead: that is a
+landed decision, not open work, so it must not keep an `UNLANDED` row.
 
 The causal chain is: eligible situation -> availability -> invocation ->
 adherence -> outcome. A SERS record should report each stage and name the
@@ -61,8 +63,6 @@ the vocabulary exists produces a list whose members nobody can validate.
 Revisit if a component vocabulary is decided anywhere, which makes this
 addition ordinary schema plumbing and lapses the decline immediately.
 
-- `landed_as: UNLANDED #520`
-
 ### 3. The implementation family and alternatives considered
 
 What implementation family the skill belongs to and what alternatives were
@@ -83,8 +83,6 @@ a rule.
 
 Revisit if cost dimensions and a dominance rule are specified, which lapses
 the decline.
-
-- `landed_as: UNLANDED #520`
 
 ### 5. The claim scope and disturbance set
 
