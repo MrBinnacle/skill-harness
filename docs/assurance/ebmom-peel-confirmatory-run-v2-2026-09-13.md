@@ -93,9 +93,18 @@ recorded in step 3 were recomputed against the revealed root and both matched.
 
 ## Step 5. The run (once)
 
-To be appended in its own commit. The receipt carries both identities of v1 section 8 plus v2's SHA.
-
-The run makes no network call and costs no money. `scripts/ebmom_acceptance_matrix.py` at the SHA above imports `argparse`, `hashlib`, `json`, `random`, `sys`, `time`, `scipy.stats` and `skill_harness.aggregation.fit`. There is no HTTP client, no SDK and no credential. `#360`'s note of 2026-09-06 says the run would become a spend authorisation if it needed paid API calls. Measured at this commitment, it does not, so no spend authorisation is sought.
+| item | value |
+|---|---|
+| command | `PYTHONPATH=src PYTHONHASHSEED=0 python scripts/ebmom_acceptance_matrix.py --root-seed d77c7cd1f9daab006397b20330988074bc24b34c98ffa2827eebfc7195f7500f --out docs/assurance/ebmom-peel-confirmatory-run-v2-2026-09-13.json` |
+| where | the S446 scratchpad worktree, local branch `agent/issue-360-stub` at `a6f40f9`, which is `origin/agent/issue-360` at `681824d` plus the three stub commits of steps 1 to 4, all under `docs/assurance/`; step 1's harness, estimator and errors digests re-measured unchanged at this commit (harness sha256 `84ee23c6a71a2ec18215486e9578f1dbfda0d64cf1afbf2220c39f5fad72105c`) |
+| launched | OS-detached by S446 at 2026-09-13T16:23:35Z (process creation time, Windows PID 46788); the launching session closed with the run at 2,443 s of CPU and no JSON written |
+| finished | 2026-09-13T18:03Z, one process, about 100 minutes wall clock; per-regime wall times from the log: `small_n_bite` 698 s, `low_heterogeneity` 1,095 s, `benign_large_n` 1,872 s, `tie_heavy_null` 1,134 s, `tie_heavy_signal` 1,173 s |
+| replicates | R = 1000 per regime, the registered value; `registered_replicates: 1000`, `replicates: 1000`, `is_confirmatory: true` in the JSON |
+| root in the JSON | `root_seed` equals the root revealed at step 4, byte for byte |
+| output | `ebmom-peel-confirmatory-run-v2-2026-09-13.json`, 105,037 bytes, sha256 `3cd7437f5addd3e1e7b2a18c68e7870fa0a4b799fad7eacd2f07a98756601eaa` |
+| stderr log | `ebmom-peel-confirmatory-run-v2-2026-09-13.log`, 180,155 bytes after its line endings were normalised to LF as v1's were, sha256 `9abd815ce3597991a95a7b5bf46e9253fbd918a68add2b5bd4587148c5443748`; 1,241 `Admission refused (latent_variance_not_identified)` lines and the five per-regime admission lines, nothing else |
+| network | none; the harness at this SHA imports no HTTP client, no SDK and no credential, as this step's commitment stated, and the run cost no money |
+| read by | S447, which did not build v2 and did not rule on it, and which read the root only from the step 4 file after the stub commits were on disk |
 
 ## Step 6. Disposition
 
