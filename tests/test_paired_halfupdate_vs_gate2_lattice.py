@@ -56,8 +56,9 @@ It does NOT assert that either estimand is wrong. They answer different question
 against is the two silently converging or silently drifting further apart without the change
 being noticed, and a reader concluding from a passing half-update that Gate 2 would agree.
 
-`paired_verdict`'s own docstring records that Path B has never fired to date, so nothing here
-claims to describe observed production behaviour.
+`paired_verdict`'s own docstring records that it has no production caller under
+`src/` and that the live paired verdict was hand-encoded under #403, so nothing
+here claims to describe observed production behaviour.
 """
 
 from __future__ import annotations
@@ -107,17 +108,42 @@ def _half_update_state(x_f: int, ties: int, n_pairs: int) -> tuple[float, int]:
     """Return the (w, n) the aggregation engine would pool this table into.
 
     `w` is the sum of the observations and `n` their count, matching
-    `aggregation/engine.py`, which builds `ClauseObservations(w=sum(...), n=len(...))`.
+    `aggregation/engine.py`.
+
+    Deliberately still (w, n) after #360, which added `sum_sq` to
+    `ClauseObservations`. `sum_sq` distinguishes two ties from a win and a loss,
+    but it feeds only the sampling-variance peel, which runs on the K >= 10
+    hierarchical path. The posterior for a single clause is Beta(1 + w, 1 + n - w)
+    and reads `w` and `n` alone, so the collapse this module measures is
+    unchanged: the two tables still produce the same posterior and the same
+    decision, which is what item 3 is about.
     """
     x_n = n_pairs - x_f - ties
     observations = _observations(x_f, x_n, ties)
     return (sum(observations), len(observations))
 
 
+def _half_update_clause(x_f: int, ties: int, n_pairs: int) -> ClauseObservations:
+    """Build the ClauseObservations the engine would build for one table.
+
+    `sum_sq` comes from the observation list rather than being reconstructed
+    from `(w, n)`, because reconstructing it is precisely what is impossible:
+    a tie contributes 0.5 to `w` but only 0.25 to `sum_sq`, where a win
+    contributes 1.0 to both.
+    """
+    x_n = n_pairs - x_f - ties
+    observations = _observations(x_f, x_n, ties)
+    return ClauseObservations(
+        clause_id="clause",
+        w=sum(observations),
+        n=len(observations),
+        sum_sq=sum(o * o for o in observations),
+    )
+
+
 def _half_update_pass_probability(x_f: int, ties: int, n_pairs: int) -> float:
     """Return P(win_rate > 0.60) for the pooled half-update state of one table."""
-    w, n = _half_update_state(x_f, ties, n_pairs)
-    result = fit_skill([ClauseObservations(clause_id="clause", w=w, n=n)])
+    result = fit_skill([_half_update_clause(x_f, ties, n_pairs)])
     return result.posteriors[0].p_win_gt_threshold
 
 

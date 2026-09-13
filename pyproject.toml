@@ -45,6 +45,16 @@ dependencies = [
   # scipy>=1.11: EB-MoM hierarchical fit + BH-FDR fallback (A53, Track E.2).
   # Already present transitively via statsmodels; direct pin per Phase 1.1 supply-chain audit.
   "scipy>=1.11",
+  # numpy is NOT listed here, and src/skill_harness/aggregation/fit.py imports it
+  # directly. That is deliberate and it is a gate's ruling, not an oversight:
+  # tests/test_assurance_manifest_161.py locks the runtime Requires-Dist set to
+  # the pre-#161 names and admits zero additions, and #442 is not the ticket that
+  # reopens a ratified dependency manifest. numpy resolves into every environment
+  # regardless, as an install-time requirement of the scipy pinned above, and it
+  # is already declared in the dev extra. The residual exposure is real and
+  # small: if scipy ever stopped requiring numpy, this package would import a
+  # module its own metadata does not name. Raise that with the manifest, not
+  # here.
   # tiktoken: offline tokenizer for Verbosity metric (A35). Version-pinned to cl100k_base
   # encoding which is stable across 0.x series; DO NOT upgrade without re-running
   # bit-equality corpus and updating IMPLEMENTATION_HASH in verbosity.py.
@@ -119,6 +129,13 @@ packages = ["src/skill_harness"]
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
+# #509: when one test phase runs past this many seconds, faulthandler dumps every
+# thread's stack to stderr, naming the running test's file and function. It does not
+# fail the test, so it cannot manufacture a red cell; it exists so a 25-minute CI
+# overrun names its cause instead of dying anonymously. 900s sits inside the Test
+# cell's ceiling (tests/test_ci_test_cell_attribution_509.py asserts that ordering)
+# and above the slowest legitimate module fixture measured under coverage (#510).
+faulthandler_timeout = 900
 addopts = [
   "-ra",
   "--strict-markers",
@@ -145,7 +162,15 @@ filterwarnings = ["error"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-extend-exclude = ["fuzz/corpus", "fuzz/crashes", "fuzz/artifacts"]
+extend-exclude = [
+  "fuzz/corpus",
+  "fuzz/crashes",
+  "fuzz/artifacts",
+  "prototypes",
+  # Vendored verbatim copies of the measured class-2 prototype (S414). They must stay
+  # byte-identical to what produced amendment v2's numbers; lint would rewrite them.
+  "docs/assurance/reference",
+]
 
 [tool.ruff.lint]
 select = [

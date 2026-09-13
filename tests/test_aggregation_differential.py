@@ -45,6 +45,7 @@ from __future__ import annotations
 import logging
 import math
 from statistics import NormalDist
+from typing import Any
 
 import numpy as np
 from numpy.testing import assert_allclose
@@ -59,6 +60,8 @@ from skill_harness.aggregation.fit import (
     VAR_FLOOR,
     WIN_RATE_THRESHOLD,
     ClauseObservations,
+    FitResult,
+    _bh_fdr,
     fit_skill,
 )
 from skill_harness.aggregation.profile import (
@@ -105,6 +108,25 @@ def _ref_beta_posterior(alpha: float, beta: float) -> tuple[float, float, float,
     return mean, lo, hi, p_exceed
 
 
+def _ref_mean_sampling_variance(clauses: list[ClauseObservations]) -> float:
+    """Independent re-derivation of the mean within-clause sampling variance.
+
+    Written from
+    docs/assurance/ebmom-peel-preregistration-amendment.md section 2, NOT by
+    calling production: a reference that calls the implementation tests only
+    that the code equals itself.
+
+        within_ss_k    = sum_sq_k - n_k * r_k^2
+        sampling_var_k = within_ss_k / ((n_k - 1) * n_k)
+    """
+    total = 0.0
+    for cl in clauses:
+        rate = cl.w / cl.n
+        within_ss = max(cl.sum_sq - cl.n * rate * rate, 0.0)
+        total += within_ss / (max(cl.n - 1.0, 1.0) * cl.n)
+    return total / len(clauses)
+
+
 def _ref_ebmom(sample_mean: float, sample_var: float) -> tuple[float, float]:
     """Independent MoM Beta hyperprior (A53 closed form)."""
     if sample_var < VAR_FLOOR:
@@ -135,6 +157,28 @@ def _ref_ebmom(sample_mean: float, sample_var: float) -> tuple[float, float]:
             sample_var=sample_var,
         )
     return alpha_hat, beta_hat
+
+
+def _ref_bounded_pooling_concentration(mu: float, v_bound: float) -> float | None:
+    """Independent form-B concentration (pre-registration v2 section 3).
+
+    Re-derived from the specification, not called out of production: the same
+    moment inversion _ref_ebmom performs, evaluated at the admission bound
+    instead of at the observed latent variance. Returns None where the
+    inversion yields no proper Beta, which is the specified revert to unpooled.
+
+    v_bound itself is READ from provenance rather than re-derived. It is the
+    critical order statistic of a bootstrap seeded from the data, and an
+    "independent" re-derivation of a seeded resampling procedure would have to
+    reproduce its exact RNG stream, which is cloning rather than independence.
+    The same argument the admission branch below already makes.
+    """
+    if v_bound <= VAR_FLOOR:
+        return None
+    c = mu * (1.0 - mu) / v_bound - 1.0
+    if c <= 0.0 or mu * c <= 0.0 or (1.0 - mu) * c <= 0.0:
+        return None
+    return c
 
 
 def _ref_bh_pass_indices(p_values: list[float], q: float) -> set[int]:
@@ -205,7 +249,7 @@ def _fit_skill_inputs(rng: np.random.Generator) -> list[list[ClauseObservations]
             for j in range(k):
                 n = int(rng.integers(1, 48))
                 w = float(rng.uniform(0.0, float(n)))
-                clauses.append(ClauseObservations(clause_id=f"c{j}", w=w, n=n))
+                clauses.append(ClauseObservations.bernoulli(clause_id=f"c{j}", w=w, n=n))
             out.append(clauses)
         elif bucket == 1:
             # Heterogeneous rates in (0.15, 0.85) → EB-MoM typically converges.
@@ -214,14 +258,16 @@ def _fit_skill_inputs(rng: np.random.Generator) -> list[list[ClauseObservations]
             for j in range(k):
                 n = int(rng.integers(4, 48))
                 rate = float(rng.uniform(0.15, 0.85))
-                clauses.append(ClauseObservations(clause_id=f"c{j}", w=rate * n, n=n))
+                clauses.append(ClauseObservations.bernoulli(clause_id=f"c{j}", w=rate * n, n=n))
             out.append(clauses)
         else:
             # Force BH-FDR: identical rates → sample_var = 0 < VAR_FLOOR.
             k = int(rng.integers(K_MIN_FOR_EB, 28))
             n = int(rng.integers(5, 40))
             rate = float(rng.uniform(0.05, 0.95))
-            out.append([ClauseObservations(clause_id=f"c{j}", w=rate * n, n=n) for j in range(k)])
+            out.append(
+                [ClauseObservations.bernoulli(clause_id=f"c{j}", w=rate * n, n=n) for j in range(k)]
+            )
     return out
 
 
@@ -311,6 +357,49 @@ def _effect_per_cost_inputs(
 # ---------------------------------------------------------------------------
 
 
+def _check_admitted_bootstrap_tail(
+    result: FitResult, plugin_tail: np.ndarray[Any, np.dtype[np.float64]], seed_index: int
+) -> None:
+    """What an independent reference can say about the class-2 tail.
+
+    Not the value: that would mean reproducing a seeded resampling stream, which
+    is cloning rather than an independent check, and this file refuses that for
+    the admission bootstrap for the same reason. What is checkable is that the
+    number is a probability, that the mechanism actually reached the decision
+    rather than the plug-in reaching it silently, and that provenance's own draw
+    counts are internally consistent with the mode it reports.
+    """
+    diagnostics = result.aggregation_provenance["admitted_bootstrap"]
+    assert isinstance(diagnostics, dict)
+    got = np.array([p.p_win_gt_threshold for p in result.posteriors])
+    assert np.all((got >= 0.0) & (got <= 1.0)), (
+        f"class-2 tail outside [0, 1] at seed_index={seed_index}: {got}"
+    )
+    assert int(diagnostics["used"]) <= int(diagnostics["s_target"])
+    assert int(diagnostics["kept"]) + int(diagnostics["below_crit"]) + int(
+        diagnostics["nonpositive_c"]
+    ) == int(diagnostics["drawn"]), (
+        f"admitted_bootstrap draw counts do not add up at seed_index={seed_index}: {diagnostics}"
+    )
+    if diagnostics["fell_back_to_plugin"]:
+        assert_allclose(
+            got,
+            plugin_tail,
+            rtol=0.0,
+            atol=TOL_FIT_SKILL,
+            err_msg=(
+                "the counted plug-in fallback must return the plug-in tail exactly, "
+                f"seed_index={seed_index}"
+            ),
+        )
+        return
+    assert int(diagnostics["used"]) > 0
+    assert not np.allclose(got, plugin_tail, rtol=0.0, atol=TOL_FIT_SKILL), (
+        "the admitted path reported the plug-in tail while claiming not to have "
+        f"fallen back, seed_index={seed_index}: the mechanism did not reach the decision"
+    )
+
+
 class TestFitSkillDifferential:
     """``fit_skill`` vs independent Beta / MoM / statsmodels BH-FDR."""
 
@@ -347,13 +436,54 @@ class TestFitSkillDifferential:
                     exp_p = np.array([s[3] for s in exp_stats])
                 else:
                     sample_mean = sum(rates) / k
-                    sample_var = sum((r - sample_mean) ** 2 for r in rates) / k
-                    try:
-                        alpha_hat, beta_hat = _ref_ebmom(sample_mean, sample_var)
-                    except ConvergenceFailure:
-                        assert result.aggregation_method == "bh_fdr_fallback"
-                        exp_a = np.array([1.0 + cl.w for cl in clauses])
-                        exp_b = np.array([1.0 + (cl.n - cl.w) for cl in clauses])
+                    # Amended estimator (#360), re-derived here from the
+                    # specification rather than by calling production:
+                    # unbiased /(k-1) total variance, minus the mean
+                    # within-clause sampling variance.
+                    total_var = sum((r - sample_mean) ** 2 for r in rates) / (k - 1)
+                    latent_var = total_var - _ref_mean_sampling_variance(clauses)
+
+                    # Branch on the method production chose, rather than
+                    # re-deriving the admission decision. Admission is a
+                    # bootstrap test seeded from the data; an "independent"
+                    # re-derivation of a seeded resampling procedure would have
+                    # to reproduce its exact RNG stream, which is cloning, not
+                    # independence. What is cross-checked here is the NUMERICS
+                    # given the branch. The admission decision itself is
+                    # covered by test_aggregation_fit.py
+                    # (test_marginal_heterogeneity_is_refused_not_fitted,
+                    # test_admission_verdict_is_deterministic) and its
+                    # calibration by the acceptance matrix.
+                    if result.aggregation_method == "bounded_pooling_refused":
+                        prov = result.aggregation_provenance
+                        pooling = prov["bounded_pooling"]
+                        assert isinstance(pooling, dict)
+                        v_bound = float(pooling["v_bound"])
+                        ref_c = _ref_bounded_pooling_concentration(sample_mean, v_bound)
+                        assert result.bh_fdr_passes is None, (
+                            "the refused path publishes no FDR selection under v2 "
+                            f"section 3, got {result.bh_fdr_passes!r} at seed_index={seed_i}"
+                        )
+                        assert bool(pooling["reverted_to_unpooled"]) is (ref_c is None), (
+                            f"revert disagreement at seed_index={seed_i} SEED={SEED}: "
+                            f"production reverted={pooling['reverted_to_unpooled']!r} "
+                            f"reference c_bound={ref_c!r}"
+                        )
+                        if ref_c is None:
+                            exp_a = np.array([1.0 + cl.w for cl in clauses])
+                            exp_b = np.array([1.0 + (cl.n - cl.w) for cl in clauses])
+                        else:
+                            assert_allclose(
+                                float(pooling["c_bound"]),
+                                ref_c,
+                                rtol=0.0,
+                                atol=TOL_FIT_SKILL,
+                                err_msg=f"fit_skill c_bound seed_index={seed_i}",
+                            )
+                            exp_a = np.array([sample_mean * ref_c + cl.w for cl in clauses])
+                            exp_b = np.array(
+                                [(1.0 - sample_mean) * ref_c + (cl.n - cl.w) for cl in clauses]
+                            )
                         exp_stats = [
                             _ref_beta_posterior(float(a), float(b)) for a, b in zip(exp_a, exp_b)
                         ]
@@ -361,20 +491,9 @@ class TestFitSkillDifferential:
                         exp_lo = np.array([s[1] for s in exp_stats])
                         exp_hi = np.array([s[2] for s in exp_stats])
                         exp_p = np.array([s[3] for s in exp_stats])
-                        p_values = [1.0 - float(p) for p in exp_p]
-                        ref_pass = _ref_bh_pass_indices(p_values, BH_FDR_Q)
-                        got_pass = {
-                            i
-                            for i, post in enumerate(result.posteriors)
-                            if result.bh_fdr_passes is not None
-                            and post.clause_id in result.bh_fdr_passes
-                        }
-                        assert got_pass == ref_pass, (
-                            f"fit_skill BH-FDR disagreement at seed_index={seed_i} "
-                            f"SEED={SEED}: got={sorted(got_pass)} ref={sorted(ref_pass)}"
-                        )
                     else:
                         assert result.aggregation_method == "ebmom_hierarchical"
+                        alpha_hat, beta_hat = _ref_ebmom(sample_mean, max(latent_var, 0.0))
                         assert_allclose(
                             float(result.aggregation_provenance["alpha_hat"]),  # type: ignore[arg-type]
                             alpha_hat,
@@ -397,7 +516,20 @@ class TestFitSkillDifferential:
                         exp_means = np.array([s[0] for s in exp_stats])
                         exp_lo = np.array([s[1] for s in exp_stats])
                         exp_hi = np.array([s[2] for s in exp_stats])
+                        # p_win_gt_threshold on the admitted path is NOT the tail
+                        # of the reported Beta since v2 section 4: it is the same
+                        # tail averaged over S admission-conditioned draws of the
+                        # hyperparameters. An independent reference cannot be
+                        # written for it -- reproducing a seeded resampling
+                        # procedure is cloning, which is the reason this test
+                        # already branches on production's method rather than
+                        # re-deriving admission. What CAN be cross-checked without
+                        # cloning is asserted in _check_admitted_bootstrap_tail
+                        # below, and the plug-in tail is kept as the reference the
+                        # mechanism must have moved away from.
                         exp_p = np.array([s[3] for s in exp_stats])
+                        _check_admitted_bootstrap_tail(result, exp_p, seed_i)
+                        exp_p = got_p
 
                 # rtol=0, atol=TOL_FIT_SKILL (1e-12) — fit_skill posterior band
                 assert_allclose(
@@ -453,6 +585,39 @@ class TestFitSkillDifferential:
                     )
         finally:
             _LOG.setLevel(prev_level)
+
+
+class TestBhFdrHelperDifferential:
+    """``_bh_fdr`` vs statsmodels ``multipletests(method='fdr_bh')``.
+
+    The helper has had no production caller since pre-registration v2 section 3
+    retired BH-FDR on the refused path; it is retained as the subject of the
+    registered detector for falsification-plan item 1, which asks whether the
+    ``1 - posterior mass`` transform behaves as a valid null p-value. That
+    question is answered against this implementation, so the implementation
+    still needs an independent reference. The cross-check moved here when the
+    fit-level BH branch above became a bounded-pooling branch, rather than
+    being deleted with it.
+    """
+
+    def test_1000_seeded_pvectors_match_reference(self) -> None:
+        rng = np.random.default_rng(SEED + 7)
+        for draw in range(1000):
+            k = int(rng.integers(1, 41))
+            # A mixture of near-null and strongly significant p-values, so the
+            # step-up boundary is exercised rather than only its interior.
+            p_values = [
+                float(rng.uniform(0.0, 1.0))
+                if rng.random() < 0.7
+                else float(rng.uniform(0.0, 0.02))
+                for _ in range(k)
+            ]
+            got = set(_bh_fdr(p_values, BH_FDR_Q))
+            ref = _ref_bh_pass_indices(p_values, BH_FDR_Q)
+            assert got == ref, (
+                f"_bh_fdr disagreement at draw={draw} SEED={SEED}: "
+                f"got={sorted(got)} ref={sorted(ref)} p_values={p_values}"
+            )
 
 
 class TestTwoArmGateDifferential:

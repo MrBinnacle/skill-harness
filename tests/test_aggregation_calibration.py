@@ -213,7 +213,7 @@ def run_calibration_grid_point(
         assert n >= 1
         assert 0.0 <= w <= float(n)
 
-        fit = fit_skill([ClauseObservations(clause_id="planted", w=w, n=n)])
+        fit = fit_skill([ClauseObservations.bernoulli(clause_id="planted", w=w, n=n)])
         assert fit.aggregation_method == "unpooled"
         assert len(fit.posteriors) == 1
         post = fit.posteriors[0]

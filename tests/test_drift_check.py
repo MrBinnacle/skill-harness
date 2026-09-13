@@ -17,6 +17,9 @@ tests/test_semantics.py — NOT an allowlist entry; the allowlist stays empty).
 
 from __future__ import annotations
 
+import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -41,6 +44,7 @@ _LIVE_IDS = (
     "DC-14",
     "DC-15",
     "DC-16",
+    "DC-17",
     "AC-1",
 )
 _PLANNED_IDS = ("DC-13",)
@@ -74,6 +78,7 @@ _LIVE_SURFACES = (
     "docs/PRD.md",
     "docs/assurance/calibration-report.md",
     "docs/ratifications/README.md",
+    "docs/ratifications/MIRROR-0001-on-irreducibility.md",
     "README.md",
     # DC-16 reads the vendored word list; without it every synthetic tree
     # would fail on a missing manifest instead of the lane under test.
@@ -81,10 +86,29 @@ _LIVE_SURFACES = (
 )
 
 
-def _run(root: Path | None = None) -> subprocess.CompletedProcess[str]:
+def _run(
+    root: Path | None = None,
+    *,
+    ticket_states: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run the drift check as a subprocess.
+
+    ``ticket_states`` fills DC-17's injected seam, so a control that asserts
+    what a closed ticket does makes no network call. A control that reaches
+    api.github.com proves the network worked; it does not prove the rule.
+
+    The DEFAULT holds every ticket open. DC-17 now fails closed on a ticket
+    state it cannot read, and the fixture tree carries a live ``UNLANDED
+    #514`` row, so without this default every drift-check test in this file,
+    including the ones about token bans and estimand vocabulary, would go red
+    whenever api.github.com was unreachable. The live lookup has its own
+    tests; it is not every other test's dependency.
+    """
     cmd = [sys.executable, str(_SCRIPT)]
     if root is not None:
         cmd += ["--root", str(root)]
+    states = {"*": "open"} if ticket_states is None else ticket_states
+    env = {**os.environ, "SKILL_HARNESS_TICKET_STATES": json.dumps(states)}
     return subprocess.run(
         cmd,
         capture_output=True,
@@ -92,6 +116,7 @@ def _run(root: Path | None = None) -> subprocess.CompletedProcess[str]:
         encoding="utf-8",
         cwd=str(_REPO_ROOT),
         check=False,
+        env=env,
     )
 
 
@@ -1102,5 +1127,332 @@ def test_dc16_prints_its_scope_on_a_green_run(tmp_path: Path) -> None:
         "docs/PLAN.md",
         "docs/findings/v0.2-preregistration.md",
         "docs/findings/v0.2-reaim-gate.md",
+        "docs/ratifications/MIRROR-0001-on-irreducibility.md",
     ):
         assert any(rel in line for line in exclude_lines), r.stdout
+
+
+# ---------------------------------------------------------------------------
+# DC-17: mirror records — landed_as symbol existence + UNLANDED ticket status
+# (#514)
+# ---------------------------------------------------------------------------
+
+
+def _write_mirror_record(
+    root: Path,
+    *,
+    additions: str = "",
+    body: str = "",
+) -> None:
+    path = root / "docs" / "ratifications" / "MIRROR-0001-test-slug.md"
+    path.write_text(
+        "---\n"
+        "mirror: MIRROR-0001\n"
+        'source_page: "Test Page"\n'
+        'source_last_edited: "2026-08-11T00:00:00.000Z"\n'
+        'ratified_date: "2026-09-13"\n'
+        "status: RATIFIED\n"
+        "---\n\n"
+        "# MIRROR-0001 -- test mirror record\n\n"
+        f"{additions}\n"
+        f"{body}\n",
+        encoding="utf-8",
+    )
+
+
+def test_dc17_valid_mirror_record_is_green(tmp_path: Path) -> None:
+    """A MIRROR record where every landed_as symbol exists under the search
+    roots is green."""
+    root = _make_tree(tmp_path)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: WIN_RATE_THRESHOLD`\n"),
+    )
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc17_nonexistent_symbol_blocks(tmp_path: Path) -> None:
+    """Control: pointing one landed_as at a symbol that does not exist must
+    turn DC-17 red, naming the record and the symbol."""
+    root = _make_tree(tmp_path)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: NONEXISTENT_SYMBOL_XYZ`\n"),
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "NONEXISTENT_SYMBOL_XYZ" in line for line in fail_lines), (
+        r.stdout
+    )
+
+
+def _drop_live_mirror(root: Path) -> None:
+    """Remove the real MIRROR record the fixture copies in.
+
+    It carries ``UNLANDED #514``, so leaving it in place makes every DC-17
+    case below depend on a second ticket's state as well as the one it is
+    actually testing.
+    """
+    live = root / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
+    if live.exists():
+        live.unlink()
+
+
+def test_dc17_unlanded_closed_ticket_blocks(tmp_path: Path) -> None:
+    """Control: an UNLANDED row naming a closed ticket must turn DC-17 red.
+
+    The ticket state is INJECTED, not fetched. The previous version of this
+    control read issue #1 from api.github.com, so it asserted that the network
+    worked and that the rule held, and could not tell those apart. It went red
+    on one of four CI cells when the unauthenticated rate budget ran out
+    (PR #518), which reads as flakiness and invites a re-run rather than a fix.
+    """
+    root = _make_tree(tmp_path)
+    _drop_live_mirror(root)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: UNLANDED #1`\n"),
+    )
+    r = _run(root, ticket_states={"1": "closed"})
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "DC-17" in line and "closed ticket" in line and "#1" in line for line in fail_lines
+    ), r.stdout
+
+
+def test_dc17_unlanded_open_ticket_is_green(tmp_path: Path) -> None:
+    """The other arm of the same control: an OPEN ticket must NOT block.
+
+    Without this arm, a DC-17 that failed on every UNLANDED row whatever its
+    state would satisfy the closed-ticket control above while measuring
+    nothing about ticket state at all.
+    """
+    root = _make_tree(tmp_path)
+    _drop_live_mirror(root)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: UNLANDED #1`\n"),
+    )
+    r = _run(root, ticket_states={"1": "open"})
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc17_unreadable_ticket_state_blocks(tmp_path: Path) -> None:
+    """Control: a ticket state that cannot be READ must turn DC-17 red.
+
+    This is the defect that opened PR #518 red. ``_check_ticket_closed``
+    returned ``None`` on any network error and the caller tested ``is True``,
+    so an unreachable API produced a clean run. "Could not read" and "no
+    problem found" are different findings, and the check now says which one
+    it has.
+    """
+    root = _make_tree(tmp_path)
+    _drop_live_mirror(root)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: UNLANDED #1`\n"),
+    )
+    r = _run(root, ticket_states={"1": "unreadable"})
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "unreadable" in line and "#1" in line for line in fail_lines), (
+        r.stdout
+    )
+
+
+def test_dc17_malformed_seam_is_unreadable_not_absent(tmp_path: Path) -> None:
+    """A malformed seam value must block, never fall through to the network.
+
+    A test that believes it is isolated and silently is not is the whole class
+    of defect this seam exists to end, so a typo in the seam is treated as
+    unreadable rather than as an absent override.
+    """
+    root = _make_tree(tmp_path)
+    _drop_live_mirror(root)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: UNLANDED #1`\n"),
+    )
+    env = {**os.environ, "SKILL_HARNESS_TICKET_STATES": "{not json"}
+    r = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--root", str(root)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(_REPO_ROOT),
+        check=False,
+        env=env,
+    )
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "unreadable" in line for line in fail_lines), r.stdout
+
+
+def test_dc17_zero_mirror_files_blocks(tmp_path: Path) -> None:
+    """A check that scans nothing passes trivially: DC-17 must refuse when
+    the mirror surface has zero MIRROR-*.md files."""
+    root = _make_tree(tmp_path)
+    # Remove the MIRROR file that _make_tree copies
+    mirror = root / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
+    if mirror.exists():
+        mirror.unlink()
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "no MIRROR-*.md files found" in line for line in fail_lines), (
+        r.stdout
+    )
+
+
+def test_dc17_mirror_with_zero_landed_as_blocks(tmp_path: Path) -> None:
+    """A MIRROR file with front-matter but no landed_as entries is the same
+    trivial-pass hole as an empty glob: DC-17 must refuse it."""
+    root = _make_tree(tmp_path)
+    live = root / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
+    if live.exists():
+        live.unlink()
+    _write_mirror_record(root, additions="### Addition 1\n\nNo landed_as field here.\n")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "no landed_as" in line for line in fail_lines), r.stdout
+
+
+def test_dc17_missing_ledger_dir_blocks(tmp_path: Path) -> None:
+    """The registered surface itself going missing is drift."""
+    import shutil as _shutil
+
+    root = _make_tree(tmp_path)
+    _shutil.rmtree(root / "docs" / "ratifications")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "ledger dir missing" in line for line in fail_lines), r.stdout
+
+
+def test_dc17_printed_in_green_listing() -> None:
+    """DC-17 must appear in the OK listing on a green run."""
+    r = _run()
+    assert r.returncode == 0
+    ok_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("OK")]
+    assert any("DC-17" in line for line in ok_lines), r.stdout
+
+
+def test_dc17_multiple_additions_all_checked(tmp_path: Path) -> None:
+    """Multiple landed_as entries in one record are all checked: one valid
+    and one invalid must block."""
+    root = _make_tree(tmp_path)
+    _write_mirror_record(
+        root,
+        additions=(
+            "### Addition 1\n\n"
+            "- `landed_as: WIN_RATE_THRESHOLD`\n\n"
+            "### Addition 2\n\n"
+            "- `landed_as: TOTALLY_FAKE_SYMBOL`\n"
+        ),
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "TOTALLY_FAKE_SYMBOL" in line for line in fail_lines), r.stdout
+
+
+def test_dc17_real_mirror_names_source_and_six_unlanded_additions() -> None:
+    """AC pin: the committed On-Irreducibility mirror names the source page
+    and edit date, and accounts for all six additions -- not omitted, not
+    fabricated as landed (#514).
+
+    The tracking ticket number is deliberately NOT pinned. This assertion read
+    ``== ["UNLANDED #514"] * 6`` until #520, and that literal made the test
+    fail on its own correction: closing #514 turned DC-17 red on main, the
+    repair was to repoint the rows at an open ticket, and this test blocked
+    exactly that repair while asserting nothing DC-17 does not already check.
+
+    What is pinned instead is the SHAPE the record must hold: six accounted
+    additions, every UNLANDED row naming ONE ticket rather than drifting
+    apart, and no row silently dropped. Which ticket is live is DC-17's job,
+    and DC-17 reads it from the API.
+
+    #525 cleared UNLANDED from declined additions 2 and 4. Those two are still
+    accounted by heading; they no longer contribute a landed_as row, so the
+    remaining open work is four UNLANDED rows, not six. A decline is a landed
+    decision: leaving UNLANDED on it would re-break DC-17 when #520 closes.
+    """
+    path = _REPO_ROOT / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
+    text = path.read_text(encoding="utf-8")
+    assert 'source_page: "On Irreducibility"' in text
+    assert 'source_last_edited: "2026-08-11T17:33:55.553Z"' in text
+    assert "source_status: Done" in text
+    assert "source_verdict: HOLDS" in text
+    expected_headings = (
+        "### 1. Activation-chain stages and failure location",
+        "### 2. The tested component set",
+        "### 3. The implementation family and alternatives considered",
+        "### 4. The cost vector and dominance rule",
+        "### 5. The claim scope and disturbance set",
+        "### 6. The retest triggers and expiry state",
+    )
+    for heading in expected_headings:
+        assert heading in text, f"missing addition heading: {heading}"
+    landed = re.findall(r"landed_as:\s*(.+?)\s*`", text)
+    # Four still-open additions keep landed_as; declined 2 and 4 do not (#525).
+    assert len(landed) == 4, f"expected one landed_as per open addition, got {landed}"
+    unlanded = [v for v in landed if v.startswith("UNLANDED ")]
+    for value in unlanded:
+        assert re.fullmatch(r"UNLANDED #\d+", value), f"malformed UNLANDED row: {value}"
+    assert len(set(unlanded)) <= 1, (
+        f"UNLANDED rows name more than one ticket, so closing one leaves the rest stale: {unlanded}"
+    )
+
+
+def test_dc17_additions_2_and_4_declined_with_reason() -> None:
+    """AC (#525): additions 2 and 4 carry a decline with its stated reason,
+    not UNLANDED. Each decline names a reversal condition specific enough
+    that a reader can tell what would reverse it.
+
+    Pins external behaviour of the mirror record: the section is a decline
+    (not a deferral), the UNLANDED row is gone, and the reason states what
+    would lapse the decline. DC-17 is not modified; clearing the row is the
+    format change that keeps the check green with two fewer open-work rows.
+    """
+    path = _REPO_ROOT / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
+    text = path.read_text(encoding="utf-8")
+
+    def _section(heading: str) -> str:
+        """Return the text between one heading and the next ### or end."""
+        pattern = re.compile(rf"(^{re.escape(heading)}\b.*?)(?=^### |\Z)", re.MULTILINE | re.DOTALL)
+        m = pattern.search(text)
+        assert m, f"heading {heading!r} not found"
+        return m.group(1)
+
+    section_2 = _section("### 2. The tested component set")
+    section_4 = _section("### 4. The cost vector and dominance rule")
+
+    for heading, section in (
+        ("### 2. The tested component set", section_2),
+        ("### 4. The cost vector and dominance rule", section_4),
+    ):
+        assert re.search(r"Declined", section), f"{heading}: no 'Declined' in section prose"
+        assert re.search(r"Revisit if", section), (
+            f"{heading}: no reversal condition ('Revisit if') in section prose"
+        )
+        assert not re.search(r"landed_as:\s*UNLANDED", section), (
+            f"{heading}: still carries UNLANDED; a decline is a landed decision "
+            "and must clear the open-work row (#525, S445)"
+        )
+        assert not re.search(r"landed_as:", section), (
+            f"{heading}: carries a landed_as row; declined additions replace "
+            "landed_as with a stated decline, they do not point at a symbol"
+        )
+
+    assert "component vocabulary" in section_2, (
+        "addition 2 reason must name the missing component vocabulary"
+    )
+    assert "delivery.channel" in section_2, (
+        "addition 2 reason must name the nearest non-match (delivery.channel)"
+    )
+    assert "cost dimensions" in section_4, "addition 4 reason must name the missing cost dimensions"
+    assert "dominance rule" in section_4, "addition 4 reason must name the missing dominance rule"

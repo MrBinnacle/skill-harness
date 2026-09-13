@@ -362,6 +362,406 @@ and covers that section only. This page stays the citable surface for every kind
 
 ## Assurance reports
 
+### [`docs/assurance/ebmom-gate-mutation-receipt.md`](assurance/ebmom-gate-mutation-receipt.md)
+
+- **Claims:** Seven mutants against the #360 peel and heterogeneity gate, each
+  run in its own git worktree at a fixed commit with production never mutated in
+  place, each case recording and asserting both worktree HEADs, the
+  `module.__file__` actually imported, clean and mutant source digests, that the
+  digests differ, that the clean baseline passed first with nonzero collection,
+  that the mutant imports, the named failing assertion, and that the production
+  tree is byte-unchanged afterwards. Re-run 2026-09-02 after the null was amended
+  on the heterogeneity-target ruling: six killed by named assertions, one
+  survivor preserved rather than folded into a score. M-B4 is now the superseded
+  ties-fixed draw and is killed by the deterministic tie-split fixture that pins
+  the ruling; the first campaign's M-B4 result is retained as the record of how
+  the contract inconsistency was found. On the first campaign's first run the
+  generator returned INVALID_BASELINE for all four method-selection cases
+  because their clean baseline was already red from a renamed provenance field,
+  which is the baseline check preventing four kills being recorded against an
+  already-failing test. Records that a tie-blind peel survives the differential
+  suite by construction, since that suite's inputs are tie-free where the two
+  formulas are algebraically identical, and that the registered acceptance
+  regimes cannot distinguish the amended null from a ties-fixed one, which is
+  why the fixture exists.
+- **Refuses to claim:** Any mutation score, and that the mutant set is
+  exhaustive; that the candidate passes the acceptance matrix, since no
+  confirmatory run has been performed and the development smoke, with row 1 now
+  calibrated at 0 of 40, still returns REJECTED on the kill criterion in three
+  regimes; that the smoke numbers quoted for the survivor are results, since they
+  were produced at R=20 under a throwaway root seed solely to show the mutant is
+  detectable; that obligation B is fully covered by seven hand-chosen mutants.
+
+### [`docs/assurance/ebmom-peel-preregistration-amendment.md`](assurance/ebmom-peel-preregistration-amendment.md)
+
+- **Claims:** The mean-of-`c_hat` acceptance statistic registered for falsification
+  plan item 2 (#344) is superseded, because concentration is a reciprocal of the
+  latent variance and the peel removes that variance's magnitude without removing
+  its sampling error, so the mean is dominated by the replicates carrying least
+  information. Records the development evidence that produced the amendment (seed
+  20260902; four estimator families; the measured finite-K bias of the `/K` peel
+  matching its closed form). Freezes a replacement acceptance matrix that reports
+  false admission under homogeneity, admission rate, latent-variance bias and
+  coverage, fallback rate, and wrong-PASS, wrong-FAIL and added-abstention
+  separately. Replaces the fixed `VAR_FLOOR` with a one-sided parametric-bootstrap
+  test of `latent_variance > 0` at a proposed level of 0.05 with its power cost
+  tabled. States that `(w, n)` does not identify within-clause variance when ties
+  are present, verified on a worked pair, which makes #360 depend on #368. Amended
+  2026-09-02 by supersession on the heterogeneity-target ruling: the null redraws
+  ties from one pooled categorical because the lane's target is the encoded clause
+  mean; row 1 re-measured at 0 of 40 on the registered null world, calibrated; the
+  superseded ties-fixed text is retained and marked. Records, in section 0, that the
+  same development smoke fires the frozen kill criterion in three regimes and that
+  two of those were already present at `7d50b4a` and unreported.
+- **Refuses to claim:** That the repaired estimator passes anything — no
+  confirmatory simulation has been run against this amendment, and the development
+  smoke predicts a REJECTED one; that the heterogeneity target is settled beyond the
+  lane's current decision rule, since the ruling expires when the lane migrates to
+  the discordant representation; that the test level is anything but the
+  maintainer's ruling of 2026-08-31;
+  that the development results on seed 20260902 confirm any repair, since they are
+  quarantined as development evidence by section 0; that the original registration
+  was wrong, as its derivation is correct for the unpeeled estimator it was written
+  against; that tie-free synthetic regimes can detect the tie-identification
+  defect; that the bootstrap's power figures hold, since they are normal
+  approximations pending measurement.
+
+### [`docs/assurance/ebmom-peel-confirmatory-run-2026-09-05.md`](assurance/ebmom-peel-confirmatory-run-2026-09-05.md)
+
+- **Claims:** The pre-registered confirmatory run of the v1 EB-MoM peel amendment (#360, #405):
+  branch/harness/estimator identity by SHA at `4bd4633`; a root seed generated by the maintainer
+  outside the building session and committed by SHA-256 before disclosure; a prediction of
+  REJECTED stated before the reveal; one execution at the registered R = 1000 per regime
+  (`is_confirmatory: true`); the disclosed root verified against the commitment; and the full
+  section-5 matrix reported for every regime. Result: REJECTED
+  (`kill_criterion_triggered: true`), with four positive-excess kill cells — `low_heterogeneity`
+  row 5 (+2,294) and row 6 (+160), `tie_heavy_null` row 6 (+251), `tie_heavy_signal` row 5
+  (+875) — plus row 1 calibrated (39/1,000 admissions, p = 0.127) and row 3 inside tolerance
+  everywhere nonzero. Scores its own prediction: direction and cell set held in all four kill
+  cells; the stated multiplier ("near 25x the R = 40 counts") held in two and missed in two,
+  recorded as missed rather than smoothed over. States the contract consequence: a failed
+  confirmatory run does not license a second run at new seeds, only a superseding amendment
+  (which `ebmom-peel-preregistration-amendment-v2.md` is); rollback state is `main`,
+  `agent/issue-360` stays unmerged.
+- **Refuses to claim:** That this result is re-runnable or appealable at a fresh seed — the
+  contract it invokes forbids that; that the missed multiplier readings indicate the underlying
+  mechanism is wrong, only that the R = 40 magnitude gloss was; a resolution to the four open
+  design questions the REJECTED result raises (how rows 5/6 are scored, the fallback policy on
+  refusal, whether `low_heterogeneity` discriminates estimators, which mechanism class to measure
+  first) — it names them as going to reserved-tier cross-family review, not as decided here.
+
+### [`docs/assurance/ebmom-peel-confirmatory-run-2026-09-05-step4-reveal.md`](assurance/ebmom-peel-confirmatory-run-2026-09-05-step4-reveal.md)
+
+- **Claims:** The root seed `f95e4de5…` was disclosed only after its SHA-256 commitment had
+  already landed and been pushed as commit `6d6835a` in
+  `ebmom-peel-confirmatory-run-2026-09-05.md` step 3; the disclosed root reproduces that
+  commitment under the stated `hashlib.sha256` check; and the harness runs once, next, from the
+  worktree at `4bd4633` plus the reveal commits, with the harness and estimator digests unchanged
+  from step 1.
+- **Refuses to claim:** Any run result — steps 5 and 6 (the run's output, its manifest hash, and
+  the verification of the published root against the commitment) are explicitly deferred to "the
+  commit that lands the JSON," which is `ebmom-peel-confirmatory-run-2026-09-05.md`, not this
+  file; independent re-verification of the harness or estimator digests beyond restating that
+  they are unchanged.
+
+### [`docs/assurance/ebmom-peel-confirmatory-run-v2-2026-09-13.md`](assurance/ebmom-peel-confirmatory-run-v2-2026-09-13.md)
+
+- **Claims:** The pre-registered confirmatory run of the v2 EB-MoM amendment (#360, #405):
+  branch, harness, estimator and errors-module identity by SHA-256 at `681824d`, re-measured
+  unchanged at the run commit; no file under `src/` and no change to the acceptance harness since
+  `#444` was accepted at `d2d31a7`; a root seed generated by the maintainer outside the building
+  session and committed in both encodings before disclosure; a prediction of NOT_REJECTED taken
+  from v2 section 6, which was written at the 2026-09-05 freeze before this root existed; one
+  execution at the registered R = 1000 per regime over every registered regime
+  (`is_confirmatory: true`); the disclosed root matching the JSON's `root_seed` byte for byte; and
+  the full section-5 matrix reported for every regime, both paths and the pooled column. Result:
+  NOT_REJECTED (`kill_criterion_triggered: false`, `rejecting_cells: []`), with the oracle
+  self-check passing on all 13 testable oracle cells, `latent_raw` relative bias inside the 0.1
+  tolerance wherever it is defined, and `tie_heavy_null` calibrated at 57 of 1,000 admitted,
+  exact binomial p = 0.309 at level 0.01. Thirteen candidate cells were testable and none
+  rejected; the seven not testable are listed in the JSON's `not_testable_cells`. Names the
+  nearest cell to a kill rather than the verdict alone: `small_n_bite`, admitted path, row 6c, 21
+  false FAIL claims in 241, rate 0.087, p = 0.029 against the frozen level of 0.01, which would
+  have rejected at 0.05, while the comparator column `cand_bpB` in that same cell is 31 of 350 at
+  p = 0.0028 and does reject. Records that the one cell section 6 excluded in advance, the
+  admitted-path 6c cell in `low_heterogeneity`, came out `G = 1`, two FAIL decisions and zero
+  false, the outcome section 6 gave probability 0.34. Discharges v2 section 5's condition for
+  holding `agent/issue-360` unmerged, and states that no threshold, regime, oracle, row or level
+  moved in response to the result.
+- **Refuses to claim:** That a NOT_REJECTED result shows the mechanism works. It establishes only
+  that on one fresh committed root of 1,000 worlds per regime the candidate kept the per-claim
+  promise of section 2 in every testable cell at level 0.01. It is not a level-0.01 procedure,
+  since section 5 states the criterion as a union over up to 20 cells with true level up to about
+  0.18; it does not demonstrate the admitted-path FAIL side in `low_heterogeneity`, where `G = 1`
+  is a sparse pass reported with its `G`; it does not resolve the maintainer's section 9 fork,
+  whether that sparse cell is a confirmatory kill or a mechanism gate, which a pass leaves exactly
+  where it was; it does not retire the v1 REJECTED result of 2026-09-05, which stays in the record
+  beside it; and it does not stand if a third-party recomputation of the two step 3 digests
+  against the step 4 root fails, or if a re-run of the step 5 command at the step 1 SHA produces a
+  JSON whose `regimes` differ in any cell, either of which voids the step. The hand review of the
+  branch's own diff is still owed before merge.
+
+### [`docs/assurance/ebmom-peel-confirmatory-run-v2-2026-09-13-step4-reveal.md`](assurance/ebmom-peel-confirmatory-run-v2-2026-09-13-step4-reveal.md)
+
+- **Claims:** The root seed `d77c7cd1…` was disclosed only after its SHA-256 commitment had
+  already landed as commit `122185f` on `agent/issue-360` and been pushed; both encodings recorded
+  at step 3, the 64 ASCII hex characters and the 32 raw bytes, were recomputed at reveal time and
+  both matched; the root is 64 characters; and the harness runs once, next, from the worktree at
+  `681824d` with the reveal commits on top, which touch `docs/assurance/` only, so the harness and
+  estimator digests recorded in step 1 are unchanged. Gives the exact command and records that no
+  `--replicates`, `--regime` or `--world-range` argument is passed, so the harness's own defaults
+  of R = 1000 and every registered regime decide completeness rather than a restated argument.
+- **Refuses to claim:** Any run result. Steps 5 and 6, the run's output, its manifest hash, and
+  the verification of the published root against the commitment, are deferred to the commit that
+  lands the JSON, which is `ebmom-peel-confirmatory-run-v2-2026-09-13.md`, not this file.
+  Independent re-verification of the harness or estimator digests beyond restating that they are
+  unchanged.
+
+### [`docs/assurance/ebmom-peel-preregistration-amendment-v2.md`](assurance/ebmom-peel-preregistration-amendment-v2.md)
+
+- **Claims:** FROZEN 2026-09-05 (S414) on mechanism class 2, superseding v1's rows 5/6 kill
+  criterion (any positive wrong-PASS/wrong-FAIL excess against `main`) with a per-path,
+  per-regime exact-binomial-over-one-selected-decision-per-world test (rows 5c/6c), because
+  `main` itself breaks the promise it stood in for, "wrong against the oracle" is a regret rather
+  than an error rate, and the registered world-block bootstrap bound is 0 by construction — hence
+  vacuous — whenever four or fewer worlds carry a false decision. Development re-score at
+  R = 1000 on the burned confirmatory root, across five regimes, both paths and six candidate
+  columns, measures every disagreement between the exact test and the vacuous bound (five cells,
+  always the bound passing by vacuity where the exact test fails) and the seed-dependence of
+  every verdict (highest rejection probability among passing cells: 0.0084). Rules the refused
+  path pools through a hierarchical "form B" posterior chosen by a pre-committed rule under both
+  candidate tests, retiring BH-FDR; rules the admitted path must integrate hyperparameter
+  uncertainty rather than plug in point estimates, because plug-in and class 1 (normal
+  approximation) both leave `low_heterogeneity` admitted 6c false at 3 of 4 (one decision per
+  world, p = 4.8e-4). Measures mechanism class 2 (admission-conditioned parametric bootstrap)
+  rejecting in no cell across three burned-root world ranges, including the S414 extension of
+  3,000 further never-generated burned-root worlds, whose exact test passes with power (6
+  decision-bearing worlds of 4,000, 2 false, p = 0.033, rejects at 3) — the ground on which the
+  freeze executes. Names the four admitted-path FAIL worlds directly (255, 316, 600, 783) and
+  reads a shared mechanism: latent-variance overshoot, understated fitted concentration,
+  posterior under-shrinkage of a clause near the 0.60 boundary.
+- **Refuses to claim:** That anything in it is confirmation of anything — "no confirmatory root
+  exists for it," and every R = 1000 / burned-root number is development evidence, quarantined
+  under v1 section 7 item 2; that the mechanism-gate alternative (a pre-registered abstention
+  floor on the sparse admitted-path cell) is wrong — it is recorded as "the live alternative" the
+  maintainer still owns, declined twice but not foreclosed; that the kill criterion has overall
+  level 0.01 as a procedure — stated explicitly as a union over up to 20 cells with true level up
+  to about 0.18; that the `small_n_bite` refused-6c cell is independent confirmation of the
+  pooling policy, since its rejection probability over seeds is 0.40; that the admitted-path
+  mechanism's form is final — section 4 marks it "revisable in form, frozen in kind," and the
+  third mechanism class was never run.
+
+### [`docs/assurance/ebmom-v2-form-b-mutation-receipt.md`](assurance/ebmom-v2-form-b-mutation-receipt.md)
+
+- **Claims:** Mutant 1 of v2 section 7 — pooling removed on the refused path, reverting to the
+  unpooled posterior the pre-registration retired — is KILLED at `d39440d` by
+  `tests/test_aggregation_fit_bounded_pooling.py::test_mutant_1_tie_heavy_null_refused_false_fail_rate`,
+  measured by `scripts/mutation_receipt.py` in its own git worktree at a fixed commit with
+  production never mutated in place, recording both worktree HEADs, the `module.__file__`
+  actually imported, clean and mutant source digests, that the digests differ, that the mutant
+  compiles, that the clean baseline passed first with nonzero collection, and that the
+  production tree was byte-unchanged afterwards. The selection carries three node ids so the
+  receipt shows which assertion moved and which did not: only the kill assertion failed, while
+  the positive control (the retired unpooled fallback REJECTING the same registered test on the
+  same worlds) and the refusal guard (all 41 replicates refused) stayed green under the mutant,
+  which excludes both an empty-cell kill and a kill through the wrong mechanism. The regime
+  makes every FAIL false by construction: `tie_heavy_null` is homogeneous at a true encoded mean
+  of 0.65 against a 0.60 threshold.
+- **Refuses to claim:** Any mutation score, or that one mutant is a campaign — mutants 2, 3 and
+  4 of section 7 are not measured here and belong to #443, #443 and #442, with #444 collecting
+  all four; that form B passes the acceptance matrix, since no confirmatory run has been
+  performed and v2 section 5 keeps the branch unmerged until one is; that its numbers are
+  results rather than a detectability demonstration, since they are R = 41 under the throwaway
+  root `SMOKE_NOT_CONFIRMATORY` rather than the R = 1000 figures section 7 cites; anything
+  whatever about the admitted path or about the fresh root, which does not yet exist.
+
+### [`docs/assurance/ebmom-class2-reproduction-R40-SMOKE_NO.md`](assurance/ebmom-class2-reproduction-R40-SMOKE_NO.md)
+
+- **Claims:** The built `fit_skill`, scored through `scripts/ebmom_form_b_reproduction.py
+  --column cand_pb` at R = 40 on the throwaway root `SMOKE_NOT_CONFIRMATORY`, reproduces 15 of
+  the 20 per-path cells of the `cand_pb` column of `proto-pb-all-R40-SMOKE_NO.json` (five
+  regimes, both paths, rows 5c and 6c, compared on false count, decision count, `G` and `g`),
+  and reproduces ALL 20 when the same production code is driven with the prototype's own draw
+  seed. Every refused-path cell agrees in every regime, `tie_heavy_null` refusing all 40
+  replicates, so the admitted-path mechanism left the refused path untouched. The five that
+  differ under production's own seed are all admitted-path, in `small_n_bite` (6c decision count
+  9 against 8) and `tie_heavy_signal` (5c count 7 against 6, of 864 against 854), and the
+  diagnostic run isolates the seed as the whole of the difference: the prototype seeds from
+  `<root>|<regime>|<world>|pb`, which `fit_skill` cannot compute, so the frozen derivation gives
+  it `<canonical clause encoding>|pb` and a different stream.
+- **Refuses to claim:** That the built candidate reproduces `cand_pb` under its own seed — it
+  does not, in two regimes, and #442's acceptance criterion asking for that is recorded NOT MET
+  as written rather than reinterpreted; anything about R = 1000 or R = 4000, which the harness
+  ticket owns and where a one-decision difference may or may not persist; that any cell passes
+  or fails the v2 section 5 kill rows, which need a confirmatory run that has not been performed;
+  that any number here is confirmatory, the root being a development smoke.
+
+### [`docs/assurance/ebmom-form-b-reproduction-R40-SMOKE_NO.md`](assurance/ebmom-form-b-reproduction-R40-SMOKE_NO.md)
+
+- **Claims:** The twin of `ebmom-form-b-reproduction-R40-SMOKE_NO.json`, recording that receipt
+  as FROZEN at `#458` rather than regenerated. The receipt itself is a dated record of the state
+  at `d39440d`: production reproduced the prototype's `cand_bpB` column (form B on refusal,
+  plug-in on the admitted path) at R = 40 on `low_heterogeneity` and `tie_heavy_null`, on the
+  throwaway root `SMOKE_NOT_CONFIRMATORY`, with `total_differences` 0. Three measurements taken
+  2026-09-08 support the freeze: the receipt's `expected_file`
+  (`proto-pb-all-R40-SMOKE_NO.json`) is not in the repository; that dump embeds a wall-clock
+  `seconds` field per regime (`proto_pb.py:238`), so its pinned `expected_sha256` is
+  unreproducible - two regenerations differ from the pin and from each other, and are identical
+  once `seconds` is dropped; and the receipt's own command line, run against production on this
+  branch, exits 1 with exactly three differing cells, all in
+  `low_heterogeneity.row5c_false_pass_admitted`, with `tie_heavy_null` agreeing entirely. The
+  twin also records that the reference directory repaired under `#458` regenerates a `cand_bpB`
+  column matching the receipt's recorded `built` block on 32 of 32 compared fields.
+- **Refuses to claim:** Anything about production at or after `60a6548` - the receipt does not
+  assert current reproduction and must not be read as asserting it; that the three differing
+  cells are a regression, the differences being confined to the admitted path `#442`
+  deliberately changed while the refused path form B governs still agrees; that the receipt
+  could be regenerated into a current claim without new measurement machinery; anything
+  confirmatory, `is_confirmatory` being false and the root a development smoke; anything about
+  R = 1000 or R = 4000, which this receipt never measured; a keep/cut verdict or any result
+  about the estimator.
+
+### [`docs/assurance/ebmom-v2-class2-mutation-receipt.md`](assurance/ebmom-v2-class2-mutation-receipt.md)
+
+- **Claims:** Mutant 4 of v2 section 7 - the admission-conditioned parametric bootstrap removed
+  from the admitted path and the plug-in posterior restored - is KILLED at `60a6548` by
+  `tests/test_aggregation_fit_admitted_bootstrap.py::test_mutant_4_low_heterogeneity_admitted_false_fail_rate`,
+  measured by `scripts/mutation_receipt.py` in its own git worktree at a fixed commit with
+  production never mutated in place, recording both worktree HEADs, the `module.__file__`
+  actually imported, clean and mutant source digests, that the digests differ, that the mutant
+  compiles, that the clean baseline passed first with nonzero collection, and that the production
+  tree was byte-unchanged afterwards. The selection carries three node ids so the receipt shows
+  which assertion moved and which did not: only the kill assertion failed, while the positive
+  control (the plug-in posterior REJECTING the same registered test on the same four fits, three
+  false of four, exact binomial p = 4.8e-4) and the admission guard (all four worlds reaching
+  `ebmom_hierarchical`) stayed green under the mutant, which excludes both an empty-cell kill and
+  a kill through the wrong mechanism. The mutation leaves the bootstrap running and discards its
+  result, so nothing but the decision path can account for the kill.
+- **Refuses to claim:** Any mutation score, or that one mutant is a campaign - mutants 1, 2 and 3
+  of section 7 are measured elsewhere (#441, #443) with #444 collecting all four; that the
+  admitted 6c cell's MEMBERSHIP was re-derived, since the four worlds come from v2 section 0.5's
+  `find_fail_worlds.py` scan and this receipt re-derives only the decisions on them, the control
+  being what makes the borrowed membership falsifiable; that the mechanism is calibrated, the cell
+  being four decisions where v2 section 5 rates a pass as weak evidence; that the mechanism passes
+  the acceptance matrix, since no confirmatory run has been performed and v2 section 5 keeps the
+  branch unmerged until one is; anything about the fresh root, which does not yet exist.
+
+### [`docs/assurance/ebmom-v2-section-7-mutation-receipts.md`](assurance/ebmom-v2-section-7-mutation-receipts.md)
+
+- **Claims:** That the four mutants registered in v2 section 7 have four mutation receipts in
+  `docs/assurance/`, and names for each one the mutant, its id, the receipt, the file it targets,
+  the verdict and the assertion that killed it. Every row was checked against the receipts and
+  against the tree when written: all four verdicts are KILLED, and all four killing assertions
+  exist under the names given. It is an index over receipts, so its authority is entirely
+  borrowed - each receipt is the evidence for its own row.
+- **Refuses to claim:** Any digest, deliberately - each receipt pins the files it measured in its
+  own `target_digests`, and `tests/test_mutation_receipt.py` holds that pin honest against both
+  the live tree and the receipt's own prose, so a digest copied into an index would be guarded by
+  neither and could go stale in silence while both tests stayed green. That four is a mutation
+  score or a campaign result. That the other mutation receipts in the same directory are section 7
+  mutants - they are not, and a reader counting files there will get a larger number. That the
+  EB-MoM gate receipt's one SURVIVED case is a failure, it being a preserved finding. That the
+  mechanism passes the acceptance matrix, since no confirmatory run has been performed and v2
+  section 5 keeps the branch unmerged until one is. Anything about the fresh root, which does not
+  yet exist and is the maintainer's to generate. That the index is self-policing: no test checks
+  it is complete against section 7, so a mutant added or removed there leaves this page wrong and
+  silent.
+
+### [`docs/assurance/ebmom-v2-per-path-split-mutation-receipt.md`](assurance/ebmom-v2-per-path-split-mutation-receipt.md)
+
+- **Claims:** Mutant 2 of v2 section 7 - the per-path split removed, so every decision is
+  tallied on one lane and the refused-path cell cannot be reported at all - is KILLED at
+  `9a81e83` by
+  `tests/test_ebmom_acceptance_matrix_v2.py::test_mutant_2_low_heterogeneity_refused_cell_carries_its_own_G`,
+  measured by `scripts/mutation_receipt.py` in its own git worktree at a fixed commit with
+  production never mutated in place, recording both worktree HEADs, the `module.__file__`
+  actually imported, clean and mutant source digests, that the digests differ, that the mutant
+  compiles, that the clean baseline passed first with nonzero collection, and that the production
+  tree was byte-unchanged afterwards. The selection carries three node ids so the receipt shows
+  which assertion moved and which did not: only the kill assertion failed, while the positive
+  control (the POOLED cell unchanged, because pooling loses the path and never the decisions) and
+  the guard (the two fixture worlds re-derived from `fit_skill` reaching different paths) stayed
+  green under the mutant, which excludes both an emptied fixture and a kill through the wrong
+  mechanism. The receipt records that the FIRST control was wrong - it died beside the kill and
+  the generator reported two killing assertions - and what replaced it.
+- **Refuses to claim:** Any mutation score, or that one mutant is a campaign - mutants 1, 3 and 4
+  of section 7 are measured elsewhere with #444 collecting all four; anything about any cell's
+  rate, verdict or kill status, this being a receipt about the report's structure and not about
+  the candidate; that the candidate passes the acceptance matrix, since no confirmatory run has
+  been performed and v2 section 5 keeps the branch unmerged until one is; anything about the
+  fresh root, which does not yet exist.
+
+### [`docs/assurance/ebmom-v2-one-per-world-mutation-receipt.md`](assurance/ebmom-v2-one-per-world-mutation-receipt.md)
+
+- **Claims:** Mutant 3 of v2 section 7 - the one-decision-per-world selection replaced by all
+  decisions, restoring the test that treats clause decisions as independent - is KILLED at
+  `16da76b` by
+  `tests/test_ebmom_acceptance_matrix_v2.py::test_mutant_3_two_correlated_false_decisions_do_not_reject`,
+  measured by `scripts/mutation_receipt.py` in its own git worktree at a fixed commit with
+  production never mutated in place, recording both worktree HEADs, the `module.__file__`
+  actually imported, clean and mutant source digests, that the digests differ, that the mutant
+  compiles, that the clean baseline passed first with nonzero collection, and that the production
+  tree was byte-unchanged afterwards. The selection carries three node ids so the receipt shows
+  which assertion moved and which did not: only the kill assertion failed, while the positive
+  control (the retired all-decision test REJECTING the same fixture, two false of two, exact
+  binomial p = 0.0025) and the guard (the fixture being one world carrying two decisions) stayed
+  green under the mutant, which excludes both an inert fixture and a kill through the wrong
+  mechanism.
+- **Refuses to claim:** Any mutation score, or that one mutant is a campaign - mutants 1, 2 and 4
+  of section 7 are measured elsewhere with #444 collecting all four; anything about any
+  registered regime's cells, the fixture being synthetic and two decisions wide; that the
+  selection has the right POWER, only the right level, section 2.1 stating separately what is
+  discarded and why the remaining power is judged sufficient; that the candidate passes the
+  acceptance matrix, since no confirmatory run has been performed and v2 section 5 keeps the
+  branch unmerged until one is.
+
+### [`docs/assurance/ebmom-v2-reproduction-R1000-f95e4de5.md`](assurance/ebmom-v2-reproduction-R1000-f95e4de5.md)
+
+- **Claims:** Parts (a), (b) and (c) of the S417 amendment against
+  `proto-pb-all-R1000-f95e4de5.json` (SHA-256 recorded), all five registered regimes at R = 1000
+  on the burned root, 9,428.5 s. (a) PORT IDENTITY HOLDS: under the injected prototype seed
+  production reproduces the dump with ZERO differing cells in every regime, all four columns,
+  both paths, both rows, the pooled rows and the vs-oracle excesses. (b) Under the production
+  seed 39 cells differ, every one of them `cand_pb`, driven by 2,836 near-cut flips in 740,800
+  admitted clause decisions with a largest absolute tail movement of 0.0381; `cand_bpB`, `oracle`
+  and `main` agree cell for cell, which is what the S417 ruling predicts of columns that do not
+  draw the admitted-path stream. (c) v2 section 4's freeze condition on worlds 500 to 999 under
+  the production seed rejects NO candidate cell in any regime and the oracle self-check passes
+  every one of the 11 testable cells. Reported beside each cell: false over decisions, `G`, `g`,
+  the selected-false count, the rejecting count, the p-value, the world-block bound and the
+  reliability table. `main` independently reproduces v2 section 6's written prediction to the
+  decimal (admitted 6c 40.3 percent false in `low_heterogeneity`, 12.4 percent in
+  `small_n_bite`). Receipt identity, both halves of v1 section 8 plus the v2 SHA:
+  `ebmom-v2-reproduction-identity-f95e4de5.json`.
+- **Refuses to claim:** That the candidate reproduces `cand_pb` under its OWN seed - it does not,
+  and the S417 amendment is why that is reported rather than treated as a defect; any
+  confirmatory result or verdict on the candidate, the root being burned development evidence
+  seen in full before every choice v2 records, with the fresh root not yet generated and v2
+  section 5 keeping the branch unmerged; the consequence of part (c), which v2 section 4 owns and
+  which nothing triggered; that the `low_heterogeneity` admitted 6c cell is evidence of anything,
+  since at `G = 1` no selection could have rejected it and the harness prints that rather than
+  leaving it to be inferred; any verdict on `main`.
+
+### [`docs/assurance/ebmom-v2-reproduction-R4000-low_heterogeneity-f95e4de5.md`](assurance/ebmom-v2-reproduction-R4000-low_heterogeneity-f95e4de5.md)
+
+- **Claims:** The same three parts against `proto-pb-low_heterogeneity-R4000-f95e4de5.json`
+  (SHA-256 recorded), `low_heterogeneity` at R = 4000 on the burned root, 5,718.3 s. (a) PORT
+  IDENTITY HOLDS: zero differing cells under the injected prototype seed, all four columns. (b)
+  Eleven `cand_pb` cells differ under the production seed, with every one of the 2,458 flips in
+  565,000 admitted clause decisions sitting within 0.0038 of a decision cut and no clause moving
+  by more than 0.0379; the flips are close to symmetric at the PASS cut (1,299 UNDECIDED to PASS,
+  1,157 PASS to UNDECIDED, 2 FAIL to UNDECIDED). (c) The S414 extension of the freeze condition,
+  worlds 1,000 to 3,999 under the production seed, rejects no cell: the admitted 6c cell is 1
+  false of 7 selected across 7 decision-bearing worlds, `p = 0.302`, with a rejecting count of 3,
+  so it passes WITH POWER - a replication of the S414 result (`1 / 5`, `p = 0.226`) on a second
+  stream. The oracle self-check passes both testable cells.
+- **Refuses to claim:** That the candidate reproduces `cand_pb` under its own seed; any
+  confirmatory result; the consequence of part (c), which belongs to v2 section 4; that the
+  admitted 6c cell is safe - over the full 4,000 worlds it is 2 false of 8 selected against a
+  rejecting count of 3, one selection from rejecting, which the receipt states rather than
+  buries, and v2 section 5 rates a pass in a cell that small as weak evidence; any verdict on
+  `main`, whose two 6c cells fail decisively on the same worlds.
+
 ### [`docs/assurance/dependency-audit.md`](assurance/dependency-audit.md)
 
 - **Claims:** The command CI runs (`python -m pip_audit --local`, pip-audit 2.10.1,

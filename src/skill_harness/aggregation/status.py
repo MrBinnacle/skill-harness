@@ -77,6 +77,24 @@ class UnmeasuredSubReason(StrEnum):
     Lifetime is registry-dependent — recomputed at aggregation, never frozen
     onto clauses.vacuity_flag.
     """
+    TIER2_UNCALIBRATED = "tier2_uncalibrated"
+    """The runner's BLOCKER-1 pre-sampling gate refused the clause (#503).
+
+    The clause is not Tier-1-measurable: its ``oracle_tier`` is not 1, or no
+    scorer is registered for its axis. The runner gates this BEFORE sampling,
+    so no samples and no verdicts are produced. Distinct from
+    ``MECHANICAL_VACUOUS`` (an axis-registry scoreability property recomputed at
+    aggregation): a tier-2 clause whose axis IS registered fails this gate on
+    its tier, not on the axis, and ``MECHANICAL_VACUOUS`` would not name that.
+    """
+    LENGTH_CONFOUNDED = "length_confounded"
+    """The runner's QUAL-1 pre-sampling gate refused the clause (#503).
+
+    The operator could not meet length tolerance for the clause text, so the
+    ablation cannot separate the clause's effect from a length artefact. The
+    runner gates this BEFORE sampling, so no samples and no verdicts are
+    produced. No other member names an operator-tolerance refusal.
+    """
 
 
 # ---------------------------------------------------------------------------

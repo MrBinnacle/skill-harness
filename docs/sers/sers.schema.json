@@ -50,6 +50,8 @@
         "falsifying_case_stale",
         "fdr_correction_failed",
         "mechanical_vacuous",
+        "tier2_uncalibrated",
+        "length_confounded",
         null
       ],
       "description": "Qualifies an UNMEASURED / cannot-score path when applicable. Mirrors UnmeasuredSubReason exactly. null when the receipt is not an unmeasured refusal path (e.g. a measured KEEP or CUT)."

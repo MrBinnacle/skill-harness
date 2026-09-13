@@ -19,6 +19,7 @@ from click.testing import CliRunner
 
 from skill_harness.ablation.runner import ClauseResult
 from skill_harness.ablation.stopping import StopDecision, StoppingReason
+from skill_harness.aggregation.status import UnmeasuredSubReason
 from skill_harness.cli.main import cli
 from tests.ratification_fixture import ratified_exec_args
 
@@ -267,7 +268,7 @@ class TestRealClauseResultRendersVerdictId:
             stop_decision=real_stop_decision,
             samples_collected=0,
             length_confounded=False,
-            unmeasured_reason="tier2_uncalibrated",
+            unmeasured_reason=UnmeasuredSubReason.TIER2_UNCALIBRATED,
             verdict_id=None,
         )
         assert real_result.verdict_id is None

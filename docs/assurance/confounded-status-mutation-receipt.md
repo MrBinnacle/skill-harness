@@ -5,8 +5,8 @@
 **Generator:** `scripts/mutation_receipt.py --select 366`. **Machine-readable record:**
 `docs/assurance/confounded-status-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/aggregation/engine.py` at
-`sha256:c64986c3f154e1b2b74e2fb37738633357dba5201ced47851100a89cef5f2176`.
-**Commit at generation:** `e1bfe205ab20` — informational only; currency is checked against the
+`sha256:2cdb46d63fab5f682c62ec9327635fdcaf1f07f98799538b4270d4e26cfd9363`.
+**Commit at generation:** `a8b906811185` — informational only; currency is checked against the
 digest above by `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
 
 Each case runs in its own git worktree at a fixed commit. Production is never mutated in place.
