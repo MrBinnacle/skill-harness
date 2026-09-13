@@ -108,4 +108,38 @@ recorded in step 3 were recomputed against the revealed root and both matched.
 
 ## Step 6. Disposition
 
-To be appended. v2 section 5 keeps `agent/issue-360` unmerged until step 5 reports. No merge pull request is opened before then.
+### Result: NOT_REJECTED
+
+`verdict: NOT_REJECTED`, `kill_criterion_triggered: false`, `rejecting_cells: []`, `rollback_state: main` not invoked. The oracle self-check passed on all 13 testable oracle cells (`failing_cells: []`), so no regime's result is voided. Relative bias of `latent_raw` is within the 0.1 tolerance in every regime where it is defined. `tie_heavy_null` calibrates: 57 of 1000 admitted against an expected 0.05, exact binomial p = 0.309 at level 0.01.
+
+Section 6 predicted NOT_REJECTED and it landed. The one cell section 6 excluded in advance, the admitted-path 6c cell in `low_heterogeneity`, came out `G = 1`, two FAIL decisions, zero false, which section 6 gave probability 0.34. Under section 5 that is a sparse pass reported with its `G`, never a demonstration.
+
+### The kill rows, candidate column `cand_pb`, every regime and both paths, plus pooled
+
+Rate is false claims over decisions of that kind; p is the exact one-sided binomial against 0.05; a cell rejects at p < 0.01. "not testable" means no decision of that kind on that path.
+
+| regime | 5c admitted | 5c pooled | 5c refused | 6c admitted | 6c pooled | 6c refused |
+|---|---|---|---|---|---|---|
+| `small_n_bite` (adm 0.988) | 565/13,317 = 0.0424, p 0.999 | 580/13,463 = 0.0431, p 0.999 | 15/146 = 0.103, p 0.37 | **21/241 = 0.0871, p 0.029** | 21/241 = 0.0871, p 0.029 | not testable |
+| `low_heterogeneity` (adm 0.717) | 685/22,083 = 0.0310, p 0.998 | 1,505/37,769 = 0.0399, p 0.991 | 820/15,686 = 0.0523, p 0.55 | 0/2 = 0, G = 1, p 1 | 0/2, p 1 | not testable |
+| `benign_large_n` (adm 1.000) | 604/92,776 = 0.0065, p 1 | same | not testable | 284/36,523 = 0.0078, p 1 | same | not testable |
+| `tie_heavy_null` (adm 0.057) | 0/2,398 = 0, p 1 | 0/121,545, p 1 | 0/119,147, p 1 | not testable | not testable | not testable |
+| `tie_heavy_signal` (adm 0.997) | 361/23,701 = 0.0152, p 1 | 388/24,063 = 0.0161, p 1 | 27/362 = 0.0746, p 1 | 0/2 = 0, G = 2, p 1 | same | not testable |
+
+Seven cells are not testable, all listed in the JSON's `not_testable_cells`: four refused-path 6c cells, both `benign_large_n` refused cells, and the `tie_heavy_null` admitted 6c cell. Thirteen candidate cells were testable and none rejected.
+
+**The nearest cell to a kill is stated so it is not lost.** `small_n_bite`, admitted path, row 6c: 21 false FAIL claims in 241, rate 0.087, p = 0.029 against the 0.01 level. It passes the criterion as written and would have rejected at level 0.05. The same cell for the comparator column `cand_bpB`, reported beside the candidate and not under test, is 31 of 350 at p = 0.0028, which rejects. Nothing moves in response: the candidate column was named before the root existed, the level was frozen at 0.01, and this paragraph exists so a reader sees the margin rather than the verdict alone.
+
+### Reported beside the kill, never a kill
+
+Wrong PASS, wrong FAIL and abstention against the oracle, candidate over `main`, negative meaning fewer: `small_n_bite` -13,570 / -3,216 / +79; `low_heterogeneity` +6,718 / -591 / -6,663; `benign_large_n` 0 / -889 / +11; `tie_heavy_null` 0 / 0 / -112,573; `tie_heavy_signal` +887 / -1 / -5,549. `main` itself rejects on 6c in `small_n_bite` (413/3,457, p about 1e-17) and on all three 6c paths in `low_heterogeneity` (p about 1e-66 and smaller), which is the defect v1 and v2 were written to remove; the candidate's 6c rates in those regimes are 0.087 and 0. Fallback reasons are all `latent_variance_not_identified`: 12, 283, 0, 943, 3 worlds per regime in the order above. The reliability tables are in the JSON under each regime's `reliability`.
+
+### What this result establishes, and what it does not
+
+It establishes that on one fresh committed root of 1,000 worlds per regime, the candidate kept the per-claim promise of section 2 in every testable cell at level 0.01, and that the R = 1000 counts measured on the burned root were stable enough to predict this. It does not establish a level-0.01 procedure (section 5 says so), it does not demonstrate the admitted-path FAIL side in `low_heterogeneity` (`G = 1`), and it leaves the maintainer's fork in section 9 exactly where it was: whether that sparse cell is a confirmatory kill or a mechanism gate is unchanged by a pass.
+
+### Disposition
+
+The candidate is not rejected. v2 section 5's condition for holding `agent/issue-360` unmerged, that step 5 has not reported, is discharged by this step. The next action is a merge pull request from `agent/issue-360` to `main`, opened after this step lands, with this file and the JSON as its evidence and a hand review of the branch's own diff still owed before merge. No threshold, regime, oracle, row or level moves. The v1 REJECTED result of 2026-09-05 stays in the record beside this one.
+
+*Revisit if:* a third-party recomputation of the two step 3 digests against the step 4 root fails, or a re-run of the step 5 command at the step 1 SHA produces a JSON whose `regimes` differ in any cell; either voids this step.
