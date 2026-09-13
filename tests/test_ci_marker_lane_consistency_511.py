@@ -2,65 +2,97 @@
 
 Before this ticket the comments above the Test cell called ``slow`` "the slow
 lane" and prescribed thinning it as the overrun remedy, but no CI job
-deselects on ``slow`` — the marker is advisory only (pyproject.toml:135).
-A maintainer who follows the file's own instruction sees no change.
+selects or deselects on ``slow`` — the marker is advisory only
+(pyproject.toml). A maintainer who follows the file's own instruction sees
+no change.
 
-These tests parse the real ``pyproject.toml`` marker registry and ``ci.yml``
-job expressions, then fail when a comment calls a marker a "lane" while no
-job's ``-m`` expression selects on it. Control fixtures prove the check
-catches the defect (``slow lane`` goes red) and passes the real lanes
-(``calibration lane``, ``assurance lane`` stay green).
+S442 kept ``slow`` advisory and required a check: parse the marker registry
+and ``ci.yml``, fail when any ``ci.yml`` comment calls a registered marker a
+"lane" while no job's ``-m`` expression selects on it. Controls: a fixture
+saying ``slow lane`` goes red; ``calibration lane`` and ``assurance lane``
+stay green because jobs select on them.
 """
 
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+ASSURANCE_YML = REPO_ROOT / ".github" / "workflows" / "assurance.yml"
+PYPROJECT = REPO_ROOT / "pyproject.toml"
 
-# ci.yml -m expressions: `run:` lines containing `-m` and a quoted expression
-_M_EXPR = re.compile(r'-m\s+"([^"]+)"', re.MULTILINE)
+# pytest -m expressions on run lines (quoted or bare marker name).
+# Require a leading "pytest" so "python -m pip" does not match.
+_M_EXPR = re.compile(
+    r"pytest\b[^\n]*?-m\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+))",
+    re.MULTILINE,
+)
 
-# ci.yml comment lines mentioning "<marker> lane"
+# ci.yml comment lines mentioning "<word> lane"
 _LANE_COMMENT = re.compile(r"#.*\b(\w+)\s+lane\b", re.MULTILINE)
 
-
-def _job_lane_markers(ci_text: str) -> set[str]:
-    """Markers selected on by a job's -m expression (lanes with their own job)."""
-    lanes: set[str] = set()
-    for m in _M_EXPR.finditer(ci_text):
-        expr = m.group(1)
-        for raw in re.split(r"\s+and\s+|\s+or\s+", expr):
-            name = raw.strip()
-            if name.startswith("not "):
-                name = name[4:]
-            name = name.strip()
-            if name:
-                lanes.add(name)
-    return lanes
+# "name: description" entries under [tool.pytest.ini_options].markers
+_MARKER_ENTRY = re.compile(r'^["\']?(\w+)\s*:')
 
 
-def _comment_lane_markers(ci_text: str) -> set[str]:
-    """Markers called a "lane" in ci.yml comments."""
-    lanes: set[str] = set()
+def _registered_markers() -> set[str]:
+    """Marker names declared in pyproject.toml's pytest marker registry."""
+    with PYPROJECT.open("rb") as fh:
+        options = tomllib.load(fh)["tool"]["pytest"]["ini_options"]
+    raw = options.get("markers", [])
+    names: set[str] = set()
+    for entry in raw:
+        match = _MARKER_ENTRY.match(str(entry).strip())
+        if match:
+            names.add(match.group(1))
+    return names
+
+
+def _job_selected_markers(*workflow_texts: str) -> set[str]:
+    """Markers a job's -m expression positively selects on (not deselected)."""
+    selected: set[str] = set()
+    for text in workflow_texts:
+        for m in _M_EXPR.finditer(text):
+            expr = next(g for g in m.groups() if g is not None)
+            for raw in re.split(r"\s+and\s+|\s+or\s+", expr):
+                name = raw.strip()
+                if not name or name.startswith("not "):
+                    continue
+                selected.add(name)
+    return selected
+
+
+def _comment_lane_markers(ci_text: str, registered: set[str]) -> set[str]:
+    """Registered markers called a "lane" in ci.yml comments."""
+    found: set[str] = set()
     for m in _LANE_COMMENT.finditer(ci_text):
-        lanes.add(m.group(1).lower())
-    return lanes
+        name = m.group(1).lower()
+        if name in registered:
+            found.add(name)
+    return found
+
+
+def _workflow_bundle() -> tuple[str, str, set[str]]:
+    ci_text = CI_YML.read_text(encoding="utf-8")
+    assurance_text = ASSURANCE_YML.read_text(encoding="utf-8")
+    return ci_text, assurance_text, _registered_markers()
 
 
 def test_comment_lane_markers_have_a_selecting_job() -> None:
-    """Every marker called a 'lane' in ci.yml must be selected on by a job.
+    """Every registered marker called a 'lane' in ci.yml must have a selecting job.
 
     Fails when a comment calls a marker a lane while no job's -m expression
-    selects on it — the comment misleads a maintainer into thinking the
-    marker controls CI routing.
+    positively selects on it — the comment misleads a maintainer into thinking
+    the marker controls CI routing.
     """
-    ci_text = CI_YML.read_text(encoding="utf-8")
-    commented_lanes = _comment_lane_markers(ci_text)
-    job_lanes = _job_lane_markers(ci_text)
-    orphans = commented_lanes - job_lanes
+    ci_text, assurance_text, registered = _workflow_bundle()
+    assert "slow" in registered, "slow must remain registered as an advisory marker"
+    commented = _comment_lane_markers(ci_text, registered)
+    selected = _job_selected_markers(ci_text, assurance_text)
+    orphans = commented - selected
     assert not orphans, (
         f"ci.yml comments call these markers 'lane' but no job selects on them: "
         f"{sorted(orphans)}. Either add a job or remove the 'lane' phrasing."
@@ -68,29 +100,27 @@ def test_comment_lane_markers_have_a_selecting_job() -> None:
 
 
 def test_registered_markers_called_lane_are_selected() -> None:
-    """Control: a fixture ci.yml saying 'slow lane' with the current expression
-    goes red; 'calibration lane' stays green because a job selects on it.
-    """
-    current_ci = CI_YML.read_text(encoding="utf-8")
+    """Controls: 'slow lane' goes red; calibration and assurance lanes stay green."""
+    ci_text, assurance_text, registered = _workflow_bundle()
+    selected = _job_selected_markers(ci_text, assurance_text)
+    assert "calibration" in selected, "calibration job must select on -m calibration"
+    assert "assurance" in selected, "assurance job must select on -m assurance"
+    assert "slow" not in selected, "no job may select on slow (advisory only)"
 
-    # Control A: inject "slow lane" into a comment — slow is registered but no
-    # job selects on it, so the check must catch it.
-    fixture_a = current_ci + "\n    # thin the slow lane instead\n"
-    assert "slow lane" in fixture_a, "control fixture did not receive 'slow lane'"
-
-    commented_a = _comment_lane_markers(fixture_a)
-    job_a = _job_lane_markers(fixture_a)
-    orphans_a = commented_a - job_a
-    assert "slow" in orphans_a, (
-        f"control A should catch 'slow' as orphaned lane, got orphans={sorted(orphans_a)}"
+    fixture_slow = ci_text + "\n    # thin the slow lane instead\n"
+    orphans_slow = _comment_lane_markers(fixture_slow, registered) - selected
+    assert "slow" in orphans_slow, (
+        f"control A should catch 'slow' as orphaned lane, got orphans={sorted(orphans_slow)}"
     )
 
-    # Control B: inject "calibration lane" — calibration IS selected on by the
-    # calibration job, so it must NOT be flagged as an orphan.
-    fixture_b = current_ci + "\n    # thin the calibration lane instead\n"
-    commented_b = _comment_lane_markers(fixture_b)
-    job_b = _job_lane_markers(fixture_b)
-    orphans_b = commented_b - job_b
-    assert "calibration" not in orphans_b, (
-        f"control B should pass for 'calibration' (a real lane), got orphans={sorted(orphans_b)}"
+    fixture_cal = ci_text + "\n    # thin the calibration lane instead\n"
+    orphans_cal = _comment_lane_markers(fixture_cal, registered) - selected
+    assert "calibration" not in orphans_cal, (
+        f"control B should pass for 'calibration', got orphans={sorted(orphans_cal)}"
+    )
+
+    fixture_as = ci_text + "\n    # the assurance lane runs on a schedule\n"
+    orphans_as = _comment_lane_markers(fixture_as, registered) - selected
+    assert "assurance" not in orphans_as, (
+        f"control C should pass for 'assurance', got orphans={sorted(orphans_as)}"
     )
