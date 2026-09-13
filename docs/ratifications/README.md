@@ -74,3 +74,15 @@ the two parsers are a deliberate differential pair.
 10. Post-launch amendments (run_ids, SME upgrades).
 11. Historical-classification obligation (first Gate-1 record only; see
     above).
+
+## Mirror records (MIRROR)
+
+Mirrors of ratified Notion pages live here alongside the row-pick ledger, named
+`MIRROR-NNNN-<slug>.md`. Mirrors are a distinct record kind with a distinct
+glob (`MIRROR-*.md`), checked by **DC-17** rather than DC-12. The `RAT-*.md`
+ledger glob does not match them, and DC-12 does not parse them.
+
+A mirror records schema additions from a ratified external page. Each addition
+carries a `landed_as:` field naming the SERS schema key or source symbol that
+implements it, or the literal `UNLANDED` with a ticket number. DC-17 checks
+that landed symbols exist and that UNLANDED rows name open tickets.
