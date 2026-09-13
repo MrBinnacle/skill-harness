@@ -484,7 +484,7 @@ def _subject_identity_section(receipt: Mapping[str, Any]) -> str:
             prose = _string_field(source, "prose_path", "")
         pointer = "subject not recorded in this receipt"
         if prose:
-            pointer += f"; the prose source may name it ({safe(prose)})"
+            pointer += f"; the prose source may name it ({prose})"
         return (
             '<section aria-labelledby="subject-identity">\n'
             '  <h2 id="subject-identity">Subject identity</h2>\n'

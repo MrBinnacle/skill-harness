@@ -19,11 +19,19 @@ import json
 from pathlib import Path
 from typing import Any
 
-from skill_harness.sitegen.render import _subject_identity_section, render_skill_page
+from skill_harness.sitegen.render import (
+    ABSENT_TEXT,
+    _subject_identity_section,
+    render_skill_page,
+)
 
 _SCHEMA: dict[str, Any] = json.loads(Path("docs/sers/sers.schema.json").read_text(encoding="utf-8"))
 
 _MARKER = "test-build-marker"
+
+_EXTRACTOR_MODEL = "fixture-extractor-model"
+_PROMPT_FP = "fixture-prompt-fp"
+_SCHEMA_FP = "fixture-schema-fp"
 
 _MINIMAL_RECEIPT: dict[str, Any] = {
     "sers_version": "1.0.0",
@@ -39,9 +47,9 @@ _MINIMAL_RECEIPT: dict[str, Any] = {
         "aux_tokens": {"refusal": "not_applicable"},
     },
     "instrument_identity": {
-        "extractor_model": "test",
-        "prompt_fingerprint": "a",
-        "schema_fingerprint": "b",
+        "extractor_model": _EXTRACTOR_MODEL,
+        "prompt_fingerprint": _PROMPT_FP,
+        "schema_fingerprint": _SCHEMA_FP,
     },
     "source": {"prose_path": "README.md"},
     "summary": "Test receipt.",
@@ -101,44 +109,59 @@ def test_subject_identity_section_v14_renders_subject_model() -> None:
     """AC1: 1.4.0 receipt renders subject_model in the subject identity section."""
     receipt = _v14_receipt()
     html = _subject_identity_section(receipt)
-    assert "anthropic/claude-sonnet-5" in html
-    assert "subject_model" in html
+    assert "<dt>subject_model</dt><dd><code>anthropic/claude-sonnet-5</code></dd>" in html
     assert "Subject identity" in html
 
 
 def test_subject_identity_section_v14_renders_all_fields() -> None:
-    """AC1: 1.4.0 receipt renders all identity fields."""
+    """AC1: 1.4.0 receipt renders all identity field values, not only keys."""
     receipt = _v14_receipt()
     html = _subject_identity_section(receipt)
-    assert "skill_id" in html
-    assert "harness_version" in html
-    assert "metric_version" in html
-    assert "implementation_hash" in html
-    assert "arms" in html
+    assert f"<dt>skill_id</dt><dd><code>{'aa' * 32}</code></dd>" in html
+    assert "<dt>harness_version</dt><dd><code>0.3.0</code></dd>" in html
+    assert "<dt>metric_version</dt><dd><code>0.4.1</code></dd>" in html
+    assert f"<dt>implementation_hash</dt><dd><code>{'bb' * 32}</code></dd>" in html
+    assert "<dt>arms</dt><dd><code>null, full</code></dd>" in html
 
 
 def test_subject_identity_section_v11_shows_subject_model_absent() -> None:
     """AC2: 1.1.0 receipt shows subject_model absent, not a claim."""
     receipt = _v11_receipt()
     html = _subject_identity_section(receipt)
-    assert "subject_model" in html
-    assert "absent from this receipt" in html
-    # The other fields should render with values
-    assert "cc" * 32 in html
-    assert "0.3.0" in html
+    assert f"<dt>subject_model</dt><dd><code>{ABSENT_TEXT}</code></dd>" in html
+    assert f"<dt>skill_id</dt><dd><code>{'cc' * 32}</code></dd>" in html
+    assert "<dt>harness_version</dt><dd><code>0.3.0</code></dd>" in html
 
 
 def test_subject_identity_section_v10_renders_pointer() -> None:
     """AC3: 1.0.0 receipt renders a compact pointer, not silence."""
     receipt = _MINIMAL_RECEIPT
     html = _subject_identity_section(receipt)
-    assert "subject not recorded" in html
-    assert "README.md" in html
+    assert "subject not recorded in this receipt" in html
+    assert "the prose source may name it (README.md)" in html
+    assert ABSENT_TEXT not in html
+
+
+def test_subject_identity_section_v10_escapes_prose_path_once() -> None:
+    """AC3: prose_path is HTML-escaped once, never double-escaped."""
+    receipt = dict(_MINIMAL_RECEIPT)
+    receipt["source"] = {"prose_path": "docs/a&b.md"}
+    html = _subject_identity_section(receipt)
+    assert "docs/a&amp;b.md" in html
+    assert "docs/a&amp;amp;b.md" not in html
 
 
 # ---------------------------------------------------------------------------
 # render_skill_page integration
 # ---------------------------------------------------------------------------
+
+
+def _assert_instrument_identity_unchanged(page: str) -> None:
+    """Instrument identity fields are not relabelled, moved, or dropped (#490 brief)."""
+    assert "Instrument identity" in page
+    assert f"<dt>extractor_model</dt><dd><code>{_EXTRACTOR_MODEL}</code></dd>" in page
+    assert f"<dt>prompt_fingerprint</dt><dd><code>{_PROMPT_FP}</code></dd>" in page
+    assert f"<dt>schema_fingerprint</dt><dd><code>{_SCHEMA_FP}</code></dd>" in page
 
 
 def test_full_render_v14_shows_subject_identity_section() -> None:
@@ -152,6 +175,7 @@ def test_full_render_v14_shows_subject_identity_section() -> None:
     )
     assert "Subject identity" in page
     assert "anthropic/claude-sonnet-5" in page
+    _assert_instrument_identity_unchanged(page)
 
 
 def test_full_render_v11_shows_subject_identity_section() -> None:
@@ -164,8 +188,8 @@ def test_full_render_v11_shows_subject_identity_section() -> None:
         marker=_MARKER,
     )
     assert "Subject identity" in page
-    assert "absent from this receipt" in page
-    assert "subject_model" in page
+    assert f"<dt>subject_model</dt><dd><code>{ABSENT_TEXT}</code></dd>" in page
+    _assert_instrument_identity_unchanged(page)
 
 
 def test_full_render_v10_shows_subject_pointer() -> None:
@@ -178,8 +202,9 @@ def test_full_render_v10_shows_subject_pointer() -> None:
         marker=_MARKER,
     )
     assert "Subject identity" in page
-    assert "subject not recorded" in page
+    assert "subject not recorded in this receipt" in page
     assert "README.md" in page
+    _assert_instrument_identity_unchanged(page)
 
 
 def test_v14_receipt_does_not_render_pointer() -> None:
@@ -204,3 +229,17 @@ def test_v11_receipt_does_not_render_pointer() -> None:
         marker=_MARKER,
     )
     assert "subject not recorded" not in page
+
+
+def test_two_identity_sections_are_distinguishable() -> None:
+    """The two sections stay labelled for their roles without reading values."""
+    page = render_skill_page(
+        skill_name="test-skill",
+        receipt=_v14_receipt(),
+        evidence=_evidence(),
+        schema=_SCHEMA,
+        marker=_MARKER,
+    )
+    assert page.index("Instrument identity") < page.index("Subject identity")
+    assert 'id="instrument-identity"' in page
+    assert 'id="subject-identity"' in page
