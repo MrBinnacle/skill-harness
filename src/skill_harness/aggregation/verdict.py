@@ -20,12 +20,21 @@ Two data paths feed a verdict (per the v0.2 pre-registration):
   Path B — paired Full-vs-Null (`ClauseStatus`). Launches only when the screen
     shows the skill has room to matter. FIRING TRIGGER: the first task whose Null
     screen returns p0 < 1 (real-workload or engineered) — that is the first skill
-    with epochs the skill could actually improve. Has NEVER fired to date: every
-    screen run so far ceilings at p0 = 1.00 (per-record history in
-    `docs/observations/`; dispositions stand as dated decisions), so no paired
-    run has been warranted. The mapping is coded and $0-validated (7/7
-    oracle-discrimination cases on the git-pull fixture) but unexercised on live
-    paired data. `paired_verdict()` maps it.
+    with epochs the skill could actually improve. `paired_verdict()` has no
+    production caller under `src/`: the verdict layer's live callers are
+    `screen_verdict` (called from `cli/main.py`) and `matched_gate2_verdict`
+    (called from `cli/paired_gate2.py` and `aggregation/matched_bridge.py`); no
+    code path mints a verdict through `paired_verdict`. Live paired data does
+    exist — the sized run recorded at
+    `docs/sers/receipts/gitpull-paired-n32-2026-09-03-sized.json` (RAT-0001,
+    git-pull-rebase-trap, decided 2026-09-03) returned CANT_TELL_YET with both
+    arms passing every epoch — but that verdict was hand-encoded under the #403
+    hazard-not-met ruling, not minted by `paired_verdict` (the hazard was never
+    met, so the paired mapping was never exercised). It came through neither
+    Path B nor Path C. The mapping is coded and $0-validated (7/7
+    oracle-discrimination cases on the git-pull fixture) but has produced no
+    live KEEP or CUT; whether to wire `paired_verdict` to a caller or remove it
+    is a separate decision, out of scope here. `paired_verdict()` maps it.
 
 Threshold provenance (do NOT silently retune — operator-accepted values decision):
   The instrument detects TRANSFORMATIVE skills only. Under arm-independence the
@@ -357,8 +366,12 @@ def paired_verdict(
 ) -> VerdictResult:
     """Map a paired-run terminal ClauseStatus to a keep/cut verdict.
 
-    See rules B1-B4 in the module docstring. Path B has never fired to date; this
-    mapping is prospective. ``scope`` is the registered claim boundary the
+    See rules B1-B4 in the module docstring. This function has no production
+    caller under `src/`: no code path mints a verdict through it. Live paired
+    data exists (the sized receipt under `docs/sers/receipts/`, decided
+    2026-09-03 under RAT-0001), but its CANT_TELL_YET was hand-encoded under
+    the #403 hazard-not-met ruling rather than produced here, so this mapping
+    is prospective and $0-validated only. ``scope`` is the registered claim boundary the
     verdict carries; omit it ONLY for pre-registry observations.
 
     ``pi_c_hat``..``pi_c_ci_high`` carry the invocation-rate stratifier from the
