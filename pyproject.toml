@@ -152,7 +152,7 @@ filterwarnings = ["error"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-extend-exclude = ["fuzz/corpus", "fuzz/crashes", "fuzz/artifacts"]
+extend-exclude = ["fuzz/corpus", "fuzz/crashes", "fuzz/artifacts", "prototypes"]
 
 [tool.ruff.lint]
 select = [
