@@ -101,18 +101,44 @@ class TestEvidenceRepoSurface:
             "Banned names found:\n" + "\n".join(f"  {v}" for v in violations)
         )
 
-    def test_expected_module_count(self) -> None:
-        """Exactly 13 table modules (plus optionally __init__.py) must exist.
+    def test_expected_module_set(self) -> None:
+        """The evidence table modules are exactly the registered set.
 
-        10 original A24 table modules + screens.py (migration 0501: the Stage-0
-        Null-only screen store, screen_runs/screen_trials) + task_frontier.py
-        (migration 0700: the calibration/confirmation/matched phase partition)
-        + metric_identity.py (migration 0800: the #209 implementation-identity
-        bookkeeping, metric_semantic_digests/metric_implementation_restamps).
+        A tripwire, deliberately: a new evidence table changes the storage
+        surface, so it must not appear here unreviewed. Adding a module means
+        adding its name below and saying in the commit why the table exists.
+
+        This asserts the SET rather than a count. A count reports only that the
+        total moved and leaves the reader to work out which module did it, and
+        it is blind to a rename, which keeps the total intact while changing the
+        surface. Naming the members costs one line per module and makes the
+        failure message say exactly what changed.
         """
         assert EVIDENCE_REPO_DIR.exists(), f"directory missing: {EVIDENCE_REPO_DIR}"
-        module_files = [f for f in EVIDENCE_REPO_DIR.glob("*.py") if f.name != "__init__.py"]
-        assert len(module_files) == 13, (
-            f"Expected 13 evidence table modules, found {len(module_files)}: "
-            + str([f.name for f in module_files])
+        registered = {
+            # 10 original A24 table modules.
+            "calibration_events.py",
+            "clauses.py",
+            "confound_events.py",
+            "frozen_cases.py",
+            "judges.py",
+            "metric_versions.py",
+            "oracle_verdicts.py",
+            "runs.py",
+            "samples.py",
+            "skills.py",
+            # migration 0501: the Stage-0 Null-only screen store.
+            "screens.py",
+            # migration 0700: the calibration/confirmation/matched phase partition.
+            "task_frontier.py",
+            # migration 0800: #209 implementation-identity bookkeeping.
+            "metric_identity.py",
+            # #501: structural outcome covariates, recorded and never an oracle.
+            "structural_covariates.py",
+        }
+        found = {f.name for f in EVIDENCE_REPO_DIR.glob("*.py") if f.name != "__init__.py"}
+        assert found == registered, (
+            "Evidence table modules differ from the registered set.\n"
+            f"  unregistered on disk: {sorted(found - registered)}\n"
+            f"  registered but absent: {sorted(registered - found)}"
         )
