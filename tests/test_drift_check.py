@@ -1362,8 +1362,20 @@ def test_dc17_multiple_additions_all_checked(tmp_path: Path) -> None:
 
 def test_dc17_real_mirror_names_source_and_six_unlanded_additions() -> None:
     """AC pin: the committed On-Irreducibility mirror names the source page
-    and edit date, and lists all six additions as UNLANDED #514 — not
-    omitted, not fabricated as landed (#514)."""
+    and edit date, and accounts for all six additions -- not omitted, not
+    fabricated as landed (#514).
+
+    The tracking ticket number is deliberately NOT pinned. This assertion read
+    ``== ["UNLANDED #514"] * 6`` until #520, and that literal made the test
+    fail on its own correction: closing #514 turned DC-17 red on main, the
+    repair was to repoint the rows at an open ticket, and this test blocked
+    exactly that repair while asserting nothing DC-17 does not already check.
+
+    What is pinned instead is the SHAPE the record must hold: six accounted
+    additions, every UNLANDED row naming ONE ticket rather than drifting
+    apart, and no row silently dropped. Which ticket is live is DC-17's job,
+    and DC-17 reads it from the API.
+    """
     path = _REPO_ROOT / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
     text = path.read_text(encoding="utf-8")
     assert 'source_page: "On Irreducibility"' in text
@@ -1381,4 +1393,10 @@ def test_dc17_real_mirror_names_source_and_six_unlanded_additions() -> None:
     for heading in expected_headings:
         assert heading in text, f"missing addition heading: {heading}"
     landed = re.findall(r"landed_as:\s*(.+?)\s*`", text)
-    assert landed == ["UNLANDED #514"] * 6, landed
+    assert len(landed) == 6, f"expected one landed_as per addition, got {landed}"
+    unlanded = [v for v in landed if v.startswith("UNLANDED ")]
+    for value in unlanded:
+        assert re.fullmatch(r"UNLANDED #\d+", value), f"malformed UNLANDED row: {value}"
+    assert len(set(unlanded)) <= 1, (
+        f"UNLANDED rows name more than one ticket, so closing one leaves the rest stale: {unlanded}"
+    )

@@ -47,36 +47,36 @@ The causal chain stages: eligible situation, availability, invocation,
 adherence, outcome. A failed outcome does not identify a failed skill when
 invocation did not occur.
 
-- `landed_as: UNLANDED #514`
+- `landed_as: UNLANDED #520`
 
 ### 2. The tested component set
 
 Which components of the skill were under test in this measurement.
 
-- `landed_as: UNLANDED #514`
+- `landed_as: UNLANDED #520`
 
 ### 3. The implementation family and alternatives considered
 
 What implementation family the skill belongs to and what alternatives were
 considered.
 
-- `landed_as: UNLANDED #514`
+- `landed_as: UNLANDED #520`
 
 ### 4. The cost vector and dominance rule
 
 Cost dimensions and the rule for dominance comparison across realizations.
 
-- `landed_as: UNLANDED #514`
+- `landed_as: UNLANDED #520`
 
 ### 5. The claim scope and disturbance set
 
 The scope of the behavioral claim and the set of disturbances under which it
 holds.
 
-- `landed_as: UNLANDED #514`
+- `landed_as: UNLANDED #520`
 
 ### 6. The retest triggers and expiry state
 
 What triggers a retest and the expiry conditions for a result.
 
-- `landed_as: UNLANDED #514`
+- `landed_as: UNLANDED #520`
