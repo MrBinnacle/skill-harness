@@ -1170,9 +1170,9 @@ def test_paired_verdict_carries_pi_c_line() -> None:
     """AC5: Path B paired_verdict rationale carries the pi_c line per #36
     adoption 4 display rule (`pi_c_hat = k/n [95% CI lo, hi]`).
 
-    Path B has no production caller yet (module docstring: never fired). This
-    pins the mapping function the eventual caller must use; it does not claim
-    a live mint already attaches the line.
+    Path B has no production caller yet (module docstring: no caller under
+    `src/`). This pins the mapping function the eventual caller must use; it
+    does not claim a live mint already attaches the line.
     """
     r = paired_verdict(
         ClauseStatus.PASSED,
