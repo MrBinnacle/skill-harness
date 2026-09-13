@@ -1400,3 +1400,33 @@ def test_dc17_real_mirror_names_source_and_six_unlanded_additions() -> None:
     assert len(set(unlanded)) <= 1, (
         f"UNLANDED rows name more than one ticket, so closing one leaves the rest stale: {unlanded}"
     )
+
+
+def test_dc17_additions_2_and_4_declined_with_reason() -> None:
+    """AC (#525): additions 2 and 4 carry a decline with its stated reason,
+    not a bare UNLANDED deferral. Each decline names a reversal condition
+    specific enough that a reader can tell what would reverse it.
+
+    The prose sections for additions 2 and 4 must contain 'Declined'
+    (case-insensitive) and 'revisit' (case-insensitive), pinning the two
+    acceptance criteria that are not otherwise checked by DC-17 or by the
+    shape test above.
+    """
+    path = _REPO_ROOT / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
+    text = path.read_text(encoding="utf-8")
+
+    def _section(heading: str) -> str:
+        """Return the text between one heading and the next ### or end."""
+        pattern = re.compile(rf"(^{re.escape(heading)}\b.*?)(?=^### |\Z)", re.MULTILINE | re.DOTALL)
+        m = pattern.search(text)
+        assert m, f"heading {heading!r} not found"
+        return m.group(1)
+
+    for heading in ("### 2. The tested component set", "### 4. The cost vector and dominance rule"):
+        section = _section(heading)
+        assert re.search(r"[Dd]eclined", section), (
+            f"{heading}: no 'Declined' found in section prose"
+        )
+        assert re.search(r"[Rr]evisit", section), (
+            f"{heading}: no reversal condition ('revisit') found in section prose"
+        )
