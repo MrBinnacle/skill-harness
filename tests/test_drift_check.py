@@ -17,6 +17,8 @@ tests/test_semantics.py — NOT an allowlist entry; the allowlist stays empty).
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -84,10 +86,29 @@ _LIVE_SURFACES = (
 )
 
 
-def _run(root: Path | None = None) -> subprocess.CompletedProcess[str]:
+def _run(
+    root: Path | None = None,
+    *,
+    ticket_states: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run the drift check as a subprocess.
+
+    ``ticket_states`` fills DC-17's injected seam, so a control that asserts
+    what a closed ticket does makes no network call. A control that reaches
+    api.github.com proves the network worked; it does not prove the rule.
+
+    The DEFAULT holds every ticket open. DC-17 now fails closed on a ticket
+    state it cannot read, and the fixture tree carries a live ``UNLANDED
+    #514`` row, so without this default every drift-check test in this file,
+    including the ones about token bans and estimand vocabulary, would go red
+    whenever api.github.com was unreachable. The live lookup has its own
+    tests; it is not every other test's dependency.
+    """
     cmd = [sys.executable, str(_SCRIPT)]
     if root is not None:
         cmd += ["--root", str(root)]
+    states = {"*": "open"} if ticket_states is None else ticket_states
+    env = {**os.environ, "SKILL_HARNESS_TICKET_STATES": json.dumps(states)}
     return subprocess.run(
         cmd,
         capture_output=True,
@@ -95,6 +116,7 @@ def _run(root: Path | None = None) -> subprocess.CompletedProcess[str]:
         encoding="utf-8",
         cwd=str(_REPO_ROOT),
         check=False,
+        env=env,
     )
 
 
@@ -1166,30 +1188,107 @@ def test_dc17_nonexistent_symbol_blocks(tmp_path: Path) -> None:
     )
 
 
-def test_dc17_unlanded_closed_ticket_blocks(tmp_path: Path) -> None:
-    """Control: an UNLANDED row naming a closed ticket must turn DC-17 red.
+def _drop_live_mirror(root: Path) -> None:
+    """Remove the real MIRROR record the fixture copies in.
 
-    Uses the repo's issue #1 (closed). Reads issue state through the public
-    GitHub API — the same path CI exercises — so the control is not skipped
-    when ``gh`` is unauthenticated.
+    It carries ``UNLANDED #514``, so leaving it in place makes every DC-17
+    case below depend on a second ticket's state as well as the one it is
+    actually testing.
     """
-    root = _make_tree(tmp_path)
-    # Drop the live mirror (UNLANDED #514, open) so only the closed-ticket
-    # row is under test; otherwise a network miss on #1 could be masked by
-    # a green sibling file.
     live = root / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
     if live.exists():
         live.unlink()
+
+
+def test_dc17_unlanded_closed_ticket_blocks(tmp_path: Path) -> None:
+    """Control: an UNLANDED row naming a closed ticket must turn DC-17 red.
+
+    The ticket state is INJECTED, not fetched. The previous version of this
+    control read issue #1 from api.github.com, so it asserted that the network
+    worked and that the rule held, and could not tell those apart. It went red
+    on one of four CI cells when the unauthenticated rate budget ran out
+    (PR #518), which reads as flakiness and invites a re-run rather than a fix.
+    """
+    root = _make_tree(tmp_path)
+    _drop_live_mirror(root)
     _write_mirror_record(
         root,
         additions=("### Addition 1\n\n- `landed_as: UNLANDED #1`\n"),
     )
-    r = _run(root)
+    r = _run(root, ticket_states={"1": "closed"})
     assert r.returncode == 1, r.stdout + r.stderr
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any(
         "DC-17" in line and "closed ticket" in line and "#1" in line for line in fail_lines
     ), r.stdout
+
+
+def test_dc17_unlanded_open_ticket_is_green(tmp_path: Path) -> None:
+    """The other arm of the same control: an OPEN ticket must NOT block.
+
+    Without this arm, a DC-17 that failed on every UNLANDED row whatever its
+    state would satisfy the closed-ticket control above while measuring
+    nothing about ticket state at all.
+    """
+    root = _make_tree(tmp_path)
+    _drop_live_mirror(root)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: UNLANDED #1`\n"),
+    )
+    r = _run(root, ticket_states={"1": "open"})
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc17_unreadable_ticket_state_blocks(tmp_path: Path) -> None:
+    """Control: a ticket state that cannot be READ must turn DC-17 red.
+
+    This is the defect that opened PR #518 red. ``_check_ticket_closed``
+    returned ``None`` on any network error and the caller tested ``is True``,
+    so an unreachable API produced a clean run. "Could not read" and "no
+    problem found" are different findings, and the check now says which one
+    it has.
+    """
+    root = _make_tree(tmp_path)
+    _drop_live_mirror(root)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: UNLANDED #1`\n"),
+    )
+    r = _run(root, ticket_states={"1": "unreadable"})
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "unreadable" in line and "#1" in line for line in fail_lines), (
+        r.stdout
+    )
+
+
+def test_dc17_malformed_seam_is_unreadable_not_absent(tmp_path: Path) -> None:
+    """A malformed seam value must block, never fall through to the network.
+
+    A test that believes it is isolated and silently is not is the whole class
+    of defect this seam exists to end, so a typo in the seam is treated as
+    unreadable rather than as an absent override.
+    """
+    root = _make_tree(tmp_path)
+    _drop_live_mirror(root)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: UNLANDED #1`\n"),
+    )
+    env = {**os.environ, "SKILL_HARNESS_TICKET_STATES": "{not json"}
+    r = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--root", str(root)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(_REPO_ROOT),
+        check=False,
+        env=env,
+    )
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "unreadable" in line for line in fail_lines), r.stdout
 
 
 def test_dc17_zero_mirror_files_blocks(tmp_path: Path) -> None:

@@ -243,7 +243,15 @@ jobs:
       # Declarative contract table (#43/#53): pass-rule thresholds, sampling
       # schedule, token bans, estimand vocabulary, registered claim sentences.
       # Green output prints exactly what is covered — never more (F7).
+      # DC-17 reads issue state from api.github.com and now FAILS CLOSED when
+      # it cannot: "could not read" and "no problem found" are different
+      # findings. Unauthenticated, that lookup shares a 60-per-hour budget with
+      # every other job on the runner's IP, which is how PR #518 went red on
+      # exactly one of four cells. The token raises the budget and is the same
+      # one the release-gate job below already takes.
       - name: Run drift check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/drift_check.py
 
   release-gate:

@@ -175,9 +175,9 @@ class MirrorRecordContract:
     implementing it, or the literal ``UNLANDED`` with a ticket number.
 
     The check fails when a landed symbol does not exist under ``docs/sers/``
-    or ``src/skill_harness/``, or when an UNLANDED row names a closed ticket.
-    Zero records is drift: the mirror surface going missing means the
-    subsumption carrier is gone."""
+    or ``src/skill_harness/``, when an UNLANDED row names a closed ticket, or
+    when that ticket's state cannot be read at all. Zero records is drift: the
+    mirror surface going missing means the subsumption carrier is gone."""
 
     ledger_dir: str
     search_roots: tuple[str, ...]
@@ -1094,6 +1094,25 @@ _UNLANDED_RE = re.compile(r"^UNLANDED\s+#(\d+)$")
 _MIRROR_TICKET_API = "https://api.github.com/repos/MrBinnacle/skill-harness/issues"
 # Per-process cache so six UNLANDED rows naming the same ticket make one GET.
 _TICKET_STATE_CACHE: dict[str, bool | None] = {}
+# Injected seam for the closed-ticket control. See _ticket_state_override.
+_TICKET_STATE_SEAM_ENV = "SKILL_HARNESS_TICKET_STATES"
+
+
+class _Sentinel:
+    """A distinguishable non-value, so 'not in the seam' and 'in the seam and
+    unreadable' stay two findings rather than one."""
+
+    __slots__ = ("_name",)
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return self._name
+
+
+_ABSENT = _Sentinel("_ABSENT")
+_UNREADABLE = _Sentinel("_UNREADABLE")
 
 
 def _check_mirror_records(root: Path, contract: MirrorRecordContract) -> list[str]:
@@ -1103,7 +1122,7 @@ def _check_mirror_records(root: Path, contract: MirrorRecordContract) -> list[st
     Fails when:
     - The ledger dir or its README is missing (registered surface gone).
     - A landed symbol does not exist under the search roots.
-    - An UNLANDED row names a closed ticket.
+    - An UNLANDED row names a closed ticket, or its state cannot be read.
     - The glob matches zero files (a check that scans nothing passes trivially).
     - A MIRROR file has zero landed_as entries (same trivial-pass hole).
     """
@@ -1141,6 +1160,11 @@ def _check_mirror_records(root: Path, contract: MirrorRecordContract) -> list[st
                 is_closed = _check_ticket_closed(ticket_num)
                 if is_closed is True:
                     failures.append(f"{rel}: UNLANDED #{ticket_num} names a closed ticket")
+                elif is_closed is None:
+                    failures.append(
+                        f"{rel}: UNLANDED #{ticket_num} ticket state unreadable "
+                        "(the closed-ticket control could not run)"
+                    )
             elif not _symbol_exists(root, landed, contract.search_roots):
                 failures.append(
                     f"{rel}: landed_as {landed!r} does not exist under "
@@ -1149,18 +1173,64 @@ def _check_mirror_records(root: Path, contract: MirrorRecordContract) -> list[st
     return failures
 
 
+def _ticket_state_override(ticket_num: str) -> bool | _Sentinel:
+    """Read one ticket's state from the injected seam, or return ``_ABSENT``.
+
+    The seam exists so the closed-ticket CONTROL can be proven without a
+    network call. A control that reaches api.github.com proves the network
+    worked, not that a closed ticket blocks: PR #518 went red on exactly one
+    of four Test cells because the lookup failed there and nowhere else,
+    which reads as flakiness and invites a re-run.
+
+    ``SKILL_HARNESS_TICKET_STATES`` holds a JSON object mapping ticket number
+    to ``"open"``, ``"closed"`` or ``"unreadable"``. The key ``"*"`` sets the
+    state for every ticket the table does not name, so one variable can take
+    a whole test run off the network rather than each case listing the
+    tickets its fixture happens to carry. A malformed value is itself
+    unreadable rather than absent, so a typo in the seam cannot silently
+    restore the live lookup under a test that believes it is isolated.
+    """
+    raw = os.environ.get(_TICKET_STATE_SEAM_ENV)
+    if not raw:
+        return _ABSENT
+    try:
+        table = json.loads(raw)
+    except ValueError:
+        return _UNREADABLE
+    if not isinstance(table, dict):
+        return _UNREADABLE
+    if ticket_num in table:
+        value = table[ticket_num]
+    elif "*" in table:
+        value = table["*"]
+    else:
+        return _ABSENT
+    if value == "closed":
+        return True
+    if value == "open":
+        return False
+    return _UNREADABLE
+
+
 def _check_ticket_closed(ticket_num: str) -> bool | None:
     """True if the issue is closed, False if open, None if unread.
 
     Uses the public GitHub issues API (same pattern as release_gate G7/G8),
-    not ``gh``: the drift-check CI job does not receive GITHUB_TOKEN, and
-    unauthenticated ``gh`` cannot read issue state, which left the closed-
-    ticket control dead on every green CI run. Public issue state is readable
-    without a token; GITHUB_TOKEN is attached when present so shared runners
-    do not burn the unauthenticated rate budget. Fail-open only when the
-    status cannot be read (network/API error) — never when the issue is
-    closed.
+    not ``gh``: unauthenticated ``gh`` cannot read issue state, which left the
+    closed-ticket control dead on every green CI run. GITHUB_TOKEN is attached
+    when present, and the drift-check job now receives it, so the lookup does
+    not spend the 60-per-hour unauthenticated budget a shared runner shares
+    with every other job on that IP.
+
+    ``None`` means the state could not be read. It is NOT a pass: the caller
+    treats it as a failure. "Could not read" and "no problem found" are
+    different findings and this function no longer collapses them.
     """
+    override = _ticket_state_override(ticket_num)
+    if override is _UNREADABLE:
+        return None
+    if not isinstance(override, _Sentinel):
+        return override
     if ticket_num in _TICKET_STATE_CACHE:
         return _TICKET_STATE_CACHE[ticket_num]
     state: bool | None
