@@ -22,6 +22,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPT = _REPO_ROOT / "scripts" / "drift_check.py"
 
@@ -41,6 +43,7 @@ _LIVE_IDS = (
     "DC-14",
     "DC-15",
     "DC-16",
+    "DC-17",
     "AC-1",
 )
 _PLANNED_IDS = ("DC-13",)
@@ -74,6 +77,7 @@ _LIVE_SURFACES = (
     "docs/PRD.md",
     "docs/assurance/calibration-report.md",
     "docs/ratifications/README.md",
+    "docs/ratifications/MIRROR-0001-on-irreducibility.md",
     "README.md",
     # DC-16 reads the vendored word list; without it every synthetic tree
     # would fail on a missing manifest instead of the lane under test.
@@ -1102,5 +1106,143 @@ def test_dc16_prints_its_scope_on_a_green_run(tmp_path: Path) -> None:
         "docs/PLAN.md",
         "docs/findings/v0.2-preregistration.md",
         "docs/findings/v0.2-reaim-gate.md",
+        "docs/ratifications/MIRROR-0001-on-irreducibility.md",
     ):
         assert any(rel in line for line in exclude_lines), r.stdout
+
+
+# ---------------------------------------------------------------------------
+# DC-17: mirror records — landed_as symbol existence + UNLANDED ticket status
+# (#514)
+# ---------------------------------------------------------------------------
+
+
+def _write_mirror_record(
+    root: Path,
+    *,
+    additions: str = "",
+    body: str = "",
+) -> None:
+    path = root / "docs" / "ratifications" / "MIRROR-0001-test-slug.md"
+    path.write_text(
+        "---\n"
+        "mirror: MIRROR-0001\n"
+        'source_page: "Test Page"\n'
+        'source_last_edited: "2026-08-11T00:00:00.000Z"\n'
+        'ratified_date: "2026-09-13"\n'
+        "status: RATIFIED\n"
+        "---\n\n"
+        "# MIRROR-0001 -- test mirror record\n\n"
+        f"{additions}\n"
+        f"{body}\n",
+        encoding="utf-8",
+    )
+
+
+def test_dc17_valid_mirror_record_is_green(tmp_path: Path) -> None:
+    """A MIRROR record where every landed_as symbol exists under the search
+    roots is green."""
+    root = _make_tree(tmp_path)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: WIN_RATE_THRESHOLD`\n"),
+    )
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc17_nonexistent_symbol_blocks(tmp_path: Path) -> None:
+    """Control: pointing one landed_as at a symbol that does not exist must
+    turn DC-17 red, naming the record and the symbol."""
+    root = _make_tree(tmp_path)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: NONEXISTENT_SYMBOL_XYZ`\n"),
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "NONEXISTENT_SYMBOL_XYZ" in line for line in fail_lines), (
+        r.stdout
+    )
+
+
+def test_dc17_unlaned_closed_ticket_blocks(tmp_path: Path) -> None:
+    """Control: an UNLANDED row naming a closed ticket must turn DC-17 red.
+
+    Uses a known-closed issue (the repo's issue #1 is typically closed).
+    Skipped when gh is not authenticated — the check passes when ticket
+    status cannot be verified (fail-open on auth absence)."""
+    # Check if gh is available and authenticated
+    result = subprocess.run(
+        ["gh", "auth", "status"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.skip("gh not authenticated — cannot verify ticket status")
+    root = _make_tree(tmp_path)
+    _write_mirror_record(
+        root,
+        additions=("### Addition 1\n\n- `landed_as: UNLANDED #1`\n"),
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line for line in fail_lines), r.stdout
+
+
+def test_dc17_zero_mirror_files_blocks(tmp_path: Path) -> None:
+    """A check that scans nothing passes trivially: DC-17 must refuse when
+    the mirror surface has zero MIRROR-*.md files."""
+    root = _make_tree(tmp_path)
+    # Remove the MIRROR file that _make_tree copies
+    mirror = root / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
+    if mirror.exists():
+        mirror.unlink()
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "no MIRROR-*.md files found" in line for line in fail_lines), (
+        r.stdout
+    )
+
+
+def test_dc17_missing_ledger_dir_blocks(tmp_path: Path) -> None:
+    """The registered surface itself going missing is drift."""
+    import shutil as _shutil
+
+    root = _make_tree(tmp_path)
+    _shutil.rmtree(root / "docs" / "ratifications")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "ledger dir missing" in line for line in fail_lines), r.stdout
+
+
+def test_dc17_printed_in_green_listing() -> None:
+    """DC-17 must appear in the OK listing on a green run."""
+    r = _run()
+    assert r.returncode == 0
+    ok_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("OK")]
+    assert any("DC-17" in line for line in ok_lines), r.stdout
+
+
+def test_dc17_multiple_additions_all_checked(tmp_path: Path) -> None:
+    """Multiple landed_as entries in one record are all checked: one valid
+    and one invalid must block."""
+    root = _make_tree(tmp_path)
+    _write_mirror_record(
+        root,
+        additions=(
+            "### Addition 1\n\n"
+            "- `landed_as: WIN_RATE_THRESHOLD`\n\n"
+            "### Addition 2\n\n"
+            "- `landed_as: TOTALLY_FAKE_SYMBOL`\n"
+        ),
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-17" in line and "TOTALLY_FAKE_SYMBOL" in line for line in fail_lines), r.stdout

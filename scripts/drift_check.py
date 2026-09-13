@@ -165,6 +165,22 @@ class CacheAwareContract:
 
 
 @dataclass(frozen=True)
+class MirrorRecordContract:
+    """DC-17 (#514): mirror records of ratified Notion pages live under
+    ``ledger_dir`` matching ``MIRROR-*.md``. Each addition carries a
+    ``landed_as:`` field naming the SERS schema key or source symbol
+    implementing it, or the literal ``UNLANDED`` with a ticket number.
+
+    The check fails when a landed symbol does not exist under ``docs/sers/``
+    or ``src/skill_harness/``, or when an UNLANDED row names a closed ticket.
+    Zero records is drift: the mirror surface going missing means the
+    subsumption carrier is gone."""
+
+    ledger_dir: str
+    search_roots: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class WordListBan:
     """DC-16 (#462): the collection's ``words_to_avoid`` list, vendored into
     ``manifest_path``, refused in every markdown file this repository TRACKS.
@@ -198,6 +214,7 @@ class LiveRow:
     rat_ledger: RatLedgerContract | None = None
     cache_aware_contract: CacheAwareContract | None = None
     word_list_ban: WordListBan | None = None
+    mirror_record: MirrorRecordContract | None = None
 
 
 @dataclass(frozen=True)
@@ -284,6 +301,10 @@ _WORD_LIST_EXCLUDED_PATHS = (
     "docs/PLAN.md",
     "docs/findings/v0.2-preregistration.md",
     "docs/findings/v0.2-reaim-gate.md",
+    # Mirror record of a ratified Notion page: the verdict block is a verbatim
+    # quote and carries a listed word ("robust"). The record is append-only
+    # by the same house convention, so the wording is immutable.
+    "docs/ratifications/MIRROR-0001-on-irreducibility.md",
 )
 
 LIVE_ROWS: tuple[LiveRow, ...] = (
@@ -662,6 +683,17 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         word_list_ban=WordListBan(
             manifest_path=_WORD_LIST_MANIFEST,
             excluded_paths=_WORD_LIST_EXCLUDED_PATHS,
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-17",
+        summary=(
+            "mirror records: each MIRROR-*.md addition has a landed_as symbol "
+            "in docs/sers/ or src/skill_harness/, or UNLANDED with an open ticket (#514)"
+        ),
+        mirror_record=MirrorRecordContract(
+            ledger_dir="docs/ratifications",
+            search_roots=("docs/sers", "src/skill_harness"),
         ),
     ),
 )
@@ -1053,6 +1085,103 @@ def _check_cache_aware(root: Path, contract: CacheAwareContract) -> list[str]:
     return failures
 
 
+_MIRROR_FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
+_MIRROR_LANDED_AS = re.compile(r"landed_as:\s*(.+?)\s*`", re.MULTILINE)
+_UNLANDED_RE = re.compile(r"^UNLANDED\s+#(\d+)$")
+
+
+def _check_mirror_records(root: Path, contract: MirrorRecordContract) -> list[str]:
+    """DC-17 (#514): each MIRROR-*.md addition carries a landed_as: field
+    naming the implementing symbol or UNLANDED with a ticket number.
+
+    Fails when:
+    - The ledger dir or its README is missing (registered surface gone).
+    - A landed symbol does not exist under the search roots.
+    - An UNLANDED row names a closed ticket.
+    - The glob matches zero files (a check that scans nothing passes trivially).
+    """
+    base = root / contract.ledger_dir
+    if not base.is_dir():
+        return [f"{contract.ledger_dir}: ledger dir missing (registered surface gone)"]
+    failures: list[str] = []
+    if not (base / "README.md").is_file():
+        failures.append(f"{contract.ledger_dir}/README.md missing (ledger conventions gone)")
+    mirror_files = sorted(base.glob("MIRROR-*.md"))
+    if not mirror_files:
+        failures.append(
+            f"{contract.ledger_dir}: no MIRROR-*.md files found "
+            "(a check that scans nothing passes trivially)"
+        )
+        return failures
+    for path in mirror_files:
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        block = _MIRROR_FRONTMATTER.match(text)
+        if block is None:
+            failures.append(f"{rel}: no leading front-matter block")
+            continue
+        for m in _MIRROR_LANDED_AS.finditer(text):
+            landed = m.group(1).strip()
+            unlaned_match = _UNLANDED_RE.match(landed)
+            if unlaned_match:
+                ticket_num = unlaned_match.group(1)
+                is_closed = _check_ticket_closed(root, ticket_num)
+                if is_closed is True:
+                    failures.append(f"{rel}: UNLANDED #{ticket_num} names a closed ticket")
+            elif not _symbol_exists(root, landed, contract.search_roots):
+                failures.append(
+                    f"{rel}: landed_as {landed!r} does not exist under "
+                    f"{' or '.join(contract.search_roots)}"
+                )
+    return failures
+
+
+def _check_ticket_closed(root: Path, ticket_num: str) -> bool | None:
+    """Check if a GitHub issue is closed. Returns True if closed, False if
+    open, None if the status cannot be determined."""
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, no shell, no user input
+            [  # noqa: S607 - partial path is intentional (gh on PATH)
+                "gh",
+                "issue",
+                "view",
+                ticket_num,
+                "--repo",
+                "MrBinnacle/skill-harness",
+                "--json",
+                "state",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=str(root),
+        )
+        if result.returncode != 0:
+            return None
+        data = json.loads(result.stdout)
+        return data.get("state") == "CLOSED"
+    except Exception:
+        return None
+
+
+def _symbol_exists(root: Path, symbol: str, search_roots: tuple[str, ...]) -> bool:
+    """Check if a symbol string exists as content in any file under the search roots."""
+    for search_root in search_roots:
+        base = root / search_root
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if symbol in text:
+                return True
+    return False
+
+
 def _run_row(root: Path, row: LiveRow) -> list[str]:
     failures: list[str] = []
     for site in row.value_sites:
@@ -1073,6 +1202,8 @@ def _run_row(root: Path, row: LiveRow) -> list[str]:
         failures.extend(_check_cache_aware(root, row.cache_aware_contract))
     if row.word_list_ban is not None:
         failures.extend(_check_word_list_ban(root, row.word_list_ban))
+    if row.mirror_record is not None:
+        failures.extend(_check_mirror_records(root, row.mirror_record))
     return failures
 
 
