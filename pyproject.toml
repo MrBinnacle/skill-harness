@@ -129,6 +129,27 @@ packages = ["src/skill_harness"]
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
+# #509, carried onto this integration branch by #510: when one test phase runs
+# past this many seconds, faulthandler dumps every thread's stack to stderr,
+# naming the running test's file and function. It does not fail the test, so it
+# cannot manufacture a red cell; it exists so a 25-minute CI overrun names its
+# cause instead of dying anonymously.
+#
+# This branch is where that matters. Every Test cell of PR #506 died at exactly
+# 25 minutes, and the annotation says only "exceeded the maximum execution
+# time". Without this key the kill is anonymous and #510 cannot be diagnosed at
+# all.
+#
+# Only faulthandler_timeout is carried here, not #509's --durations flag. A
+# killed cell never reaches session end, and --durations prints at session end,
+# so it emits nothing from precisely the run under investigation. It also lives
+# in .github/workflows/ci.yml, which PR #506 is already editing on its own
+# branch; adding it here would put two open changes on one file for no
+# diagnostic gain.
+#
+# 900s sits inside the Test cell's 25-minute ceiling and above the slowest
+# legitimate module fixture measured under coverage on main (#510).
+faulthandler_timeout = 900
 addopts = [
   "-ra",
   "--strict-markers",
