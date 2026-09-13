@@ -1,6 +1,6 @@
 extends: existence
 message: "Dashes: '%s' is not used here. Recast the sentence, or use a spaced hyphen."
-level: error
+level: warning
 nonword: true
 tokens:
   - '—'

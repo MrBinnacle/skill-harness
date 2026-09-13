@@ -29,6 +29,8 @@ _EXPECTED_ROWS = {
     "Voice",
     "Register",
     "Brevity-and-order",
+    # Hard rule 2 of the voice card (docs/README-voice-stack.md), not a table row.
+    "Dashes",
 }
 
 
