@@ -59,6 +59,7 @@ from skill_harness.aggregation.status import (
     UnmeasuredSubReason,
     derive_clause_status,
 )
+from tests._module_selection import python_modules_under
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC_ROOT = REPO_ROOT / "src"
@@ -75,7 +76,7 @@ _ALLOWLIST = {
 
 
 def _production_py_files() -> list[Path]:
-    return [p for p in SRC_ROOT.rglob("*.py") if ".sandcastle" not in p.parts]
+    return python_modules_under(SRC_ROOT)
 
 
 class TestUnpinnedInsertBan:
@@ -144,6 +145,111 @@ class TestUnpinnedInsertBan:
             f" revisit clause the allowlist question changes shape; record the"
             f" finding on #341."
         )
+
+
+def test_the_scan_finds_the_insert_call_sites_at_all() -> None:
+    """The scan must find insert_oracle_verdict calls, or every other assertion is vacuous.
+
+    A refactor that renames the function, or a walk that silently stops matching, would
+    otherwise turn this module green while guarding nothing. That is the failure this
+    repository's success-test-accepts-any-output card describes.
+    """
+    hits = [
+        p for p in _production_py_files() if _INSERT_CALL_RE.search(p.read_text(encoding="utf-8"))
+    ]
+    assert hits, (
+        "the static scan found no production call to insert_oracle_verdict. Either the "
+        "function was renamed and this guard needs updating, or the scan stopped walking "
+        "production sources. A guard that matches nothing passes everything."
+    )
+
+
+def test_module_selection_is_not_defeated_by_the_checkout_location(tmp_path: Path) -> None:
+    """A checkout that itself sits under an excluded directory name must still be scanned.
+
+    Builds run in worktrees at `<repo>/.sandcastle/worktrees/agent-issue-<n>/`. A filter that
+    tested the absolute path's components excluded every file in such a tree, so the scan
+    returned nothing and every assertion in this module passed while checking no call site.
+    The failure is reachable by location rather than by a code change, which is what makes it
+    worth a case of its own: nothing a maintainer does to the production tree can provoke it.
+    """
+    root = tmp_path / ".sandcastle" / "worktrees" / "agent-issue-482" / "src"
+    (root / "pkg").mkdir(parents=True)
+    live = root / "pkg" / "live.py"
+    live.write_text("x = 1\n", encoding="utf-8")
+
+    cached = root / "pkg" / "__pycache__" / "stale.py"
+    cached.parent.mkdir()
+    cached.write_text("x = 2\n", encoding="utf-8")
+
+    nested_build = root / ".sandcastle" / "worktrees" / "old" / "copy.py"
+    nested_build.parent.mkdir(parents=True)
+    nested_build.write_text("x = 3\n", encoding="utf-8")
+
+    found = python_modules_under(root)
+
+    assert live in found, (
+        f"the scan skipped {live}, which is a production module, because an ancestor of the "
+        "scanned root is named '.sandcastle'. The exclusion must be anchored at the root: a "
+        "scan that returns nothing inside a build worktree passes every assertion in this "
+        "module while guarding nothing."
+    )
+    assert cached not in found, (
+        f"the scan picked up {cached}. The __pycache__ exclusion must still apply to "
+        "directories inside the scanned tree."
+    )
+    assert nested_build not in found, (
+        f"the scan picked up {nested_build}. A nested build tree inside the scanned root "
+        "must still be excluded; narrowing the filter must not quietly delete the exclusion."
+    )
+
+
+def test_the_selection_filter_is_implemented_exactly_once() -> None:
+    """A second copy of the selection filter would let defect #447 recur.
+
+    #447 fixed this shape in test_value_class_call_sites_static, and it came back because
+    test_mint_path_allowlist carried its own copy that was never touched. The filter is now
+    extracted to tests._module_selection; this test asserts the extraction is complete by
+    checking that no other module-level function in the test suite implements the same
+    directory-exclusion logic.
+    """
+    import ast
+
+    seen: list[str] = []
+    # Walk every .py file under tests/ and look for module-level functions that call
+    # .relative_to(.).parts with an exclusion set — the signature pattern of the filter.
+    for path in sorted(REPO_ROOT.rglob("*.py")):
+        if path.suffix != ".py":
+            continue
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if ".sandcastle" not in source and "_EXCLUDED_DIRECTORY_NAMES" not in source:
+            continue
+        if path.name in ("_module_selection.py", "test_mint_path_allowlist.py"):
+            continue
+        try:
+            tree = ast.parse(source, filename=str(path))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            body_src = ast.get_source_segment(source, node)
+            if body_src is None:
+                continue
+            if (
+                ".relative_to(" in body_src
+                and ".parts" in body_src
+                and ("EXCLUDED" in body_src or ".sandcastle" in body_src)
+            ):
+                seen.append(f"{path.relative_to(REPO_ROOT)}:{node.name}")
+    assert not seen, (
+        f"SELECTION_FILTER_DUPLICATED: found additional directory-exclusion filters in "
+        f"{seen}. The shared implementation lives in tests._module_selection; remove the "
+        f"duplicates so defect #447 cannot recur through a second un-maintained copy."
+    )
 
 
 _DECISIVE = dict(
