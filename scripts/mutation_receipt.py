@@ -436,6 +436,7 @@ MUTANTS: tuple[Mutant, ...] = (
         "        trials, trial_false = clusters, sum(1 for value in selected if value == 1)",
         "        trials, trial_false = decisions, false_total  # mutant: all decisions",
         (_SELECTION_KILL, _SELECTION_CONTROL, _SELECTION_SHAPE_GUARD),
+    ),
     # #368 Path C: the discordant accumulator and the registered Gate-2 route.
     Mutant(
         "M-T1",
