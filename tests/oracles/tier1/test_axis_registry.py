@@ -116,8 +116,8 @@ def test_no_normalisation_at_all_not_even_a_whitespace_strip() -> None:
     The runner's pre-sampling gate and ``_score_primary_axis``'s scorer lookup
     must agree exactly. A strip here (tried, reverted) admitted a padded axis
     the raw lookup then missed, turning a safe UNMEASURED into an uncaught
-    RuntimeError mid-run. Whoever adds normalisation must fix that first, at the
-    extractor boundary; this test is the tripwire.
+    RuntimeError mid-run. Whitespace stripping lives on ``ExtractedClause``
+    (#504); this classifier must stay strict. This test is the tripwire.
     """
     assert classify_axis("  verbosity  ") is AxisScoreability.UNSCOREABLE
     assert classify_axis("\tverbosity\n") is AxisScoreability.UNSCOREABLE

@@ -197,14 +197,14 @@ class ExtractedClause(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _normalise_axis(cls, data: dict[str, Any]) -> dict[str, Any]:
+    def _normalise_axis(cls, data: Any) -> Any:
         """Strip leading/trailing whitespace from axis at the extractor boundary.
 
         Padded axes must not survive into downstream consumers. Normalising here
         keeps ``classify_axis`` strict (fail-closed on near-misses) while
         ensuring that ``" verbosity "`` and ``"verbosity"`` store identically.
         """
-        if isinstance(data.get("axis"), str):
+        if isinstance(data, dict) and isinstance(data.get("axis"), str):
             data["axis"] = data["axis"].strip()
         return data
 

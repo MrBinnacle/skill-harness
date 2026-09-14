@@ -117,15 +117,20 @@ def test_extracted_clause_valid() -> None:
     ],
 )
 def test_axis_whitespace_stripped_at_boundary(padded: str) -> None:
-    """A clause whose axis carries leading or trailing whitespace stores
-    identically to its unpadded twin.
+    """A clause whose axis carries leading or trailing whitespace stores,
+    groups and joins identically to its unpadded twin.
 
     The padded value must not survive into the stored clause. If this test
     fails without the change, criterion 1 is pinned: the normalisation is
     the only thing that makes it pass.
     """
     clause = ExtractedClause.model_validate(_valid_clause(axis=padded))
-    assert clause.axis == "list_usage"
+    twin = ExtractedClause.model_validate(_valid_clause(axis="list_usage"))
+    assert clause.axis == twin.axis == "list_usage"
+    grouped: dict[str, int] = {}
+    for item in (clause, twin):
+        grouped[item.axis] = grouped.get(item.axis, 0) + 1
+    assert grouped == {"list_usage": 2}
 
 
 def test_axis_clean_value_unchanged() -> None:
