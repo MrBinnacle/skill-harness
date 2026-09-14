@@ -12,13 +12,73 @@ _SHA_PINNED_RE = re.compile(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}")
 _WRITE_SCOPE_RE = re.compile(r"(?m)^\s+([a-z-]+):\s*write\s*(?:#.*)?$")
 
 
-def _workflows() -> list[Path]:
-    """Every workflow file GitHub would run, `.yaml` included.
+def _workflows_under(root: Path) -> list[Path]:
+    """Every workflow file GitHub would run under ``root``, `.yaml` included.
 
     Globbing `*.yml` alone would let a `.yaml` workflow escape both the audit's
     coverage claim and the pinning and permission checks below.
+
+    ``root`` is a parameter rather than the module's ``ROOT`` constant because
+    the two predicates below are called from two places: the audit test, which
+    reads this repository, and the `AC-4` row in scripts/drift_check.py, which
+    reads whatever tree ``--root`` names. A predicate hardcoding ``ROOT`` would
+    report on the real tree no matter which tree it was asked about, which is a
+    check that cannot be red-demonstrated.
     """
-    return sorted(path for path in WORKFLOW_DIR.glob("*.y*ml") if path.suffix in {".yml", ".yaml"})
+    directory = root / ".github" / "workflows"
+    return sorted(path for path in directory.glob("*.y*ml") if path.suffix in {".yml", ".yaml"})
+
+
+def workflow_permissions_baseline_violations(root: Path, errors: list[str]) -> None:
+    """Every workflow declares a read-only workflow-level permissions baseline.
+
+    Public, and shaped as ``(root, errors) -> None``, because the `AC-4` row in
+    scripts/drift_check.py names this symbol and calls it. That is the house
+    gate signature release_gate.py uses for all eight of its gates. The wording
+    below is what a reader sees from either entry point, so one defect reads as
+    one sentence no matter which caller found it.
+
+    A job may still widen a single scope explicitly. The baseline may not be
+    absent, and it may not carry a write grant. Absence is read at column 0
+    only: see _workflow_level_permissions for why `"permissions:" in text` is
+    satisfied by a job-level block, by a comment, and by `write-all`.
+    """
+    for workflow in _workflows_under(root):
+        rel = workflow.relative_to(root).as_posix()
+        permissions = _workflow_level_permissions(workflow.read_text(encoding="utf-8"))
+        if not permissions:
+            errors.append(
+                f"{rel}: no workflow-level permissions block - an absent baseline "
+                "takes the repository default, which is not read-only"
+            )
+        elif "write" in permissions:
+            errors.append(
+                f"{rel}: workflow-level write grant {permissions!r} - write access "
+                "belongs on the job that consumes it, not on the baseline"
+            )
+
+
+def workflow_trigger_violations(root: Path, errors: list[str]) -> None:
+    """No workflow carries the `pull_request_target` trigger.
+
+    Public and house-signatured for the same reason as the predicate above.
+
+    `pull_request_target` runs with the base repository's secrets and a
+    write-capable token while the pull request's head is authored by whoever
+    opened it. A checkout of that head under this trigger hands repository
+    credentials to fork-authored code, so the string is refused anywhere in the
+    file rather than parsed for position: a commented-out one is a line away
+    from being live.
+    """
+    for workflow in _workflows_under(root):
+        rel = workflow.relative_to(root).as_posix()
+        lines = workflow.read_text(encoding="utf-8").splitlines()
+        for lineno, line in enumerate(lines, start=1):
+            if "pull_request_target" in line:
+                errors.append(
+                    f"{rel}:{lineno} carries the pull_request_target trigger - it runs "
+                    "with the base repository's secrets on fork-authored code"
+                )
 
 
 def _unpinned_uses(text: str) -> list[str]:
@@ -146,20 +206,24 @@ def test_workflow_audit_covers_every_workflow_and_records_required_checks() -> N
 
     assert audit_path.is_file()
     audit = audit_path.read_text(encoding="utf-8")
-    workflows = _workflows()
+    workflows = _workflows_under(ROOT)
     assert len(workflows) >= 6, workflows
     for workflow in workflows:
         text = workflow.read_text(encoding="utf-8")
         assert f"`.github/workflows/{workflow.name}`" in audit, workflow.name
-        assert "pull_request_target" not in text, workflow.name
         assert not _unpinned_uses(text), f"{workflow.name}: {_unpinned_uses(text)}"
 
-        permissions = _workflow_level_permissions(text)
-        assert permissions, f"{workflow.name}: no workflow-level permissions block"
-        assert "write" not in permissions, (
-            f"{workflow.name}: workflow-level write grant {permissions!r} - the audit "
-            "claims write access exists only on the job that consumes it"
-        )
+    # The permissions baseline and the trigger ban were inline here until #544.
+    # They now live in the two predicates above, and this test calls the same
+    # ones the `AC-4` row calls. A second copy here is how two guards over one
+    # subject start reporting different answers about the same file.
+    permission_failures: list[str] = []
+    workflow_permissions_baseline_violations(ROOT, permission_failures)
+    assert permission_failures == [], permission_failures
+
+    trigger_failures: list[str] = []
+    workflow_trigger_violations(ROOT, trigger_failures)
+    assert trigger_failures == [], trigger_failures
 
     assert "No existing job was renamed" in audit
     assert "No branch-protection setting was changed" in audit

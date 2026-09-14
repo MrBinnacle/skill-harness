@@ -96,22 +96,27 @@ it is the `AC-2` row in `scripts/drift_check.py`, red-demonstrated in
 `tests/test_drift_check.py`, landed by #545. AC-3 CONFIGURED: it is the `AC-3` row,
 which delegates to the vacuity scanner in `tests/test_structural_bans.py` rather
 than restating its predicates, red-demonstrated in `tests/test_drift_check.py`,
-landed by #543. AC-4 NOT CONFIGURED (#544).
+landed by #543. AC-4 CONFIGURED: it is the `AC-4` row, which delegates the
+action-pin leg to the release gate's `G5` and the permissions-baseline and trigger
+legs to the two predicates in `tests/test_assurance_supply_chain_172.py` rather than
+restating any of them, red-demonstrated per leg in `tests/test_drift_check.py`,
+landed by #544.
 
-**What NOT CONFIGURED means here, corrected.** An earlier revision of this
-paragraph said the unconfigured candidates "carry no mechanical guard, so drift in
-them stays unobserved". That was false for both candidates and is withdrawn. AC-3's
-invariant was enforced before its row existed, by the public-copy scanner
+**What the status word means here, corrected.** An earlier revision of this
+paragraph said the then-unconfigured candidates "carry no mechanical guard, so drift
+in them stays unobserved". That was false for both AC-3 and AC-4 and is withdrawn.
+AC-3's invariant was enforced before its row existed, by the public-copy scanner
 `.pre-commit-config.yaml` runs as `python tests/test_structural_bans.py` and that
 `test_no_banned_copy_on_public_surfaces` runs inside the required `Test` job. AC-4's
-three legs are enforced today by
+three legs were likewise enforced before its row existed, by
 `test_workflow_audit_covers_every_workflow_and_records_required_checks` in
 `tests/test_assurance_supply_chain_172.py`, also inside that required job, and the
-SHA-pin leg additionally by the release gate's `G5`. NOT CONFIGURED means one thing
-and only one thing: the drift-check contract table prints no row for the candidate,
-so its coverage is real but absent from the one listing this repository publishes as
-its coverage boundary. Read the status word as a claim about that listing. Never as
-a claim that nothing guards the invariant.
+SHA-pin leg additionally by the release gate's `G5`. The status word means one thing
+and only one thing: whether the drift-check contract table prints a row for the
+candidate. That table states that its coverage is exactly the list it prints, so a
+candidate missing from the list was real enforcement that the one listing this
+repository publishes did not name. Read the status word as a claim about that
+listing. Never as a claim that the invariant is fully guarded.
 
 The `AC-2` row guards the harness sites only, which is what the candidate row
 below asks for in its own words: "DC-1 and DC-2 cover production and selected
@@ -139,6 +144,33 @@ It does state literals of its own, where it asserts the contents of `CS_P_GRID`;
 two of those grid points are 0.60 and 0.95. They are rates the calibration sweeps
 rather than decision constants, so they are left unpinned for the same reason
 `NOMINAL_COVERAGE` is.
+
+**State what the `AC-4` row does not mean.** The `AC-4` row lists the workflow
+configuration contract. It did not start the enforcement of that contract, and four
+listed rows are four listed rows rather than a settled assurance question. All three
+legs were asserted before the row existed, inside the required `Test` job, by the
+one-shot test named above. What the row adds is bounded and was measured rather than
+assumed. The contract table now names the workflow configuration among the contracts
+it checks. `gate_workflows_sha_pinned` now runs behind a required check, and it
+did not before. Before this row it ran only inside `scripts/release_gate.py`,
+whose job `Release gate (surface lockstep)` branch protection still does not
+require. Branch protection on `main` requires seven contexts as of 2026-09-14 and
+that job is not among them, so on that path alone a `G5` failure can stand on a
+pull request with the merge button available. What this row changes is the path,
+not the rule. The SHA-pin rule was already blocking through the separate copy in
+`tests/test_assurance_supply_chain_172.py`. What is new is that
+`gate_workflows_sha_pinned` itself now runs inside `scripts/drift_check.py`,
+which `tests/test_drift_check.py::test_real_tree_is_green_and_exits_zero` asserts
+exits 0 from inside the required `Test` job. And each leg gains a red
+demonstration against a synthetic tree, which the one-shot test cannot have, because
+it reads a hardcoded repository root and can therefore only report that the real
+tree is clean.
+
+Two instrument gaps stay open behind these four rows, and neither is closed here.
+#559 carries the check kind `AC-2` needs, one that reads a value from a producing
+file and compares a consuming file against it. #563 records that the drift check,
+the structural bans and the release gate all run as jobs branch protection does not
+require, so each reaches a merge only where some other required job asserts it.
 
 | Candidate | Invariant | Sites to compare | Why it may be worth pinning |
 | --- | --- | --- | --- |

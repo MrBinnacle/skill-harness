@@ -151,9 +151,21 @@ def gate_readme_pypi_render_safe(root: Path, errors: list[str]) -> None:
 
 
 def gate_workflows_sha_pinned(root: Path, errors: list[str]) -> None:
-    """G5: every workflow action is pinned to a full commit SHA."""
+    """G5: every workflow action is pinned to a full commit SHA.
+
+    The glob reads ``.yaml`` as well as ``.yml``. GitHub runs both suffixes, so
+    a ``*.yml`` glob left a workflow named ``release.yaml`` unread: its actions
+    were never checked and the gate printed PASS. That hole was latent rather
+    than live, because this repository tracks no ``.yaml`` workflow today, which
+    is the shape of a hole that survives review. The sibling copy of this rule,
+    ``_workflows`` in tests/test_assurance_supply_chain_172.py, already globbed
+    both suffixes, so the two copies of one rule disagreed on scope; they now
+    agree. AC-4 in scripts/drift_check.py calls THIS function, so the widened
+    scope reaches the drift check too.
+    """
     pinned = re.compile(r"^\s*-?\s*uses:\s*\S+@[0-9a-f]{40}(\s+#.*)?$")
-    for wf in sorted((root / ".github" / "workflows").glob("*.yml")):
+    workflows = (root / ".github" / "workflows").glob("*.y*ml")
+    for wf in sorted(wf for wf in workflows if wf.suffix in {".yml", ".yaml"}):
         for lineno, line in enumerate(wf.read_text(encoding="utf-8").splitlines(), start=1):
             if re.match(r"^\s*-?\s*uses:", line) and pinned.match(line) is None:
                 errors.append(

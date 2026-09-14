@@ -922,6 +922,84 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         ),
     ),
     LiveRow(
+        dc_id="AC-4",
+        summary=(
+            "workflow configuration: every file under .github/workflows pins each action "
+            "reference to a full 40-hex commit SHA, declares a workflow-level permissions "
+            "baseline carrying no write grant, and uses no pull_request_target trigger "
+            "(#544). Scope is both suffixes GitHub runs, .yml and .yaml. Each leg calls "
+            "the predicate that already owns it rather than restating the rule: the SHA "
+            "pin is release_gate.py's G5, the permissions baseline and the trigger ban "
+            "are the two predicates in the #172 supply-chain module"
+        ),
+        # WHAT THIS ROW IS, stated so nobody overstates it later. Same shape as
+        # AC-3's note above, and for the same reason.
+        #
+        # It is NOT the moment these three legs started being enforced. All
+        # three are asserted today by
+        # test_workflow_audit_covers_every_workflow_and_records_required_checks
+        # in tests/test_assurance_supply_chain_172.py, which runs inside the
+        # required Test job, and the SHA pin additionally by the release gate's
+        # G5.
+        #
+        # What the row buys is three things, each measurable.
+        #
+        # First, the contract table now prints the workflow configuration
+        # contract. This script's coverage-boundary line says coverage is
+        # EXACTLY the list it prints, so a guard absent from the list was real
+        # enforcement that the one listing this repository publishes did not
+        # name.
+        #
+        # Second, gate_workflows_sha_pinned moves behind a required check.
+        # Measured on 2026-09-14: branch protection on main requires seven
+        # contexts, and "Release gate (surface lockstep)" is not among them, so
+        # a G5 failure could stand on a pull request with the merge button
+        # still available. The same function now runs inside this script, and
+        # tests/test_drift_check.py::test_real_tree_is_green_and_exits_zero
+        # asserts this script exits 0 from inside the required Test job. The
+        # rule was already blocking through the #172 module's own copy; what
+        # changes is that release_gate.py's copy is too, which is what makes
+        # its widened .yaml glob reach a merge at all. #563
+        # carries the wider problem that the drift check, the structural bans
+        # and the release gate all run as jobs that cannot block a merge.
+        #
+        # Third, a red demonstration per leg. The #172 module reads a module
+        # level ROOT and cannot be pointed at a synthetic tree, so its only
+        # control is "the real tree is clean", which cannot tell a working
+        # predicate from one returning an empty list. This script takes --root,
+        # so tests/test_drift_check.py poisons a tmp tree and watches AC-4
+        # redden on each leg separately.
+        #
+        # WHY THREE GUARDS RATHER THAN ONE. Each leg is a separate defect with
+        # a separate repair, and a single predicate emitting all three would
+        # make a mutation of one leg indistinguishable from a mutation of
+        # another in the failure output.
+        delegated_guards=(
+            DelegatedGuard(
+                # The SHA-pin leg. #544 asked for reuse "so the two cannot
+                # drift apart", on the understanding that one other copy
+                # existed. Two did, and they had already drifted on scope:
+                # this gate globbed *.yml while the #172 module globbed
+                # *.y*ml. That was repaired in the commit before this one.
+                # This row calling the gate is what keeps a third copy from
+                # being written here.
+                module_rel="scripts/release_gate.py",
+                symbol="gate_workflows_sha_pinned",
+                requires=(".github/workflows",),
+            ),
+            DelegatedGuard(
+                module_rel="tests/test_assurance_supply_chain_172.py",
+                symbol="workflow_permissions_baseline_violations",
+                requires=(".github/workflows",),
+            ),
+            DelegatedGuard(
+                module_rel="tests/test_assurance_supply_chain_172.py",
+                symbol="workflow_trigger_violations",
+                requires=(".github/workflows",),
+            ),
+        ),
+    ),
+    LiveRow(
         dc_id="DC-14",
         summary=(
             "outcome_type values: pass_fail + invariant in ratification.py parse == "

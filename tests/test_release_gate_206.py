@@ -316,6 +316,47 @@ def test_the_g3_failure_states_the_scope_it_actually_checks(tmp_path: Path) -> N
     assert "it cannot observe the published package" in failure
 
 
+_TAG_PINNED_WORKFLOW = """jobs:
+  build:
+    steps:
+      - uses: actions/checkout@v5
+"""
+
+
+def test_g5_reads_yaml_workflows_as_well_as_yml(tmp_path: Path) -> None:
+    """The G5 scope control: `.yaml` is a workflow suffix GitHub runs.
+
+    Differential pair. Both arms seed the identical tree at 0.2.4 with the
+    identical GitHub state; the arms differ only in whether a second workflow
+    file named with the `.yaml` suffix is present. The green arm proves the
+    fixture reaches the gate without tripping anything, so the red arm's single
+    failure is attributable to G5 reading that file and to nothing else.
+
+    This lane is the whole reason the widening is a control rather than a
+    tidy-up. No `.yaml` workflow is tracked in this repository, so the narrow
+    glob found nothing to miss and the gate printed PASS either way. The
+    fixture supplies the file the tree does not have.
+    """
+    matched = _seed_tree(tmp_path / "yml-only", "0.2.4")
+    green = _run_gate(matched, _closed(), [GREEN_RUN])
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert _failures(green) == []
+
+    widened = _seed_tree(tmp_path / "with-yaml", "0.2.4")
+    (widened / ".github/workflows/release.yaml").write_text(_TAG_PINNED_WORKFLOW, encoding="utf-8")
+    red = _run_gate(widened, _closed(), [GREEN_RUN])
+
+    assert _failures(red) == [
+        "G5: release.yaml:4 action not SHA-pinned: '- uses: actions/checkout@v5' "
+        "(mutable refs are not provenance)"
+    ], (
+        "G5 did not report the tag pin in the .yaml workflow. The gate printed:\n"
+        + red.stdout
+        + red.stderr
+    )
+    assert red.returncode == 1, red.stdout + red.stderr
+
+
 def _recorded_transcript() -> list[str]:
     """The lines of the receipt's fenced output block."""
     text = RED_RECEIPT.read_text(encoding="utf-8")
