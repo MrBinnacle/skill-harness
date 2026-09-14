@@ -195,6 +195,19 @@ class ExtractedClause(BaseModel):
     falsifying_case: FalsifyingCaseSchema | None = None
     """Optional constructible falsifying case; independent of vacuity_flag (#136)."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise_axis(cls, data: Any) -> Any:
+        """Strip leading/trailing whitespace from axis at the extractor boundary.
+
+        Padded axes must not survive into downstream consumers. Normalising here
+        keeps ``classify_axis`` strict (fail-closed on near-misses) while
+        ensuring that ``" verbosity "`` and ``"verbosity"`` store identically.
+        """
+        if isinstance(data, dict) and isinstance(data.get("axis"), str):
+            data["axis"] = data["axis"].strip()
+        return data
+
     @model_validator(mode="after")
     def _vacuity_kind_matches_flag(self) -> ExtractedClause:
         """Couple vacuity_kind/reason to vacuity_flag without collapsing kinds."""

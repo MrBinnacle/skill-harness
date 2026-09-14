@@ -102,6 +102,62 @@ def test_extracted_clause_valid() -> None:
 
 
 # ---------------------------------------------------------------------------
+# ExtractedClause — axis normalisation (#504)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "padded",
+    [
+        "  list_usage  ",
+        "\tlist_usage\n",
+        " list_usage ",
+        "list_usage ",
+        "  list_usage",
+    ],
+)
+def test_axis_whitespace_stripped_at_boundary(padded: str) -> None:
+    """A clause whose axis carries leading or trailing whitespace stores,
+    groups and joins identically to its unpadded twin.
+
+    The padded value must not survive into the stored clause. If this test
+    fails without the change, criterion 1 is pinned: the normalisation is
+    the only thing that makes it pass.
+    """
+    clause = ExtractedClause.model_validate(_valid_clause(axis=padded))
+    twin = ExtractedClause.model_validate(_valid_clause(axis="list_usage"))
+    assert clause.axis == twin.axis == "list_usage"
+    grouped: dict[str, int] = {}
+    for item in (clause, twin):
+        grouped[item.axis] = grouped.get(item.axis, 0) + 1
+    assert grouped == {"list_usage": 2}
+
+
+def test_axis_clean_value_unchanged() -> None:
+    """An already-clean axis is a no-op — grouping over a clean corpus returns
+    exactly what it returned before the change.
+
+    This pins criterion 2: the normalisation must not alter values that
+    already lack whitespace.
+    """
+    clause = ExtractedClause.model_validate(_valid_clause())
+    assert clause.axis == "list_usage"
+    # Two clean constructions must be identical in axis.
+    clause2 = ExtractedClause.model_validate(_valid_clause())
+    assert clause.axis == clause2.axis
+
+
+def test_axis_only_strips_outer_whitespace() -> None:
+    """Internal whitespace is NOT stripped — only leading/trailing.
+
+    ``"hedge index"`` (space in the middle) is a different axis from
+    ``"hedge_index"`` and must not be collapsed to it.
+    """
+    clause = ExtractedClause.model_validate(_valid_clause(axis="hedge index"))
+    assert clause.axis == "hedge index"
+
+
+# ---------------------------------------------------------------------------
 # ExtractedClause — vacuity and falsifying_case are independent (#136)
 # ---------------------------------------------------------------------------
 

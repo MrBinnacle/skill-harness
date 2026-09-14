@@ -19,15 +19,15 @@ whitespace strip. Two reasons, and both are load-bearing:
 - Fuzzy or case-insensitive matching would raise the apparent match rate by
   manufacturing measurability, which is the failure this instrument exists to
   distrust. A near miss (``"Verbosity"``) must fail closed.
-- A strip was tried and reverted. Every downstream consumer of a clause's axis
-  compares it raw — ``AblationRunner._score_primary_axis`` keys the scorer dict
-  with it, ``detect_confounds`` inverts ``clause_to_axis_map`` on it, and the A1
-  invariant check compares it to ``ConfoundEvent.axis``. A gate that accepted
-  ``" verbosity "`` while those lookups missed it turned a safe UNMEASURED into
-  a run-aborting ``RuntimeError``. Normalising once at the extractor boundary
-  (a validator on ``ExtractedClause.axis``) is the correct fix and is a
-  deliberate follow-up; until then the rule here is the strictest one, which is
-  also the fail-closed one.
+- A strip was tried and reverted here. Every downstream consumer of a clause's
+  axis compares it raw — ``AblationRunner._score_primary_axis`` keys the scorer
+  dict with it, ``detect_confounds`` inverts ``clause_to_axis_map`` on it, and
+  the A1 invariant check compares it to ``ConfoundEvent.axis``. A gate that
+  accepted ``" verbosity "`` while those lookups missed it turned a safe
+  UNMEASURED into a run-aborting ``RuntimeError``. Whitespace is stripped once
+  at the extractor boundary (``ExtractedClause._normalise_axis``, #504) so a
+  padded axis never reaches this classifier or those consumers; this function
+  stays strict and fail-closed on anything that still arrives unstripped.
 """
 
 from __future__ import annotations
