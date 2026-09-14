@@ -1378,8 +1378,13 @@ def test_dc17_real_mirror_names_source_and_six_unlanded_additions() -> None:
 
     #525 cleared UNLANDED from declined additions 2 and 4. Those two are still
     accounted by heading; they no longer contribute a landed_as row, so the
-    remaining open work is four UNLANDED rows, not six. A decline is a landed
+    remaining open work was four UNLANDED rows, not six. A decline is a landed
     decision: leaving UNLANDED on it would re-break DC-17 when #520 closes.
+
+    #526 landed additions 3, 5 and 6 as schema keys. Addition 1 remains
+    UNLANDED. Addition 6 carries two landed_as entries (retest_triggers and
+    expiry_state) because it adds two schema keys. The remaining open work is
+    one UNLANDED row.
     """
     path = _REPO_ROOT / "docs" / "ratifications" / "MIRROR-0001-on-irreducibility.md"
     text = path.read_text(encoding="utf-8")
@@ -1398,14 +1403,21 @@ def test_dc17_real_mirror_names_source_and_six_unlanded_additions() -> None:
     for heading in expected_headings:
         assert heading in text, f"missing addition heading: {heading}"
     landed = re.findall(r"landed_as:\s*(.+?)\s*`", text)
-    # Four still-open additions keep landed_as; declined 2 and 4 do not (#525).
-    assert len(landed) == 4, f"expected one landed_as per open addition, got {landed}"
+    # Five landed_as rows: addition 1 UNLANDED, additions 3 and 5 landed,
+    # addition 6 landed with two keys (retest_triggers + expiry_state).
+    assert len(landed) == 5, f"expected five landed_as rows, got {landed}"
     unlanded = [v for v in landed if v.startswith("UNLANDED ")]
+    landed_symbols = [v for v in landed if not v.startswith("UNLANDED ")]
     for value in unlanded:
         assert re.fullmatch(r"UNLANDED #\d+", value), f"malformed UNLANDED row: {value}"
     assert len(set(unlanded)) <= 1, (
         f"UNLANDED rows name more than one ticket, so closing one leaves the rest stale: {unlanded}"
     )
+    # Landed symbols must exist under docs/sers/ or src/skill_harness/.
+    assert "implementation_family" in landed_symbols
+    assert "claim_scope" in landed_symbols
+    assert "retest_triggers" in landed_symbols
+    assert "expiry_state" in landed_symbols
 
 
 def test_dc17_additions_2_and_4_declined_with_reason() -> None:

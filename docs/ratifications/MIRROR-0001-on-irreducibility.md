@@ -68,7 +68,7 @@ addition ordinary schema plumbing and lapses the decline immediately.
 What implementation family the skill belongs to and what alternatives were
 considered.
 
-- `landed_as: UNLANDED #520`
+- `landed_as: implementation_family` #526
 
 ### 4. The cost vector and dominance rule — Declined
 
@@ -89,10 +89,11 @@ the decline.
 The scope of the behavioral claim and the set of disturbances under which it
 holds.
 
-- `landed_as: UNLANDED #520`
+- `landed_as: claim_scope` #526
 
 ### 6. The retest triggers and expiry state
 
 What triggers a retest and the expiry conditions for a result.
 
-- `landed_as: UNLANDED #520`
+- `landed_as: retest_triggers` #526
+- `landed_as: expiry_state` #526
