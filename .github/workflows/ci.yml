@@ -105,10 +105,24 @@ jobs:
     # rather than dropping it. Requires Python 3.12+; the matrix is 3.12 and 3.13.
     # Re-measure before enabling branch coverage: these runs are statement-only, and there
     # is no [tool.coverage] table or .coveragerc in the repository.
+    #
+    # COLUMNS=200 (#561): pins the width Rich renders CLI tables at. A rich Console
+    # reads COLUMNS once, in its constructor, and freezes its width when the value is
+    # a number. src/skill_harness/cli/main.py builds its Console at import time, so a
+    # COLUMNS already present in the environment wins and the per-test
+    # CliRunner(env={"COLUMNS": "200"}) override never takes effect. Measured on
+    # ubuntu-latest: the serial pytest process has no COLUMNS and the override works,
+    # while a pytest-xdist worker process has COLUMNS=80, and 21 table-rendering tests
+    # then fail on a truncated column. 200 is the width every one of those tests
+    # already asks for, so this sets the environment to the value the suite declares
+    # instead of letting it depend on how the suite is launched. The dependency is not
+    # specific to xdist and reproduces without it: COLUMNS=80 pytest
+    # tests/test_cli_screen_profile.py fails 7 of 13 on a serial run.
     env:
       PYTHONHASHSEED: "0"
       SKILL_HARNESS_REQUIRE_VALE: "1"
       COVERAGE_CORE: "sysmon"
+      COLUMNS: "200"
     strategy:
       fail-fast: false
       matrix:
