@@ -23,7 +23,7 @@
         "worktree_head": "66e5c16d9321101348451cbbb6c63bbd60117b47"
       },
       "mutant_id": "M-R1",
-      "notes": [],
+      "notes": ["2026-09-14, #536: renamed to M-R6 to resolve collision with 389-ratification-binding"],
       "obligation": "mr-driver-identity-gate",
       "selection": [
         "tests/test_subject_pi_runner.py::test_parser_identity_mismatch_blocks_spend",
@@ -54,7 +54,7 @@
         "worktree_head": "66e5c16d9321101348451cbbb6c63bbd60117b47"
       },
       "mutant_id": "M-R2",
-      "notes": [],
+      "notes": ["2026-09-14, #536: renamed to M-R7 to resolve collision with 389-count-mismatch"],
       "obligation": "mr-driver-nonzero-epoch",
       "selection": [
         "tests/test_subject_pi_runner.py::test_nonzero_epoch_refuses_before_evidence"
