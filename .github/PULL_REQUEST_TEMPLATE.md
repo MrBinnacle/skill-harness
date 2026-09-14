@@ -4,8 +4,8 @@ Thanks for the PR.
 Before you submit, please confirm:
 
 - [ ] You read `CONTRIBUTING.md` and `docs/INVARIANTS.md`
-- [ ] `ruff check src tests` is clean
-- [ ] `ruff format --check src tests` is clean
+- [ ] `ruff check src tests scripts` is clean
+- [ ] `ruff format --check src tests scripts` is clean
 - [ ] `mypy src tests` is clean
 - [ ] `pytest -q` is green
 - [ ] New tests cover the new behavior (TDD discipline — see CONTRIBUTING.md)

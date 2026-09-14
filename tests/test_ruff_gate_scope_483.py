@@ -24,14 +24,29 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 _RUFF_HOOK_IDS = ("ruff", "ruff-format")
 
 
-def _ci_ruff_paths() -> set[str]:
-    """Directories passed to ``ruff check`` and ``ruff format --check`` in CI."""
+def _ci_ruff_paths_by_command() -> dict[str, set[str]]:
+    """Directories passed to each ``ruff check`` / ``ruff format --check`` in CI.
+
+    Keys are the ruff subcommand strings (``check``, ``format --check``). A
+    path present only in the union of the two commands is not enough: both
+    invocations must lint the same directories or format can silently drop a
+    tree that check still covers.
+    """
     text = CI_YML.read_text(encoding="utf-8")
+    by_cmd: dict[str, set[str]] = {}
+    for m in re.finditer(r"^\s+run:\s+ruff (check|format --check)\s+(.+)$", text, re.MULTILINE):
+        cmd = m.group(1)
+        paths = {token for token in m.group(2).split() if not token.startswith("-")}
+        by_cmd[cmd] = paths
+    return by_cmd
+
+
+def _ci_ruff_paths() -> set[str]:
+    """Union of directories passed to every CI ruff invocation."""
+    by_cmd = _ci_ruff_paths_by_command()
     paths: set[str] = set()
-    for m in re.finditer(r"^\s+run:\s+ruff (?:check|format --check)\s+(.+)$", text, re.MULTILINE):
-        for token in m.group(1).split():
-            if not token.startswith("-"):
-                paths.add(token)
+    for cmd_paths in by_cmd.values():
+        paths |= cmd_paths
     return paths
 
 
@@ -83,18 +98,25 @@ def _extend_exclude() -> set[str]:
 def test_ruff_path_set_matches_between_gates() -> None:
     """CI and both pre-commit ruff hooks must lint the same directories.
 
-    Fails when one gate adds a directory the other does not cover, or when
-    ``ruff`` and ``ruff-format`` disagree with each other. Equality of the
-    extracted path sets, not a literal value, so a deliberate change to what
-    is linted survives as long as both configs change together.
+    Fails when one gate adds a directory the other does not cover, when the
+    two CI ruff invocations disagree with each other, or when ``ruff`` and
+    ``ruff-format`` disagree. Equality of the extracted path sets, not a
+    literal value, so a deliberate change to what is linted survives as long
+    as both configs change together.
     """
-    ci_paths = _ci_ruff_paths()
-    by_hook = _pre_commit_ruff_files_by_hook()
-
-    assert ci_paths, (
+    by_cmd = _ci_ruff_paths_by_command()
+    assert by_cmd, (
         "no ruff path arguments found in CI -- "
         "expected 'ruff check <paths>' in .github/workflows/ci.yml"
     )
+    distinct_ci = {frozenset(paths) for paths in by_cmd.values()}
+    assert len(distinct_ci) == 1, (
+        f"CI ruff invocations disagree with each other: "
+        f"{ {k: sorted(v) for k, v in by_cmd.items()} }. "
+        f"ruff check and ruff format --check must share the same path set."
+    )
+    ci_paths = next(iter(distinct_ci))
+    by_hook = _pre_commit_ruff_files_by_hook()
 
     hook_path_sets = {hook_id: _paths_from_files_regex(regex) for hook_id, regex in by_hook.items()}
 
@@ -116,15 +138,21 @@ def test_ruff_path_set_matches_between_gates() -> None:
 def test_ruff_scope_includes_scripts() -> None:
     """scripts/ must be in the ruff lint scope (issue #535).
 
-    The ruff path set in CI and both pre-commit ruff hooks must include
-    ``scripts`` so that operational scripts receive the same lint gate as
-    ``src`` and ``tests``.
+    Every CI ruff invocation, both pre-commit ruff hooks, and the
+    contributor-facing command lines in CONTRIBUTING.md and the PR template
+    must list ``scripts`` so a syntax error under scripts/ cannot reach a
+    commit through a gate or doc that still under-lints.
     """
-    ci_paths = _ci_ruff_paths()
-    assert "scripts" in ci_paths, (
-        f"scripts/ not in ruff CI scope; found {sorted(ci_paths)}. "
-        "Extend 'ruff check' and 'ruff format --check' in ci.yml to include scripts."
+    by_cmd = _ci_ruff_paths_by_command()
+    assert by_cmd, (
+        "no ruff path arguments found in CI -- "
+        "expected 'ruff check <paths>' in .github/workflows/ci.yml"
     )
+    for cmd, paths in by_cmd.items():
+        assert "scripts" in paths, (
+            f"scripts/ not in ruff CI '{cmd}' scope; found {sorted(paths)}. "
+            "Extend both 'ruff check' and 'ruff format --check' in ci.yml to include scripts."
+        )
     by_hook = _pre_commit_ruff_files_by_hook()
     for hook_id, regex in by_hook.items():
         hook_paths = _paths_from_files_regex(regex)
@@ -132,6 +160,16 @@ def test_ruff_scope_includes_scripts() -> None:
             f"scripts/ not in pre-commit {hook_id} ruff scope; found {sorted(hook_paths)}. "
             "Extend the files: regex in .pre-commit-config.yaml to include scripts."
         )
+    for rel in ("CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md"):
+        text = (REPO_ROOT / rel).read_text(encoding="utf-8")
+        doc_cmds = list(re.finditer(r"ruff (?:check|format --check)\s+([^\n#!`]+)", text))
+        assert doc_cmds, f"no ruff check/format command line found in {rel}"
+        for m in doc_cmds:
+            doc_paths = [t for t in m.group(1).split() if t.isidentifier()]
+            assert "scripts" in doc_paths, (
+                f"scripts/ not in ruff command documented in {rel}: {m.group(0)!r}. "
+                "Keep contributor docs aligned with the CI ruff path set."
+            )
 
 
 def test_ruff_src_config_includes_scripts() -> None:
