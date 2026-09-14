@@ -30,15 +30,29 @@ bit-equality tests refuse to collect without it; on Windows use
 `set PYTHONHASHSEED=0` first):
 
 ```bash
-PYTHONHASHSEED=0 pytest -q -m "not live"   # all green (mirrors CI)
+PYTHONHASHSEED=0 pytest -q -m "not live"   # all green
 mypy --strict src tests                    # 0 errors
 ruff check src tests scripts               # 0 issues
 ruff format --check src tests scripts      # 0 reformats needed
 ```
 
+That first line is not the CI command. The Test cell excludes three markers, splits the
+suite across four worker processes with `-n 4`, and sets `COLUMNS=200` so rich renders
+tables at the width the tests ask for. To run what CI runs:
+
+```bash
+PYTHONHASHSEED=0 COLUMNS=200 pytest -q -n 4 -m "not live and not calibration and not assurance"
+```
+
 CI generates a seed and passes it through `--randomly-seed=<seed>`. `pytest-randomly` prints the seed
 at the start of each run; reproduce that order locally by adding the printed
 value, for example `PYTHONHASHSEED=0 pytest -q --randomly-seed=123456789 -m "not live and not calibration and not assurance"`.
+
+The seed fixes the collection order. Under `-n` it does not fix which worker runs a
+test, so a failure that depends on what ran before it in the same worker process may
+not come back. Measured in #561: five `-n 4` runs at one seed produced five different
+worker assignments, while two serial runs at the same seed were identical. Drop `-n`
+when a seeded replay does not reproduce.
 
 ## The discipline
 

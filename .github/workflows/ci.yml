@@ -113,7 +113,11 @@ jobs:
     # CliRunner(env={"COLUMNS": "200"}) override never takes effect. Measured on
     # ubuntu-latest: the serial pytest process has no COLUMNS and the override works,
     # while a pytest-xdist worker process has COLUMNS=80, and 21 table-rendering tests
-    # then fail on a truncated column. 200 is the width every one of those tests
+    # then fail on a truncated column. Those tests live in test_cli_screen_profile.py,
+    # test_ablation_report_gate2_546.py, ablation/test_cli_d3_fixes.py,
+    # ablation/test_cli_run_ablation.py, test_audit_metric.py,
+    # test_clause_evidence_audit.py and extractor/test_cli.py. None was skipped, marked
+    # or deleted. 200 is the width every one of those tests
     # already asks for, so this sets the environment to the value the suite declares
     # instead of letting it depend on how the suite is launched. The dependency is not
     # specific to xdist and reproduces without it: COLUMNS=80 pytest
@@ -202,11 +206,13 @@ jobs:
         # reads this line and fails if either goes.
         #
         # -n 4 (#561): pytest-xdist splits the suite across four worker processes.
-        # Four is the processor count of the GitHub-hosted standard runner this matrix
-        # uses. It was read off the runner rather than taken from documentation:
-        # python -c "import os; print(os.cpu_count())" printed 4 on windows-latest in
-        # runs 34881350571 and 34881353876. A literal number is written rather than
-        # `auto` so a change in the runner image lands here as a deliberate edit.
+        # Four is the processor count read off the runner rather than taken from
+        # documentation: python -c "import os; print(os.cpu_count())" printed 4 on
+        # windows-latest in runs 34881350571 and 34881353876. That is the cell this
+        # ticket measured. ubuntu-latest was not probed, so the number is written as a
+        # measurement of windows-latest and an assumption about the rest of the matrix.
+        # A literal is used rather than `auto` so a change in the runner image lands
+        # here as a deliberate edit.
         #
         # Measured on the windows-latest py3.12 cell, which is the critical path. One
         # CI run per arm, pytest's own reported wall clock:
