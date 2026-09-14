@@ -527,7 +527,7 @@ MUTANTS: tuple[Mutant, ...] = (
     # cases prove the DRIVER calls them. A control nobody calls is dead code
     # with a docstring, which is what the driver commit exists to close.
     Mutant(
-        "M-R3",
+        "M-R6",
         "mr-driver-identity-gate",
         "the driver stops comparing the declared parser identity: an undeclared "
         "evidence pipeline passes the pre-spend gate and reaches spend",
@@ -538,7 +538,7 @@ MUTANTS: tuple[Mutant, ...] = (
         _PI_RUNNER_IDENTITY,
     ),
     Mutant(
-        "M-R6",
+        "M-R7",
         "mr-driver-nonzero-epoch",
         "the nonzero-returncode refusal no longer fires: a crashed epoch is "
         "parsed and ingested as if it had run",

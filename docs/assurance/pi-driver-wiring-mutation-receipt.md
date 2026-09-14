@@ -59,10 +59,12 @@ cannot support one; each is a named obligation, not a sample.
 **2026-09-14, issue #536:** `M-R1` and `M-R2` in `MUTANTS` collided with the
 `M-R1` and `M-R2` registered under the `389-` obligation prefix in
 `paired-gate2-mutation-receipt`. The `389-` pair was registered first and keeps
-its ids. This receipt's mutants were renamed: `M-R1` → `M-R3`, `M-R2` → `M-R6`.
-The table above still names the original ids because it is a record of what the
-receipt measured; the new ids are in `scripts/mutation_receipt.py` and in any
-receipt generated after this change.
+its ids. This receipt's mutants were renamed: `M-R1` → `M-R6`, `M-R2` → `M-R7`.
+`M-R3` is not reused: the section below already uses that id for the scratch
+session's fifth case that was never registered. The table above still names the
+original ids because it is a record of what the receipt measured; the new ids
+are in `scripts/mutation_receipt.py` and in any receipt generated after this
+change.
 
 ## What happened to M-R3
 

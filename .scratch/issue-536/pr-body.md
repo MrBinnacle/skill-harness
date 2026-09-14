@@ -11,11 +11,13 @@ does not identify which mutation ran, so a reader cannot check the claim against
 ### Criterion 1: Every entry in MUTANTS carries a distinct id
 
 Renamed the later-registered pi-driver-wiring mutants:
-- `M-R1` (mr-driver-identity-gate) → `M-R3`
-- `M-R2` (mr-driver-nonzero-epoch) → `M-R6`
+- `M-R1` (mr-driver-identity-gate) → `M-R6`
+- `M-R2` (mr-driver-nonzero-epoch) → `M-R7`
 
-The paired-gate2 mutants (`389-ratification-binding` and `389-count-mismatch`) keep `M-R1` and
-`M-R2` because their receipt (`paired-gate2-mutation-receipt`) was generated first.
+`M-R3` is not reused: the pi-driver-wiring receipt already uses that id for the scratch
+session's fifth case that was never registered. The paired-gate2 mutants
+(`389-ratification-binding` and `389-count-mismatch`) keep `M-R1` and `M-R2` because their
+receipt (`paired-gate2-mutation-receipt`) was generated first.
 
 **Test:** `test_every_mutation_id_is_unique` in `tests/test_mutation_receipt.py` asserts
 `len({m.mutant_id for m in MUTANTS}) == len(MUTANTS)` and names any colliding id. This test
@@ -36,7 +38,7 @@ Two receipts reference `M-R1` and `M-R2`:
    These ids did not move. No change.
 2. `pi-driver-wiring-mutation-receipt.json/md` — uses `M-R1` and `M-R2` for the `mr-` mutants.
    These ids moved. Added a dated note to both the prose and JSON receipt recording the rename:
-   `M-R1` → `M-R3`, `M-R2` → `M-R6`. The table in the prose still names the original ids
+   `M-R1` → `M-R6`, `M-R2` → `M-R7`. The table in the prose still names the original ids
    because it is a record of what the receipt measured.
 
 **Test:** `test_receipt_still_describes_the_files_it_measured` continues to pass for both
