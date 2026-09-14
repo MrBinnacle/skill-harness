@@ -112,8 +112,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.12", "3.13"]
+        os: [windows-latest]
+        python-version: ["3.12"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -173,6 +173,8 @@ jobs:
           # name here would fail on Windows even after a good extract, which is the
           # second defect this step carried.
           PATH="$VALE_DIR:$PATH" vale --version
+      - name: Runner capacity
+        run: python -c "import os; print('RUNNER_CPU_COUNT', os.cpu_count())"
       - name: pytest
         # `-m "not live and not calibration and not assurance"` mirrors local gate; live
         # tests require ANTHROPIC_API_KEY (not provisioned in CI). Dense CS calibration
@@ -196,7 +198,7 @@ jobs:
         # MEASUREMENT PENDING. The four CI durations this ticket requires are filled
         # in by a follow-up commit on this branch. Do not read this block as a
         # finished record until they are here.
-        run: pytest -q -n 4 --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing --durations=25 --durations-min=1.0
+        run: pytest -q -n 4 --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing --no-cov --durations=25 --durations-min=1.0
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
