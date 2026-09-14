@@ -47,6 +47,7 @@ _LIVE_IDS = (
     "DC-17",
     "AC-1",
     "AC-2",
+    "AC-3",
 )
 _PLANNED_IDS = ("DC-13",)
 
@@ -94,6 +95,18 @@ _LIVE_SURFACES = (
     # the synthetic tree does not need it.
     "tests/test_aggregation_aa.py",
     "tests/test_aggregation_calibration.py",
+    # AC-3's two ValueSite legs read the calibration registry by FIELD (#543).
+    # The row does not prose-scan docs/calibration/*.json; without this copy
+    # every synthetic tree would fail on a missing value site instead of the
+    # lane under test.
+    "docs/calibration/vacuity-flag-calibration-2026-08-08.json",
+    # AC-3's `requires` also covers pyproject.toml and the sitegen templates
+    # (#565), two of the five surfaces the row's own summary names. Without
+    # these two copies every synthetic tree would refuse on a missing surface
+    # instead of the lane under test. One template file is enough to make the
+    # sitegen directory exist; the predicate itself globs the rest.
+    "pyproject.toml",
+    "src/skill_harness/sitegen/templates/schema_vocabulary.html",
 )
 
 
@@ -101,12 +114,18 @@ def _run(
     root: Path | None = None,
     *,
     ticket_states: dict[str, str] | None = None,
+    script: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the drift check as a subprocess.
 
     ``ticket_states`` fills DC-17's injected seam, so a control that asserts
     what a closed ticket does makes no network call. A control that reaches
     api.github.com proves the network worked; it does not prove the rule.
+
+    ``script`` runs a COPY of the drift check from somewhere else, which is how
+    the AC-3 dead-row lane reaches a guard module it has renamed:
+    _load_guard_module resolves the guard against the script's own parent
+    directory, so relocating the script relocates its guard lookup.
 
     The DEFAULT holds every ticket open. DC-17 now fails closed on a ticket
     state it cannot read, and the fixture tree carries a live ``UNLANDED
@@ -115,7 +134,7 @@ def _run(
     whenever api.github.com was unreachable. The live lookup has its own
     tests; it is not every other test's dependency.
     """
-    cmd = [sys.executable, str(_SCRIPT)]
+    cmd = [sys.executable, str(_SCRIPT if script is None else script)]
     if root is not None:
         cmd += ["--root", str(root)]
     states = {"*": "open"} if ticket_states is None else ticket_states
@@ -842,7 +861,7 @@ def test_dc15_no_cache_aware_fields_is_green(tmp_path: Path) -> None:
     assert r.returncode == 0, r.stdout + r.stderr
 
 
-def test_dc15_printed_in_green_listing(tmp_path: Path) -> None:
+def test_dc15_printed_in_green_listing() -> None:
     """DC-15 must appear in the OK listing on a green run."""
     r = _run()
     assert r.returncode == 0
@@ -1114,6 +1133,276 @@ def test_ac2_does_not_fire_on_a_compliant_tree(tmp_path: Path) -> None:
     )
     r = _run(root)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+# ---------------------------------------------------------------------------
+# AC-3 (#543): the public vacuity-claim row. It delegates to the narrow
+# vacuity scanner in tests/test_structural_bans.py, which is the same predicate
+# .pre-commit-config.yaml runs. These lanes prove THE ROW reddens: the script
+# runs as a subprocess, so no pytest case from that module is in scope, and the
+# poison lives in a tmp tree nothing else reads. If the subprocess exits 1 and
+# prints a FAIL line whose row id is AC-3, the only code that can have produced
+# it is _check_delegated_guard running the delegate.
+#
+# Every poison APPENDS to README.md rather than replacing it. A replaced README
+# loses DC-5's registered sentences, DC-5 reddens too, and the demonstration
+# stops naming one row.
+# ---------------------------------------------------------------------------
+
+_FAIL_ROW_RE = re.compile(r"^\s*FAIL\s+((?:DC|AC)-\d+)")
+
+
+def _append_tracked(root: Path, rel: str, extra: str) -> None:
+    """Append to an existing surface in the synthetic tree and re-stage it."""
+    path = root / rel
+    assert path.is_file(), f"{rel} is not in _LIVE_SURFACES"
+    path.write_text(path.read_text(encoding="utf-8") + extra, encoding="utf-8")
+    _git(root, "add", "--", rel)
+
+
+def _failed_row_ids(stdout: str) -> set[str]:
+    """Every row id the run printed a FAIL for.
+
+    Both FAIL shapes main() prints carry the id right after the word: the row
+    header line and each indented detail line. Collecting from both means a row
+    that failed cannot be missed by reading only one shape.
+    """
+    ids = set()
+    for line in stdout.splitlines():
+        match = _FAIL_ROW_RE.match(line)
+        if match is not None:
+            ids.add(match.group(1))
+    return ids
+
+
+def test_ac3_poison_readme_bare_precision_reddens_ac3_and_only_ac3(tmp_path: Path) -> None:
+    """Poison leg 1. A generation-2 kind-precision aggregate with no class split
+    beside it, appended to the README, and AC-3 reddens naming the file and the
+    line. The reddened SET is asserted, so a lane that went red for some other
+    row's reason cannot pass as this one."""
+    root = _make_tree(tmp_path)
+    _append_tracked(
+        root,
+        "README.md",
+        "\n## Appendix\n\nThe kind-precision aggregate over the corpus is 0.9667.\n",
+    )
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-3" in line and "README.md" in line and "bare kind-precision aggregate" in line
+        for line in fail_lines
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-3"}, r.stdout
+
+
+def test_ac3_poison_readme_bare_recall_reddens_ac3_and_only_ac3(tmp_path: Path) -> None:
+    """Poison leg 2. A measured detector-recall figure without the registered
+    intervals or the sample and skill denominators. The word 'measured' in the
+    context window is what forbids it; UNMEASURED would have been compliant."""
+    root = _make_tree(tmp_path)
+    _append_tracked(
+        root,
+        "README.md",
+        "\n## Appendix\n\nThe vacuity-flag detector's recall was measured at 0.74.\n",
+    )
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-3" in line and "README.md" in line and "recall not stated as UNMEASURED" in line
+        for line in fail_lines
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-3"}, r.stdout
+
+
+def test_ac3_poison_in_docs_names_the_docs_file_not_the_readme(tmp_path: Path) -> None:
+    """Scope control. The row scans the whole public-copy surface set, not the
+    README alone, and the failure names the surface that actually carries the
+    claim. A row that only ever reported README.md would pass the two lanes
+    above while guarding one file."""
+    root = _make_tree(tmp_path)
+    _write_tracked(
+        root,
+        "docs/appendix.md",
+        "Kind-precision 0.835 held across the run.\n",
+    )
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("AC-3" in line and "docs/appendix.md" in line for line in fail_lines), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-3"}, r.stdout
+
+
+def test_ac3_compliant_readme_appendix_stays_green(tmp_path: Path) -> None:
+    """Green control for both legs, mirroring DC-16's. The SAME two figures as
+    the poison lanes, written the way the live README writes them: the aggregate
+    beside both class splits, the recall named UNMEASURED."""
+    root = _make_tree(tmp_path)
+    _append_tracked(
+        root,
+        "README.md",
+        "\n## Appendix\n\nKind-precision 0.9667: `not_a_directive` matched 255/255, while\n"
+        "`weak_directive` matched 6/15. The vacuity-flag detector's recall is UNMEASURED.\n",
+    )
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_ac3_vacuity_prose_without_a_figure_does_not_fire(tmp_path: Path) -> None:
+    """False-positive control, required by #543. A sentence that names the
+    vacuity flag and the detector but states no figure is not a claim, and a
+    rule that fired on it would be untrue to its own summary."""
+    root = _make_tree(tmp_path)
+    _append_tracked(
+        root,
+        "README.md",
+        "\n## Appendix\n\nThe vacuity flag marks clauses the detector could not resolve.\n",
+    )
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_ac3_registry_kind_precision_split_drift_blocks(tmp_path: Path) -> None:
+    """The registry leg. docs/calibration/*.json is not prose-scanned, so the
+    two figures it holds are pinned as VALUES instead. Move one class
+    denominator and AC-3 reddens naming the file and both readings."""
+    root = _make_tree(tmp_path)
+    registry = "docs/calibration/vacuity-flag-calibration-2026-08-08.json"
+    # No staging: DC-16 selects only markdown from the tracked set, and a
+    # ValueSite reads the worktree file, so the index copy is nothing's input.
+    _mutate(root, registry, '"weak_directive_n": 20,', '"weak_directive_n": 21,')
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-3" in line and registry in line and "0.835/77/77/4/20" in line for line in fail_lines
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-3"}, r.stdout
+
+
+def test_ac3_registry_recall_claim_drift_blocks(tmp_path: Path) -> None:
+    """The registry's recall field is the one word the public claim rests on.
+    Changing UNMEASURED to anything else reddens AC-3, because the row reads the
+    field rather than the prose that quotes it."""
+    root = _make_tree(tmp_path)
+    registry = "docs/calibration/vacuity-flag-calibration-2026-08-08.json"
+    _mutate(root, registry, '"recall": "UNMEASURED",', '"recall": "MEASURED",')
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-3" in line and registry in line and "expected UNMEASURED" in line for line in fail_lines
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-3"}, r.stdout
+
+
+def test_ac3_refuses_when_its_surface_is_gone(tmp_path: Path) -> None:
+    """The vacuity control for the delegation kind itself.
+
+    The delegate builds its surface set by globbing. A tree with no README and
+    no docs makes it return zero violations, which without `requires` prints as
+    OK. This lane deletes the surface and asserts the row REFUSES, in the
+    table's own wording, naming the missing path.
+
+    The reddened SET is not asserted here: removing README.md is also DC-5's and
+    DC-16's business, and it is correct that they notice. What must hold is that
+    AC-3 does not go quietly green.
+    """
+    root = _make_tree(tmp_path)
+    (root / "README.md").unlink()
+    shutil.rmtree(root / "docs")
+    _git(root, "add", "-A")
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("AC-3" in line and "has no surface to scan" in line for line in fail_lines), r.stdout
+
+
+def test_ac3_refuses_when_the_named_predicate_is_gone(tmp_path: Path) -> None:
+    """The dead-row control for the delegation kind.
+
+    A row that names a symbol is only a guard while that symbol exists. This
+    lane copies the script into a scratch repo root whose guard module has the
+    predicate renamed, and asserts the row says so rather than reporting zero
+    violations.
+
+    Without this lane, deleting `vacuity_claim_violations_for_repo` from
+    tests/test_structural_bans.py would leave AC-3 printing OK forever, which is
+    precisely the dead control this repository exists to refuse. It works
+    because _load_guard_module resolves the guard against the SCRIPT's own
+    parent directory, so relocating the script relocates its guard lookup.
+    """
+    fake_repo = tmp_path / "fake-repo"
+    (fake_repo / "scripts").mkdir(parents=True)
+    (fake_repo / "tests").mkdir()
+    shutil.copyfile(_SCRIPT, fake_repo / "scripts" / "drift_check.py")
+    guard = (_REPO_ROOT / "tests" / "test_structural_bans.py").read_text(encoding="utf-8")
+    (fake_repo / "tests" / "test_structural_bans.py").write_text(
+        guard.replace(
+            "def vacuity_claim_violations_for_repo",
+            "def vacuity_claim_violations_for_repo_RENAMED",
+        ),
+        encoding="utf-8",
+    )
+    root = _make_tree(tmp_path)
+    r = _run(root, script=fake_repo / "scripts" / "drift_check.py")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert any(
+        "AC-3" in line and "is absent or not callable" in line
+        for line in r.stdout.splitlines()
+        if line.strip().startswith("FAIL")
+    ), r.stdout
+
+
+def test_ac3_undecodable_file_reddens_ac3_instead_of_crashing(tmp_path: Path) -> None:
+    """The predicate-exception refusal (#565).
+
+    A doc the delegate cannot decode is unreachable in the same sense as a
+    missing surface or an unloadable module. Before the fix, `predicate(root,
+    failures)` ran outside any try, so this file aborted the whole subprocess
+    with an unhandled UnicodeDecodeError: exit 1, a traceback on stderr, and
+    no rows at all. After the fix the row itself reddens, names the guard and
+    the exception, and every other row still prints.
+    """
+    root = _make_tree(tmp_path)
+    path = root / "docs" / "undecodable.md"
+    path.write_bytes("Some heading\n\xe9 not utf8\n".encode("latin-1"))
+    _git(root, "add", "--", "docs/undecodable.md")
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "Traceback" not in r.stderr, r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-3" in line and "vacuity_claim_violations_for_repo raised" in line for line in fail_lines
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-3"}, r.stdout
+    ok_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("OK")]
+    assert any("DC-1 " in line for line in ok_lines), r.stdout
+    assert "DRIFT CHECK: BLOCKED" in r.stdout, r.stdout
+
+
+def test_ac3_refuses_when_a_named_surface_beyond_readme_and_docs_is_gone(
+    tmp_path: Path,
+) -> None:
+    """The coverage-widening control (#565).
+
+    `requires` used to name only README.md and docs, two of the five surfaces
+    the row's own summary claims. Deleting the sitegen templates, one of the
+    other three, used to leave the row scanning nothing and printing OK. This
+    lane proves the widened `requires` catches it: the row refuses, in the
+    table's own wording, naming the missing path.
+    """
+    root = _make_tree(tmp_path)
+    shutil.rmtree(root / "src" / "skill_harness" / "sitegen")
+    _git(root, "add", "-A")
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-3" in line and "has no surface to scan" in line and "src/skill_harness/sitegen" in line
+        for line in fail_lines
+    ), r.stdout
 
 
 # ---------------------------------------------------------------------------
