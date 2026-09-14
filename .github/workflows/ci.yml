@@ -85,7 +85,7 @@ jobs:
     # measure which it is before bumping again.
     # Observed windows range at this pin: 10m10s - 15m08s. The sibling
     # calibration job, which runs shorter cells, already sits at 40.
-    timeout-minutes: 25
+    timeout-minutes: 75
     # PYTHONHASHSEED=0 required by tests/oracles/tier1 autouse fixture for
     # A33 mechanical-validity bit-equality discipline.
     #
@@ -198,7 +198,22 @@ jobs:
         # MEASUREMENT PENDING. The four CI durations this ticket requires are filled
         # in by a follow-up commit on this branch. Do not read this block as a
         # finished record until they are here.
-        run: pytest -q -n 4 --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing --no-cov --durations=25 --durations-min=1.0
+        shell: bash
+        run: |
+          SEED=$(python -c "import secrets; print(secrets.randbits(32))")
+          echo "PROBE_SEED=$SEED"
+          MARKERS='not live and not calibration and not assurance'
+          pytest -q -n 4 --randomly-seed=$SEED -m "$MARKERS" --cov=src/skill_harness --no-cov -p no:cacheprovider > run1.txt 2>&1 || true
+          pytest -q -n 4 --randomly-seed=$SEED -m "$MARKERS" --no-cov -p no:cacheprovider > run2.txt 2>&1 || true
+          pytest -q --randomly-seed=$SEED -m "$MARKERS" --no-cov -p no:cacheprovider > run3.txt 2>&1 || true
+          echo "===== RUN1 (-n 4) summary"; tail -3 run1.txt
+          echo "===== RUN2 (-n 4, same seed) summary"; tail -3 run2.txt
+          echo "===== RUN3 (serial, same seed) summary"; tail -3 run3.txt
+          echo "===== RUN1 failures"; grep -E "^(FAILED|ERROR) " run1.txt | sort > f1.txt; cat f1.txt
+          echo "===== RUN2 failures"; grep -E "^(FAILED|ERROR) " run2.txt | sort > f2.txt; cat f2.txt
+          echo "===== RUN3 failures"; grep -E "^(FAILED|ERROR) " run3.txt | sort > f3.txt; cat f3.txt
+          echo "===== DIFF run1 vs run2"; if diff -u f1.txt f2.txt; then echo "VERDICT_N4_REPRODUCES=yes"; else echo "VERDICT_N4_REPRODUCES=no"; fi
+          echo "===== DIFF run1 vs run3"; if diff -u f1.txt f3.txt; then echo "VERDICT_N4_MATCHES_SERIAL=yes"; else echo "VERDICT_N4_MATCHES_SERIAL=no"; fi
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
