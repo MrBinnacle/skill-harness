@@ -151,10 +151,17 @@ listed rows are four listed rows rather than a settled assurance question. All t
 legs were asserted before the row existed, inside the required `Test` job, by the
 one-shot test named above. What the row adds is bounded and was measured rather than
 assumed. The contract table now names the workflow configuration among the contracts
-it checks. `gate_workflows_sha_pinned` now runs behind a required check: branch
-protection on `main` requires seven contexts as of 2026-09-14, and `Release gate
-(surface lockstep)` is not one of them, so a `G5` failure could stand on a pull
-request with the merge button still available. And each leg gains a red
+it checks. `gate_workflows_sha_pinned` now runs behind a required check, and it
+did not before. Before this row it ran only inside `scripts/release_gate.py`,
+whose job `Release gate (surface lockstep)` branch protection still does not
+require. Branch protection on `main` requires seven contexts as of 2026-09-14 and
+that job is not among them, so on that path alone a `G5` failure can stand on a
+pull request with the merge button available. What this row changes is the path,
+not the rule. The SHA-pin rule was already blocking through the separate copy in
+`tests/test_assurance_supply_chain_172.py`. What is new is that
+`gate_workflows_sha_pinned` itself now runs inside `scripts/drift_check.py`,
+which `tests/test_drift_check.py::test_real_tree_is_green_and_exits_zero` asserts
+exits 0 from inside the required `Test` job. And each leg gains a red
 demonstration against a synthetic tree, which the one-shot test cannot have, because
 it reads a hardcoded repository root and can therefore only report that the real
 tree is clean.
