@@ -46,6 +46,7 @@ _LIVE_IDS = (
     "DC-16",
     "DC-17",
     "AC-1",
+    "AC-2",
 )
 _PLANNED_IDS = ("DC-13",)
 
@@ -86,6 +87,13 @@ _LIVE_SURFACES = (
     # DC-16 reads the vendored word list; without it every synthetic tree
     # would fail on a missing manifest instead of the lane under test.
     "assets/words_to_avoid.json",
+    # AC-2 reads the two assurance harnesses that RESTATE the schedule and the
+    # pass-probability threshold (#545). The third harness named in that ticket,
+    # tests/test_aggregation_cs_calibration.py, imports every constant it uses
+    # and states no literal of its own, so the row has nothing to read there and
+    # the synthetic tree does not need it.
+    "tests/test_aggregation_aa.py",
+    "tests/test_aggregation_calibration.py",
 )
 
 
@@ -968,6 +976,116 @@ def test_ac1_does_not_fire_on_promoting_the_cs_in_the_json_dict(tmp_path: Path) 
         '        "sequential_confidence_sequence_95": list(seq) if seq is not None else None,',
         '"sequential_confidence_sequence_95": list(seq) if seq is not None else None,\n'
         '        "posterior_credible_interval_95": list(clause.posterior_credible_interval_95),',
+    )
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+# ---------------------------------------------------------------------------
+# AC-2: assurance-harness schedule agreement (#248 candidate, ratified in
+# docs/ASSURANCE.md; activated by #545)
+#
+# This row guards the HARNESS side only. DC-1 and DC-2 already pin the
+# production constants in src/skill_harness/ablation/stopping.py, so every
+# demonstration below mutates a HARNESS site and asserts that AC-2 is the row
+# that names it. Mutating production instead would turn DC-1 or DC-2 red and
+# prove nothing about this row.
+# ---------------------------------------------------------------------------
+
+
+def test_ac2_aa_harness_threshold_drift_blocks(tmp_path: Path) -> None:
+    """The A/A harness restates the pass-probability threshold as its own module
+    constant. Moving it away from the registered 0.95 must block, naming the
+    harness file."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "tests/test_aggregation_aa.py",
+        "PROB_THRESHOLD = 0.95",
+        "PROB_THRESHOLD = 0.90",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("AC-2" in line and "test_aggregation_aa.py" in line for line in fail_lines), r.stdout
+
+
+def test_ac2_calibration_harness_threshold_drift_blocks(tmp_path: Path) -> None:
+    """The coverage-calibration harness restates the same threshold. It drifts
+    independently of the A/A harness, so it is demonstrated independently."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "tests/test_aggregation_calibration.py",
+        "PROB_THRESHOLD = 0.95",
+        "PROB_THRESHOLD = 0.99",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-2" in line and "test_aggregation_calibration.py" in line for line in fail_lines
+    ), r.stdout
+
+
+def test_ac2_harness_docstring_schedule_drift_blocks(tmp_path: Path) -> None:
+    """A production re-tune that leaves the harness prose behind is the drift
+    this row exists for. The harness then describes a schedule it does not run,
+    and a reader of the test file cannot see the difference.
+
+    The mutation moves only the harness sentence, so the red must come from
+    AC-2. DC-2 reads the production module and stays green here, which is what
+    makes this demonstration attributable to one row."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "tests/test_aggregation_calibration.py",
+        "(``N_MIN=8``, ``N_INC=4``, ``N_MAX=40``)",
+        "(``N_MIN=8``, ``N_INC=4``, ``N_MAX=60``)",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-2" in line and "test_aggregation_calibration.py" in line for line in fail_lines
+    ), r.stdout
+    # The control asserts on the line's ROW ID, not on the token "DC-2"
+    # appearing anywhere in it. AC-2's own summary names DC-1 and DC-2 as the
+    # production side, so a substring test matches AC-2's own failure line and
+    # the control fires on a tree where nothing is wrong.
+    assert not any(re.match(r"FAIL\s+DC-2\b", line.strip()) for line in fail_lines), (
+        "The harness sentence moved and the production module did not, so DC-2 "
+        "must stay green. A red DC-2 here would mean this demonstration is "
+        "killed by the wrong row.\n" + r.stdout
+    )
+
+
+def test_ac2_aa_harness_delta_and_threshold_sentence_drift_blocks(tmp_path: Path) -> None:
+    """The A/A harness states its registered constants in prose as well as in
+    code. The sentence is registered, so moving it alone must block."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "tests/test_aggregation_aa.py",
+        "``delta=0.1``, ``prob_threshold=0.95``",
+        "``delta=0.1``, ``prob_threshold=0.90``",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("AC-2" in line and "test_aggregation_aa.py" in line for line in fail_lines), r.stdout
+
+
+def test_ac2_does_not_fire_on_a_compliant_tree(tmp_path: Path) -> None:
+    """AC-2 must never punish compliance. An unmutated copy of the live tree is
+    green, and so is a harness edit that touches neither a registered constant
+    nor a registered sentence."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "tests/test_aggregation_aa.py",
+        "NOMINAL_ALPHA = 1.0 - PROB_THRESHOLD",
+        "NOMINAL_ALPHA = 1.0 - PROB_THRESHOLD  # derived, not registered",
     )
     r = _run(root)
     assert r.returncode == 0, r.stdout + r.stderr

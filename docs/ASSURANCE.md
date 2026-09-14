@@ -91,11 +91,24 @@ not the absence of defects.
 ## Proposed drift-check candidates
 
 **Row status.** AC-1 CONFIGURED: it is the `AC-1` row in `scripts/drift_check.py`,
-red-demonstrated in `tests/test_drift_check.py`, landed by #248. AC-2 NOT
-CONFIGURED. AC-3 NOT CONFIGURED. AC-4 NOT CONFIGURED. The #160 close-out ratified
-all four; the three unconfigured candidates carry no mechanical guard, so drift in
-them stays unobserved until each lands as a row with its own red demonstration
-(#248).
+red-demonstrated in `tests/test_drift_check.py`, landed by #248. AC-2 CONFIGURED:
+it is the `AC-2` row in `scripts/drift_check.py`, red-demonstrated in
+`tests/test_drift_check.py`, landed by #545. AC-3 NOT CONFIGURED. AC-4 NOT
+CONFIGURED. The #160 close-out ratified all four; the two unconfigured candidates
+carry no mechanical guard, so drift in them stays unobserved until each lands as a
+row with its own red demonstration (#248, #543, #544).
+
+The `AC-2` row guards the harness sites only, which is what the candidate row
+below asks for in its own words: "DC-1 and DC-2 cover production and selected
+prose, but not these harness sites." The production constants stay with DC-1 and
+DC-2. Restating them in `AC-2` would put one meaning in two rows and would make
+a production mutation turn two rows red at once, which leaves no demonstration
+able to show that `AC-2` is the row doing the work.
+
+`test_aggregation_cs_calibration.py` is named in the candidate row and carries no
+pinned site. It imports every constant it uses from `test_aggregation_calibration.py`
+and states no schedule or decision literal of its own, so it is compliant by
+import and has nothing that can drift independently.
 
 | Candidate | Invariant | Sites to compare | Why it may be worth pinning |
 | --- | --- | --- | --- |
