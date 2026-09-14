@@ -202,14 +202,46 @@ jobs:
         # reads this line and fails if either goes.
         #
         # -n 4 (#561): pytest-xdist splits the suite across four worker processes.
-        # Four is the processor count of the GitHub-hosted standard runner this
-        # matrix uses, not a tuning guess. A literal number is written rather than
-        # `auto` so that a change in the runner image shows up as a deliberate edit
-        # here instead of a silent change in behaviour.
+        # Four is the processor count of the GitHub-hosted standard runner this matrix
+        # uses. It was read off the runner rather than taken from documentation:
+        # python -c "import os; print(os.cpu_count())" printed 4 on windows-latest in
+        # runs 34881350571 and 34881353876. A literal number is written rather than
+        # `auto` so a change in the runner image lands here as a deliberate edit.
         #
-        # MEASUREMENT PENDING. The four CI durations this ticket requires are filled
-        # in by a follow-up commit on this branch. Do not read this block as a
-        # finished record until they are here.
+        # Measured on the windows-latest py3.12 cell, which is the critical path. One
+        # CI run per arm, pytest's own reported wall clock:
+        #   1191.71s  no -n, with --cov      run 34878186948, main at ab29e6a
+        #    486.85s  -n 4,  with --cov      run 34881212524
+        #   1104.16s  no -n, without --cov   run 34881353876
+        #    515.90s  -n 4,  without --cov   run 34881350571
+        # Pass, skip and xfail counts are identical in all four arms and identical to
+        # the main run the first arm came from: 3037 passed, 14 skipped, 2 xfailed.
+        # The reported coverage is IDENTICAL across the two --cov arms, 11589
+        # statements, 860 missed, 93%, which is the property #510 required of sysmon.
+        # pytest-cov combines its per-worker data correctly here.
+        #
+        # What these numbers do NOT establish, stated because one run per arm is one
+        # sample and this cell's variance is why the ceiling above sits at 25. A second
+        # -n 4 with --cov sample, run 34884572303, came back at 628.25s. Three serial
+        # with --cov samples on main span 1093.63s to 1331.62s. The speedup is
+        # therefore a range of roughly 1.7x to 2.7x, not the 2.45x the fastest pair on
+        # its own suggests. The without-cov arm under -n 4 came back SLOWER than the
+        # with-cov arm by 29s, which is a negative instrumentation cost and so is
+        # variance rather than a finding. Do not project any of this to a larger -n.
+        #
+        # Seed reproducibility under -n (#561 item 3), measured on CI in run
+        # 34882784013. A deterministic failure and an order-dependent failure were
+        # injected, then one seed was run three times on one runner: twice under -n 4
+        # and once serially. All three produced the same failure set. The printed seed
+        # still reproduces a failure under xdist, so the --randomly-seed line above is
+        # not decoration.
+        # The reproduction is luck rather than a guarantee, and the difference matters.
+        # Measured locally with a per-worker execution log, five -n 4 runs at one seed
+        # produced five DIFFERENT worker assignments, while two serial runs at the same
+        # seed were byte-identical. The seed fixes the collection order; it does not fix
+        # which worker runs a test or what ran before it in that process. A failure
+        # intrinsic to one test reproduces from the seed. A failure that depends on what
+        # ran earlier in the same process may not.
         run: pytest -q -n 4 --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing --durations=25 --durations-min=1.0
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
