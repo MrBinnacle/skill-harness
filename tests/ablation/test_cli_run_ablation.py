@@ -141,6 +141,8 @@ class TestExitCodes:
         cr.unmeasured_reason = unmeasured_reason
         cr.length_confounded = unmeasured_reason == "length_confounded"
         cr.samples_collected = 8
+        cr.path_c = None
+        cr.path_c_unavailable_reason = "no_ratification_reference"
         cr.stop_decision = MagicMock()
         cr.stop_decision.p_win_rate_exceeds_threshold = 0.97
         cr.stop_decision.n_samples = 8
@@ -236,6 +238,8 @@ class TestUnmeasuredVsFailedRender:
         cr.unmeasured_reason = None
         cr.length_confounded = False
         cr.samples_collected = 8
+        cr.path_c = None
+        cr.path_c_unavailable_reason = "no_ratification_reference"
         cr.stop_decision = MagicMock()
         cr.stop_decision.p_win_rate_exceeds_threshold = 0.97
         cr.stop_decision.n_samples = 8
@@ -250,6 +254,8 @@ class TestUnmeasuredVsFailedRender:
         cr.unmeasured_reason = None
         cr.length_confounded = False
         cr.samples_collected = 8
+        cr.path_c = None
+        cr.path_c_unavailable_reason = "no_ratification_reference"
         cr.stop_decision = MagicMock()
         cr.stop_decision.p_win_rate_exceeds_threshold = 0.03
         cr.stop_decision.n_samples = 8
@@ -264,6 +270,8 @@ class TestUnmeasuredVsFailedRender:
         cr.unmeasured_reason = subreason
         cr.length_confounded = subreason == "length_confounded"
         cr.samples_collected = 40
+        cr.path_c = None
+        cr.path_c_unavailable_reason = "no_ratification_reference"
         cr.stop_decision = MagicMock()
         cr.stop_decision.p_win_rate_exceeds_threshold = 0.5
         cr.stop_decision.n_samples = 40
@@ -284,6 +292,8 @@ class TestUnmeasuredVsFailedRender:
         cr.unmeasured_reason = None
         cr.length_confounded = False
         cr.samples_collected = 12
+        cr.path_c = None
+        cr.path_c_unavailable_reason = "no_ratification_reference"
         cr.stop_decision = MagicMock()
         cr.stop_decision.p_win_rate_exceeds_threshold = 0.5
         cr.stop_decision.n_samples = 12
@@ -414,6 +424,8 @@ class TestResumeFlag:
         mock_result.unmeasured_reason = None
         mock_result.length_confounded = False
         mock_result.samples_collected = 8
+        mock_result.path_c = None
+        mock_result.path_c_unavailable_reason = "no_ratification_reference"
         mock_result.stop_decision = MagicMock()
         mock_result.stop_decision.p_win_rate_exceeds_threshold = 0.97
         mock_result.stop_decision.n_samples = 8

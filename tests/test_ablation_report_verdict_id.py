@@ -49,6 +49,11 @@ def _make_result(
     result.unmeasured_reason = unmeasured_reason
     result.length_confounded = False
     result.samples_collected = 8
+    # #546: the report reads the Gate-2 decision. A bare MagicMock here would
+    # render an auto-created attribute into the registered-floor cell, so these
+    # fixtures state the honest case instead: no record, therefore no decision.
+    result.path_c = None
+    result.path_c_unavailable_reason = "no_ratification_reference"
     result.stop_decision = MagicMock()
     result.stop_decision.p_win_rate_exceeds_threshold = 0.97
     result.stop_decision.n_samples = 8

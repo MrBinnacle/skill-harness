@@ -1499,13 +1499,53 @@ def _any_unmeasured(results: list[Any]) -> bool:
     return any(_is_unmeasured(r) for r in results)
 
 
+def _gate2_cell(result: Any) -> str:
+    """Render the registered Gate-2 decision for one clause (#546, #368 Path C).
+
+    Two displays, and the difference between them is load-bearing:
+
+    - A decision was made. The cell shows it, the plug-in net lift it was made
+      on, and the ratification id whose thresholds decided it, so a reader can
+      retrieve what it was decided under.
+    - No decision was made. The cell shows "not applied" and the typed reason
+      from ClauseResult.path_c_unavailable_reason. An absent floor decision is
+      never displayed as a clause clearing the floor.
+    """
+    from skill_harness.oc.gate2 import Gate2Decision
+
+    path_c = getattr(result, "path_c", None)
+    if path_c is None:
+        reason = getattr(result, "path_c_unavailable_reason", None) or "unknown"
+        return f"[dim]not applied ({reason})[/]"
+
+    decision = path_c.decision
+    if decision == Gate2Decision.BENEFIT:
+        colour = "green"
+    elif decision == Gate2Decision.HARM:
+        colour = "red"
+    else:
+        colour = "yellow"
+    return (
+        f"[{colour}]{decision.upper()}[/] "
+        f"[dim]net_lift={path_c.net_lift_point:+.3f} | {path_c.ratification_id}[/]"
+    )
+
+
 def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = False) -> None:
     """Render the ablation results table + reporting-honesty caveats (A48, A50).
 
     Verdict rendering (A48):
-    - PASSED  → green   "PASSED"
-    - FAILED  → red     "FAILED (P(win)≤.05)"
-    - UNMEASURED → yellow "UNMEASURED(<subreason>)"
+    - PASSED  -> green   "PASSED"
+    - FAILED  -> red     "FAILED (P(win)<=.05)"
+    - UNMEASURED -> yellow "UNMEASURED(<subreason>)"
+
+    Registered effect-size floor (#546, docs/INVARIANTS.md section 8):
+    The scalar stopping rule reports the conditional win rate q and cannot see
+    how often a direction occurred at all, so it passes a clause whose net lift
+    is below the registered delta_min. Gate 2 can see it. A clause that clears
+    the scalar rule and fails the floor renders as its Gate-2 verdict, never as
+    PASSED. A clause decided with no registered thresholds renders as a
+    scalar-only pass, with the refusal reason beside it.
 
     Contribution label (A50):
     - "single-clause LOO; lower-bound under redundancy"
@@ -1513,16 +1553,20 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
     """
     from skill_harness.ablation.stopping import StoppingReason
     from skill_harness.aggregation.status import UnmeasuredSubReason
+    from skill_harness.oc.gate2 import Gate2Decision
 
     table = Table(title="Ablation Results", show_lines=True)
     table.add_column("clause_id", style="dim", min_width=12)
     table.add_column("verdict_id", style="dim", min_width=36)
     table.add_column("verdict", min_width=30)
+    table.add_column("gate-2 (registered floor)", min_width=24)
     table.add_column("N", width=5, justify="right")
     table.add_column("P(win>0.60)", min_width=12)
     table.add_column("contribution", min_width=36)
 
     has_any_unmeasured = False
+    has_any_floor_unapplied = False
+    has_any_floor_displacement = False
 
     for result in results:
         clause_id = result.clause_id
@@ -1548,7 +1592,19 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
             verdict_str = f"[yellow]UNMEASURED({subreason})[/]"
             contrib_str = "[dim]—[/]"
         elif stopping_reason == StoppingReason.PASSED:
-            verdict_str = "[green]PASSED[/]"
+            # #546: the scalar rule passed. Display the registered floor before
+            # calling it a pass, because a clause can clear the scalar rule on a
+            # net lift the registered delta_min rejects.
+            path_c = getattr(result, "path_c", None)
+            if path_c is None:
+                has_any_floor_unapplied = True
+                verdict_str = "[green]PASSED[/] [dim](scalar only)[/]"
+            elif path_c.decision == Gate2Decision.BENEFIT:
+                verdict_str = "[green]PASSED[/]"
+            else:
+                has_any_floor_displacement = True
+                floor_colour = "red" if path_c.decision == Gate2Decision.HARM else "yellow"
+                verdict_str = f"[{floor_colour}]{path_c.decision.upper()} (registered floor)[/]"
             contrib_str = "single-clause LOO; lower-bound under redundancy"
         elif stopping_reason == StoppingReason.FAILED:
             verdict_str = "[red]FAILED (P(win)≤.05)[/]"
@@ -1563,6 +1619,7 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
             clause_id,
             verdict_id_str,
             verdict_str,
+            _gate2_cell(result),
             str(n_samples),
             f"{p_win:.3f}",
             contrib_str,
@@ -1584,6 +1641,25 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
             "\n[yellow][!] One or more clauses are UNMEASURED.[/]"
             "\n  UNMEASURED != FAILED. No admissible evidence -> no claim."
             "\n  See subreason for each UNMEASURED clause above."
+        )
+
+    # #546: the report states what the registered floor did and did not decide.
+    if has_any_floor_displacement:
+        _console.print(
+            "\n[yellow][!] One or more clauses cleared the scalar rule and failed the "
+            "registered effect-size floor.[/]"
+            "\n  The Gate-2 verdict is displayed in place of the scalar verdict."
+            "\n  The scalar rule reports the conditional win rate and cannot see how"
+            "\n  often a direction occurred at all. See docs/INVARIANTS.md section 8."
+        )
+
+    if has_any_floor_unapplied:
+        _console.print(
+            "\n[dim]Gate-2 floor not applied on one or more rows.[/]"
+            "\n  No registered thresholds were in force for those clauses, so this"
+            "\n  report makes no claim about registered net lift for them. The absence"
+            "\n  is a typed refusal, never a clause clearing the floor."
+            "\n  Supply one with: run ablation --execute --ratification <record>"
         )
 
     if probe_redundancy:
