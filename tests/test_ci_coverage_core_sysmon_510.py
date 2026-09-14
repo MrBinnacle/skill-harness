@@ -4,9 +4,8 @@ Before this ticket, coverage instrumentation on the Test cell cost ~522 seconds
 of wall-clock time on the dominant fixture, pushing every cell near or past the
 25-minute ceiling. The fix adds ``COVERAGE_CORE: "sysmon"`` to the Test job's
 ``env:`` block in ``ci.yml``, which switches coverage.py from its default
-settrace callback to CPython's sys.monitoring API. Measured on the dominant
-fixture (``tests/test_aggregation_fit_ebmom_recovery.py``) with
-``pytest -p no:randomly``:
+core to CPython's sys.monitoring API. Measured on the dominant fixture
+(``tests/test_aggregation_fit_ebmom_recovery.py``) with ``pytest -p no:randomly``:
 
 * Default core: 664s, 10298 statements, 8825 missed, 14%.
 * ``COVERAGE_CORE=sysmon``: 152s, 10298 statements, 8825 missed, 14%.
@@ -21,7 +20,7 @@ absent. They read the real ``ci.yml`` rather than a copy, then prove the
 mechanism in a subprocess so the assertion is about behaviour and not about a
 string being present.
 
-Why the behavioural half uses a direct subprocess invocation rather than
+Why the behavioural half uses a direct coverage invocation rather than
 re-running the full test suite: the full suite is 2700+ tests and takes
 minutes even with sysmon. The control proves that the env-var reachability
 mechanism works; the CI run on the PR branch proves the numbers.
@@ -41,18 +40,48 @@ CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
 # A job block runs from its two-space key to the next two-space key.
 _TEST_JOB_BLOCK = re.compile(r"\n  test:\n(?P<body>.*?)(?=\n  [A-Za-z_-]+:\n)", re.DOTALL)
-# The env: block inside the Test job, from "env:" to the next top-level key
-# (two-space indent) or the end of the job block.
-_ENV_BLOCK = re.compile(r"^\s+env:\s*\n(?P<body>(?:\s+.*\n)*)", re.MULTILINE)
-# A bare key: value line inside the env block.
+# Job-level keys sit four spaces under the workflow (``  test:`` then ``    env:``).
+_JOB_LEVEL_KEY = re.compile(r"^    ([A-Za-z_][A-Za-z0-9_-]*):", re.MULTILINE)
+# The env: block: only lines indented deeper than the ``env:`` key itself. A
+# greedy ``\s+.*`` body would swallow strategy/steps and make the "same block"
+# check vacuous when a second ``env:`` key appears later in the job.
+_ENV_BLOCK = re.compile(
+    r"^(?P<indent>[ \t]+)env:\s*\n(?P<body>(?:(?P=indent)[ \t]+.+\n)*)",
+    re.MULTILINE,
+)
+# A bare key: value line inside the env block (quoted values, as ci.yml writes them).
 _ENV_VAR = re.compile(r"^\s+(?P<key>\w+):\s*\"(?P<value>[^\"]*)\"\s*$", re.MULTILINE)
 
-_SLEEPING_TEST = textwrap.dedent(
+_PARTIAL_MODULE = textwrap.dedent(
     """
-    import time
+    def covered() -> int:
+        return 1
 
-    def test_always_passes():
-        time.sleep(1)
+    def uncovered() -> int:
+        return 2
+    """
+)
+
+_PARTIAL_TEST = textwrap.dedent(
+    """
+    from mod import covered
+
+    def test_covers_one_function():
+        assert covered() == 1
+    """
+)
+
+_CORE_PROBE = textwrap.dedent(
+    """
+    import os
+    from coverage import Coverage
+
+    cov = Coverage()
+    cov.start()
+    _ = 1 + 1
+    cov.stop()
+    tracers = list(cov._collector.tracers)
+    print(type(tracers[0]).__name__ if tracers else "NONE")
     """
 )
 
@@ -77,11 +106,18 @@ def _test_job_env() -> dict[str, str]:
 
 
 def _test_job_env_raw() -> str:
-    """The raw text of the Test job's env: block."""
+    """The raw text of the Test job's env: block (values only, not siblings)."""
     job = _test_job_raw()
     env_m = _ENV_BLOCK.search(job)
     assert env_m is not None, "Test job has no env: block"
     return env_m.group("body")
+
+
+def _parse_coverage_percent(output: str) -> str:
+    """TOTAL row percent from a term-missing coverage report."""
+    m = re.search(r"^TOTAL\s+\d+\s+\d+\s+(\d+%)\s*$", output, re.MULTILINE)
+    assert m is not None, "no TOTAL coverage row in output:\n" + output
+    return m.group(1)
 
 
 # -- Configuration tests: fail when the setting is absent ------------------
@@ -112,8 +148,14 @@ def test_coverage_core_lives_inside_existing_env_block() -> None:
     this. If someone copies the env block instead of adding to it, the other
     variables (PYTHONHASHSEED, SKILL_HARNESS_REQUIRE_VALE) would disappear.
     """
+    job = _test_job_raw()
+    job_keys = _JOB_LEVEL_KEY.findall(job)
+    assert job_keys.count("env") == 1, (
+        f"Test job must declare exactly one job-level env: key; found "
+        f"{job_keys.count('env')} among {job_keys!r}. A second env: key "
+        f"silently replaces the first rather than merging."
+    )
     raw = _test_job_env_raw()
-    # PYTHONHASHSEED must also be present in the same block.
     assert "PYTHONHASHSEED" in raw, (
         "PYTHONHASHSEED must be in the same env block as COVERAGE_CORE; "
         "a second env: key would have silently replaced the first"
@@ -121,48 +163,58 @@ def test_coverage_core_lives_inside_existing_env_block() -> None:
     assert "SKILL_HARNESS_REQUIRE_VALE" in raw, (
         "SKILL_HARNESS_REQUIRE_VALE must be in the same env block as COVERAGE_CORE"
     )
+    assert "COVERAGE_CORE" in raw, "COVERAGE_CORE missing from the single env block body"
 
 
 # -- Behavioural test: prove the env var reaches coverage.py ----------------
 
 
 def test_coverage_core_sysmon_reaches_coverage(tmp_path: Path) -> None:
-    """A subprocess that runs coverage with COVERAGE_CORE=sysmon completes quickly.
+    """COVERAGE_CORE=sysmon selects SysMonitor and does not reduce reported coverage.
 
-    The default core (settrace) instruments every line via sys.settrace, which
-    is O(statements) per test and costs ~500s on the dominant fixture on CI
-    hardware. The sysmon core uses CPython's sys.monitoring API, which avoids
-    per-line callbacks and costs ~10s. This test runs a trivial coverage-collected
-    invocation with and without the env var and asserts the sysmon path finishes
-    first.
-
-    Uses a one-test file so the absolute times are small; the ratio is what
-    matters and is stable across hardware.
+    The configuration tests above fail when the variable leaves ci.yml. This
+    test proves the variable does what those tests assume: coverage.py reads it
+    and switches to the sys.monitoring core, and the reported statement
+    coverage on a module with a deliberate miss is identical to the default
+    core. A duration race on a one-second sleep is not a control — both cores
+    finish inside the sleep — so this asserts core identity and coverage
+    parity instead.
     """
-    test_file = tmp_path / "test_trivial.py"
-    test_file.write_text(_SLEEPING_TEST, encoding="utf-8")
-    empty_ini = tmp_path / "empty.ini"
-    empty_ini.write_text("[pytest]\n", encoding="utf-8")
+    probe = subprocess.run(
+        [sys.executable, "-c", _CORE_PROBE],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env={**os.environ, "COVERAGE_CORE": "sysmon"},
+        timeout=30,
+        check=False,
+    )
+    assert probe.returncode == 0, f"sysmon core probe failed:\n{probe.stdout}\n{probe.stderr}"
+    assert probe.stdout.strip() == "SysMonitor", (
+        f"COVERAGE_CORE=sysmon must select SysMonitor, got {probe.stdout.strip()!r}"
+    )
+
+    (tmp_path / "mod.py").write_text(_PARTIAL_MODULE, encoding="utf-8")
+    (tmp_path / "test_partial.py").write_text(_PARTIAL_TEST, encoding="utf-8")
+    (tmp_path / "empty.ini").write_text("[pytest]\n", encoding="utf-8")
 
     base_cmd = [
         sys.executable,
         "-m",
         "pytest",
         "-c",
-        str(empty_ini),
+        str(tmp_path / "empty.ini"),
         "--rootdir",
         str(tmp_path),
         "-p",
         "no:randomly",
         "-p",
         "no:cacheprovider",
-        "--cov",
-        str(tmp_path / "test_trivial.py"),
+        "--cov=mod",
         "--cov-report=term-missing",
-        str(tmp_path / "test_trivial.py"),
+        str(tmp_path / "test_partial.py"),
     ]
 
-    # Run WITH sysmon (the fix).
     env_sysmon = {**os.environ, "COVERAGE_CORE": "sysmon"}
     result_sysmon = subprocess.run(
         base_cmd,
@@ -177,7 +229,6 @@ def test_coverage_core_sysmon_reaches_coverage(tmp_path: Path) -> None:
         f"sysmon run failed:\n{result_sysmon.stdout}\n{result_sysmon.stderr}"
     )
 
-    # Run WITHOUT sysmon (the default settrace core).
     env_default = {k: v for k, v in os.environ.items() if k != "COVERAGE_CORE"}
     result_default = subprocess.run(
         base_cmd,
@@ -192,28 +243,16 @@ def test_coverage_core_sysmon_reaches_coverage(tmp_path: Path) -> None:
         f"default-core run failed:\n{result_default.stdout}\n{result_default.stderr}"
     )
 
-    # Both runs collect coverage. The sysmon run should be no slower than the
-    # default-core run. On a trivial file the difference is small, but the
-    # direction is stable: sysmon is always <= settrace.
-    #
-    # Parse wall-clock time from "pytest completed in Xs" if present, else
-    # fall back to a rough check that both ran.
-    def _parse_duration(output: str) -> float | None:
-        m = re.search(r"completed in (\d+\.\d+)s", output)
-        return float(m.group(1)) if m else None
-
-    t_sysmon = _parse_duration(result_sysmon.stdout)
-    t_default = _parse_duration(result_default.stdout)
-    if t_sysmon is not None and t_default is not None:
-        assert t_sysmon <= t_default + 1.0, (
-            f"sysmon ({t_sysmon:.2f}s) should be no slower than default ({t_default:.2f}s)"
-        )
-
-    # Both runs report coverage. The critical property: sysmon does not reduce
-    # reported coverage. The trivial file is 100% covered in both arms.
-    assert "100%" in result_sysmon.stdout, (
-        "sysmon run did not report 100% coverage:\n" + result_sysmon.stdout
+    # Partial module: covered() runs, uncovered() does not. Both cores must
+    # report the same TOTAL percent; a silent drop under sysmon fails criterion 3.
+    pct_sysmon = _parse_coverage_percent(result_sysmon.stdout)
+    pct_default = _parse_coverage_percent(result_default.stdout)
+    assert pct_sysmon == pct_default, (
+        f"sysmon reported {pct_sysmon}, default reported {pct_default}; "
+        f"criterion 3 forbids a smaller number under sysmon.\n"
+        f"sysmon out:\n{result_sysmon.stdout}\ndefault out:\n{result_default.stdout}"
     )
-    assert "100%" in result_default.stdout, (
-        "default-core run did not report 100% coverage:\n" + result_default.stdout
+    assert pct_sysmon != "100%", (
+        "fixture module was fully covered; the deliberate miss is gone and "
+        "parity against 100% no longer tests criterion 3:\n" + result_sysmon.stdout
     )

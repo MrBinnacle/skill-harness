@@ -25,13 +25,17 @@ and reported coverage is **identical** rather than merely comparable.
 
 `COVERAGE_CORE: "sysmon"` was added to the Test job's existing `env:` block in
 `ci.yml` on PR #506, which merged at `681824d`. The variable lives at `ci.yml:111`,
-alongside `--durations=25 --durations-min=1.0` at `:187`.
+alongside `--durations=25 --durations-min=1.0` at the pytest step.
 
 ## Acceptance criterion 1: per-test durations
 
-`--durations=25 --durations-min=1.0` runs on this branch and the cells reached
-session end, so the durations table exists in run 34764117821's logs. The four
-cell durations from that run:
+`--durations=25 --durations-min=1.0` runs on this branch and the cells of run
+34764117821 reached session end, so the table exists in that run's job logs.
+
+**Still owed on the ticket body:** quote the slowest rows from one Test job of
+run 34764117821 onto issue #510. This review seat cannot download those logs
+(API returns 403 without admin rights). Cell-level durations from that run are
+below; the per-test table is the missing quote.
 
 | Cell | Duration |
 |---|---|
@@ -42,10 +46,17 @@ cell durations from that run:
 
 The previous run on this branch killed all four at exactly 25m00s.
 
-The per-test durations table (tests that dominate the cell on CI hardware) is
-available in run 34764117821's job logs under the "pytest" step output. The
-`--durations=25 --durations-min=1.0` flags ensure that only phases exceeding
-1.0 seconds appear, filtering noise.
+Pre-fix per-test evidence already on the ticket (run 34724342821 on `main`,
+windows py3.13) named the dominant suite before sysmon landed:
+
+```
+223.89s call     tests/test_oc_frontier.py::test_full_grid_assembly_every_row_no_shortlist
+57.50s call     tests/test_aggregation_calibration.py::test_coverage_within_binomial_tolerance_per_grid_point[small]
+57.30s call     tests/test_aggregation_calibration.py::test_calibration_harness_is_deterministic
+```
+
+That table satisfies the "name the tests that dominate" half on `main` hardware.
+The post-sysmon table from 34764117821 is what criterion 1 still asks to paste.
 
 ## Acceptance criterion 2: cell finishes inside 25 minutes
 
@@ -57,16 +68,14 @@ available in run 34764117821's job logs under the "pytest" step output. The
 
 The three-arm measurement above shows identical coverage: 10298 statements,
 8825 missed, 14% in both the default-core and sysmon arms. The sysmon core
-uses CPython's sys.monitoring API instead of its settrace callback, which avoids
+uses CPython's sys.monitoring API instead of the default tracer, which avoids
 the per-line callback cost without changing what coverage.py collects.
 
 ## Acceptance criterion 4: second commit reproduces the result
 
-This commit is the second commit on `agent/issue-510`. The control test
-(`tests/test_ci_coverage_core_sysmon_510.py`) asserts that `COVERAGE_CORE`
-is present in the Test job's env block and proves the mechanism reaches
-coverage.py in a subprocess. The Test cells on this commit will confirm
-the timing holds.
+This branch's control commit is a second commit after the fix on `main`. The
+Test cells on the PR for this branch are the reproduction run; record all four
+durations on the ticket once they finish.
 
 ## Non-negotiable: control for the fix
 
@@ -76,17 +85,22 @@ env block. Four tests:
 
 1. `test_coverage_core_is_set_in_test_job_env` — the variable exists.
 2. `test_coverage_core_value_is_sysmon` — the value is `"sysmon"`.
-3. `test_coverage_core_lives_inside_existing_env_block` — it sits in the
-   same `env:` block as `PYTHONHASHSEED` and `SKILL_HARNESS_REQUIRE_VALE`,
-   not in a second `env:` key that would silently replace the first.
-4. `test_coverage_core_sysmon_reaches_coverage` — a subprocess proof that
-   sysmon reaches coverage.py and does not reduce reported coverage.
+3. `test_coverage_core_lives_inside_existing_env_block` — exactly one
+   job-level `env:` key, and COVERAGE_CORE sits in that block with
+   `PYTHONHASHSEED` and `SKILL_HARNESS_REQUIRE_VALE` (a second `env:` key
+   would silently replace the first).
+4. `test_coverage_core_sysmon_reaches_coverage` — subprocess proof that
+   `COVERAGE_CORE=sysmon` selects `SysMonitor`, and that reported coverage
+   on a module with a deliberate miss matches the default core (criterion 3).
 
 ## What remains
 
-Nothing else is owed. The cause is known, the fix has shipped, the control is
-in place, and the cells are green. Do not thin a test, do not move a suite to
-its own lane, and do not raise the ceiling.
+- Quote the per-test durations table from run 34764117821 onto issue #510
+  (criterion 1; needs log access).
+- Record the four cell durations from this PR's Test cells (criterion 4).
+
+Do not thin a test, do not move a suite to its own lane, and do not raise the
+ceiling.
 
 ## Revisit if
 
