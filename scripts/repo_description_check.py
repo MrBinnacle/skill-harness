@@ -92,9 +92,7 @@ def fetch_live_description(repo: str, token: str | None, timeout: float = _TIMEO
 
     last_error: Exception | None = None
     for attempt in range(_MAX_ATTEMPTS):
-        request = urllib.request.Request(  # noqa: S310 - fixed API origin or test stub
-            url, headers=headers
-        )
+        request = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
                 status = response.status

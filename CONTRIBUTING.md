@@ -32,8 +32,8 @@ bit-equality tests refuse to collect without it; on Windows use
 ```bash
 PYTHONHASHSEED=0 pytest -q -m "not live"   # all green (mirrors CI)
 mypy --strict src tests                    # 0 errors
-ruff check src tests                       # 0 issues
-ruff format --check src tests              # 0 reformats needed
+ruff check src tests scripts               # 0 issues
+ruff format --check src tests scripts      # 0 reformats needed
 ```
 
 CI generates a seed and passes it through `--randomly-seed=<seed>`. `pytest-randomly` prints the seed
