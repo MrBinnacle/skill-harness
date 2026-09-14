@@ -106,7 +106,7 @@ finds nothing on a tree that is already clean. Killing that mutant needs a
 seeded unpinned action in `tests/test_release_gate_206.py`, which is the
 module that owns the seeded seam.
 
-`#563` carries the measurement.
+This receipt carries the measurement. Issue #563 does not.
 
 ## Reproducing
 

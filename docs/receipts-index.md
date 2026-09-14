@@ -904,6 +904,29 @@ The deterministic falsification receipt for the `0.3.0` assurance release gate
   the 0.2.x patch line is in scope for the assurance checks; that the gate is
   tamper-proof rather than blocked-by-default.
 
+### [`docs/assurance/release-gate-red-563.md`](assurance/release-gate-red-563.md)
+
+The deterministic falsification receipt for the real-tree release-gate control
+(#563), the counterpart to the seeded-tree receipt above.
+
+- **Claims:** Two seeded mutations each drove `python scripts/release_gate.py`
+  on the real repository tree, with no `--root`, to exit 1 with the gate's
+  stdout recorded verbatim. One set a README status banner to `v0.2.9` against a
+  tree declaring `0.3.0`, naming one G3 lockstep failure and reddening two
+  tests. The other short-circuited `main` off the tree's version, naming three
+  failures and reddening three tests including the request-set assertion; a
+  third mutation, `gate_workflows_sha_pinned` neutered so its glob matches no
+  file, left both release-gate modules green and is recorded as a measured
+  limit rather than as a pass.
+- **Refuses to claim:** That the transcripts were re-derived by a live run;
+  they are a dated record, and the checked-in control asserts only that the
+  receipt still names its command, its seeded mutation and its exit code; that
+  the surviving mutant is a defect in the control rather than a property of the
+  verdict-reading seam; that the enumerated survivors are the complete set of
+  mutations this seam cannot see; that a green real-tree run establishes the
+  gate asked every question it declares, rather than that it reported no
+  failure.
+
 ### [`docs/assurance/issue-174-bottom-line-receipt.md`](assurance/issue-174-bottom-line-receipt.md)
 
 - **Claims:** The Phase 7 close-out's bottom-line paragraph is published verbatim

@@ -30,13 +30,26 @@ unauthenticated budget is spent, is a control someone mutes. So the assurance
 reads are answered by a local stub, exactly as the seeded-tree module does.
 G7 and G8 keep their own tests there; they are not this module's subject.
 
-What a green here does not prove. This control reads the gate's verdict from
-outside, so it detects a gate that reports the wrong answer, not a gate that
-stops asking a question. Neutering ``gate_workflows_sha_pinned`` so its glob
-matches no file leaves this module and ``tests/test_release_gate_206.py`` both
-green, because a check that scans nothing finds nothing on a tree already
-clean. Killing that mutant needs a seeded unpinned action in the seeded-tree
-module, which G5 does not have. #563 records the measurement.
+What a green here does not prove, stated generally. This control reads the
+gate's verdict from outside and drives a tree that is already clean, so it
+cannot tell a gate that asked its questions and found nothing from a gate that
+stopped asking. The limit is a property of the seam, not of any one check.
+Three mutation shapes are measured to survive this module:
+
+1. ``gate_workflows_sha_pinned`` returning before its loop, which neuters G5.
+2. ``gate_readme_status_banner`` returning before its body, which neuters G3.
+3. ``errors = []`` inserted immediately before ``if errors:`` in ``main``,
+   which discards every finding the gate made. This one survives here even
+   when a genuinely stale surface is seeded at the same time, because the gate
+   still prints PASS and exits 0.
+
+``tests/test_release_gate_206.py`` kills shapes 2 and 3 and not shape 1. It
+seeds a tree it has made stale on purpose and asserts the named failure rather
+than the verdict, so the seeded seam, not this one, is what catches a gate
+whose findings are discarded; closing shape 1 would mean giving G5 a seeded
+unpinned action there, which it does not have anywhere in the suite. Shape 1
+is recorded in ``docs/assurance/release-gate-red-563.md``. Shapes 2 and 3 were
+measured by the independent verification recorded on pull request #569.
 
 The red demonstrations are recorded in
 ``docs/assurance/release-gate-red-563.md``.
