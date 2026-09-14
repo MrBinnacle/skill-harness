@@ -48,6 +48,7 @@ _LIVE_IDS = (
     "AC-1",
     "AC-2",
     "AC-3",
+    "AC-4",
 )
 _PLANNED_IDS = ("DC-13",)
 
@@ -108,6 +109,14 @@ _LIVE_SURFACES = (
     "pyproject.toml",
     "src/skill_harness/sitegen/templates/schema_vocabulary.html",
 )
+
+# AC-4 reads a DIRECTORY rather than a named file: its three delegates glob
+# every workflow GitHub would run, both suffixes (#544). _LIVE_SURFACES copies
+# named paths, so without this the row would refuse on a missing surface in
+# every lane below instead of reporting the lane under test. That refusal is
+# the vacuity control working; copying the directory is how a synthetic tree
+# gets a workflow set to be green about.
+_LIVE_SURFACE_DIRS = (".github/workflows",)
 
 
 def _run(
@@ -182,6 +191,8 @@ def _make_tree(tmp_path: Path) -> Path:
         dst = root / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(_REPO_ROOT / rel, dst)
+    for rel in _LIVE_SURFACE_DIRS:
+        shutil.copytree(_REPO_ROOT / rel, root / rel)
     _git(root, "init", "-q")
     _git(root, "add", "-A")
     return root
@@ -1332,11 +1343,22 @@ def test_ac3_refuses_when_the_named_predicate_is_gone(tmp_path: Path) -> None:
     precisely the dead control this repository exists to refuse. It works
     because _load_guard_module resolves the guard against the SCRIPT's own
     parent directory, so relocating the script relocates its guard lookup.
+
+    Every OTHER guard module a row names is copied into the scratch root
+    unrenamed, so the run reddens on this symbol and nothing else, and the
+    reddened set says so. Without those copies AC-4's three delegates would
+    fail to load here and redden alongside AC-3 (#544): the lane would still
+    pass on its any(...) clause while quietly proving less than it claims.
     """
     fake_repo = tmp_path / "fake-repo"
     (fake_repo / "scripts").mkdir(parents=True)
     (fake_repo / "tests").mkdir()
     shutil.copyfile(_SCRIPT, fake_repo / "scripts" / "drift_check.py")
+    for rel in (
+        "scripts/release_gate.py",
+        "tests/test_assurance_supply_chain_172.py",
+    ):
+        shutil.copyfile(_REPO_ROOT / rel, fake_repo / rel)
     guard = (_REPO_ROOT / "tests" / "test_structural_bans.py").read_text(encoding="utf-8")
     (fake_repo / "tests" / "test_structural_bans.py").write_text(
         guard.replace(
@@ -1353,6 +1375,7 @@ def test_ac3_refuses_when_the_named_predicate_is_gone(tmp_path: Path) -> None:
         for line in r.stdout.splitlines()
         if line.strip().startswith("FAIL")
     ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-3"}, r.stdout
 
 
 def test_ac3_undecodable_file_reddens_ac3_instead_of_crashing(tmp_path: Path) -> None:
@@ -1403,6 +1426,243 @@ def test_ac3_refuses_when_a_named_surface_beyond_readme_and_docs_is_gone(
         "AC-3" in line and "has no surface to scan" in line and "src/skill_harness/sitegen" in line
         for line in fail_lines
     ), r.stdout
+
+
+# ---------------------------------------------------------------------------
+# AC-4 (#544): the workflow configuration contract. Three legs, three
+# delegates, one per defect: action references pinned to a full commit SHA
+# (release_gate.py's G5), a workflow-level permissions baseline with no write
+# grant, and no pull_request_target trigger (the two predicates in
+# tests/test_assurance_supply_chain_172.py).
+#
+# Every poison ADDS a workflow file rather than editing a live one. Editing
+# ci.yml in the synthetic tree would reach whatever else reads that file and
+# stop the demonstration naming one row. Each poison file is compliant on the
+# two legs it is not testing, so the reddened line attributes to one leg.
+#
+# The live workflows are copied into the tree by _make_tree, so the green
+# arm of each lane is the real workflow set, not an empty directory.
+# ---------------------------------------------------------------------------
+
+_COMPLIANT_WORKFLOW = """\
+name: Compliant
+on:
+  push:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+"""
+
+
+def test_ac4_compliant_workflow_stays_green(tmp_path: Path) -> None:
+    """Green control for all three legs. A workflow that pins its action to a
+    full SHA, declares a read-only baseline and triggers on push is added to the
+    tree and nothing reddens. Without this, the three poison lanes below would
+    pass on a row that reddened at any added workflow whatsoever."""
+    root = _make_tree(tmp_path)
+    _write_tracked(root, ".github/workflows/compliant.yml", _COMPLIANT_WORKFLOW)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_ac4_tag_pinned_action_reddens_ac4_and_only_ac4(tmp_path: Path) -> None:
+    """Poison leg 1, the SHA pin. The workflow is compliant on the permissions
+    baseline and the trigger, so the single reddened line is the action pin.
+    The failure carries release_gate.py's own G5 wording, which is the point of
+    delegating: one defect reads as one sentence whichever caller found it."""
+    root = _make_tree(tmp_path)
+    _write_tracked(
+        root,
+        ".github/workflows/poison.yml",
+        _COMPLIANT_WORKFLOW.replace(
+            "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+            "actions/checkout@v5",
+        ),
+    )
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-4" in line and "poison.yml:10 action not SHA-pinned" in line for line in fail_lines
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-4"}, r.stdout
+
+
+def test_ac4_missing_permissions_baseline_reddens_ac4_and_only_ac4(tmp_path: Path) -> None:
+    """Poison leg 2, first half. No workflow-level permissions block at all.
+    The action stays SHA-pinned and the trigger stays push, so the reddened line
+    attributes to the baseline."""
+    root = _make_tree(tmp_path)
+    _write_tracked(
+        root,
+        ".github/workflows/poison.yml",
+        _COMPLIANT_WORKFLOW.replace("permissions:\n  contents: read\n", ""),
+    )
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-4" in line
+        and ".github/workflows/poison.yml: no workflow-level permissions block" in line
+        for line in fail_lines
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-4"}, r.stdout
+
+
+def test_ac4_write_baseline_reddens_ac4_and_only_ac4(tmp_path: Path) -> None:
+    """Poison leg 2, second half. A baseline that is present but broader than
+    read. A rule checking only for presence would pass this, which is why the
+    leg has two lanes rather than one: `permissions: write-all` is a block, and
+    it is the opposite of the least-privilege claim the audit makes."""
+    root = _make_tree(tmp_path)
+    _write_tracked(
+        root,
+        ".github/workflows/poison.yml",
+        _COMPLIANT_WORKFLOW.replace("permissions:\n  contents: read\n", "permissions: write-all\n"),
+    )
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-4" in line and "workflow-level write grant 'write-all'" in line for line in fail_lines
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-4"}, r.stdout
+
+
+def test_ac4_pull_request_target_reddens_ac4_and_only_ac4(tmp_path: Path) -> None:
+    """Poison leg 3, the trigger. The workflow is SHA-pinned and read-only
+    baselined, so the reddened line attributes to the trigger alone."""
+    root = _make_tree(tmp_path)
+    _write_tracked(
+        root,
+        ".github/workflows/poison.yml",
+        _COMPLIANT_WORKFLOW.replace("on:\n  push:\n", "on:\n  pull_request_target:\n"),
+    )
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-4" in line
+        and ".github/workflows/poison.yml:3 carries the pull_request_target trigger" in line
+        for line in fail_lines
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-4"}, r.stdout
+
+
+def test_ac4_compliant_yaml_workflow_stays_green(tmp_path: Path) -> None:
+    """The green arm for the widened glob, and it is half of a pair.
+
+    The lane below proves the three delegates SEE a `.yaml` file. On its own
+    that cannot tell a rule reading the new surface correctly from one that
+    fires on everything it can now reach, and the widening's whole defence is
+    that it costs nothing on a compliant tree. This lane writes a `.yaml`
+    workflow that satisfies all three legs and asserts the row stays green.
+    """
+    root = _make_tree(tmp_path)
+    _write_tracked(root, ".github/workflows/compliant.yaml", _COMPLIANT_WORKFLOW)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_ac4_reads_yaml_workflows_as_well_as_yml(tmp_path: Path) -> None:
+    """The scope control. GitHub runs both suffixes, and all three delegates
+    glob both. A `.yaml` workflow carrying all three defects reddens the row.
+
+    This lane is the reason the glob widening in the commit before this one is
+    a control rather than a tidy-up: no `.yaml` workflow is tracked here, so a
+    narrow glob finds nothing to miss and the row prints OK either way. The
+    fixture supplies the file the tree does not have."""
+    root = _make_tree(tmp_path)
+    _write_tracked(
+        root,
+        ".github/workflows/poison.yaml",
+        "name: Poison\non:\n  pull_request_target:\njobs:\n"
+        "  build:\n    steps:\n      - uses: actions/checkout@v5\n",
+    )
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    for fragment in (
+        "poison.yaml:7 action not SHA-pinned",
+        ".github/workflows/poison.yaml: no workflow-level permissions block",
+        ".github/workflows/poison.yaml:3 carries the pull_request_target trigger",
+    ):
+        assert any("AC-4" in line and fragment in line for line in fail_lines), (
+            f"{fragment} missing:\n{r.stdout}"
+        )
+    assert _failed_row_ids(r.stdout) == {"AC-4"}, r.stdout
+
+
+def test_ac4_refuses_when_its_surface_is_gone(tmp_path: Path) -> None:
+    """The vacuity control for all three delegates at once.
+
+    Each one builds its surface set by globbing a directory. A tree with no
+    .github/workflows makes all three return zero violations, which without
+    `requires` prints as OK: a row reporting that every workflow is compliant
+    in a tree that has no workflows. This lane deletes the directory and
+    asserts the row refuses, in the table's own wording, naming the path.
+
+    The reddened SET is asserted here because no other row reads that
+    directory, so removing it is AC-4's business alone."""
+    root = _make_tree(tmp_path)
+    shutil.rmtree(root / ".github" / "workflows")
+    _git(root, "add", "-A")
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-4" in line and "has no surface to scan" in line and ".github/workflows" in line
+        for line in fail_lines
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-4"}, r.stdout
+
+
+def test_ac4_refuses_when_the_named_release_gate_predicate_is_gone(tmp_path: Path) -> None:
+    """The dead-row control for AC-4's cross-file delegation.
+
+    AC-4's SHA-pin leg is the first entry in this table to name a symbol in
+    scripts/, so it is the one whose lookup is worth proving. A row that names a
+    symbol is only a guard while that symbol exists. This lane copies the script
+    into a scratch repo root whose release_gate.py has the gate renamed, and
+    asserts the row says so rather than reporting zero violations.
+
+    It works because _load_guard_module resolves the guard against the SCRIPT's
+    own parent directory, so relocating the script relocates its guard lookup.
+    The two #172 predicates and the AC-3 guard are copied unrenamed, so the run
+    reddens on the renamed symbol and nothing else. That last clause is
+    asserted rather than stated: a docstring claiming a reddened set the lane
+    never compares is the same defect this row exists to refuse."""
+    fake_repo = tmp_path / "fake-repo"
+    (fake_repo / "scripts").mkdir(parents=True)
+    (fake_repo / "tests").mkdir()
+    shutil.copyfile(_SCRIPT, fake_repo / "scripts" / "drift_check.py")
+    shutil.copyfile(
+        _REPO_ROOT / "tests" / "test_structural_bans.py",
+        fake_repo / "tests" / "test_structural_bans.py",
+    )
+    shutil.copyfile(
+        _REPO_ROOT / "tests" / "test_assurance_supply_chain_172.py",
+        fake_repo / "tests" / "test_assurance_supply_chain_172.py",
+    )
+    gate = (_REPO_ROOT / "scripts" / "release_gate.py").read_text(encoding="utf-8")
+    (fake_repo / "scripts" / "release_gate.py").write_text(
+        gate.replace("def gate_workflows_sha_pinned", "def gate_workflows_sha_pinned_RENAMED"),
+        encoding="utf-8",
+    )
+    root = _make_tree(tmp_path)
+    r = _run(root, script=fake_repo / "scripts" / "drift_check.py")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert any(
+        "AC-4" in line
+        and "scripts/release_gate.py:gate_workflows_sha_pinned is absent or not callable" in line
+        for line in r.stdout.splitlines()
+        if line.strip().startswith("FAIL")
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-4"}, r.stdout
 
 
 # ---------------------------------------------------------------------------
