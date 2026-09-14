@@ -8,7 +8,10 @@ enforced. This script is that guard, the third instance of the house pattern
 the structural-bans CI job = token bans).
 
 Contract rows are DATA (the tables below): adding a contract is a table row,
-not new code. Fourteen live rows ship checked (DC-1..DC-6 from #43/#53; DC-7
+not new code. The live rows are the table itself; a green run prints every one
+of them, so read the run or the table rather than a number in this paragraph.
+This sentence carried a count until #545, and the count was wrong both before
+and after that change. Provenance of the older rows (DC-1..DC-6 from #43/#53; DC-7
 and DC-8 activated by the PR landing skill_harness/oc; DC-11 activated by
 the PR landing the Gate-2 cross-checks; DC-9 and DC-10 activated by the PR
 landing the frontier-assembly cost layer (#56); DC-12 activated by the PR
@@ -660,9 +663,10 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
     LiveRow(
         dc_id="AC-2",
         summary=(
-            "assurance-harness schedule agreement: every harness site that RESTATES the "
-            "schedule N_MIN=8 / N_INC=4 / N_MAX=40 or the 0.60 / 0.95 decision constants "
-            "states the registered values (production side: DC-1, DC-2) (#545)"
+            "assurance-harness agreement: every harness site restating the sampling "
+            "schedule N_MIN=8 / N_INC=4 / N_MAX=40, and the two-arm gate constants "
+            "delta=0.1 / prob_threshold=0.95 that live ONLY in the harnesses, states the "
+            "registered values (ablation pass rule: DC-1, DC-2) (#545)"
         ),
         # This row carries the HARNESS side only, and the omission is the
         # design rather than a gap.
@@ -677,18 +681,45 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         # would turn DC-2 and AC-2 red together, so a test that only checked
         # the tree went red would prove nothing about this row.
         #
-        # The mechanism still holds end to end. A production re-tune turns DC-1
-        # or DC-2 red, which forces the production change to be deliberate. It
-        # leaves the harness statements below stating the old schedule, which
-        # turns AC-2 red and keeps it red until the harness moves in the same
-        # change. That is what #545 asks for: "a production module whose values
-        # move without the harness moving turns the row red."
+        # WHAT THIS ROW DOES NOT DO, measured rather than reasoned.
+        #
+        # #545 asks for a row that reddens when "a production module whose
+        # values move without the harness moving". This row does not do that,
+        # and no row of this shape can. Every check here compares a file
+        # against a literal written in this table, never against another file.
+        # Move N_MAX from 40 to 60 in the production module and DC-2 reddens
+        # alone: the harness prose still says 40, this table still expects 40,
+        # they agree, AC-2 stays green. That was run, not deduced.
+        #
+        # Restating the production sites here would not close it either. The
+        # author would update both expectations and the harness prose would
+        # still never be forced to move.
+        #
+        # Closing it needs a check kind this script does not have, one that
+        # reads a value from a producing file and compares a consuming file
+        # against it. See #559.
+        #
+        # What this row DOES cover is real and is covered by nothing else: the
+        # two-arm gate constants below exist only in these two harnesses, and
+        # the registered sentences hold each harness to the schedule it claims
+        # to run.
         value_sites=(
-            # Both calibration harnesses IMPORT N_MIN and N_MAX from the
-            # production module, so those cannot drift. Neither imports the
-            # pass-probability threshold: each restates it as its own module
-            # constant, which is exactly the site that can drift silently
-            # while every test in the file stays green.
+            # These are the TWO-ARM GATE's constants, not the ablation pass
+            # rule's. two_arm.py:18 states that delta and prob_threshold are
+            # "the caller's PRE-REGISTERED constants, frozen" and the module
+            # holds no default for either, so each harness is their only site.
+            # Nothing else in the tree can be compared against, which makes
+            # this row their only possible guard.
+            #
+            # prob_threshold carries the same digits as the ablation
+            # PASS_PROB_THRESHOLD and is a different quantity. Conflating them
+            # is the error this row refuses two comments below, so the names
+            # here say which constant is which.
+            #
+            # The sampling schedule needs no code leg: both harnesses IMPORT
+            # N_MIN and N_MAX from the production module, so those cannot
+            # drift in code. They restate the schedule in PROSE, which is what
+            # the registered sentences below guard.
             ValueSite(
                 "tests/test_aggregation_aa.py",
                 r"^PROB_THRESHOLD = ([\d.]+)$",
@@ -698,6 +729,16 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
                 "tests/test_aggregation_calibration.py",
                 r"^PROB_THRESHOLD = ([\d.]+)$",
                 ("0.95",),
+            ),
+            ValueSite(
+                "tests/test_aggregation_aa.py",
+                r"^DELTA = ([\d.]+)$",
+                ("0.1",),
+            ),
+            ValueSite(
+                "tests/test_aggregation_calibration.py",
+                r"^DELTA = ([\d.]+)$",
+                ("0.1",),
             ),
         ),
         registered_texts=(
@@ -722,10 +763,15 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         # Deliberately NOT registered here, and the reason is worth stating.
         #
         # tests/test_aggregation_cs_calibration.py is named in #545 as a
-        # harness site. It imports every constant it uses from
-        # tests/test_aggregation_calibration.py and states no schedule or
-        # decision literal of its own, so under the ticket's own rule it is
-        # compliant by import and has nothing to pin.
+        # harness site and carries no pinned leg. It imports every schedule and
+        # threshold constant it uses from tests/test_aggregation_calibration.py,
+        # so none of them can drift there independently.
+        #
+        # It does state literals of its own, at line 37, where it asserts the
+        # contents of CS_P_GRID. Those are the rates the calibration sweeps,
+        # two of which happen to be 0.60 and 0.95. They are grid points, not
+        # decision constants, so they fall under the same refusal as the two
+        # values named below.
         #
         # NOMINAL_COVERAGE = 0.95 in the calibration harness is not registered
         # either. It is the nominal coverage of an interval, not the posterior

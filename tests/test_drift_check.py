@@ -1076,10 +1076,35 @@ def test_ac2_aa_harness_delta_and_threshold_sentence_drift_blocks(tmp_path: Path
     assert any("AC-2" in line and "test_aggregation_aa.py" in line for line in fail_lines), r.stdout
 
 
+def test_ac2_calibration_harness_delta_drift_blocks(tmp_path: Path) -> None:
+    """delta is the other two-arm gate constant, and it lives ONLY here.
+
+    two_arm.py:18 records delta and prob_threshold as the caller's
+    pre-registered constants and holds no default for either, so each harness
+    states its own. There is no production site to compare against and no other
+    row reads these files, which makes AC-2 their only guard."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        "tests/test_aggregation_calibration.py",
+        "DELTA = 0.1",
+        "DELTA = 0.2",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-2" in line and "test_aggregation_calibration.py" in line for line in fail_lines
+    ), r.stdout
+
+
 def test_ac2_does_not_fire_on_a_compliant_tree(tmp_path: Path) -> None:
-    """AC-2 must never punish compliance. An unmutated copy of the live tree is
-    green, and so is a harness edit that touches neither a registered constant
-    nor a registered sentence."""
+    """A false-positive control, and it is worth saying what it does not do.
+
+    It proves AC-2 stays green on a harness edit that touches no registered
+    constant and no registered sentence. It does NOT bind AC-2: deleting the
+    row leaves this test passing, because a row that never fires cannot
+    over-fire either. The four tests above carry the binding."""
     root = _make_tree(tmp_path)
     _mutate(
         root,

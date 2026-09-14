@@ -101,14 +101,29 @@ row with its own red demonstration (#248, #543, #544).
 The `AC-2` row guards the harness sites only, which is what the candidate row
 below asks for in its own words: "DC-1 and DC-2 cover production and selected
 prose, but not these harness sites." The production constants stay with DC-1 and
-DC-2. Restating them in `AC-2` would put one meaning in two rows and would make
-a production mutation turn two rows red at once, which leaves no demonstration
-able to show that `AC-2` is the row doing the work.
+DC-2.
+
+**State what CONFIGURED does not mean here.** The row does not redden when a
+production value moves and a harness does not follow. That was measured, not
+assumed: moving `N_MAX` from 40 to 60 in `src/skill_harness/ablation/stopping.py`
+reddens `DC-2` alone, because the harness prose still says 40, the contract table
+still expects 40, and the two agree without consulting production. No row of this
+shape can close that leg, since every check compares a file against a literal in
+the table rather than against another file. #559 carries the check kind that
+would. Read `AC-2 CONFIGURED` as covering what the row pins and nothing more.
+
+What the row does cover is guarded by nothing else. The two-arm gate constants
+`delta` and `prob_threshold` are recorded in `aggregation/two_arm.py` as the
+caller's pre-registered constants, and that module holds no default for either,
+so the two harnesses are their only site in the tree.
 
 `test_aggregation_cs_calibration.py` is named in the candidate row and carries no
-pinned site. It imports every constant it uses from `test_aggregation_calibration.py`
-and states no schedule or decision literal of its own, so it is compliant by
-import and has nothing that can drift independently.
+pinned site. It imports every schedule and threshold constant it uses from
+`test_aggregation_calibration.py`, so none of them can drift there independently.
+It does state literals of its own, where it asserts the contents of `CS_P_GRID`;
+two of those grid points are 0.60 and 0.95. They are rates the calibration sweeps
+rather than decision constants, so they are left unpinned for the same reason
+`NOMINAL_COVERAGE` is.
 
 | Candidate | Invariant | Sites to compare | Why it may be worth pinning |
 | --- | --- | --- | --- |
