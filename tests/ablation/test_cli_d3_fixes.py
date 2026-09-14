@@ -421,6 +421,8 @@ class TestB2DailyCapEnforcement:
         mock_result.unmeasured_reason = None
         mock_result.length_confounded = False
         mock_result.samples_collected = 8
+        mock_result.path_c = None
+        mock_result.path_c_unavailable_reason = "no_ratification_reference"
         mock_result.stop_decision = MagicMock()
         mock_result.stop_decision.p_win_rate_exceeds_threshold = 0.97
         mock_result.stop_decision.n_samples = 8
@@ -756,6 +758,8 @@ class TestM4ProgressFooter:
         mock_result.unmeasured_reason = None
         mock_result.length_confounded = False
         mock_result.samples_collected = 8
+        mock_result.path_c = None
+        mock_result.path_c_unavailable_reason = "no_ratification_reference"
         mock_result.stop_decision = MagicMock()
         mock_result.stop_decision.p_win_rate_exceeds_threshold = 0.97
         mock_result.stop_decision.n_samples = 8
@@ -1090,6 +1094,8 @@ class TestM4ExitCodeContract:
         mock_result.unmeasured_reason = "underpowered"
         mock_result.length_confounded = False
         mock_result.samples_collected = 40
+        mock_result.path_c = None
+        mock_result.path_c_unavailable_reason = "no_ratification_reference"
         mock_result.stop_decision = MagicMock()
         mock_result.stop_decision.p_win_rate_exceeds_threshold = 0.5
         mock_result.stop_decision.n_samples = 40
@@ -1277,6 +1283,8 @@ class TestI4FooterHonesty:
         mock_result.unmeasured_reason = None
         mock_result.length_confounded = False
         mock_result.samples_collected = 8
+        mock_result.path_c = None
+        mock_result.path_c_unavailable_reason = "no_ratification_reference"
         mock_result.stop_decision = MagicMock()
         mock_result.stop_decision.p_win_rate_exceeds_threshold = 0.97
         mock_result.stop_decision.n_samples = 8

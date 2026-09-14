@@ -137,6 +137,8 @@ class TestHappyPath:
         passed.unmeasured_reason = None
         passed.length_confounded = False
         passed.samples_collected = 8
+        passed.path_c = None
+        passed.path_c_unavailable_reason = "no_ratification_reference"
         passed.stop_decision = MagicMock()
         passed.stop_decision.p_win_rate_exceeds_threshold = 0.97
         passed.stop_decision.n_samples = 8

@@ -267,11 +267,16 @@ thresholds and no decision is made** - `ClauseResult.path_c` is `None` and
 `unregistered_thresholds` or `no_sampling` applies. That absence is a typed
 refusal. A reader must not read it as a clause clearing the effect-size floor.
 
-**NOT wired: the report surface.** The rendered ablation report still shows the
-scalar `StoppingReason`, so a clause that PASSES the scalar rule and fails the
-registered floor prints as PASSED. The Gate-2 decision exists on the result
-object and is not yet displayed. Until it is, the rendered report is not a claim
-about registered net lift, and this paragraph is the reason.
+**Wired on the report surface, since #546.** Every row of the rendered ablation
+report carries a `gate-2 (registered floor)` cell. A clause that clears the
+scalar rule and fails the registered floor renders as its Gate-2 verdict and
+never as PASSED; a clause that clears both renders as PASSED. Where no
+registered thresholds were in force, the cell reads `not applied` with the
+`path_c_unavailable_reason` beside it and the pass is marked `scalar only`, so
+an absent floor decision is never displayed as a clause clearing the floor. A
+run without a ratification reference therefore still makes no claim about
+registered net lift, and the report now says so on its face rather than in this
+paragraph.
 
 Enforced in / recorded by:
 - `src/skill_harness/ablation/stopping.py` (the discordant accumulator, and
@@ -281,7 +286,12 @@ Enforced in / recorded by:
 - `src/skill_harness/ablation/runner.py` (`run_ablation(ratification_path=...)`,
   `_decide_path_c`, and the `ratification_id` written into `config_json`)
 - `src/skill_harness/cli/main.py` (threads `--ratification` from the preflight
-  through to the runner)
+  through to the runner; `_gate2_cell` and `_render_ablation_report` display the
+  decision on the report surface, #546)
+- `tests/test_ablation_report_gate2_546.py` (#546: the tie-heavy clause that
+  clears the scalar rule and fails the floor never renders PASSED; the clause
+  that clears both renders unchanged; an unapplied floor renders its typed
+  refusal)
 - `src/skill_harness/ablation/sizing.py` (the exact DP, moved to the same rule)
 - `docs/findings/halfupdate-tie-sensitivity.md` (the finding and its fixtures)
 - `tests/test_halfupdate_tie_sensitivity.py` (the seven strict xfails are
@@ -307,7 +317,7 @@ which point `n_pairs` should come from the ratification record and this
 section's "does not claim" paragraph is what expires.
 
 Spec: skill-harness #368 (ruling, its amendment, and the Path C build), #347
-(item 5 detector), #345.
+(item 5 detector), #345, #546 (the report surface).
 ## 9. The model pin is provenance, not a staleness badge
 
 Every newly-minted verdict carries an `ArticleFingerprint` — `mint_oracle_verdict`
