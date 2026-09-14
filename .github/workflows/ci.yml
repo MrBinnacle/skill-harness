@@ -117,11 +117,31 @@ jobs:
     # test_ablation_report_gate2_546.py, ablation/test_cli_d3_fixes.py,
     # ablation/test_cli_run_ablation.py, test_audit_metric.py,
     # test_clause_evidence_audit.py and extractor/test_cli.py. None was skipped, marked
-    # or deleted. 200 is the width every one of those tests
-    # already asks for, so this sets the environment to the value the suite declares
-    # instead of letting it depend on how the suite is launched. The dependency is not
-    # specific to xdist and reproduces without it: COLUMNS=80 pytest
-    # tests/test_cli_screen_profile.py fails 7 of 13 on a serial run.
+    # or deleted.
+    #
+    # WITHDRAWN: this comment previously said 200 is the width every one of those tests
+    # already asks for. That is false. tests/test_ablation_report_gate2_546.py:43 sets
+    # COLUMNS to 260, and that file is named in the list above.
+    # tests/test_ablation_report_verdict_id.py:33 sets 220. Every other test that sets
+    # COLUMNS sets 200.
+    #
+    # What is true is narrower. 200 is at least the width the failing tests need, and
+    # the pin overrides the two wider requests without breaking them. The override
+    # really happens rather than deferring to the test: under COLUMNS=200 the
+    # module-level Console in src/skill_harness/cli/main.py froze at width 199, and
+    # setting COLUMNS=260 in the same process afterwards left it at 199. Both files
+    # pass at that width. Measured locally, Windows, Python 3.13.1, each file run
+    # twice with -p no:randomly:
+    #   test_ablation_report_gate2_546.py    COLUMNS=200 -> 9 passed   unset -> 9 passed
+    #   test_ablation_report_verdict_id.py   COLUMNS=200 -> 6 passed   unset -> 6 passed
+    # So nothing either file asserts on needs more than the pinned width. An assertion
+    # added later that does need more would pass locally with COLUMNS unset and fail in
+    # this cell, and the width to widen is this one.
+    #
+    # This sets the environment to a width the suite declares instead of letting it
+    # depend on how the suite is launched. The dependency is not specific to xdist and
+    # reproduces without it: COLUMNS=80 pytest tests/test_cli_screen_profile.py fails
+    # 7 of 13 on a serial run.
     env:
       PYTHONHASHSEED: "0"
       SKILL_HARNESS_REQUIRE_VALE: "1"
@@ -227,11 +247,23 @@ jobs:
         # pytest-cov combines its per-worker data correctly here.
         #
         # What these numbers do NOT establish, stated because one run per arm is one
-        # sample and this cell's variance is why the ceiling above sits at 25. A second
-        # -n 4 with --cov sample, run 34884572303, came back at 628.25s. Three serial
-        # with --cov samples on main span 1093.63s to 1331.62s. The speedup is
-        # therefore a range of roughly 1.7x to 2.7x, not the 2.45x the fastest pair on
-        # its own suggests. The without-cov arm under -n 4 came back SLOWER than the
+        # sample and this cell's variance is why the ceiling above sits at 25. Two more
+        # -n 4 with --cov samples exist: 628.25s in run 34884572303, and 729.58s in run
+        # 34890125765, which is the first run on main after this change merged. Three
+        # serial with --cov samples on main span 1093.63s to 1331.62s. The speedup is
+        # therefore a range of roughly 1.5x to 2.7x, not the 2.45x the fastest pair on
+        # its own suggests. The floor is the fastest serial sample over the slowest
+        # parallel one, 1093.63 / 729.58 = 1.50. The ceiling is the slowest serial over
+        # the fastest parallel, 1331.62 / 486.85 = 2.74.
+        #
+        # WITHDRAWN: this comment previously gave that range as 1.7x to 2.7x. The floor
+        # was computed when 628.25s was the slowest parallel sample on record, giving
+        # 1093.63 / 628.25 = 1.74. The 729.58s sample post-dates it and moves the floor
+        # to 1.50. The ceiling is unchanged. A single run on main was enough to fall
+        # outside the stated range, so read this range as the samples to date and not
+        # as a bound.
+        #
+        # The without-cov arm under -n 4 came back SLOWER than the
         # with-cov arm by 29s, which is a negative instrumentation cost and so is
         # variance rather than a finding. Do not project any of this to a larger -n.
         #
