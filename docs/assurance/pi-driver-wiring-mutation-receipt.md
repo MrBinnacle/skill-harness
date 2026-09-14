@@ -56,6 +56,14 @@ through the call. The helpers' own predicates are attested separately by
 Four hand-chosen mutants. **No mutation score is reported** — four cases
 cannot support one; each is a named obligation, not a sample.
 
+**2026-09-14, issue #536:** `M-R1` and `M-R2` in `MUTANTS` collided with the
+`M-R1` and `M-R2` registered under the `389-` obligation prefix in
+`paired-gate2-mutation-receipt`. The `389-` pair was registered first and keeps
+its ids. This receipt's mutants were renamed: `M-R1` → `M-R3`, `M-R2` → `M-R6`.
+The table above still names the original ids because it is a record of what the
+receipt measured; the new ids are in `scripts/mutation_receipt.py` and in any
+receipt generated after this change.
+
 ## What happened to M-R3
 
 The scratch session's fifth case removed the driver's gate call entirely,

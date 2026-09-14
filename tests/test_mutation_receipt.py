@@ -118,6 +118,22 @@ def test_collected_counts_executed_tests(tail: str, expected: int) -> None:
     assert MODULE._collected(tail) == expected
 
 
+def test_every_mutant_id_is_unique() -> None:
+    ids = [m.mutant_id for m in MODULE.MUTANTS]
+    seen: dict[str, int] = {}
+    dupes: list[str] = []
+    for mid in ids:
+        if mid in seen:
+            dupes.append(mid)
+        else:
+            seen[mid] = 1
+    assert not dupes, (
+        f"duplicate mutant ids: {', '.join(sorted(set(dupes)))}. Each mutant must"
+        f" carry a distinct id so that a receipt naming an id identifies exactly"
+        f" one mutation."
+    )
+
+
 def test_run_pytest_spreads_every_node_of_a_multi_node_selection(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
