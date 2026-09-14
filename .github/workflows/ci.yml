@@ -112,8 +112,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.12", "3.13"]
+        os: [ubuntu-latest]
+        python-version: ["3.12"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -186,7 +186,16 @@ jobs:
         # now print with their node ids; faulthandler_timeout in pyproject.toml names
         # the running test when a single phase hangs. tests/test_ci_test_cell_attribution_509.py
         # reads this line and fails if either goes.
-        run: pytest -q --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing --durations=25 --durations-min=1.0
+        shell: bash
+        run: |
+          echo "=== serial"
+          pytest -q -s -p no:randomly -p no:cacheprovider --no-cov tests/test_zz_width_probe_561.py 2>&1 | grep WIDTHPROBE
+          echo "=== -n 2"
+          pytest -q -s -p no:randomly -p no:cacheprovider --no-cov -n 2 tests/test_zz_width_probe_561.py 2>&1 | grep WIDTHPROBE
+          echo "=== real failing test, serial"
+          pytest -q -p no:randomly -p no:cacheprovider --no-cov tests/test_cli_screen_profile.py 2>&1 | tail -3
+          echo "=== real failing test, -n 2"
+          pytest -q -p no:randomly -p no:cacheprovider --no-cov -n 2 tests/test_cli_screen_profile.py 2>&1 | tail -3
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
