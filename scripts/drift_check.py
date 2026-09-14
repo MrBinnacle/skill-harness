@@ -430,7 +430,12 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
     ),
     LiveRow(
         dc_id="DC-5",
-        summary="launch-trigger sentence registered verbatim at both README sites",
+        summary="launch-trigger sentence registered verbatim at both sites",
+        # Updated 2026-09-13 under the S447 README ruling. The sentence stood
+        # twice on the front page; the empirical record moved to
+        # docs/what-the-instrument-has-found.md, so the second registration
+        # follows the content instead of being dropped. Two sites still carry
+        # the claim, and a rewording at either one still fails this row.
         registered_texts=(
             RegisteredText(
                 "README.md",
@@ -438,7 +443,7 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
                 "no-skill screen returns a pass rate below 1",
             ),
             RegisteredText(
-                "README.md",
+                "docs/what-the-instrument-has-found.md",
                 "a sized benefit run launches only when a screen returns a sub-1 pass rate",
             ),
         ),
