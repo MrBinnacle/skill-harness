@@ -200,12 +200,22 @@ def _evidence_admissibility_violations(text: str) -> list[str]:
     ]
 
 
-def _public_copy_violations(text: str) -> list[str]:
-    violations = _evidence_admissibility_violations(text)
-    violations.extend(
-        f"earn/earned family at line {_line_number(text, match.start())}"
-        for match in _EARN_FAMILY_RE.finditer(text)
-    )
+def vacuity_claim_violations(text: str) -> list[str]:
+    """The AC-3 invariant alone: kind-precision carries its class split, and
+    recall carries its denominators.
+
+    Public, because ``scripts/drift_check.py``'s AC-3 row delegates to it by
+    name rather than restating these nine regexes and their context windows in
+    a second place. Two guards over one subject that canonicalize differently
+    invent drift that is not there.
+
+    Split out of ``_public_copy_violations``, which still runs it as its third
+    block. The other two rules in that function, evidence-admissibility and the
+    earn family, are not AC-3 and are deliberately NOT here: a row that
+    reported them under the AC-3 id would be red for a reason its own summary
+    denies.
+    """
+    violations: list[str] = []
 
     for match in _KIND_PRECISION_AGGREGATE_RE.finditer(text):
         lineno = _line_number(text, match.start())
@@ -232,6 +242,35 @@ def _public_copy_violations(text: str) -> list[str]:
             violations.append(
                 f"recall not stated as UNMEASURED at line {_line_number(text, match.start())}"
             )
+    return violations
+
+
+def vacuity_claim_violations_for_repo(root: Path, errors: list[str]) -> None:
+    """AC-3 over one tree, in the house gate signature (#543).
+
+    Skips ``python:`` surfaces for the reason ``_surface_violations`` states at
+    length: running the aggregate and recall rules over ``src/`` flags five
+    lines in ``extractor/vacuity_policy.py``, the guard cited for describing
+    itself. This entry point makes the same routing choice, so the drift row
+    and the pre-commit hook scan the same set and cannot disagree about scope.
+
+    It takes ``root`` as a parameter and never touches the module-level
+    ``REPO_ROOT``. That is what makes AC-3 runnable against a synthetic tree,
+    which is what makes its red demonstration possible at all.
+    """
+    for surface, text in _public_surface_texts(root):
+        if surface.startswith("python:"):
+            continue
+        errors.extend(f"{surface}: {violation}" for violation in vacuity_claim_violations(text))
+
+
+def _public_copy_violations(text: str) -> list[str]:
+    violations = _evidence_admissibility_violations(text)
+    violations.extend(
+        f"earn/earned family at line {_line_number(text, match.start())}"
+        for match in _EARN_FAMILY_RE.finditer(text)
+    )
+    violations.extend(vacuity_claim_violations(text))
     return violations
 
 
@@ -746,6 +785,33 @@ def test_named_source_prose_qualifies_evidence_admissibility() -> None:
         text = (REPO_ROOT / relative).read_text(encoding="utf-8")
         for phrase in phrases:
             assert phrase in text, f"{relative} is missing {phrase!r}"
+
+
+def test_public_copy_violations_is_its_three_rules_in_order() -> None:
+    """The extraction AC-3 delegates to is the SAME code the pre-commit hook
+    runs, not a copy of it (#543).
+
+    A text triggering all three rules must produce exactly the concatenation,
+    in order, so a future edit to one caller's behaviour cannot silently
+    diverge from the other's. The order matters on its own:
+    ``test_gen2_receipt_json_is_not_a_public_surface`` asserts a literal
+    violation string, so the block order is a published shape.
+    """
+    text = (
+        "Admissibility is decided here.\n"
+        "A skill must earn its slot.\n"
+        "The kind-precision aggregate is 0.9667.\n"
+    )
+    expected = (
+        _evidence_admissibility_violations(text)
+        + [
+            f"earn/earned family at line {_line_number(text, m.start())}"
+            for m in _EARN_FAMILY_RE.finditer(text)
+        ]
+        + vacuity_claim_violations(text)
+    )
+    assert _public_copy_violations(text) == expected
+    assert len(expected) == 3
 
 
 def test_gen2_receipt_json_is_not_a_public_surface(tmp_path: Path) -> None:
