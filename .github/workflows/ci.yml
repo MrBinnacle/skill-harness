@@ -198,7 +198,7 @@ jobs:
         # MEASUREMENT PENDING. The four CI durations this ticket requires are filled
         # in by a follow-up commit on this branch. Do not read this block as a
         # finished record until they are here.
-        run: pytest -q -n 4 --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing --no-cov --durations=25 --durations-min=1.0
+        run: pytest -q --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing --no-cov --durations=25 --durations-min=1.0
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
