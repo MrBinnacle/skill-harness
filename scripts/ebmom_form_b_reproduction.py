@@ -78,7 +78,6 @@ from ebmom_acceptance_matrix import (
     score_regime_v2,
     v2_regime_report,
 )
-
 from skill_harness.aggregation import fit as fit_module
 from skill_harness.aggregation.fit import ClauseObservations, fit_skill
 

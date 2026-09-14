@@ -37,9 +37,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -c requirements-ci.txt -e ".[dev]"
       - name: ruff check
-        run: ruff check src tests
+        run: ruff check src tests scripts
       - name: ruff format --check
-        run: ruff format --check src tests
+        run: ruff format --check src tests scripts
 
   typecheck:
     name: mypy --strict

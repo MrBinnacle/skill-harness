@@ -113,6 +113,43 @@ def test_ruff_path_set_matches_between_gates() -> None:
     )
 
 
+def test_ruff_scope_includes_scripts() -> None:
+    """scripts/ must be in the ruff lint scope (issue #535).
+
+    The ruff path set in CI and both pre-commit ruff hooks must include
+    ``scripts`` so that operational scripts receive the same lint gate as
+    ``src`` and ``tests``.
+    """
+    ci_paths = _ci_ruff_paths()
+    assert "scripts" in ci_paths, (
+        f"scripts/ not in ruff CI scope; found {sorted(ci_paths)}. "
+        "Extend 'ruff check' and 'ruff format --check' in ci.yml to include scripts."
+    )
+    by_hook = _pre_commit_ruff_files_by_hook()
+    for hook_id, regex in by_hook.items():
+        hook_paths = _paths_from_files_regex(regex)
+        assert "scripts" in hook_paths, (
+            f"scripts/ not in pre-commit {hook_id} ruff scope; found {sorted(hook_paths)}. "
+            "Extend the files: regex in .pre-commit-config.yaml to include scripts."
+        )
+
+
+def test_ruff_src_config_includes_scripts() -> None:
+    """pyproject.toml [tool.ruff] src must list scripts/ (issue #535).
+
+    The ``src`` key tells ruff where to resolve first-party imports. Without
+    ``scripts`` in this list, ruff treats scripts/ imports as third-party and
+    emits spurious F401 or import-resolution findings.
+    """
+    with PYPROJECT.open("rb") as fh:
+        config = tomllib.load(fh)
+    src_roots = config.get("tool", {}).get("ruff", {}).get("src", [])
+    assert "scripts" in src_roots, (
+        f"scripts/ not in [tool.ruff] src; found {src_roots}. "
+        "Add 'scripts' to src in pyproject.toml [tool.ruff]."
+    )
+
+
 def test_extend_exclude_includes_prototypes() -> None:
     """prototypes/ must be in ruff's extend-exclude (issue #483)."""
     excludes = _extend_exclude()
