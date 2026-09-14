@@ -100,6 +100,13 @@ _LIVE_SURFACES = (
     # every synthetic tree would fail on a missing value site instead of the
     # lane under test.
     "docs/calibration/vacuity-flag-calibration-2026-08-08.json",
+    # AC-3's `requires` also covers pyproject.toml and the sitegen templates
+    # (#565), two of the five surfaces the row's own summary names. Without
+    # these two copies every synthetic tree would refuse on a missing surface
+    # instead of the lane under test. One template file is enough to make the
+    # sitegen directory exist; the predicate itself globs the rest.
+    "pyproject.toml",
+    "src/skill_harness/sitegen/templates/schema_vocabulary.html",
 )
 
 
@@ -854,7 +861,7 @@ def test_dc15_no_cache_aware_fields_is_green(tmp_path: Path) -> None:
     assert r.returncode == 0, r.stdout + r.stderr
 
 
-def test_dc15_printed_in_green_listing(tmp_path: Path) -> None:
+def test_dc15_printed_in_green_listing() -> None:
     """DC-15 must appear in the OK listing on a green run."""
     r = _run()
     assert r.returncode == 0
@@ -1345,6 +1352,56 @@ def test_ac3_refuses_when_the_named_predicate_is_gone(tmp_path: Path) -> None:
         "AC-3" in line and "is absent or not callable" in line
         for line in r.stdout.splitlines()
         if line.strip().startswith("FAIL")
+    ), r.stdout
+
+
+def test_ac3_undecodable_file_reddens_ac3_instead_of_crashing(tmp_path: Path) -> None:
+    """The predicate-exception refusal (#565).
+
+    A doc the delegate cannot decode is unreachable in the same sense as a
+    missing surface or an unloadable module. Before the fix, `predicate(root,
+    failures)` ran outside any try, so this file aborted the whole subprocess
+    with an unhandled UnicodeDecodeError: exit 1, a traceback on stderr, and
+    no rows at all. After the fix the row itself reddens, names the guard and
+    the exception, and every other row still prints.
+    """
+    root = _make_tree(tmp_path)
+    path = root / "docs" / "undecodable.md"
+    path.write_bytes("Some heading\n\xe9 not utf8\n".encode("latin-1"))
+    _git(root, "add", "--", "docs/undecodable.md")
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "Traceback" not in r.stderr, r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-3" in line and "vacuity_claim_violations_for_repo raised" in line for line in fail_lines
+    ), r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-3"}, r.stdout
+    ok_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("OK")]
+    assert any("DC-1 " in line for line in ok_lines), r.stdout
+    assert "DRIFT CHECK: BLOCKED" in r.stdout, r.stdout
+
+
+def test_ac3_refuses_when_a_named_surface_beyond_readme_and_docs_is_gone(
+    tmp_path: Path,
+) -> None:
+    """The coverage-widening control (#565).
+
+    `requires` used to name only README.md and docs, two of the five surfaces
+    the row's own summary claims. Deleting the sitegen templates, one of the
+    other three, used to leave the row scanning nothing and printing OK. This
+    lane proves the widened `requires` catches it: the row refuses, in the
+    table's own wording, naming the missing path.
+    """
+    root = _make_tree(tmp_path)
+    shutil.rmtree(root / "src" / "skill_harness" / "sitegen")
+    _git(root, "add", "-A")
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any(
+        "AC-3" in line and "has no surface to scan" in line and "src/skill_harness/sitegen" in line
+        for line in fail_lines
     ), r.stdout
 
 

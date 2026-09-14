@@ -836,9 +836,11 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
             "either the word UNMEASURED or both registered intervals with their sample and "
             "skill denominators (#543). Scope is the public-copy surface set the pre-commit "
             "scanner already defines: README.md, docs markdown, the pyproject description, "
-            "asset SVG text nodes and the sitegen templates. NOT docs/calibration/*.json as "
-            "prose: those are immutable receipts, and the two figures the registry holds are "
-            "pinned as VALUES below instead"
+            "asset SVG text nodes and the sitegen templates. The row inherits the pre-commit "
+            "scanner's own seven-file _PUBLIC_COPY_EXCLUDED list, the immutable-record docs "
+            "that list itself exempts from public-copy scanning. NOT docs/calibration/*.json "
+            "as prose: those are immutable receipts, and the two figures the registry holds "
+            "are pinned as VALUES below instead"
         ),
         # WHAT THIS ROW IS, stated so nobody overstates it later.
         #
@@ -869,7 +871,23 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
             DelegatedGuard(
                 module_rel="tests/test_structural_bans.py",
                 symbol="vacuity_claim_violations_for_repo",
-                requires=("README.md", "docs"),
+                # The five surfaces the summary above names, one required path
+                # each. README.md and docs cover the first two; pyproject.toml
+                # and assets are the pyproject description and the SVG text
+                # nodes; src/skill_harness/sitegen is the one template root
+                # this repository actually populates (_site_template_files
+                # also globs templates/ and site/templates/, neither of which
+                # exists here, so requiring either would refuse on a root that
+                # was never meant to carry it). A tree missing any one of the
+                # five reddens this row instead of scanning nothing and
+                # printing OK.
+                requires=(
+                    "README.md",
+                    "docs",
+                    "pyproject.toml",
+                    "assets",
+                    "src/skill_harness/sitegen",
+                ),
             ),
         ),
         # The registry is covered HERE, by reading named fields, not by
@@ -1566,11 +1584,18 @@ def _load_guard_module(module_rel: str) -> ModuleType:
 def _check_delegated_guard(root: Path, guard: DelegatedGuard) -> list[str]:
     """Run one delegated predicate against ``root``, or refuse and say why.
 
-    Three refusals, all of them the table's own wording: a missing surface, an
-    unloadable module, a symbol that is absent or not callable. Each is a
-    failure string, never an exception and never a silent pass. A guard this
-    row cannot reach is indistinguishable, from the output, from a guard that
-    found nothing, and the second reading is the one that ships drift.
+    Four refusals, all of them the table's own wording: a missing surface, an
+    unloadable module, a symbol that is absent or not callable, and a
+    predicate that raises instead of returning. Each is a failure string,
+    never an exception and never a silent pass. A guard this row cannot reach
+    is indistinguishable, from the output, from a guard that found nothing,
+    and the second reading is the one that ships drift.
+
+    The fourth refusal wraps the call itself. A file the predicate cannot
+    decode or parse (a non-UTF-8 doc, a malformed SVG) is unreachable in the
+    same sense as an unloadable module, and letting it raise would abort the
+    whole drift check with a traceback, printing no rows at all, instead of
+    reddening this one row and leaving the rest of the report intact.
     """
     for rel in guard.requires:
         if not (root / rel).exists():
@@ -1589,7 +1614,10 @@ def _check_delegated_guard(root: Path, guard: DelegatedGuard) -> list[str]:
             "(the row names a predicate that no longer exists)"
         ]
     failures: list[str] = []
-    predicate(root, failures)
+    try:
+        predicate(root, failures)
+    except Exception as exc:  # a raising predicate is a refusal, never a crash
+        return [f"delegated guard {guard.symbol} raised {exc!r}"]
     return failures
 
 
