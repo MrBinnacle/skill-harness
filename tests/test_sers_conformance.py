@@ -527,3 +527,106 @@ def test_build_subject_identity_refuses_a_blank_subject_model(blank: str) -> Non
     """A blank pin is a manufactured record, not a missing one."""
     with pytest.raises(ValueError, match="subject_model"):
         build_subject_identity(skill_md=_CONTROL_SKILL_MD, arms="null", subject_model=blank)
+
+
+# ---------------------------------------------------------------------------
+# On-Irreducibility additions 3, 5, 6 (#526)
+# ---------------------------------------------------------------------------
+
+
+def _v15_instance() -> dict[str, Any]:
+    """A minimal conforming 1.5.0 instance with all three new optional fields."""
+    return {
+        "sers_version": "1.5.0",
+        "skill_name": "on-irreducibility-shape",
+        "verdict": "CANT_TELL_YET",
+        "cut_sub_reason": None,
+        "unmeasured_sub_reason": "no_data",
+        "value_class": None,
+        "evidence_admissibility": {"status": "not_applicable"},
+        "cost": {
+            "standing_tokens": {"refusal": "not_applicable"},
+            "fired_tokens": {"refusal": "not_applicable"},
+            "aux_tokens": {"refusal": "not_applicable"},
+        },
+        "instrument_identity": {
+            "extractor_model": {"refusal": "not_applicable"},
+            "prompt_fingerprint": "a",
+            "schema_fingerprint": "b",
+        },
+        "delivery": {
+            "channel": "not_instrumented",
+            "exposure": {"refusal": "not_instrumented"},
+            "pi_c": {"refusal": "not_instrumented"},
+        },
+        "source": {"prose_path": "README.md"},
+        "summary": "Shape instance for the 1.5.0 On-Irreducibility additions.",
+        "subject_identity": {
+            "skill_id": "aabbccddee0011223344556677889900aabbccddee0011223344556677889900",
+            "harness_version": "0.3.0",
+            "metric_version": "0.4.1",
+            "implementation_hash": (
+                "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+            ),
+            "arms": "null",
+            "subject_model": "anthropic/claude-sonnet-5",
+        },
+        "implementation_family": "retrieval-augmented generation",
+        "claim_scope": "Behavioral claim under standard agent workload disturbances",
+        "retest_triggers": "Metric version bump or skill content change",
+        "expiry_state": "current",
+    }
+
+
+def test_v15_with_all_new_fields_validates(sers_validator: Draft202012Validator) -> None:
+    """A 1.5.0 receipt carrying implementation_family, claim_scope,
+    retest_triggers and expiry_state validates."""
+    sers_validator.validate(_v15_instance())
+
+
+def test_v15_without_new_fields_still_validates(sers_validator: Draft202012Validator) -> None:
+    """The new fields are optional; a 1.5.0 receipt omitting them still validates."""
+    instance = _v15_instance()
+    del instance["implementation_family"]
+    del instance["claim_scope"]
+    del instance["retest_triggers"]
+    del instance["expiry_state"]
+    sers_validator.validate(instance)
+
+
+def test_expiry_state_rejects_invalid_value(sers_validator: Draft202012Validator) -> None:
+    """expiry_state must be one of current, stale, no_current_metric_version."""
+    instance = _v15_instance()
+    instance["expiry_state"] = "expired"
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "expiry_state" in str(excinfo.value)
+
+
+def test_v14_receipt_without_new_fields_still_validates(
+    sers_validator: Draft202012Validator,
+) -> None:
+    """The new fields are optional at every version, including pre-1.5.0."""
+    instance = _v14_instance()
+    sers_validator.validate(instance)
+    assert "implementation_family" not in instance
+    assert "claim_scope" not in instance
+    assert "retest_triggers" not in instance
+    assert "expiry_state" not in instance
+
+
+def test_schema_15_version_in_enum(sers_schema: dict[str, Any]) -> None:
+    """sers_version enum includes 1.5.0."""
+    schema_vals = _schema_enum(sers_schema, "properties", "sers_version", "enum")
+    assert "1.5.0" in schema_vals
+
+
+def test_schema_new_properties_are_optional() -> None:
+    """None of the three new On-Irreducibility keys appear in the top-level
+    required list — they are author-typed and never computed by the harness."""
+    schema = _load_json(_SCHEMA_PATH)
+    required = set(schema.get("required", []))
+    assert "implementation_family" not in required
+    assert "claim_scope" not in required
+    assert "retest_triggers" not in required
+    assert "expiry_state" not in required

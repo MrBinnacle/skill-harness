@@ -21,7 +21,7 @@
   "properties": {
     "sers_version": {
       "type": "string",
-      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0"],
+      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0"],
       "description": "SERS vocabulary generation. Receipts from different sers_version values are not comparable."
     },
     "skill_name": {
@@ -369,6 +369,26 @@
           "description": "Which of the skill's two products carried the measured value. 'description_only' = the standing description line was read but the body was never loaded (pi_c = 0 with full exposure); 'body_and_description' = invocations are present so the body was read; 'not_instrumented' = receipts minted before detector v2."
         }
       }
+    },
+    "implementation_family": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Implementation family the skill belongs to and what alternatives were considered. Author-typed; nothing in the codebase computes it."
+    },
+    "claim_scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Scope of the behavioral claim and the set of disturbances under which it holds. Author-typed; nothing in the codebase enumerates disturbances."
+    },
+    "retest_triggers": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What triggers a retest of the result. Author-typed."
+    },
+    "expiry_state": {
+      "type": "string",
+      "enum": ["current", "stale", "no_current_metric_version"],
+      "description": "Expiry state of the result, read from the frozen_cases_with_currency VIEW. 'current' = metric version and implementation hash match the current metric version; 'stale' = a newer version exists or the hash mismatches; 'no_current_metric_version' = no audited valid metric version exists."
     }
   },
   "allOf": [
@@ -427,6 +447,20 @@
     {
       "if": {
         "properties": { "sers_version": { "const": "1.4.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"],
+        "properties": {
+          "subject_identity": {
+            "required": ["subject_model"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.5.0" } },
         "required": ["sers_version"]
       },
       "then": {
