@@ -88,7 +88,7 @@ dev = [
   "pytest-xdist>=3.5",
   "ruff>=0.5",
   "mypy>=2.3.1",
-  "hypothesis>=6.100",
+  "hypothesis>=6.168.0",
   # C.1 — Tier-1 mechanical-validity gate (A33)
   # pytest-socket blocks network calls in offline Tier-1 tests; module-level autouse fixture.
   "pytest-socket>=0.8.1",
