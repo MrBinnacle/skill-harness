@@ -25,9 +25,11 @@ locked INVARIANTS entry.
 
 AC-2 landed by #545 and carries the HARNESS side of the schedule agreement only;
 the production side is DC-1 and DC-2, and the row's own comment says why it does
-not restate them. The ratified assurance candidates AC-3 and AC-4 are NOT here
-yet: they are ratified but unenforced, and docs/ASSURANCE.md names that
-remaining coverage hole (#248, #543, #544).
+not restate them. AC-3 landed by #543 through the delegation kind below: its
+invariant was already enforced by the pre-commit public-copy scanner, so the row
+buys legibility and a red demonstration rather than new enforcement, and the row's
+own comment says so. The last ratified assurance candidate, AC-4, is NOT here yet
+and docs/ASSURANCE.md names what already guards it (#248, #544).
 
 DC-12's reader is deliberately independent of the src parser
 (skill_harness/ratification.py feeds the spend-time gate): the two parsers
@@ -53,6 +55,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -62,6 +65,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import ModuleType
 
 
 class WordListManifestError(Exception):
@@ -211,6 +215,46 @@ class WordListBan:
 
 
 @dataclass(frozen=True)
+class DelegatedGuard:
+    """A guard predicate this table does NOT own, named by path and symbol.
+
+    Every other kind in this vocabulary compares a file against a literal
+    written in the table. This one does not, and the difference is the point:
+    the rules AC-3 and AC-4 register are already implemented, already enforced,
+    and already have a caller. Restating them here would put one meaning in two
+    places, which is the failure scripts/words_to_avoid_drift_check.py names in
+    its own import comment: two guards over one subject that canonicalize
+    differently invent drift that is not there.
+
+    The callee owns the WORDING of a violation it finds, which is the wording
+    its other caller already prints, so an operator reads one sentence for one
+    defect no matter which entry point found it.
+
+    ``module_rel`` is repo-relative and is resolved against THIS SCRIPT's
+    repository, never against ``--root``. The guard's code is this tree's code;
+    the tree under test is ``--root``. Resolving against ``--root`` would let a
+    checked tree supply the guard that checks it.
+
+    ``symbol`` must name a callable with the house gate signature,
+    ``(root: Path, errors: list[str]) -> None``, appending one string per
+    violation. That is release_gate.py's shape for all eight of its gates, so
+    the convention is the repository's, not this kind's invention.
+
+    ``requires`` is the vacuity control, and it is why this is a check function
+    rather than two inlined lines. Both delegates build their surface set by
+    globbing. A tree with no ``docs`` directory makes its delegate return zero
+    violations, which prints as a clean row. Every listed path must exist under
+    ``--root`` or the row REFUSES and says which path was missing. Same rule as
+    WordListSelectionError above: an expectation with no surface is a refusal
+    to report, never a pass.
+    """
+
+    module_rel: str
+    symbol: str
+    requires: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class LiveRow:
     dc_id: str
     summary: str
@@ -218,6 +262,7 @@ class LiveRow:
     registered_texts: tuple[RegisteredText, ...] = ()
     live_pointers: tuple[str, ...] = ()
     token_bans: tuple[TokenBan, ...] = ()
+    delegated_guards: tuple[DelegatedGuard, ...] = ()
     estimand_contract: EstimandContract | None = None
     import_ban: ImportScanBan | None = None
     rat_ledger: RatLedgerContract | None = None
@@ -782,6 +827,81 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         # CS_P_GRID contains 0.60 and 0.95 as grid points. A grid point is a
         # value the calibration sweeps, not a decision constant, for the same
         # reason.
+    ),
+    LiveRow(
+        dc_id="AC-3",
+        summary=(
+            "public vacuity claims: a kind-precision aggregate never appears without its own "
+            "generation's class split, and a detector recall figure never appears without "
+            "either the word UNMEASURED or both registered intervals with their sample and "
+            "skill denominators (#543). Scope is the public-copy surface set the pre-commit "
+            "scanner already defines: README.md, docs markdown, the pyproject description, "
+            "asset SVG text nodes and the sitegen templates. NOT docs/calibration/*.json as "
+            "prose: those are immutable receipts, and the two figures the registry holds are "
+            "pinned as VALUES below instead"
+        ),
+        # WHAT THIS ROW IS, stated so nobody overstates it later.
+        #
+        # It is NOT new enforcement. The invariant is enforced today, by the
+        # public-copy scanner .pre-commit-config.yaml runs as
+        # `python tests/test_structural_bans.py` and by
+        # test_no_banned_copy_on_public_surfaces inside the required Test job.
+        #
+        # What the row buys is legibility plus a red demonstration for
+        # enforcement that had neither. tests/test_structural_bans.py's _main
+        # hardcodes REPO_ROOT and takes no --root, so that enforcement cannot
+        # be pointed at a synthetic tree: its only control is "the real tree is
+        # clean", which cannot tell a working guard from one returning an empty
+        # list. This script takes --root, so tests/test_drift_check.py can
+        # poison a tmp tree and watch AC-3 redden.
+        #
+        # WHY IT DELEGATES rather than restating the rules. The nine regexes,
+        # their context windows and the ten-pattern receipt conjunction have
+        # one home already. A second copy here would canonicalize differently
+        # and invent drift that is not there.
+        #
+        # WHY THE NARROW PREDICATE. vacuity_claim_violations_for_repo runs the
+        # three vacuity blocks alone. _public_copy_violations also runs the
+        # evidence-admissibility and earn-family rules, so a row built on it
+        # would print "earn/earned family at line 12" under a summary that says
+        # AC-3: red for a reason its own name denies.
+        delegated_guards=(
+            DelegatedGuard(
+                module_rel="tests/test_structural_bans.py",
+                symbol="vacuity_claim_violations_for_repo",
+                requires=("README.md", "docs"),
+            ),
+        ),
+        # The registry is covered HERE, by reading named fields, not by
+        # prose-scanning JSON. Measured: running the public-copy rules over
+        # docs/calibration/*.json flags five lines in two immutable receipts,
+        # and they fail on the split regexes' sentence-boundary limit rather
+        # than on content. The two available repairs are rewriting a sealed
+        # record, which vacuity-flag-calibration-2026-08-08.json's
+        # generation_lock field forbids, or widening the proximity regex for
+        # every surface in order to accommodate two files it should not read.
+        #
+        # #543's revisit clause anticipated this: "if the calibration registry
+        # gains a machine-readable form; then the row reads figures from it
+        # instead of matching prose". It already has one. These two legs are
+        # that field read.
+        value_sites=(
+            ValueSite(
+                "docs/calibration/vacuity-flag-calibration-2026-08-08.json",
+                r'^\s*"kind_precision": \{\n'
+                r'\s*"aggregate": ([0-9.]+),\n'
+                r'\s*"not_a_directive_correct": (\d+),\n'
+                r'\s*"not_a_directive_n": (\d+),\n'
+                r'\s*"weak_directive_correct": (\d+),\n'
+                r'\s*"weak_directive_n": (\d+),',
+                ("0.835", "77", "77", "4", "20"),
+            ),
+            ValueSite(
+                "docs/calibration/vacuity-flag-calibration-2026-08-08.json",
+                r'^\s*"recall": "([A-Z]+)",$',
+                ("UNMEASURED",),
+            ),
+        ),
     ),
     LiveRow(
         dc_id="DC-14",
@@ -1418,6 +1538,61 @@ def _symbol_exists(root: Path, symbol: str, search_roots: tuple[str, ...]) -> bo
     return False
 
 
+def _load_guard_module(module_rel: str) -> ModuleType:
+    """Import a guard module from THIS script's repository, by file path.
+
+    ``scripts`` and ``tests`` carry no ``__init__.py`` and are not packages
+    (the same note scripts/words_to_avoid_drift_check.py carries), so this is
+    the loader tests/test_words_to_avoid_ban.py already uses to reach this
+    script. The direction here is the reverse and the mechanism is identical.
+
+    The module is registered in ``sys.modules`` BEFORE ``exec_module``:
+    @dataclass resolves a field annotation by looking its defining module up in
+    sys.modules, and a module that is not there yet resolves to None, which
+    surfaces as an AttributeError inside dataclasses at import time that reads
+    like a bug in the guard and is not one.
+    """
+    name = "drift_check_guard_" + re.sub(r"\W", "_", module_rel)
+    path = Path(__file__).resolve().parent.parent / module_rel
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"no loader for {module_rel}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _check_delegated_guard(root: Path, guard: DelegatedGuard) -> list[str]:
+    """Run one delegated predicate against ``root``, or refuse and say why.
+
+    Three refusals, all of them the table's own wording: a missing surface, an
+    unloadable module, a symbol that is absent or not callable. Each is a
+    failure string, never an exception and never a silent pass. A guard this
+    row cannot reach is indistinguishable, from the output, from a guard that
+    found nothing, and the second reading is the one that ships drift.
+    """
+    for rel in guard.requires:
+        if not (root / rel).exists():
+            return [
+                f"delegated guard {guard.symbol} has no surface to scan: "
+                f"{rel} does not exist under the checked root"
+            ]
+    try:
+        module = _load_guard_module(guard.module_rel)
+    except Exception as exc:  # an unloadable guard is a refusal, never a pass
+        return [f"delegated guard module {guard.module_rel} did not load: {exc!r}"]
+    predicate = getattr(module, guard.symbol, None)
+    if not callable(predicate):
+        return [
+            f"delegated guard {guard.module_rel}:{guard.symbol} is absent or not callable "
+            "(the row names a predicate that no longer exists)"
+        ]
+    failures: list[str] = []
+    predicate(root, failures)
+    return failures
+
+
 def _run_row(root: Path, row: LiveRow) -> list[str]:
     failures: list[str] = []
     for site in row.value_sites:
@@ -1428,6 +1603,8 @@ def _run_row(root: Path, row: LiveRow) -> list[str]:
         failures.extend(_check_pointer(root, pointer))
     for ban in row.token_bans:
         failures.extend(_check_token_ban(root, ban))
+    for guard in row.delegated_guards:
+        failures.extend(_check_delegated_guard(root, guard))
     if row.estimand_contract is not None:
         failures.extend(_check_estimand_contract(root, row.estimand_contract))
     if row.import_ban is not None:

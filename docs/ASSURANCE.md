@@ -93,10 +93,25 @@ not the absence of defects.
 **Row status.** AC-1 CONFIGURED: it is the `AC-1` row in `scripts/drift_check.py`,
 red-demonstrated in `tests/test_drift_check.py`, landed by #248. AC-2 CONFIGURED:
 it is the `AC-2` row in `scripts/drift_check.py`, red-demonstrated in
-`tests/test_drift_check.py`, landed by #545. AC-3 NOT CONFIGURED. AC-4 NOT
-CONFIGURED. The #160 close-out ratified all four; the two unconfigured candidates
-carry no mechanical guard, so drift in them stays unobserved until each lands as a
-row with its own red demonstration (#248, #543, #544).
+`tests/test_drift_check.py`, landed by #545. AC-3 CONFIGURED: it is the `AC-3` row,
+which delegates to the vacuity scanner in `tests/test_structural_bans.py` rather
+than restating its predicates, red-demonstrated in `tests/test_drift_check.py`,
+landed by #543. AC-4 NOT CONFIGURED (#544).
+
+**What NOT CONFIGURED means here, corrected.** An earlier revision of this
+paragraph said the unconfigured candidates "carry no mechanical guard, so drift in
+them stays unobserved". That was false for both candidates and is withdrawn. AC-3's
+invariant was enforced before its row existed, by the public-copy scanner
+`.pre-commit-config.yaml` runs as `python tests/test_structural_bans.py` and that
+`test_no_banned_copy_on_public_surfaces` runs inside the required `Test` job. AC-4's
+three legs are enforced today by
+`test_workflow_audit_covers_every_workflow_and_records_required_checks` in
+`tests/test_assurance_supply_chain_172.py`, also inside that required job, and the
+SHA-pin leg additionally by the release gate's `G5`. NOT CONFIGURED means one thing
+and only one thing: the drift-check contract table prints no row for the candidate,
+so its coverage is real but absent from the one listing this repository publishes as
+its coverage boundary. Read the status word as a claim about that listing. Never as
+a claim that nothing guards the invariant.
 
 The `AC-2` row guards the harness sites only, which is what the candidate row
 below asks for in its own words: "DC-1 and DC-2 cover production and selected
