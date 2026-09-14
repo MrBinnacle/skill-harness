@@ -1499,35 +1499,54 @@ def _any_unmeasured(results: list[Any]) -> bool:
     return any(_is_unmeasured(r) for r in results)
 
 
+def _gate2_colour(decision: Any) -> str:
+    """The one colour map for a Gate-2 decision, shared by both display sites.
+
+    BENEFIT is the only decision that lets a clause keep its scalar pass, so it
+    is the only green one. HARM is red. EQUIVALENT and UNRESOLVED are both
+    yellow: neither is a pass, and the cell names which one it is in text, so
+    the colour never has to carry that distinction.
+    """
+    from skill_harness.oc.gate2 import Gate2Decision
+
+    if decision == Gate2Decision.BENEFIT:
+        return "green"
+    if decision == Gate2Decision.HARM:
+        return "red"
+    return "yellow"
+
+
 def _gate2_cell(result: Any) -> str:
     """Render the registered Gate-2 decision for one clause (#546, #368 Path C).
 
     Two displays, and the difference between them is load-bearing:
 
-    - A decision was made. The cell shows it, the plug-in net lift it was made
-      on, and the ratification id whose thresholds decided it, so a reader can
-      retrieve what it was decided under.
+    - A decision was made. The cell shows the decision, the ratification id
+      whose thresholds made it, and the plug-in net lift, LABELLED as plug-in.
+      The decision is made on posterior mass, not on that point estimate
+      (PathCResult.net_lift_point says so in its own words), so the label is
+      what stops a reader reading the number as the basis of the verdict.
     - No decision was made. The cell shows "not applied" and the typed reason
-      from ClauseResult.path_c_unavailable_reason. An absent floor decision is
-      never displayed as a clause clearing the floor.
-    """
-    from skill_harness.oc.gate2 import Gate2Decision
+      from ClauseResult.path_c_unavailable_reason, which is one of
+      no_ratification_reference, unregistered_thresholds or no_sampling. An
+      absent floor decision is never displayed as a clause clearing the floor.
 
-    path_c = getattr(result, "path_c", None)
+    A result carrying no decision and no reason is a defect in the result
+    object, not a fourth kind of refusal. It renders as "no reason recorded"
+    rather than as an invented member of that vocabulary, and rather than
+    raising, because a run that has already spent money still owes its operator
+    the rest of the table.
+    """
+    path_c = result.path_c
     if path_c is None:
-        reason = getattr(result, "path_c_unavailable_reason", None) or "unknown"
+        reason = result.path_c_unavailable_reason
+        if reason is None:
+            return "[dim]not applied (no reason recorded)[/]"
         return f"[dim]not applied ({reason})[/]"
 
-    decision = path_c.decision
-    if decision == Gate2Decision.BENEFIT:
-        colour = "green"
-    elif decision == Gate2Decision.HARM:
-        colour = "red"
-    else:
-        colour = "yellow"
     return (
-        f"[{colour}]{decision.upper()}[/] "
-        f"[dim]net_lift={path_c.net_lift_point:+.3f} | {path_c.ratification_id}[/]"
+        f"[{_gate2_colour(path_c.decision)}]{path_c.decision.upper()}[/] "
+        f"[dim]{path_c.ratification_id} | net_lift(plug-in)={path_c.net_lift_point:+.3f}[/]"
     )
 
 
@@ -1535,9 +1554,9 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
     """Render the ablation results table + reporting-honesty caveats (A48, A50).
 
     Verdict rendering (A48):
-    - PASSED  -> green   "PASSED"
-    - FAILED  -> red     "FAILED (P(win)<=.05)"
-    - UNMEASURED -> yellow "UNMEASURED(<subreason>)"
+    - PASSED  → green   "PASSED"
+    - FAILED  → red     "FAILED (P(win)≤.05)"
+    - UNMEASURED → yellow "UNMEASURED(<subreason>)"
 
     Registered effect-size floor (#546, docs/INVARIANTS.md section 8):
     The scalar stopping rule reports the conditional win rate q and cannot see
@@ -1566,7 +1585,7 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
 
     has_any_unmeasured = False
     has_any_floor_unapplied = False
-    has_any_floor_displacement = False
+    has_any_floor_rejected_pass = False
 
     for result in results:
         clause_id = result.clause_id
@@ -1595,15 +1614,15 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
             # #546: the scalar rule passed. Display the registered floor before
             # calling it a pass, because a clause can clear the scalar rule on a
             # net lift the registered delta_min rejects.
-            path_c = getattr(result, "path_c", None)
+            path_c = result.path_c
             if path_c is None:
                 has_any_floor_unapplied = True
                 verdict_str = "[green]PASSED[/] [dim](scalar only)[/]"
             elif path_c.decision == Gate2Decision.BENEFIT:
                 verdict_str = "[green]PASSED[/]"
             else:
-                has_any_floor_displacement = True
-                floor_colour = "red" if path_c.decision == Gate2Decision.HARM else "yellow"
+                has_any_floor_rejected_pass = True
+                floor_colour = _gate2_colour(path_c.decision)
                 verdict_str = f"[{floor_colour}]{path_c.decision.upper()} (registered floor)[/]"
             contrib_str = "single-clause LOO; lower-bound under redundancy"
         elif stopping_reason == StoppingReason.FAILED:
@@ -1644,13 +1663,15 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
         )
 
     # #546: the report states what the registered floor did and did not decide.
-    if has_any_floor_displacement:
+    if has_any_floor_rejected_pass:
         _console.print(
             "\n[yellow][!] One or more clauses cleared the scalar rule and failed the "
             "registered effect-size floor.[/]"
             "\n  The Gate-2 verdict is displayed in place of the scalar verdict."
             "\n  The scalar rule reports the conditional win rate and cannot see how"
-            "\n  often a direction occurred at all. See docs/INVARIANTS.md section 8."
+            "\n  often a direction occurred at all. The Gate-2 decision is made on"
+            "\n  posterior mass, not on the plug-in net lift printed beside it."
+            "\n  See docs/INVARIANTS.md section 8."
         )
 
     if has_any_floor_unapplied:

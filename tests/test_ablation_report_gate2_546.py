@@ -278,6 +278,38 @@ class TestFloorNotApplied:
             f"those rows.\nOutput:\n{result.output}"
         )
 
+    def test_missing_reason_is_a_defect_not_a_fourth_refusal(self) -> None:
+        """A result with no decision and no reason names the gap as a gap.
+
+        The refusal vocabulary has exactly three members. A result carrying
+        neither a decision nor a reason is a defect in the result object, and
+        the cell says so rather than printing a fourth member of a closed
+        vocabulary.
+        """
+        stop_decision = _decisive_decision()
+        result = _render(
+            [
+                ClauseResult(
+                    clause_id="clause-defective",
+                    stopping_reason=StoppingReason.PASSED,
+                    stop_decision=stop_decision,
+                    samples_collected=11,
+                    length_confounded=False,
+                    verdict_id="verdict-defective",
+                    path_c=None,
+                    path_c_unavailable_reason=None,
+                )
+            ]
+        )
+
+        assert "no reason recorded" in result.output, (
+            f"A missing reason is displayed as a defect.\nOutput:\n{result.output}"
+        )
+        assert "unknown" not in result.output, (
+            "A missing reason must not be given a plausible-looking vocabulary word.\n"
+            f"Output:\n{result.output}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # AC 1 (scope): every row carries a Gate-2 cell
