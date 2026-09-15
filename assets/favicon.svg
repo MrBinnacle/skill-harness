@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="skill-harness">
+  <style>.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}</style>
+  <!-- field: bench-void -->
+  <rect width="32" height="32" fill="#010409"/>
+  <!-- readout frame at icon size: bench-surface fill, 2px bench-muted stroke, radius 0 -->
+  <rect x="2" y="2" width="28" height="28" fill="#0d1117" stroke="#8b949e" stroke-width="2"/>
+  <!-- the wordmark's initial inside the frame, bench-command size, bench-ink -->
+  <text x="16" y="23" text-anchor="middle" class="mono" font-size="21" font-weight="700" fill="#e6edf3">s</text>
+</svg>
