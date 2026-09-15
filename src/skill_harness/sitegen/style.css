@@ -255,14 +255,49 @@ td {
 
 /* A 64-character sha256 in a cell needs about 470px at 0.92em mono; a 360px
  * viewport leaves about 328px. The value breaks rather than overflowing, and
- * the wrapper is NOT given overflow-x: hidden, which hides the symptom. */
+ * the wrapper is NOT given overflow-x: hidden, which hides the symptom.
+ *
+ * The two properties are not interchangeable and S456 measured the difference.
+ * `anywhere` breaks between any two characters AND shrinks the element's
+ * min-content width, so a cell carrying it lets a table column collapse to one
+ * character and then shreds ordinary English to fit: "Ver / dic / t",
+ * "absen / t", "not_instrumen / ted". It belongs on the machine token, which is
+ * one unbreakable string with no word boundaries to use. `break-word` breaks a
+ * word only when the word alone would overflow, and leaves min-content alone,
+ * so it is what the cell itself wears.
+ *
+ * A <dd> is the exception and it was measured rather than reasoned about. Put
+ * on break-word it overflowed a 360px viewport by 212px on
+ * skill-git-pull-rebase-trap.html, because one receipt's notes field carries a
+ * 56-character run id in ordinary prose, outside any <code>. A definition list
+ * is one column per line, not a column competing with four others, so
+ * `anywhere` there costs nothing and is the only property that breaks that id. */
+/* A paragraph gets it too. Found at S456 and NOT one of the reported defects:
+ * skill-git-pull-rebase-trap.html overflows a 360px viewport by 212px at main,
+ * because its summary states a 40-character run id in the middle of a sentence
+ * and a <p> had no break rule at all. The Check seat read one of the four
+ * receipt pages and named the other three as uncovered, which is where this
+ * was. break-word, not anywhere, so ordinary prose is untouched. */
+p,
 td,
 th,
+.figure {
+  overflow-wrap: break-word;
+}
+
 dd,
 td code,
-th code,
 dd code {
   overflow-wrap: anywhere;
+}
+
+/* A row header's <code> is the raw schema key and it stays whole. Given
+ * `anywhere` it let the cost table's Leg column collapse to one character at
+ * 1440px, where that table is 468px because it sits beside the clause block,
+ * and printed "standin / g_token / s". The key is 15 characters; the column can
+ * afford it. */
+th code {
+  overflow-wrap: break-word;
 }
 
 thead th {
@@ -415,7 +450,134 @@ th > code {
   color: var(--bench-muted);
 }
 
-.measurements th[scope="row"],
-.cost th[scope="row"] {
-  max-width: 22rem;
+/* Scoped to the wide viewport because no cap value works at the narrow one.
+ * S456 measured four caps at 360px and 1440px. At 1440px 22rem buys the figure
+ * column 27px over an uncapped header and reads in two or three lines a row.
+ * At 360px it makes the header 98px of a 328px main and the schema sentence
+ * renders at about nine characters a line; removing the cap there gives the
+ * header 138px and drops the figure column to 55px, which is worse. A
+ * three-column table holding a sentence, a figure and a detail does not fit a
+ * phone at any cap, so the narrow viewport stops drawing one. */
+@media (min-width: 40rem) {
+  .measurements th[scope="row"],
+  .cost th[scope="row"] {
+    max-width: 22rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Narrow viewports. One boundary, 40rem, shared with the display step's own
+ * step-down above.
+ * ------------------------------------------------------------------------ */
+
+@media (max-width: 40rem) {
+  /* A definition list is two columns only while both columns have room. The
+   * widest term on the landing page's refusals list takes a max-content width
+   * larger than the whole 328px main, which left the second track a few pixels
+   * and ran the definition down the page one character to a line. One column,
+   * term above definition.
+   *
+   * The track floor is 0 rather than the default auto. An auto floor is the
+   * item's min-content width, and a receipt's notes field carrying a 56-character
+   * run id makes that wider than the viewport. */
+  dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The receipts index and the measurements table stop being tables here and
+   * become one labelled block per row. Measured: with the word breaking
+   * repaired the index needs 531px against 328px available, and it reported no
+   * horizontal overflow before only because the shredding was hiding it, which
+   * is the concealment overflow-x: hidden was refused for.
+   *
+   * The table role goes with the table. display: block drops it in every
+   * browser, and that is stated rather than patched back with ARIA, because at
+   * this width there is no table on the screen for a restored role to describe.
+   * Every cell keeps its column label, printed from the data-label the row
+   * builder writes, so nothing a wide reader is told is lost to a narrow one. */
+  .receipts,
+  .receipts tbody,
+  .receipts tr,
+  .receipts th,
+  .receipts td,
+  .measurements,
+  .measurements tbody,
+  .measurements tr,
+  .measurements th,
+  .measurements td,
+  .cost,
+  .cost tbody,
+  .cost tr,
+  .cost th,
+  .cost td {
+    display: block;
+    width: auto;
+    max-width: none;
+  }
+
+  /* A table-caption inside a block parent gets wrapped in an anonymous table
+   * box and shrinks to fit, which set "Published receipts (4)" one word to a
+   * line. It becomes an ordinary block with the rest of the table. */
+  .receipts caption,
+  .measurements caption,
+  .cost caption {
+    display: block;
+  }
+
+  .receipts thead,
+  .measurements thead,
+  .cost thead {
+    display: none;
+  }
+
+  .receipts tr,
+  .measurements tr,
+  .cost tr {
+    border-top: 1px solid var(--bench-muted);
+  }
+
+  .receipts tbody tr:first-child,
+  .measurements tbody tr:first-child,
+  .cost tbody tr:first-child {
+    border-top: 0;
+  }
+
+  /* The cell rules go with the columns they separated. The padding is left to
+   * the table default above, so a refusal cell's own padding still wins on
+   * specificity here and does not become the cramped one. */
+  .receipts th,
+  .receipts td,
+  .measurements th,
+  .measurements td,
+  .cost th,
+  .cost td {
+    border: 0;
+  }
+
+  .receipts th[scope="row"],
+  .measurements th[scope="row"],
+  .cost th[scope="row"] {
+    padding-top: 0.6rem;
+  }
+
+  .receipts td::before,
+  .measurements td::before,
+  .cost td::before {
+    content: attr(data-label) ": ";
+    color: var(--bench-muted);
+  }
+
+  /* An empty Detail cell would otherwise draw its own label over nothing. */
+  .receipts td:empty,
+  .measurements td:empty,
+  .cost td:empty {
+    display: none;
+  }
+
+  /* The cost triple takes the same treatment. It is three columns rather than
+   * five, but its Leg column holds a raw schema key in <code>, which wears
+   * overflow-wrap: anywhere, and at 360px that collapsed the column and printed
+   * "stan / ding / _tok / ens". Measured on the rendered page, not reasoned
+   * about. The clauses table is deliberately NOT stacked: no published receipt
+   * renders one today, and its cells carry no data-label to print. */
 }
