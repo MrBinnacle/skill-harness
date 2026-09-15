@@ -60,9 +60,9 @@ DEFAULT_NAV: Final[tuple[tuple[str, str], ...]] = (
 )
 
 #: Written into ``<link rel="icon">`` when an icon file is supplied to the
-#: build. No icon ships in the tree today, so no page links one: see the make
-#: log's halt on A4. The link is emitted only when the bytes exist, because a
-#: 404ing icon link is worse than no icon link.
+#: build. ``assets/favicon.svg`` ships in the tree since S456, so every page of
+#: a default build links one. The link is still emitted only when the bytes
+#: exist, because a 404ing icon link is worse than no icon link.
 FAVICON_NAME: Final[str] = "favicon.svg"
 
 #: Rendered in place of an optional key the receipt does not carry. Never a
@@ -541,6 +541,33 @@ def schema_label(properties: Mapping[str, Any], key: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+#: The column label each body cell carries in ``data-label``.
+#:
+#: Below 40rem the receipts index and the measurements table stop being tables
+#: and become one labelled block per row (S456 defect 3: with the word breaking
+#: repaired, the five-column index needs 531px and a 360px viewport leaves 328).
+#: The stylesheet prints the label from this attribute, so the label a narrow
+#: reader sees is markup rather than copy invented in CSS. It prints the
+#: attribute whole and adds no separator, because a separator written in CSS
+#: would be the same copy-outside-the-gate this attribute exists to avoid.
+#:
+#: These strings repeat the ``<th scope="col">`` text in the templates, and the
+#: duplication is deliberate rather than unnoticed: the header row is written in
+#: HTML and the body rows are written here.
+#: ``test_site_viewport_S456.py`` asserts the two sets are equal, so the copy
+#: cannot drift in one place without a red suite.
+INDEX_COLUMN_LABELS: Final[tuple[str, ...]] = (
+    "Verdict",
+    "Refusal qualifier",
+    "Evidence admissibility",
+    "Source of record",
+)
+
+#: The same, for the cost triple and the measurements table. Both carry a row
+#: header and then these two columns.
+FIGURE_COLUMN_LABELS: Final[tuple[str, ...]] = ("Figure", "Detail")
+
+
 def _index_row(receipt: Mapping[str, Any]) -> str:
     name = _string_field(receipt, "skill_name", "")
     href = safe(skill_page_name(name))
@@ -548,12 +575,14 @@ def _index_row(receipt: Mapping[str, Any]) -> str:
     prose = ""
     if isinstance(source, Mapping):
         prose = _string_field(source, "prose_path", "")
+    verdict, qualifier, gate, record = (safe(label) for label in INDEX_COLUMN_LABELS)
     return (
         f'<tr><th scope="row"><a href="{href}">{safe(name)}</a></th>'
-        f'<td><span class="verdict-token">{safe(_string_field(receipt, "verdict", ""))}</span></td>'
-        f"<td>{safe(_qualifier_text(receipt))}</td>"
-        f"<td>{safe(_gate_status(receipt))}</td>"
-        f"<td><code>{safe(prose)}</code></td></tr>"
+        f'<td data-label="{verdict}"><span class="verdict-token">'
+        f"{safe(_string_field(receipt, 'verdict', ''))}</span></td>"
+        f'<td data-label="{qualifier}">{safe(_qualifier_text(receipt))}</td>'
+        f'<td data-label="{gate}">{safe(_gate_status(receipt))}</td>'
+        f'<td data-label="{record}"><code>{safe(prose)}</code></td></tr>'
     )
 
 
@@ -642,9 +671,11 @@ def _measurement_rows(receipt: Mapping[str, Any], schema: Mapping[str, Any]) -> 
         label = schema_label(properties, key)
         raw = measurements.get(key)
         if raw is None:
+            figure, _ = (safe(column) for column in FIGURE_COLUMN_LABELS)
             rows.append(
                 f'<tr><th scope="row">{label}</th>'
-                f'<td class="absent">{safe(ABSENT_TEXT)}</td><td></td></tr>'
+                f'<td class="absent" data-label="{figure}">'
+                f"{safe(ABSENT_TEXT)}</td>{_detail_cell('')}</tr>"
             )
         elif isinstance(raw, Mapping):
             rows.append(_figure_row(label, rate_figure(key, raw)))
@@ -655,16 +686,37 @@ def _measurement_rows(receipt: Mapping[str, Any], schema: Mapping[str, Any]) -> 
     return rows
 
 
+def _detail_cell(detail: str) -> str:
+    """The Detail cell of a figure row, stated rather than left blank.
+
+    A figure's ``detail`` is optional in the schema, so an empty one means the
+    receipt did not carry it. That is the same absence the qualifier fields and
+    a missing measurement key already name, so it renders the same way, in the
+    same words, at every width.
+
+    The alternative shipped at cb25ea2 and was wrong: the cell was left empty
+    and the narrow viewport hid empty cells, so a phone reader was shown less
+    than a desktop reader and was not told. Concealing a field is the defect
+    class this pass exists to remove, and a blank cell under a column header a
+    narrow reader cannot see is a value with no name.
+    """
+    _, detail_label = (safe(column) for column in FIGURE_COLUMN_LABELS)
+    if not detail:
+        return f'<td class="absent" data-label="{detail_label}">{safe(ABSENT_TEXT)}</td>'
+    return f'<td data-label="{detail_label}">{safe(detail)}</td>'
+
+
 def _figure_row(label: str, figure: Figure) -> str:
     """One figure row. ``label`` is already-escaped markup from ``schema_label``."""
     css = "figure refused" if figure.refused else "figure"
     text = safe(figure.text)
     if figure.machine_value:
         text = f'<data value="{safe(figure.machine_value)}">{text}</data>'
+    figure_label, _ = (safe(column) for column in FIGURE_COLUMN_LABELS)
     return (
         f'<tr><th scope="row">{label}</th>'
-        f'<td class="{css}">{text}</td>'
-        f"<td>{safe(figure.detail)}</td></tr>"
+        f'<td class="{css}" data-label="{figure_label}">{text}</td>'
+        f"{_detail_cell(figure.detail)}</tr>"
     )
 
 
