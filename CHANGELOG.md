@@ -7,7 +7,140 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+This section records the 133 commits on `main` since v0.3.0. It rolls to
+`## [0.4.0] - YYYY-MM-DD` at the tag.
+
+Read the first entry under Changed before you upgrade. One rename in this range
+breaks consumers silently. Nothing raises an error and nothing logs a warning.
+A program that matched the old value stops matching and reports nothing.
+
+### Changed
+
+- **BREAKING. `report_schema_version` goes from `1.4.0` to `2.0.0`, because the
+  `aggregation_method` value `bh_fdr_fallback` is renamed to
+  `bounded_pooling_refused`** (#360, #441, in `03ee27d`). The constant lives at
+  `src/skill_harness/aggregation/report.py:44`. The new value is written at
+  `src/skill_harness/aggregation/fit.py:759`. There is no alias on the write
+  path and none on the read path. The old string survives only in comments at
+  `fit.py:255` and `report.py:17`.
+
+  What breaks. Any consumer that compares against the literal
+  `"bh_fdr_fallback"` stops matching. The comparison returns false rather than
+  raising, so the consumer reports nothing instead of failing. Code that
+  branches on the value takes the wrong branch. Code that filters on it returns
+  an empty result.
+
+  What to do. Match `"bounded_pooling_refused"`. If you must read both
+  generations, branch on `report_schema_version` rather than accepting either
+  string, because the two values report different outcomes. The fit is refused
+  and pooled at the admission bound, rather than falling back to BH-FDR.
+
+  `docs/PRD.md:757` states the rule this follows. Removals, renames, and type
+  changes take a major bump, because they break `diff skill` consumers.
+
+- **The ablation results table gains a `gate-2 (registered floor)` column**
+  (#546, #558, in `c2fa804`). A clause that previously rendered a green
+  `PASSED` now renders `PASSED (scalar only)`, `HARM (registered floor)`,
+  `EQUIVALENT (registered floor)`, or `UNRESOLVED (registered floor)`. The
+  verdict words did not change meaning. The report now shows which decision
+  produced them. Anyone who parses this table by column position must re-read
+  it.
+
+- **Tie-bearing ablation clause decisions route through the Gate-2 discordant
+  rule** (#368, #493, in `0274dd1`). A clause whose decision turned on a tie
+  can receive a different verdict than it did under 0.3.0.
+
+- **`paired-gate2` refuses a run that carries undecided epochs** (#438, #491,
+  in `1a5027a`). A hazard entry is counted per simple command rather than per
+  tool-call blob. When an arm carries undecided epochs, the command emits a
+  `HAZARD_UNDECIDED` refusal and exits 1. A run that previously produced a
+  score now produces a typed refusal instead.
+
+- **The minimum `anthropic` version rises from `1.2.0` to `1.5.0`** (#548, in
+  `b1ec720`). An environment that pins `anthropic` below `1.5.0` no longer
+  satisfies this package's requirements.
+
+- **The PyPI package description is replaced** (#497, in `3ba4f69`). It now
+  carries the repository's GitHub About text.
+
+### Added
+
+- **`skill-harness run pi-paired CONFIG [--execute]`**, a paired subject lane
+  for the Pi runtime (`src/skill_harness/cli/main.py:3439`). The default is a
+  dry run that performs the pre-spend gate only. `--execute` runs the Full and
+  Null epochs and spends money. The subcommand requires a `pi` binary that this
+  package does not install. Without it the launcher raises
+  `PiExecutableNotFoundError`
+  (`src/skill_harness/subject/pi/launcher.py:164`). The runtime version is
+  measured from the binary that ran and is never assumed. No sized Pi
+  measurement has been run, so no Pi skill effect is admissible yet.
+
+- **SERS 1.4.0 and SERS 1.5.0.** 1.4.0 splits the subject and extractor model
+  roles and adds `subject_identity.subject_model`, required only under the
+  1.4.0 conditional (#487, in `c398cca`). 1.5.0 adds four optional top-level
+  keys from the On-Irreducibility additions (#526, #547, in `cfb5cec`). Both
+  are additive for existing receipts. A consumer holding an older copy of the
+  schema rejects a new receipt, which the standard treats as intended
+  generational non-comparability.
+
+- **Drift-check rows AC-2, AC-3 and AC-4.** AC-3 covers the public vacuity
+  claims (#543, #565, in `f3f2ba9`). AC-4 covers workflow configuration (#571,
+  in `dc7520e`). The drift check reports 20 live contracts at this version.
+
+- **Two storage migrations**, `1100_clause_run_outcomes.sql` and
+  `1101_structural_covariates.sql` (in `e047967`). Both create new tables with
+  append-only triggers and touch no existing table, so a store created under
+  v0.3.0 applies them additively on first open. Nothing in the shipped code
+  writes to `sample_structural_covariates` yet.
+
+- **The release gate reports its own coverage** (#576). Every gate that does
+  not run prints a named skip line, and both summary lines state how many of
+  the eight gates ran. At 0.3.0 the gate prints `7 of 8 gates ran; skipped G6`.
+  Off the 0.3 minor line it prints `5 of 8 gates ran; skipped G6, G7, G8`. G7
+  and G8 previously returned in silence, so `RELEASE GATE: PASS` covered six of
+  eight checks and did not say so.
+
 ### Fixed
+
+- **The SERS schema held the UNMEASURED sub-reason vocabulary twice and one
+  copy was untested** (#578). `$defs/rate_or_refusal` is referenced by ten
+  measurement fields and was short `tier2_uncalibrated` and
+  `length_confounded`, so a receipt recording either of the runner's
+  pre-sampling refusals could not be written. Both copies are now asserted
+  equal to `UnmeasuredSubReason`.
+- `ExtractedClause.axis` is persisted unnormalised, so a padded axis splits one
+  axis into two (#504, in `8d5e0d6`).
+- `unmeasured_reason` is never persisted, and its vocabulary is disjoint from
+  `UnmeasuredSubReason` (#503, in `710ef78`).
+- An absent dump column is a difference, not agreement (#360, in `1f5a73e`).
+- Two mutants share the id `M-R1` and two share `M-R2`, and nothing asserts
+  that a mutant id is unique (#536, in `af0788f`).
+- The lint gate does not cover `scripts/`, and a syntax error reached a commit
+  through the gap (#535, in `bef52e1`).
+- `pre-commit run --all-files` cannot pass on `main`, because ruff fails on
+  `prototypes/`, which CI never lints (#483, in `fe5b3c1`).
+- `test_mint_path_allowlist` filters on the absolute path, so it is vacuous in
+  a build worktree (#482, in `7284342`).
+- Receipt pages render no `subject_identity`, so the 1.4.0 `subject_model` is
+  invisible to a reader (#490, in `eebaad8`).
+- `DC-16` selects the tracked set, not a filesystem walk (#471, #473, in
+  `b06272a`).
+- The six UNLANDED mirror rows point at an open ticket and no longer pin its
+  number (#521, in `658f769`).
+- The G7 and G8 GitHub reads authenticate with `GITHUB_TOKEN` (#496, in
+  `cf250bd`). Unauthenticated reads share a 60-per-hour budget per IP, which
+  shared CI runners exhaust.
+- The dry-run claim is scoped to the subcommand that spends (#472, in
+  `8dab4d3`).
+- The frozen class-2 reference is runnable, its copies are pinned, and the R40
+  receipt is frozen (#458, in `6225c66`).
+- numpy stays out of the runtime manifest (#161, #442, in `52ee261`).
+- Two tests reported the environment as a code failure. One now skips with the
+  privilege named, and the other scans where the build actually runs (#484, in
+  `db3a688`).
+- The design snapshot describes the banner `main` draws, not the window it
+  retired (#481, in `466e629`), and no longer declares the paper surface that
+  #308 retired (#485, in `8a4d064`).
 - **README "Measuring for real" snippet now shows what `run ablation --execute`
   actually requires** (#460). `--execute` also needs `--ratification`,
   `--task-family`, and `--estimand`; the ratification preflight refuses before
@@ -17,6 +150,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the negative control; it closed 2026-09-04 once the control was re-seeded to
   satisfy the #403 ruling's qualified-fixture precondition (#432). The 0.3.0
   section otherwise unchanged.
+
+### Internal
+
+The bulk of this range is a rebuild of the empirical-Bayes method-of-moments
+peel in `src/skill_harness/aggregation`, 65 commits that change `fit.py` by 904
+lines. The rebuild carries one externally visible consequence, the rename
+recorded under Changed. The work is covered by a frozen pre-registration
+(`b477983`), a superseding v2 frozen on mechanism class 2 (`e11e4e2`,
+`397e840`), a confirmatory run that returned REJECTED at R=1000 on the
+committed root (`13f0fbb`) and NOT_REJECTED on a fresh root (`feb318d`), and
+mutation receipts re-run against the code that ships (`36dcc22`, `4348275`).
 
 ## [0.3.0] — 2026-09-06
 
