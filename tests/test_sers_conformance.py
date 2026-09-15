@@ -141,6 +141,37 @@ def test_schema_rate_refusal_enum_matches_code(sers_schema: dict[str, Any]) -> N
     assert schema_vals == code_vals
 
 
+_SUB_REASON_PROSE_SURFACES = (
+    "docs/sers/what-sers-is.md",
+    "docs/sers/README.md",
+    "docs/concepts/why-unmeasured.md",
+)
+"""Documents that write the UNMEASURED sub-reason vocabulary out in full.
+
+Each one restates a code enum by hand, which is a claim no test read until #575.
+`710ef78` added two members and updated one of the five places the vocabulary is
+written. The README carried a wrong count for a day, inside the paragraph that
+states this project's rule against inventing numbers.
+
+README.md is deliberately absent from this tuple. It no longer enumerates the
+vocabulary at all; it names `UnmeasuredSubReason` and links the definitions.
+That is the fix for a surface whose job is not to be a reference.
+"""
+
+
+@pytest.mark.parametrize("relative_path", _SUB_REASON_PROSE_SURFACES)
+def test_prose_surfaces_carry_every_sub_reason(relative_path: str) -> None:
+    """Every document that enumerates the vocabulary enumerates all of it (#575).
+
+    An eleventh member reddens this test once per stale document, and the
+    failure names the document and the member, so the fix is not a search.
+    """
+    text = (_REPO_ROOT / relative_path).read_text(encoding="utf-8")
+    missing = sorted(m.value for m in UnmeasuredSubReason if m.value not in text)
+
+    assert not missing, f"{relative_path} does not name {missing}"
+
+
 def test_schema_value_class_enum_matches_code(sers_schema: dict[str, Any]) -> None:
     schema_vals = _schema_enum(sers_schema, "properties", "value_class", "enum")
     code_vals = {m.value for m in ValueClass}
