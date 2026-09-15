@@ -185,9 +185,8 @@ def gate_tag_matches(version: str, errors: list[str], skipped: list[str]) -> Non
                 f"(expected 'v{version}')"
             )
     else:
-        _record_skip(
-            skipped, "G6", f"not a tag ref ({ref_name or 'local run'}), tag-match check self-skips"
-        )
+        skipped.append("G6")
+        print(f"G6: not a tag ref ({ref_name or 'local run'}) — tag-match check self-skips.")
 
 
 TOTAL_GATES = 8
@@ -200,7 +199,14 @@ checks and reported itself as though it covered all eight.
 
 
 def _record_skip(skipped: list[str], gate: str, reason: str) -> None:
-    """Print a gate's self-skip and record it for the run summary."""
+    """Print a gate's self-skip and record it for the run summary.
+
+    G6 does not use this helper. It printed its own self-skip line before #576,
+    and #576 asked only that G7 and G8 stop skipping in silence. Rewording a
+    line nobody complained about would churn the transcript that
+    docs/assurance/release-gate-red-206.md records, so G6 keeps its wording and
+    appends to the ledger directly.
+    """
     skipped.append(gate)
     print(f"{gate}: SKIPPED, {reason}.")
 

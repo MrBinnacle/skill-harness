@@ -211,7 +211,7 @@ def test_no_tag_ref_leaks_into_the_gate_environment(
     """
     result, _ = gate_run
 
-    assert "G6: SKIPPED, not a tag ref" in result.stdout, result.stdout + result.stderr
+    assert "G6: not a tag ref" in result.stdout, result.stdout + result.stderr
 
 
 def test_the_assurance_gates_asked_for_exactly_the_issues_the_script_names(
