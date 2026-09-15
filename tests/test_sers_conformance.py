@@ -127,6 +127,20 @@ def test_schema_unmeasured_sub_reason_enum_matches_code(sers_schema: dict[str, A
     assert schema_vals == code_vals
 
 
+def test_schema_rate_refusal_enum_matches_code(sers_schema: dict[str, Any]) -> None:
+    """The second copy of the sub-reason vocabulary tracks the code enum (#578).
+
+    $defs/rate_or_refusal is referenced by ten measurement fields and its own
+    description says the refusal is "drawn from UnmeasuredSubReason (plus
+    not_applicable for non-paths)". Nothing asserted that until now, so the copy
+    went stale when #503 added two members and only the other copy was updated.
+    """
+    refusal_branch = sers_schema["$defs"]["rate_or_refusal"]["oneOf"][1]
+    schema_vals = {str(v) for v in refusal_branch["properties"]["refusal"]["enum"]}
+    code_vals = {m.value for m in UnmeasuredSubReason} | {"not_applicable"}
+    assert schema_vals == code_vals
+
+
 def test_schema_value_class_enum_matches_code(sers_schema: dict[str, Any]) -> None:
     schema_vals = _schema_enum(sers_schema, "properties", "value_class", "enum")
     code_vals = {m.value for m in ValueClass}
