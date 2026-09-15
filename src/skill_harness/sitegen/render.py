@@ -57,6 +57,11 @@ _DELIVERY_CHANNEL_TEXT: Final[dict[str, str]] = {
 
 _SLUG_RE: Final[re.Pattern[str]] = re.compile(r"[^a-z0-9]+")
 
+#: The one construction a SERS field description uses to name a word for its
+#: null case, as in ``value_class``'s "null = unclassified." Anything looser
+#: would start turning sentences into labels (#583).
+_NULL_LANGUAGE_RE: Final[re.Pattern[str]] = re.compile(r"\bnull\s*=\s*(?P<word>[^.;\n]+)")
+
 
 class SiteBuildError(Exception):
     """Raised when a page cannot be written without inventing a figure."""
@@ -232,13 +237,7 @@ def render_skill_page(
     else:
         body = _template("skill.html").substitute(
             verdict=safe(_string_field(receipt, "verdict", "")),
-            cut_sub_reason=safe(_nullable_text(receipt.get("cut_sub_reason"))),
-            unmeasured_sub_reason=safe(_nullable_text(receipt.get("unmeasured_sub_reason"))),
-            value_class=safe(_nullable_text(receipt.get("value_class"))),
-            wrong_instrument=safe(_nullable_text(receipt.get("wrong_instrument"))),
-            declared_synthetic_control=safe(
-                _nullable_text(receipt.get("declared_synthetic_control"))
-            ),
+            qualifier_rows=_indent(_qualifier_rows(receipt, schema), 8),
             summary=safe(_string_field(receipt, "summary", "")),
             cost_rows=_indent(_cost_rows(receipt), 14),
             clause_evidence=clause_evidence,
@@ -276,14 +275,20 @@ def render_clause_evidence(outcome: ClauseEvidenceOutcome) -> str:
     clause_rows = [
         _clause_row(
             (
-                str(row.clause_index),
-                row.axis,
-                "yes" if row.scoreable else "no",
-                row.vacuity_flag,
-                row.flag_evidence_status,
-                row.kind_evidence_status,
-                _nullable_text(row.adjudicated_vacuity_kind),
-                "yes" if row.constructible_fc else "no",
+                (str(row.clause_index), ""),
+                (row.axis, ""),
+                ("yes" if row.scoreable else "no", ""),
+                (row.vacuity_flag, ""),
+                (row.flag_evidence_status, ""),
+                (row.kind_evidence_status, ""),
+                # No adjudication on file is an absence, and it wears the same
+                # marker every other absence on the site wears (#583).
+                (
+                    (row.adjudicated_vacuity_kind, "")
+                    if row.adjudicated_vacuity_kind is not None
+                    else (ABSENT_TEXT, "absent")
+                ),
+                ("yes" if row.constructible_fc else "no", ""),
             )
         )
         for row in measured.rows
@@ -325,6 +330,50 @@ def _index_row(receipt: Mapping[str, Any]) -> str:
         f"<td>{safe(_gate_status(receipt))}</td>"
         f"<td><code>{safe(prose)}</code></td></tr>"
     )
+
+
+#: The five qualifiers a receipt page states under its verdict, as
+#: (human label, receipt key). The labels are the page's own, not schema keys:
+#: the schema declares no ``title`` for any of them.
+_QUALIFIERS: Final[tuple[tuple[str, str], ...]] = (
+    ("Cut sub-reason", "cut_sub_reason"),
+    ("Unmeasured sub-reason", "unmeasured_sub_reason"),
+    ("Value class", "value_class"),
+    ("Wrong instrument", "wrong_instrument"),
+    ("Declared synthetic control", "declared_synthetic_control"),
+)
+
+
+def nullable_cell(schema: Mapping[str, Any], key: str, value: object) -> tuple[str, str]:
+    """Render one nullable receipt field as (text, css class).
+
+    Three cases, and none of them invents a word (#583):
+
+    - a boolean is an answer the receipt carries, so it renders ``yes`` or
+      ``no``, which is that answer in plain language;
+    - a ``None`` whose schema field names a word for its null case renders that
+      word;
+    - anything else absent renders ``ABSENT_TEXT`` in the ``absent`` class, the
+      same treatment the measurements table has given a missing key since #186,
+      so a reader meets one vocabulary for absence across the whole page.
+    """
+    if isinstance(value, bool):
+        return ("yes" if value else "no", "")
+    if value is None:
+        declared = null_case_language(schema, key)
+        if declared is not None:
+            return (declared, "")
+        return (ABSENT_TEXT, "absent")
+    return (str(value), "")
+
+
+def _qualifier_rows(receipt: Mapping[str, Any], schema: Mapping[str, Any]) -> list[str]:
+    rows: list[str] = []
+    for label, key in _QUALIFIERS:
+        text, css = nullable_cell(schema, key, receipt.get(key))
+        attribute = f' class="{css}"' if css else ""
+        rows.append(f"<dt>{safe(label)}</dt><dd{attribute}>{safe(text)}</dd>")
+    return rows
 
 
 def _qualifier_text(receipt: Mapping[str, Any]) -> str:
@@ -380,8 +429,13 @@ def _figure_row(label: str, figure: Figure) -> str:
     )
 
 
-def _clause_row(cells: Sequence[str]) -> str:
-    return "<tr>" + "".join(f"<td>{safe(cell)}</td>" for cell in cells) + "</tr>"
+def _clause_row(cells: Sequence[tuple[str, str]]) -> str:
+    """One clause row. Each cell is (text, css class); an empty class draws none."""
+    rendered: list[str] = []
+    for text, css in cells:
+        attribute = f' class="{css}"' if css else ""
+        rendered.append(f"<td{attribute}>{safe(text)}</td>")
+    return "<tr>" + "".join(rendered) + "</tr>"
 
 
 def _identity_rows(receipt: Mapping[str, Any]) -> list[str]:
@@ -616,12 +670,29 @@ def _string_list(value: object) -> list[str]:
     return [item for item in value if isinstance(item, str)]
 
 
-def _nullable_text(value: object) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    return str(value)
+def null_case_language(schema: Mapping[str, Any], key: str) -> str | None:
+    """The schema's own word for ``key``'s null case, or ``None`` if it declares none.
+
+    The site does not invent vocabulary (#583). Where a nullable field's schema
+    description names a word for the null case, it does so in one construction,
+    ``null = <word>``, and that word is what the page prints. A description that
+    discusses the null case without naming a word for it supplies semantics, not
+    vocabulary, and the caller renders absence instead.
+
+    Deliberately narrow. A looser reader would start paraphrasing sentences into
+    labels, which is the defect this function exists to end, one layer down.
+    """
+    properties = schema.get("properties")
+    if not isinstance(properties, Mapping):
+        return None
+    field = properties.get(key)
+    if not isinstance(field, Mapping):
+        return None
+    description = field.get("description")
+    if not isinstance(description, str):
+        return None
+    match = _NULL_LANGUAGE_RE.search(description)
+    return match.group("word").strip() if match is not None else None
 
 
 def _indent(fragments: Iterable[str], columns: int) -> str:
