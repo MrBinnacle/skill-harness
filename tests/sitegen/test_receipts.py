@@ -170,14 +170,92 @@ def _main_text(page: Path) -> str:
 
 
 def _cell(page: Path, row_label: str) -> str:
-    """Text of the figure cell of the table row whose header is ``row_label``."""
+    """Text of the figure cell of the row whose header names the key ``row_label``.
+
+    The header is looked up by the ``<code>`` element inside it, because S455
+    gave a measurement row two parts: the schema's own sentence about the key,
+    and the raw key beside it in ``<code>``. Keeping the raw key greppable is
+    the reason the schema-sourced label was allowed to land at all, so this
+    helper looks it up exactly the way a reader would search for it, and falls
+    back to the header's own text for a row that carries no key element.
+    """
     for row in ET.parse(page).getroot().iter("tr"):
         header = row.find("th")
-        if header is not None and (header.text or "").strip() == row_label:
+        if header is None:
+            continue
+        key_element = header.find("code")
+        if key_element is not None:
+            found = "".join(key_element.itertext()).strip()
+        else:
+            found = (header.text or "").strip()
+        if found == row_label:
             cells = row.findall("td")
             assert cells, f"row {row_label!r} has no cells"
             return "".join(cells[0].itertext()).strip()
     raise AssertionError(f"no row labelled {row_label!r} in {page.name}")
+
+
+def test_a_measurement_row_carries_the_schema_sentence_and_the_raw_key(tmp_path: Path) -> None:
+    """S455: a raw schema key is not a human label, and is not paraphrased into one.
+
+    Every measurement key the schema describes gets that description verbatim as
+    its row label, with the key kept in ``<code>`` beside it. A key the schema
+    says nothing about keeps the bare key, which is the honest result: the
+    language belongs in the schema.
+    """
+    output = _build(tmp_path, receipts_dir=_copy_real_receipt(tmp_path))
+    page = next(output.glob("skill-*.html"))
+    root = ET.parse(page).getroot()
+
+    glossed = {}
+    for row in root.iter("tr"):
+        header = row.find("th")
+        if header is None:
+            continue
+        key_element = header.find("code")
+        gloss_element = header.find("span")
+        if key_element is None or gloss_element is None:
+            continue
+        glossed["".join(key_element.itertext()).strip()] = "".join(gloss_element.itertext()).strip()
+
+    schema = json.loads(_SCHEMA.read_text(encoding="utf-8"))
+    described = schema["properties"]["measurements"]["properties"]
+    assert described, "the schema declares no measurement keys"
+    for key, subschema in described.items():
+        description = subschema.get("description")
+        if not description:
+            continue
+        assert key in glossed, f"{key} lost its schema sentence"
+        assert glossed[key] == description.strip(), f"{key} was paraphrased, not copied"
+
+
+def test_cost_legs_keep_the_bare_key_while_the_schema_states_no_language(
+    tmp_path: Path,
+) -> None:
+    """The fallback half of the same rule, pinned so a silent paraphrase fails.
+
+    The schema describes none of the three cost legs today. The page therefore
+    prints the key and nothing else. If someone later invents prose for these
+    rows in the renderer rather than in the schema, this test reddens.
+    """
+    schema = json.loads(_SCHEMA.read_text(encoding="utf-8"))
+    legs = schema["properties"]["cost"]["properties"]
+    undescribed = [
+        key for key, sub in legs.items() if not sub.get("title") and not sub.get("description")
+    ]
+    assert undescribed, "the schema now describes the cost legs; render them and drop this"
+
+    output = _build(tmp_path, receipts_dir=_copy_real_receipt(tmp_path))
+    page = next(output.glob("skill-*.html"))
+    for row in ET.parse(page).getroot().iter("tr"):
+        header = row.find("th")
+        if header is None:
+            continue
+        key_element = header.find("code")
+        if key_element is None:
+            continue
+        if "".join(key_element.itertext()).strip() in undescribed:
+            assert header.find("span") is None, "a cost leg grew prose the schema does not state"
 
 
 # ---------------------------------------------------------------------------
@@ -404,8 +482,17 @@ def test_one_stylesheet_and_no_script(tmp_path: Path) -> None:
     for page in sorted(output.glob("*.html")):
         root = ET.parse(page).getroot()
         assert [element.tag for element in root.iter("script")] == [], page.name
-        links = [element.get("href") for element in root.iter("link")]
-        assert links == ["style.css"], page.name
+        # One stylesheet is what this asserts, and it now filters on rel: the
+        # head also carries a rel="canonical" link, and on a build with an icon
+        # a rel="icon" one. Asserting the raw href list made this test fail on
+        # a meta tag rather than on a second stylesheet (S455).
+        sheets = [
+            element.get("href")
+            for element in root.iter("link")
+            if element.get("rel") == "stylesheet"
+        ]
+        assert sheets == ["style.css"], page.name
+        assert [element.get("rel") for element in root.iter("link")].count("stylesheet") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -555,9 +642,17 @@ def test_repo_receipts_build_a_page_each_with_no_warnings(tmp_path: Path) -> Non
     assert [str(warning.message) for warning in caught] == []
 
     receipts = load_receipts(_SCHEMA, _RECEIPTS)
-    expected = {"index.html", "schema.html", "style.css", "sers.schema.json"} | {
-        skill_page_name(receipt["skill_name"]) for receipt in receipts
-    }
+    # 404.html joins the default page set in S455: GitHub Pages serves it for
+    # an address that is not on the site, and it needs the shell like any other
+    # page. The social preview joins it too whenever those bytes are supplied,
+    # which _build does not do.
+    expected = {
+        "index.html",
+        "schema.html",
+        "404.html",
+        "style.css",
+        "sers.schema.json",
+    } | {skill_page_name(receipt["skill_name"]) for receipt in receipts}
     assert {path.name for path in written} == expected
     for page in sorted(output.glob("*.html")):
         ET.parse(page)  # semantic markup, well-formed enough to parse
