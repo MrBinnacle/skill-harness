@@ -128,6 +128,41 @@ runs against a harness that has only five registered Tier-1 scorers (`verbosity`
 returns `UNMEASURED(mechanical_vacuous)` — not `no_data` — naming the missing
 instrument rather than implying missing effort.
 
+### `tier2_uncalibrated`
+
+The runner's BLOCKER-1 gate refused the clause before sampling. The clause is not
+Tier-1 measurable, either because its `oracle_tier` is not 1 or because no scorer
+is registered for its axis. No samples and no verdicts exist, because the gate
+runs first.
+
+Distinct from `mechanical_vacuous`, and the difference is which property failed.
+`mechanical_vacuous` is a statement about the axis registry, recomputed at
+aggregation. A Tier-2 clause whose axis **is** registered fails this gate on its
+tier, not on its axis, so `mechanical_vacuous` would name the wrong cause.
+
+Example: a clause on `citation_presence_per_flag` carries `oracle_tier = 2`,
+awaiting a calibrated judge. The axis has a registered Tier-1 scorer, so
+`mechanical_vacuous` is false. The runner still refuses the clause, because the
+clause asked for a judge that is not calibrated on that axis yet. The sub-reason
+names the uncalibrated judge rather than a missing instrument.
+
+### `length_confounded`
+
+The runner's QUAL-1 gate refused the clause before sampling. The operator could
+not meet the length tolerance for the clause text, so an ablation of that clause
+cannot separate the clause's effect from a length artefact. No samples and no
+verdicts exist, because the gate runs first.
+
+No other sub-reason names an operator-tolerance refusal. Reporting this clause as
+`underpowered` would be a false explanation, because more sampling does not fix a
+confound. Reporting it as `no_data` would be worse, because it implies the run
+could have produced data and did not.
+
+Example: removing one clause from a skill shortens the prompt by 38 percent. The
+ablated arm is now materially shorter than the full arm. Any difference the
+oracle records could be the clause or could be the length. The runner refuses the
+clause rather than attributing the difference to the clause.
+
 ## Contrast with the field's pattern
 
 The standard pattern in LLM evaluation is to produce a number regardless of whether

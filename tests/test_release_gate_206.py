@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -392,3 +393,64 @@ def test_red_receipt_names_the_command_and_exit_code() -> None:
     assert "RELEASE_GATE_GITHUB_API_URL" in text
     assert "python scripts/release_gate.py --root" in text
     assert "Exit code: `1`" in text
+
+
+def _coverage(stdout: str) -> tuple[int, int, set[str]]:
+    """The summary's coverage claim, as numbers rather than as a string.
+
+    The assertions below lock the SHAPE and the arithmetic, never the literals.
+    A test that pinned "7 of 8 gates ran" would couple every gate assertion to
+    TOTAL_GATES, so adding a ninth gate would redden tests that have nothing to
+    say about it, and the one edit it could block is the correction.
+    """
+    match = re.search(r"(\d+) of (\d+) gates ran(?:; skipped ([A-Z0-9, ]+))?", stdout)
+    assert match is not None, f"no coverage line in gate output: {stdout!r}"
+    named = match.group(3)
+    skipped = {token.strip() for token in named.split(",")} if named else set()
+    return int(match.group(1)), int(match.group(2)), skipped
+
+
+def test_gate_names_the_assurance_gates_it_skips_off_the_zero_three_line(tmp_path: Path) -> None:
+    """Every gate that does not run says so, and the summary counts them (#576).
+
+    ``_is_zero_three`` scopes G7 and G8 to the 0.3 minor line. Off that line
+    both returned without printing, so ``RELEASE GATE: PASS`` covered six of
+    eight checks and said nothing about the other two. G6 already printed its
+    own self-skip line, so the asymmetry was in these two functions rather than
+    in the design. A reader quoting the gate as evidence of readiness was
+    quoting a narrower claim than the output stated.
+    """
+    root = _seed_tree(tmp_path, "0.4.0")
+    result = _run_gate(root, issue_states={}, workflow_runs=[])
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RELEASE GATE: PASS" in result.stdout
+    assert "G7: SKIPPED" in result.stdout, "G7 skipped in silence"
+    assert "G8: SKIPPED" in result.stdout, "G8 skipped in silence"
+
+    ran, total, skipped = _coverage(result.stdout)
+    assert {"G7", "G8"} <= skipped, f"summary does not name G7 and G8 as skipped: {skipped}"
+    assert ran + len(skipped) == total, f"{ran} ran plus {skipped} skipped is not {total}"
+
+
+def test_gate_reports_all_eight_running_on_the_zero_three_line(tmp_path: Path) -> None:
+    """Negative control for #576: on 0.3 the assurance gates run, so no skip.
+
+    Without this, an implementation that printed a skip line unconditionally
+    would satisfy the test above while lying in the other direction.
+    """
+    root = _seed_tree(tmp_path, "0.3.9")
+    result = _run_gate(
+        root,
+        issue_states=dict.fromkeys(ASSURANCE_ISSUES, "closed"),
+        workflow_runs=[GREEN_RUN],
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "G7: SKIPPED" not in result.stdout, "G7 reported as skipped on its own line"
+    assert "G8: SKIPPED" not in result.stdout, "G8 reported as skipped on its own line"
+
+    ran, total, skipped = _coverage(result.stdout)
+    assert not {"G7", "G8"} & skipped, f"an assurance gate self-skipped on the 0.3 line: {skipped}"
+    assert skipped == {"G6"}, f"expected only G6 to self-skip on a local run, got {skipped}"
+    assert ran + len(skipped) == total, f"{ran} ran plus {skipped} skipped is not {total}"

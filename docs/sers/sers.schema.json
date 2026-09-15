@@ -608,6 +608,8 @@
                 "falsifying_case_stale",
                 "fdr_correction_failed",
                 "mechanical_vacuous",
+                "tier2_uncalibrated",
+                "length_confounded",
                 "not_applicable"
               ]
             },

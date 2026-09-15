@@ -19,7 +19,7 @@ The README's further-reading list, moved here on 2026-09-13 with every link inta
   shows that if a discipline fires in a hook, ablating the skill text says nothing about the
   discipline.
 - [Why UNMEASURED is not a failure](https://github.com/MrBinnacle/skill-harness/blob/main/docs/concepts/why-unmeasured.md)
-  defines all eight sub-reasons.
+  defines every sub-reason.
 - [`docs/PRD.md`](https://github.com/MrBinnacle/skill-harness/blob/main/docs/PRD.md) is the full
   specification: evidence model, oracle tiers, gate rules, CLI reference.
 - [The observation ledger](https://github.com/MrBinnacle/skill-harness/blob/main/docs/observations/README.md)

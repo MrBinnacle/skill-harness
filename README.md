@@ -77,11 +77,10 @@ CAN'T-TELL-YET, and the pre-guard results stay in the record as dated output.
 
 The governing rule: **where no measurement exists, record the absence of measurement rather than
 inventing a number or a verdict.** `UNMEASURED` is never bare. Which kind of not-knowing applies is
-more information than not-knowing alone, so it carries one of eight registered sub-reasons:
-`no_data`, `inadmissible`, `underpowered`, `falsifying_case_missing`, `budget_exhausted`,
-`falsifying_case_stale`, `fdr_correction_failed`, `mechanical_vacuous`
-(`src/skill_harness/aggregation/status.py`, defined in
-[docs/concepts/why-unmeasured.md](https://github.com/MrBinnacle/skill-harness/blob/main/docs/concepts/why-unmeasured.md)).
+more information than not-knowing alone, so it always carries a sub-reason from a closed
+vocabulary. That vocabulary is fixed in one place, the `UnmeasuredSubReason` enum in
+`src/skill_harness/aggregation/status.py`, and every member is defined in
+[docs/concepts/why-unmeasured.md](https://github.com/MrBinnacle/skill-harness/blob/main/docs/concepts/why-unmeasured.md).
 
 **The oracle only sees the final filesystem.** The registered oracle runs against the isolated
 final filesystem, so it measures task outcome only. It cannot observe program design, coupling,
@@ -90,9 +89,15 @@ codebase, and the instrument will correctly report KEEP. **Maintainability effec
 for every skill result produced to date.** No existing claim is retracted. The scope is now stated.
 
 **The runtime is part of the apparatus.** Cross-runtime pooling is not automatic and is not
-permitted without a separate equivalence measurement. The Pi 0.85.1 subject adapter is implemented
-and apparatus-verified, validation battery green. **No sized Pi measurement has run, so no Pi skill
-effect is admissible yet.** Apparatus compatibility is established and nothing more.
+permitted without a separate equivalence measurement. The Pi subject adapter is implemented, and
+its refusal predicates and its driver wiring carry mutation receipts over seven mutants, all
+killed, one of which shows the pre-spend identity gate refusing an undeclared evidence pipeline
+before any spend
+([refusal](https://github.com/MrBinnacle/skill-harness/blob/main/docs/assurance/pi-adapter-refusal-mutation-receipt.json),
+[driver wiring](https://github.com/MrBinnacle/skill-harness/blob/main/docs/assurance/pi-driver-wiring-mutation-receipt.json)).
+The adapter measures the runtime version from the binary that ran and pins no version itself.
+**No sized Pi measurement has run, so no Pi skill effect is admissible yet.** Apparatus
+compatibility is established and nothing more.
 
 **Zero production-skill KEEPs.** The one KEEP on record is a declared synthetic positive control,
 8 of 8 with the skill against 0 of 8 without: the instrument fires when an effect is present, and
