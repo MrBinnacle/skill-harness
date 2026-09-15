@@ -193,10 +193,14 @@ code,
   }
 }
 
+/* 1.2 is the display step's leading and it was carried here by hand, which the
+ * S456 Check seat caught with the detector on both paths: 21px on 1.2 computes
+ * to a 25.2px line box and the lead wraps to two lines at 1440px and three at
+ * 360px. A line-height is not fenced, so this costs no token declaration. */
 .lead {
   font-size: 21px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.4;
   margin: 1rem 0 1.5rem;
   max-width: 65ch;
 }
@@ -354,11 +358,16 @@ dd {
 
 /* A refusal is primary content: same weight as a measured figure, boxed so it
  * cannot be mistaken for a missing value. The edge is the can't-tell colour,
- * whose one declared role is the refused state. */
+ * whose one declared role is the refused state.
+ *
+ * The vertical padding was 0.25rem, which is 4px against 14.72px text, and the
+ * detector's rendered path reported it cramped three times on the receipt page
+ * (it needs 4.4px). The 4px left edge is untouched: it is the thing that tells
+ * a refusal from an absence, and it is the strongest device on the surface. */
 .refusal,
 .refused {
   border-left: 4px solid var(--bench-cant-tell);
-  padding: 0.25rem 0 0.25rem 0.6rem;
+  padding: 0.5rem 0 0.5rem 0.6rem;
   font-weight: 600;
 }
 

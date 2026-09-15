@@ -215,3 +215,47 @@ def test_the_row_label_cap_is_scoped_to_the_wide_viewport() -> None:
     wide = _media_blocks(css, _WIDE)
     assert "max-width: 22rem" in wide
     assert css.count("max-width: 22rem") == 1, "the cap is declared outside the wide viewport"
+
+
+# ---------------------------------------------------------------------------
+# The two smaller defects (D4 and D6)
+# ---------------------------------------------------------------------------
+
+
+def _declaration(css: str, selector: str, prop: str) -> str:
+    """The value of ``prop`` in the rule whose selector list ends with ``selector``.
+
+    Every rule is scanned rather than only the first match, because ``.lead``
+    also appears in the shared mono font-family group above the rule that sets
+    its own leading, and a first-match reader reports the wrong block.
+    """
+    wanted = {part.strip() for part in selector.split(",")}
+    for match in re.finditer(r"([^{}]+)\{([^}]*)\}", css):
+        selectors = {part.strip() for part in match.group(1).split(",")}
+        if not wanted <= selectors:
+            continue
+        found = re.search(rf"{re.escape(prop)}:\s*([^;]+);", match.group(2))
+        if found is not None:
+            return found.group(1).strip()
+    raise AssertionError(f"no rule for {selector} declares {prop}")
+
+
+def test_the_lead_has_room_between_its_lines() -> None:
+    """D4. 21px on 1.2 leading is a 25.2px line box; the detector needs 1.3."""
+    leading = float(_declaration(_css(), ".lead", "line-height"))
+    assert leading >= 1.3, f"the lead sets {leading} leading"
+
+
+def test_a_refusal_block_is_not_cramped_against_its_own_edge() -> None:
+    """D6. 0.25rem is 4px against 14.72px text and the detector needs 4.4px.
+
+    The 4px left edge stays. It is what tells a refusal from an absence, the
+    detector calls it an AI tell, and the Check seat overruled the detector on
+    the owner's own stylesheet comment. That argument is not reopened here.
+    """
+    css = _css()
+    padding = _declaration(css, ".refusal,\n.refused", "padding")
+    top, _right, bottom, _left = padding.split()
+    assert float(top.removesuffix("rem")) * 16 >= 4.4, padding
+    assert float(bottom.removesuffix("rem")) * 16 >= 4.4, padding
+    assert "border-left: 4px solid var(--bench-cant-tell)" in css
