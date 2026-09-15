@@ -34,7 +34,13 @@ _LANDING_COPY = _REPO / "docs" / "site" / "landing.md"
 _COMMAND_SOURCE = _REPO / "README.md"
 _PYPROJECT = _REPO / "pyproject.toml"
 
-_BASH_BLOCK = re.compile(r"^```bash\n(?P<body>.*?)^```", re.MULTILINE | re.DOTALL)
+# The fence language is matched as an alternation. Keying on ``bash`` alone
+# means relabelling a block to ``shell`` or ``console`` drops its commands from
+# this check while the suite stays green on whatever blocks remain, which is a
+# vacuity the guard below cannot see.
+_BASH_BLOCK = re.compile(
+    r"^```(?:bash|sh|shell|console|zsh)\n(?P<body>.*?)^```", re.MULTILINE | re.DOTALL
+)
 _INLINE_COMMENT = re.compile(r"\s+#.*$")
 
 
@@ -78,18 +84,47 @@ def test_the_published_copy_prints_at_least_one_command() -> None:
     assert _printed_commands(), f"{_COMMAND_SOURCE} names no command to check"
 
 
-def test_the_landing_page_prints_no_command_of_its_own() -> None:
+def test_the_rendered_landing_page_prints_no_command_of_its_own(tmp_path: Path) -> None:
     """Issue #588: the page is a heading, four sentences and three pointers.
 
     This is the other half of the move. The commands are checked against the
     README above; here the page is held to the shape that sent them there, so a
-    later edit cannot quietly put an unchecked command back on the front page.
+    later edit cannot put an unchecked command back on the front page.
+
+    A first version of this test grepped the copy file for a ``command:`` field.
+    An independent reviewer pointed out that a command can return as hero prose,
+    a pointer label or a supporting line, and that version would stay green. So
+    this reads the RENDERED page and looks for any console script this package
+    declares, wherever it appears. The rendered page is the surface a stranger
+    meets, and the copy file's field names are not.
     """
-    text = _LANDING_COPY.read_text(encoding="utf-8")
-    assert not re.search(r"^command:", text, re.MULTILINE), (
-        f"{_LANDING_COPY} prints a command again. Issue #588 moved install off the front "
-        f"page, and {_COMMAND_SOURCE.name} is where the command-reality tests look."
+    output = _build_site_for_test(tmp_path)
+    page = (output / "index.html").read_text(encoding="utf-8")
+    text = re.sub(r"<[^>]+>", " ", page)
+
+    programs = sorted(_declared_console_scripts() | {"pip install", "python -m"})
+    found = [program for program in programs if program in text]
+    assert not found, (
+        f"the rendered landing page names {found}. Issue #588 moved install behind a "
+        f"pointer, and {_COMMAND_SOURCE.name} is where the command-reality tests look. "
+        "A command on this page is unchecked by them."
     )
+
+
+def _build_site_for_test(tmp_path: Path) -> Path:
+    from skill_harness.sitegen import build_site
+
+    output = tmp_path / "site"
+    build_site(
+        receipts_dir=_REPO / "docs" / "sers" / "receipts",
+        schema_path=_REPO / "docs" / "sers" / "sers.schema.json",
+        extraction_path=None,
+        output_dir=output,
+        marker="command-shape-585",
+        landing=True,
+        landing_copy_path=_LANDING_COPY,
+    )
+    return output
 
 
 @pytest.mark.parametrize("command", _printed_commands())

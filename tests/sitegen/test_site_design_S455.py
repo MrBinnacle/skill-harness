@@ -15,6 +15,7 @@ anyone remembering it.
 
 from __future__ import annotations
 
+import json
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -435,26 +436,64 @@ def test_the_landing_copy_fixture_parses() -> None:
     assert copy.heading
     assert copy.detects
     assert copy.control
-    assert copy.thin
+    assert copy.evidence_is_thin
     assert len(copy.pointers) == POINTER_COUNT
     assert len(copy.lead.split()) <= 20
 
 
-def test_the_capability_sentence_never_renders_without_its_caveat() -> None:
+def test_the_capability_sentence_never_renders_without_its_caveat(tmp_path: Path) -> None:
     """Issue #588: the 8-of-8 figure belongs to a declared synthetic control.
 
     The owner's ordering comment requires the page to say so plainly rather
-    than let the number read as a win. ``detects`` and ``control`` are separate
-    required fields for exactly that reason, so dropping the caveat fails the
-    build instead of publishing a bare number.
+    than let the number read as a win.
+
+    An earlier version of this test called ``parse_landing`` and asserted the
+    parser raised. An independent reviewer pointed out that it therefore never
+    rendered anything, so it proved the parser was fussy and left the template
+    free to emit the number without the caveat. The name claimed a render the
+    body never performed. This version builds the site and reads the page, so
+    the assertion is about the HTML a stranger receives.
     """
-    text = _LANDING_COPY.read_text(encoding="utf-8")
-    without_caveat = "\n".join(
-        line for line in text.splitlines() if not line.startswith("control:")
+    output = _build(tmp_path / "site", landing=True)
+    page = (output / "index.html").read_text(encoding="utf-8")
+
+    copy = parse_landing(_LANDING_COPY.read_text(encoding="utf-8"))
+    assert copy.detects in page
+    assert copy.control in page, (
+        "the rendered page carries the capability sentence without its caveat"
     )
-    with pytest.raises(SiteBuildError) as caught:
-        parse_landing(without_caveat)
-    assert "control" in str(caught.value)
+    assert page.index(copy.detects) < page.index(copy.control), (
+        "the caveat must follow the figure it qualifies, not precede it"
+    )
+
+
+def test_the_published_figure_matches_the_receipt_it_came_from() -> None:
+    """Issue #588: no line may claim anything this repository cannot show.
+
+    The capability sentence prints two integers. Copy is not data, so nothing
+    else in this change stops those integers drifting from the run that
+    produced them. This binds them to the receipt on disk. If the receipt
+    changes or the sentence is edited to a different score, this fails.
+    """
+    receipt = json.loads(
+        (_REPO / "docs" / "sers" / "receipts" / "synthetic-control-keep-2026-07-27.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    measurements = receipt["measurements"]
+    full = measurements["full_pass_rate"]
+    null = measurements["null_pass_rate"]
+    assert receipt["declared_synthetic_control"] is True, (
+        "the page calls this control synthetic; the receipt must agree"
+    )
+
+    sentence = parse_landing(_LANDING_COPY.read_text(encoding="utf-8")).detects
+    assert f"{full['passes']} of {full['epochs']}" in sentence, (
+        f"the page states a Full score the receipt does not: {sentence!r}"
+    )
+    assert f"{null['passes']} of {null['epochs']}" in sentence, (
+        f"the page states a Null score the receipt does not: {sentence!r}"
+    )
 
 
 def test_a_fourth_pointer_is_refused() -> None:
@@ -470,12 +509,22 @@ def test_a_fourth_pointer_is_refused() -> None:
 
 
 def test_a_pointer_without_a_supporting_line_is_refused() -> None:
-    """Issue #588: each pointer says what is behind it and why to want it."""
-    text = _LANDING_COPY.read_text(encoding="utf-8").replace(
-        "  Every verdict the instrument gives, and the run behind each one.\n", "", 1
-    )
+    """Issue #588: each pointer says what is behind it and why to want it.
+
+    The line to strip is read out of the parsed copy rather than written here.
+    A hardcoded sentence makes this test pass vacuously the moment the copy is
+    edited: it would remove nothing, the parse would succeed, and the control
+    would be gone with nothing going red. That happened once while this change
+    was being written.
+    """
+    text = _LANDING_COPY.read_text(encoding="utf-8")
+    support = parse_landing(text).pointers[0].support
+    assert support in text, "the support line could not be located in the copy"
+    stripped = text.replace(support + "\n", "", 1)
+    assert stripped != text, "nothing was removed, so this test would pass vacuously"
+
     with pytest.raises(SiteBuildError) as caught:
-        parse_landing(text)
+        parse_landing(stripped)
     assert "supporting line" in str(caught.value)
 
 

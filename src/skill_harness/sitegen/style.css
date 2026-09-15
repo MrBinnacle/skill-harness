@@ -403,46 +403,8 @@ footer {
   margin: 96px 0 0;
 }
 
-@media (max-width: 40rem) {
-  .landing section {
-    margin: 48px 0 0;
-  }
-}
-
 .landing .hero {
   margin-top: 32px;
-}
-
-/* The first screen on a phone is the whole budget this page has, and issue #588
- * asks for the heading, the hero and the pointers inside it. The hero's four
- * sentences and three pointers do not fit at the wide viewport's rhythm, so the
- * narrow viewport steps the landing's own spacing down. The step is here rather
- * than in the shared section rule because the evidence pages keep their density
- * on purpose, and this is the one surface whose fold is a stated requirement. */
-@media (max-width: 40rem) {
-  .landing section {
-    margin: 24px 0 0;
-  }
-
-  .landing .hero {
-    margin-top: 16px;
-  }
-
-  .landing .hero p {
-    margin: 0 0 12px;
-  }
-
-  .pointers > li {
-    margin: 0.75rem 0 0;
-  }
-}
-
-.landing .action {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0.5rem 0;
-  font-weight: 700;
 }
 
 /* The three pointers. Each is a link on its own line with one sentence under it
@@ -457,7 +419,7 @@ footer {
 }
 
 .pointers > li {
-  margin: 1.25rem 0 0;
+  margin: 24px 0 0;
 }
 
 .pointers .pointer {
@@ -471,28 +433,39 @@ footer {
   display: block;
 }
 
-/* The negation list: a term and what the instrument does instead, on the same
- * hairline grid the evidence pages use, so the two surfaces read as one site. */
-.refusals {
-  gap: 1px;
-  background: var(--bench-void);
-  border: 1px solid var(--bench-muted);
-}
+/* The first screen on a phone is the whole budget this page has, and issue #588
+ * asks for the heading, the hero and the pointers inside it. The hero's four
+ * sentences and three pointers do not fit at the wide viewport's rhythm, so the
+ * narrow viewport steps the landing's own spacing down. Every value is on the
+ * declared 4/8/16/24/32/48/96 scale. The step lives on .landing because the
+ * evidence pages keep their density on purpose, and this is the one surface
+ * whose fold is a stated requirement.
+ *
+ * THIS BLOCK SITS AFTER THE RULES IT OVERRIDES, and that placement is the whole
+ * point. Media queries add no specificity, so source order decides. A first cut
+ * of this change put the block above `.pointers > li`, where the generic rule
+ * won at every width and the narrow-viewport margin never applied. Nothing went
+ * red: the stylesheet still carried both rules, so a test that greps rule text
+ * passed while the page rendered the wrong one. That is the defect #589
+ * records, reproduced here by the commit that cites it and caught by measuring
+ * the rendered page. Keep any later narrow-viewport rule below its wide
+ * counterpart. */
+@media (max-width: 40rem) {
+  .landing section {
+    margin: 24px 0 0;
+  }
 
-.refusals > dt,
-.refusals > dd {
-  background: var(--bench-surface);
-  padding: 0.35rem 0.5rem;
-}
+  .landing .hero {
+    margin-top: 16px;
+  }
 
-.install {
-  margin: 1rem 0;
-  padding: 0.25rem 0 0.25rem 0.85rem;
-  border-left: 4px solid var(--bench-ink);
-}
+  .landing .hero p {
+    margin: 0 0 16px;
+  }
 
-.install code {
-  display: block;
+  .pointers > li {
+    margin: 16px 0 0;
+  }
 }
 
 /* A measurement or cost row's label is the schema's own sentence about the key,

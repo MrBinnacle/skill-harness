@@ -63,7 +63,7 @@ SECTION_TITLES: Final[tuple[str, ...]] = ("Where to go next",)
 
 #: The hero's fields, in the order the page prints them. Capability before
 #: refusal, per the owner's 2026-09-15 ordering decision on issue #588.
-HERO_FIELDS: Final[tuple[str, ...]] = ("lead", "detects", "control", "thin")
+HERO_FIELDS: Final[tuple[str, ...]] = ("lead", "detects", "control", "evidence_is_thin")
 
 #: The page carries exactly three pointers. "Three pointers and nothing else"
 #: is the ticket's wording, so the count is held by the build rather than by a
@@ -76,8 +76,23 @@ POINTER_COUNT: Final[int] = 3
 _SYMBOLIC_TARGETS: Final[tuple[str, ...]] = ("receipts", "reporting-standard")
 
 _HEADING_RE: Final[re.Pattern[str]] = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*$")
-_FIELD_RE: Final[re.Pattern[str]] = re.compile(r"^(?P<key>[a-z]+):\s+(?P<value>.+?)\s*$")
+_FIELD_RE: Final[re.Pattern[str]] = re.compile(r"^(?P<key>[a-z_]+):\s+(?P<value>.+?)\s*$")
 _LINK_RE: Final[re.Pattern[str]] = re.compile(r"^-\s+(?P<label>.+?)\s+->\s+(?P<target>\S+)\s*$")
+
+
+@dataclass(frozen=True)
+class Pointer:
+    """One of the three pointers: where it goes, and why a reader would follow.
+
+    A frozen dataclass rather than a 3-tuple. The three strings travel together
+    through the reader, the copy object and the template loop, which is the
+    shape that wants a type, and ``pointer[2]`` says nothing about what it
+    holds where ``pointer.support`` does.
+    """
+
+    label: str
+    target: str
+    support: str
 
 
 @dataclass(frozen=True)
@@ -88,8 +103,8 @@ class LandingCopy:
     lead: str
     detects: str
     control: str
-    thin: str
-    pointers: tuple[tuple[str, str, str], ...]
+    evidence_is_thin: str
+    pointers: tuple[Pointer, ...]
 
 
 def _refuse(line_number: int, line: str, reason: str) -> SiteBuildError:
@@ -172,14 +187,14 @@ def _checked_target(target: str) -> str:
     )
 
 
-def _read_pointers(lines: Sequence[tuple[int, str]]) -> tuple[tuple[str, str, str], ...]:
+def _read_pointers(lines: Sequence[tuple[int, str]]) -> tuple[Pointer, ...]:
     """Each pointer is a link line followed by one supporting line.
 
     The supporting line is required. The ticket's wording is that each pointer
     says what is behind it and why a reader would want it, so a pointer without
     one fails the build rather than rendering a bare link.
     """
-    rows: list[tuple[str, str, str]] = []
+    rows: list[Pointer] = []
     index = 0
     while index < len(lines):
         number, line = lines[index]
@@ -196,10 +211,10 @@ def _read_pointers(lines: Sequence[tuple[int, str]]) -> tuple[tuple[str, str, st
                 "this pointer has no supporting line beneath it",
             )
         rows.append(
-            (
-                match.group("label"),
-                _checked_target(match.group("target")),
-                support_line.strip(),
+            Pointer(
+                label=match.group("label"),
+                target=_checked_target(match.group("target")),
+                support=support_line.strip(),
             )
         )
         index += 2
@@ -221,7 +236,7 @@ def parse_landing(text: str) -> LandingCopy:
         lead=fields["lead"],
         detects=fields["detects"],
         control=fields["control"],
-        thin=fields["thin"],
+        evidence_is_thin=fields["evidence_is_thin"],
         pointers=_read_pointers(pointers),
     )
 
@@ -242,12 +257,12 @@ def render_landing_page(*, shell: SiteShell, copy: LandingCopy) -> str:
         lead=safe(copy.lead),
         detects=safe(copy.detects),
         control=safe(copy.control),
-        thin=safe(copy.thin),
+        evidence_is_thin=safe(copy.evidence_is_thin),
         pointers=_indent(
             [
-                f'<li><a class="pointer" href="{safe(_href(shell, target))}">{safe(label)}</a>'
-                f"<span>{safe(support)}</span></li>"
-                for label, target, support in copy.pointers
+                f'<li><a class="pointer" href="{safe(_href(shell, pointer.target))}">'
+                f"{safe(pointer.label)}</a><span>{safe(pointer.support)}</span></li>"
+                for pointer in copy.pointers
             ],
             10,
         ),
