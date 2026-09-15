@@ -174,7 +174,7 @@ def gate_workflows_sha_pinned(root: Path, errors: list[str]) -> None:
                 )
 
 
-def gate_tag_matches(version: str, errors: list[str]) -> None:
+def gate_tag_matches(version: str, errors: list[str], skipped: list[str]) -> None:
     """G6: on a tag ref, the tag must be exactly v<version>."""
     ref_name = os.environ.get("GITHUB_REF_NAME", "")
     ref_type = os.environ.get("GITHUB_REF", "")
@@ -185,7 +185,24 @@ def gate_tag_matches(version: str, errors: list[str]) -> None:
                 f"(expected 'v{version}')"
             )
     else:
-        print(f"G6: not a tag ref ({ref_name or 'local run'}) — tag-match check self-skips.")
+        _record_skip(
+            skipped, "G6", f"not a tag ref ({ref_name or 'local run'}), tag-match check self-skips"
+        )
+
+
+TOTAL_GATES = 8
+"""Gates this script declares. G1 to G8, counted in the run summary.
+
+A gate that does not run must say so. Before #576, G7 and G8 returned in
+silence off the 0.3 minor line, so ``RELEASE GATE: PASS`` covered six of eight
+checks and reported itself as though it covered all eight.
+"""
+
+
+def _record_skip(skipped: list[str], gate: str, reason: str) -> None:
+    """Print a gate's self-skip and record it for the run summary."""
+    skipped.append(gate)
+    print(f"{gate}: SKIPPED, {reason}.")
 
 
 def _is_zero_three(version: str) -> bool:
@@ -210,9 +227,10 @@ def _get_json(url: str) -> object:
         return json.load(response)
 
 
-def gate_assurance_issues_closed(version: str, errors: list[str]) -> None:
+def gate_assurance_issues_closed(version: str, errors: list[str], skipped: list[str]) -> None:
     """G7: the 0.3 minor gate requires every assurance phase issue closed."""
     if not _is_zero_three(version):
+        _record_skip(skipped, "G7", f"version {version} is not on the 0.3 minor line")
         return
 
     for issue in ASSURANCE_ISSUES:
@@ -226,9 +244,10 @@ def gate_assurance_issues_closed(version: str, errors: list[str]) -> None:
             errors.append(f"G7: assurance issue #{issue} is {state or 'missing a state'}")
 
 
-def gate_assurance_lane_green(version: str, errors: list[str]) -> None:
+def gate_assurance_lane_green(version: str, errors: list[str], skipped: list[str]) -> None:
     """G8: the 0.3 minor gate requires a recorded green assurance lane run."""
     if not _is_zero_three(version):
+        _record_skip(skipped, "G8", f"version {version} is not on the 0.3 minor line")
         return
 
     try:
@@ -259,21 +278,29 @@ def main(argv: list[str] | None = None) -> int:
     root: Path = args.root.resolve()
 
     errors: list[str] = []
+    skipped: list[str] = []
     version = gate_versions_lockstep(root, errors)
     gate_changelog_rolled(root, version, errors)
     gate_readme_status_banner(root, version, errors)
     gate_readme_pypi_render_safe(root, errors)
     gate_workflows_sha_pinned(root, errors)
-    gate_tag_matches(version, errors)
-    gate_assurance_issues_closed(version, errors)
-    gate_assurance_lane_green(version, errors)
+    gate_tag_matches(version, errors, skipped)
+    gate_assurance_issues_closed(version, errors, skipped)
+    gate_assurance_lane_green(version, errors, skipped)
+    ran = TOTAL_GATES - len(skipped)
+    coverage = f"{ran} of {TOTAL_GATES} gates ran"
+    if skipped:
+        coverage += f"; skipped {', '.join(skipped)}"
 
     if errors:
-        print(f"RELEASE GATE: BLOCKED — {len(errors)} stale surface(s) at version {version}:")
+        print(
+            f"RELEASE GATE: BLOCKED ({coverage}), "
+            f"{len(errors)} stale surface(s) at version {version}:"
+        )
         for e in errors:
             print(f"  FAIL  {e}")
         return 1
-    print(f"RELEASE GATE: PASS — public surfaces in lockstep at version {version}.")
+    print(f"RELEASE GATE: PASS ({coverage}), public surfaces in lockstep at version {version}.")
     return 0
 
 

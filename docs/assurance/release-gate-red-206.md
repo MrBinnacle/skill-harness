@@ -24,8 +24,8 @@ Exit code: `1`
 Output, verbatim:
 
 ```text
-G6: not a tag ref (local run) — tag-match check self-skips.
-RELEASE GATE: BLOCKED — 2 stale surface(s) at version 0.3.0:
+G6: SKIPPED, not a tag ref (local run), tag-match check self-skips.
+RELEASE GATE: BLOCKED (7 of 8 gates ran; skipped G6), 2 stale surface(s) at version 0.3.0:
   FAIL  G7: assurance issue #169 is open
   FAIL  G8: no successful assurance.yml workflow run recorded
 ```
@@ -46,3 +46,10 @@ Next: `tests/test_release_gate_206.py` re-runs this scenario on every CI run
 and compares the transcript above line-for-line against the gate's output, so
 the record cannot drift from the program. The live-API path is first exercised
 at the `0.3.0` tag.
+
+Amended 2026-09-14 under #576. The gate now states how many of its eight
+checks ran and names each one it skipped. The transcript above is the
+re-recorded output of the identical scenario. The finding is unchanged: the
+same two assurance failures block the same release. What changed is that the
+run now reports its own coverage, so a reader can see that G6 self-skipped on
+a local run and that the other seven checks did execute.
