@@ -126,10 +126,27 @@ def test_a_cell_breaks_words_and_a_machine_token_breaks_anywhere() -> None:
         assert selector in selectors_breaking, f"{selector} no longer breaks on word boundaries"
         assert selector not in selectors_anywhere, f"{selector} shreds words again"
 
-    for selector in ("td code", "dd code"):
-        assert selector in selectors_anywhere, f"{selector} can no longer break a sha256"
+    for selector in ("dd", "td code", "dd code"):
+        assert selector in selectors_anywhere, f"{selector} can no longer break a machine token"
 
     assert "th code" in selectors_breaking, "the row header's schema key shreds again"
+
+
+def test_the_definition_rule_is_pinned_on_its_own_ground() -> None:
+    """``dd`` keeps ``anywhere``, and nothing else may be assumed to carry it.
+
+    An independent reading at S456 measured the two narrow-viewport exceptions
+    against each other. Either the ``dd`` rule or the definition list's zero
+    track floor is sufficient alone to keep a receipt's prose fields inside a
+    360px viewport; neither is necessary while the other stands. Both ship, and
+    both are pinned here, because the failure mode is a later seat removing one
+    on the belief that the other carries it by itself.
+    """
+    css = _css()
+    assert re.search(r"(^|\n)dd,\n[^{]*\{[^}]*overflow-wrap:\s*anywhere", css), (
+        "the dd rule is gone; the dl track floor alone is not a reason to remove it"
+    )
+    assert "minmax(0, 1fr)" in _media_blocks(css, _NARROW)
 
 
 def test_the_stylesheet_still_refuses_to_hide_the_symptom() -> None:
@@ -165,6 +182,73 @@ def test_the_narrow_viewport_stops_drawing_these_tables(
     assert f".{table_class} td::before" in narrow
     assert "content: attr(data-label)" in narrow
     assert labels, "a stacked table with no column labels would print bare values"
+
+
+def test_the_stacked_label_carries_no_copy_in_the_stylesheet() -> None:
+    """The generated content prints the attribute whole and adds nothing to it.
+
+    Silent choice 1 of the first cut put the labels in ``data-label`` rather
+    than in CSS, on the ground that copy in a stylesheet sits outside every gate
+    that reads copy. That cut then wrote ``": "`` into the same declaration,
+    which is copy in a stylesheet by its own test. The label is a block above
+    its value instead, which is the shape the definition lists take at this
+    width and needs no separator at all.
+    """
+    narrow = _media_blocks(_css(), _NARROW)
+    generated = re.findall(r"content:\s*([^;]+);", narrow)
+    assert generated, "nothing prints the column label any more"
+    for declaration in generated:
+        assert declaration.strip() == "attr(data-label)", (
+            f"the stylesheet writes copy into generated content: {declaration!r}"
+        )
+
+
+def test_the_header_row_leaves_the_screen_and_stays_in_the_accessibility_tree() -> None:
+    """``display: none`` on ``thead`` takes the column headers out of both.
+
+    Measured on the first cut at 360px: zero ``columnheader`` nodes in the
+    accessibility tree against five at 1440px, on the same page. The label a
+    sighted reader gets comes from CSS generated content, which is not a header
+    to assistive technology, so dropping the row dropped the association. The
+    row goes off-canvas instead, the same technique the skip link uses.
+    """
+    narrow = _media_blocks(_css(), _NARROW)
+    match = re.search(r"thead[^{]*\{([^}]*)\}", narrow)
+    assert match is not None, "the narrow viewport no longer rules the header row"
+    body = match.group(1)
+    assert "display: none" not in body, "the header row is removed from the accessibility tree"
+    assert "position: absolute" in body
+    assert "left: -100vw" in body
+
+
+def test_no_cell_ships_empty(tmp_path: Path) -> None:
+    """A blank cell at 1440px was a dropped line at 360px, and nobody was told.
+
+    Measured on the first cut through the rendered DOM: 43 ``<td>`` elements
+    across the four receipt pages matched ``td:empty``, every one of them a
+    figure's missing Detail. At 1440px each drew a box. At 360px they drew
+    nothing and the phone reader was not told the field existed. An absent
+    detail now states itself in the words the qualifier fields and a missing
+    measurement key already use, at every width.
+    """
+    output = _build(tmp_path / "site")
+    checked = 0
+    for page in sorted(output.glob("*.html")):
+        for cell in ET.parse(page).getroot().iter("td"):
+            assert "".join(cell.itertext()).strip(), f"{page.name}: an empty cell ships"
+            checked += 1
+    assert checked, "the build rendered no cells to check"
+
+
+def test_the_narrow_viewport_hides_no_cell_on_the_ground_that_it_is_empty() -> None:
+    """The rule that dropped the cell is gone, and may not come back.
+
+    Stating the absence removes the reason the rule existed. The rule is pinned
+    out separately from the markup because a later pass could restore it while
+    every cell still ships non-empty, and the next receipt with a blank field
+    would reintroduce the width-dependent drop with no test going red.
+    """
+    assert "td:empty" not in _css(), "a width-dependent cell is being concealed again"
 
 
 def test_every_body_cell_carries_the_column_label_its_header_states(tmp_path: Path) -> None:
