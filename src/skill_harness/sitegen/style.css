@@ -413,12 +413,62 @@ footer {
   margin-top: 32px;
 }
 
+/* The first screen on a phone is the whole budget this page has, and issue #588
+ * asks for the heading, the hero and the pointers inside it. The hero's four
+ * sentences and three pointers do not fit at the wide viewport's rhythm, so the
+ * narrow viewport steps the landing's own spacing down. The step is here rather
+ * than in the shared section rule because the evidence pages keep their density
+ * on purpose, and this is the one surface whose fold is a stated requirement. */
+@media (max-width: 40rem) {
+  .landing section {
+    margin: 24px 0 0;
+  }
+
+  .landing .hero {
+    margin-top: 16px;
+  }
+
+  .landing .hero p {
+    margin: 0 0 12px;
+  }
+
+  .pointers > li {
+    margin: 0.75rem 0 0;
+  }
+}
+
 .landing .action {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
   padding: 0.5rem 0;
   font-weight: 700;
+}
+
+/* The three pointers. Each is a link on its own line with one sentence under it
+ * saying what is behind it, so the label carries the destination and the
+ * sentence carries the reason. The list markers are dropped because a bare
+ * marker column steals horizontal room a phone does not have. The 44px minimum
+ * is the touch target the rest of the site already uses. */
+.pointers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pointers > li {
+  margin: 1.25rem 0 0;
+}
+
+.pointers .pointer {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 700;
+}
+
+.pointers .pointer + span {
+  display: block;
 }
 
 /* The negation list: a term and what the instrument does instead, on the same

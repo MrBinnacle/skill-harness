@@ -23,7 +23,7 @@ import pytest
 
 from skill_harness.sitegen import DEFAULT_BASE_URL, build_site
 from skill_harness.sitegen.__main__ import _parser
-from skill_harness.sitegen.landing import SECTION_TITLES, parse_landing
+from skill_harness.sitegen.landing import POINTER_COUNT, SECTION_TITLES, parse_landing
 from skill_harness.sitegen.render import SiteBuildError
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -112,6 +112,22 @@ def test_the_landing_page_is_off_by_default(tmp_path: Path) -> None:
     This is the ordering rule made mechanical. If the default ever flips, this
     test fails before the site publishes a page that claims more than the
     receipts behind it support.
+
+    Issue #588's fourth acceptance criterion asks for this default to be
+    reconciled with the new front page, or for the reason it survives to be
+    stated. It survives, and this is the reason.
+
+    The ordering rule is that a landing page amplifies whatever is true,
+    including the parts that are not, so it comes after claim integrity. Claim
+    integrity is not done: issue #587 is open and names four published sentences
+    this repository contradicts. Flipping the default now would publish the new
+    page over an unfixed claim set, which is the exact sequence the rule exists
+    to prevent, and polish would raise the confidence a reader places in claims
+    that have not been checked.
+
+    So #588 builds the page and #587 is what unblocks the flip. The page is
+    reachable today with --landing, and every test in this file that covers it
+    runs with the flag on.
     """
     output = _build(tmp_path / "site")
 
@@ -417,9 +433,50 @@ def test_the_landing_copy_fixture_parses() -> None:
     """The reader accepts the shape the brief fixes."""
     copy = parse_landing(_LANDING_COPY.read_text(encoding="utf-8"))
     assert copy.heading
-    assert copy.refusals
-    assert copy.commands
+    assert copy.detects
+    assert copy.control
+    assert copy.thin
+    assert len(copy.pointers) == POINTER_COUNT
     assert len(copy.lead.split()) <= 20
+
+
+def test_the_capability_sentence_never_renders_without_its_caveat() -> None:
+    """Issue #588: the 8-of-8 figure belongs to a declared synthetic control.
+
+    The owner's ordering comment requires the page to say so plainly rather
+    than let the number read as a win. ``detects`` and ``control`` are separate
+    required fields for exactly that reason, so dropping the caveat fails the
+    build instead of publishing a bare number.
+    """
+    text = _LANDING_COPY.read_text(encoding="utf-8")
+    without_caveat = "\n".join(
+        line for line in text.splitlines() if not line.startswith("control:")
+    )
+    with pytest.raises(SiteBuildError) as caught:
+        parse_landing(without_caveat)
+    assert "control" in str(caught.value)
+
+
+def test_a_fourth_pointer_is_refused() -> None:
+    """Issue #588: three pointers and nothing else, held by the build.
+
+    A reviewer counting bullets is the control this replaces.
+    """
+    text = _LANDING_COPY.read_text(encoding="utf-8")
+    text += "- One more -> https://example.invalid/\n  A fourth pointer.\n"
+    with pytest.raises(SiteBuildError) as caught:
+        parse_landing(text)
+    assert str(POINTER_COUNT) in str(caught.value)
+
+
+def test_a_pointer_without_a_supporting_line_is_refused() -> None:
+    """Issue #588: each pointer says what is behind it and why to want it."""
+    text = _LANDING_COPY.read_text(encoding="utf-8").replace(
+        "  Every verdict the instrument gives, and the run behind each one.\n", "", 1
+    )
+    with pytest.raises(SiteBuildError) as caught:
+        parse_landing(text)
+    assert "supporting line" in str(caught.value)
 
 
 def test_a_sixth_section_is_refused() -> None:
@@ -430,16 +487,22 @@ def test_a_sixth_section_is_refused() -> None:
     assert "Testimonials" in str(caught.value)
 
 
-def test_reordering_the_sections_is_refused() -> None:
-    """Brief halt item 8: the order is fixed too, not only the count."""
-    text = _LANDING_COPY.read_text(encoding="utf-8")
-    swapped = text.replace("## " + SECTION_TITLES[2], "## " + SECTION_TITLES[3]).replace(
-        "## " + SECTION_TITLES[3] + "\n\n- Published", "## " + SECTION_TITLES[2] + "\n\n- Published"
+def test_renaming_the_section_is_refused() -> None:
+    """Brief halt item 8: the section set is fixed, not only its size.
+
+    This test pinned section ORDER until issue #588 cut the page to one
+    section, where order is not a thing a document can get wrong. The rule that
+    survives is the one order was a special case of: the heading set is the
+    build's to hold, and a rename is a Direction decision. Pinning the rename
+    keeps a live control here rather than deleting an assertion because its
+    original phrasing stopped applying.
+    """
+    text = _LANDING_COPY.read_text(encoding="utf-8").replace(
+        "## " + SECTION_TITLES[0], "## Further reading", 1
     )
-    if swapped == text:  # pragma: no cover - the fixture always carries both
-        pytest.skip("the fixture does not carry both headings to swap")
-    with pytest.raises(SiteBuildError):
-        parse_landing(swapped)
+    with pytest.raises(SiteBuildError) as caught:
+        parse_landing(text)
+    assert "Further reading" in str(caught.value)
 
 
 def test_an_unrecognised_construct_is_refused_rather_than_dropped() -> None:
@@ -449,8 +512,8 @@ def test_an_unrecognised_construct_is_refused_rather_than_dropped() -> None:
     invites, and it is the one this reader exists to refuse.
     """
     text = _LANDING_COPY.read_text(encoding="utf-8").replace(
-        "## " + SECTION_TITLES[1],
-        "## " + SECTION_TITLES[1] + "\n\n> A block quote the reader does not know.",
+        "## " + SECTION_TITLES[0],
+        "## " + SECTION_TITLES[0] + "\n\n> A block quote the reader does not know.",
         1,
     )
     with pytest.raises(SiteBuildError):

@@ -1,4 +1,4 @@
-"""Every command the landing page prints is a command a stranger can run.
+"""Every command this project publishes is a command a stranger can run.
 
 The landing page shipped `skill audit --help` as its only procedural line. No
 such executable exists. A reader who followed the page's one instruction got
@@ -8,6 +8,14 @@ such executable exists. A reader who followed the page's one instruction got
 No test caught it. The page rendered, the build passed, and the suite was green,
 because nothing bound the printed command to the packaging that has to serve it.
 These tests bind the two.
+
+Issue #588 moved the install commands off the landing page. The page is now a
+heading, four sentences and three pointers, and one pointer sends the reader to
+the README's usage section. The rule did not stop applying; its subject moved.
+So these tests follow the commands to `README.md` rather than being deleted with
+the section that used to carry them. Deleting them would have retired a live
+control because its original address went away, which is the failure mode the
+docstring above describes one layer up.
 """
 
 from __future__ import annotations
@@ -23,9 +31,11 @@ import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
 _LANDING_COPY = _REPO / "docs" / "site" / "landing.md"
+_COMMAND_SOURCE = _REPO / "README.md"
 _PYPROJECT = _REPO / "pyproject.toml"
 
-_COMMAND_LINE = re.compile(r"^command:\s*(?P<command>.+?)\s*$", re.MULTILINE)
+_BASH_BLOCK = re.compile(r"^```bash\n(?P<body>.*?)^```", re.MULTILINE | re.DOTALL)
+_INLINE_COMMENT = re.compile(r"\s+#.*$")
 
 
 def _declared_console_scripts() -> set[str]:
@@ -34,17 +44,52 @@ def _declared_console_scripts() -> set[str]:
 
 
 def _printed_commands() -> list[str]:
-    text = _LANDING_COPY.read_text(encoding="utf-8")
-    return [match.group("command") for match in _COMMAND_LINE.finditer(text)]
+    """Every command the README's bash blocks publish, as one string each.
+
+    A trailing backslash continues a command onto the next line. Splitting on
+    newlines alone would hand the program check an argument as if it were a
+    program, which is a test failing on its own parsing rather than on the
+    thing it is there to catch.
+    """
+    text = _COMMAND_SOURCE.read_text(encoding="utf-8")
+    commands: list[str] = []
+    for block in _BASH_BLOCK.finditer(text):
+        pending = ""
+        for line in block.group("body").splitlines():
+            stripped = _INLINE_COMMENT.sub("", line).strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped.endswith("\\"):
+                pending += stripped[:-1].strip() + " "
+                continue
+            commands.append((pending + stripped).strip())
+            pending = ""
+        if pending:
+            commands.append(pending.strip())
+    return commands
 
 
-def test_the_landing_copy_prints_at_least_one_command() -> None:
+def test_the_published_copy_prints_at_least_one_command() -> None:
     """A vacuous pass is the failure mode these tests exist to avoid.
 
     Every assertion below iterates the printed commands. If the copy stopped
     naming any, they would all pass while saying nothing.
     """
-    assert _printed_commands(), f"{_LANDING_COPY} names no command to check"
+    assert _printed_commands(), f"{_COMMAND_SOURCE} names no command to check"
+
+
+def test_the_landing_page_prints_no_command_of_its_own() -> None:
+    """Issue #588: the page is a heading, four sentences and three pointers.
+
+    This is the other half of the move. The commands are checked against the
+    README above; here the page is held to the shape that sent them there, so a
+    later edit cannot quietly put an unchecked command back on the front page.
+    """
+    text = _LANDING_COPY.read_text(encoding="utf-8")
+    assert not re.search(r"^command:", text, re.MULTILINE), (
+        f"{_LANDING_COPY} prints a command again. Issue #588 moved install off the front "
+        f"page, and {_COMMAND_SOURCE.name} is where the command-reality tests look."
+    )
 
 
 @pytest.mark.parametrize("command", _printed_commands())
@@ -58,7 +103,7 @@ def test_every_printed_command_names_a_real_program(command: str) -> None:
     allowed = _declared_console_scripts() | {"pip", "python"}
 
     assert program in allowed, (
-        f"{_LANDING_COPY} prints {command!r}, whose program {program!r} is not a "
+        f"{_COMMAND_SOURCE} prints {command!r}, whose program {program!r} is not a "
         f"console script this package declares ({sorted(_declared_console_scripts())}) "
         "and is not pip or python"
     )
@@ -75,7 +120,7 @@ def test_the_audit_command_runs_and_exits_zero() -> None:
         (c for c in _printed_commands() if "audit" in c),
         None,
     )
-    assert audit is not None, f"{_LANDING_COPY} prints no audit command"
+    assert audit is not None, f"{_COMMAND_SOURCE} prints no audit command"
 
     fixture = _REPO / "tests" / "fixtures" / "sers" / "declared-synthetic-positive-control"
     skill_md = fixture / "SKILL.md"
