@@ -447,12 +447,25 @@ jobs:
           # Remap same-repo blob/tree/main URLs onto the checked-out tree so a
           # PR that adds both a doc and a README link to it is not failed for
           # a main-branch 404 before merge. External URLs still hit the network.
+          #
+          # The third remap is the same rule for the site's own origin. Every
+          # page emits an absolute canonical and og:url for itself, so without
+          # it lychee fetches the published address of a page this PR is adding
+          # and gets the 404 that adding it is meant to fix. Measured on #584:
+          # the only failing link was the new 404 page's own canonical URL. A
+          # gate that fails any PR introducing a page is a gate that blocks its
+          # own inputs.
+          #
+          # The pattern requires at least one character after the slash, so the
+          # bare site root is left to the network. That URL is published today
+          # and a 404 on it is a real failure worth catching.
           args: >-
             --verbose
             --no-progress
             --accept 200,206,429
             --remap 'https://github.com/MrBinnacle/skill-harness/blob/main/(.*) file://${{ github.workspace }}/$1'
             --remap 'https://github.com/MrBinnacle/skill-harness/tree/main/(.*) file://${{ github.workspace }}/$1'
+            --remap 'https://mrbinnacle.github.io/skill-harness/(.+) file://${{ github.workspace }}/site/$1'
             README.md
             "docs/**/*.md"
             "site/**/*.html"

@@ -41,6 +41,29 @@ STYLESHEET_NAME: Final[str] = "style.css"
 SCHEMA_FILE_NAME: Final[str] = "sers.schema.json"
 INDEX_FILE_NAME: Final[str] = "index.html"
 SCHEMA_PAGE_NAME: Final[str] = "schema.html"
+#: Where the receipts index is written when the landing page takes ``index.html``.
+RECEIPTS_PAGE_NAME: Final[str] = "receipts.html"
+NOT_FOUND_PAGE_NAME: Final[str] = "404.html"
+SOCIAL_IMAGE_NAME: Final[str] = "social-preview.png"
+
+#: The address a stranger is sent to. Every absolute URL on the site is composed
+#: from this, never written as a literal, so moving to a custom domain later is
+#: one build argument rather than a code change.
+DEFAULT_BASE_URL: Final[str] = "https://mrbinnacle.github.io/skill-harness/"
+
+#: The nav in the flag-off state, which is what the site publishes today. With
+#: the landing page on, ``build_site`` passes a nav with a home item ahead of
+#: these two and the receipts item pointing at ``receipts.html``.
+DEFAULT_NAV: Final[tuple[tuple[str, str], ...]] = (
+    (INDEX_FILE_NAME, "Receipts"),
+    (SCHEMA_PAGE_NAME, "Reporting standard"),
+)
+
+#: Written into ``<link rel="icon">`` when an icon file is supplied to the
+#: build. No icon ships in the tree today, so no page links one: see the make
+#: log's halt on A4. The link is emitted only when the bytes exist, because a
+#: 404ing icon link is worse than no icon link.
+FAVICON_NAME: Final[str] = "favicon.svg"
 
 #: Rendered in place of an optional key the receipt does not carry. Never a
 #: number, never a zero: an absent figure is stated as absent.
@@ -57,6 +80,13 @@ _DELIVERY_CHANNEL_TEXT: Final[dict[str, str]] = {
 
 _SLUG_RE: Final[re.Pattern[str]] = re.compile(r"[^a-z0-9]+")
 
+_ISO_DATE_RE: Final[re.Pattern[str]] = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+#: The one construction a SERS field description uses to name a word for its
+#: null case, as in ``value_class``'s "null = unclassified." Anything looser
+#: would start turning sentences into labels (#583).
+_NULL_LANGUAGE_RE: Final[re.Pattern[str]] = re.compile(r"\bnull\s*=\s*(?P<word>[^.;\n]+)")
+
 
 class SiteBuildError(Exception):
     """Raised when a page cannot be written without inventing a figure."""
@@ -64,11 +94,19 @@ class SiteBuildError(Exception):
 
 @dataclass(frozen=True)
 class Figure:
-    """One rendered figure: a measured value or a typed refusal, plus detail."""
+    """One rendered figure: a measured value or a typed refusal, plus detail.
+
+    ``machine_value`` carries the bare number a measured figure displays, so the
+    markup can state it as ``<data value="...">``. This page's whole product is
+    machine-checkable claims, so the machine value and the displayed value both
+    belong in the DOM. A refusal has no machine value and carries the empty
+    string, which is what keeps a refusal out of ``<data>`` entirely.
+    """
 
     text: str
     detail: str
     refused: bool
+    machine_value: str = ""
 
 
 def safe(text: str) -> str:
@@ -113,7 +151,12 @@ def token_figure(leg: str, figure: Mapping[str, Any]) -> Figure:
     if isinstance(tokens, bool):
         raise SiteBuildError(f"cost leg {leg!r} carries a boolean where a token count belongs")
     if isinstance(tokens, int):
-        return Figure(text=f"{tokens} tokens", detail=_detail(figure), refused=False)
+        return Figure(
+            text=f"{tokens} tokens",
+            detail=_detail(figure),
+            refused=False,
+            machine_value=str(tokens),
+        )
     refusal = figure.get("refusal")
     if isinstance(refusal, str):
         return Figure(text=f"REFUSED ({refusal})", detail=_detail(figure), refused=True)
@@ -129,7 +172,12 @@ def rate_figure(key: str, figure: Mapping[str, Any]) -> Figure:
     if isinstance(value, bool):
         raise SiteBuildError(f"measurement {key!r} carries a boolean where a rate belongs")
     if isinstance(value, int | float):
-        return Figure(text=_rate_text(value, figure), detail=_detail(figure), refused=False)
+        return Figure(
+            text=_rate_text(value, figure),
+            detail=_detail(figure),
+            refused=False,
+            machine_value=str(value),
+        )
     refusal = figure.get("refusal")
     if isinstance(refusal, str):
         return Figure(text=f"REFUSED ({refusal})", detail=_detail(figure), refused=True)
@@ -163,24 +211,139 @@ def _detail(figure: Mapping[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def render_page(*, title: str, heading: str, body: str, marker: str) -> str:
-    """Wrap a rendered body fragment in the site shell."""
+@dataclass(frozen=True)
+class SiteShell:
+    """What every page's head, nav and footer need, fixed once per build.
+
+    ``nav`` is a sequence of (href, label). It differs between the two flag
+    states, which is why the nav is data rather than markup in the template, and
+    it is what supplies the page identity ``aria-current`` needs. One change,
+    two fixes: the current-page marker has been open as DESIGN.md Known
+    Divergence 7 since #308.
+
+    Every field except ``marker`` carries the flag-off default, so a caller that
+    only has a marker (the page-level unit tests, and any future one-page render)
+    builds a valid shell without restating the whole site. ``build_site`` passes
+    all of them.
+    """
+
+    marker: str
+    base_url: str = DEFAULT_BASE_URL
+    nav: tuple[tuple[str, str], ...] = DEFAULT_NAV
+    receipts_href: str = INDEX_FILE_NAME
+    has_social_image: bool = False
+    has_favicon: bool = False
+
+    def url_for(self, page_name: str) -> str:
+        """The absolute URL of one page, composed from ``base_url``.
+
+        ``index.html`` resolves to the bare directory URL, which is the address
+        the two published inbound links already point at.
+        """
+        base = self.base_url if self.base_url.endswith("/") else f"{self.base_url}/"
+        return base if page_name == INDEX_FILE_NAME else f"{base}{page_name}"
+
+
+def _shell_for(shell: SiteShell | None, marker: str | None) -> SiteShell:
+    """One shell from whichever of the two the caller supplied.
+
+    Exactly one is required. Accepting both would let a caller pass a marker
+    that the shell contradicts, and the marker is the string a deploy is
+    verified against, so two sources for it is the one ambiguity worth refusing.
+    """
+    if shell is not None and marker is not None:
+        raise SiteBuildError("pass either a shell or a marker, not both")
+    if shell is not None:
+        return shell
+    if marker is None:
+        raise SiteBuildError("rendering a page needs a shell or a build marker")
+    return SiteShell(marker=marker)
+
+
+def render_page(
+    *,
+    shell: SiteShell,
+    page_name: str,
+    title: str,
+    heading: str,
+    description: str,
+    body: str,
+    body_class: str = "",
+    footer: bool = True,
+) -> str:
+    """Wrap a rendered body fragment in the site shell.
+
+    ``footer`` carries the visible build-marker line. It stays on the evidence
+    pages, where the string is a real identifier a reader can check a deploy
+    against, and comes off the landing page, where a version footer is marketing
+    furniture. The ``<meta name="skill-harness-build">`` marker is on every page
+    either way, and that meta tag is what the deploy verification greps.
+    """
+    nav_items = [
+        (
+            f'<li><a href="{safe(href)}"'
+            f"{' aria-current="page"' if href == page_name else ''}"
+            f">{safe(label)}</a></li>"
+        )
+        for href, label in shell.nav
+    ]
+    social_image = ""
+    if shell.has_social_image:
+        url = safe(shell.url_for(SOCIAL_IMAGE_NAME))
+        social_image = f'    <meta property="og:image" content="{url}" />'
+    # Emitted only when the icon bytes are in the build. No icon ships in the
+    # tree today, so today every page renders this as the empty string.
+    favicon_link = ""
+    if shell.has_favicon:
+        favicon_link = f'    <link rel="icon" href="{safe(FAVICON_NAME)}" />'
     return _template("page.html").substitute(
         title=safe(title),
         heading=safe(heading),
+        description=safe(description),
+        canonical_url=safe(shell.url_for(page_name)),
+        favicon_link=favicon_link,
+        social_image=social_image,
+        nav_items=_indent(nav_items, 10),
+        body_class=f' class="{safe(body_class)}"' if body_class else "",
         body=body,
-        marker=safe(marker),
+        footer=_template("footer.html").substitute(marker=safe(shell.marker)) if footer else "",
+        marker=safe(shell.marker),
+    )
+
+
+def render_not_found_page(shell: SiteShell) -> str:
+    """The page GitHub Pages serves for an address that is not on the site."""
+    body = _template("not_found.html").substitute(receipts_href=safe(shell.receipts_href))
+    return render_page(
+        shell=shell,
+        page_name=NOT_FOUND_PAGE_NAME,
+        title="Page not found",
+        heading="Page not found",
+        description="This page is not on the skill-harness receipts site.",
+        body=body,
     )
 
 
 def render_index_page(
     *,
+    shell: SiteShell,
+    page_name: str,
     receipts: Sequence[Mapping[str, Any]],
     unreceipted_skills: Sequence[str],
-    marker: str,
 ) -> str:
-    """The receipts index: one row per validated receipt."""
-    rows = [_index_row(receipt) for receipt in receipts]
+    """The receipts index: one row per validated receipt.
+
+    A build with no receipt renders a refusal block instead of an empty table.
+    A table with no rows and a measured zero look alike on a screen and mean
+    different things, so the page says which one this is.
+    """
+    if receipts:
+        receipts_section = _template("index_table.html").substitute(
+            receipt_count=len(receipts),
+            receipt_rows=_indent([_index_row(receipt) for receipt in receipts], 10),
+        )
+    else:
+        receipts_section = _package_text("templates/index_no_receipts.html")
     unreceipted = ""
     if unreceipted_skills:
         items = [
@@ -189,19 +352,23 @@ def render_index_page(
         ]
         unreceipted = _template("index_unreceipted.html").substitute(rows=_indent(items, 10))
     body = _template("index.html").substitute(
-        receipt_count=len(receipts),
-        receipt_rows=_indent(rows, 10),
+        receipts_section=receipts_section,
         unreceipted=unreceipted,
     )
     return render_page(
+        shell=shell,
+        page_name=page_name,
         title="Published receipts",
         heading="Published receipts",
+        description=(
+            "Published SERS receipts: one page per screened skill, the cost triple beside "
+            "the clause-level evidence grade, every figure copied from the receipt."
+        ),
         body=body,
-        marker=marker,
     )
 
 
-def render_schema_page(*, schema: Mapping[str, Any], marker: str) -> str:
+def render_schema_page(*, shell: SiteShell, schema: Mapping[str, Any]) -> str:
     """The reporting-standard page, derived from the schema itself."""
     required = _string_list(schema.get("required"))
     required_rows = [f"<li><code>{safe(name)}</code></li>" for name in required]
@@ -214,7 +381,17 @@ def render_schema_page(*, schema: Mapping[str, Any], marker: str) -> str:
         required_rows=_indent(required_rows, 8),
         vocabulary_tables="".join(vocabulary_tables),
     )
-    return render_page(title=title, heading=title, body=body, marker=marker)
+    return render_page(
+        shell=shell,
+        page_name=SCHEMA_PAGE_NAME,
+        title=title,
+        heading=title,
+        description=(
+            "The reporting standard the published receipts validate against, with every "
+            "closed vocabulary the schema fixes."
+        ),
+        body=body,
+    )
 
 
 def render_skill_page(
@@ -223,38 +400,45 @@ def render_skill_page(
     receipt: Mapping[str, Any] | None,
     evidence: ClauseEvidenceOutcome,
     schema: Mapping[str, Any],
-    marker: str,
+    shell: SiteShell | None = None,
+    marker: str | None = None,
 ) -> str:
-    """One skill page: cost triple beside the clause-level evidence grade."""
+    """One skill page: cost triple beside the clause-level evidence grade.
+
+    Takes either a ``shell``, which is what ``build_site`` passes, or a bare
+    ``marker``, which is what a caller rendering one page in isolation has. The
+    marker form builds the flag-off shell, so a single page renders with the
+    site's real nav and head rather than a stub.
+    """
+    shell = _shell_for(shell, marker)
     clause_evidence = render_clause_evidence(evidence)
     if receipt is None:
         body = _template("skill_no_receipt.html").substitute(clause_evidence=clause_evidence)
     else:
         body = _template("skill.html").substitute(
             verdict=safe(_string_field(receipt, "verdict", "")),
-            cut_sub_reason=safe(_nullable_text(receipt.get("cut_sub_reason"))),
-            unmeasured_sub_reason=safe(_nullable_text(receipt.get("unmeasured_sub_reason"))),
-            value_class=safe(_nullable_text(receipt.get("value_class"))),
-            wrong_instrument=safe(_nullable_text(receipt.get("wrong_instrument"))),
-            declared_synthetic_control=safe(
-                _nullable_text(receipt.get("declared_synthetic_control"))
-            ),
+            qualifier_rows=_indent(_qualifier_rows(receipt, schema), 8),
             summary=safe(_string_field(receipt, "summary", "")),
-            cost_rows=_indent(_cost_rows(receipt), 14),
+            cost_rows=_indent(_cost_rows(receipt, schema), 14),
             clause_evidence=clause_evidence,
             measurement_rows=_indent(_measurement_rows(receipt, schema), 12),
             delivery_section=_delivery_section(receipt),
             gate_status=safe(_gate_status(receipt)),
             gate_detail=safe(_gate_detail(receipt)),
             instrument_rows=_indent(_identity_rows(receipt), 10),
-            source_rows=_indent(_source_rows(receipt), 10),
+            source_rows=_indent(_source_rows(receipt, schema), 10),
             subject_identity_section=_subject_identity_section(receipt),
         )
     return render_page(
+        shell=shell,
+        page_name=skill_page_name(skill_name),
         title=f"{skill_name}: receipt",
         heading=skill_name,
+        description=(
+            f"The published receipt for {skill_name}: verdict, cost triple, measured values "
+            "and typed refusals, with the source of record."
+        ),
         body=body,
-        marker=marker,
     )
 
 
@@ -276,14 +460,20 @@ def render_clause_evidence(outcome: ClauseEvidenceOutcome) -> str:
     clause_rows = [
         _clause_row(
             (
-                str(row.clause_index),
-                row.axis,
-                "yes" if row.scoreable else "no",
-                row.vacuity_flag,
-                row.flag_evidence_status,
-                row.kind_evidence_status,
-                _nullable_text(row.adjudicated_vacuity_kind),
-                "yes" if row.constructible_fc else "no",
+                (str(row.clause_index), ""),
+                (row.axis, ""),
+                ("yes" if row.scoreable else "no", ""),
+                (row.vacuity_flag, ""),
+                (row.flag_evidence_status, ""),
+                (row.kind_evidence_status, ""),
+                # No adjudication on file is an absence, and it wears the same
+                # marker every other absence on the site wears (#583).
+                (
+                    (row.adjudicated_vacuity_kind, "")
+                    if row.adjudicated_vacuity_kind is not None
+                    else (ABSENT_TEXT, "absent")
+                ),
+                ("yes" if row.constructible_fc else "no", ""),
             )
         )
         for row in measured.rows
@@ -304,6 +494,46 @@ def render_clause_evidence(outcome: ClauseEvidenceOutcome) -> str:
             f"{safe(format_unparseable_warning(outcome.unparseable_line_count))}</p>"
         )
     return _indent(parts, 12)
+
+
+def schema_properties(schema: Mapping[str, Any], group: str) -> Mapping[str, Any]:
+    """The ``properties`` map for one receipt group, or an empty map."""
+    properties = schema.get("properties")
+    if not isinstance(properties, Mapping):
+        return {}
+    node = properties.get(group)
+    if not isinstance(node, Mapping):
+        return {}
+    nested = node.get("properties")
+    return nested if isinstance(nested, Mapping) else {}
+
+
+def schema_label(properties: Mapping[str, Any], key: str) -> str:
+    """One row label: the schema's own words for the key, then the key itself.
+
+    This is #583's rule one layer out. A raw schema key is not a human label,
+    and the page does not paraphrase one into a label either. It prints what the
+    schema already says about the field, whole and unedited, and keeps the raw
+    key beside it in ``<code>`` so the page stays greppable by key.
+
+    A description is rendered entire, punctuation included. Trimming a sentence
+    to label length is a rewrite, and a rewrite is the thing being refused.
+    Where the schema states neither a ``title`` nor a ``description``, the raw
+    key stands alone, which is the honest result: the language belongs in the
+    schema, not in a word this page made up for it.
+    """
+    gloss = ""
+    field = properties.get(key)
+    if isinstance(field, Mapping):
+        for source in ("title", "description"):
+            value = field.get(source)
+            if isinstance(value, str) and value.strip():
+                gloss = value.strip()
+                break
+    code = f"<code>{safe(key)}</code>"
+    if not gloss:
+        return code
+    return f'<span class="key-gloss">{safe(gloss)}</span>{code}'
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +557,50 @@ def _index_row(receipt: Mapping[str, Any]) -> str:
     )
 
 
+#: The five qualifiers a receipt page states under its verdict, as
+#: (human label, receipt key). The labels are the page's own, not schema keys:
+#: the schema declares no ``title`` for any of them.
+_QUALIFIERS: Final[tuple[tuple[str, str], ...]] = (
+    ("Cut sub-reason", "cut_sub_reason"),
+    ("Unmeasured sub-reason", "unmeasured_sub_reason"),
+    ("Value class", "value_class"),
+    ("Wrong instrument", "wrong_instrument"),
+    ("Declared synthetic control", "declared_synthetic_control"),
+)
+
+
+def nullable_cell(schema: Mapping[str, Any], key: str, value: object) -> tuple[str, str]:
+    """Render one nullable receipt field as (text, css class).
+
+    Three cases, and none of them invents a word (#583):
+
+    - a boolean is an answer the receipt carries, so it renders ``yes`` or
+      ``no``, which is that answer in plain language;
+    - a ``None`` whose schema field names a word for its null case renders that
+      word;
+    - anything else absent renders ``ABSENT_TEXT`` in the ``absent`` class, the
+      same treatment the measurements table has given a missing key since #186,
+      so a reader meets one vocabulary for absence across the whole page.
+    """
+    if isinstance(value, bool):
+        return ("yes" if value else "no", "")
+    if value is None:
+        declared = null_case_language(schema, key)
+        if declared is not None:
+            return (declared, "")
+        return (ABSENT_TEXT, "absent")
+    return (str(value), "")
+
+
+def _qualifier_rows(receipt: Mapping[str, Any], schema: Mapping[str, Any]) -> list[str]:
+    rows: list[str] = []
+    for label, key in _QUALIFIERS:
+        text, css = nullable_cell(schema, key, receipt.get(key))
+        attribute = f' class="{css}"' if css else ""
+        rows.append(f"<dt>{safe(label)}</dt><dd{attribute}>{safe(text)}</dd>")
+    return rows
+
+
 def _qualifier_text(receipt: Mapping[str, Any]) -> str:
     parts: list[str] = []
     cut = receipt.get("cut_sub_reason")
@@ -338,53 +612,80 @@ def _qualifier_text(receipt: Mapping[str, Any]) -> str:
     return ", ".join(parts) if parts else NO_QUALIFIER_TEXT
 
 
-def _cost_rows(receipt: Mapping[str, Any]) -> list[str]:
+def _cost_rows(receipt: Mapping[str, Any], schema: Mapping[str, Any]) -> list[str]:
+    """The cost triple, with each leg labelled in the schema's own words.
+
+    The schema states neither a title nor a description for any of the three
+    legs as of this pass, so all three render as the bare key. That is the
+    result, not a gap the page papers over: inventing the language here would
+    put a word on the site that no receipt can be checked against.
+    """
     cost = receipt.get("cost")
     if not isinstance(cost, Mapping):
         raise SiteBuildError("receipt carries no cost triple")
+    properties = schema_properties(schema, "cost")
     rows: list[str] = []
     for leg in ("standing_tokens", "fired_tokens", "aux_tokens"):
         raw = cost.get(leg)
         if not isinstance(raw, Mapping):
             raise SiteBuildError(f"cost triple is missing leg {leg!r}")
-        rows.append(_figure_row(leg, token_figure(leg, raw)))
+        rows.append(_figure_row(schema_label(properties, leg), token_figure(leg, raw)))
     return rows
 
 
 def _measurement_rows(receipt: Mapping[str, Any], schema: Mapping[str, Any]) -> list[str]:
     present = receipt.get("measurements")
     measurements: Mapping[str, Any] = present if isinstance(present, Mapping) else {}
+    properties = schema_properties(schema, "measurements")
     rows: list[str] = []
     for key in _measurement_keys(schema):
+        label = schema_label(properties, key)
         raw = measurements.get(key)
         if raw is None:
             rows.append(
-                f'<tr><th scope="row">{safe(key)}</th>'
+                f'<tr><th scope="row">{label}</th>'
                 f'<td class="absent">{safe(ABSENT_TEXT)}</td><td></td></tr>'
             )
         elif isinstance(raw, Mapping):
-            rows.append(_figure_row(key, rate_figure(key, raw)))
+            rows.append(_figure_row(label, rate_figure(key, raw)))
         elif isinstance(raw, str):
-            rows.append(_figure_row(key, Figure(text=raw, detail="", refused=False)))
+            rows.append(_figure_row(label, Figure(text=raw, detail="", refused=False)))
         else:
             raise SiteBuildError(f"measurement {key!r} is neither a figure nor a stated gate")
     return rows
 
 
 def _figure_row(label: str, figure: Figure) -> str:
+    """One figure row. ``label`` is already-escaped markup from ``schema_label``."""
     css = "figure refused" if figure.refused else "figure"
+    text = safe(figure.text)
+    if figure.machine_value:
+        text = f'<data value="{safe(figure.machine_value)}">{text}</data>'
     return (
-        f'<tr><th scope="row">{safe(label)}</th>'
-        f'<td class="{css}">{safe(figure.text)}</td>'
+        f'<tr><th scope="row">{label}</th>'
+        f'<td class="{css}">{text}</td>'
         f"<td>{safe(figure.detail)}</td></tr>"
     )
 
 
-def _clause_row(cells: Sequence[str]) -> str:
-    return "<tr>" + "".join(f"<td>{safe(cell)}</td>" for cell in cells) + "</tr>"
+def _clause_row(cells: Sequence[tuple[str, str]]) -> str:
+    """One clause row. Each cell is (text, css class); an empty class draws none."""
+    rendered: list[str] = []
+    for text, css in cells:
+        attribute = f' class="{css}"' if css else ""
+        rendered.append(f"<td{attribute}>{safe(text)}</td>")
+    return "<tr>" + "".join(rendered) + "</tr>"
 
 
 def _identity_rows(receipt: Mapping[str, Any]) -> list[str]:
+    """The instrument identity pins.
+
+    These keys are deliberately NOT given the schema-sourced label the
+    measurement and cost keys get. #490's brief fixed this block's markup, and
+    ``tests/test_sitegen_subject_identity.py`` holds that pin by asserting the
+    literal ``<dt>extractor_model</dt>`` row. Relabelling them is a decision
+    that reopens #490 rather than one this pass makes on the way past.
+    """
     identity = receipt.get("instrument_identity")
     if not isinstance(identity, Mapping):
         raise SiteBuildError("receipt carries no instrument identity")
@@ -405,17 +706,25 @@ def _identity_rows(receipt: Mapping[str, Any]) -> list[str]:
     return rows
 
 
-def _source_rows(receipt: Mapping[str, Any]) -> list[str]:
+def _source_rows(receipt: Mapping[str, Any], schema: Mapping[str, Any]) -> list[str]:
     source = receipt.get("source")
     if not isinstance(source, Mapping):
         raise SiteBuildError("receipt carries no source of record")
+    properties = schema_properties(schema, "source")
     rows: list[str] = []
     for key in ("prose_path", "date", "notes"):
+        label = schema_label(properties, key)
         value = source.get(key)
-        if isinstance(value, str):
-            rows.append(f"<dt>{safe(key)}</dt><dd>{safe(value)}</dd>")
+        if not isinstance(value, str):
+            rows.append(f'<dt>{label}</dt><dd class="absent">{safe(ABSENT_TEXT)}</dd>')
+            continue
+        # A date is a machine value as much as a figure is, so it is marked up
+        # as one rather than left as loose text.
+        if key == "date" and _ISO_DATE_RE.fullmatch(value):
+            cell = f'<time datetime="{safe(value)}">{safe(value)}</time>'
         else:
-            rows.append(f'<dt>{safe(key)}</dt><dd class="absent">{safe(ABSENT_TEXT)}</dd>')
+            cell = safe(value)
+        rows.append(f"<dt>{label}</dt><dd>{cell}</dd>")
     return rows
 
 
@@ -616,12 +925,29 @@ def _string_list(value: object) -> list[str]:
     return [item for item in value if isinstance(item, str)]
 
 
-def _nullable_text(value: object) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    return str(value)
+def null_case_language(schema: Mapping[str, Any], key: str) -> str | None:
+    """The schema's own word for ``key``'s null case, or ``None`` if it declares none.
+
+    The site does not invent vocabulary (#583). Where a nullable field's schema
+    description names a word for the null case, it does so in one construction,
+    ``null = <word>``, and that word is what the page prints. A description that
+    discusses the null case without naming a word for it supplies semantics, not
+    vocabulary, and the caller renders absence instead.
+
+    Deliberately narrow. A looser reader would start paraphrasing sentences into
+    labels, which is the defect this function exists to end, one layer down.
+    """
+    properties = schema.get("properties")
+    if not isinstance(properties, Mapping):
+        return None
+    field = properties.get(key)
+    if not isinstance(field, Mapping):
+        return None
+    description = field.get("description")
+    if not isinstance(description, str):
+        return None
+    match = _NULL_LANGUAGE_RE.search(description)
+    return match.group("word").strip() if match is not None else None
 
 
 def _indent(fragments: Iterable[str], columns: int) -> str:

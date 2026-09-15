@@ -32,26 +32,41 @@ from skill_harness.extractor.clause_evidence import (
     load_clause_evidence,
     no_extraction_outcome,
 )
+from skill_harness.sitegen.landing import parse_landing, render_landing_page
 from skill_harness.sitegen.render import (
+    DEFAULT_BASE_URL,
+    FAVICON_NAME,
     INDEX_FILE_NAME,
+    NOT_FOUND_PAGE_NAME,
+    RECEIPTS_PAGE_NAME,
     SCHEMA_FILE_NAME,
     SCHEMA_PAGE_NAME,
+    SOCIAL_IMAGE_NAME,
     STYLESHEET_NAME,
     SiteBuildError,
+    SiteShell,
     read_stylesheet,
     render_index_page,
+    render_not_found_page,
     render_schema_page,
     render_skill_page,
     skill_page_name,
 )
 
 __all__ = [
+    "DEFAULT_BASE_URL",
+    "DEFAULT_LANDING_COPY",
     "SiteBuildError",
     "SitegenNotInstalledError",
     "build_site",
     "load_receipts",
     "load_schema",
 ]
+
+#: Where the landing copy lives. Under ``docs/`` on purpose: the required
+#: ``vale`` job already lints that tree at error level, so the prose a stranger
+#: reads is gated with no workflow edit.
+DEFAULT_LANDING_COPY = Path("docs") / "site" / "landing.md"
 
 
 # The [sitegen] extra's install hint. ``jsonschema`` reaches this environment
@@ -129,12 +144,28 @@ def build_site(
     extraction_path: Path | None,
     output_dir: Path,
     marker: str,
+    base_url: str = DEFAULT_BASE_URL,
+    landing: bool = False,
+    landing_copy_path: Path | None = None,
+    social_image_path: Path | None = None,
+    favicon_path: Path | None = None,
 ) -> tuple[Path, ...]:
     """Render the site, after validating every receipt. Returns the files written.
 
     ``marker`` is a content marker unique to one build: it is written into every
     page so a deploy can be checked by fetching the published URL, rather than
     inferred from a green workflow.
+
+    ``landing`` defaults to OFF, and that default is the point. A landing page
+    amplifies whatever is true, including the parts that are not, so the
+    project's own definition of done orders it after claim integrity. The page
+    is built, tested and reviewable here; flipping the default is a separate
+    one-line change at a moment the owner picks. ``tests/sitegen`` pins the
+    default so the ordering rule is held by a machine rather than by memory.
+
+    With ``landing`` off the output is exactly the previous page set plus the
+    404 page: ``index.html`` is the receipts index, and both published inbound
+    links keep resolving.
     """
     if not marker.strip():
         raise SiteBuildError(
@@ -145,6 +176,40 @@ def build_site(
     schema = _parse_schema(schema_text)
     receipts = validate_receipts(schema, receipts_dir)
 
+    landing_copy = None
+    if landing:
+        path = landing_copy_path if landing_copy_path is not None else DEFAULT_LANDING_COPY
+        if not path.is_file():
+            raise SiteBuildError(f"landing copy not found at {path}")
+        landing_copy = parse_landing(path.read_text(encoding="utf-8"))
+
+    social_bytes: bytes | None = None
+    if social_image_path is not None and social_image_path.is_file():
+        social_bytes = social_image_path.read_bytes()
+
+    # No icon ships in the tree today. The link is emitted only when the bytes
+    # are in the build, because a <link rel="icon"> pointing at a 404 is worse
+    # than no icon link: it makes the absence a broken reference instead of an
+    # absence. Dropping an SVG at the default path closes it with no code edit.
+    favicon_bytes: bytes | None = None
+    if favicon_path is not None and favicon_path.is_file():
+        favicon_bytes = favicon_path.read_bytes()
+
+    receipts_page = RECEIPTS_PAGE_NAME if landing else INDEX_FILE_NAME
+    nav: list[tuple[str, str]] = []
+    if landing:
+        nav.append((INDEX_FILE_NAME, "Home"))
+    nav.append((receipts_page, "Receipts"))
+    nav.append((SCHEMA_PAGE_NAME, "Reporting standard"))
+    shell = SiteShell(
+        marker=marker,
+        base_url=base_url,
+        nav=tuple(nav),
+        receipts_href=receipts_page,
+        has_social_image=social_bytes is not None,
+        has_favicon=favicon_bytes is not None,
+    )
+
     by_skill = _receipts_by_skill(receipts)
     join_rows = _read_join_rows(extraction_path)
     join_skills = sorted({row.skill_name for row in join_rows})
@@ -152,20 +217,24 @@ def build_site(
     _check_page_names(skill_names)
 
     pages: dict[str, str] = {
-        INDEX_FILE_NAME: render_index_page(
+        receipts_page: render_index_page(
+            shell=shell,
+            page_name=receipts_page,
             receipts=[by_skill[name] for name in sorted(by_skill)],
             unreceipted_skills=[name for name in join_skills if name not in by_skill],
-            marker=marker,
         ),
-        SCHEMA_PAGE_NAME: render_schema_page(schema=schema, marker=marker),
+        SCHEMA_PAGE_NAME: render_schema_page(shell=shell, schema=schema),
+        NOT_FOUND_PAGE_NAME: render_not_found_page(shell),
     }
+    if landing_copy is not None:
+        pages[INDEX_FILE_NAME] = render_landing_page(shell=shell, copy=landing_copy)
     for name in skill_names:
         pages[skill_page_name(name)] = render_skill_page(
+            shell=shell,
             skill_name=name,
             receipt=by_skill.get(name),
             evidence=_clause_evidence_for(name, extraction_path, join_rows),
             schema=schema,
-            marker=marker,
         )
 
     output_dir.mkdir(parents=True, exist_ok=False)
@@ -173,6 +242,14 @@ def build_site(
         _write(output_dir / STYLESHEET_NAME, read_stylesheet()),
         _write(output_dir / SCHEMA_FILE_NAME, schema_text),
     ]
+    if social_bytes is not None:
+        social_target = output_dir / SOCIAL_IMAGE_NAME
+        social_target.write_bytes(social_bytes)
+        written.append(social_target)
+    if favicon_bytes is not None:
+        favicon_target = output_dir / FAVICON_NAME
+        favicon_target.write_bytes(favicon_bytes)
+        written.append(favicon_target)
     written.extend(_write(output_dir / name, text) for name, text in sorted(pages.items()))
     return tuple(sorted(written))
 

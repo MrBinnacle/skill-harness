@@ -16,11 +16,21 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from skill_harness.sitegen import SiteBuildError, SitegenNotInstalledError, build_site
+from skill_harness.sitegen import (
+    DEFAULT_BASE_URL,
+    DEFAULT_LANDING_COPY,
+    SiteBuildError,
+    SitegenNotInstalledError,
+    build_site,
+)
 
 _DEFAULT_SCHEMA = Path("docs") / "sers" / "sers.schema.json"
 _DEFAULT_RECEIPTS = Path("docs") / "sers" / "receipts"
 _DEFAULT_OUTPUT = Path("site")
+_DEFAULT_SOCIAL_IMAGE = Path("assets") / "social-preview.png"
+#: No icon is on the tree at this path today, so no page links one. See the
+#: S455 make log's halt on audit finding A4.
+_DEFAULT_FAVICON = Path("assets") / "favicon.svg"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -49,6 +59,40 @@ def _parser() -> argparse.ArgumentParser:
         "--marker",
         required=True,
         help="content marker unique to this build, written into every page",
+    )
+    parser.add_argument(
+        "--base-url",
+        default=DEFAULT_BASE_URL,
+        help=(
+            "the published address every absolute URL on the site is composed from "
+            f"(default: {DEFAULT_BASE_URL})"
+        ),
+    )
+    parser.add_argument(
+        "--landing",
+        action="store_true",
+        help=(
+            "write the landing page as index.html and move the receipts index to "
+            "receipts.html (default: off, so index.html stays the receipts index)"
+        ),
+    )
+    parser.add_argument(
+        "--landing-copy",
+        type=Path,
+        default=DEFAULT_LANDING_COPY,
+        help="Markdown file the landing copy is read from",
+    )
+    parser.add_argument(
+        "--social-preview",
+        type=Path,
+        default=_DEFAULT_SOCIAL_IMAGE,
+        help="image copied into the build and referenced as og:image (skipped when absent)",
+    )
+    parser.add_argument(
+        "--favicon",
+        type=Path,
+        default=_DEFAULT_FAVICON,
+        help="icon copied into the build and linked from every page (skipped when absent)",
     )
     return parser
 
@@ -87,6 +131,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             extraction_path=args.extraction,
             output_dir=args.output,
             marker=args.marker,
+            base_url=args.base_url,
+            landing=args.landing,
+            landing_copy_path=args.landing_copy,
+            social_image_path=args.social_preview,
+            favicon_path=args.favicon,
         )
     except SitegenNotInstalledError as exc:
         print(f"SITE BUILD: REFUSED -- {exc}", file=sys.stderr)
