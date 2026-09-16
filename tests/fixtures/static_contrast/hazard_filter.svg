@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10">
+  <filter id="soften"><feGaussianBlur stdDeviation="1"/></filter>
+  <rect width="10" height="10" fill="#010409"/>
+  <text x="1" y="8" font-size="21" fill="#e6edf3">soft</text>
+</svg>

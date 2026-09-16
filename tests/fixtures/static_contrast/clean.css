@@ -1,0 +1,18 @@
+/* Clean fixture. The word linear-gradient here proves comments are blanked. */
+:root {
+  --bench-void: #010409;
+  --bench-ink: #e6edf3;
+}
+body {
+  background: var(--bench-void);
+  color: var(--bench-ink);
+}
+a {
+  color: inherit;
+}
+@media (prefers-color-scheme: light) {
+  body {
+    background: #e6edf3;
+    color: #010409;
+  }
+}

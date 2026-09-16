@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10">
+  <!-- Clean fixture. The word opacity here proves comments are blanked. -->
+  <rect width="10" height="10" fill="#010409" stroke="#30363d"/>
+  <text x="1" y="8" font-size="21" fill="#e6edf3">&#8594; ok</text>
+</svg>
