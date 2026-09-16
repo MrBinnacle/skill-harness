@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SKILL HARNESS / FIELD MANUAL</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230E100D'/%3E%3Crect x='2' y='3' width='5' height='10' fill='%236E7356'/%3E%3Crect x='9' y='3' width='5' height='10' fill='%23D8D2C0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#0E100D;
+  --plank:#171A15;
+  --field:#6E7356;
+  --field-deep:#3E4436;
+  --bone:#D8D2C0;
+  --bone-dim:#8F9480;
+  --brass:#C9A227;
+  --hair:#3A3F33;
+}
+*{box-sizing:border-box;border-radius:0 !important;}
+html{background:var(--void);}
+body{
+  margin:0;background:var(--plank);color:var(--bone);
+  font-family:"Archivo",system-ui,sans-serif;font-size:16px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+/* analog degradation: grain + beam sweep */
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:9;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='200' height='200' filter='url(%23n)' opacity='0.55'/></svg>");
+  opacity:.20;mix-blend-mode:overlay;}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:8;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.16) 2px,rgba(0,0,0,.16) 4px);}
+.wrap{position:relative;z-index:1;max-width:1360px;margin:0 auto;}
+
+/* ---------- telemetry micro-type ---------- */
+.tele,.tele *{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.09em;
+  text-transform:uppercase;line-height:1.3;color:var(--bone-dim);}
+.tele b{color:var(--bone);font-weight:700;}
+.brass{color:var(--brass) !important;}
+.olive{color:var(--field) !important;}
+
+/* ---------- header ---------- */
+header.bar{display:grid;grid-template-columns:1fr auto;gap:1px;background:var(--hair);
+  border-bottom:1px solid var(--hair);}
+header.bar > div{background:var(--plank);padding:12px 18px;display:flex;align-items:center;gap:20px;}
+.mark{font-family:"Archivo Black",sans-serif;font-size:13px;letter-spacing:.14em;color:var(--bone);}
+header nav{display:flex;gap:18px;}
+header nav a{color:var(--bone-dim);text-decoration:none;}
+header nav a[aria-current]{color:var(--bone);border-bottom:2px solid var(--brass);}
+
+/* ---------- hero ---------- */
+.hero{padding:74px 18px 0;border-bottom:1px solid var(--hair);}
+.stamp{display:flex;flex-wrap:wrap;gap:8px 26px;margin-bottom:26px;}
+h1{font-family:"Archivo Black",sans-serif;font-weight:400;
+  font-size:clamp(3.4rem,11.5vw,11.5rem);line-height:.86;letter-spacing:-.045em;
+  text-transform:uppercase;margin:0;max-width:16ch;}
+h1 span{color:var(--field);}
+.sub{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px;background:var(--hair);
+  margin:56px 0 0;border-top:1px solid var(--hair);}
+.sub > div{background:var(--plank);padding:24px 20px 30px;}
+.sub p{margin:10px 0 0;font-size:18px;max-width:46ch;}
+.sub .lead{font-size:21px;color:var(--bone);}
+.sub .refuse{color:var(--bone-dim);}
+
+/* ---------- specimen plate ---------- */
+.platetitle{font-family:"Archivo Black",sans-serif;font-weight:400;font-size:clamp(1.6rem,3vw,2.4rem);
+  letter-spacing:-.03em;text-transform:uppercase;margin:0;padding:34px 20px 0;}
+.define{margin:12px 20px 30px;max-width:64ch;color:var(--bone-dim);font-size:17px;}
+.define b{color:var(--bone);font-weight:600;}
+.plate{border-bottom:1px solid var(--hair);}
+.plate-head{display:grid;grid-template-columns:1fr auto auto;gap:1px;background:var(--hair);
+  border-bottom:1px solid var(--hair);}
+.plate-head > div{background:var(--plank);padding:11px 18px;}
+.arms{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--hair);}
+.arm{background:var(--plank);padding:26px 20px 28px;}
+.arm .who{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px;}
+.epochs{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-bottom:14px;}
+.ep{height:52px;background:var(--void);position:relative;}
+.ep.hit{background:var(--field);}
+.ep::after{content:attr(data-n);position:absolute;left:0;right:0;bottom:-18px;text-align:center;
+  font-family:"JetBrains Mono",monospace;font-size:9px;color:var(--bone-dim);letter-spacing:.06em;}
+.score{margin-top:26px;font-family:"Archivo Black",sans-serif;font-size:clamp(2.2rem,4.4vw,3.6rem);
+  line-height:1;letter-spacing:-.03em;color:var(--bone);}
+.score small{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.09em;
+  color:var(--bone-dim);display:block;margin-top:10px;text-transform:uppercase;}
+
+/* ---------- determination ---------- */
+.det{display:grid;grid-template-columns:auto 1fr;gap:1px;background:var(--hair);
+  border-top:1px solid var(--hair);}
+.det > div{background:var(--plank);padding:22px 20px;}
+.verdict{display:inline-flex;align-items:center;gap:12px;border:2px solid var(--bone);
+  padding:14px 20px;font-family:"JetBrains Mono",monospace;font-weight:700;font-size:15px;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--bone);white-space:nowrap;}
+.verdict i{width:12px;height:12px;background:var(--bone);font-style:normal;}
+.verdict.keep i{background:var(--field);}
+.verdict.cut i{background:var(--bone-dim);}
+.det p{margin:0;color:var(--bone-dim);max-width:62ch;font-size:16px;}
+.det p b{color:var(--bone);font-weight:600;}
+
+/* ---------- key ---------- */
+.key{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--hair);
+  border-bottom:1px solid var(--hair);}
+.key section{background:var(--plank);padding:26px 20px 30px;}
+.key h3{font-family:"Archivo Black",sans-serif;font-size:19px;letter-spacing:-.01em;
+  text-transform:uppercase;margin:14px 0 8px;}
+.key a{color:var(--bone);text-decoration:none;}
+.key section:hover h3 a{color:var(--field);}
+.key p{margin:0;color:var(--bone-dim);font-size:15px;}
+
+/* ---------- action ---------- */
+.act{display:grid;grid-template-columns:auto 1fr;gap:1px;background:var(--hair);}
+.act > div{background:var(--plank);padding:24px 20px;display:flex;align-items:center;gap:20px;}
+.cta{display:inline-block;background:var(--bone);color:var(--void);border:2px solid var(--bone);
+  font-family:"JetBrains Mono",monospace;font-weight:700;font-size:14px;letter-spacing:.18em;
+  text-transform:uppercase;padding:16px 26px;text-decoration:none;}
+.cta:hover{background:transparent;color:var(--bone);}
+::selection{background:var(--field);color:var(--void);}
+
+@media(max-width:820px){
+  .sub,.arms,.key,.act,.det{grid-template-columns:1fr;}
+  .hero{padding-top:44px;}
+  .epochs{grid-template-columns:repeat(8,1fr);}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="bar">
+    <div><span class="mark">SKILL HARNESS</span>
+      <span class="tele">/// FIELD MANUAL &nbsp; REV 2.6</span></div>
+    <div><nav class="tele">
+      <a href="#" aria-current="page">Determinations</a>
+      <a href="#">Reporting</a>
+      <a href="#">Run it</a>
+    </nav></div>
+  </header>
+
+  <section class="hero">
+    <div class="stamp tele">
+      <span>[ SPECIMEN INDEX ]</span><span>UNIT / D-01</span>
+      <span>COLLECTION <b>04</b></span><span class="brass">PRODUCTION KEEP <b>00</b></span>
+    </div>
+
+    <h1>Does this skill <span>help?</span></h1>
+
+    <div class="sub">
+      <div>
+        <div class="tele">&gt;&gt;&gt; METHOD</div>
+        <p class="lead">It runs a task twice. Once with the skill, once without it. Then it
+        compares the two runs.</p>
+      </div>
+      <div>
+        <div class="tele brass">&gt;&gt;&gt; WHAT IT REFUSES</div>
+        <p class="refuse">When the difference is too small to call, or the sample too thin,
+        it says so. It does not fill the gap with a number.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="plate">
+    <h2 class="platetitle">One skill, measured</h2>
+    <p class="define">Each run of the task is one <b>try</b>. The same task runs eight
+    times with the skill and eight times without, and the two sets are compared. The task
+    hides a false fact on purpose, so a try either catches it or misses it.</p>
+    <div class="plate-head tele">
+      <div><b>SPECIMEN 02</b> &nbsp;///&nbsp; SQLITE-EXPERT</div>
+      <div>TASK / SPOT THE FALSE FACT</div>
+      <div class="brass">TRIES EACH WAY / 08</div>
+    </div>
+
+    <div class="arms">
+      <div class="arm">
+        <div class="who tele"><span>[ SET A ] WITH THE SKILL</span><span class="olive">+</span></div>
+        <div class="epochs">
+          <span class="ep hit" data-n="01"></span><span class="ep hit" data-n="02"></span>
+          <span class="ep hit" data-n="03"></span><span class="ep hit" data-n="04"></span>
+          <span class="ep" data-n="05"></span><span class="ep hit" data-n="06"></span>
+          <span class="ep" data-n="07"></span><span class="ep hit" data-n="08"></span>
+        </div>
+        <div class="score">6/8<small>tries caught the false fact</small></div>
+      </div>
+
+      <div class="arm">
+        <div class="who tele"><span>[ SET B ] WITHOUT IT</span><span>+</span></div>
+        <div class="epochs">
+          <span class="ep hit" data-n="01"></span><span class="ep" data-n="02"></span>
+          <span class="ep hit" data-n="03"></span><span class="ep" data-n="04"></span>
+          <span class="ep hit" data-n="05"></span><span class="ep" data-n="06"></span>
+          <span class="ep hit" data-n="07"></span><span class="ep" data-n="08"></span>
+        </div>
+        <div class="score">4/8<small>tries caught the false fact</small></div>
+      </div>
+    </div>
+
+    <div class="det">
+      <div><span class="verdict"><i></i>CANT_TELL_YET</span></div>
+      <div>
+        <div class="tele" style="margin-bottom:10px">[ DETERMINATION ]</div>
+        <p>Two tries apart out of eight. That is not enough to tell the two sets apart, so
+        <b>no verdict is recorded</b>. This is a result, not a failure. Widen the sample and
+        the instrument will call it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="key">
+    <section>
+      <div class="tele brass">01 ///</div>
+      <h3><a href="#">Published determinations</a></h3>
+      <p>Every skill measured so far, and the ones still waiting on evidence.</p>
+    </section>
+    <section>
+      <div class="tele brass">02 ///</div>
+      <h3><a href="#">What the instrument found</a></h3>
+      <p>All results to date, including the runs that came back undetermined.</p>
+    </section>
+    <section>
+      <div class="tele brass">03 ///</div>
+      <h3><a href="#">Run it on your own skill</a></h3>
+      <p>Install the package and audit a skill file on your own machine.</p>
+    </section>
+  </section>
+
+  <section class="act">
+    <div><a class="cta" href="#">Pull your own proof &gt;&gt;&gt;</a></div>
+    <div><span class="tele">$ pip install skill-harness &nbsp;&nbsp;///&nbsp;&nbsp; MIT &nbsp;&nbsp; REV 2.6 &nbsp;&nbsp; ®</span></div>
+  </section>
+
+</div>
+</body>
+</html>
