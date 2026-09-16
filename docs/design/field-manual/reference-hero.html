@@ -1,4 +1,18 @@
 <!DOCTYPE html>
+<!--
+  PROTOTYPE. NOT SHIPPED, NOT PRODUCTION CODE.
+
+  The approved visual reference for the Field Manual direction. It is built OUTSIDE
+  the product so the token conformance fence does not constrain it, which means every
+  colour, face and size in here is currently UNDECLARED in DESIGN.md and would fail
+  tests/test_design_tokens_conformance.py if pasted into src/.
+
+  Every number on the page is fictional placeholder content: SPECIMEN 02, COLLECTION 04,
+  the 6/8 and 4/8 scores and the try pattern. Do not carry them into a real template.
+  Real figures come from docs/sers/receipts/.
+
+  Contract and measurements: docs/design/field-manual/DIRECTION.md
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -77,6 +91,8 @@ h1 span{color:var(--field);}
 .arm{background:var(--plank);padding:26px 20px 28px;}
 .arm .who{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px;}
 .epochs{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-bottom:14px;}
+.vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0;}
 .ep{height:52px;background:var(--void);position:relative;}
 .ep.hit{background:var(--field);}
 .ep::after{content:attr(data-n);position:absolute;left:0;right:0;bottom:-18px;text-align:center;
@@ -126,6 +142,29 @@ h1 span{color:var(--field);}
 </style>
 </head>
 <body>
+<!-- DIRECTION CONTRACT. new-work.md section 5 puts this in the emitted markup, as the
+     first child of body, so the contract travels with the artifact rather than living
+     only in a sibling file. Full version, with the measurements: DIRECTION.md.
+
+     THESIS: A skill is a specimen and this site is the manual that identifies it. It
+     refuses the dark benchmark dashboard this category ships, and the white page with one
+     big number. Taxonomy already writes indeterminate without any reader hearing failure,
+     which is CANT_TELL_YET with precedent instead of an argument.
+     OWN-WORLD: Green-black over void, matte flocked grain, a beam sweep. Olive drab means
+     one thing only, a try that caught the fact. Bone is the ink and the primary action.
+     Brass marks sections, never a verdict. 90 degree corners. Hairlines are 1px grid gaps.
+     Archivo Black uppercase at clamp(3.4rem,11.5vw,11.5rem), -0.045em, 0.86 leading.
+     JetBrains Mono 11px uppercase labels; it never sets a paragraph.
+     STORY: A skill author unsure whether to ship learns the method in one sentence, sees
+     what the instrument refuses in the next, watches one specimen measured, and runs it.
+     FIRST VIEWPORT: Telemetry stamp, the question at display scale over two lines with
+     help? in olive, then method and refusal divided by a hairline. The action sits at the
+     foot in bone, the brightest element on the surface.
+     FORM: The Field Manual, position 3 of 7 on the grounded list, seed 9d090308 re-roll 1.
+     Palette and materials are owner-pinned and outrank the roll.
+     FINISH: unreviewed and undocumented is unfinished; this build ends with the finish
+     review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+-->
 <div class="wrap">
 
   <header class="bar">
@@ -137,6 +176,8 @@ h1 span{color:var(--field);}
       <a href="#">Run it</a>
     </nav></div>
   </header>
+
+  <main>
 
   <section class="hero">
     <div class="stamp tele">
@@ -175,10 +216,10 @@ h1 span{color:var(--field);}
       <div class="arm">
         <div class="who tele"><span>[ SET A ] WITH THE SKILL</span><span class="olive">+</span></div>
         <div class="epochs">
-          <span class="ep hit" data-n="01"></span><span class="ep hit" data-n="02"></span>
-          <span class="ep hit" data-n="03"></span><span class="ep hit" data-n="04"></span>
-          <span class="ep" data-n="05"></span><span class="ep hit" data-n="06"></span>
-          <span class="ep" data-n="07"></span><span class="ep hit" data-n="08"></span>
+          <span class="ep hit" data-n="01"><span class="vh">try 1 caught it</span></span><span class="ep hit" data-n="02"><span class="vh">try 2 caught it</span></span>
+          <span class="ep hit" data-n="03"><span class="vh">try 3 caught it</span></span><span class="ep hit" data-n="04"><span class="vh">try 4 caught it</span></span>
+          <span class="ep" data-n="05"><span class="vh">try 5 missed it</span></span><span class="ep hit" data-n="06"><span class="vh">try 6 caught it</span></span>
+          <span class="ep" data-n="07"><span class="vh">try 7 missed it</span></span><span class="ep hit" data-n="08"><span class="vh">try 8 caught it</span></span>
         </div>
         <div class="score">6/8<small>tries caught the false fact</small></div>
       </div>
@@ -186,10 +227,10 @@ h1 span{color:var(--field);}
       <div class="arm">
         <div class="who tele"><span>[ SET B ] WITHOUT IT</span><span>+</span></div>
         <div class="epochs">
-          <span class="ep hit" data-n="01"></span><span class="ep" data-n="02"></span>
-          <span class="ep hit" data-n="03"></span><span class="ep" data-n="04"></span>
-          <span class="ep hit" data-n="05"></span><span class="ep" data-n="06"></span>
-          <span class="ep hit" data-n="07"></span><span class="ep" data-n="08"></span>
+          <span class="ep hit" data-n="01"><span class="vh">try 1 caught it</span></span><span class="ep" data-n="02"><span class="vh">try 2 missed it</span></span>
+          <span class="ep hit" data-n="03"><span class="vh">try 3 caught it</span></span><span class="ep" data-n="04"><span class="vh">try 4 missed it</span></span>
+          <span class="ep hit" data-n="05"><span class="vh">try 5 caught it</span></span><span class="ep" data-n="06"><span class="vh">try 6 missed it</span></span>
+          <span class="ep hit" data-n="07"><span class="vh">try 7 caught it</span></span><span class="ep" data-n="08"><span class="vh">try 8 missed it</span></span>
         </div>
         <div class="score">4/8<small>tries caught the false fact</small></div>
       </div>
@@ -206,7 +247,8 @@ h1 span{color:var(--field);}
     </div>
   </section>
 
-  <section class="key">
+  <section class="key" aria-labelledby="keyhead">
+    <h2 id="keyhead" class="vh">Where to go next</h2>
     <section>
       <div class="tele brass">01 ///</div>
       <h3><a href="#">Published determinations</a></h3>
@@ -228,6 +270,8 @@ h1 span{color:var(--field);}
     <div><a class="cta" href="#">Pull your own proof &gt;&gt;&gt;</a></div>
     <div><span class="tele">$ pip install skill-harness &nbsp;&nbsp;///&nbsp;&nbsp; MIT &nbsp;&nbsp; REV 2.6 &nbsp;&nbsp; ®</span></div>
   </section>
+
+  </main>
 
 </div>
 </body>
