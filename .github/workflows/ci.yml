@@ -496,10 +496,25 @@ jobs:
         # The error-level gate is the step below.
         continue-on-error: true
         run: |
-          vale --config .vale.ini README.md docs/
+          vale --config .vale.ini --glob='*.md' README.md docs/
       - name: Run Vale on prose (gate, error-level rows only)
+        # --glob='*.md' is load-bearing, and it is here because a screenshot reddened
+        # this gate. Vale walks EVERY file under docs/ regardless of type, and
+        # .vale.ini applies the Taste style under a `[*]` section, so the first PNG
+        # committed under docs/ produced thirteen Dressing errors -- each one a glyph
+        # Vale found by decoding image bytes as text. The prose was never at fault.
+        #
+        # An empty BasedOnStyles under an extension glob in .vale.ini does NOT fix
+        # this; it was tried and the thirteen errors survived. The flag is Vale's
+        # documented mechanism and it is the one that works.
+        #
+        # This narrows the walk from 146 files to 96. The 50 dropped are .py and .log
+        # files under docs/ that contributed no findings and were never this job's
+        # subject: it lints prose, and prose here means markdown. Any image, archive
+        # or PDF added under docs/ would have reddened this gate the same way, so the
+        # trap was latent rather than specific to one file.
         run: |
-          vale --config .vale.ini --minAlertLevel=error README.md docs/
+          vale --config .vale.ini --minAlertLevel=error --glob='*.md' README.md docs/
 
   all-green:
     name: All checks green
