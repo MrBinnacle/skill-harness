@@ -200,7 +200,7 @@ def build_site(
     if landing:
         nav.append((INDEX_FILE_NAME, "Home"))
     nav.append((receipts_page, "Receipts"))
-    nav.append((SCHEMA_PAGE_NAME, "Reporting standard"))
+    nav.append((SCHEMA_PAGE_NAME, "How results are reported"))
     shell = SiteShell(
         marker=marker,
         base_url=base_url,

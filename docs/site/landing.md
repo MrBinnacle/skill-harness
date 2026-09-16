@@ -1,8 +1,6 @@
 # Does this skill help?
 
 lead: It runs a task twice, with the skill and without it, then compares.
-detects: A control skill carried an invented fact. It scored 8 of 8 with the skill, and 0 of 8 without.
-control: That control is synthetic, so the run validates the instrument and not any real skill.
 evidence_is_thin: There is little data yet. No production skill has a KEEP verdict.
 
 ## Where to go next

@@ -16,22 +16,33 @@ YAML frontmatter and workflow YAML by regex for the same reason.
 
 The shape changed for issue #588. The page was a four-section document that
 introduced the instrument by listing what it refuses to claim, what it measures,
-how to install it, and where the verdicts land. It is now a heading, four hero
+how to install it, and where the verdicts land. It is now a heading, two hero
 sentences and exactly three pointers.
 
-The order of those sentences is the part a later pass is most likely to get
-wrong, so it is stated here. Capability comes before refusal. A refusal does not
-read as a strength to a reader who does not already hold the epistemics, so the
-page says what the instrument does, then that it finds an effect when an effect
-is present, then that there is little data yet. The owner decided that ordering
-on 2026-09-15 against rendered prototypes, and reopening it is a Direction
-decision rather than an implementation one.
+THE PAGE PUBLISHES NO SCORE, and that is a ruling rather than an oversight.
 
-``detects`` and ``control`` are two fields rather than one for the same reason.
-The 8-of-8 result belongs to a declared synthetic positive control, which this
-repository states is instrument validation and not a product claim. Splitting
-the number from its caveat means the build cannot render the number without the
-caveat beside it.
+An intermediate version of this change carried four hero sentences. Two of them
+were ``detects``, which printed "8 of 8 with the skill, and 0 of 8 without", and
+``control``, which said that control was synthetic so the run validated the
+instrument and not any real skill. They were two fields rather than one so that
+the build could not render the number without the caveat beside it.
+
+The independent review seat argued that this does not work on a reader. The
+figure was the only integer on the page. It answered the heading's question with
+a yes. The repository's own next sentence says no production skill has ever
+returned a KEEP. A caveat in the following paragraph is a subsequent sentence,
+not a cancellation, and coupling the two at build time is not coupling them in
+the reader. The owner accepted that argument on 2026-09-15 and cut the figure.
+
+So the guarantee moved from editorial to structural. There is no hero field that
+can carry a score, which is stronger than any rule about what must sit beside
+one. ``tests/sitegen/test_site_design_S455.py`` holds it at the rendered page.
+
+Cutting the figure is also what satisfies acceptance criterion 2. That criterion
+asks for the heading, the two sentences and the pointers on the first 360px
+screen. Four hero paragraphs and three pointers with supporting lines did not fit
+in 640px, and removing two of them is what puts all three pointers above the
+fold. The criterion is met rather than waived.
 
 Internal link targets are symbolic names, not paths. The receipts index lives at
 ``index.html`` or at ``receipts.html`` depending on whether the landing page is
@@ -58,12 +69,26 @@ from skill_harness.sitegen.render import (
 )
 
 #: The one ``##`` heading the page carries. Issue #588 replaced a four-section
-#: document with a heading, four hero sentences and three pointers.
+#: document with a heading, two hero sentences and three pointers.
 SECTION_TITLES: Final[tuple[str, ...]] = ("Where to go next",)
 
-#: The hero's fields, in the order the page prints them. Capability before
-#: refusal, per the owner's 2026-09-15 ordering decision on issue #588.
-HERO_FIELDS: Final[tuple[str, ...]] = ("lead", "detects", "control", "evidence_is_thin")
+#: The hero's fields, in the order the page prints them.
+#:
+#: THE CAPABILITY FIGURE IS GONE, and its absence is the rule (issue #588, owner's
+#: ruling of 2026-09-15). The hero used to carry ``detects`` and ``control``: a sentence
+#: printing "8 of 8 with the skill, and 0 of 8 without", and a sentence beneath it saying
+#: the control was synthetic.
+#:
+#: The independent review seat argued that the caveat does not neutralise the number for
+#: a skimmer. The figure was the only integer on the page, it answered the heading's
+#: question with a yes, and the repository's own next sentence says no production skill
+#: has ever returned a KEEP. Build-time coupling of figure and caveat is not reader-time
+#: coupling. The owner accepted that and cut the figure rather than re-wording the caveat.
+#:
+#: What remains is what acceptance criterion 2 asked for in the first place: a heading,
+#: two sentences and the pointers. Cutting the figure is also what lets the first 360px
+#: screen carry all three pointers, so the criterion is met rather than waived.
+HERO_FIELDS: Final[tuple[str, ...]] = ("lead", "evidence_is_thin")
 
 #: The page carries exactly three pointers. "Three pointers and nothing else"
 #: is the ticket's wording, so the count is held by the build rather than by a
@@ -101,8 +126,6 @@ class LandingCopy:
 
     heading: str
     lead: str
-    detects: str
-    control: str
     evidence_is_thin: str
     pointers: tuple[Pointer, ...]
 
@@ -154,7 +177,7 @@ def _split_sections(lines: Sequence[tuple[int, str]]) -> tuple[str, list[list[tu
 
 
 def _read_hero(lines: Sequence[tuple[int, str]]) -> dict[str, str]:
-    """The hero's four sentences, keyed by field name."""
+    """The hero sentences, keyed by field name."""
     fields: dict[str, str] = {}
     for number, line in lines:
         match = _FIELD_RE.match(line.strip())
@@ -234,8 +257,6 @@ def parse_landing(text: str) -> LandingCopy:
     return LandingCopy(
         heading=heading,
         lead=fields["lead"],
-        detects=fields["detects"],
-        control=fields["control"],
         evidence_is_thin=fields["evidence_is_thin"],
         pointers=_read_pointers(pointers),
     )
@@ -255,8 +276,6 @@ def render_landing_page(*, shell: SiteShell, copy: LandingCopy) -> str:
 
     body = _template("landing.html").substitute(
         lead=safe(copy.lead),
-        detects=safe(copy.detects),
-        control=safe(copy.control),
         evidence_is_thin=safe(copy.evidence_is_thin),
         pointers=_indent(
             [

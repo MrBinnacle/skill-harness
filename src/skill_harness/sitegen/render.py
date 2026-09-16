@@ -56,7 +56,7 @@ DEFAULT_BASE_URL: Final[str] = "https://mrbinnacle.github.io/skill-harness/"
 #: these two and the receipts item pointing at ``receipts.html``.
 DEFAULT_NAV: Final[tuple[tuple[str, str], ...]] = (
     (INDEX_FILE_NAME, "Receipts"),
-    (SCHEMA_PAGE_NAME, "Reporting standard"),
+    (SCHEMA_PAGE_NAME, "How results are reported"),
 )
 
 #: Written into ``<link rel="icon">`` when an icon file is supplied to the
@@ -375,7 +375,7 @@ def render_schema_page(*, shell: SiteShell, schema: Mapping[str, Any]) -> str:
     vocabulary_tables = [
         _vocabulary_section(name, subschema) for name, subschema in _vocabularies(schema)
     ]
-    title = _string_field(schema, "title", "Reporting standard")
+    title = _string_field(schema, "title", "How results are reported")
     body = _template("schema.html").substitute(
         description=safe(_string_field(schema, "description", "")),
         required_rows=_indent(required_rows, 8),

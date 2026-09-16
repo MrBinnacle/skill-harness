@@ -15,7 +15,6 @@ anyone remembering it.
 
 from __future__ import annotations
 
-import json
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -434,66 +433,57 @@ def test_the_landing_copy_fixture_parses() -> None:
     """The reader accepts the shape the brief fixes."""
     copy = parse_landing(_LANDING_COPY.read_text(encoding="utf-8"))
     assert copy.heading
-    assert copy.detects
-    assert copy.control
     assert copy.evidence_is_thin
     assert len(copy.pointers) == POINTER_COUNT
     assert len(copy.lead.split()) <= 20
 
 
-def test_the_capability_sentence_never_renders_without_its_caveat(tmp_path: Path) -> None:
-    """Issue #588: the 8-of-8 figure belongs to a declared synthetic control.
+def test_the_front_page_publishes_no_score(tmp_path: Path) -> None:
+    """Issue #588, the owner's ruling of 2026-09-15: no integer on the front page.
 
-    The owner's ordering comment requires the page to say so plainly rather
-    than let the number read as a win.
+    The page used to print "8 of 8 with the skill, and 0 of 8 without", with a
+    caveat sentence beneath it saying the control was synthetic. The independent
+    review seat argued the caveat does not neutralise the number for a skimmer:
+    the figure is the only integer on the page, it answers the headline's
+    question with a yes, and the repository's own next sentence says no
+    production skill has ever returned a KEEP. Build-time coupling of figure and
+    caveat is not reader-time coupling. The owner accepted that argument and cut
+    the figure rather than re-wording the caveat.
 
-    An earlier version of this test called ``parse_landing`` and asserted the
-    parser raised. An independent reviewer pointed out that it therefore never
-    rendered anything, so it proved the parser was fussy and left the template
-    free to emit the number without the caveat. The name claimed a render the
-    body never performed. This version builds the site and reads the page, so
-    the assertion is about the HTML a stranger receives.
+    So the guarantee is now structural instead of editorial. A score cannot
+    appear on this page, whatever sentence is written next to it. That is
+    stronger than the pair of tests this replaces, both of which assumed the
+    figure would stay and only policed what sat beside it.
+
+    The pattern is deliberately broad. It catches "8 of 8", "8/8" and "8 out of
+    8" alike, because the ruling is about a reader taking an integer, not about
+    one phrasing of one sentence.
     """
     output = _build(tmp_path / "site", landing=True)
     page = (output / "index.html").read_text(encoding="utf-8")
+    hero = page[page.index('<section class="hero">') : page.index("</section>")]
 
-    copy = parse_landing(_LANDING_COPY.read_text(encoding="utf-8"))
-    assert copy.detects in page
-    assert copy.control in page, (
-        "the rendered page carries the capability sentence without its caveat"
+    score = re.compile(r"\b\d+\s*(?:/|of|out of)\s*\d+\b", re.IGNORECASE)
+    found = score.findall(hero)
+    assert not found, (
+        f"the front page hero publishes a score, which the owner cut: {found!r}. "
+        "A figure here is the only integer a skimmer takes and it reads as the "
+        "answer to the heading."
     )
-    assert page.index(copy.detects) < page.index(copy.control), (
-        "the caveat must follow the figure it qualifies, not precede it"
-    )
 
 
-def test_the_published_figure_matches_the_receipt_it_came_from() -> None:
-    """Issue #588: no line may claim anything this repository cannot show.
+def test_the_landing_copy_carries_no_score_field(tmp_path: Path) -> None:
+    """The cut is held at the copy layer too, not only at the rendered page.
 
-    The capability sentence prints two integers. Copy is not data, so nothing
-    else in this change stops those integers drifting from the run that
-    produced them. This binds them to the receipt on disk. If the receipt
-    changes or the sentence is edited to a different score, this fails.
+    Deleting the fields from ``LandingCopy`` is what makes the figure
+    unrenderable. Without this, someone restoring a ``detects:`` line to
+    ``docs/site/landing.md`` would get a build refusal that reads as a parser
+    complaint rather than as the ruling it actually is.
     """
-    receipt = json.loads(
-        (_REPO / "docs" / "sers" / "receipts" / "synthetic-control-keep-2026-07-27.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    measurements = receipt["measurements"]
-    full = measurements["full_pass_rate"]
-    null = measurements["null_pass_rate"]
-    assert receipt["declared_synthetic_control"] is True, (
-        "the page calls this control synthetic; the receipt must agree"
-    )
-
-    sentence = parse_landing(_LANDING_COPY.read_text(encoding="utf-8")).detects
-    assert f"{full['passes']} of {full['epochs']}" in sentence, (
-        f"the page states a Full score the receipt does not: {sentence!r}"
-    )
-    assert f"{null['passes']} of {null['epochs']}" in sentence, (
-        f"the page states a Null score the receipt does not: {sentence!r}"
-    )
+    text = _LANDING_COPY.read_text(encoding="utf-8")
+    with pytest.raises(SiteBuildError) as caught:
+        parse_landing(text + "\ndetects: It scored 8 of 8 with the skill.\n")
+    assert "detects" in str(caught.value)
 
 
 def test_a_fourth_pointer_is_refused() -> None:
