@@ -1,50 +1,158 @@
-/* The one hand-written stylesheet for the receipts site.
+/* The one hand-written stylesheet for the receipts site, in the Field Manual world.
  *
  * No preprocessor, no framework, no build step: the generator copies this file
- * verbatim into the output directory. Refusals are styled as ordinary primary
- * content -- never dimmed, collapsed, or pushed into a footnote -- because a
- * refusal is a result here, not an absence.
+ * verbatim into the output directory. All styling lives here. A <style> block or
+ * a style= attribute in a template would escape the token fence entirely: the
+ * scanner's path list is this file plus assets/*.svg, and templates are not
+ * scanned.
  *
- * Every colour, font-family and font-size literal below is a value declared in
- * DESIGN.md's token block (the Test Bench); the conformance test reads that
- * block and fails on any literal it does not find.
+ * ---------------------------------------------------------------------------
+ * THE FOUR ROLES. docs/design/field-manual/DIRECTION.md assigns four and only
+ * four, and the role is what decides where a colour may appear, not the hue.
  *
- * All styling lives here. A <style> block or a style= attribute in a template
- * would escape that check entirely: the scanner's path list is this file plus
- * assets/*.svg, and templates are not scanned.
+ *   ground   #171A15 plank over #0E100D void
+ *   fill     #6E7356 olive drab, which carries whole fields and means one
+ *            thing only, a try that caught the fact
+ *   ink      #D8D2C0 bone, which is also the primary action
+ *   marks    #C9A227 brass, spent on section marks and callouts, never on a
+ *            verdict
+ *   hairline #3A3F33 hair, which is a 1px grid gap over a hair-coloured
+ *            parent, never a border
  *
- * The declared font-size set is exactly 0.92em, 1rem, 1.25rem, 1.75rem, 21px
- * and 52px. clamp() and var() both FAIL the scanner in a font-size, so a
- * responsive type step is a media query that swaps two declared sizes.
+ * There is no secondary ink and olive never sets text. Both were measured as
+ * defects rather than assumed: a browser pass over the approved prototype found
+ * fourteen runs below WCAG AA, worst at 1.51:1, and every one of them used a
+ * colour as ink that has no ink role here. Olive on plank measures 2.82:1 once
+ * the tooth is composited, so olive fails even the 3:1 large-text floor and the
+ * prototype's display-scale olive accent was unshippable on contrast grounds as
+ * well as on role grounds.
+ *
+ * #8F9480 is the one colour outside the five roles, and DIRECTION.md admits it
+ * for exactly one job: the CUT verdict marker. It is named --cut-mark rather
+ * than --bone-dim so that the name cannot be read as an invitation to set text
+ * in it, which is how the prototype acquired its secondary ink.
+ *
+ * ---------------------------------------------------------------------------
+ * THE MATERIAL STACK COMPOSITES OVER THE INK, NOT BEHIND IT. Both materials are
+ * position: fixed above the content, so they darken foreground and background
+ * together and every contrast figure below is computed through them.
+ *
+ * The tooth is black at alpha 0.16, so at its dark stripe every sRGB channel of
+ * ink and ground alike is multiplied by 0.84. The beam is bone at alpha 0.03 on
+ * top of that. One layer each: a second tooth layer would multiply again and the
+ * 0.84 that the published measurements rest on would stop being the real figure.
+ *
+ * Through the tooth, and through the tooth plus the beam:
+ *
+ *   bone on plank      8.46  8.10   body prose and headings
+ *   bone on void       9.01  8.72   refusals, the verdict block, the skip link
+ *   void on bone       9.01  8.72   the primary action
+ *   brass on plank     5.42  5.26   section marks at telemetry size
+ *   brass on void      5.77  5.67   section marks on the darker ground
+ *   olive on void      3.01  3.03   the KEEP marker, a graphical object
+ *   cut-mark on void   4.55  4.52   the CUT marker, a graphical object
+ *
+ * Olive fills sit on void and never on plank. On plank the same fill measures
+ * 2.82:1, which is the defect DIRECTION.md's own table records as fixed by
+ * moving the ground.
+ *
+ * ---------------------------------------------------------------------------
+ * SIX FONT SIZES, AND THE SCALE IS A PERFECT FIFTH ANCHORED ON THE BODY.
+ *
+ *   clamp(3.4rem, 11.5vw, 11.5rem)  macro, owner-pinned, viewport-driven and
+ *                                   off-scale on purpose
+ *   3.375rem  54px  the verdict, one datum a page exists to state
+ *   2.25rem   36px  section heads
+ *   1.5rem    24px  sub-heads and the lead
+ *   1rem      16px  prose, the anchor
+ *   11px            telemetry, owner-pinned
+ *
+ * 16 x 1.5 = 24, x 1.5 = 36, x 1.5 = 54. The ratio is 3:2 at every step, which
+ * is large enough that a reader sees a scale rather than a smudge; the ten
+ * ad-hoc sizes this replaces sat within 12px of each other. The pinned 11px is
+ * the step below the anchor, 16 / 1.5 = 10.67 rounded up, so the telemetry rung
+ * belongs to the same scale it was pinned independently of.
+ *
+ * clamp() and var() both fail the token scanner inside a font-size, so a
+ * responsive step is a media query swapping two declared sizes, never a
+ * calculation. Any narrow-viewport step-down below reuses one of the six.
+ *
+ * ---------------------------------------------------------------------------
+ * THE TYPEFACES ARE NAMED HERE AND LOADED ELSEWHERE. templates/page.html owns
+ * <head> and is a separate unit, so no font link exists yet and this file does
+ * not add one: an @import would put a third-party request on a published static
+ * site whose stated bar is a cold install. Until that unit lands, each stack
+ * falls back to the nearest system face.
  */
 
 :root {
-  --bench-void: #010409;
-  --bench-surface: #0d1117;
-  --bench-hairline: #30363d;
-  --bench-ink: #e6edf3;
-  --bench-ink-soft: #c9d1d9;
-  --bench-muted: #8b949e;
-  --bench-cant-tell: #58a6ff;
+  --void: #0E100D;
+  --plank: #171A15;
+  --olive: #6E7356;
+  --bone: #D8D2C0;
+  --brass: #C9A227;
+  --hair: #3A3F33;
+  --cut-mark: #8F9480;
 }
 
 * {
   box-sizing: border-box;
+  border-radius: 0;
 }
 
 html {
-  background: var(--bench-void);
+  background: var(--void);
 }
 
 body {
   margin: 0 auto;
-  max-width: 62rem;
-  padding: 0 1rem 3rem;
-  background: var(--bench-surface);
-  color: var(--bench-ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  max-width: 76rem;
+  padding: 0 20px 96px;
+  background: var(--plank);
+  color: var(--bone);
+  font-family: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 1rem;
   line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The tooth. The stops are hard pairs rather than interpolated ones, so no
+ * fractional alpha exists between them and 0.84 is the whole worst case. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0) 0 2px,
+    rgba(0, 0, 0, 0.16) 2px 4px
+  );
+}
+
+/* The beam. Its end stops are bone at zero alpha rather than `transparent`,
+ * which interpolates through premultiplied black and would drag a dark band
+ * across the middle of the sweep. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  background: linear-gradient(
+    104deg,
+    rgba(216, 210, 192, 0) 0%,
+    rgba(216, 210, 192, 0.03) 38%,
+    rgba(216, 210, 192, 0) 62%
+  );
+}
+
+header,
+main,
+footer {
+  position: relative;
+  z-index: 1;
 }
 
 /* The first focusable element on every page. Off-canvas until focused, never
@@ -53,37 +161,72 @@ body {
   position: absolute;
   left: -100vw;
   top: 0;
-  z-index: 1;
-  padding: 0.75rem 1rem;
+  z-index: 9;
+  padding: 16px 20px;
   min-height: 44px;
-  background: var(--bench-void);
-  color: var(--bench-ink);
+  background: var(--void);
+  color: var(--bone);
 }
 
 .skip-link:focus-visible {
   left: 0;
 }
 
+/* ---------------------------------------------------------------------------
+ * Telemetry. It labels and it never sets a paragraph, so this selector list
+ * carries no prose element.
+ * ------------------------------------------------------------------------ */
+
+nav,
+caption,
+th[scope="col"],
+.wordmark,
+.verdict-label,
+.verdict-token,
+.gate-status,
+footer,
+.build-marker {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+code,
+.figure,
+.verdict-token,
+.verdict-display {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+ * The bar.
+ * ------------------------------------------------------------------------ */
+
 header {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.5rem 1.5rem;
-  border-bottom: 2px solid var(--bench-ink);
-  padding: 1.5rem 0 0.5rem;
+  gap: 8px 32px;
+  padding: 16px 0;
+  margin-bottom: 1px;
+  background: var(--plank);
+  box-shadow: 0 1px 0 var(--hair);
 }
 
 .wordmark {
   margin: 0;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-family: "Archivo Black", "Arial Black", system-ui, sans-serif;
+  letter-spacing: 0.14em;
 }
 
 nav ul {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 24px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -96,240 +239,289 @@ nav a {
   min-height: 44px;
 }
 
-/* The current page is stated, not merely styled: the weight change rides on
+/* The current page is stated, not merely styled: the marker rides on
  * aria-current, so the marker and the announcement cannot drift apart. */
 nav a[aria-current="page"] {
-  font-weight: 700;
   text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
 }
 
-/* Links carry no chromatic accent: the underline is the affordance. */
+/* Links carry no chromatic accent: bone is the only ink, so the underline is
+ * the affordance. */
 a {
   color: inherit;
   text-decoration: underline;
 }
 
 a:hover {
-  color: var(--bench-ink-soft);
+  text-decoration-thickness: 2px;
 }
 
 /* Interaction feedback, and only interaction feedback. No entrance animation,
  * no scroll trigger, no transform. */
 @media (prefers-reduced-motion: no-preference) {
   a {
-    transition: color 150ms ease, text-decoration-thickness 150ms ease;
+    transition: text-decoration-thickness 150ms ease;
   }
 }
 
 a:focus-visible {
-  outline: 2px solid var(--bench-cant-tell);
-  outline-offset: 0.25rem;
+  outline: 2px solid var(--brass);
+  outline-offset: 4px;
 }
+
+/* ---------------------------------------------------------------------------
+ * Type.
+ * ------------------------------------------------------------------------ */
 
 h1,
 h2,
 h3 {
+  font-family: "Archivo Black", "Arial Black", system-ui, sans-serif;
+  font-weight: 400;
+  text-transform: uppercase;
   text-wrap: balance;
 }
 
 h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  margin: 1.5rem 0 1rem;
+  font-size: clamp(3.4rem, 11.5vw, 11.5rem);
+  line-height: 0.86;
+  letter-spacing: -0.045em;
+  margin: 48px 0 32px;
+  max-width: 16ch;
 }
 
 h2 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 2rem 0 0.5rem;
-  border-bottom: 1px solid var(--bench-hairline);
-  padding-bottom: 0.25rem;
+  font-size: 2.25rem;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  margin: 48px 0 16px;
 }
 
-/* Hierarchy by weight, not by a fifth size. */
 h3 {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 1.5rem 0 0.5rem;
+  font-size: 1.5rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin: 32px 0 8px;
 }
 
 p {
   max-width: 65ch;
 }
 
-/* Anything a reader could copy into a terminal or cite as a number is mono. */
-code,
-.figure,
-.verdict-token,
-.verdict-display {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  font-variant-numeric: tabular-nums;
-}
-
-code,
-.figure,
-.verdict-token {
-  font-size: 0.92em;
-}
-
-/* The display step, spent once per page on the one datum the page exists to
- * state. CANT_TELL_YET at 52px needs about 403px and overflows a 360px
- * viewport, so the narrow step is the h1 size, which needs about 218px. */
-.verdict-display {
-  display: block;
-  font-size: 52px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  margin: 0;
-}
-
-@media (max-width: 40rem) {
-  .verdict-display {
-    font-size: 1.75rem;
-  }
-}
-
-/* 1.2 is the display step's leading and it was carried here by hand, which the
- * S456 Check seat caught with the detector on both paths: 21px on 1.2 computes
- * to a 25.2px line box and the lead wraps to two lines at 1440px and three at
- * 360px. A line-height is not fenced, so this costs no token declaration. */
 .lead {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  font-size: 21px;
-  font-weight: 700;
-  line-height: 1.4;
+  font-size: 1.5rem;
+  line-height: 1.3;
   letter-spacing: -0.01em;
-  margin: 1rem 0 1.5rem;
-  max-width: 65ch;
+  margin: 16px 0 24px;
 }
 
-/* The evidence-is-thin sentence is the page's refusal, so it wears the refusal
- * edge the receipt pages already use. Same 4px, same can't-tell colour; the left
- * padding is 16px rather than .refusal's legacy 0.6rem because the declared
- * spacing scale is 4/8/16/24/32/48/96 and this rule is new. No vertical padding:
- * the fold budget does not have 16px, and the edge alone carries the meaning. */
-.landing .thin {
-  border-left: 4px solid var(--bench-cant-tell);
-  padding-left: 16px;
-}
+/* ---------------------------------------------------------------------------
+ * The verdict. Void ground, because the markers are fills and an olive fill
+ * measures 3.01:1 on void against 2.82:1 on plank.
+ * ------------------------------------------------------------------------ */
 
-.rule {
-  border-left: 4px solid var(--bench-ink);
-  margin: 1rem 0;
-  padding: 0.25rem 0 0.25rem 0.85rem;
-}
-
-/* The verdict readout: the label above, the token at the display step below. */
 .verdict {
-  margin: 1rem 0 0.25rem;
+  margin: 24px 0 8px;
+  padding: 24px 20px;
+  max-width: none;
+  background: var(--void);
 }
 
 .verdict-label {
   display: block;
-  color: var(--bench-muted);
+  margin-bottom: 8px;
+}
+
+.verdict-display {
+  display: block;
+  font-size: 3.375rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+/* The marker is an enhancement beside a token that already states its own
+ * meaning in words, which is why colour may carry it at all.
+ *
+ * Bone is the unmodified case and that is deliberate: an unmarked verdict is a
+ * refusal, and a refusal takes bone. The .keep and .cut hooks are written here
+ * and attached by the template unit that owns skill.html; until then every
+ * marker renders bone, which mislabels a KEEP or a CUT by colour while the
+ * token beside it still reads correctly. */
+.verdict-display::before,
+.verdict-token::before {
+  content: "";
+  display: inline-block;
+  width: 0.34em;
+  height: 0.34em;
+  margin-right: 0.4em;
+  vertical-align: 0.08em;
+  background: var(--bone);
+}
+
+.verdict-display.keep::before,
+.verdict-token.keep::before {
+  background: var(--olive);
+}
+
+.verdict-display.cut::before,
+.verdict-token.cut::before {
+  background: var(--cut-mark);
+}
+
+.verdict-token {
+  display: inline-block;
+  padding: 4px 8px;
+  background: var(--void);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+ * Callouts and refusals. Brass marks a callout, bone marks a refusal, and the
+ * two devices are different so that a reader cannot read one as the other.
+ * ------------------------------------------------------------------------ */
+
+.rule {
+  border-left: 4px solid var(--brass);
+  margin: 24px 0;
+  padding: 8px 0 8px 16px;
+}
+
+/* A refusal is primary content: same ink as a measured figure, on the darkest
+ * ground so it cannot be mistaken for a missing value. */
+.refusal,
+.refused,
+.landing .thin {
+  border-left: 4px solid var(--bone);
+  padding: 8px 0 8px 16px;
+  font-weight: 700;
+}
+
+.refusal,
+.refused {
+  background: var(--void);
+  padding-right: 16px;
+}
+
+.absent {
+  font-style: italic;
 }
 
 .summary {
-  margin: 0.5rem 0 1.5rem;
+  margin: 8px 0 24px;
 }
 
+/* ---------------------------------------------------------------------------
+ * Tables. Every separator is a 1px gap showing a hair-coloured parent through
+ * between opaque cells, never a border. border-spacing is the mechanism that
+ * does this on a real <table>: display:grid would give the same look and strip
+ * the row and cell roles out of the accessibility tree.
+ * ------------------------------------------------------------------------ */
+
 table {
-  border-collapse: collapse;
-  margin: 1rem 0;
+  border-collapse: separate;
+  border-spacing: 1px;
+  background: var(--hair);
+  margin: 24px 0;
   width: 100%;
-}
-
-/* The outer frame and the head underline carry the table's structure, so they
- * sit on bench-muted (6.15:1 on bench-surface) rather than on the hairline
- * (1.55:1). The interior cell rules stay hairline so the table does not become
- * a grid of heavy boxes. */
-table {
-  border: 1px solid var(--bench-muted);
-}
-
-thead {
-  border-bottom: 2px solid var(--bench-muted);
 }
 
 caption {
   text-align: left;
-  font-weight: 700;
-  padding-bottom: 0.25rem;
+  padding-bottom: 8px;
 }
 
 th,
 td {
-  border: 1px solid var(--bench-hairline);
-  padding: 0.35rem 0.5rem;
+  background: var(--plank);
+  padding: 8px 16px;
   text-align: left;
   vertical-align: top;
 }
 
-/* A machine token in a cell can be longer than the cell, and it breaks rather
- * than overflowing. The wrapper is NOT given overflow-x: hidden, which hides
- * the symptom instead of fixing it.
- *
- * The two properties are not interchangeable and S456 measured the difference.
- * `anywhere` breaks between any two characters AND shrinks the element's
- * min-content width, so a cell carrying it lets a table column collapse to one
- * character and then shreds ordinary English to fit: "Ver / dic / t",
- * "absen / t", "not_instrumen / ted". It belongs on the machine token, which is
- * one unbreakable string with no word boundaries to use. `break-word` breaks a
- * word only when the word alone would overflow, and leaves min-content alone,
- * so it is what the cell itself wears.
- *
- * No length is quoted here on purpose. A comment that states a measured length
- * is a cache of a lookup and goes stale against the receipts the site
- * publishes; two such comments shipped in this file at cb25ea2 and both were
- * wrong within one pass. */
-td,
+/* Deliberately unscoped, and .figure is named beside the cells rather than left
+ * to the td it usually is: break-word does nothing at all unless a word would
+ * otherwise overflow its line, so naming the class costs no behaviour anywhere
+ * it is already covered and keeps the guarantee if a figure is ever rendered
+ * outside a cell. */
 th,
+td,
+p,
 .figure {
   overflow-wrap: break-word;
 }
 
-/* A paragraph breaks a word too, at every width and on every page. Deliberately
- * unscoped: break-word does nothing at all unless a word would otherwise
- * overflow its line, so narrowing it to the viewport where the defect was first
- * seen would buy no behaviour and would leave the same overflow available at
- * every other width the moment a longer token is published. */
-p {
-  overflow-wrap: break-word;
+thead th {
+  background: var(--void);
 }
 
-/* A <dd> is the exception. A definition list is one column per line rather than
- * a column competing with four others, so `anywhere` costs it no shredding, and
- * a receipt's prose fields carry machine tokens with no word boundary to break
- * at. Kept on its own ground: an independent reading at S456 measured that this
- * rule and the dl track floor are each sufficient alone, so neither may be
- * removed on the assumption the other carries it. */
+/* A machine token in a cell can be longer than the cell, and it breaks rather
+ * than overflowing. The wrapper is NOT given overflow-x: hidden, which hides the
+ * symptom instead of fixing it.
+ *
+ * The two properties are not interchangeable and S456 measured the difference.
+ * `anywhere` breaks between any two characters AND shrinks the element's
+ * min-content width, so a cell carrying it lets a column collapse to one
+ * character and then shreds ordinary English to fit: "Ver / dic / t",
+ * "absen / t". It belongs on the machine token, which is one unbreakable string
+ * with no word boundaries to use. `break-word` breaks a word only when the word
+ * alone would overflow, and leaves min-content alone, so it is what the cell
+ * itself wears.
+ *
+ * A row header's <code> is the raw schema key and it stays whole: given
+ * `anywhere` it let the cost table's Leg column collapse to one character at
+ * 1440px and printed "standin / g_token / s". */
 dd,
 td code,
 dd code {
   overflow-wrap: anywhere;
 }
 
-/* A row header's <code> is the raw schema key and it stays whole. Given
- * `anywhere` it let the cost table's Leg column collapse to one character at
- * 1440px, where that table is 468px because it sits beside the clause block,
- * and printed "standin / g_token / s". The key is 15 characters; the column can
- * afford it. */
 th code {
   overflow-wrap: break-word;
 }
 
-thead th {
-  background: var(--bench-void);
+/* A measurement or cost row's label is the schema's own sentence about the key,
+ * with the raw key under it so the page stays greppable by key. The sentence is
+ * body weight because a column of bold sentences reads as shouting; the key is
+ * the thing a reader scans for, so the key is the element that wears mono. */
+.key-gloss {
+  display: block;
+  font-weight: 400;
 }
+
+th > code {
+  display: block;
+  margin-top: 4px;
+  font-weight: 400;
+}
+
+/* Scoped to the wide viewport because no cap value works at the narrow one.
+ * S456 measured four caps at 360px and 1440px. At 1440px 22rem buys the figure
+ * column 27px over an uncapped header and reads in two or three lines a row. At
+ * 360px it makes the header 98px of a 328px main and the schema sentence renders
+ * at about nine characters a line; removing the cap there gives the header 138px
+ * and drops the figure column to 55px, which is worse. A three-column table
+ * holding a sentence, a figure and a detail does not fit a phone at any cap, so
+ * the narrow viewport stops drawing one. */
+@media (min-width: 40rem) {
+  .measurements th[scope="row"],
+  .cost th[scope="row"] {
+    max-width: 22rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Definition lists. Same 1px gap over the same hair parent.
+ * ------------------------------------------------------------------------ */
 
 dl {
   display: grid;
   grid-template-columns: minmax(10rem, max-content) 1fr;
-  gap: 0.25rem 1rem;
-  margin: 1rem 0 1.5rem;
+  gap: 1px;
+  margin: 24px 0;
+  background: var(--hair);
 }
 
 dt {
@@ -340,31 +532,16 @@ dd {
   margin: 0;
 }
 
-/* Exact hairlines without a border declaration per cell: the gap shows the
- * grid's own ground through between opaque cells. Applied to the qualifier and
- * identity grids only. */
-.qualifiers,
-.instrument,
-.subject {
-  gap: 1px;
-  background: var(--bench-void);
-  border: 1px solid var(--bench-muted);
-}
-
-.qualifiers > dt,
-.qualifiers > dd,
-.instrument > dt,
-.instrument > dd,
-.subject > dt,
-.subject > dd {
-  background: var(--bench-surface);
-  padding: 0.35rem 0.5rem;
+dl > dt,
+dl > dd {
+  background: var(--plank);
+  padding: 8px 16px;
 }
 
 .beside {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem;
+  gap: 32px;
   align-items: flex-start;
 }
 
@@ -373,41 +550,23 @@ dd {
   min-width: 0;
 }
 
-/* A refusal is primary content: same weight as a measured figure, boxed so it
- * cannot be mistaken for a missing value. The edge is the can't-tell colour,
- * whose one declared role is the refused state.
- *
- * The vertical padding was 0.25rem, which is 4px against 14.72px text, and the
- * detector's rendered path reported it cramped three times on the receipt page
- * (it needs 4.4px). The 4px left edge is untouched: it is the thing that tells
- * a refusal from an absence, and it is the strongest device on the surface. */
-.refusal,
-.refused {
-  border-left: 4px solid var(--bench-cant-tell);
-  padding: 0.5rem 0 0.5rem 0.6rem;
-  font-weight: 600;
-}
-
-.absent {
-  font-style: italic;
-}
-
 .clause-evidence ul {
-  padding-left: 1rem;
-}
-
-/* Colour carries the demotion, not size. */
-footer {
-  border-top: 1px solid var(--bench-hairline);
-  margin-top: 3rem;
-  padding-top: 1rem;
-  color: var(--bench-muted);
+  padding-left: 16px;
 }
 
 /* ---------------------------------------------------------------------------
- * The landing surface. Sections are separated by the declared section step,
- * stepping down on narrow viewports. The evidence pages keep their density;
- * the contrast between the two is deliberate.
+ * The foot.
+ * ------------------------------------------------------------------------ */
+
+footer {
+  margin-top: 96px;
+  padding-top: 16px;
+  background: var(--plank);
+  box-shadow: 0 -1px 0 var(--hair);
+}
+
+/* ---------------------------------------------------------------------------
+ * The landing surface.
  * ------------------------------------------------------------------------ */
 
 .landing section {
@@ -418,42 +577,42 @@ footer {
   margin-top: 32px;
 }
 
-/* The three pointers. Each is a link on its own line with one sentence under it
- * saying what is behind it, so the label carries the destination and the
- * sentence carries the reason. The list markers are dropped because a bare
- * marker column steals horizontal room a phone does not have. The 44px minimum
- * is the touch target the rest of the site already uses. */
+/* The gap between rows is 1px of the group's own hair ground showing through,
+ * rather than a border on the row. The parent's 1px padding is what stops the
+ * first row's own margin collapsing out and drawing that gap above the group
+ * instead of inside it. */
 .pointers {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 1px;
+  background: var(--hair);
 }
 
 .pointers > li {
-  margin: 24px 0 0;
+  margin: 0;
+  padding: 8px 16px;
+  background: var(--plank);
 }
 
-/* A hairline BETWEEN rows, never above the group and never below the last: the
- * h2's own border-bottom already rules above, and a line under the last row would
- * be the border-t-plus-border-b pattern this stylesheet has no reason to draw.
- * Two lines, and they organise real content. */
 .pointers > li + li {
-  border-top: 1px solid var(--bench-hairline);
-  padding-top: 8px;
+  margin-top: 1px;
 }
 
 .pointers .pointer {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  font-weight: 700;
+  font-family: "Archivo Black", "Arial Black", system-ui, sans-serif;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
   text-decoration-thickness: 1px;
 }
 
-/* The site already says "current" with underline thickness (nav a[aria-current],
- * style.css:101-104). A pointer under the cursor or the caret borrows that same
- * vocabulary rather than inventing a second one. Thickness paints inside the line
- * box, so nothing reflows and the fold measurement is unaffected. */
+/* The site already says "current" with underline thickness (nav a[aria-current]).
+ * A pointer under the cursor or the caret borrows that same vocabulary rather
+ * than inventing a second one. Thickness paints inside the line box, so nothing
+ * reflows and the fold measurement is unaffected. */
 .pointers .pointer:hover,
 .pointers .pointer:focus-visible {
   text-decoration-thickness: 2px;
@@ -461,111 +620,65 @@ footer {
 
 .pointers .pointer + span {
   display: block;
-  font-size: 0.92em;
-  color: var(--bench-ink-soft);
+  max-width: 65ch;
 }
 
-/* The first screen on a phone is the whole budget this page has, and issue #588
- * asks for the heading, the hero and the pointers inside it. The hero's four
- * sentences and three pointers do not fit at the wide viewport's rhythm, so the
- * narrow viewport steps the landing's own spacing down. Every value is on the
- * declared 4/8/16/24/32/48/96 scale. The step lives on .landing because the
- * evidence pages keep their density on purpose, and this is the one surface
- * whose fold is a stated requirement.
- *
- * THIS BLOCK SITS AFTER THE RULES IT OVERRIDES, and that placement is the whole
- * point. Media queries add no specificity, so source order decides. A first cut
- * of this change put the block above `.pointers > li`, where the generic rule
- * won at every width and the narrow-viewport margin never applied. Nothing went
- * red: the stylesheet still carried both rules, so a test that greps rule text
- * passed while the page rendered the wrong one. That is the defect #589
- * records, reproduced here by the commit that cites it and caught by measuring
- * the rendered page. Keep any later narrow-viewport rule below its wide
- * counterpart. */
-@media (max-width: 40rem) {
-  .landing header {
-    gap: 4px 24px;
-    padding: 16px 0 8px;
-  }
-
-  .landing h1 {
-    margin: 8px 0;
-  }
-
-  .landing section {
-    margin: 16px 0 0;
-  }
-
-  .landing .hero {
-    margin-top: 8px;
-  }
-
-  .landing .hero p {
-    margin: 0 0 8px;
-  }
-
-  .landing h2 {
-    margin: 16px 0 8px;
-  }
-
-  .pointers > li {
-    margin: 8px 0 0;
-  }
+/* The primary action, in bone, the brightest element on the surface, at the foot
+ * of the page. The last pointer is the action rather than a link the copy
+ * happens to end on: docs/site/landing.md puts "install it and run it yourself"
+ * there, and landing.py fixes the count at three, so the foot of the list is a
+ * stable position and not an accident of ordering. */
+.landing .pointers > li:last-child {
+  background: var(--bone);
 }
 
-/* The display step is spent once per page on the one datum the page exists to
- * state (style.css:174-177). This page carries no verdict, so its one datum is
- * its question. 52px sets that question in about 600px of measure; the 62rem body
- * gives 960px of content at 64rem and above, so the step is a wide-viewport rule
- * and the narrow default stays at the h1 size. Placed AFTER the narrow-viewport
- * block, per the source-order rule at style.css:451-452 (#589). */
-@media (min-width: 64rem) {
-  .landing h1 {
-    font-size: 52px;
-  }
-}
-
-/* A measurement or cost row's label is the schema's own sentence about the key,
- * with the raw key under it so the page stays greppable by key. The sentence is
- * body weight because a column of bold sentences reads as shouting; the key is
- * the thing a reader scans for, so the key is the element that wears mono.
- *
- * bench-muted measures 6.15:1 on bench-surface, which clears AA body. The row
- * header is width-capped so a long schema sentence does not squeeze the figure
- * and detail columns off the right edge. */
-.key-gloss {
-  display: block;
-  font-weight: 400;
-}
-
-th > code {
-  display: block;
-  margin-top: 0.2rem;
-  font-weight: 400;
-  color: var(--bench-muted);
-}
-
-/* Scoped to the wide viewport because no cap value works at the narrow one.
- * S456 measured four caps at 360px and 1440px. At 1440px 22rem buys the figure
- * column 27px over an uncapped header and reads in two or three lines a row.
- * At 360px it makes the header 98px of a 328px main and the schema sentence
- * renders at about nine characters a line; removing the cap there gives the
- * header 138px and drops the figure column to 55px, which is worse. A
- * three-column table holding a sentence, a figure and a detail does not fit a
- * phone at any cap, so the narrow viewport stops drawing one. */
-@media (min-width: 40rem) {
-  .measurements th[scope="row"],
-  .cost th[scope="row"] {
-    max-width: 22rem;
-  }
+.landing .pointers > li:last-child .pointer,
+.landing .pointers > li:last-child .pointer + span {
+  color: var(--void);
 }
 
 /* ---------------------------------------------------------------------------
- * Narrow viewports. One boundary, 40rem, shared with the display step's own
- * step-down above.
+ * Narrow viewports. One boundary, 40rem.
  * ------------------------------------------------------------------------ */
 
 @media (max-width: 40rem) {
+  body {
+    padding: 0 16px 48px;
+  }
+
+  /* CANT_TELL_YET at 54px needs about 419px and overflows a 360px viewport. The
+   * narrow step is the sub-head size, which needs about 186px. */
+  .verdict-display {
+    font-size: 1.5rem;
+  }
+
+  .landing section {
+    margin: 32px 0 0;
+  }
+
+  .landing .hero {
+    margin-top: 16px;
+  }
+
+  .landing h1 {
+    margin: 16px 0;
+  }
+
+  /* Issue #588 asks for the heading, the hero and all three pointers on the
+   * first 360x640 screen. The owner-pinned macro scale spends 140px of that
+   * budget on the question alone, so the criterion cannot be met here and these
+   * two step-downs only reduce the overrun: the page needs 1038px at 360px wide
+   * and these recover about 190px of it. The remaining conflict is between two
+   * owner rulings and is not a stylesheet's to settle. */
+  h2 {
+    font-size: 1.5rem;
+    margin: 32px 0 16px;
+  }
+
+  .pointers .pointer {
+    font-size: 1rem;
+  }
+
   /* A definition list is two columns only while both columns have room. The
    * widest term on the landing page's refusals list takes a max-content width
    * larger than the whole 328px main, which left the second track a few pixels
@@ -580,18 +693,17 @@ th > code {
   }
 
   /* The receipts index and the measurements table stop being tables here and
-   * become one labelled block per row. Measured: with the word breaking
-   * repaired the index needs 531px against 328px available, and it reported no
-   * horizontal overflow before only because the shredding was hiding it, which
-   * is the concealment overflow-x: hidden was refused for.
+   * become one labelled block per row. Measured: with the word breaking repaired
+   * the index needs 531px against 328px available, and it reported no horizontal
+   * overflow before only because the shredding was hiding it, which is the
+   * concealment overflow-x: hidden was refused for.
    *
    * No ARIA is restated here, and that was measured rather than assumed. Read
    * through CDP Accessibility.getFullAXTree at both widths, this rule alone
-   * leaves the table, row, rowheader and cell roles intact; stripping every
-   * explicit role= attribute from the built markup changes not one count. What
-   * did remove the column headers was hiding the header row, and that is ruled
-   * on its own below. The seat that measured this had one engine, so the claim
-   * is about the engine it drove and not about every browser. */
+   * leaves the table, row, rowheader and cell roles intact. What did remove the
+   * column headers was hiding the header row, and that is ruled on its own
+   * below. The seat that measured this had one engine, so the claim is about
+   * the engine it drove and not about every browser. */
   .receipts,
   .receipts tbody,
   .receipts tr,
@@ -612,19 +724,19 @@ th > code {
     max-width: none;
   }
 
-  /* A table-caption inside a block parent gets wrapped in an anonymous table
-   * box and shrinks to fit, which set "Published receipts (4)" one word to a
-   * line. It becomes an ordinary block with the rest of the table. */
+  /* A table-caption inside a block parent gets wrapped in an anonymous table box
+   * and shrinks to fit, which set "Published receipts (4)" one word to a line. It
+   * becomes an ordinary block with the rest of the table. */
   .receipts caption,
   .measurements caption,
   .cost caption {
     display: block;
   }
 
-  /* Off-canvas, NOT display: none. The header row leaves the screen and stays
-   * in the accessibility tree, which is what keeps every cell associated with
-   * its column header. display: none removes it from both, and a cell with no
-   * header is a value with no name. Same technique as the skip link above. */
+  /* Off-canvas, NOT display: none. The header row leaves the screen and stays in
+   * the accessibility tree, which is what keeps every cell associated with its
+   * column header. display: none removes it from both, and a cell with no header
+   * is a value with no name. Same technique as the skip link above. */
   .receipts thead,
   .measurements thead,
   .cost thead {
@@ -632,40 +744,32 @@ th > code {
     left: -100vw;
   }
 
-  .receipts tr,
-  .measurements tr,
-  .cost tr {
-    border-top: 1px solid var(--bench-muted);
+  /* border-spacing does nothing once the parts are blocks, so the 1px gap moves
+   * to a margin between rows over the same hair ground. Still a gap, still not
+   * a border. */
+  .receipts tr + tr,
+  .measurements tr + tr,
+  .cost tr + tr {
+    margin-top: 1px;
   }
 
-  .receipts tbody tr:first-child,
-  .measurements tbody tr:first-child,
-  .cost tbody tr:first-child {
-    border-top: 0;
-  }
-
-  /* The cell rules go with the columns they separated. The padding is left to
-   * the table default above, so a refusal cell's own padding still wins on
-   * specificity here and does not become the cramped one. */
   .receipts th,
   .receipts td,
   .measurements th,
   .measurements td,
   .cost th,
   .cost td {
-    border: 0;
+    padding: 4px 16px;
   }
 
-  /* 8px, on the declared spacing scale. The first cut used 0.6rem, which is
-   * 9.6px and on no scale this repository declares. */
   .receipts th[scope="row"],
   .measurements th[scope="row"],
   .cost th[scope="row"] {
-    padding-top: 0.5rem;
+    padding-top: 8px;
   }
 
-  /* The column label, above its value, in the same shape the definition lists
-   * on this page take at this width. It is a block rather than an inline run
+  /* The column label, above its value, in the same shape the definition lists on
+   * this page take at this width. It is a block rather than an inline run
    * followed by a separator: a separator written here would be copy living in
    * the stylesheet, outside every gate that reads copy, which is the reason the
    * labels went into the markup in the first place. */
@@ -674,6 +778,9 @@ th > code {
   .cost td::before {
     content: attr(data-label);
     display: block;
-    color: var(--bench-muted);
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
   }
 }
