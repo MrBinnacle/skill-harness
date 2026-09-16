@@ -23,7 +23,7 @@ import pytest
 
 from skill_harness.sitegen import DEFAULT_BASE_URL, build_site
 from skill_harness.sitegen.__main__ import _parser
-from skill_harness.sitegen.landing import SECTION_TITLES, parse_landing
+from skill_harness.sitegen.landing import POINTER_COUNT, SECTION_TITLES, parse_landing
 from skill_harness.sitegen.render import SiteBuildError
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -112,6 +112,22 @@ def test_the_landing_page_is_off_by_default(tmp_path: Path) -> None:
     This is the ordering rule made mechanical. If the default ever flips, this
     test fails before the site publishes a page that claims more than the
     receipts behind it support.
+
+    Issue #588's fourth acceptance criterion asks for this default to be
+    reconciled with the new front page, or for the reason it survives to be
+    stated. It survives, and this is the reason.
+
+    The ordering rule is that a landing page amplifies whatever is true,
+    including the parts that are not, so it comes after claim integrity. Claim
+    integrity is not done: issue #587 is open and names four published sentences
+    this repository contradicts. Flipping the default now would publish the new
+    page over an unfixed claim set, which is the exact sequence the rule exists
+    to prevent, and polish would raise the confidence a reader places in claims
+    that have not been checked.
+
+    So #588 builds the page and #587 is what unblocks the flip. The page is
+    reachable today with --landing, and every test in this file that covers it
+    runs with the flag on.
     """
     output = _build(tmp_path / "site")
 
@@ -417,9 +433,89 @@ def test_the_landing_copy_fixture_parses() -> None:
     """The reader accepts the shape the brief fixes."""
     copy = parse_landing(_LANDING_COPY.read_text(encoding="utf-8"))
     assert copy.heading
-    assert copy.refusals
-    assert copy.commands
+    assert copy.evidence_is_thin
+    assert len(copy.pointers) == POINTER_COUNT
     assert len(copy.lead.split()) <= 20
+
+
+def test_the_front_page_publishes_no_score(tmp_path: Path) -> None:
+    """Issue #588, the owner's ruling of 2026-09-15: no integer on the front page.
+
+    The page used to print "8 of 8 with the skill, and 0 of 8 without", with a
+    caveat sentence beneath it saying the control was synthetic. The independent
+    review seat argued the caveat does not neutralise the number for a skimmer:
+    the figure is the only integer on the page, it answers the headline's
+    question with a yes, and the repository's own next sentence says no
+    production skill has ever returned a KEEP. Build-time coupling of figure and
+    caveat is not reader-time coupling. The owner accepted that argument and cut
+    the figure rather than re-wording the caveat.
+
+    So the guarantee is now structural instead of editorial. A score cannot
+    appear on this page, whatever sentence is written next to it. That is
+    stronger than the pair of tests this replaces, both of which assumed the
+    figure would stay and only policed what sat beside it.
+
+    The pattern is deliberately broad. It catches "8 of 8", "8/8" and "8 out of
+    8" alike, because the ruling is about a reader taking an integer, not about
+    one phrasing of one sentence.
+    """
+    output = _build(tmp_path / "site", landing=True)
+    page = (output / "index.html").read_text(encoding="utf-8")
+    hero = page[page.index('<section class="hero">') : page.index("</section>")]
+
+    score = re.compile(r"\b\d+\s*(?:/|of|out of)\s*\d+\b", re.IGNORECASE)
+    found = score.findall(hero)
+    assert not found, (
+        f"the front page hero publishes a score, which the owner cut: {found!r}. "
+        "A figure here is the only integer a skimmer takes and it reads as the "
+        "answer to the heading."
+    )
+
+
+def test_the_landing_copy_carries_no_score_field(tmp_path: Path) -> None:
+    """The cut is held at the copy layer too, not only at the rendered page.
+
+    Deleting the fields from ``LandingCopy`` is what makes the figure
+    unrenderable. Without this, someone restoring a ``detects:`` line to
+    ``docs/site/landing.md`` would get a build refusal that reads as a parser
+    complaint rather than as the ruling it actually is.
+    """
+    text = _LANDING_COPY.read_text(encoding="utf-8")
+    with pytest.raises(SiteBuildError) as caught:
+        parse_landing(text + "\ndetects: It scored 8 of 8 with the skill.\n")
+    assert "detects" in str(caught.value)
+
+
+def test_a_fourth_pointer_is_refused() -> None:
+    """Issue #588: three pointers and nothing else, held by the build.
+
+    A reviewer counting bullets is the control this replaces.
+    """
+    text = _LANDING_COPY.read_text(encoding="utf-8")
+    text += "- One more -> https://example.invalid/\n  A fourth pointer.\n"
+    with pytest.raises(SiteBuildError) as caught:
+        parse_landing(text)
+    assert str(POINTER_COUNT) in str(caught.value)
+
+
+def test_a_pointer_without_a_supporting_line_is_refused() -> None:
+    """Issue #588: each pointer says what is behind it and why to want it.
+
+    The line to strip is read out of the parsed copy rather than written here.
+    A hardcoded sentence makes this test pass vacuously the moment the copy is
+    edited: it would remove nothing, the parse would succeed, and the control
+    would be gone with nothing going red. That happened once while this change
+    was being written.
+    """
+    text = _LANDING_COPY.read_text(encoding="utf-8")
+    support = parse_landing(text).pointers[0].support
+    assert support in text, "the support line could not be located in the copy"
+    stripped = text.replace(support + "\n", "", 1)
+    assert stripped != text, "nothing was removed, so this test would pass vacuously"
+
+    with pytest.raises(SiteBuildError) as caught:
+        parse_landing(stripped)
+    assert "supporting line" in str(caught.value)
 
 
 def test_a_sixth_section_is_refused() -> None:
@@ -430,16 +526,22 @@ def test_a_sixth_section_is_refused() -> None:
     assert "Testimonials" in str(caught.value)
 
 
-def test_reordering_the_sections_is_refused() -> None:
-    """Brief halt item 8: the order is fixed too, not only the count."""
-    text = _LANDING_COPY.read_text(encoding="utf-8")
-    swapped = text.replace("## " + SECTION_TITLES[2], "## " + SECTION_TITLES[3]).replace(
-        "## " + SECTION_TITLES[3] + "\n\n- Published", "## " + SECTION_TITLES[2] + "\n\n- Published"
+def test_renaming_the_section_is_refused() -> None:
+    """Brief halt item 8: the section set is fixed, not only its size.
+
+    This test pinned section ORDER until issue #588 cut the page to one
+    section, where order is not a thing a document can get wrong. The rule that
+    survives is the one order was a special case of: the heading set is the
+    build's to hold, and a rename is a Direction decision. Pinning the rename
+    keeps a live control here rather than deleting an assertion because its
+    original phrasing stopped applying.
+    """
+    text = _LANDING_COPY.read_text(encoding="utf-8").replace(
+        "## " + SECTION_TITLES[0], "## Further reading", 1
     )
-    if swapped == text:  # pragma: no cover - the fixture always carries both
-        pytest.skip("the fixture does not carry both headings to swap")
-    with pytest.raises(SiteBuildError):
-        parse_landing(swapped)
+    with pytest.raises(SiteBuildError) as caught:
+        parse_landing(text)
+    assert "Further reading" in str(caught.value)
 
 
 def test_an_unrecognised_construct_is_refused_rather_than_dropped() -> None:
@@ -449,8 +551,8 @@ def test_an_unrecognised_construct_is_refused_rather_than_dropped() -> None:
     invites, and it is the one this reader exists to refuse.
     """
     text = _LANDING_COPY.read_text(encoding="utf-8").replace(
-        "## " + SECTION_TITLES[1],
-        "## " + SECTION_TITLES[1] + "\n\n> A block quote the reader does not know.",
+        "## " + SECTION_TITLES[0],
+        "## " + SECTION_TITLES[0] + "\n\n> A block quote the reader does not know.",
         1,
     )
     with pytest.raises(SiteBuildError):

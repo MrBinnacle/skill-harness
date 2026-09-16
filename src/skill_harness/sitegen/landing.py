@@ -8,15 +8,41 @@ reads ``docs/**/*.md``, and the file sits beside the rest of the prose a reader
 can send a correction about.
 
 **This is not a Markdown parser.** It reads a deliberately tiny fixed subset
-keyed to the five sections the design brief fixes, and it raises
-``SiteBuildError`` on any construct it does not recognise rather than silently
-dropping copy. A Markdown library would break the cold-install contract, and a
-general hand-rolled parser would be a new bug surface. The repository already
-parses YAML frontmatter and workflow YAML by regex for the same reason.
+keyed to the shape the design brief fixes, and it raises ``SiteBuildError`` on
+any construct it does not recognise rather than silently dropping copy. A
+Markdown library would break the cold-install contract, and a general
+hand-rolled parser would be a new bug surface. The repository already parses
+YAML frontmatter and workflow YAML by regex for the same reason.
 
-The four section headings are pinned here verbatim. A sixth section, a renamed
-section or a reordering fails the build, which is how the brief's fixed
-structure is held by a machine instead of by memory.
+The shape changed for issue #588. The page was a four-section document that
+introduced the instrument by listing what it refuses to claim, what it measures,
+how to install it, and where the verdicts land. It is now a heading, two hero
+sentences and exactly three pointers.
+
+THE PAGE PUBLISHES NO SCORE, and that is a ruling rather than an oversight.
+
+An intermediate version of this change carried four hero sentences. Two of them
+were ``detects``, which printed "8 of 8 with the skill, and 0 of 8 without", and
+``control``, which said that control was synthetic so the run validated the
+instrument and not any real skill. They were two fields rather than one so that
+the build could not render the number without the caveat beside it.
+
+The independent review seat argued that this does not work on a reader. The
+figure was the only integer on the page. It answered the heading's question with
+a yes. The repository's own next sentence says no production skill has ever
+returned a KEEP. A caveat in the following paragraph is a subsequent sentence,
+not a cancellation, and coupling the two at build time is not coupling them in
+the reader. The owner accepted that argument on 2026-09-15 and cut the figure.
+
+So the guarantee moved from editorial to structural. There is no hero field that
+can carry a score, which is stronger than any rule about what must sit beside
+one. ``tests/sitegen/test_site_design_S455.py`` holds it at the rendered page.
+
+Cutting the figure is also what satisfies acceptance criterion 2. That criterion
+asks for the heading, the two sentences and the pointers on the first 360px
+screen. Four hero paragraphs and three pointers with supporting lines did not fit
+in 640px, and removing two of them is what puts all three pointers above the
+fold. The criterion is met rather than waived.
 
 Internal link targets are symbolic names, not paths. The receipts index lives at
 ``index.html`` or at ``receipts.html`` depending on whether the landing page is
@@ -42,13 +68,32 @@ from skill_harness.sitegen.render import (
     safe,
 )
 
-#: The four ``##`` headings, in the one order the brief fixes.
-SECTION_TITLES: Final[tuple[str, ...]] = (
-    "What it refuses to claim",
-    "What it measures, in the instrument's own terms",
-    "Install",
-    "Where the verdicts land",
-)
+#: The one ``##`` heading the page carries. Issue #588 replaced a four-section
+#: document with a heading, two hero sentences and three pointers.
+SECTION_TITLES: Final[tuple[str, ...]] = ("Where to go next",)
+
+#: The hero's fields, in the order the page prints them.
+#:
+#: THE CAPABILITY FIGURE IS GONE, and its absence is the rule (issue #588, owner's
+#: ruling of 2026-09-15). The hero used to carry ``detects`` and ``control``: a sentence
+#: printing "8 of 8 with the skill, and 0 of 8 without", and a sentence beneath it saying
+#: the control was synthetic.
+#:
+#: The independent review seat argued that the caveat does not neutralise the number for
+#: a skimmer. The figure was the only integer on the page, it answered the heading's
+#: question with a yes, and the repository's own next sentence says no production skill
+#: has ever returned a KEEP. Build-time coupling of figure and caveat is not reader-time
+#: coupling. The owner accepted that and cut the figure rather than re-wording the caveat.
+#:
+#: What remains is what acceptance criterion 2 asked for in the first place: a heading,
+#: two sentences and the pointers. Cutting the figure is also what lets the first 360px
+#: screen carry all three pointers, so the criterion is met rather than waived.
+HERO_FIELDS: Final[tuple[str, ...]] = ("lead", "evidence_is_thin")
+
+#: The page carries exactly three pointers. "Three pointers and nothing else"
+#: is the ticket's wording, so the count is held by the build rather than by a
+#: reviewer counting bullets.
+POINTER_COUNT: Final[int] = 3
 
 #: Symbolic link targets the generator resolves. Anything else must be an
 #: absolute ``https://`` URL, so a target can never be a path that is right in
@@ -56,9 +101,23 @@ SECTION_TITLES: Final[tuple[str, ...]] = (
 _SYMBOLIC_TARGETS: Final[tuple[str, ...]] = ("receipts", "reporting-standard")
 
 _HEADING_RE: Final[re.Pattern[str]] = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*$")
-_FIELD_RE: Final[re.Pattern[str]] = re.compile(r"^(?P<key>[a-z]+):\s+(?P<value>.+?)\s*$")
-_TERM_RE: Final[re.Pattern[str]] = re.compile(r"^-\s+\*\*(?P<term>[^*]+)\*\*:\s+(?P<body>.+?)\s*$")
+_FIELD_RE: Final[re.Pattern[str]] = re.compile(r"^(?P<key>[a-z_]+):\s+(?P<value>.+?)\s*$")
 _LINK_RE: Final[re.Pattern[str]] = re.compile(r"^-\s+(?P<label>.+?)\s+->\s+(?P<target>\S+)\s*$")
+
+
+@dataclass(frozen=True)
+class Pointer:
+    """One of the three pointers: where it goes, and why a reader would follow.
+
+    A frozen dataclass rather than a 3-tuple. The three strings travel together
+    through the reader, the copy object and the template loop, which is the
+    shape that wants a type, and ``pointer[2]`` says nothing about what it
+    holds where ``pointer.support`` does.
+    """
+
+    label: str
+    target: str
+    support: str
 
 
 @dataclass(frozen=True)
@@ -67,14 +126,8 @@ class LandingCopy:
 
     heading: str
     lead: str
-    claim: str
-    action_label: str
-    action_target: str
-    refusals: tuple[tuple[str, str], ...]
-    measures: tuple[str, ...]
-    commands: tuple[str, ...]
-    install_notes: tuple[str, ...]
-    links: tuple[tuple[str, str], ...]
+    evidence_is_thin: str
+    pointers: tuple[Pointer, ...]
 
 
 def _refuse(line_number: int, line: str, reason: str) -> SiteBuildError:
@@ -85,7 +138,7 @@ def _refuse(line_number: int, line: str, reason: str) -> SiteBuildError:
 
 
 def _blocks(text: str) -> list[tuple[int, str]]:
-    """Every non-blank line with its 1-based line number."""
+    """Every non-blank line with its 1-based line number, leading space kept."""
     return [
         (number, line.rstrip())
         for number, line in enumerate(text.splitlines(), start=1)
@@ -94,7 +147,7 @@ def _blocks(text: str) -> list[tuple[int, str]]:
 
 
 def _split_sections(lines: Sequence[tuple[int, str]]) -> tuple[str, list[list[tuple[int, str]]]]:
-    """The h1 text, then one list of lines per section: hero, then the four fixed ones."""
+    """The h1 text, then one list of lines per section: hero, then the fixed ones."""
     if not lines:
         raise SiteBuildError("docs/site/landing.md is empty")
     first_number, first_line = lines[0]
@@ -106,7 +159,7 @@ def _split_sections(lines: Sequence[tuple[int, str]]) -> tuple[str, list[list[tu
     sections: list[list[tuple[int, str]]] = [[]]
     seen_titles: list[str] = []
     for number, line in lines[1:]:
-        found = _HEADING_RE.match(line)
+        found = _HEADING_RE.match(line.strip())
         if found is None:
             sections[-1].append((number, line))
             continue
@@ -123,20 +176,20 @@ def _split_sections(lines: Sequence[tuple[int, str]]) -> tuple[str, list[list[tu
     return heading, sections
 
 
-def _read_hero(lines: Sequence[tuple[int, str]]) -> tuple[str, str, str, str]:
-    """The hero's four fields: lead, claim, action label, action target."""
+def _read_hero(lines: Sequence[tuple[int, str]]) -> dict[str, str]:
+    """The hero sentences, keyed by field name."""
     fields: dict[str, str] = {}
     for number, line in lines:
-        match = _FIELD_RE.match(line)
+        match = _FIELD_RE.match(line.strip())
         if match is None:
             raise _refuse(number, line, "the hero reads only 'key: value' lines")
         key = match.group("key")
-        if key not in {"lead", "claim", "action"}:
+        if key not in HERO_FIELDS:
             raise _refuse(number, line, f"unknown hero field {key!r}")
         if key in fields:
             raise _refuse(number, line, f"hero field {key!r} is stated twice")
         fields[key] = match.group("value")
-    missing = [key for key in ("lead", "claim", "action") if key not in fields]
+    missing = [key for key in HERO_FIELDS if key not in fields]
     if missing:
         raise SiteBuildError(f"docs/site/landing.md hero is missing: {missing}")
     if len(fields["lead"].split()) > 20:
@@ -144,10 +197,7 @@ def _read_hero(lines: Sequence[tuple[int, str]]) -> tuple[str, str, str, str]:
             "docs/site/landing.md hero lead is longer than 20 words. The hero holds one "
             "sentence, and a longer one means the statement is not settled."
         )
-    label, _, target = fields["action"].partition(" -> ")
-    if not target:
-        raise SiteBuildError("docs/site/landing.md hero action must read 'label -> target'")
-    return fields["lead"], fields["claim"], label.strip(), _checked_target(target.strip())
+    return fields
 
 
 def _checked_target(target: str) -> str:
@@ -160,73 +210,55 @@ def _checked_target(target: str) -> str:
     )
 
 
-def _read_refusals(lines: Sequence[tuple[int, str]]) -> tuple[tuple[str, str], ...]:
-    rows: list[tuple[str, str]] = []
-    for number, line in lines:
-        match = _TERM_RE.match(line)
-        if match is None:
-            raise _refuse(number, line, "this section reads only '- **term**: sentence' lines")
-        rows.append((match.group("term"), match.group("body")))
-    if not rows:
-        raise SiteBuildError("docs/site/landing.md states no refusals")
-    return tuple(rows)
+def _read_pointers(lines: Sequence[tuple[int, str]]) -> tuple[Pointer, ...]:
+    """Each pointer is a link line followed by one supporting line.
 
-
-def _read_paragraphs(lines: Sequence[tuple[int, str]], section: str) -> tuple[str, ...]:
-    for number, line in lines:
-        if line.startswith(("-", "#", "|", ">", "    ", "\t")) or _FIELD_RE.match(line):
-            raise _refuse(number, line, f"the {section!r} section reads only paragraph lines")
-    paragraphs = tuple(line for _, line in lines)
-    if not paragraphs:
-        raise SiteBuildError(f"docs/site/landing.md section {section!r} is empty")
-    return paragraphs
-
-
-def _read_install(lines: Sequence[tuple[int, str]]) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    commands: list[str] = []
-    notes: list[tuple[int, str]] = []
-    for number, line in lines:
-        match = _FIELD_RE.match(line)
-        if match is not None:
-            if match.group("key") != "command":
-                raise _refuse(number, line, "the install section's only field is 'command'")
-            commands.append(match.group("value"))
-            continue
-        notes.append((number, line))
-    if not commands:
-        raise SiteBuildError("docs/site/landing.md install section states no command")
-    return tuple(commands), _read_paragraphs(notes, "Install")
-
-
-def _read_links(lines: Sequence[tuple[int, str]]) -> tuple[tuple[str, str], ...]:
-    rows: list[tuple[str, str]] = []
-    for number, line in lines:
-        match = _LINK_RE.match(line)
+    The supporting line is required. The ticket's wording is that each pointer
+    says what is behind it and why a reader would want it, so a pointer without
+    one fails the build rather than rendering a bare link.
+    """
+    rows: list[Pointer] = []
+    index = 0
+    while index < len(lines):
+        number, line = lines[index]
+        match = _LINK_RE.match(line.strip())
         if match is None:
             raise _refuse(number, line, "this section reads only '- label -> target' lines")
-        rows.append((match.group("label"), _checked_target(match.group("target"))))
-    if not rows:
-        raise SiteBuildError("docs/site/landing.md states nowhere to go")
+        if index + 1 >= len(lines):
+            raise _refuse(number, line, "this pointer has no supporting line beneath it")
+        support_number, support_line = lines[index + 1]
+        if _LINK_RE.match(support_line.strip()) is not None:
+            raise _refuse(
+                support_number,
+                support_line,
+                "this pointer has no supporting line beneath it",
+            )
+        rows.append(
+            Pointer(
+                label=match.group("label"),
+                target=_checked_target(match.group("target")),
+                support=support_line.strip(),
+            )
+        )
+        index += 2
+    if len(rows) != POINTER_COUNT:
+        raise SiteBuildError(
+            f"docs/site/landing.md states {len(rows)} pointer(s) and the page carries exactly "
+            f"{POINTER_COUNT}. Issue #588 fixes the count: three pointers and nothing else."
+        )
     return tuple(rows)
 
 
 def parse_landing(text: str) -> LandingCopy:
-    """Read the landing copy, refusing anything the five-section shape does not allow."""
+    """Read the landing copy, refusing anything the fixed shape does not allow."""
     heading, sections = _split_sections(_blocks(text))
-    hero, refusals, measures, install, links = sections
-    lead, claim, action_label, action_target = _read_hero(hero)
-    commands, install_notes = _read_install(install)
+    hero, pointers = sections
+    fields = _read_hero(hero)
     return LandingCopy(
         heading=heading,
-        lead=lead,
-        claim=claim,
-        action_label=action_label,
-        action_target=action_target,
-        refusals=_read_refusals(refusals),
-        measures=_read_paragraphs(measures, SECTION_TITLES[1]),
-        commands=commands,
-        install_notes=install_notes,
-        links=_read_links(links),
+        lead=fields["lead"],
+        evidence_is_thin=fields["evidence_is_thin"],
+        pointers=_read_pointers(pointers),
     )
 
 
@@ -244,27 +276,12 @@ def render_landing_page(*, shell: SiteShell, copy: LandingCopy) -> str:
 
     body = _template("landing.html").substitute(
         lead=safe(copy.lead),
-        claim=safe(copy.claim),
-        action_href=safe(_href(shell, copy.action_target)),
-        action_label=safe(copy.action_label),
-        refusal_rows=_indent(
+        evidence_is_thin=safe(copy.evidence_is_thin),
+        pointers=_indent(
             [
-                f"<dt>{safe(term)}</dt><dd>{safe(body_text)}</dd>"
-                for term, body_text in copy.refusals
-            ],
-            10,
-        ),
-        measures_paragraphs=_indent(
-            [f"<p>{safe(paragraph)}</p>" for paragraph in copy.measures], 8
-        ),
-        install_commands=_indent(
-            [f"<code>{safe(command)}</code>" for command in copy.commands], 10
-        ),
-        install_paragraphs=_indent([f"<p>{safe(note)}</p>" for note in copy.install_notes], 8),
-        verdict_links=_indent(
-            [
-                f'<li><a href="{safe(_href(shell, target))}">{safe(label)}</a></li>'
-                for label, target in copy.links
+                f'<li><a class="pointer" href="{safe(_href(shell, pointer.target))}">'
+                f"{safe(pointer.label)}</a><span>{safe(pointer.support)}</span></li>"
+                for pointer in copy.pointers
             ],
             10,
         ),

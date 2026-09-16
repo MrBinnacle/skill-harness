@@ -117,7 +117,7 @@ a:hover {
  * no scroll trigger, no transform. */
 @media (prefers-reduced-motion: no-preference) {
   a {
-    transition: color 150ms ease;
+    transition: color 150ms ease, text-decoration-thickness 150ms ease;
   }
 }
 
@@ -163,8 +163,7 @@ p {
 code,
 .figure,
 .verdict-token,
-.verdict-display,
-.lead {
+.verdict-display {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   font-variant-numeric: tabular-nums;
 }
@@ -198,11 +197,23 @@ code,
  * to a 25.2px line box and the lead wraps to two lines at 1440px and three at
  * 360px. A line-height is not fenced, so this costs no token declaration. */
 .lead {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   font-size: 21px;
   font-weight: 700;
   line-height: 1.4;
+  letter-spacing: -0.01em;
   margin: 1rem 0 1.5rem;
   max-width: 65ch;
+}
+
+/* The evidence-is-thin sentence is the page's refusal, so it wears the refusal
+ * edge the receipt pages already use. Same 4px, same can't-tell colour; the left
+ * padding is 16px rather than .refusal's legacy 0.6rem because the declared
+ * spacing scale is 4/8/16/24/32/48/96 and this rule is new. No vertical padding:
+ * the fold budget does not have 16px, and the edge alone carries the meaning. */
+.landing .thin {
+  border-left: 4px solid var(--bench-cant-tell);
+  padding-left: 16px;
 }
 
 .rule {
@@ -403,46 +414,115 @@ footer {
   margin: 96px 0 0;
 }
 
-@media (max-width: 40rem) {
-  .landing section {
-    margin: 48px 0 0;
-  }
-}
-
 .landing .hero {
   margin-top: 32px;
 }
 
-.landing .action {
+/* The three pointers. Each is a link on its own line with one sentence under it
+ * saying what is behind it, so the label carries the destination and the
+ * sentence carries the reason. The list markers are dropped because a bare
+ * marker column steals horizontal room a phone does not have. The 44px minimum
+ * is the touch target the rest of the site already uses. */
+.pointers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pointers > li {
+  margin: 24px 0 0;
+}
+
+/* A hairline BETWEEN rows, never above the group and never below the last: the
+ * h2's own border-bottom already rules above, and a line under the last row would
+ * be the border-t-plus-border-b pattern this stylesheet has no reason to draw.
+ * Two lines, and they organise real content. */
+.pointers > li + li {
+  border-top: 1px solid var(--bench-hairline);
+  padding-top: 8px;
+}
+
+.pointers .pointer {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 0.5rem 0;
   font-weight: 700;
+  text-decoration-thickness: 1px;
 }
 
-/* The negation list: a term and what the instrument does instead, on the same
- * hairline grid the evidence pages use, so the two surfaces read as one site. */
-.refusals {
-  gap: 1px;
-  background: var(--bench-void);
-  border: 1px solid var(--bench-muted);
+/* The site already says "current" with underline thickness (nav a[aria-current],
+ * style.css:101-104). A pointer under the cursor or the caret borrows that same
+ * vocabulary rather than inventing a second one. Thickness paints inside the line
+ * box, so nothing reflows and the fold measurement is unaffected. */
+.pointers .pointer:hover,
+.pointers .pointer:focus-visible {
+  text-decoration-thickness: 2px;
 }
 
-.refusals > dt,
-.refusals > dd {
-  background: var(--bench-surface);
-  padding: 0.35rem 0.5rem;
-}
-
-.install {
-  margin: 1rem 0;
-  padding: 0.25rem 0 0.25rem 0.85rem;
-  border-left: 4px solid var(--bench-ink);
-}
-
-.install code {
+.pointers .pointer + span {
   display: block;
+  font-size: 0.92em;
+  color: var(--bench-ink-soft);
+}
+
+/* The first screen on a phone is the whole budget this page has, and issue #588
+ * asks for the heading, the hero and the pointers inside it. The hero's four
+ * sentences and three pointers do not fit at the wide viewport's rhythm, so the
+ * narrow viewport steps the landing's own spacing down. Every value is on the
+ * declared 4/8/16/24/32/48/96 scale. The step lives on .landing because the
+ * evidence pages keep their density on purpose, and this is the one surface
+ * whose fold is a stated requirement.
+ *
+ * THIS BLOCK SITS AFTER THE RULES IT OVERRIDES, and that placement is the whole
+ * point. Media queries add no specificity, so source order decides. A first cut
+ * of this change put the block above `.pointers > li`, where the generic rule
+ * won at every width and the narrow-viewport margin never applied. Nothing went
+ * red: the stylesheet still carried both rules, so a test that greps rule text
+ * passed while the page rendered the wrong one. That is the defect #589
+ * records, reproduced here by the commit that cites it and caught by measuring
+ * the rendered page. Keep any later narrow-viewport rule below its wide
+ * counterpart. */
+@media (max-width: 40rem) {
+  .landing header {
+    gap: 4px 24px;
+    padding: 16px 0 8px;
+  }
+
+  .landing h1 {
+    margin: 8px 0;
+  }
+
+  .landing section {
+    margin: 16px 0 0;
+  }
+
+  .landing .hero {
+    margin-top: 8px;
+  }
+
+  .landing .hero p {
+    margin: 0 0 8px;
+  }
+
+  .landing h2 {
+    margin: 16px 0 8px;
+  }
+
+  .pointers > li {
+    margin: 8px 0 0;
+  }
+}
+
+/* The display step is spent once per page on the one datum the page exists to
+ * state (style.css:174-177). This page carries no verdict, so its one datum is
+ * its question. 52px sets that question in about 600px of measure; the 62rem body
+ * gives 960px of content at 64rem and above, so the step is a wide-viewport rule
+ * and the narrow default stays at the h1 size. Placed AFTER the narrow-viewport
+ * block, per the source-order rule at style.css:451-452 (#589). */
+@media (min-width: 64rem) {
+  .landing h1 {
+    font-size: 52px;
+  }
 }
 
 /* A measurement or cost row's label is the schema's own sentence about the key,
