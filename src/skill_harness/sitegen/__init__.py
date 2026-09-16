@@ -36,6 +36,7 @@ from skill_harness.sitegen.landing import parse_landing, render_landing_page
 from skill_harness.sitegen.render import (
     DEFAULT_BASE_URL,
     FAVICON_NAME,
+    FONTS_DIR_NAME,
     INDEX_FILE_NAME,
     NOT_FOUND_PAGE_NAME,
     RECEIPTS_PAGE_NAME,
@@ -45,6 +46,7 @@ from skill_harness.sitegen.render import (
     STYLESHEET_NAME,
     SiteBuildError,
     SiteShell,
+    read_fonts,
     read_stylesheet,
     render_index_page,
     render_not_found_page,
@@ -242,6 +244,11 @@ def build_site(
         _write(output_dir / STYLESHEET_NAME, read_stylesheet()),
         _write(output_dir / SCHEMA_FILE_NAME, schema_text),
     ]
+    (output_dir / FONTS_DIR_NAME).mkdir()
+    for font_name, font_bytes in read_fonts():
+        font_target = output_dir / font_name
+        font_target.write_bytes(font_bytes)
+        written.append(font_target)
     if social_bytes is not None:
         social_target = output_dir / SOCIAL_IMAGE_NAME
         social_target.write_bytes(social_bytes)

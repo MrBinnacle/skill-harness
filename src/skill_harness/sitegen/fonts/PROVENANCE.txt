@@ -1,0 +1,22 @@
+Self-hosted typefaces for the receipts site.
+
+Each WOFF2 file here is the latin subset published by Fontsource, fetched from
+https://cdn.jsdelivr.net/fontsource/fonts/ on 2026-09-16, and each ships beside
+the SIL Open Font License 1.1 text that covers it.
+
+  archivo-latin-variable.woff2          archivo:vf@latest/latin-wght-normal.woff2
+  archivo-black-latin-400.woff2         archivo-black@latest/latin-400-normal.woff2
+  jetbrains-mono-latin-variable.woff2   jetbrains-mono:vf@latest/latin-wght-normal.woff2
+
+sha256:
+  25f33e61cf995abd6be62931cf03bf427286259177b43618cc410ee0157cfd30  archivo-black-latin-400.woff2
+  8f704806dbedeaaeca334b11ec348bc3ac3a439d6431544b3afb54f534ee4967  archivo-latin-variable.woff2
+  18be452724bfdc236c074ca94a249a7f41a86752c7d04ab258ce9ed5651f6a7e  jetbrains-mono-latin-variable.woff2
+
+The OFL texts come from google/fonts: ofl/archivo/OFL.txt, ofl/archivoblack/OFL.txt
+and ofl/jetbrainsmono/OFL.txt. They are not byte-identical to upstream. This
+repository's pre-commit hooks strip trailing whitespace and normalise line
+endings, and they rewrote these files on the commit that added them. The licence
+terms are unchanged; only whitespace is. No hash is recorded for them for that
+reason, and the hashes above cover the binaries alone, which the hooks leave
+untouched.

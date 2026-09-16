@@ -22,10 +22,13 @@
  * There is no secondary ink and olive never sets text. Both were measured as
  * defects rather than assumed: a browser pass over the approved prototype found
  * fourteen runs below WCAG AA, worst at 1.51:1, and every one of them used a
- * colour as ink that has no ink role here. Olive on plank measures 2.82:1 once
- * the tooth is composited, so olive fails even the 3:1 large-text floor and the
- * prototype's display-scale olive accent was unshippable on contrast grounds as
- * well as on role grounds.
+ * colour as ink that has no ink role here. Olive on plank measured 2.82:1
+ * through the banded tooth that preceded this one, so olive failed even the 3:1
+ * large-text floor and the prototype's display-scale olive accent was
+ * unshippable on contrast grounds as well as on role grounds. The tooth is
+ * lighter now, which moves that figure up by a fraction and not across the
+ * floor; it is left as the figure that was measured rather than adjusted by
+ * arithmetic on a composite that is no longer uniform.
  *
  * #8F9480 is the one colour outside the five roles, and DIRECTION.md admits it
  * for exactly one job: the CUT verdict marker. It is named --cut-mark rather
@@ -37,22 +40,36 @@
  * position: fixed above the content, so they darken foreground and background
  * together and every contrast figure below is computed through them.
  *
- * The tooth is black at alpha 0.16, so at its dark stripe every sRGB channel of
- * ink and ground alike is multiplied by 0.84. The beam is bone at alpha 0.03 on
- * top of that. One layer each: a second tooth layer would multiply again and the
- * 0.84 that the published measurements rest on would stop being the real figure.
+ * The tooth is black noise whose alpha varies per pixel between 0.04 and 0.14,
+ * so no single multiplier describes it and the figures below are sampled from
+ * rendered pixels rather than computed from the literals. The beam is bone at
+ * alpha 0.03 on top of that. One layer each: a second tooth layer would multiply
+ * again and the sampled figures would stop being the real ones.
  *
- * Through the tooth, and through the tooth plus the beam:
+ * Sampled at 1440x900 from decoded screenshot pixels, glyph core against the
+ * median of the same line box, which is background because glyph coverage is a
+ * minority of any line. Eight runs, two pages, all above the 4.5 floor:
  *
- *   bone on plank      8.46  8.10   body prose and headings
- *   bone on void       9.01  8.72   refusals, the verdict block, the skip link
- *   void on bone       9.01  8.72   the primary action
- *   brass on plank     5.42  5.26   section marks at telemetry size
- *   brass on void      5.77  5.67   section marks on the darker ground
- *   olive on void      3.01  3.03   the KEEP marker, a graphical object
- *   cut-mark on void   4.55  4.52   the CUT marker, a graphical object
+ *   landing  macro h1           bone on plank    9.86
+ *   landing  lead prose         bone on plank    9.83
+ *   landing  wordmark           bone on plank   10.07
+ *   landing  nav item           bone on plank    9.95
+ *   landing  primary action     void on bone    10.13
+ *   receipt  macro h1           bone on plank   10.06
+ *   receipt  verdict display    bone on void    10.78
+ *   receipt  verdict label      bone on void     7.52
  *
- * Olive fills sit on void and never on plank. On plank the same fill measures
+ * The verdict label is the low figure because it is 11px mono and the extreme
+ * pixel inside it is a subpixel fringe rather than the glyph core; the core
+ * itself measures with the rest.
+ *
+ * Three colours have no rendered instance to sample. Brass appears only as
+ * outline-color and border-left-color, and no .rule element exists on either
+ * page at rest. Olive and cut-mark are verdict markers, and the .keep and .cut
+ * hooks below are attached by the template unit that owns skill.html, so every
+ * marker on the site today renders bone.
+ *
+ * Olive fills sit on void and never on plank. On plank the same fill measured
  * 2.82:1, which is the defect DIRECTION.md's own table records as fixed by
  * moving the ground.
  *
@@ -78,12 +95,44 @@
  * calculation. Any narrow-viewport step-down below reuses one of the six.
  *
  * ---------------------------------------------------------------------------
- * THE TYPEFACES ARE NAMED HERE AND LOADED ELSEWHERE. templates/page.html owns
- * <head> and is a separate unit, so no font link exists yet and this file does
- * not add one: an @import would put a third-party request on a published static
- * site whose stated bar is a cold install. Until that unit lands, each stack
- * falls back to the nearest system face.
+ * THE TYPEFACES ARE SELF-HOSTED AND THE @font-face BLOCK IS WHY NO TEMPLATE
+ * CHANGE WAS NEEDED. templates/page.html owns <head> and is a separate unit, so
+ * a <link> was not available; @font-face reaches the same faces from inside the
+ * one file this unit owns. No @import and no CDN href appears anywhere here,
+ * because the site's stated bar is a cold install and a third-party runtime
+ * request fails it whatever the request is for.
+ *
+ * The binaries are WOFF2 latin subsets vendored under fonts/, each beside the
+ * OFL text that licenses it. Archivo and JetBrains Mono ship as one variable
+ * file apiece spanning 100 to 900, which is smaller than the two static weights
+ * each would otherwise need; Archivo Black has one weight and ships static.
  */
+
+/* swap, not block: the fallback stack renders immediately and the real face
+ * replaces it on arrival, so a slow font never costs the reader the text. */
+@font-face {
+  font-family: "Archivo";
+  src: url("fonts/archivo-latin-variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Archivo Black";
+  src: url("fonts/archivo-black-latin-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/jetbrains-mono-latin-variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   --void: #0E100D;
@@ -116,19 +165,32 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* The tooth. The stops are hard pairs rather than interpolated ones, so no
- * fractional alpha exists between them and 0.84 is the whole worst case. */
+/* The tooth: fractal noise, rasterised from an inline SVG filter and tiled.
+ *
+ * It was hard 2px bands of repeating-linear-gradient and that was wrong twice
+ * over. A band has an edge, and an edge the width of the whole viewport lands
+ * ON the macro glyphs and the bone action panel, so the surface read as
+ * interlacing rather than as paper. impeccable's detector reached the same
+ * verdict from the other side and flagged it as repeating-stripes-gradient on
+ * two pages. A tooth is per-pixel and directionless, which is what feTurbulence
+ * produces and what no gradient can.
+ *
+ * The feColorMatrix alpha row is 0.1 x R + 0.04, so the black it paints lands
+ * between alpha 0.04 and 0.14 rather than at a flat 0.16. Every composite is
+ * therefore lighter than the banded tooth was at its dark stripe, and the table
+ * above is the re-measured result, not the old one carried forward.
+ *
+ * color-interpolation-filters is sRGB because the default is linearRGB, which
+ * would push the same matrix to a different alpha distribution than the one the
+ * ratios above were measured against. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: 8;
   pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0) 0 2px,
-    rgba(0, 0, 0, 0.16) 2px 4px
-  );
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='t' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.1 0 0 0 0.04'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23t)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
 }
 
 /* The beam. Its end stops are bone at zero alpha rather than `transparent`,
@@ -274,6 +336,17 @@ a:focus-visible {
  * Type.
  * ------------------------------------------------------------------------ */
 
+/* A heading on this site carries a machine token: an h1 is a skill name and an
+ * h3 in the vocabulary is a schema key. Both are set in Archivo Black at a size
+ * that does not fall with the viewport, and neither offers a break Chrome will
+ * take, so at 360px the token painted past the screen while every element box
+ * stayed inside its parent. That is why the page reported horizontal scroll and
+ * an element sweep found nothing: the overflow was ink, not layout.
+ *
+ * break-word rather than anywhere, for the reason spelled out at the cells
+ * below. It breaks a word only when that word alone would overflow the line, so
+ * an ordinary heading is untouched and a heading that would otherwise overflow
+ * is broken at the last possible moment. */
 h1,
 h2,
 h3 {
@@ -281,6 +354,7 @@ h3 {
   font-weight: 400;
   text-transform: uppercase;
   text-wrap: balance;
+  overflow-wrap: break-word;
 }
 
 h1 {

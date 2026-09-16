@@ -38,6 +38,10 @@ from skill_harness.extractor.clause_evidence import (
 _PACKAGE: Final[str] = "skill_harness.sitegen"
 
 STYLESHEET_NAME: Final[str] = "style.css"
+#: Self-hosted WOFF2 faces and their OFL texts. The name is the same in the
+#: package and in the output, so the ``url()`` in ``style.css`` is one relative
+#: path that resolves in both places.
+FONTS_DIR_NAME: Final[str] = "fonts"
 SCHEMA_FILE_NAME: Final[str] = "sers.schema.json"
 INDEX_FILE_NAME: Final[str] = "index.html"
 SCHEMA_PAGE_NAME: Final[str] = "schema.html"
@@ -138,6 +142,30 @@ def skill_page_name(skill_name: str) -> str:
 def read_stylesheet() -> str:
     """The one hand-written stylesheet, copied verbatim into the output."""
     return _package_text(STYLESHEET_NAME)
+
+
+def read_fonts() -> tuple[tuple[str, bytes], ...]:
+    """Every file under ``fonts/``, paired with the name it takes in the output.
+
+    The licence text travels with the binary rather than being linked from a
+    README, because a published site is the only copy a stranger receives and an
+    OFL font shipped without its licence is a redistribution defect.
+
+    Missing files raise instead of shipping a site whose ``@font-face`` rules
+    resolve to nothing: a silent fallback to Arial Black is exactly the defect
+    this directory exists to end, and it is invisible until someone looks.
+    """
+    directory = resources.files(_PACKAGE).joinpath(FONTS_DIR_NAME)
+    names = sorted(
+        entry.name
+        for entry in directory.iterdir()
+        if entry.is_file() and entry.name.endswith((".woff2", ".txt"))
+    )
+    if not any(name.endswith(".woff2") for name in names):
+        raise SiteBuildError(f"{FONTS_DIR_NAME}/ carries no WOFF2 file; refusing to build")
+    return tuple(
+        (f"{FONTS_DIR_NAME}/{name}", directory.joinpath(name).read_bytes()) for name in names
+    )
 
 
 # ---------------------------------------------------------------------------

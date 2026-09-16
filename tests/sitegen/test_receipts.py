@@ -38,7 +38,7 @@ from skill_harness.extractor.models import (
 )
 from skill_harness.sitegen import SiteBuildError, build_site, load_receipts, load_schema
 from skill_harness.sitegen.__main__ import main as sitegen_main
-from skill_harness.sitegen.render import ABSENT_TEXT, skill_page_name
+from skill_harness.sitegen.render import ABSENT_TEXT, read_fonts, skill_page_name
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCHEMA = _REPO_ROOT / "docs" / "sers" / "sers.schema.json"
@@ -646,13 +646,24 @@ def test_repo_receipts_build_a_page_each_with_no_warnings(tmp_path: Path) -> Non
     # an address that is not on the site, and it needs the shell like any other
     # page. The social preview joins it too whenever those bytes are supplied,
     # which _build does not do.
-    expected = {
-        "index.html",
-        "schema.html",
-        "404.html",
-        "style.css",
-        "sers.schema.json",
-    } | {skill_page_name(receipt["skill_name"]) for receipt in receipts}
+    #
+    # The font set joins it once the site self-hosts its faces. The names come
+    # from read_fonts() rather than a list typed here, and that is not a scan
+    # that passes whatever it finds: read_fonts() raises SiteBuildError when the
+    # directory carries no WOFF2, so an emptied fonts/ fails the build before it
+    # reaches this assertion. The equality is kept rather than relaxed, so a font
+    # the build forgets to write still fails here.
+    expected = (
+        {
+            "index.html",
+            "schema.html",
+            "404.html",
+            "style.css",
+            "sers.schema.json",
+        }
+        | {skill_page_name(receipt["skill_name"]) for receipt in receipts}
+        | {Path(name).name for name, _ in read_fonts()}
+    )
     assert {path.name for path in written} == expected
     for page in sorted(output.glob("*.html")):
         ET.parse(page)  # semantic markup, well-formed enough to parse
