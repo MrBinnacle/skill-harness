@@ -23,7 +23,8 @@ H1 is what every type-conditional reading of a null in this instrument silently 
 `aggregation/verdict.py` already branches on it: `CUT` is withheld unless the class is
 `TRANSFORMATIVE_LIFT`, and `TRAP_DISCIPLINE` takes its own path when `outcome_type` is
 `invariant`. `tests/test_value_class_call_sites_static.py` refuses any call site that omits the
-argument. So H1 is not a proposal. It is load-bearing in shipped code and has never been tested.
+argument. So H1 is not a proposal. Shipped code already depends on it, and it has never been
+tested.
 
 **The precondition H1 requires.** Between-class variance must exceed within-class variance. If
 two skills of the same class differ more than two skills of different classes, the class label
