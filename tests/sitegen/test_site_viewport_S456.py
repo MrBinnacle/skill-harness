@@ -8,67 +8,65 @@ What a test can hold and what it cannot is the line this file draws. A test can
 hold that the stylesheet still carries the rule and that the markup still
 carries the label the rule prints. It cannot hold that the page reads, and the
 report's own numbers came from a browser rather than from a suite. Every
-assertion below names the measurement it stands in for, so the next pass can
-find the browser reading rather than trusting the green.
+assertion below names the measurement it stands in for.
+
+#589 built that browser reading. It lives in ``test_rendered_geometry.py``, and
+the fourteen stylesheet greps this file used to spell inline now live in
+``_s456_rules.py`` as named predicates. Nothing about what they hold changed.
+They moved so the harness's negative control can run all fourteen against a
+stylesheet a real browser has just measured as broken and show every one still
+returning True, which is this file's own blindness stated as an assertion
+rather than as the paragraph above.
 """
 
 from __future__ import annotations
 
-import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 
-from skill_harness.sitegen import DEFAULT_BASE_URL, build_site
 from skill_harness.sitegen.render import FIGURE_COLUMN_LABELS, INDEX_COLUMN_LABELS
+from tests.sitegen._s456_rules import (
+    RULE_CELLS_BREAK_WORDS,
+    RULE_DEFINITION_RULE_PINNED,
+    RULE_DL_IS_ONE_COLUMN,
+    RULE_HEADER_ROW_STAYS_IN_THE_TREE,
+    RULE_LEAD_HAS_ROOM,
+    RULE_NO_CELL_HIDDEN_FOR_BEING_EMPTY,
+    RULE_REFUSAL_NOT_CRAMPED,
+    RULE_ROW_LABEL_CAP_SCOPED,
+    RULE_SINGLE_TRACK_ZERO_FLOOR,
+    RULE_STACKED_LABEL_CARRIES_NO_COPY,
+    RULE_STACKS_COST_TABLE,
+    RULE_STACKS_MEASUREMENTS_TABLE,
+    RULE_STACKS_RECEIPTS_TABLE,
+    RULE_SYMPTOM_NOT_HIDDEN,
+    StylesheetRule,
+)
+from tests.sitegen._sites import build_fixture_site
 
 _REPO = Path(__file__).resolve().parents[2]
 _STYLESHEET = _REPO / "src" / "skill_harness" / "sitegen" / "style.css"
-_SCHEMA = _REPO / "docs" / "sers" / "sers.schema.json"
-_RECEIPTS = _REPO / "docs" / "sers" / "receipts"
-_NARROW = "@media (max-width: 40rem)"
-_WIDE = "@media (min-width: 40rem)"
 
 
 def _build(output: Path) -> Path:
-    build_site(
-        schema_path=_SCHEMA,
-        receipts_dir=_RECEIPTS,
-        extraction_path=None,
-        output_dir=output,
-        marker="s456-viewport-marker",
-        base_url=DEFAULT_BASE_URL,
-    )
-    return output
+    """The repository's own site, through the shared builder.
+
+    ``landing=False`` keeps this file measuring exactly the page set it always
+    measured. The landing page is the geometry harness's business.
+    """
+    return build_fixture_site(output, landing=False)
 
 
 def _css() -> str:
-    """The stylesheet with its comments removed.
+    """The stylesheet as it is on disk.
 
-    The comments quote the defects by name, so a substring search over the whole
-    file finds the shredded word inside the sentence explaining the shredding.
+    Comment stripping used to happen here and now happens inside each predicate,
+    because it is part of what a grep over this file means and both callers of a
+    rule have to strip identically.
     """
-    return re.sub(r"/\*.*?\*/", "", _STYLESHEET.read_text(encoding="utf-8"), flags=re.DOTALL)
-
-
-def _media_blocks(css: str, opener: str) -> str:
-    """Everything inside every ``@media`` block that opens with ``opener``."""
-    blocks: list[str] = []
-    for match in re.finditer(re.escape(opener), css):
-        depth = 0
-        for index in range(match.start(), len(css)):
-            if css[index] == "{":
-                depth += 1
-            elif css[index] == "}":
-                depth -= 1
-                if depth == 0:
-                    blocks.append(css[match.start() : index + 1])
-                    break
-        else:
-            raise AssertionError(f"{opener} block never closes")
-    assert blocks, f"the stylesheet carries no {opener} block"
-    return "\n".join(blocks)
+    return _STYLESHEET.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -84,8 +82,7 @@ def test_a_definition_list_is_one_column_on_a_narrow_viewport() -> None:
     track a few pixels and ran the definition down the page one letter to a
     line for roughly two thousand pixels of scroll.
     """
-    narrow = _media_blocks(_css(), _NARROW)
-    assert re.search(r"\bdl\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)", narrow), (
+    assert RULE_DL_IS_ONE_COLUMN.holds(_css()), (
         "the narrow viewport no longer gives a definition list a single column"
     )
 
@@ -97,9 +94,9 @@ def test_the_single_column_track_has_a_zero_floor() -> None:
     states a 40-character run id in its notes, so an auto floor made the track
     wider than the viewport and the page scrolled sideways by 212px.
     """
-    narrow = _media_blocks(_css(), _NARROW)
-    assert "minmax(0, 1fr)" in narrow
-    assert not re.search(r"\bdl\s*\{[^}]*grid-template-columns:\s*1fr\s*;", narrow)
+    assert RULE_SINGLE_TRACK_ZERO_FLOOR.holds(_css()), (
+        "the definition list's single track no longer has a zero floor"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -115,21 +112,11 @@ def test_a_cell_breaks_words_and_a_machine_token_breaks_anywhere() -> None:
     t", "absen / t", "not_instrumen / ted". It belongs on the unbreakable
     machine string and nowhere else.
     """
-    css = _css()
-    breaking = re.findall(r"([^{}]+)\{[^}]*overflow-wrap:\s*break-word", css)
-    anywhere = re.findall(r"([^{}]+)\{[^}]*overflow-wrap:\s*anywhere", css)
-
-    selectors_breaking = {part.strip() for group in breaking for part in group.split(",")}
-    selectors_anywhere = {part.strip() for group in anywhere for part in group.split(",")}
-
-    for selector in ("td", "th", "p", ".figure"):
-        assert selector in selectors_breaking, f"{selector} no longer breaks on word boundaries"
-        assert selector not in selectors_anywhere, f"{selector} shreds words again"
-
-    for selector in ("dd", "td code", "dd code"):
-        assert selector in selectors_anywhere, f"{selector} can no longer break a machine token"
-
-    assert "th code" in selectors_breaking, "the row header's schema key shreds again"
+    assert RULE_CELLS_BREAK_WORDS.holds(_css()), (
+        "td, th, p and .figure must break on word boundaries and must not shred words; "
+        "dd, td code and dd code must be able to break a machine token anywhere; "
+        "th code must break on word boundaries"
+    )
 
 
 def test_the_definition_rule_is_pinned_on_its_own_ground() -> None:
@@ -142,11 +129,9 @@ def test_the_definition_rule_is_pinned_on_its_own_ground() -> None:
     both are pinned here, because the failure mode is a later seat removing one
     on the belief that the other carries it by itself.
     """
-    css = _css()
-    assert re.search(r"(^|\n)dd,\n[^{]*\{[^}]*overflow-wrap:\s*anywhere", css), (
+    assert RULE_DEFINITION_RULE_PINNED.holds(_css()), (
         "the dd rule is gone; the dl track floor alone is not a reason to remove it"
     )
-    assert "minmax(0, 1fr)" in _media_blocks(css, _NARROW)
 
 
 def test_the_stylesheet_still_refuses_to_hide_the_symptom() -> None:
@@ -156,7 +141,7 @@ def test_the_stylesheet_still_refuses_to_hide_the_symptom() -> None:
     was what kept the receipts index reporting no horizontal overflow while it
     needed 531px of a 328px main.
     """
-    assert "overflow-x: hidden" not in _css()
+    assert RULE_SYMPTOM_NOT_HIDDEN.holds(_css()), "the stylesheet hides a horizontal overflow"
 
 
 # ---------------------------------------------------------------------------
@@ -165,22 +150,19 @@ def test_the_stylesheet_still_refuses_to_hide_the_symptom() -> None:
 
 
 @pytest.mark.parametrize(
-    ("table_class", "labels"),
+    ("rule", "labels"),
     [
-        ("receipts", INDEX_COLUMN_LABELS),
-        ("measurements", FIGURE_COLUMN_LABELS),
-        ("cost", FIGURE_COLUMN_LABELS),
+        (RULE_STACKS_RECEIPTS_TABLE, INDEX_COLUMN_LABELS),
+        (RULE_STACKS_MEASUREMENTS_TABLE, FIGURE_COLUMN_LABELS),
+        (RULE_STACKS_COST_TABLE, FIGURE_COLUMN_LABELS),
     ],
+    ids=["receipts", "measurements", "cost"],
 )
 def test_the_narrow_viewport_stops_drawing_these_tables(
-    table_class: str, labels: tuple[str, ...]
+    rule: StylesheetRule, labels: tuple[str, ...]
 ) -> None:
     """D3. Below 40rem each of the three becomes one labelled block per row."""
-    narrow = _media_blocks(_css(), _NARROW)
-    assert f".{table_class} tbody" in narrow
-    assert f".{table_class} thead" in narrow
-    assert f".{table_class} td::before" in narrow
-    assert "content: attr(data-label)" in narrow
+    assert rule.holds(_css()), f"{rule.name} no longer holds"
     assert labels, "a stacked table with no column labels would print bare values"
 
 
@@ -194,13 +176,10 @@ def test_the_stacked_label_carries_no_copy_in_the_stylesheet() -> None:
     its value instead, which is the shape the definition lists take at this
     width and needs no separator at all.
     """
-    narrow = _media_blocks(_css(), _NARROW)
-    generated = re.findall(r"content:\s*([^;]+);", narrow)
-    assert generated, "nothing prints the column label any more"
-    for declaration in generated:
-        assert declaration.strip() == "attr(data-label)", (
-            f"the stylesheet writes copy into generated content: {declaration!r}"
-        )
+    assert RULE_STACKED_LABEL_CARRIES_NO_COPY.holds(_css()), (
+        "either nothing prints the column label any more, or the stylesheet writes copy "
+        "into generated content"
+    )
 
 
 def test_the_header_row_leaves_the_screen_and_stays_in_the_accessibility_tree() -> None:
@@ -212,13 +191,10 @@ def test_the_header_row_leaves_the_screen_and_stays_in_the_accessibility_tree() 
     to assistive technology, so dropping the row dropped the association. The
     row goes off-canvas instead, the same technique the skip link uses.
     """
-    narrow = _media_blocks(_css(), _NARROW)
-    match = re.search(r"thead[^{]*\{([^}]*)\}", narrow)
-    assert match is not None, "the narrow viewport no longer rules the header row"
-    body = match.group(1)
-    assert "display: none" not in body, "the header row is removed from the accessibility tree"
-    assert "position: absolute" in body
-    assert "left: -100vw" in body
+    assert RULE_HEADER_ROW_STAYS_IN_THE_TREE.holds(_css()), (
+        "the narrow viewport either no longer rules the header row, or removes it from "
+        "the accessibility tree instead of moving it off-canvas"
+    )
 
 
 def test_no_cell_ships_empty(tmp_path: Path) -> None:
@@ -248,7 +224,9 @@ def test_the_narrow_viewport_hides_no_cell_on_the_ground_that_it_is_empty() -> N
     every cell still ships non-empty, and the next receipt with a blank field
     would reintroduce the width-dependent drop with no test going red.
     """
-    assert "td:empty" not in _css(), "a width-dependent cell is being concealed again"
+    assert RULE_NO_CELL_HIDDEN_FOR_BEING_EMPTY.holds(_css()), (
+        "a width-dependent cell is being concealed again"
+    )
 
 
 def test_every_body_cell_carries_the_column_label_its_header_states(tmp_path: Path) -> None:
@@ -295,10 +273,9 @@ def test_the_row_label_cap_is_scoped_to_the_wide_viewport() -> None:
     figure column 55px, which is worse. The narrow viewport stops drawing the
     table instead.
     """
-    css = _css()
-    wide = _media_blocks(css, _WIDE)
-    assert "max-width: 22rem" in wide
-    assert css.count("max-width: 22rem") == 1, "the cap is declared outside the wide viewport"
+    assert RULE_ROW_LABEL_CAP_SCOPED.holds(_css()), (
+        "the cap is missing from the wide viewport, or is declared outside it"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -306,28 +283,9 @@ def test_the_row_label_cap_is_scoped_to_the_wide_viewport() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _declaration(css: str, selector: str, prop: str) -> str:
-    """The value of ``prop`` in the rule whose selector list ends with ``selector``.
-
-    Every rule is scanned rather than only the first match, because ``.lead``
-    also appears in the shared mono font-family group above the rule that sets
-    its own leading, and a first-match reader reports the wrong block.
-    """
-    wanted = {part.strip() for part in selector.split(",")}
-    for match in re.finditer(r"([^{}]+)\{([^}]*)\}", css):
-        selectors = {part.strip() for part in match.group(1).split(",")}
-        if not wanted <= selectors:
-            continue
-        found = re.search(rf"{re.escape(prop)}:\s*([^;]+);", match.group(2))
-        if found is not None:
-            return found.group(1).strip()
-    raise AssertionError(f"no rule for {selector} declares {prop}")
-
-
 def test_the_lead_has_room_between_its_lines() -> None:
     """D4. 21px on 1.2 leading is a 25.2px line box; the detector needs 1.3."""
-    leading = float(_declaration(_css(), ".lead", "line-height"))
-    assert leading >= 1.3, f"the lead sets {leading} leading"
+    assert RULE_LEAD_HAS_ROOM.holds(_css()), "the lead sets less than 1.3 leading"
 
 
 def test_a_refusal_block_is_not_cramped_against_its_own_edge() -> None:
@@ -337,9 +295,6 @@ def test_a_refusal_block_is_not_cramped_against_its_own_edge() -> None:
     detector calls it an AI tell, and the Check seat overruled the detector on
     the owner's own stylesheet comment. That argument is not reopened here.
     """
-    css = _css()
-    padding = _declaration(css, ".refusal,\n.refused", "padding")
-    top, _right, bottom, _left = padding.split()
-    assert float(top.removesuffix("rem")) * 16 >= 4.4, padding
-    assert float(bottom.removesuffix("rem")) * 16 >= 4.4, padding
-    assert "border-left: 4px solid var(--bench-cant-tell)" in css
+    assert RULE_REFUSAL_NOT_CRAMPED.holds(_css()), (
+        "a refusal block's vertical padding is under 4.4px, or its left edge is gone"
+    )
