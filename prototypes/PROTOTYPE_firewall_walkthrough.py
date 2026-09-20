@@ -1,6 +1,11 @@
-"""PROTOTYPE — THROWAWAY. Not production. No tests, no error handling, no polish.
+"""PROTOTYPE -- THROWAWAY. Not production. No error handling, no polish.
 
-Lives on branch `prototype/task-frontier-firewall-90`, never merged to main.
+Lives on main under prototypes/, which pyproject.toml excludes from ruff on
+purpose (issue #483; the exclusion is asserted by
+tests/test_ruff_gate_scope_483.py). A smoke test --
+tests/test_prototype_firewall_walkthrough.py -- runs it end to end and checks
+the exit code and the attack-outcome counts, so the old claim of no tests no
+longer holds; what is still true is that nothing here is production code.
 
 WHAT QUESTION THIS ANSWERS
     "You say the three pools of tasks can't leak into each other. Show me."
@@ -267,16 +272,23 @@ def main():
      - the stored record cannot be edited or deleted
      - unregistered evidence is refused with a reason
 
-   NOT PROVEN, AND NOT BUILT YET
-     - that the scoring pool actually FEEDS the scorer (ticket #91 -- right now
-       it hands over raw results, not the paired win/loss counts the maths needs)
-     - that a "fresh" recipe is genuinely fresh and not a reworded clone of a
-       difficulty-picking one (ticket #92)
-     - the full end-to-end no-leak proof on synthetic data (ticket #94)
+   WHAT THIS WALKTHROUGH DOES NOT ITSELF SHOW
+     - that the scoring pool's results actually feed the scorer's maths as
+       paired win/loss counts. That is proven separately, in
+       src/skill_harness/aggregation/matched_bridge.py
+       (aggregate_matched_gate2 consumes matched_evidence's output directly).
+     - that these same rules hold under more than the three attacks staged
+       above. Each half is tested separately, in a different place: the
+       write-time stamping and the refusal of off-manifest evidence live in
+       tests/task_frontier/test_tracer.py, and the append-only triggers that
+       killed ATTACK 2 live in tests/storage/test_task_frontier_store.py.
+     - a full end-to-end no-leak proof run on synthetic data at scale. This
+       script is a demo of the mechanism, not that proof.
 
    So: this removes a whole class of leak -- the kind where somebody forgets a
-   filter. It is not a claim that the measurement is now trustworthy end to end.
-   Three tickets stand between here and that.
+   filter -- and shows it holding against three attacks live, in front of you.
+   It is not, on its own, the full case that the measurement is trustworthy
+   end to end; the two files named above carry the rest of that case.
 """)
 
     conn.close()
