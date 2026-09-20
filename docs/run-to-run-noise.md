@@ -21,7 +21,7 @@ Three consequences follow.
 - Every paid comparison has a control arm: with the skill and without it, never a score in a
   vacuum, because a score in a vacuum cannot show that the model did not need the skill.
 - Where the evidence cannot carry a call, the recorded state is `UNMEASURED` with a reason drawn
-  from a fixed list of eight (`src/skill_harness/aggregation/status.py`, defined in
+  from a fixed list (`UnmeasuredSubReason` in `src/skill_harness/aggregation/status.py`, defined in
   [docs/concepts/why-unmeasured.md](https://github.com/MrBinnacle/skill-harness/blob/main/docs/concepts/why-unmeasured.md)).
   Which kind of not-knowing applies is more information than not-knowing alone.
 - Evidence passes a gate before it enters an aggregate, and the append-only store snapshots the
