@@ -62,31 +62,37 @@ and covers that section only. This page stays the citable surface for every kind
 
 ### [`docs/findings/class-hypothesis-preregistration.md`](findings/class-hypothesis-preregistration.md)
 
-- **Claims:** The class hypothesis, that a skill's `value_class` conditions how
-  a null about that skill is read, is registered before any paid run, with its
-  outcome rules stated in both directions. Testing it needs between-class spread
-  to exceed within-class spread, and on this corpus that contrast is undefined
-  rather than underpowered. Measured at zero spend on 2026-09-20: the extractor's
-  corpus resolves to 82 entries via `--dry-scope`, not the 71 three surfaces
-  state; `value_class_registry.py` holds 12 entries, 9 `trap-discipline` and 3
-  `calibration`, not 11; only 4 of the 12 resolve in that corpus, of which
-  exactly one is `trap-discipline` and the registry marks it retired
-  (`sqlite-tie-break-red-test-trap`). Seven of the remaining eight exist only
-  inside dated backup directories and one only inside plugin `_quarantine/`.
-  The corpus-wide extraction `#104` contemplates is therefore refused as an
-  instrument for this hypothesis, because the skills it would pay for are not
-  the missing ones. The binding constraint is classification coverage, not
-  extraction coverage.
-- **Refuses to claim:** That the class hypothesis is false. It is untested, and
-  this document exists so that a later test cannot be read backwards. That the
-  registry's labels are correct: only their count and reachability were measured,
-  never whether each skill is in the right class. That `verdict.py` should stop
-  branching on `value_class` while the hypothesis is untested, which is a
-  behaviour change with its own blast radius and belongs to `#104`. That the
-  6-skill sample's within-class spread (6.4x, Fisher two-sided p = 0.041, quoted
-  from a prior fact sheet rather than recomputed here) settles anything on its
-  own. That the corpus-wide extraction is refused for any purpose other than this
-  hypothesis: a means-to-an-end run stays open under its own authorisation.
+- **Claims:** `value_class` has three permitted values and `TRANSFORMATIVE_LIFT`
+  has zero members anywhere in the registry, so the `CUT`-withholding branch in
+  `verdict.py` is untestable in principle rather than merely unreached. Measured
+  at zero spend on 2026-09-20: the extractor's corpus resolves to 82 entries via
+  `--dry-scope`, not the 71 three surfaces state; `value_class_registry.py` holds
+  12 entries, 9 `trap-discipline` and 3 `calibration`, not 11; only 4 of the 12
+  resolve in that corpus, of which exactly one is `trap-discipline` and the
+  registry marks it retired (`sqlite-tie-break-red-test-trap`). Seven of the
+  remaining eight exist only inside dated backup directories and one only inside
+  plugin `_quarantine/`. The corpus-wide extraction `#104` contemplates is
+  therefore refused as an instrument for this hypothesis, because the skills it
+  would pay for are not the missing ones. Class as assigned is close to collinear
+  with liveness, so classification coverage rather than extraction coverage is
+  the binding constraint. Registered as the next observation, at zero cost:
+  ablate the `value_class` branch across every verdict already on disk and count
+  how many change, publishing either outcome.
+- **Refuses to claim:** That the class hypothesis is false, or that it has been
+  tested. Refusing an instrument does not discharge a hypothesis, and the shipped
+  branches remain depended upon and unexamined. That any test of the hypothesis
+  is registered here: the first draft registered a between-class versus
+  within-class contrast on mechanical measurability, two independent non-Anthropic
+  reviewers converged that this measures registry coverage rather than null
+  interpretation, and it is withdrawn with nothing put in its place. That the
+  6-skill sample's within-class spread (6.4x, Fisher two-sided p = 0.041) supports
+  anything: two of six rows carry a class and both are the same class, so it is
+  quarantined as anecdote. That the registry's labels are correct, since only
+  their count and reachability were measured. That `verdict.py` should stop
+  branching on `value_class`, which belongs to `#104`. That no literature lets
+  intervention type condition a null's interpretation, a prior sweep's claim this
+  document declines to rely on. That the refusal is permanent: it should be
+  re-derived if classification coverage puts live members in both arms.
 
 ### [`docs/findings/gitpull-hazard-entry-is-not-a-prompt-lever.md`](findings/gitpull-hazard-entry-is-not-a-prompt-lever.md)
 

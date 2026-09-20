@@ -1,4 +1,4 @@
-# Class-hypothesis pre-registration — does `value_class` condition how a null is read? (REGISTERED)
+# Class-hypothesis pre-registration — what a `value_class` null may mean (REGISTERED)
 
 > **Reader's note.** This document locks what will be tested, and what each possible answer
 > means, *before* the data exists. It was written to discharge one blocker: `skill-harness#104`
@@ -7,11 +7,13 @@
 > the status line is the registered record and changes only by dated amendment blocks appended at
 > the end, never by an edit in place.
 
-**Status:** REGISTERED 2026-09-20, session S465. Registered **with a pre-stated NO-GO on the
-run that prompted it.** The corpus-wide clause extraction `#104` contemplates cannot test this
-hypothesis, and the reason is not power or money. It is that one of the two arms is empty on
-disk and nothing purchasable fills it. That finding is registered here as the primary result,
-because a pre-registration that discovers its own contrast is unrunnable has done its job.
+**Status:** REGISTERED 2026-09-20, session S465, after a cross-family challenge review that
+refuted the first draft's primary contrast. That review and the adjudication of every objection
+are recorded in the research repository that governs this work, under
+`docs/audit/t1-class-hypothesis-S465/`. Registered **with a pre-stated
+NO-GO on the corpus-wide extraction as an instrument for this hypothesis**, and with **no valid
+test of the hypothesis itself yet registered**, because the first attempt measured the wrong
+quantity and is withdrawn below rather than quietly repaired.
 
 ## The hypothesis, stated so it can fail
 
@@ -19,111 +21,147 @@ because a pre-registration that discovers its own contrast is unrunnable has don
 skill should be interpreted. A null on a `trap-discipline` skill means something different from
 a null on a `calibration` skill, and the difference is large enough to change a verdict.
 
-H1 is what every type-conditional reading of a null in this instrument silently assumes.
-`aggregation/verdict.py` already branches on it: `CUT` is withheld unless the class is
-`TRANSFORMATIVE_LIFT`, and `TRAP_DISCIPLINE` takes its own path when `outcome_type` is
-`invariant`. `tests/test_value_class_call_sites_static.py` refuses any call site that omits the
-argument. So H1 is not a proposal. Shipped code already depends on it, and it has never been
-tested.
+`aggregation/verdict.py` already branches on exactly this. `CUT` is withheld unless the class is
+`TRANSFORMATIVE_LIFT`, `TRAP_DISCIPLINE` takes its own path when `outcome_type` is `invariant`,
+and `tests/test_value_class_call_sites_static.py` refuses any call site that omits the argument.
+So H1 is not a proposal. Shipped code already depends on it, and it has never been tested.
 
-**The precondition H1 requires.** Between-class variance must exceed within-class variance. If
-two skills of the same class differ more than two skills of different classes, the class label
-carries no information a verdict may lean on, and every branch above is reading noise.
+**H0.** `value_class` carries no information a verdict may lean on, and the branches above are
+policy rather than measurement.
 
-**H0.** `value_class` is not associated with measurability beyond what within-class spread
-already explains.
+## The emptiest cell, which is the headline
+
+`value_class` has three permitted values. **`TRANSFORMATIVE_LIFT` has zero members anywhere in
+the registry** — not unreachable, not retired, absent. The branch that withholds `CUT` is the
+most consequential one in `verdict.py`, and nothing in this corpus can exercise it in principle.
+
+That is a stronger emptiness result than anything about extraction cost, and it does not depend
+on any contrast being runnable. It is stated first because the first draft of this document
+buried it under a census.
+
+## What was withdrawn, and why it matters more than what replaced it
+
+The first draft registered a primary contrast of **between-class versus within-class spread in
+per-skill mechanical measurability**, the fraction of a skill's extracted clauses whose axis
+appears in the Tier-1 registry. Two independent non-Anthropic reviewers, prompted to adjudicate
+in both directions, converged on the same refutation, and it holds.
+
+Measurability is a property of the extraction pipeline's registry coverage. H1 is a claim about
+what a null *means*. Even a clean result on that contrast would establish that skills of
+different classes have clauses of differing registry coverage, and would license nothing about
+whether `CUT` should be withheld or whether an invariant outcome deserves its own path. The
+proxy and the hypothesis are different constructs and the draft never bridged them.
+
+The draft also cited construct validity as the field's nearest cautionary analogue, then
+committed that exact error in its own registered contrast. **The contrast is withdrawn. No
+substitute is registered in its place, because none that was measured today tests H1.**
 
 ## Gate fields
 
 | Field | Value |
 |---|---|
 | Pending decision | Whether `aggregation/verdict.py` may keep branching on `value_class`, and whether `#104`'s corpus-wide extraction should be paid for to settle it. |
-| Primary contrast | Between-class vs within-class spread in per-skill mechanical measurability (the fraction of a skill's extracted clauses whose axis appears in the Tier-1 axis registry). One test. Measurability is deterministic arithmetic over local text, so it carries no judge and no sampling error — unlike the vacuity rate, which the live pin leaves unlabelled. |
-| Task source | The extractor's own corpus enumeration, `scripts/extract-corpus-clauses.py`, resolved with `--dry-scope` before any call. The class labels come from `aggregation/value_class_registry.py`, which is pinned against a fixed `(skill_name, value_class, retired_on)` triple list (#422). Labels are frozen before extraction; no skill is classified after its clauses are seen. |
-| Oracle set | `classify_axis()` against the Tier-1 axis registry. Deterministic, zero-network, byte-reproducible. No judge, no LLM in the scoring path. |
-| Subject layer | Not applicable. This contrast is arithmetic over already-extracted text; no agent runs. |
-| Harness pin | Extractor model pin `claude-opus-5`, recorded per row in the JSONL header. The pin is part of the instrument's identity: clause sets from different pins are not poolable. Registry state is pinned by its test. |
-| Differentiation vs field | A prior sweep recorded, as a verified precondition, that no literature supports letting intervention *type* determine the *interpretation* of a null, and that the nearest analogue is a cautionary tale about construct validity. H1 is therefore this project's own claim, unsupported from outside, which is exactly why it needs registering rather than assuming. |
-| MDE + sizing | Not computed, and deliberately so. See the NO-GO below: one arm has n=0 reachable members, and no sample size is defined on an empty arm. Sizing becomes meaningful only after the corpus-construction precondition is met. |
-| Stopping rule | Single deterministic pass over the corpus. Nothing sequential, nothing to stop early. |
-| Leak audit | Not applicable in the usual sense — no subject reads anything. The analogous risk is label leakage, and it is closed by freezing the registry before extraction and by the registry's own pinning test. |
-| Budget | **$0 registered.** This document authorises no spend. The run it was written to authorise is refused below on evidence, not on cost. |
+| Primary contrast | **WITHDRAWN.** The measurability-spread contrast tested registry coverage, not null interpretation. Nothing replaces it here. The next section registers the cheap observation that decides whether H1 is worth testing at all. |
+| Task source | The extractor's own corpus enumeration, resolved with `--dry-scope` before any call. Class labels come from `aggregation/value_class_registry.py`, pinned against a fixed triple list (#422). |
+| Oracle set | Deterministic and local for the census below. No judge, no LLM in any scoring path. |
+| Subject layer | Not applicable. Nothing registered here runs an agent. |
+| Harness pin | Extractor model pin `claude-opus-5`, recorded per row in the JSONL header. Clause sets from different pins are not poolable. |
+| Differentiation vs field | None claimed. This is a feasibility stop before spend, and the fitting prior art is the registered-reports literature on pre-stated futility, plus variance-components reasoning where a label informs only when between-group spread exceeds within-group. A prior sweep's claim that no literature lets intervention type condition a null's interpretation is **too strong as written** and is not relied on: estimand and endpoint choice do change what a null means, which is why guidance like ICH E9(R1) exists. What the project lacks is warrant for *this* typology, not warrant for the general idea. |
+| MDE + sizing | Not computed, and not a virtue. One arm has no reachable live members, so no sample size is defined. |
+| Stopping rule | Not applicable to a feasibility stop. |
+| Leak audit | Labels are frozen before extraction, and the registry's pinning test holds them. That control stands and should be kept by any later design. |
+| Budget | **$0 registered.** This document authorises no spend. |
 
-## The measurement that produced the NO-GO
+## The registered next observation, and it costs nothing
 
-Every figure below was measured on 2026-09-20 by running the command in its own row. None is
-carried from a checkpoint, a ticket, or a prior session's summary.
+Before any contrast is designed, run the observation that decides whether H1 is operationally
+live in the shipped instrument.
+
+**Ablate the `value_class` branch in `aggregation/verdict.py` across every verdict already on
+disk, and count how many change.** One static run, no network, no model call.
+
+- **If zero verdicts change,** H1 is moot in the deployed instrument. The branches are policy
+  with no observed effect, the question is a taxonomy question rather than a measurement one, and
+  no corpus spend is justified for it.
+- **If verdicts change,** the question is live, the count is the measure of how much rides on it,
+  and classifying the currently unclassified live skills becomes the justified next step.
+
+Registered before the result: **both outcomes are published.** A zero is a finding about the
+instrument, not an absence of one.
+
+A second observation, equally cheap, bounds the taxonomy directly. **Count how many live skills
+could be `trap-discipline` under the written class definition.** If the answer is zero, the class
+has no live referents and the branch is dead code regardless of any variance result.
+
+## The census that produced the NO-GO
+
+Every figure was measured on 2026-09-20 by running the command in its own row. None is carried
+from a checkpoint, a ticket, or a prior session's summary.
 
 | What was measured | Command | Result |
 |---|---|---|
-| Corpus size | `python scripts/extract-corpus-clauses.py --dry-scope` | **82 entries** (73 local, 9 fable), not the 71 carried across `#104`, the S194 facts and the checkpoint. |
-| Registry size | parse of `value_class_registry.py` | **12 entries: 9 `trap-discipline`, 3 `calibration`, 0 `transformative-lift`**, not the 11 (8 + 3) those same surfaces state. |
-| Already extracted | `docs/research/corpus-clauses-S184.jsonl` | 6 skills, the first six alphabetically. Two carry a class, both `calibration`. |
-| How many classified skills the extractor can reach | `--dry-scope --slugs-file` over all 12 registry slugs | **4 of 12 resolve.** Three `calibration`, one `trap-discipline`. |
-| Where the unreachable eight live | `find -L` across `~/.claude`, the plugin cache, and `git ls-files` in the `skills` clone | Seven exist **only inside dated backup directories** (`skills-backup-20260728-210643/`, `_retired-quarantine-backup-2026-08-25/`). One, `subagent-research-reliability`, exists only inside plugin `_quarantine/`. None is a live card on any surface the extractor walks. |
+| Corpus size | `extract-corpus-clauses.py --dry-scope` | **82 entries** (73 local, 9 fable), not the 71 carried across `#104`, the S194 facts and the checkpoint. |
+| Registry size | parse of `value_class_registry.py` | **12 entries: 9 `trap-discipline`, 3 `calibration`, 0 `transformative-lift`**, not the 11 those surfaces state. |
+| Already extracted | `docs/research/corpus-clauses-S184.jsonl` | 6 skills, the first six alphabetically. |
+| Reachable classified skills | `--dry-scope --slugs-file` over all 12 registry slugs | **4 of 12 resolve.** Three `calibration`, one `trap-discipline`. |
+| Where the unreachable eight live | `find -L` across `~/.claude`, the plugin cache, and `git ls-files` in the `skills` clone | Seven exist **only inside dated backup directories**. One, `subagent-research-reliability`, only inside plugin `_quarantine/`. |
 
-**The one `trap-discipline` skill the extractor can reach is `sqlite-tie-break-red-test-trap`,
-and the registry itself marks it retired 2026-07-10.**
+The one reachable `trap-discipline` skill is `sqlite-tie-break-red-test-trap`, which the registry
+marks retired 2026-07-10.
 
-## What this means, decided before the data, and unchanged by it
+## What the census licenses, stated narrowly
 
-**The contrast is not underpowered. It is undefined.** A between-class comparison needs two
-arms. The `trap-discipline` arm contains one reachable member and that member is retired. Paying
-for the other 76 skills changes nothing here, because the missing eight are not among them — they
-are not on disk at all. This is the first time the obstacle has been stated as a property of the
-corpus rather than of the budget, and it is why `#104` kept coming back: every previous pass
-priced the run and none asked whether the run could answer the question.
+**It licenses refusing `#104`'s corpus-wide extraction as an instrument for H1.** The skills that
+run would not include the missing eight, because those are not on disk. Paying for 76 more does
+not fill the arm.
 
-**The class variable is confounded with liveness.** All three `calibration` skills are live
-cards. Eight of nine `trap-discipline` skills are backups or quarantine residue, and the ninth is
-retired. Any number this comparison produced would separate live cards from dead ones at least as
-well as it separated classes, and a reader could not tell which. That is precisely the construct
-validity failure the prior sweep flagged as the nearest analogue, arriving here by a route nobody
-planned.
+**It does not license treating H1 as tested.** An empty cell is an empty cell. A blocked design
+is not a result about the hypothesis, and this refusal leaves the shipped branches in exactly the
+state they were in before: depended upon, unexamined.
 
-**Registered outcome rules, binding on whoever runs this later.**
+**It supports preferring classification over extraction.** Every `calibration` entry is a live
+card and almost every `trap-discipline` entry is backup residue, so class as currently assigned
+is close to collinear with liveness. Any comparison run on this registry would separate live from
+retired at least as well as it separated classes. Classifying live skills is free and removes the
+confound at its source; enumerating the backup roots through `--extra-root` would make a contrast
+runnable while baking the confound in, which is why it is the worse of the two routes.
 
-- A **non-zero, non-uniform** measurability spread that is larger *between* classes than *within*
-  them supports H1, and only then may `verdict.py`'s branches be called evidenced.
-- A spread larger **within** a class than between classes refutes H1. Publish it. The 6-skill
-  sample already shows a 6.4x within-class spread at Fisher two-sided p = 0.041, so this outcome
-  is the one currently favoured by the only data that exists, and it must not be quietly reframed
-  as "inconclusive" when the full run agrees with it.
-- A **corpus-wide uniform** result publishes as a finding about the *instrument's reach*, not
-  about the corpus, on the same terms `#104` already registered for the vacuity rate.
-- **Publish either way.** An absence census that publishes only when it finds absences is not
-  evidence. This clause is the reason the document exists.
+## Quarantined, and not part of any outcome rule
 
-**What would make a later run interesting.** Not money. A corpus in which both arms have
-members. Two routes exist and both are cheap:
+The first draft cited a 6.4x within-class measurability spread at Fisher two-sided p = 0.041 from
+a prior fact sheet, and called it the outcome currently favoured by the only data that exists. It
+is withdrawn from the registered rules. The sample is six skills chosen as the first six
+alphabetically, only two carry a class, and both are the same class. A p-value on that table
+cannot bear directional weight, and quoting it as a pre-registered expectation would have locked
+in a peek. It is recorded here as anecdote so that a later reader can see it was considered and
+set aside, and it must not be cited as support for any result.
 
-1. Enumerate the backup and quarantine roots the extractor already supports through
-   `--extra-root ROOT:PROVENANCE`, recording provenance per row so a reader can see that the
-   `trap-discipline` arm is made of retired cards. This makes the comparison runnable and keeps
-   the confound visible instead of hiding it.
-2. Classify live skills that have never been given a `value_class`. The registry covers 12 of 82.
-   The binding constraint on this whole question is **classification coverage, not extraction
-   coverage**, and classification is free.
+## What is refused, and what stays open
 
-Route 2 is the one worth taking, because route 1 buys a comparison whose confound cannot be
-removed afterwards.
+**Refused: the corpus-wide extraction as an instrument for H1.** It cannot reach the missing arm.
 
-## What is refused, and what is released
+**Released: the extraction as a means to other ends.** `#104`'s own Revisit-if anticipated this:
+*"a means-to-an-end run is a different authorisation than a census, and it may not need the same
+pre-registration."* Anything needing more clauses for a reason unrelated to `value_class` is
+governed by its own ticket.
 
-**Refused: the corpus-wide extraction as an instrument for H1.** It cannot reach the missing
-arm. Registering this refusal is what closes `#104`'s carried decision — not a ruling that the
-sweep is worthless, but a finding that it is the wrong instrument for the question that was
-blocking it.
+**Open, and belonging to `#104` rather than to this document:** whether `verdict.py` should stop
+branching on `value_class` while H1 is untested. That is a behaviour change with its own blast
+radius. The ablation count registered above is the input that decision needs.
 
-**Released: the extraction as a means to other ends.** `#104`'s own Revisit-if anticipated this
-exactly — *"a means-to-an-end run is a different authorisation than a census, and it may not need
-the same pre-registration."* Anything that needs more clauses for a reason unrelated to
-`value_class` is governed by its own ticket and is untouched by this document.
+**Time-limited, not permanent.** If classification coverage grows and both arms gain live
+members, this refusal should be re-derived rather than assumed. A refusal that survives its own
+stated remedy was momentum rather than structure.
 
 ## Provenance
 
 Written at session S465 from a direct read of `skill-harness#104` and its resolution comment, the
 S194 fact sheet's facts 13 through 17, `aggregation/value_class_registry.py`,
-`tests/test_value_class_call_sites_static.py`, and fourteen zero-spend measurements listed above.
-House format follows `docs/findings/v0.2-preregistration.md`, including its amendment rule:
-append a dated block, never edit registered text.
+`tests/test_value_class_call_sites_static.py`, and the zero-spend measurements in the census
+table. House format follows `docs/findings/v0.2-preregistration.md`, including its amendment
+rule: append a dated block, never edit registered text.
+
+The first draft was reviewed before registration by two non-Anthropic models prompted to
+adjudicate in both directions. Both returned PARTLY SOUND and converged on the proxy mismatch,
+the unsupportable p-value, and the buried `TRANSFORMATIVE_LIFT` emptiness. Each is corrected
+above. The review is the reason this document registers no test rather than a wrong one.
