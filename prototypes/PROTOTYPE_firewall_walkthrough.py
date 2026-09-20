@@ -277,9 +277,11 @@ def main():
        paired win/loss counts. That is proven separately, in
        src/skill_harness/aggregation/matched_bridge.py
        (aggregate_matched_gate2 consumes matched_evidence's output directly).
-     - that these same admission rules hold under a full battery of adversarial
-       cases, not just the three attacks staged above. That is proven
-       separately too, in tests/task_frontier/test_tracer.py.
+     - that these same rules hold under more than the three attacks staged
+       above. Each half is tested separately, in a different place: the
+       write-time stamping and the refusal of off-manifest evidence live in
+       tests/task_frontier/test_tracer.py, and the append-only triggers that
+       killed ATTACK 2 live in tests/storage/test_task_frontier_store.py.
      - a full end-to-end no-leak proof run on synthetic data at scale. This
        script is a demo of the mechanism, not that proof.
 
