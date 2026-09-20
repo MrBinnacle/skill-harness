@@ -92,13 +92,6 @@ sitegen = [
 # Supply-chain note: microsoft/playwright-python, the vendor's own Python binding.
 geometry = [
   "playwright>=1.63.0",
-  # Declared, and imported by nothing in this repository. The design
-  # (docs/design/rendered-geometry-harness-S464.md, "Alternatives considered")
-  # rejected its function-scoped `page` fixture, which fights the one session-scoped
-  # measurement pass the harness is built on, and geometry.py stays pytest-free by
-  # construction. It is here so this extra names the whole browser-test surface in
-  # one place. If no caller appears, delete it rather than finding it a use.
-  "pytest-playwright>=0.9.0",
 ]
 dev = [
   "pytest>=7.4",

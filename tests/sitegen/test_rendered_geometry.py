@@ -8,8 +8,8 @@ breakpoints.
 The two controls below are why the file exists rather than what it does incidentally.
 The positive control sabotages a second build's stylesheet and asserts the browser sees
 the break. The negative control runs all fourteen S456 greps over that same sabotaged
-text and asserts every one still returns True. Together they are the ticket's whole
-argument, executable: the greps are blind to a break the browser sees.
+text and asserts the override changes not one of their verdicts. Together they are the
+ticket's whole argument, executable: the greps are blind to a break the browser sees.
 
 Neither control is an ``xfail``. A control that passes whether or not it reddens is the
 exact defect class this ticket is about.
@@ -22,6 +22,7 @@ from __future__ import annotations
 import pytest
 
 from skill_harness.sitegen.geometry import GeometryReport, PageReading, UnreadablePage
+from skill_harness.sitegen.render import read_stylesheet
 from tests.sitegen import _s456_rules
 from tests.sitegen._s456_rules import S456_RULES, StylesheetRule
 from tests.sitegen._sites import expected_page_names, sabotaged_stylesheet
@@ -83,12 +84,13 @@ def test_the_cascade_override_is_seen_by_the_browser(sabotaged_report: GeometryR
 def test_the_cascade_override_is_invisible_to_every_stylesheet_grep() -> None:
     """Negative control, and it is the reason the browser layer exists.
 
-    All fourteen S456 predicates still return True against the sabotaged stylesheet the
-    test above just measured as broken. Both controls read that text from one function,
-    so this is a claim about one stylesheet rather than about two assumed to agree.
+    Every one of the fourteen S456 predicates returns the SAME verdict on the sabotaged
+    stylesheet as on the clean one. Both texts come from one function, so this is a claim
+    about one stylesheet rather than about two assumed to agree.
 
     Needs no browser and no fixture, so the blindness is asserted on every cell rather
-    than only the designated one.
+    than only the designated one. Its sibling, the positive control, skips everywhere but
+    the designated cell, so the two do not always run together.
 
     If somebody later strengthens a grep enough to catch the override, this reddens and a
     maintainer decides whether the sabotage string is still the right control. That is
@@ -103,9 +105,24 @@ def test_the_cascade_override_is_invisible_to_every_stylesheet_grep() -> None:
         "grep set, so this control covers less than the suite it speaks for"
     )
 
+    clean = read_stylesheet()
     sabotaged = sabotaged_stylesheet()
-    still_true = [rule.name for rule in S456_RULES if rule.holds(sabotaged)]
 
-    assert still_true == [rule.name for rule in S456_RULES], (
-        "a stylesheet grep noticed the override; it is no longer a blind control"
+    # Blindness is a DELTA, not a level. Asserting only that every rule holds on the
+    # sabotaged text reddens when a rule is DELETED from style.css, and reports that a
+    # grep noticed the override, which is false. Measured: removing one real rule failed
+    # this test with exactly that message. So the clean verdicts are established first
+    # and the claim is that the override changes none of them.
+    before = {rule.name: rule.holds(clean) for rule in S456_RULES}
+    after = {rule.name: rule.holds(sabotaged) for rule in S456_RULES}
+
+    assert all(before.values()), (
+        "a grep is already failing on the UNSABOTAGED stylesheet, so this control cannot "
+        "speak about blindness until the suite it speaks for is green: "
+        f"{sorted(name for name, held in before.items() if not held)}"
+    )
+    assert after == before, (
+        "a stylesheet grep changed its verdict under the override, so it is no longer "
+        "blind to it: "
+        f"{sorted(name for name in before if before[name] != after[name])}"
     )

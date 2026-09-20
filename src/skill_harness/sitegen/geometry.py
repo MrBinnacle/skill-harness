@@ -1117,6 +1117,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(_table(report))
         if args.json_out is not None:
             Path(args.json_out).write_text(report.to_json(), encoding="utf-8", newline="\n")
+    if not report.results:
+        # A run that measured nothing must not exit like a clean one. `measure_site`
+        # discovers its own inputs by globbing, so a wrong --site, an unbuilt directory or
+        # a --page naming no file all yield an empty report, and "0 pages, 0 overflowing"
+        # is the most reassuring output this tool can produce while establishing nothing.
+        print(f"REFUSED: no pages were measured under {site}", file=sys.stderr)
+        return 2
     broke = any(r.overflows for r in report.readings()) or bool(report.refusals())
     return 1 if broke else 0
 
