@@ -70,8 +70,11 @@ Both numbers move, and this page has now been wrong about them three times. It c
 measurement — 152 against 511 — for three, then the 2026-09-05 measurement — 160 against
 537 — until this correction. A reader who ran the commands below during any of those
 windows got numbers that did not match the ones above them. The first two corrections were
-made by a person noticing; this one was made by the scheduled checker catching the drift it
-was built to catch: `scripts/check_commit_claim_drift.py` reads the figures and the commands
+made by a person noticing. This one was detected by machine and repaired by a person
+thirteen days later: the scheduled run failed on 2026-09-07 and failed again on 2026-09-14,
+and the page stayed wrong through both. Detection is solved here and response is not, which
+is worth more to a reader than a claim that the mechanism worked:
+`scripts/check_commit_claim_drift.py` reads the figures and the commands
 off this page, clones both repositories fresh, and fails when either figure has moved. It runs weekly
 rather than on every commit, because the counts rise with every merge and an exact-equality
 gate on every push would fail on the merge that landed it. The durable figure is the
