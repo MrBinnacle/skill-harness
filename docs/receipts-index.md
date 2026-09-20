@@ -69,9 +69,11 @@ and covers that section only. This page stays the citable surface for every kind
   `--dry-scope`, not the 71 three surfaces state; `value_class_registry.py` holds
   12 entries, 9 `trap-discipline` and 3 `calibration`, not 11; only 4 of the 12
   resolve in that corpus, of which exactly one is `trap-discipline` and the
-  registry marks it retired (`sqlite-tie-break-red-test-trap`). Seven of the
-  remaining eight exist only inside dated backup directories and one only inside
-  plugin `_quarantine/`. The corpus-wide extraction `#104` contemplates is
+  registry marks it retired (`sqlite-tie-break-red-test-trap`). Of the remaining
+  eight, seven sit in a dated backup directory and nowhere live, one of those
+  seven also sits in plugin `_quarantine/` so the two sets overlap rather than
+  partition, and the eighth (`closure-mode-at-boundaries`) is in no backup, no
+  quarantine and no live surface at all. The corpus-wide extraction `#104` contemplates is
   therefore refused as an instrument for this hypothesis, because the skills it
   would pay for are not the missing ones. Class as assigned is close to collinear
   with liveness, so classification coverage rather than extraction coverage is

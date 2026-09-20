@@ -104,7 +104,7 @@ from a checkpoint, a ticket, or a prior session's summary.
 | Registry size | parse of `value_class_registry.py` | **12 entries: 9 `trap-discipline`, 3 `calibration`, 0 `transformative-lift`**, not the 11 those surfaces state. |
 | Already extracted | `docs/research/corpus-clauses-S184.jsonl` | 6 skills, the first six alphabetically. |
 | Reachable classified skills | `--dry-scope --slugs-file` over all 12 registry slugs | **4 of 12 resolve.** Three `calibration`, one `trap-discipline`. |
-| Where the unreachable eight live | `find -L` across `~/.claude`, the plugin cache, and `git ls-files` in the `skills` clone | Seven exist **only inside dated backup directories**. One, `subagent-research-reliability`, only inside plugin `_quarantine/`. |
+| Where the unreachable eight live | direct `ls` of each backup root, `find -L` over the plugin cache, and `git ls-files` in the `skills` clone | **Seven exist inside a dated backup directory** and nowhere live. One of those seven, `subagent-research-reliability`, **also** sits in three plugin `_quarantine/` copies, so the backup and quarantine sets overlap rather than partition. **The eighth, `closure-mode-at-boundaries`, is in no backup, no quarantine and no live surface**; its only copy anywhere is a `.sandcastle` build worktree inside the `skills` clone. |
 
 The one reachable `trap-discipline` skill is `sqlite-tie-break-red-test-trap`, which the registry
 marks retired 2026-07-10.
