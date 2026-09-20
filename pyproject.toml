@@ -82,6 +82,17 @@ inspect = [
 sitegen = [
   "jsonschema>=4.26.0",
 ]
+# Rendered-geometry harness (#589): the real browser behind
+# src/skill_harness/sitegen/geometry.py. Opt-in — the core package never imports
+# playwright, and geometry.py pulls it lazily behind this extra's typed install hint
+# (BrowserNotInstalledError), so `pip install -e ".[dev]"` stays browser-free and no
+# CI cell but the designated one downloads a browser. Installing the distribution is
+# half the job: the Chromium build is fetched separately with
+# `python -m playwright install chromium`.
+# Supply-chain note: microsoft/playwright-python, the vendor's own Python binding.
+geometry = [
+  "playwright>=1.63.0",
+]
 dev = [
   "pytest>=7.4",
   "pytest-cov>=4.1",
@@ -140,6 +151,16 @@ addopts = [
   "-ra",
   "--strict-markers",
   "--strict-config",
+  # #589: send every test carrying the same xdist_group name to one worker, and
+  # distribute everything else exactly as the default `load` does. The rendered-geometry
+  # fixtures build a site and launch Chromium once per session, so without this each of
+  # the four workers that reaches them repeats that work. It is a COST setting and never
+  # a correctness one: each worker builds under its own tmp_path_factory root and binds
+  # its own port-0 ephemeral port, so reverting this line makes the suite slower and
+  # leaves it correct. It is inert without `-n` and a no-op for every ungrouped test.
+  # tests/test_ci_geometry_cell_589.py reads this line and fails if it goes.
+  "--dist",
+  "loadgroup",
 ]
 markers = [
   "slow: long-running tests (deselect with -m 'not slow')",
@@ -240,6 +261,18 @@ ignore_missing_imports = true
 # not installed in the default dev/CI environment, imports are lazy behind a typed error.
 # follow_imports=skip keeps the modules Any even when the extra IS installed locally,
 # so mypy verdicts (incl. which type:ignore comments are used) match CI deterministically.
+# playwright is the OPTIONAL [geometry] extra (rendered-geometry harness, #589);
+# not installed in the default dev/CI environment, and imported lazily behind a typed
+# error so a core install imports skill_harness.sitegen.geometry fine. Unlike jsonschema
+# it DOES ship py.typed, so ignore_missing_imports alone would give real types where the
+# extra is installed and Any where it is not -- two different verdicts for one file.
+# follow_imports=skip keeps it Any in both, which is why the inspect_ai override above
+# carries the same line: the pre-commit hook's isolated venv and CI must agree.
+[[tool.mypy.overrides]]
+module = ["playwright", "playwright.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
 [[tool.mypy.overrides]]
 module = ["inspect_ai", "inspect_ai.*", "inspect_swe", "inspect_swe.*"]
 ignore_missing_imports = true
