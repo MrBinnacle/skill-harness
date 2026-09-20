@@ -72,8 +72,11 @@ and covers that section only. This page stays the citable surface for every kind
   registry marks it retired (`sqlite-tie-break-red-test-trap`). Of the remaining
   eight, seven sit in a dated backup directory and nowhere live, one of those
   seven also sits in plugin `_quarantine/` so the two sets overlap rather than
-  partition, and the eighth (`closure-mode-at-boundaries`) is in no backup, no
-  quarantine and no live surface at all. The corpus-wide extraction `#104` contemplates is
+  partition, and the eighth (`closure-mode-at-boundaries`) is not absent but
+  renamed: `skills#286` renamed the card to `closure-mode`, which is live and
+  published, while `value_class_registry.py:52` still keys the old string. The
+  registry therefore holds at least one stale key, filed as `#601` as a defect
+  in the instrument. The corpus-wide extraction `#104` contemplates is
   therefore refused as an instrument for this hypothesis, because the skills it
   would pay for are not the missing ones. Class as assigned is close to collinear
   with liveness, so classification coverage rather than extraction coverage is

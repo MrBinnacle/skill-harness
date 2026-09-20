@@ -104,25 +104,49 @@ from a checkpoint, a ticket, or a prior session's summary.
 | Registry size | parse of `value_class_registry.py` | **12 entries: 9 `trap-discipline`, 3 `calibration`, 0 `transformative-lift`**, not the 11 those surfaces state. |
 | Already extracted | `docs/research/corpus-clauses-S184.jsonl` | 6 skills, the first six alphabetically. |
 | Reachable classified skills | `--dry-scope --slugs-file` over all 12 registry slugs | **4 of 12 resolve.** Three `calibration`, one `trap-discipline`. |
-| Where the unreachable eight live | direct `ls` of each backup root, `find -L` over the plugin cache, and `git ls-files` in the `skills` clone | **Seven exist inside a dated backup directory** and nowhere live. One of those seven, `subagent-research-reliability`, **also** sits in three plugin `_quarantine/` copies, so the backup and quarantine sets overlap rather than partition. **The eighth, `closure-mode-at-boundaries`, is in no backup, no quarantine and no live surface**; its only copy anywhere is a `.sandcastle` build worktree inside the `skills` clone. |
+| Where the unreachable eight live | direct `ls` of each backup root, `find -L` over the plugin trees, and `git ls-files` in the `skills` clone | **Seven exist inside a dated backup directory** and nowhere live. One of those seven, `subagent-research-reliability`, **also** sits in four plugin `_quarantine/` copies (three under the cache, one under `plugins/marketplaces/`), so the backup and quarantine sets overlap rather than partition. **The eighth, `closure-mode-at-boundaries`, is not absent. It was renamed.** |
 
 The one reachable `trap-discipline` skill is `sqlite-tie-break-red-test-trap`, which the registry
 marks retired 2026-07-10.
 
+**The registry holds at least one stale key, and that is a better finding than the absence it was
+mistaken for.** `closure-mode-at-boundaries` resolves nowhere because `skills#286` (`541522a`,
+*"Name each published card after the word a reader reaches for"*) renamed the card to
+`closure-mode`. That card is live and published: `skills/engineering/closure-mode/SKILL.md` is
+tracked in the collection with frontmatter `name: closure-mode`, its H1 still reads "Closure Mode
+at Boundaries", and `find -L` returns it installed in three plugin trees.
+`value_class_registry.py:52` still keys the pre-rename string.
+
+So the slug does not resolve and the skill is alive. Reading `tests/test_value_class_registry.py`
+in full, its seven tests pin the `(skill_name, value_class, retired_on)` triples, assert the
+`transformative-lift` class is empty, assert an unregistered name returns `None`, and check the
+ceiling behaviour for named records. None of them resolves a key against a skill on disk, which is
+consistent with what the file was built to do and is why a rename can pass it. Filed as `#601`; a
+registry that can silently stop pointing at its subject is a defect in the instrument rather than
+a fact about this hypothesis.
+
+`4 of 12 resolve` is unaffected, because the slug genuinely does not resolve in the extractor's
+corpus under either name.
+
 ## What the census licenses, stated narrowly
 
 **It licenses refusing `#104`'s corpus-wide extraction as an instrument for H1.** The skills that
-run would not include the missing eight, because those are not on disk. Paying for 76 more does
-not fill the arm.
+run would not include the missing eight, because seven are backup copies the enumeration does not
+walk and the eighth is keyed under a name that no longer exists. Paying for 76 more does not fill
+the arm.
 
 **It does not license treating H1 as tested.** An empty cell is an empty cell. A blocked design
 is not a result about the hypothesis, and this refusal leaves the shipped branches in exactly the
 state they were in before: depended upon, unexamined.
 
-**It supports preferring classification over extraction.** Every `calibration` entry is a live
-card and almost every `trap-discipline` entry is backup residue, so class as currently assigned
-is close to collinear with liveness. Any comparison run on this registry would separate live from
-retired at least as well as it separated classes. Classifying live skills is free and removes the
+**It supports preferring classification over extraction, on a weaker claim than the first draft
+made.** Every `calibration` entry is a live card. Seven of the nine `trap-discipline` entries are
+backup copies and nowhere live, one is live but retired, and one is live and published under a
+name the registry does not use. So class as currently assigned is **correlated** with liveness
+rather than collinear with it, and the correction matters: the confound is real enough to prefer
+classification, and not so total that a later reader should treat `trap-discipline` as a synonym
+for dead. Any comparison run on this registry as it stands would still separate live from
+not-live at least as well as it separated classes. Classifying live skills is free and removes the
 confound at its source; enumerating the backup roots through `--extra-root` would make a contrast
 runnable while baking the confound in, which is why it is the worse of the two routes.
 
