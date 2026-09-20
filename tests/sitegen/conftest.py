@@ -7,7 +7,6 @@ once per session and every geometry assertion reads the same table.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import pytest
 
@@ -24,11 +23,13 @@ from tests.sitegen._sites import SABOTAGE_WIDTHS, build_fixture_site, expected_p
 #: nothing else, because a gate with two mechanisms is a gate somebody half-disables.
 GEOMETRY_CELL_ENV = "SKILL_HARNESS_GEOMETRY_CELL"
 
-_HERE = Path(__file__).resolve().parent
+#: The two session fixtures whose cost the grouping exists to pay once. A test that
+#: requests neither shares nothing with the browser pass and is grouped for no reason.
+_EXPENSIVE_FIXTURES = frozenset({"geometry_report", "sabotaged_report"})
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Send every test in this package to one xdist worker.
+    """Send the tests that share the browser pass to one xdist worker, and only those.
 
     ``xdist_group`` is a COST optimisation and never a correctness one. Each worker that
     reached the fixtures below would build its own site under its own ``tmp_path_factory``
@@ -37,11 +38,18 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     measurement pass instead of up to four. Reverting it makes the suite slower and
     leaves it correct.
 
+    The predicate is the fixture closure and not the directory. Grouping the whole
+    ``tests/sitegen`` package serialised every test in it onto one worker to protect a
+    pair of fixtures that most of them never request, which is a cost paid to save a
+    cost. ``fixturenames`` is the closure pytest resolved, so a test that reaches either
+    fixture through another fixture is caught, and a test that stops requesting them
+    stops being grouped without anyone remembering to edit a list.
+
     The hook is declared in a directory conftest, so pytest hands it the whole session's
     items and the filter below is what keeps the marker off the other three thousand.
     """
     for item in items:
-        if _HERE in item.path.parents:
+        if _EXPENSIVE_FIXTURES.intersection(getattr(item, "fixturenames", ())):
             item.add_marker(pytest.mark.xdist_group("sitegen_geometry"))
 
 

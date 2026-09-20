@@ -147,6 +147,26 @@ jobs:
       SKILL_HARNESS_REQUIRE_VALE: "1"
       COVERAGE_CORE: "sysmon"
       COLUMNS: "200"
+      # #589: the ONE cell that runs the rendered-geometry browser measurement. Every
+      # other cell skips those tests, and tests/test_ci_geometry_cell_589.py fails
+      # unless exactly one cell is designated here, because a skip nobody counts is a
+      # dead control.
+      #
+      # windows-latest on 3.13, which REVERSES the choice in
+      # docs/design/rendered-geometry-harness-S464.md. That document picked
+      # ubuntu-latest on 3.13 because that cell already uploads the coverage artifact
+      # and is therefore a convenient host for the JSON report. Artifact convenience is
+      # not the governing reason. Every measurement behind this harness was taken on
+      # Windows Chromium 153, and the stylesheet's font stack (-apple-system,
+      # BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif) resolves to a different
+      # face on Linux, where no reading has ever been taken. The ink walk could
+      # legitimately report overflow on Ubuntu that nobody has measured, and that red
+      # would be a platform difference wearing a defect's clothes. Designate the
+      # platform the numbers came from.
+      #
+      # The steps below key off this value instead of repeating the condition, so the
+      # designation has exactly one site in this file.
+      SKILL_HARNESS_GEOMETRY_CELL: ${{ (matrix.os == 'windows-latest' && matrix.python-version == '3.13') && '1' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -165,6 +185,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -c requirements-ci.txt -e ".[dev]"
+      - name: Install the geometry extra
+        if: env.SKILL_HARNESS_GEOMETRY_CELL == '1'
+        # Only the designated cell installs playwright. The other three stop at
+        # `.[dev]` above, which is the property that keeps `pip install -e ".[dev]"`
+        # browser-free for a contributor as well as for CI.
+        run: python -m pip install -c requirements-ci.txt -e ".[dev,geometry]"
+      - name: Install Chromium
+        if: env.SKILL_HARNESS_GEOMETRY_CELL == '1'
+        # Its own step, so a failed browser download is attributable on sight instead
+        # of reading as a dependency-resolution failure. The distribution and the
+        # browser binary are two installs and they fail for unrelated reasons.
+        run: python -m playwright install chromium
       - name: Install Vale
         # Pinned to the same version as the vale job; doctrine-agreement tests shell out to it.
         shell: bash

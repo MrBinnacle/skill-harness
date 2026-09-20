@@ -424,8 +424,8 @@ def _serve(root: Path) -> Iterator[str]:
 def _style_probe(page: Page) -> Instrument | str:
     """Prove the stylesheet applied and the fonts loaded, or say why not.
 
-    This is the vacuity guard and it is the most load-bearing private function
-    here. If style.css 404s, the page renders unstyled, nothing is wider than the
+    This is the vacuity guard, and every reading in the report rests on it.
+    If style.css 404s, the page renders unstyled, nothing is wider than the
     viewport, and `scrollWidth <= clientWidth` passes. A green suite would then
     mean "the CSS is missing", which is the exact failure the harness exists to
     catch. So a reading is only issued once the computed body font-family matches
@@ -735,7 +735,10 @@ base and is recorded as convergent rather than grafted.
 
 **The open questions, decided rather than escalated.** None is a values fork, so none goes to
 the owner. The designated cell is `ubuntu-latest` on `3.13`, because it already uploads the
-coverage artifact and is therefore the natural host for the JSON report. A `ResourceWarning`
+coverage artifact and is therefore the natural host for the JSON report.
+**WITHDRAWN at implementation. The cell is `windows-latest` on `3.13`**, because artifact
+convenience is not a measurement argument and the font stack resolves differently on Linux.
+See "Implementation reconciliation". A `ResourceWarning`
 out of the server thread or the Playwright transport is treated as a real defect and fixed at
 source, not filtered. `pip install -e ".[dev]"` stays browser-free and the browser is reachable
 only through the explicit extra, which mirrors the `[sitegen]` precedent exactly. Running the
@@ -820,18 +823,72 @@ where a check lands, per sequence-verifiable-units.
 
 ## Implementation reconciliation
 
-*(empty until Phase D)*
+Where the built thing differs from the design above. Each entry names what the design said,
+what shipped, and why. The per-decision record is
+`docs/design/rendered-geometry-trail-S464.tsv`.
+
+**The designated cell is `windows-latest` / `3.13`, not `ubuntu-latest` / `3.13`.** The design
+chose ubuntu because that cell already uploads the coverage artifact and is therefore a
+convenient host for the JSON report. Convenience is not a measurement argument and it lost to
+one. Every reading behind this harness was taken on Windows Chromium 153, and the stylesheet's
+font stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`) resolves to
+a different face on Linux, where no reading has ever been taken. The ink walk could
+legitimately report overflow on Ubuntu that nobody has measured, and that red would be a
+platform difference wearing a defect's clothes. The designation is one GitHub Actions
+expression in the Test job's `env:`, and the two install steps gate on its value rather than
+repeating the condition, so there is exactly one site to read and one site to revert.
+
+**The xdist group is narrowed to the fixture closure.** The design put
+`pytest.mark.xdist_group` on the whole `tests/sitegen` package. Unit 3 shipped that and recorded
+it as open, because it serialises every test in the package onto one worker to protect two
+fixtures most of them never request. The marker is now applied to the items whose
+`fixturenames` contain `geometry_report` or `sabotaged_report`. Measured over the whole suite,
+`-m xdist_group` selects 10 of 3225 where it selected 133 of 3225.
+
+**`requirements-ci.txt` was extended, not re-frozen.** The design said regenerate. The header's
+regeneration command re-resolves the whole environment, and doing that today is a much larger
+change than this ticket: it drops `pip-audit` and `tqdm`, replaces `httpcore`/`httpx` with
+`httpcore2`/`httpx2`, and adds eleven `pre-commit` transitives the snapshot has never carried.
+The seven browser pins were captured by resolving `.[dev,geometry]` against the existing file,
+which is how `jsonschema` was added on 2026-08-10. Every pre-existing pin is byte-identical and
+the diff is the browser surface alone.
+
+**`[geometry]` carries `pytest-playwright`, which nothing imports.** The Alternatives section
+above rejected its function-scoped `page` fixture, and `geometry.py` is pytest-free by
+construction. It is declared so the extra names the whole browser-test surface in one place,
+and it costs four of the seven new CI pins (itself, `pytest-base-url`, `python-slugify`,
+`text-unidecode`). It is carried openly rather than quietly; if no caller appears it should be
+deleted rather than found a use.
+
+**No geometry marker was registered.** The module map above says `pyproject.toml` gains one.
+`xdist_group` is registered by pytest-xdist itself, so `--strict-markers` accepts it with no
+entry in the `markers` table, and adding one would have been a second declaration of somebody
+else's marker.
+
+**`docs/sitegen/rendered-geometry.md` does not exist.** The Usage section above cites it as the
+maintainer's quickstart. Units 1 to 3 put that text in the module docstring and never wrote the
+file, so the citation at the top of this document is a pointer to nothing. It is named here
+rather than left for a reader to discover.
+
+**Open question resolved by measurement, not by argument.** `filterwarnings = ["error"]` needed
+no geometry override. The full suite runs green with and without the designated-cell variable
+set, so neither the server thread nor the Playwright transport raised a `ResourceWarning` that
+had to be filtered.
 
 ## Open questions and risks
 
-- `pyproject.toml` sets `filterwarnings = ["error"]`. Should the geometry tests carry a narrow
-  `filterwarnings` override, or should any `ResourceWarning` from the HTTP server thread or the
-  Playwright transport be treated as a real defect and fixed at the source? I lean toward the second,
-  but it is a first-run discovery and the first run has not happened.
-- Which cell should be the designated one? Font fallback is the reason for picking one, and
-  `ubuntu-latest` / `3.13` is the cell that already uploads the coverage artifact, so it is the
-  natural host for the JSON report. Does the owner want the browser on the Windows cell instead,
-  given the published site's readers are not on CI runners at all?
+- ANSWERED, no override was needed. `pyproject.toml` sets `filterwarnings = ["error"]`. Should
+  the geometry tests carry a narrow `filterwarnings` override, or should any `ResourceWarning`
+  from the HTTP server thread or the Playwright transport be treated as a real defect and fixed
+  at the source? I lean toward the second, but it is a first-run discovery and the first run has
+  not happened. It has now, and neither source raised one.
+- ANSWERED, `windows-latest` / `3.13`. Which cell should be the designated one? Font fallback is
+  the reason for picking one, and `ubuntu-latest` / `3.13` is the cell that already uploads the
+  coverage artifact, so it is the natural host for the JSON report. Does the owner want the
+  browser on the Windows cell instead, given the published site's readers are not on CI runners
+  at all? The question reached the right answer for a reason it did not name: every reading
+  behind this harness was taken on Windows, so Ubuntu is the platform with no baseline. See
+  "Implementation reconciliation".
 - Should `.github/workflows/pages.yml`, which builds the real published site, run the geometry check
   before publishing? That would make "the published page does not protrude" a release condition
   rather than a PR condition. Out of scope as written; worth a ticket either way.
