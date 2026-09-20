@@ -1,0 +1,23 @@
+when	unit	decision	why	evidence	verdict
+S464	frame	Done = appending SABOTAGE_CSS to source style.css turns the new geometry tests RED while all 16 S456 tests stay GREEN in one run	A control nobody has seen redden is the defect #589 is about	docs/design/rendered-geometry-harness-S464.md	PENDING
+S464	frame	One branch, one PR, four ordered commits	Four PRs would ship three commits of harness that nothing runs	this file	DECIDED
+S464	frame	Rigor high	The artifact IS a control and it gates the design track	-	DECIDED
+S464	prior-art	#589 is a BUILD not a wiring task	git ls-files in skill-harness returns no rendered-geometry harness	git ls-files sweep	VERIFIED
+S464	prior-art	An instrument already existed, untracked, outside both repos	~/.claude/skills/impeccable/scripts/detector/_s456b_measure.mjs 2026-09-15, file:// no font wait, 2 widths	read in full	VERIFIED
+S464	premise	16 cases collected; 14 grep the stylesheet, 2 parse emitted HTML, 0 measure a rendered page	pytest --collect-only reports 16 tests collected	scratchpad measure_360.py	VERIFIED
+S464	premise	Cascade override breaks 5 of 7 pages, worst scrollWidth 867 vs clientWidth 360, all 16 tests still pass	The blindness, reproduced end to end	scratchpad/measure-broken.json	VERIFIED
+S464	design	Overflow is monotone in width here; every failing run starts at 320	7567 measurements, 320-1400 at 1px, both builds	scratchpad/sweep-broken.json	VERIFIED
+S464	design	Two Chrome builds on this host disagree by 15 CSS px on clientWidth at a 360 viewport	Assert scrollWidth<=clientWidth, never a nominal width	scratchpad/scrollbar_probe.py	VERIFIED
+S464	design	Base = opus candidate; it was the only one to guard the unstyled-page vacuity trap	A 404 on style.css makes the overflow check trivially pass	arena/candidate-opus.md	DECIDED
+S464	design	Graft sonnet: S455 stays untouched, only S456 moves onto build_fixture_site	Unifying two files with different params is the shallow-module red flag, and S455 is not this ticket	arena/candidate-sonnet.md	DECIDED
+S464	design	Reject haiku: xfail(strict=False) as the control	It passes whether the control reddens or not; vacuous by construction	arena/candidate-haiku.md	DECIDED
+S464	design	Reject sonnet full 1px ladder for PR runs; keep it slow-marked	A minute per PR to re-measure adjacent pixels buys no information	synthesis	DECIDED
+S464	design	Load-bearing repo facts re-checked rather than trusted from the runner	pytest -q -n 4 at ci.yml:283, socket block scoped to tests/oracles/tier1, --strict-markers on, slow registered, 0 playwright pins	grep	VERIFIED
+S464	unit1	width_ladder + 10 unit tests	Pure, no browser; the one piece of published methodology in the design	9ff8c93	VERIFIED
+S464	unit2	geometry.py, types, measure_site, CLI	Instrument before the tests that depend on it	ca40379	VERIFIED
+S464	unit2	CORRECTION to the vacuity guard: gate on loaded CSS rule count (65 vs 0), not document.fonts.size	Measured: main ships 0 webfonts and 0 @font-face, so fonts.size is 0 on a HEALTHY page; that clause would have refused all 7 pages	git ls-tree origin/main vs design/port-field-manual: 0/3 woff2, 0/5 @font-face	VERIFIED
+S464	unit2	Keep the document.fonts.ready wait even though it is a no-op on main	The design branch this harness gates ships 3 woff2 and 5 @font-face; the port-trail defect that appeared "at 75px once the real faces loaded" was measured there	same	DECIDED
+S464	unit2	Vacuity guard earns its place with a number: 22 of 28 readings on a stylesheet-less site would have been recorded CLEAN	Every one of the 7 pages contributed at least one false clean	delegate measurement, re-run by hand	VERIFIED
+S464	unit2	ACCEPT the delegate's out-of-scope pyproject.toml edit	Pre-commit mypy runs in an isolated venv with no Playwright and rejects the import; the two in-module escapes both fail. Additive [[tool.mypy.overrides]] copying the inspect_ai precedent	mypy --strict: Success, 337 source files	DECIDED
+S464	unit2	Pyright reported 10 errors including undefined names; mypy --strict reports none	Stale worktree diagnostics, a known trap here. _PRINTED_OFFENDERS is at :96 and _and_more at :455, the module imports and derives 25 rungs	grep + import + mypy	VERIFIED
+S464	unit2	The +/-1 breakpoint probes paid off on first contact	Sabotaged git-pull-rebase page reads excess 227 at 640 and 395 at 641; the 40rem block is active at one and not the other and a 60px grid lands on neither	delegate verification 3	VERIFIED
