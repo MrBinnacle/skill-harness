@@ -634,7 +634,7 @@ lock. Asking the runner prompt's question — if two actors both write, what hap
 here is literally nothing, because the design is per-actor state by construction rather than by
 arrangement. **This is the property worth protecting.** A design that reaches for a fixed port, a
 `FileLock`, or an `is_master` / `workerinput` broadcast has made parallelism a correctness problem
-in order to make it a cost problem.
+to make it a cost problem.
 
 **Cost second, and that is what the grouping buys.** `pytest.mark.xdist_group("sitegen_geometry")`
 on the whole `tests/sitegen/` package, plus `--dist loadgroup` in `addopts`. `loadgroup` sends every
@@ -787,7 +787,7 @@ where a check lands, per sequence-verifiable-units.
   never gates, and a `position: fixed` decoration showing up in the offender list is a smaller cost
   than a maintainer with a 507px excess and no idea which element produced it.
 - **We accept navigating once per page and resizing across the ladder.** Re-navigating at every width
-  would be more obviously correct and about 20x slower. It is safe because these pages carry no
+  would need less justification and run about 20x slower. It is safe because these pages carry no
   script; the comment in `measure_site` is where that assumption is recorded so the next person can
   find it when it stops holding.
 
