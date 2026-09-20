@@ -60,6 +60,34 @@ and covers that section only. This page stays the citable surface for every kind
 
 ## Findings
 
+### [`docs/findings/class-hypothesis-preregistration.md`](findings/class-hypothesis-preregistration.md)
+
+- **Claims:** The class hypothesis, that a skill's `value_class` conditions how
+  a null about that skill is read, is registered before any paid run, with its
+  outcome rules stated in both directions. Testing it needs between-class spread
+  to exceed within-class spread, and on this corpus that contrast is undefined
+  rather than underpowered. Measured at zero spend on 2026-09-20: the extractor's
+  corpus resolves to 82 entries via `--dry-scope`, not the 71 three surfaces
+  state; `value_class_registry.py` holds 12 entries, 9 `trap-discipline` and 3
+  `calibration`, not 11; only 4 of the 12 resolve in that corpus, of which
+  exactly one is `trap-discipline` and the registry marks it retired
+  (`sqlite-tie-break-red-test-trap`). Seven of the remaining eight exist only
+  inside dated backup directories and one only inside plugin `_quarantine/`.
+  The corpus-wide extraction `#104` contemplates is therefore refused as an
+  instrument for this hypothesis, because the skills it would pay for are not
+  the missing ones. The binding constraint is classification coverage, not
+  extraction coverage.
+- **Refuses to claim:** That the class hypothesis is false. It is untested, and
+  this document exists so that a later test cannot be read backwards. That the
+  registry's labels are correct: only their count and reachability were measured,
+  never whether each skill is in the right class. That `verdict.py` should stop
+  branching on `value_class` while the hypothesis is untested, which is a
+  behaviour change with its own blast radius and belongs to `#104`. That the
+  6-skill sample's within-class spread (6.4x, Fisher two-sided p = 0.041, quoted
+  from a prior fact sheet rather than recomputed here) settles anything on its
+  own. That the corpus-wide extraction is refused for any purpose other than this
+  hypothesis: a means-to-an-end run stays open under its own authorisation.
+
 ### [`docs/findings/gitpull-hazard-entry-is-not-a-prompt-lever.md`](findings/gitpull-hazard-entry-is-not-a-prompt-lever.md)
 
 - **Claims:** `#419` item 2's two criteria — force the hazard action, and do
