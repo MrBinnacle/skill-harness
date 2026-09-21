@@ -348,6 +348,114 @@ class TestArmIncludesForeignBodyByPath:
 
 
 # ---------------------------------------------------------------------------
+# AC4: a 2x2 factorial is one data declaration, no runner edit
+# ---------------------------------------------------------------------------
+
+
+class TestCrossFactorial:
+    def _design(self, tmp_path: Path) -> tuple[Any, Path, Path, Path]:
+        """The motivating study's design: parent x specialist, placebo-matched absent."""
+        parent_md = tmp_path / "parent"
+        parent_md.mkdir()
+        (parent_md / "SKILL.md").write_text(
+            "---\nname: parent-card\n---\n\nAlways flag AI-slop patterns and\n"
+            "produce a structured report.\n",
+            encoding="utf-8",
+        )
+        specialist_md = tmp_path / "specialist"
+        specialist_md.mkdir()
+        (specialist_md / "SKILL.md").write_text(
+            "---\nname: citation-specialist\n---\n\nVerify every claim against\nthe source list.\n",
+            encoding="utf-8",
+        )
+        placebo_md = tmp_path / "placebo"
+        placebo_md.mkdir()
+        (placebo_md / "SKILL.md").write_text(
+            "---\nname: matched-placebo\n---\n\nMaintain your usual working\n"
+            "style for this task.\n",
+            encoding="utf-8",
+        )
+        from skill_harness.ablation.arms import ArmFactor, ArmLevel, cross_factorial
+
+        factors = (
+            ArmFactor(
+                "parent",
+                levels=(
+                    ArmLevel("present", skill_body_paths=(str(parent_md / "SKILL.md"),)),
+                    ArmLevel("absent", skill_body_paths=(str(placebo_md / "SKILL.md"),)),
+                ),
+            ),
+            ArmFactor(
+                "specialist",
+                levels=(
+                    ArmLevel("present", skill_body_paths=(str(specialist_md / "SKILL.md"),)),
+                    ArmLevel("absent", skill_body_paths=(str(placebo_md / "SKILL.md"),)),
+                ),
+            ),
+        )
+        return cross_factorial(factors), parent_md, specialist_md, placebo_md
+
+    def test_two_crossed_factors_expand_to_the_four_cells(self, tmp_path: Path) -> None:
+        """The cartesian product is the declared arm set, names read off the design."""
+        arms, _parent_md, _specialist_md, _placebo_md = self._design(tmp_path)
+        assert [a.name for a in arms] == [
+            "parent_present__specialist_present",
+            "parent_present__specialist_absent",
+            "parent_absent__specialist_present",
+            "parent_absent__specialist_absent",
+        ]
+        parent_body = "Always flag AI-slop patterns"
+        specialist_body = "Verify every claim"
+        placebo_body = "Maintain your usual working"
+
+        resolved = {
+            arm.name: "".join(
+                block["text"]
+                for block in resolve_arm_assemblies(arms, ConditionRenderer())[
+                    arm.name
+                ].system_blocks
+            )
+            for arm in arms
+        }
+        assert parent_body in resolved["parent_present__specialist_present"]
+        assert specialist_body in resolved["parent_present__specialist_present"]
+        assert specialist_body in resolved["parent_absent__specialist_present"]
+        assert parent_body not in resolved["parent_absent__specialist_present"]
+        assert placebo_body in resolved["parent_present__specialist_absent"]
+        assert specialist_body not in resolved["parent_present__specialist_absent"]
+        both_absent = resolved["parent_absent__specialist_absent"]
+        assert placebo_body in both_absent
+        assert parent_body not in both_absent
+        assert specialist_body not in both_absent
+
+    def test_factorial_runs_without_hand_editing_the_runner(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection], tmp_path: Path
+    ) -> None:
+        """The 2x2 declared by data is sampled by the stock runner, all four arms."""
+        ev, rt = seeded_db_pair
+        arms, _parent, _specialist, _placebo = self._design(tmp_path)
+        runner, _ = _make_runner(ev, rt)
+        results = runner.run_arms(
+            skill_id=_SKILL_ID,
+            arms=list(arms),
+            user_message=_USER_MSG,
+            samples_per_arm=1,
+            max_usd=10.0,
+        )
+        assert [r.arm_name for r in results] == [a.name for a in arms]
+        cur = ev.execute("SELECT arm, COUNT(*) FROM arm_samples GROUP BY arm")
+        counts = dict(cur.fetchall())
+        assert counts == {a.name: 1 for a in arms}
+
+    def test_factorial_expansion_refuses_a_composed_ill_formed_name(self) -> None:
+        """A factor/label pair that composes an invalid arm name fails the expansion."""
+        from skill_harness.ablation.arms import ArmFactor, ArmLevel, cross_factorial
+
+        with pytest.raises(ArmSpecError, match="not a valid declared-arm name"):
+            cross_factorial((ArmFactor("Bad Factor", levels=(ArmLevel("one"), ArmLevel("two"))),))
+
+
+# ---------------------------------------------------------------------------
 # run_arms: the declared-arm sampling loop
 # ---------------------------------------------------------------------------
 
