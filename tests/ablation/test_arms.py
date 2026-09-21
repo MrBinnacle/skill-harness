@@ -1,0 +1,518 @@
+"""Tests for declared-arm runs (#554 AC1).
+
+A run config declares named arms, each resolving to a distinct system-prompt
+assembly, and the runner samples every declared arm. The per-clause
+full/ablated_k/null loop is untouched; declared-arm runs are a separate unit of
+comparison (composition studies), so they get their own entry point and their
+own append-only evidence table (arm_samples, migration 1200).
+
+Mock discipline: all API calls mocked at the SDK boundary
+(anthropic.Anthropic.messages.create) per A32 precedent. No live calls.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from collections.abc import Callable, Iterator
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock
+
+import pytest
+
+from skill_harness.ablation.arms import (
+    ArmAssembly,
+    ArmSpec,
+    ArmSpecError,
+    resolve_arm_assemblies,
+)
+from skill_harness.ablation.render import ConditionRenderer
+from skill_harness.ablation.runner import RunConfig
+from skill_harness.ablation.stopping import N_MIN
+from skill_harness.ablation.subject import SubjectClient
+from skill_harness.storage.migrations import open_evidence, open_runtime
+
+_TS = "2026-06-06T00:00:00.000000+00:00"
+_SHA = "a" * 64
+_SKILL_ID = "skill-arms-test"
+_USER_MSG = "Write a paragraph about testing."
+
+
+def _mock_response(
+    text: str = "This is a test response.",
+    input_tokens: int = 100,
+    output_tokens: int = 20,
+) -> MagicMock:
+    """Create a mock Anthropic SDK response."""
+    mock_resp = MagicMock()
+    mock_resp.content = [MagicMock(text=text)]
+    mock_resp.model = "claude-sonnet-4-6"
+    mock_resp.stop_reason = "end_turn"
+    mock_usage = MagicMock()
+    mock_usage.input_tokens = input_tokens
+    mock_usage.output_tokens = output_tokens
+    mock_usage.cache_read_input_tokens = 0
+    mock_usage.cache_creation_input_tokens = 0
+    mock_resp.usage = mock_usage
+    return mock_resp
+
+
+def _seed_skill(evidence_conn: sqlite3.Connection) -> None:
+    """Insert a skill row required by the FK constraint on runs."""
+    from skill_harness.storage.models import SkillWrite
+    from skill_harness.storage.repositories.evidence.skills import insert_skill
+    from skill_harness.storage.transaction import writer_transaction
+
+    with writer_transaction(evidence_conn):
+        insert_skill(
+            evidence_conn,
+            SkillWrite(
+                skill_id=_SKILL_ID,
+                name="Test Skill",
+                source_path="/test/skill.md",
+                source_sha256=_SHA,
+                imported_at=_TS,
+            ),
+        )
+
+
+def _make_runner(
+    evidence_conn: sqlite3.Connection,
+    runtime_conn: sqlite3.Connection,
+    response_factory: Callable[[int], MagicMock] | None = None,
+) -> tuple[Any, MagicMock]:
+    """Create an AblationRunner with a mocked SDK client.
+
+    :returns: (runner, mock_client)
+    """
+    from skill_harness.ablation.runner import AblationRunner
+
+    mock_client = MagicMock()
+    call_count = [0]
+
+    if response_factory is None:
+
+        def _default_factory(idx: int) -> MagicMock:
+            return _mock_response()
+
+        response_factory = _default_factory
+
+    def _create_side_effect(**kwargs: Any) -> MagicMock:
+        resp = response_factory(call_count[0])
+        call_count[0] += 1
+        return resp
+
+    mock_client.messages.create.side_effect = _create_side_effect
+
+    subject = SubjectClient(client=mock_client, model="claude-sonnet-4-6")
+
+    runner = AblationRunner(
+        evidence_conn=evidence_conn,
+        runtime_conn=runtime_conn,
+        subject_client=subject,
+        scorers={"verbosity": lambda t: float(len(t.split()))},
+        max_retries=0,
+        retry_delay_s=0.0,
+    )
+    return runner, mock_client
+
+
+@pytest.fixture()
+def seeded_db_pair(
+    tmp_path: Path,
+) -> Iterator[tuple[sqlite3.Connection, sqlite3.Connection]]:
+    ev = open_evidence(tmp_path / "evidence.db")
+    rt = open_runtime(tmp_path / "runtime.db")
+    _seed_skill(ev)
+    try:
+        yield ev, rt
+    finally:
+        ev.close()
+        rt.close()
+
+
+# ---------------------------------------------------------------------------
+# RunConfig carries declared arms
+# ---------------------------------------------------------------------------
+
+
+class TestRunConfigArms:
+    def test_arms_roundtrip_through_config_json(self) -> None:
+        """A run config declares named arms; JSON roundtrip preserves them (#554 AC1)."""
+        arms = (
+            ArmSpec(name="parent_only", body_texts=("Parent card body text.",)),
+            ArmSpec(
+                name="both",
+                body_texts=("Parent card body text.", "Specialist body text."),
+            ),
+        )
+        config = RunConfig(
+            run_id="r-1",
+            skill_id=_SKILL_ID,
+            clauses=[],
+            subject_model="claude-sonnet-4-6",
+            user_message=_USER_MSG,
+            arms=arms,
+        )
+        restored = RunConfig.from_json(config.to_json())
+        assert restored.arms == arms
+
+    def test_default_run_declares_no_arms(self) -> None:
+        """The per-clause run's config carries no arm field value (empty tuple)."""
+        config = RunConfig(
+            run_id="r-2",
+            skill_id=_SKILL_ID,
+            clauses=[],
+            subject_model="claude-sonnet-4-6",
+            user_message=_USER_MSG,
+        )
+        assert config.arms == ()
+        restored = RunConfig.from_json(config.to_json())
+        assert restored.arms == ()
+
+
+# ---------------------------------------------------------------------------
+# Arm resolution
+# ---------------------------------------------------------------------------
+
+
+class TestResolveArmAssemblies:
+    def test_each_declared_arm_resolves_to_a_distinct_assembly(self) -> None:
+        """One assembly per declared arm, all distinct, in declared order (#554 AC1)."""
+        renderer = ConditionRenderer()
+        arms = (
+            ArmSpec(name="null_arm", body_texts=()),
+            ArmSpec(name="parent", body_texts=("Parent body.",)),
+            ArmSpec(name="both", body_texts=("Parent body.", "Specialist body.")),
+        )
+        assemblies = resolve_arm_assemblies(arms, renderer)
+        assert list(assemblies) == ["null_arm", "parent", "both"]
+        texts = [a.system_text for a in assemblies.values()]
+        assert len(set(texts)) == 3
+        assert "Parent body." in assemblies["parent"].system_text
+        assert "Parent body." in assemblies["both"].system_text
+        assert "Specialist body." in assemblies["both"].system_text
+        assert "Parent body." not in assemblies["null_arm"].system_text
+
+    def test_two_arms_resolving_to_the_same_assembly_are_refused(self) -> None:
+        """A declared-arm run needs distinct assemblies; duplicates are refused."""
+        renderer = ConditionRenderer()
+        arms = (
+            ArmSpec(name="first", body_texts=("Same body.",)),
+            ArmSpec(name="second", body_texts=("Same body.",)),
+        )
+        with pytest.raises(ArmSpecError, match="same system-prompt assembly"):
+            resolve_arm_assemblies(arms, renderer)
+
+    def test_duplicate_arm_names_are_refused(self) -> None:
+        renderer = ConditionRenderer()
+        arms = (
+            ArmSpec(name="dup", body_texts=("One body.",)),
+            ArmSpec(name="dup", body_texts=("Other body.",)),
+        )
+        with pytest.raises(ArmSpecError, match="duplicate arm name"):
+            resolve_arm_assemblies(arms, renderer)
+
+    def test_empty_arm_set_is_refused(self) -> None:
+        with pytest.raises(ArmSpecError, match="at least one arm"):
+            resolve_arm_assemblies((), ConditionRenderer())
+
+    def test_ill_formed_arm_name_is_refused(self) -> None:
+        renderer = ConditionRenderer()
+        with pytest.raises(ArmSpecError, match="not a valid declared-arm name"):
+            resolve_arm_assemblies((ArmSpec(name="Bad Name", body_texts=("Body.",)),), renderer)
+
+    def test_blank_body_text_is_refused(self) -> None:
+        renderer = ConditionRenderer()
+        with pytest.raises(ArmSpecError, match="blank"):
+            resolve_arm_assemblies((ArmSpec(name="arm", body_texts=("   ",)),), renderer)
+
+
+# ---------------------------------------------------------------------------
+# run_arms: the declared-arm sampling loop
+# ---------------------------------------------------------------------------
+
+
+class TestRunArms:
+    def test_run_samples_every_declared_arm(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        """Every declared arm is sampled; evidence rows and results agree (#554 AC1)."""
+        ev, rt = seeded_db_pair
+        runner, mock_client = _make_runner(ev, rt)
+        arms = (
+            ArmSpec(name="parent_only", body_texts=("Parent card body.",)),
+            ArmSpec(name="both", body_texts=("Parent card body.", "Specialist body.")),
+        )
+        samples_per_arm = 2
+
+        results = runner.run_arms(
+            skill_id=_SKILL_ID,
+            arms=arms,
+            user_message=_USER_MSG,
+            samples_per_arm=samples_per_arm,
+            max_usd=10.0,
+        )
+
+        assert [(r.arm_name, r.samples_collected) for r in results] == [
+            ("parent_only", 2),
+            ("both", 2),
+        ]
+
+        # Evidence: one arm_samples row per (arm, sample_index), no clause rows.
+        cur = ev.execute("SELECT arm, COUNT(*) FROM arm_samples GROUP BY arm ORDER BY arm")
+        counts = dict(cur.fetchall())
+        assert counts == {"both": 2, "parent_only": 2}
+        cur = ev.execute("SELECT COUNT(*) FROM samples")
+        assert cur.fetchone()[0] == 0
+
+        # Wire: warmup + one call per sample, and the two arms saw different blocks.
+        calls = mock_client.messages.create.call_args_list
+        assert len(calls) == 1 + 2 * samples_per_arm  # warmup + samples
+        sample_systems = [call.kwargs["system"] for call in calls[1:]]
+        first_arm_blocks = sample_systems[:samples_per_arm]
+        second_arm_blocks = sample_systems[samples_per_arm:]
+        assert all(b == first_arm_blocks[0] for b in first_arm_blocks)
+        assert first_arm_blocks[0] != second_arm_blocks[0]
+        assert any("Parent card body." in block["text"] for block in first_arm_blocks[0])
+        assert any("Specialist body." in block["text"] for block in second_arm_blocks[0])
+
+    def test_run_config_json_carries_the_declared_arms(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        """runs.config_json names the declared arms of the run (#554 AC1)."""
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        arms = (
+            ArmSpec(name="parent_only", body_texts=("Parent card body.",)),
+            ArmSpec(name="both", body_texts=("Parent card body.", "Specialist body.")),
+        )
+        results = runner.run_arms(
+            skill_id=_SKILL_ID,
+            arms=arms,
+            user_message=_USER_MSG,
+            samples_per_arm=1,
+            max_usd=10.0,
+        )
+        assert len(results) == 2
+
+        cur = ev.execute("SELECT config_json FROM runs WHERE skill_id = ?", (_SKILL_ID,))
+        config_json = cur.fetchone()[0]
+        stored = json.loads(config_json)
+        assert [a["name"] for a in stored["arms"]] == ["parent_only", "both"]
+        assert stored["arms"][1]["body_texts"] == [
+            "Parent card body.",
+            "Specialist body.",
+        ]
+
+        restored = RunConfig.from_json(config_json)
+        assert restored.arms == arms
+        assert restored.family_size == 2
+
+    def test_run_progress_and_budget_track_the_arm_run(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        arms = (ArmSpec(name="parent_only", body_texts=("Parent card body.",)),)
+        runner.run_arms(
+            skill_id=_SKILL_ID,
+            arms=arms,
+            user_message=_USER_MSG,
+            samples_per_arm=3,
+            max_usd=10.0,
+        )
+        cur = rt.execute("SELECT state, samples_planned, samples_collected FROM run_progress")
+        state, planned, collected = cur.fetchone()
+        assert state == "completed"
+        assert planned == 3
+        assert collected == 3
+
+    def test_default_samples_per_arm_is_n_min(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        results = runner.run_arms(
+            skill_id=_SKILL_ID,
+            arms=(ArmSpec(name="parent_only", body_texts=("Parent body.",)),),
+            user_message=_USER_MSG,
+            max_usd=10.0,
+        )
+        assert results[0].samples_collected == N_MIN
+
+    def test_refusals_write_no_run_row(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        """A refused arm declaration spends nothing and writes no run row."""
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        with pytest.raises(ArmSpecError):
+            runner.run_arms(
+                skill_id=_SKILL_ID,
+                arms=(  # two names, one assembly
+                    ArmSpec(name="first", body_texts=("Same body.",)),
+                    ArmSpec(name="second", body_texts=("Same body.",)),
+                ),
+                user_message=_USER_MSG,
+                samples_per_arm=1,
+                max_usd=10.0,
+            )
+        with pytest.raises(ArmSpecError):
+            runner.run_arms(
+                skill_id=_SKILL_ID,
+                arms=(),
+                user_message=_USER_MSG,
+                samples_per_arm=1,
+                max_usd=10.0,
+            )
+        cur = ev.execute("SELECT COUNT(*) FROM runs")
+        assert cur.fetchone()[0] == 0
+        cur = ev.execute("SELECT COUNT(*) FROM arm_samples")
+        assert cur.fetchone()[0] == 0
+
+    def test_arm_samples_table_is_append_only(self, evidence_db: sqlite3.Connection) -> None:
+        """arm_samples carries the standard append-only triggers."""
+        evidence_db.execute(
+            "INSERT INTO skills (skill_id, name, source_path, source_sha256) VALUES (?,?,?,?)",
+            ("sk_x", "x", "/tmp/x.md", _SHA),
+        )
+        evidence_db.execute(
+            "INSERT INTO runs (run_id, skill_id, run_kind, config_json, started_at) "
+            "VALUES (?,?,?,?,?)",
+            ("r-x", "sk_x", "ablation", "{}", _TS),
+        )
+        evidence_db.execute(
+            "INSERT INTO arm_samples "
+            "(sample_id, run_id, arm, sample_index, subject_model, output_text, "
+            "output_sha256, sampled_at) VALUES (?,?,?,?,?,?,?,?)",
+            ("s-x", "r-x", "both", 0, "claude-sonnet-4-6", "out", _SHA, _TS),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="append_only_violation: arm_samples"):
+            evidence_db.execute(
+                "UPDATE arm_samples SET output_text = 'nope' WHERE sample_id = 's-x'"
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="append_only_violation: arm_samples"):
+            evidence_db.execute("DELETE FROM arm_samples WHERE sample_id = 's-x'")
+
+    def test_arm_samples_unique_per_arm_index(self, evidence_db: sqlite3.Connection) -> None:
+        """UNIQUE(run_id, arm, sample_index) is the crash-resume idempotency key."""
+        evidence_db.execute(
+            "INSERT INTO skills (skill_id, name, source_path, source_sha256) VALUES (?,?,?,?)",
+            ("sk_x", "x", "/tmp/x.md", _SHA),
+        )
+        evidence_db.execute(
+            "INSERT INTO runs (run_id, skill_id, run_kind, config_json, started_at) "
+            "VALUES (?,?,?,?,?)",
+            ("r-y", "sk_x", "ablation", "{}", _TS),
+        )
+        evidence_db.execute(
+            "INSERT INTO arm_samples "
+            "(sample_id, run_id, arm, sample_index, subject_model, output_text, "
+            "output_sha256, sampled_at) VALUES (?,?,?,?,?,?,?,?)",
+            ("s-y1", "r-y", "both", 0, "claude-sonnet-4-6", "out", _SHA, _TS),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            evidence_db.execute(
+                "INSERT INTO arm_samples "
+                "(sample_id, run_id, arm, sample_index, subject_model, output_text, "
+                "output_sha256, sampled_at) VALUES (?,?,?,?,?,?,?,?)",
+                ("s-y2", "r-y", "both", 0, "claude-sonnet-4-6", "out", _SHA, _TS),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Reconciliation: arm-sample costs are evidence-authoritative (A41)
+# ---------------------------------------------------------------------------
+
+
+def test_reconciler_counts_arm_sample_costs(
+    seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection],
+) -> None:
+    """Evidence cost sum includes arm_samples.usd, so an arm run reconciles clean."""
+    from skill_harness.ablation.reconciler import reconcile_run_cost
+
+    ev, rt = seeded_db_pair
+    ev.execute(
+        "INSERT INTO runs (run_id, skill_id, run_kind, config_json, started_at) VALUES (?,?,?,?,?)",
+        ("r-cost", _SKILL_ID, "ablation", "{}", _TS),
+    )
+    ev.execute(
+        "INSERT INTO arm_samples "
+        "(sample_id, run_id, arm, sample_index, subject_model, output_text, "
+        "output_sha256, sampled_at, usd) VALUES (?,?,?,?,?,?,?,?,?)",
+        ("s-c1", "r-cost", "both", 0, "claude-sonnet-4-6", "out", _SHA, _TS, 0.01),
+    )
+    from skill_harness.storage.models import CostLedgerWrite
+    from skill_harness.storage.repositories.runtime.cost_ledger import (
+        insert_cost_ledger_entry,
+    )
+    from skill_harness.storage.transaction import writer_transaction
+
+    with writer_transaction(rt):
+        insert_cost_ledger_entry(
+            rt,
+            CostLedgerWrite(
+                ts=_TS,
+                run_id="r-cost",
+                skill_id=None,
+                model_id="claude-sonnet-4-6",
+                call_kind="subject",
+                input_tok=10,
+                cache_write_tok=0,
+                cache_read_tok=0,
+                output_tok=5,
+                usd=0.01,
+            ),
+        )
+    # In sync: no back-fill needed.
+    assert (
+        reconcile_run_cost(
+            evidence_conn=ev, runtime_conn=rt, run_id="r-cost", model_id="claude-sonnet-4-6"
+        )
+        is False
+    )
+
+
+def test_arm_sample_write_model_refuses_ill_formed_arm() -> None:
+    """The write model is the floor: arm must match the declared-arm name pattern."""
+    from pydantic import ValidationError
+
+    from skill_harness.storage.models import ArmSampleWrite
+
+    with pytest.raises(ValidationError, match="declared-arm name"):
+        ArmSampleWrite(
+            sample_id="s",
+            run_id="r",
+            arm="Both Arms",
+            sample_index=0,
+            subject_model="m",
+            subject_seed=None,
+            output_text="out",
+            output_sha256=_SHA,
+            sampled_at=_TS,
+        )
+
+
+def test_arm_assembly_block_layout_carries_cache_markers() -> None:
+    """The assembly layout mirrors the renderer discipline: base marker + last body."""
+    renderer = ConditionRenderer()
+    assembly = resolve_arm_assemblies(
+        (ArmSpec(name="both", body_texts=("One.", "Two.")),), renderer
+    )["both"]
+    blocks = assembly.system_blocks
+    assert blocks[0]["text"] == renderer._base_system
+    assert blocks[0]["cache_control"] == {"type": "ephemeral"}
+    assert blocks[1]["text"] == "One."
+    assert "cache_control" not in blocks[1]
+    assert blocks[2]["text"] == "Two."
+    assert blocks[2]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_arm_assembly_type_holds_the_wire_shape() -> None:
+    renderer = ConditionRenderer()
+    assemblies = resolve_arm_assemblies((ArmSpec(name="parent", body_texts=("Body.",)),), renderer)
+    assembly = assemblies["parent"]
+    assert isinstance(assembly, ArmAssembly)
+    assert assembly.system_text == "".join(b["text"] for b in assembly.system_blocks)

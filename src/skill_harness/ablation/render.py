@@ -127,6 +127,37 @@ class ConditionRenderer:
             f"ablated_{k}": self._render_ablated(clauses, k, placeholder),
         }
 
+    def render_arm_assembly(self, body_texts: list[str]) -> dict[str, Any]:
+        """Render one declared arm's whole-prompt assembly (#554).
+
+        A declared arm is a whole prompt assembly, not one clause of one card.
+        Block layout: the base system block (cache marker), then one text block
+        per body text, with the cache marker on the LAST body block. An arm
+        with no bodies renders the base block alone (the null assembly).
+
+        The A39 discipline carries over: this method builds the request
+        STRUCTURE only and injects no inspection marker into block text.
+
+        :param body_texts: The bodies this arm includes, in declared order
+            (inline texts first, then path-read bodies).
+        :returns: ``{"system_text": str, "system_blocks": list[dict]}``.
+        """
+        base_block: dict[str, Any] = {
+            "type": "text",
+            "text": self._base_system,
+            "cache_control": {"type": "ephemeral"},
+        }
+        blocks: list[dict[str, Any]] = [base_block]
+        for i, text in enumerate(body_texts):
+            block: dict[str, Any] = {"type": "text", "text": text}
+            if i == len(body_texts) - 1:
+                block["cache_control"] = {"type": "ephemeral"}
+            blocks.append(block)
+        return {
+            "system_text": "".join(b["text"] for b in blocks),
+            "system_blocks": blocks,
+        }
+
     # ------------------------------------------------------------------
     # Private renderers
     # ------------------------------------------------------------------
