@@ -106,12 +106,18 @@ changes. Run that first. It is the cheapest thing in this document.
   `V_on_demand` is the default architecture and the profile's live cost terms are the description
   and the trigger's reliability. The large standing items are the always-loaded files, which are
   out of this instrument's scope.
-- A full listing drops descriptions and keeps names, so G0 is visibility, and adding skill B can
-  silence skill A with no model run involved. This is the cheapest non-additivity there is, and it
-  is screened before any body-layer pair. **Its documented mechanism is cited from memory and is
-  being verified** (the research repository that governs this work,
-  `docs/research/citation-verification-S471.md`, row 15).
-  Build the G0 screen only against the verified text.
+- G0 is visibility: a skill whose description never reaches the listing cannot fire, whatever
+  its body says. **The mechanism the adjudication assumed did not verify.** Claude Code's
+  settings reference and skills page (fetched 2026-09-21, the research repository's
+  `docs/research/citation-verification-S471.md`, row 15) document `skillListingBudgetFraction`
+  and `skillListingMaxDescChars`, and one over-budget behaviour: each skill's combined
+  `description` and `when_to_use` text is truncated at 1,536 characters. No default of 1 percent
+  and no dropping of least-used descriptions appears on either page. Dropping has been
+  **observed**, though: on 2026-07-04 the `/skills` command on the maintainer's host printed a
+  warning that 25 descriptions would be dropped at 1.4 percent against a 1 percent budget. So G0
+  rests on an observed, undocumented behaviour, and step 0d measures it directly from the
+  `/skills` output at collection scale rather than deriving it from a rule the docs do not
+  state. The non-additivity remains the cheapest to test, because it needs no model run.
 - A factorial on a ceilinged task measures nothing, so G4 waits on G2, which waits on G1, which
   is #419. The order is forced, not chosen.
 - Loss needs a unit the operator sets. Until then the profile reports probabilities, counts and
@@ -128,7 +134,7 @@ can tell a build from a spend decision.
 | 0a | Run the registered `value_class` ablation count over every verdict on disk. Publish the number either way. | $0, one static run | new, filed from this doc | whether one taxonomy or none conditions verdicts |
 | 0b | Declare a claim type for every published card, in a pinned registry, as reporting vocabulary. Include the `value_class` mapping. | $0 | #612 item 1 | the profile's primary-read row; Type IV cards get their typed refusal immediately |
 | 0c | Write the activation contract format and retrofit it to gitpull v3a from the #419 finding: target action, hazard preconditions, observable, consequence, mode (natural / decision-point / forced), floor, minimum P(bad state \| action), maximum leakage. The paired launch refuses a task without one. | $0 | #611 item 1 | #419 becomes the first contract's G1 measurement |
-| 0d | The G0 listing-layer screen over the installed collection, once row 15 of the citation file verifies the mechanism. | $0 | #614 item 1 | the interaction ticket's cheap half; a drop is a finding on its own |
+| 0d | The G0 listing-layer measurement over the installed collection: render the listing at collection scale and record, per skill, whether its description is present, truncated at 1,536 characters, or absent. A measurement, since the eviction mechanism is undocumented (row 15). | $0 | #614 item 1 | the interaction ticket's cheap half; a truncated or missing description is a finding on its own |
 | 1 | The #419 Null qualification screen, k = 8, on the operator's typed go. | $0.60 expected, $5.00 cap, authorised | #419 | G1 for the only task family with a card behind it; the floor RAT-0001 Amendment 5 is waiting for |
 | 2 | On a qualifying screen: consequence validation and the hazard-inactive twin on v3a, then a new row-pick on the rebuilt 539,011-token basis. | twin screen about the screen's cost; the paired run needs its own RAT | #611 items 2-3, then a RAT-0002 | the first real verdict on a published card, with a process row beside it |
 | 3 | `proximal_assertions` on a task, generalising `hazard_entry_counts`, and the artifact route. | $0 to build; each use rides an existing run | #612 items 2-3, after #555 | claim types II and III get a primary read |
@@ -165,7 +171,9 @@ gate Gn".
   anything else in steps 2 to 5 runs.
 - The `value_class` ablation count is zero. Then no field conditions a verdict, claim type stays
   reporting vocabulary permanently, and the "one taxonomy" recommendation reduces to renaming.
-- Row 15 of the citation file fails to verify the listing budget. Then G0 is a documented
-  hypothesis, not a mechanism, and step 0d is a measurement of whether descriptions drop at all.
+- Claude Code documents an eviction or ranking rule for the skill listing. Then G0 becomes a
+  documented mechanism again and step 0d turns from a measurement into a check against that rule.
+  (The reverse already happened: row 15 of the citation file found no such rule on 2026-09-21,
+  which is why step 0d is written as a measurement.)
 - The operator names a loss unit. Then the profile's recommendation row can carry an expected
   loss, and #613's out-of-scope line lifts.
