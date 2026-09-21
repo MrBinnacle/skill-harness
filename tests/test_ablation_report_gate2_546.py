@@ -20,6 +20,8 @@ tests pin the display of it:
 
 from __future__ import annotations
 
+import contextlib
+import tempfile
 from typing import Any
 from unittest.mock import patch
 
@@ -45,7 +47,7 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Any:
         merged_env.update(env)
     # `run ablation` defaults to ./evidence.db and ./runtime.db. A private cwd
     # keeps parallel workers from sharing one SQLite file ("database is locked").
-    with runner.isolated_filesystem():
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as cwd, contextlib.chdir(cwd):
         return runner.invoke(cli, list(args), env=merged_env)
 
 
