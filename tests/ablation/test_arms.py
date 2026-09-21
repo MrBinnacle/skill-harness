@@ -230,6 +230,124 @@ class TestResolveArmAssemblies:
 
 
 # ---------------------------------------------------------------------------
+# AC2: an arm can include a skill body that is not the subject's own, by path
+# ---------------------------------------------------------------------------
+
+
+_SIBLING_SKILL_MD = """---
+name: sibling-specialist
+description: A recruited third-party specialist card.
+---
+
+You are the citation-checking specialist. Verify every claim against the
+source list before you answer.
+"""
+
+
+def _write_sibling_skill(tmp_path: Path) -> Path:
+    sibling = tmp_path / "sibling-specialist"
+    sibling.mkdir()
+    skill_md = sibling / "SKILL.md"
+    skill_md.write_text(_SIBLING_SKILL_MD, encoding="utf-8")
+    return skill_md
+
+
+class TestArmIncludesForeignBodyByPath:
+    def test_path_body_is_read_verbatim_without_frontmatter(self, tmp_path: Path) -> None:
+        """The sibling's BODY joins the assembly; frontmatter is metadata only."""
+        skill_md = _write_sibling_skill(tmp_path)
+        renderer = ConditionRenderer()
+        assemblies = resolve_arm_assemblies(
+            (ArmSpec(name="with_sibling", skill_body_paths=(str(skill_md),)),),
+            renderer,
+        )
+        text = assemblies["with_sibling"].system_text
+        assert "Verify every claim against the" in text
+        assert "sibling-specialist" not in text
+        assert "recruited third-party specialist card" not in text
+
+    def test_foreign_body_reaches_the_wire_in_a_declared_arm_run(
+        self,
+        seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection],
+        tmp_path: Path,
+    ) -> None:
+        """A run with a path-bodied arm sends the sibling's body to the subject."""
+        ev, rt = seeded_db_pair
+        skill_md = _write_sibling_skill(tmp_path)
+        runner, mock_client = _make_runner(ev, rt)
+        arms = (
+            ArmSpec(
+                name="both",
+                body_texts=("Parent card body.",),
+                skill_body_paths=(str(skill_md),),
+            ),
+        )
+        results = runner.run_arms(
+            skill_id=_SKILL_ID,
+            arms=arms,
+            user_message=_USER_MSG,
+            samples_per_arm=1,
+            max_usd=10.0,
+        )
+        assert len(results) == 1
+        sample_calls = mock_client.messages.create.call_args_list[1:]
+        sent_blocks = sample_calls[0].kwargs["system"]
+        sent_text = "".join(block["text"] for block in sent_blocks)
+        assert "Parent card body." in sent_text
+        assert "Verify every claim against the" in sent_text
+        assert "sibling-specialist" not in sent_text
+
+    def test_skill_body_paths_roundtrip_through_config_json(self) -> None:
+        arms = (ArmSpec(name="both", skill_body_paths=("/skills/sibling/SKILL.md",)),)
+        config = RunConfig(
+            run_id="r-3",
+            skill_id=_SKILL_ID,
+            clauses=[],
+            subject_model="claude-sonnet-4-6",
+            user_message=_USER_MSG,
+            arms=arms,
+        )
+        restored = RunConfig.from_json(config.to_json())
+        assert restored.arms == arms
+
+    def test_unreadable_body_path_is_refused_before_spend(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection], tmp_path: Path
+    ) -> None:
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        missing = tmp_path / "no-such-skill" / "SKILL.md"
+        with pytest.raises(ArmSpecError, match=r"cannot be read as a SKILL\.md"):
+            runner.run_arms(
+                skill_id=_SKILL_ID,
+                arms=(ArmSpec(name="broken", skill_body_paths=(str(missing),)),),
+                user_message=_USER_MSG,
+                samples_per_arm=1,
+                max_usd=10.0,
+            )
+        cur = ev.execute("SELECT COUNT(*) FROM runs")
+        assert cur.fetchone()[0] == 0
+
+    def test_frontmatter_only_body_path_is_refused(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection], tmp_path: Path
+    ) -> None:
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        hollow = tmp_path / "hollow"
+        hollow.mkdir()
+        (hollow / "SKILL.md").write_text("---\nname: hollow\n---\n   \n", encoding="utf-8")
+        with pytest.raises(ArmSpecError, match=r"cannot be read as a SKILL\.md"):
+            runner.run_arms(
+                skill_id=_SKILL_ID,
+                arms=(ArmSpec(name="hollow", skill_body_paths=(str(hollow / "SKILL.md"),)),),
+                user_message=_USER_MSG,
+                samples_per_arm=1,
+                max_usd=10.0,
+            )
+        cur = ev.execute("SELECT COUNT(*) FROM runs")
+        assert cur.fetchone()[0] == 0
+
+
+# ---------------------------------------------------------------------------
 # run_arms: the declared-arm sampling loop
 # ---------------------------------------------------------------------------
 
