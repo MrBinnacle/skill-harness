@@ -251,16 +251,29 @@
         },
         "arms": {
           "oneOf": [
-            { "type": "string", "enum": ["null", "full"] },
+            {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9_-]*$",
+              "not": {
+                "pattern": "[^a-z0-9_-]"
+              }
+            },
             {
               "type": "array",
-              "items": { "type": "string", "enum": ["null", "full"] },
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9_-]*$",
+                "not": {
+                  "pattern": "[^a-z0-9_-]"
+                }
+              },
               "minItems": 1,
-              "maxItems": 2,
               "uniqueItems": true
             }
           ],
-          "description": "Which arms ran: 'null', 'full', or both."
+          "description": "Which arms ran: the run's declared arm names. 'null' and 'full' are the two-value vocabulary of the per-clause instrument; a declared-arm (composition) run names its own arms (e.g. the four cells of a factorial, composed as factor_level fragments joined by '__'). A single arm is a string; several arms are an array of unique names."
         }
       }
     },

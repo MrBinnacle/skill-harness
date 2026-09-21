@@ -32,11 +32,19 @@ import json
 import sqlite3
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NoReturn
 
+from skill_harness.ablation.arms import (
+    ArmAssembly,
+    ArmSpec,
+    arm_from_json_dict,
+    arm_to_json_dict,
+    resolve_arm_assemblies,
+)
 from skill_harness.ablation.confound import (
     N_NULL_FLOOR,
     ConfoundEvent,
@@ -77,6 +85,7 @@ from skill_harness.aggregation.status import UnmeasuredSubReason
 from skill_harness.oracles.tier1.axis_registry import MetricFn
 from skill_harness.storage.article_fingerprint import ArticleFingerprint
 from skill_harness.storage.models import (
+    ArmSampleWrite,
     ClauseRunOutcomeWrite,
     ConfoundEventWrite,
     CostLedgerWrite,
@@ -90,7 +99,9 @@ from skill_harness.storage.repositories.evidence.confound_events import insert_c
 from skill_harness.storage.repositories.evidence.oracle_verdicts import mint_oracle_verdict
 from skill_harness.storage.repositories.evidence.runs import (
     complete_run,
+    count_arm_samples_by_arm,
     get_run_by_id,
+    insert_arm_sample,
     insert_clause_run_outcome,
     insert_run,
 )
@@ -217,6 +228,27 @@ class RunConfig:
     a JSON blob that would violate A20.
     """
 
+    arms: tuple[ArmSpec, ...] = ()
+    """The run's declared named arms (#554). Empty for the per-clause run, whose
+    conditions remain the renderer's full/ablated_k/null trio and whose receipt
+    vocabulary is the two-arm {null, full} set. Non-empty for a declared-arm
+    (composition) run, whose unit of comparison is the named arm and whose
+    assemblies the runner resolves from these specs; the names travel into
+    ``subject_identity.arms`` on the run's receipt."""
+
+    def receipt_arm_names(self) -> tuple[str, ...]:
+        """The arm vocabulary a receipt for this run declares (#554).
+
+        A declared-arm run's receipt carries the declared arm names. A per-clause
+        run declares no arms; its receipt carries the two-value vocabulary the
+        SERS schema has always accepted, ``("full", "null")`` — the ablated
+        per-clause conditions were never part of the receipt vocabulary and are
+        not added here.
+        """
+        if self.arms:
+            return tuple(arm.name for arm in self.arms)
+        return ("full", "null")
+
     def to_json(self) -> str:
         """Serialize to JSON for storage in runs.config_json."""
         return json.dumps(
@@ -240,6 +272,11 @@ class RunConfig:
                 "ratification_id": self.ratification_id,
                 "ratification_path": self.ratification_path,
                 "stopping_reasons": self.stopping_reasons,
+                # #554 acceptance: the declared arms travel into
+                # runs.config_json, so a stored run names the arm set its
+                # receipt must declare. Written even when empty, for the same
+                # reason ratification_id is written when None.
+                "arms": [arm_to_json_dict(a) for a in self.arms],
             },
             sort_keys=True,
         )
@@ -262,6 +299,7 @@ class RunConfig:
             ratification_id=d.get("ratification_id"),
             ratification_path=d.get("ratification_path"),
             stopping_reasons=d.get("stopping_reasons", {}),
+            arms=tuple(arm_from_json_dict(a) for a in d.get("arms", [])),
         )
 
 
@@ -351,6 +389,91 @@ class BudgetAbortedError(Exception):
         self.run_id = run_id
         self.usd_spent = usd_spent
         self.usd_cap = usd_cap
+
+
+class ReceiptArmsMismatchError(ValueError):
+    """Raised when a run's declared arms and a receipt's declared arms disagree (#554).
+
+    The receipt's ``subject_identity.arms`` is the arm vocabulary the receipt
+    claims the run measured. A receipt that names arms the run never declared
+    (or omits declared arms) describes a different experiment; a run handed
+    such a vocabulary is refused before any spend, so the disagreement can
+    never be minted into evidence.
+    """
+
+
+class ArmNeverSampledError(RuntimeError):
+    """Raised when a declared arm finished its run with zero samples (#554 AC6).
+
+    Evidence is the authority: the gate reads ``arm_samples`` counts per
+    declared arm, so any path that leaves a declared arm unsampled — a
+    zero-sample plan, a loop that skips an arm, a silent partial write — fails
+    the run by name instead of reporting an arm set it never measured.
+    """
+
+    def __init__(self, run_id: str, unsampled: Sequence[str]) -> None:
+        super().__init__(
+            f"Run {run_id!r} ended with declared arms never sampled: {unsampled!r}; "
+            "a declared-arm run must sample every declared arm"
+        )
+        self.run_id = run_id
+        self.unsampled = tuple(unsampled)
+
+
+# ---------------------------------------------------------------------------
+# ArmResult -- per-arm run outcome (declared-arm runs, #554)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ArmResult:
+    """Outcome for one declared arm after the declared-arm loop completes.
+
+    ``samples_collected`` is the number of arm_samples rows written for this
+    arm. A declared-arm run returns one ArmResult per declared arm, in declared
+    order; a run that would report an arm with zero samples fails instead
+    (#554 AC6).
+    """
+
+    arm_name: str
+    samples_collected: int
+
+
+def assert_receipt_arms_match(
+    run_config: RunConfig,
+    receipt_arms: Sequence[str] | str,
+) -> None:
+    """Refuse a run config whose declared arms and receipt arms disagree (#554).
+
+    Set equality, both directions, order-insensitive: the receipt's declared
+    arm set must name exactly the arms the run declares. A per-clause run with
+    no declared arms keeps the two-value vocabulary ``("full", "null")``.
+
+    :param run_config: The run's frozen configuration, carrying the declared arms.
+    :param receipt_arms: The arm vocabulary the receipt declares (a single name
+        or a sequence, as ``subject_identity.arms`` accepts both shapes).
+    :raises ReceiptArmsMismatchError: empty or duplicate receipt arm list, or
+        the two declared sets differ.
+    """
+    supplied = [receipt_arms] if isinstance(receipt_arms, str) else list(receipt_arms)
+    if not supplied:
+        raise ReceiptArmsMismatchError(
+            "the receipt declares no arms; a receipt for this run must declare "
+            f"its arm vocabulary {sorted(run_config.receipt_arm_names())}"
+        )
+    if len(supplied) != len(set(supplied)):
+        raise ReceiptArmsMismatchError(
+            f"the receipt's arm list has duplicates: {supplied!r}; a declared "
+            "arm set names each arm once"
+        )
+    declared = sorted(run_config.receipt_arm_names())
+    receipt = sorted(supplied)
+    if declared != receipt:
+        raise ReceiptArmsMismatchError(
+            f"declared arms and receipt arms disagree: the run declares "
+            f"{declared}, the receipt declares {receipt}; a receipt describing "
+            "different arms describes a different experiment"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -762,6 +885,253 @@ class AblationRunner:
         )
 
         return clause_results
+
+    # ------------------------------------------------------------------
+    # Declared-arm runs (#554): composition studies sample named arms.
+    # ------------------------------------------------------------------
+
+    def run_arms(
+        self,
+        skill_id: str,
+        arms: tuple[ArmSpec, ...] | list[ArmSpec],
+        user_message: str,
+        samples_per_arm: int = N_MIN,
+        max_usd: float = 5.0,
+        subject_model: str = "claude-sonnet-4-6",
+        run_id: str | None = None,
+        receipt_arms: Sequence[str] | str | None = None,
+    ) -> list[ArmResult]:
+        """Execute a declared-arm run: sample every named arm (#554).
+
+        The unit of comparison is the named arm: a whole prompt assembly (base
+        system + the skill bodies the arm includes), resolved from the declared
+        specs before anything is written. Every declared arm is sampled, each
+        into ``evidence.arm_samples`` (migration 1200); the declared set is
+        frozen into ``runs.config_json`` so the run names the arm vocabulary
+        its receipt must carry.
+
+        Scope boundary: this is the sampling and evidence path only. Confound
+        monitoring, sequential stopping and verdict writes are per-clause-loop
+        machinery; a declared-arm run's contrasts (e.g. a 2x2 factorial's
+        interaction) are scored downstream, which is a separate ticket.
+
+        :param skill_id: Evidence.skills primary key (the subject skill).
+        :param arms: Declared arms, each resolving to a distinct assembly.
+        :param user_message: Task prompt sent to the subject model.
+        :param samples_per_arm: Samples issued per declared arm.
+        :param max_usd: Per-run budget cap in USD (A42).
+        :param subject_model: Model ID for subject calls.
+        :param run_id: Optional run ID (generated if None).
+        :param receipt_arms: The arm vocabulary the run's receipt will declare
+            (a single name or a sequence). Supplied by a pre-registered study
+            design; the run is refused before any spend when it disagrees with
+            the declared arms (#554).
+        :returns: One ArmResult per declared arm, in declared order.
+        :raises ArmSpecError: The declared set is malformed (empty, ill-formed
+            or duplicate names, unreadable body path, duplicate assemblies).
+            Refused before any run row is written, so nothing is spent.
+        :raises ReceiptArmsMismatchError: The receipt's declared arm
+            vocabulary disagrees with the config's declared arms. Refused
+            before any run row is written.
+        :raises BudgetAbortedError: If the budget cap is exceeded (A42).
+        """
+        if run_id is None:
+            run_id = str(uuid.uuid4())
+
+        arm_specs = tuple(arms)
+
+        run_config = RunConfig(
+            run_id=run_id,
+            skill_id=skill_id,
+            clauses=[],
+            subject_model=subject_model,
+            user_message=user_message,
+            max_usd=max_usd,
+            family_size=len(arm_specs),
+            arms=arm_specs,
+        )
+
+        # Refuse a disagreeing receipt vocabulary before any write or spend:
+        # the receipt describes the experiment, and a receipt naming different
+        # arms describes a different experiment (#554).
+        if receipt_arms is not None:
+            assert_receipt_arms_match(run_config, receipt_arms)
+
+        # Resolve before any row is written: a malformed declaration is
+        # refused with zero spend (A42 discipline applied to declarations).
+        assemblies: dict[str, ArmAssembly] = resolve_arm_assemblies(arm_specs, self._renderer)
+
+        samples_planned = len(arm_specs) * samples_per_arm
+        now = self._now()
+
+        # Evidence-first ordering (A25), mirroring run_ablation.
+        with writer_transaction(self._evidence):
+            insert_run(
+                self._evidence,
+                RunWrite(
+                    run_id=run_id,
+                    skill_id=skill_id,
+                    run_kind="ablation",
+                    config_json=run_config.to_json(),
+                    started_at=now,
+                    completed_at=None,
+                ),
+            )
+
+        with writer_transaction(self._runtime):
+            insert_run_budget(
+                self._runtime,
+                RunBudgetWrite(
+                    run_id=run_id,
+                    hard_cap_usd=max_usd,
+                    tokens_spent_in=0,
+                    tokens_spent_out=0,
+                    cache_write_in=0,
+                    cache_read_in=0,
+                    usd_spent=0.0,
+                    dry_run=0,
+                    aborted_at=None,
+                    last_updated=now,
+                ),
+            )
+            insert_run_progress(
+                self._runtime,
+                RunProgressWrite(
+                    run_id=run_id,
+                    state="running",
+                    samples_planned=samples_planned,
+                    samples_collected=0,
+                    last_heartbeat=now,
+                    error=None,
+                ),
+            )
+
+        samples_collected = 0
+
+        try:
+            # A43/COST-4: warmup before fan-out. Arm assemblies share only the
+            # base system block, so the warm primes the first declared arm's
+            # prefix; warmup failure is non-fatal and its cost is budgeted.
+            first_arm = arm_specs[0]
+            self._warmup_or_serialize(
+                run_id, assemblies[first_arm.name].system_blocks, user_message
+            )
+
+            for arm_spec in arm_specs:
+                assembly = assemblies[arm_spec.name]
+                for sample_index in range(samples_per_arm):
+                    # Budget gate (A42): one call per sample.
+                    projected_cost = project_call_cost(
+                        model=self._subject_model_id,
+                        estimated_input_tokens=512,
+                        estimated_output_tokens=512,
+                    )
+                    self._check_budget(run_id, max_usd, projected_cost)
+
+                    resp = self._call_subject_with_retry(assembly.system_blocks, user_message)
+                    sample_now = self._now()
+                    self._write_arm_sample_evidence(
+                        run_id=run_id,
+                        arm=arm_spec.name,
+                        sample_index=sample_index,
+                        resp=resp,
+                        sampled_at=sample_now,
+                        sample_id=str(uuid.uuid4()),
+                        model_id=self._subject_model_id,
+                    )
+                    self._write_cost_ledger(run_id, resp, sample_now, self._subject_model_id)
+                    self._update_budget_spend(run_id, resp)
+                    samples_collected += 1
+
+                with writer_transaction(self._runtime):
+                    update_run_progress(
+                        self._runtime,
+                        run_id,
+                        state="running",
+                        samples_collected=samples_collected,
+                        last_heartbeat=self._now(),
+                    )
+
+        except BudgetAbortedError as exc:
+            self._handle_budget_abort(exc, run_id, samples_collected)
+
+        # Completeness gate (#554 AC6): every declared arm must hold at least
+        # one arm_samples row. Evidence is the authority, so the gate reads
+        # counts back from the table rather than trusting the loop; an arm
+        # declared but never sampled fails the run by name instead of
+        # reporting an arm set it never measured.
+        counts = count_arm_samples_by_arm(self._evidence, run_id)
+        unsampled = [arm.name for arm in arm_specs if counts.get(arm.name, 0) == 0]
+        if unsampled:
+            failure_ts = self._now()
+            with writer_transaction(self._runtime):
+                update_run_progress(
+                    self._runtime,
+                    run_id,
+                    state="failed",
+                    samples_collected=samples_collected,
+                    last_heartbeat=failure_ts,
+                    error="declared_arm_never_sampled: " + ", ".join(unsampled),
+                )
+            raise ArmNeverSampledError(run_id, unsampled)
+
+        # Stamp completed_at exactly ONCE (A20 carve-out), as run_ablation does.
+        completed_ts = self._now()
+        with writer_transaction(self._evidence):
+            complete_run(self._evidence, run_id, completed_ts)
+
+        with writer_transaction(self._runtime):
+            update_run_progress(
+                self._runtime,
+                run_id,
+                state="completed",
+                samples_collected=samples_collected,
+                last_heartbeat=completed_ts,
+            )
+
+        # Post-run: reconcile cost (A41). Evidence sum includes arm_samples.usd.
+        reconcile_run_cost(
+            evidence_conn=self._evidence,
+            runtime_conn=self._runtime,
+            run_id=run_id,
+            model_id=subject_model,
+            skill_id=skill_id,
+        )
+
+        return [
+            ArmResult(arm_name=arm.name, samples_collected=samples_per_arm) for arm in arm_specs
+        ]
+
+    def _write_arm_sample_evidence(
+        self,
+        run_id: str,
+        arm: str,
+        sample_index: int,
+        resp: SubjectResponse,
+        sampled_at: str,
+        sample_id: str,
+        model_id: str,
+    ) -> None:
+        """Write one arm_samples row inside a writer_transaction (A25 evidence-first)."""
+        sha = sha256_of_output(resp.output_text)
+        sample = ArmSampleWrite(
+            sample_id=sample_id,
+            run_id=run_id,
+            arm=arm,
+            sample_index=sample_index,
+            subject_model=model_id,
+            subject_seed=None,
+            output_text=resp.output_text,
+            output_sha256=sha,
+            sampled_at=sampled_at,
+            input_tokens=resp.input_tokens,
+            cache_read_input_tokens=resp.cache_read_input_tokens,
+            cache_creation_input_tokens=resp.cache_creation_input_tokens,
+            output_tokens=resp.output_tokens,
+            usd=resp.usd,
+        )
+        with writer_transaction(self._evidence):
+            insert_arm_sample(self._evidence, sample)
 
     # ------------------------------------------------------------------
     # #503 — persist a pre-sampling refusal's sub-reason to evidence storage.

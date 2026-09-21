@@ -56,6 +56,27 @@ TASK_FRONTIER_ARMS: frozenset[str] = frozenset(member.value for member in TaskFr
 TASK_FRONTIER_ADMISSIBILITY_STATES: frozenset[str] = frozenset({"admissible", "inadmissible"})
 
 # ---------------------------------------------------------------------------
+# Declared-arm name vocabulary (migration 1200, #554)
+# ---------------------------------------------------------------------------
+# Defined HERE, not in `ablation/`, because the write model is the lowest layer
+# that must know it and `storage` may not import upward. The ablation arms
+# module and the SERS receipt mint re-use this one definition, so the runner's
+# declared arms, the arm_samples rows and the receipt's `subject_identity.arms`
+# are ONE vocabulary rather than three that need a drift guard.
+
+
+ARM_NAME_PATTERN: str = r"^[a-z0-9][a-z0-9_-]*$"
+"""A declared arm name: lowercase slug, first character alphanumeric."""
+
+ARM_NAME_RE = re.compile(ARM_NAME_PATTERN)
+
+
+def is_valid_arm_name(name: str) -> bool:
+    """Return True when ``name`` is a valid declared-arm name."""
+    return ARM_NAME_RE.fullmatch(name) is not None
+
+
+# ---------------------------------------------------------------------------
 # Shared validator helpers
 # ---------------------------------------------------------------------------
 
@@ -358,6 +379,72 @@ class SampleWrite(BaseModel):
         if isinstance(v, str):
             return _check_text(v, info.field_name or "field")
         return v
+
+    @field_validator("output_text")
+    @classmethod
+    def output_text_size_cap(cls, v: str) -> str:
+        return _check_text_size(v, OUTPUT_TEXT_MAX_BYTES, "output_text")
+
+
+class ArmSampleWrite(BaseModel):
+    """Insert shape for evidence.arm_samples (migration 1200, #554).
+
+    One subject output sampled under a declared arm of a composition run. The
+    arm is the unit of comparison (a whole prompt assembly), so these rows do
+    not carry the clause-keyed shape of ``samples``. ``arm`` must be a declared
+    arm name (``ARM_NAME_PATTERN``); membership in a run's declared set is the
+    runner's job, this validator is the vocabulary floor.
+    """
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    sample_id: str
+    run_id: str
+    arm: str
+    sample_index: int
+    subject_model: str
+    subject_seed: str | None
+    output_text: str
+    output_sha256: str
+    sampled_at: str
+
+    # A41 — per-call cost columns, written from actual response usage; None for
+    # non-API rows.
+    input_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
+    cache_creation_input_tokens: int | None = None
+    output_tokens: int | None = None
+    usd: float | None = None
+
+    @field_validator(
+        "sample_id",
+        "run_id",
+        "subject_model",
+        "output_sha256",
+        "sampled_at",
+    )
+    @classmethod
+    def no_control_chars(cls, v: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "field") if info else "field"
+        return _check_text(v, field_name)
+
+    @field_validator("subject_seed", mode="before")
+    @classmethod
+    def no_control_chars_optional(cls, v: object, info: ValidationInfo) -> object:
+        if isinstance(v, str):
+            return _check_text(v, info.field_name or "field")
+        return v
+
+    @field_validator("arm")
+    @classmethod
+    def declared_arm_name(cls, v: str) -> str:
+        if not is_valid_arm_name(v):
+            raise ValueError(
+                f"arm {v!r} is not a valid declared-arm name "
+                f"(must match {ARM_NAME_PATTERN}); it must also be one of the "
+                "run's declared arms, which the runner enforces at resolve time"
+            )
+        return _check_text(v, "arm")
 
     @field_validator("output_text")
     @classmethod

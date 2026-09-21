@@ -32,15 +32,22 @@ from skill_harness.storage.transaction import writer_transaction
 
 
 def get_evidence_cost_sum(evidence_conn: sqlite3.Connection, run_id: str) -> float:
-    """Sum usd from evidence.samples for a given run_id (A41 primary source).
+    """Sum usd from evidence for a given run_id (A41 primary source).
+
+    Evidence is authoritative for clause-keyed runs (samples.usd) and for
+    declared-arm runs (arm_samples.usd, migration 1200, #554); both tables sum
+    into this figure so a declared-arm run's ledger stays reconcilable.
 
     :param evidence_conn: Open evidence DB connection.
     :param run_id: Run to sum costs for.
     :returns: Sum of per-call USD costs from evidence (source of truth).
     """
     cur = evidence_conn.execute(
-        "SELECT COALESCE(SUM(usd), 0.0) FROM samples WHERE run_id = ? AND usd IS NOT NULL",
-        (run_id,),
+        "SELECT COALESCE(SUM(usd), 0.0) FROM ("
+        "SELECT usd FROM samples WHERE run_id = ? AND usd IS NOT NULL "
+        "UNION ALL "
+        "SELECT usd FROM arm_samples WHERE run_id = ? AND usd IS NOT NULL)",
+        (run_id, run_id),
     )
     row = cur.fetchone()
     return float(row[0]) if row else 0.0

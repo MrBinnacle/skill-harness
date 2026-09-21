@@ -25,7 +25,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from skill_harness.storage.models import ClauseRunOutcomeWrite, RunWrite
+from skill_harness.storage.models import ArmSampleWrite, ClauseRunOutcomeWrite, RunWrite
 
 
 def insert_run(conn: sqlite3.Connection, run: RunWrite) -> None:
@@ -167,3 +167,61 @@ def get_clause_run_outcome(
         return None
     cols = [d[0] for d in cur.description]
     return dict(zip(cols, row, strict=True))
+
+
+# ---------------------------------------------------------------------------
+# arm_samples (migration 1200, #554) — declared-arm (composition) sampling.
+# Repository lives in runs.py rather than its own module, for the same reason
+# clause_run_outcomes does: the rows are children of a run, and the evidence
+# repo module set is structurally pinned (test_evidence_repo_surface).
+# ---------------------------------------------------------------------------
+
+
+def insert_arm_sample(conn: sqlite3.Connection, sample: ArmSampleWrite) -> None:
+    """Insert an arm_samples row (append-only).
+
+    Plain INSERT, not OR IGNORE: UNIQUE(run_id, arm, sample_index) is the
+    idempotency key (A40), so a double-write attempt is loud rather than a
+    silent double-count of spend.
+
+    The arm value is validated against the declared-arm name vocabulary by the
+    write model; membership in the run's declared set is the runner's job.
+    """
+    conn.execute(
+        """
+        INSERT INTO arm_samples
+            (sample_id, run_id, arm, sample_index, subject_model, subject_seed,
+             output_text, output_sha256, sampled_at, input_tokens,
+             cache_read_input_tokens, cache_creation_input_tokens, output_tokens, usd)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            sample.sample_id,
+            sample.run_id,
+            sample.arm,
+            sample.sample_index,
+            sample.subject_model,
+            sample.subject_seed,
+            sample.output_text,
+            sample.output_sha256,
+            sample.sampled_at,
+            sample.input_tokens,
+            sample.cache_read_input_tokens,
+            sample.cache_creation_input_tokens,
+            sample.output_tokens,
+            sample.usd,
+        ),
+    )
+
+
+def count_arm_samples_by_arm(conn: sqlite3.Connection, run_id: str) -> dict[str, int]:
+    """Return {arm: sample_count} for a run's arm_samples rows.
+
+    The runner's declared-arm completeness gate reads this: an arm declared in
+    runs.config_json with zero rows here was never sampled (#554 AC6).
+    """
+    cur = conn.execute(
+        "SELECT arm, COUNT(*) FROM arm_samples WHERE run_id = ? GROUP BY arm",
+        (run_id,),
+    )
+    return {str(row[0]): int(row[1]) for row in cur.fetchall()}

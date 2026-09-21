@@ -91,6 +91,7 @@ actually buys.
 | Module | Branches | Uncovered | Mutation #166 | Branch coverage | Floor |
 |--------|---------:|----------:|--------------:|----------------:|-------|
 | `src/skill_harness/ablation/__init__.py` | 0 | 0 | not mutated | n/a | no branches |
+| `src/skill_harness/ablation/arms.py` | 26 | 0 | absent | 100.0% | BELOW 80% |
 | `src/skill_harness/ablation/confound.py` | 28 | 1 | 92.9% | 96.4% | OK |
 | `src/skill_harness/ablation/operator.py` | 6 | 3 | 52.0% | 50.0% | BELOW 80% |
 | `src/skill_harness/ablation/path_c.py` | 4 | 0 | absent | 100.0% | BELOW 80% |
@@ -141,8 +142,9 @@ normal path at many rates and never passes `alpha = 1.5`.
 arm-level records into the four-cell table, and routes it through Gate 2. It is in
 the Aggregation table above because the attention rule applies to it, not because
 it was part of the census: **the 7-of-20 figure and the 2,210/1,909 branch totals
-are the 2026-08-12 result and do not include later rows.** Counting both later
-flagged rows (this module and `binding.py`) leaves it 9 flagged of 22 today:
+are the 2026-08-12 result and do not include later rows.** Counting the three later
+flagged rows (this module, `binding.py`, and `ablation/arms.py`) leaves it 10
+flagged of 23 today:
 #247 moved this module's branch figure over the floor, but the attention rule
 reads both instruments, and mutation still reads `absent` for this module — so
 the row stays flagged on the mutation arm of the rule until #166's instrument
@@ -169,8 +171,9 @@ cross-partition id collision instead of pairing a calibration row into the
 effect (INVARIANTS #7).
 
 Mutation reads `absent` for the same reason `confidence_sequence.py` does: #166
-predates the module. Three of the 22 modules are now unmeasured by the stronger
-instrument (`confidence_sequence.py`, this module, and `binding.py`).
+predates the module. Four of the 23 modules are now unmeasured by the stronger
+instrument (`confidence_sequence.py`, this module, `binding.py`, and
+`ablation/arms.py`).
 
 **The 2 arcs still uncovered are both unreachable, and neither is suppressed.**
 The earlier draft of this row named three uncovered refusal guards - a pair
@@ -208,6 +211,26 @@ branches. Mutation reads `absent` because #166 predates the module. The attentio
 rule therefore flags this row despite complete branch reach; coverage does not
 substitute for the missing mutation measurement. The census figures above remain
 the 2026-08-12 result and do not include this row.
+
+`ablation/arms.py` was not in the tree on 2026-08-12 either. It landed on
+2026-09-21 with #554, the declared-arm (composition) sampling module: arm
+specification, name validation, assembly resolution, and the factorial expander.
+Its figures - **26 branches, 0 uncovered, 100.0%** - were measured on 2026-09-21
+with coverage.py 7.15.2 and the flags in "How to reproduce", under
+`tests/ablation/test_arms.py`. That is a narrower selection than the CI cell,
+and for this module it is the same number: `grep -rl "ablation.arms"` over
+`tests/` and `src/` returns this module's own test, the runner that consumes it,
+and the storage vocabulary constant, so no other test reaches an arc in it.
+Mutation reads `absent` because #166 predates the module. The attention rule
+therefore flags this row despite complete branch reach; coverage does not
+substitute for the missing mutation measurement. The mutation campaign recorded
+in that ticket's pull-request body is a hand-run six-mutant pass over the two
+gates and the resolver, not the #166 instrument, and does not fill the absent
+score. Two modules this change touched after the census, `ablation/runner.py`
+and `ablation/reconciler.py`, keep their dated 2026-08-12 rows; the census
+figure is not silently re-totalled, and the added code (`run_arms`, the
+arm-samples cost union) is read through this row and the #554 tests rather than
+through a stale percentage.
 
 ## What a zero in the Branches column means
 

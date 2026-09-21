@@ -896,7 +896,12 @@ and covers that section only. This page stays the citable surface for every kind
   `aggregation/confidence_sequence.py` has the worst branch coverage (17
   uncovered arcs of 54) and **no #166 mutation score at all**, and that its
   uncovered arcs were read and are input-validation guards; 2,210 branches
-  measured, 1,909 covered.
+  measured, 1,909 covered. Later rows are appended with their own measurement
+  date rather than re-totalled into that census: `matched_bridge.py` (2026-08-16,
+  #246), `binding.py` (2026-08-17, #263), and `ablation/arms.py` (2026-09-21,
+  #554) each carry a row under the same attention rule and a dated paragraph in
+  the report; the three later rows are unmeasured by #166 and stay flagged on
+  the mutation arm of the rule.
 - **Refuses to claim:** That coverage is evidence of correctness — a branch is
   counted when a test steps on it, whether or not anything asserted on the
   result; that a module reporting 0 branches carries any information, which is
