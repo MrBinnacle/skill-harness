@@ -32,6 +32,7 @@ import json
 import sqlite3
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -234,6 +235,19 @@ class RunConfig:
     assemblies the runner resolves from these specs; the names travel into
     ``subject_identity.arms`` on the run's receipt."""
 
+    def receipt_arm_names(self) -> tuple[str, ...]:
+        """The arm vocabulary a receipt for this run declares (#554).
+
+        A declared-arm run's receipt carries the declared arm names. A per-clause
+        run declares no arms; its receipt carries the two-value vocabulary the
+        SERS schema has always accepted, ``("full", "null")`` — the ablated
+        per-clause conditions were never part of the receipt vocabulary and are
+        not added here.
+        """
+        if self.arms:
+            return tuple(arm.name for arm in self.arms)
+        return ("full", "null")
+
     def to_json(self) -> str:
         """Serialize to JSON for storage in runs.config_json."""
         return json.dumps(
@@ -376,6 +390,17 @@ class BudgetAbortedError(Exception):
         self.usd_cap = usd_cap
 
 
+class ReceiptArmsMismatchError(ValueError):
+    """Raised when a run's declared arms and a receipt's declared arms disagree (#554).
+
+    The receipt's ``subject_identity.arms`` is the arm vocabulary the receipt
+    claims the run measured. A receipt that names arms the run never declared
+    (or omits declared arms) describes a different experiment; a run handed
+    such a vocabulary is refused before any spend, so the disagreement can
+    never be minted into evidence.
+    """
+
+
 # ---------------------------------------------------------------------------
 # ArmResult -- per-arm run outcome (declared-arm runs, #554)
 # ---------------------------------------------------------------------------
@@ -393,6 +418,43 @@ class ArmResult:
 
     arm_name: str
     samples_collected: int
+
+
+def assert_receipt_arms_match(
+    run_config: RunConfig,
+    receipt_arms: Sequence[str] | str,
+) -> None:
+    """Refuse a run config whose declared arms and receipt arms disagree (#554).
+
+    Set equality, both directions, order-insensitive: the receipt's declared
+    arm set must name exactly the arms the run declares. A per-clause run with
+    no declared arms keeps the two-value vocabulary ``("full", "null")``.
+
+    :param run_config: The run's frozen configuration, carrying the declared arms.
+    :param receipt_arms: The arm vocabulary the receipt declares (a single name
+        or a sequence, as ``subject_identity.arms`` accepts both shapes).
+    :raises ReceiptArmsMismatchError: empty or duplicate receipt arm list, or
+        the two declared sets differ.
+    """
+    supplied = [receipt_arms] if isinstance(receipt_arms, str) else list(receipt_arms)
+    if not supplied:
+        raise ReceiptArmsMismatchError(
+            "the receipt declares no arms; a receipt for this run must declare "
+            f"its arm vocabulary {sorted(run_config.receipt_arm_names())}"
+        )
+    if len(supplied) != len(set(supplied)):
+        raise ReceiptArmsMismatchError(
+            f"the receipt's arm list has duplicates: {supplied!r}; a declared "
+            "arm set names each arm once"
+        )
+    declared = sorted(run_config.receipt_arm_names())
+    receipt = sorted(supplied)
+    if declared != receipt:
+        raise ReceiptArmsMismatchError(
+            f"declared arms and receipt arms disagree: the run declares "
+            f"{declared}, the receipt declares {receipt}; a receipt describing "
+            "different arms describes a different experiment"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -818,6 +880,7 @@ class AblationRunner:
         max_usd: float = 5.0,
         subject_model: str = "claude-sonnet-4-6",
         run_id: str | None = None,
+        receipt_arms: Sequence[str] | str | None = None,
     ) -> list[ArmResult]:
         """Execute a declared-arm run: sample every named arm (#554).
 
@@ -840,20 +903,23 @@ class AblationRunner:
         :param max_usd: Per-run budget cap in USD (A42).
         :param subject_model: Model ID for subject calls.
         :param run_id: Optional run ID (generated if None).
+        :param receipt_arms: The arm vocabulary the run's receipt will declare
+            (a single name or a sequence). Supplied by a pre-registered study
+            design; the run is refused before any spend when it disagrees with
+            the declared arms (#554).
         :returns: One ArmResult per declared arm, in declared order.
         :raises ArmSpecError: The declared set is malformed (empty, ill-formed
             or duplicate names, unreadable body path, duplicate assemblies).
             Refused before any run row is written, so nothing is spent.
+        :raises ReceiptArmsMismatchError: The receipt's declared arm
+            vocabulary disagrees with the config's declared arms. Refused
+            before any run row is written.
         :raises BudgetAbortedError: If the budget cap is exceeded (A42).
         """
         if run_id is None:
             run_id = str(uuid.uuid4())
 
         arm_specs = tuple(arms)
-
-        # Resolve first, before any row is written: a malformed declaration is
-        # refused with zero spend (A42 discipline applied to declarations).
-        assemblies: dict[str, ArmAssembly] = resolve_arm_assemblies(arm_specs, self._renderer)
 
         run_config = RunConfig(
             run_id=run_id,
@@ -865,6 +931,16 @@ class AblationRunner:
             family_size=len(arm_specs),
             arms=arm_specs,
         )
+
+        # Refuse a disagreeing receipt vocabulary before any write or spend:
+        # the receipt describes the experiment, and a receipt naming different
+        # arms describes a different experiment (#554).
+        if receipt_arms is not None:
+            assert_receipt_arms_match(run_config, receipt_arms)
+
+        # Resolve before any row is written: a malformed declaration is
+        # refused with zero spend (A42 discipline applied to declarations).
+        assemblies: dict[str, ArmAssembly] = resolve_arm_assemblies(arm_specs, self._renderer)
 
         samples_planned = len(arm_specs) * samples_per_arm
         now = self._now()

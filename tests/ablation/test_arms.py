@@ -456,6 +456,128 @@ class TestCrossFactorial:
 
 
 # ---------------------------------------------------------------------------
+# AC5: the runner refuses a config whose declared arms and receipt arms disagree
+# ---------------------------------------------------------------------------
+
+
+class TestReceiptArmsAgreement:
+    def test_run_arms_refuses_a_disagreeing_receipt_arm_set(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        """Declared arms {parent_only, both} vs receipt arms {null, full} is refused."""
+        from skill_harness.ablation.runner import ReceiptArmsMismatchError
+
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        arms = (
+            ArmSpec(name="parent_only", body_texts=("Parent card body.",)),
+            ArmSpec(name="both", body_texts=("Parent card body.", "Sibling body.")),
+        )
+        with pytest.raises(ReceiptArmsMismatchError, match="receipt arms"):
+            runner.run_arms(
+                skill_id=_SKILL_ID,
+                arms=arms,
+                user_message=_USER_MSG,
+                samples_per_arm=1,
+                max_usd=10.0,
+                receipt_arms=["null", "full"],
+            )
+        cur = ev.execute("SELECT COUNT(*) FROM runs")
+        assert cur.fetchone()[0] == 0
+        cur = ev.execute("SELECT COUNT(*) FROM arm_samples")
+        assert cur.fetchone()[0] == 0
+
+    def test_run_arms_accepts_a_matching_receipt_arm_set(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        arms = (ArmSpec(name="parent_only", body_texts=("Parent card body.",)),)
+        results = runner.run_arms(
+            skill_id=_SKILL_ID,
+            arms=arms,
+            user_message=_USER_MSG,
+            samples_per_arm=1,
+            max_usd=10.0,
+            receipt_arms=["parent_only"],
+        )
+        assert [r.arm_name for r in results] == ["parent_only"]
+
+    def test_string_form_of_a_single_receipt_arm_is_normalized(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        results = runner.run_arms(
+            skill_id=_SKILL_ID,
+            arms=(ArmSpec(name="parent_only", body_texts=("Body.",)),),
+            user_message=_USER_MSG,
+            samples_per_arm=1,
+            max_usd=10.0,
+            receipt_arms="parent_only",
+        )
+        assert len(results) == 1
+
+    def test_assert_receipt_arms_match_direct(self, tmp_path: Path) -> None:
+        """The pure check: declared arms vs receipt arms, set equality both ways."""
+        from skill_harness.ablation.runner import (
+            ReceiptArmsMismatchError,
+            RunConfig,
+            assert_receipt_arms_match,
+        )
+
+        config = RunConfig(
+            run_id="r-arms",
+            skill_id="s",
+            clauses=[],
+            subject_model="m",
+            user_message="u",
+            arms=(ArmSpec(name="parent_only"), ArmSpec(name="both")),
+        )
+        # Disagreement in either direction is refused.
+        with pytest.raises(ReceiptArmsMismatchError):
+            assert_receipt_arms_match(config, ["null", "full"])
+        with pytest.raises(ReceiptArmsMismatchError):
+            assert_receipt_arms_match(config, ["parent_only"])
+        # A duplicate receipt arm list is refused, not silently deduplicated.
+        with pytest.raises(ReceiptArmsMismatchError, match="duplicate"):
+            assert_receipt_arms_match(config, ["parent_only", "parent_only"])
+        # An empty receipt arm list is refused.
+        with pytest.raises(ReceiptArmsMismatchError, match="no arms"):
+            assert_receipt_arms_match(config, [])
+        # Agreement (order-insensitive) passes.
+        assert_receipt_arms_match(config, ["both", "parent_only"])
+
+    def test_default_run_receipt_vocabulary_is_null_full(self) -> None:
+        """A per-clause run with no declared arms keeps the two-arm vocabulary."""
+        from skill_harness.ablation.runner import (
+            ReceiptArmsMismatchError,
+            RunConfig,
+            assert_receipt_arms_match,
+        )
+
+        config = RunConfig(
+            run_id="r-default",
+            skill_id="s",
+            clauses=[
+                {
+                    "clause_id": "c",
+                    "clause_text": "t",
+                    "clause_index": 0,
+                    "axis": "verbosity",
+                    "oracle_tier": 1,
+                }
+            ],
+            subject_model="m",
+            user_message="u",
+        )
+        assert config.receipt_arm_names() == ("full", "null")
+        assert_receipt_arms_match(config, ["null", "full"])
+        with pytest.raises(ReceiptArmsMismatchError):
+            assert_receipt_arms_match(config, ["null"])
+
+
+# ---------------------------------------------------------------------------
 # run_arms: the declared-arm sampling loop
 # ---------------------------------------------------------------------------
 
