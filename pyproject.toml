@@ -63,7 +63,7 @@ dependencies = [
   "tiktoken>=0.7,<1.0",
   # statsmodels: OLS for AlpacaEval-2 length regression (A35 observation-time half).
   # RUNTIME dep (imported by calibration/length_regression.py) — same dev-extras mis-file.
-  "statsmodels>=0.14",
+  "statsmodels>=0.15.0",
 ]
 
 [project.optional-dependencies]
@@ -111,7 +111,7 @@ dev = [
   # alone still lands the full test stack. numpy is the explicit numerical base.
   # pytest-randomly drives randomized CI order; its printed seed reproduces failures.
   "scipy>=1.11",
-  "statsmodels>=0.14",
+  "statsmodels>=0.15.0",
   "numpy>=2.5.3",
   "pytest-randomly>=4.1",
   # #182 — SERS conformance harness (draft 2020-12 validator).
