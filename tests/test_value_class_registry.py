@@ -9,6 +9,8 @@ These lock four things:
   3. ``value_class_for`` is the honest default for an unregistered skill (None).
   4. The registry is measured by this file against a pinned list of
      ``(skill_name, value_class, retired_on)`` triples (#422).
+  5. Every non-retired registry key names a skill that exists on a named surface;
+     a rename that does not reach the registry is caught here (#601).
 
 External-behaviour only — no store, no private logs (the guard is a pure function
 of p0 + value_class; the registry is a pure map).
@@ -68,6 +70,81 @@ _OBS_0003_0006 = (
     "append-only-evidence-design",  # OBS-0005
     "llm-judge-calibration",  # OBS-0006
 )
+
+
+# ---------------------------------------------------------------------------
+# Staleness detection — every non-retired key must name a live skill (#601)
+# ---------------------------------------------------------------------------
+
+# The set of skill names known to exist on a named surface (the published
+# collection).  Sourced from the class-hypothesis census (2026-09-20) and the
+# skills collection's SKILL.md frontmatter.  A key absent from this set is
+# stale: the card was renamed or removed and the registry was not updated.
+# Update this set when the collection renames or retires a card.
+_KNOWN_LIVE_SKILLS: frozenset[str] = frozenset(
+    {
+        "bayesian-eval-discipline",
+        "llm-judge-calibration",
+        "append-only-evidence-design",
+        "git-pull-rebase-trap",
+        "github-pages-deploy-verification",
+        "subagent-research-reliability",
+        "downstream-instruction-framing",
+        "closure-mode",
+        "parallel-review-disposition-schema",
+        "mock-masked-stub-trap",
+    }
+)
+
+
+def _stale_skill_keys(
+    registry: dict[str, ValueClass],
+    retired: set[str],
+    live: frozenset[str],
+) -> list[str]:
+    """Return non-retired registry keys that do not name a known live skill.
+
+    A key that names a retired skill is excluded (retired skills are expected
+    to be absent from the live collection).  A key present in ``live`` but not
+    in ``retired`` that is missing from ``live`` is stale.
+    """
+    return sorted(
+        name for name, _vc in registry.items() if name not in retired and name not in live
+    )
+
+
+def test_no_stale_skill_keys() -> None:
+    """#601: every non-retired registry key resolves to a skill on a named surface.
+
+    This catches renames that did not reach the registry (the defect
+    ``closure-mode-at-boundaries`` → ``closure-mode`` that filed #601).
+    When a card is renamed in the collection, this test fails until the
+    registry key is updated to match.
+    """
+    retired = {name for name, _vc, retired_on in _PORTFOLIO_TRIPLES if retired_on is not None}
+    stale = _stale_skill_keys(SKILL_VALUE_CLASS, retired, _KNOWN_LIVE_SKILLS)
+    assert not stale, (
+        f"registry key(s) name no known live skill: {stale}.  "
+        "If the card was renamed, update the registry key and this test's "
+        "_KNOWN_LIVE_SKILLS set.  If the card was retired, add a retired_on "
+        "date to the _PORTFOLIO_TRIPLES entry."
+    )
+
+
+def test_stale_key_check_catches_poisoned_registry() -> None:
+    """Negative control: the staleness check must fail when given a poisoned key.
+
+    Proves the check is not vacuous — it would have caught the
+    ``closure-mode-at-boundaries`` stale key before #601.
+    """
+    poisoned: dict[str, ValueClass] = {
+        **SKILL_VALUE_CLASS,
+        "deliberately-stale-key": ValueClass.TRAP_DISCIPLINE,
+    }
+    stale = _stale_skill_keys(poisoned, set(), _KNOWN_LIVE_SKILLS)
+    assert "deliberately-stale-key" in stale, (
+        "the staleness check did not catch the deliberately poisoned key; the check is vacuous"
+    )
 
 
 # ---------------------------------------------------------------------------
