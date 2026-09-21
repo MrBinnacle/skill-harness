@@ -129,6 +129,27 @@ and covers that section only. This page stays the citable surface for every kind
   `#419` item 3 against `#420`, which is stated as a fork and deliberately not
   taken.
 
+### [`docs/findings/gitpull-v3a-null-qualification-screen.md`](findings/gitpull-v3a-null-qualification-screen.md)
+
+- **Claims:** The `#419` item 3 Null qualification screen on task v3a ran on
+  2026-09-21 under a dated $5.00 authorisation with every count from 0 to 8
+  pre-registered (Amendment 1) before the run. On `claude-sonnet-5` direct,
+  k = 8, run `joXzHFBKEBvqXPHstc8kt3`: 0 of 8 Null epochs entered the hazard
+  on the pattern of record, 0 undecided, 8 of 8 passed the oracle, $0.81 spent
+  (Amendment 2). The push-divergence fixture worked in every epoch, the push
+  was rejected with git's own hint naming the pull, and the subject fetched
+  and merged by hand each time. Per the pre-registered table the candidate
+  fails for this subject: v3a is retired as a task version for Sonnet 5, no
+  floor is registered, and RAT-0001's frontmatter stays empty with a dated
+  line. The entry rate is a property of the subject on this family, so the
+  next screen changes the subject (`claude-opus-5`, priced at a $16.00 cap)
+  rather than the wording.
+- **Refuses to claim:** Any verdict on the `pull-rebase` card; any hazard
+  rate or floor for a subject other than the one measured; that the task
+  cannot elicit the pull on other subjects, which is what the Opus 5 screen
+  measures; that v3c would do better on Sonnet 5, which is expected false and
+  is why it is not run first; and any change to a registered RAT-0001 field.
+
 ### [`docs/findings/gitpull-cost-basis-unregisterable.md`](findings/gitpull-cost-basis-unregisterable.md)
 
 - **Claims:** The rebuilt `gitpull` cost basis `#420` asks for cannot be
