@@ -113,7 +113,7 @@ def test_existing_two_arm_receipt_still_validates(
 
 def test_mint_refuses_invalid_declared_arm_names() -> None:
     """The mint helper is the vocabulary floor, not a free-text field."""
-    for bad in (["Full"], [""], ["a b"], ["null", "null"], [123]):
+    for bad in (["Full"], [""], ["a b"], ["arm\n"], ["null", "null"], [123]):
         with pytest.raises(ValueError):
             build_subject_identity(skill_md=_SKILL_MD, arms=bad)  # type: ignore[arg-type]
 
@@ -123,9 +123,10 @@ def test_schema_refuses_an_ill_formed_arm_name(
 ) -> None:
     receipt = _base_receipt()
     receipt["subject_identity"] = build_subject_identity(skill_md=_SKILL_MD, arms=["null", "full"])
-    receipt["subject_identity"]["arms"] = ["null", "Full"]
-    with pytest.raises(ValidationError):
-        sers_validator.validate(receipt)
+    for arms in (["null", "Full"], ["null", "full\n"]):
+        receipt["subject_identity"]["arms"] = arms
+        with pytest.raises(ValidationError):
+            sers_validator.validate(receipt)
 
 
 def test_schema_refuses_duplicate_arm_names(

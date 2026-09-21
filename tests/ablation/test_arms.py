@@ -218,10 +218,11 @@ class TestResolveArmAssemblies:
         with pytest.raises(ArmSpecError, match="at least one arm"):
             resolve_arm_assemblies((), ConditionRenderer())
 
-    def test_ill_formed_arm_name_is_refused(self) -> None:
+    @pytest.mark.parametrize("name", ("Bad Name", "arm\n"))
+    def test_ill_formed_arm_name_is_refused(self, name: str) -> None:
         renderer = ConditionRenderer()
         with pytest.raises(ArmSpecError, match="not a valid declared-arm name"):
-            resolve_arm_assemblies((ArmSpec(name="Bad Name", body_texts=("Body.",)),), renderer)
+            resolve_arm_assemblies((ArmSpec(name=name, body_texts=("Body.",)),), renderer)
 
     def test_blank_body_text_is_refused(self) -> None:
         renderer = ConditionRenderer()

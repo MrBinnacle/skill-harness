@@ -73,7 +73,7 @@ ARM_NAME_RE = re.compile(ARM_NAME_PATTERN)
 
 def is_valid_arm_name(name: str) -> bool:
     """Return True when ``name`` is a valid declared-arm name."""
-    return bool(ARM_NAME_RE.match(name))
+    return ARM_NAME_RE.fullmatch(name) is not None
 
 
 # ---------------------------------------------------------------------------
