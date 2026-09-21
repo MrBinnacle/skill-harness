@@ -25,7 +25,12 @@ sign-off, S166): ship the classification + CAN'T-TELL-YET/field surface, do NOT
 build the S3 board apparatus for zero customers.
 
 A skill_name absent from this map resolves to ``None`` (unclassified) → the guard's
-honest default (CAN'T-TELL-YET, never a false CUT). The map is measured by
+honest default (CAN'T-TELL-YET, never a false CUT). This is the deliberate choice for
+stale keys: a renamed or removed skill silently falls to the unclassified path rather
+than raising, because CAN'T-TELL-YET is an honest refusal that never produces a false
+CUT. The staleness detection test in ``tests/test_value_class_registry.py`` catches
+stale keys before they reach production, so the silent fall is a defence-in-depth
+backstop, not the primary guard. The map is measured by
 ``tests/test_value_class_registry.py`` against a pinned list of
 ``(skill_name, value_class, retired_on)`` triples (#422).
 """
