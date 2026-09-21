@@ -1059,6 +1059,39 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
             search_roots=("docs/sers", "src/skill_harness"),
         ),
     ),
+    LiveRow(
+        dc_id="DC-18",
+        summary=(
+            "Vale version pins: the vale job and the test job in ci.yml cite the "
+            "same version, and test_vale_doctrine_agreement.py names the workflow "
+            "as its source of truth (#488)"
+        ),
+        value_sites=(
+            # The vale job's curl URL — the version must be 3.9.1.
+            ValueSite(
+                ".github/workflows/ci.yml",
+                r'curl -SfL "https://github.com/errata-ai/vale/releases/download/v([\d.]+)/vale_([\d.]+)_Linux_64-bit.tar.gz"',
+                ("3.9.1", "3.9.1"),
+            ),
+            # The test job's curl URL — the same version, same check.
+            # The pattern matches any occurrence of the same curl URL in the
+            # file; ValueSite requires at least one match and checks ALL
+            # matches, so two occurrences must both cite 3.9.1.
+            ValueSite(
+                ".github/workflows/ci.yml",
+                r'curl -SfL "https://github.com/errata-ai/vale/releases/download/v([\d.]+)/vale_([\d.]+)_Linux_64-bit.tar.gz"',
+                ("3.9.1", "3.9.1"),
+            ),
+        ),
+        registered_texts=(
+            # The test file names the workflow as its version source; the
+            # sentence must survive rewording but not version drift.
+            RegisteredText(
+                "tests/test_vale_doctrine_agreement.py",
+                "pinned to the same version the CI workflow installs",
+            ),
+        ),
+    ),
 )
 
 PLANNED_ROWS: tuple[PlannedRow, ...] = (

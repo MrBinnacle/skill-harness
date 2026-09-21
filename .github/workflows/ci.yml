@@ -197,51 +197,65 @@ jobs:
         # of reading as a dependency-resolution failure. The distribution and the
         # browser binary are two installs and they fail for unrelated reasons.
         run: python -m playwright install chromium
+      - name: Cache Vale binary
+        id: cache-vale
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: /tmp/vale-bin
+          key: vale-${{ runner.os }}-3.9.1
       - name: Install Vale
-        # Pinned to the same version as the vale job; doctrine-agreement tests shell out to it.
+        if: steps.cache-vale.outputs.cache-hit != 'true'
+        # Pinned to 3.9.1 — keep in sync with the vale job and with
+        # tests/test_vale_doctrine_agreement.py (enforced by DC-18).
+        #
+        # -S (not -s): a failed curl now prints its reason instead of
+        # feeding tar empty input, which previously produced a
+        # misleading "not in gzip format" on every network error.
+        #
+        # GITHUB_TOKEN: avoids the 60-per-hour unauthenticated rate
+        # limit on shared runners — the same token the drift-check job
+        # already takes.
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VALE_VERSION=3.9.1
+          mkdir -p /tmp/vale-bin
           case "${{ runner.os }}" in
             Linux)
-              curl -sL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
-                | tar xz -C /usr/local/bin vale
-              VALE_DIR=/usr/local/bin
+              curl -SfL "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz" \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                | tar xz -C /tmp/vale-bin vale
               ;;
             Windows)
-              curl -sL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Windows_64-bit.zip" \
-                -o vale.zip
-              mkdir -p "$HOME/bin"
-              # Extract with Python, not a shell archiver. Two Windows traps, both
-              # observed on this PR rather than anticipated:
-              #
-              # 1. $RUNNER_TEMP holds a WINDOWS path (D:\a\_temp). GNU tar reads the
-              #    leading "D:" as a remote host: "tar: Cannot connect to D: resolve
-              #    failed". Nothing with a drive letter is handed to an archiver.
-              # 2. In the bash shell `tar` resolves to MSYS GNU tar, which cannot read
-              #    zip at all: "tar: This does not look like a tar archive". The bsdtar
-              #    that ships with the image is shadowed. `unzip` is not guaranteed to
-              #    be present either.
-              #
-              # setup-python already ran, so Python and its stdlib zipfile are present
-              # and are not a new dependency. The destination is converted with cygpath
-              # because Python on Windows reads an MSYS /c/... path as relative to the
-              # current drive root. Verified on Windows/Git Bash before this landed.
-              VALE_DIR="$HOME/bin"
-              python -c "import zipfile,sys; zipfile.ZipFile('vale.zip').extract('vale.exe', sys.argv[1])" "$(cygpath -w "$VALE_DIR")"
-              rm -f vale.zip
-              # Later steps need not run under bash, so GITHUB_PATH takes the
-              # Windows form rather than the MSYS /c/... form bash reports.
-              cygpath -w "$VALE_DIR" >> "$GITHUB_PATH"
+              curl -SfL "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Windows_64-bit.zip" \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -o /tmp/vale-bin/vale.zip
+              python -c "import zipfile,sys; zipfile.ZipFile('/tmp/vale-bin/vale.zip').extract('vale.exe', sys.argv[1])" "$(cygpath -w /tmp/vale-bin)"
+              rm -f /tmp/vale-bin/vale.zip
               ;;
             *)
               echo "Unsupported runner OS: ${{ runner.os }}"
               exit 1
               ;;
           esac
-          # GITHUB_PATH applies to LATER steps only. Asserting through the bare
-          # name here would fail on Windows even after a good extract, which is the
-          # second defect this step carried.
+          chmod +x /tmp/vale-bin/vale
+      - name: Install Vale to system path
+        # Separate step so a failure here is distinguishable from a test
+        # failure at the check list — the original defect (#488).
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Linux)
+              cp /tmp/vale-bin/vale /usr/local/bin/vale
+              VALE_DIR=/usr/local/bin
+              ;;
+            Windows)
+              mkdir -p "$HOME/bin"
+              cp /tmp/vale-bin/vale.exe "$HOME/bin/vale.exe"
+              VALE_DIR="$HOME/bin"
+              cygpath -w "$VALE_DIR" >> "$GITHUB_PATH"
+              ;;
+          esac
           PATH="$VALE_DIR:$PATH" vale --version
       - name: pytest
         # `-m "not live and not calibration and not assurance"` mirrors local gate; live
@@ -514,9 +528,39 @@ jobs:
     # touch; see .vale.ini for the full reason), so it reports without failing the job.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache Vale binary
+        id: cache-vale
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: /tmp/vale-bin
+          key: vale-${{ runner.os }}-3.9.1
       - name: Install Vale
+        if: steps.cache-vale.outputs.cache-hit != 'true'
+        # Pinned to 3.9.1 — keep in sync with the test job and with
+        # tests/test_vale_doctrine_agreement.py (enforced by DC-18).
+        #
+        # -S (not -s): a failed curl now prints its reason instead of
+        # feeding tar empty input, which previously produced a
+        # misleading "not in gzip format" on every network error.
+        #
+        # GITHUB_TOKEN: avoids the 60-per-hour unauthenticated rate
+        # limit on shared runners — the same token the drift-check job
+        # already takes.
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          curl -sL https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz | tar xz -C /usr/local/bin
+          mkdir -p /tmp/vale-bin
+          curl -SfL "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            | tar xz -C /tmp/vale-bin vale
+          chmod +x /tmp/vale-bin/vale
+      - name: Install Vale to system path
+        # Separate step so a failure here is distinguishable from a prose
+        # finding at the check list — the original defect (#488).
+        run: |
+          cp /tmp/vale-bin/vale /usr/local/bin/vale
+          vale --version
       - name: Run Vale on fixtures
         # Poison/fail fixtures are DESIGNED to trigger a finding; a nonzero exit here
         # is proof the rule fires, not a build defect, so this step never gates.

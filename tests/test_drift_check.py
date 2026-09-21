@@ -45,6 +45,7 @@ _LIVE_IDS = (
     "DC-15",
     "DC-16",
     "DC-17",
+    "DC-18",
     "AC-1",
     "AC-2",
     "AC-3",
@@ -108,6 +109,10 @@ _LIVE_SURFACES = (
     # sitegen directory exist; the predicate itself globs the rest.
     "pyproject.toml",
     "src/skill_harness/sitegen/templates/schema_vocabulary.html",
+    # DC-18 reads the Vale version from ci.yml's curl URLs and the test file's
+    # docstring. Without this copy every synthetic tree would fail on a missing
+    # value site instead of the lane under test.
+    "tests/test_vale_doctrine_agreement.py",
 )
 
 # AC-4 reads a DIRECTORY rather than a named file: its three delegates glob
@@ -2163,3 +2168,100 @@ def test_dc17_additions_2_and_4_declined_with_reason() -> None:
     )
     assert "cost dimensions" in section_4, "addition 4 reason must name the missing cost dimensions"
     assert "dominance rule" in section_4, "addition 4 reason must name the missing dominance rule"
+
+
+# ---------------------------------------------------------------------------
+# DC-18: Vale version pins — vale job and test job cite the same version (#488)
+# ---------------------------------------------------------------------------
+
+
+def test_dc18_vale_version_pins_are_green(tmp_path: Path) -> None:
+    """The default synthetic tree carries the real ci.yml and test file, so
+    DC-18 is green by construction. This test pins that property."""
+    root = _make_tree(tmp_path)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+    ok_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("OK")]
+    assert any("DC-18" in line for line in ok_lines), r.stdout
+
+
+def test_dc18_vale_job_version_drift_blocks(tmp_path: Path) -> None:
+    """Control: changing the vale job's version to a different value must
+    turn DC-18 red."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        ".github/workflows/ci.yml",
+        "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz",
+        "https://github.com/errata-ai/vale/releases/download/v3.9.2/vale_3.9.2_Linux_64-bit.tar.gz",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-18" in line for line in fail_lines), r.stdout
+
+
+def test_dc18_test_job_version_drift_blocks(tmp_path: Path) -> None:
+    """Control: changing only the test job's version must turn DC-18 red.
+
+    This is the load-bearing case: if the vale job says 3.9.1 and the test
+    job says 3.9.2, the cache key produces a 3.9.1 binary but the test job
+    installs a 3.9.2 binary, and the doctrine-agreement tests fail for a
+    reason nobody will guess.
+    """
+    root = _make_tree(tmp_path)
+    # Read the file, find the SECOND occurrence of the version in the test
+    # job's curl, and change only that one.
+    ci_path = root / ".github/workflows/ci.yml"
+    text = ci_path.read_text(encoding="utf-8")
+    # The test job's curl is the second occurrence of the Linux tar.gz URL.
+    _VALE_URL = (
+        "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz"
+    )
+    first_end = text.find(_VALE_URL)
+    second_start = text.find(_VALE_URL, first_end + 1)
+    assert second_start != -1, "second occurrence of vale URL not found in ci.yml"
+    mutated = (
+        text[:second_start]
+        + "https://github.com/errata-ai/vale/releases/download/v3.8.0/vale_3.8.0_Linux_64-bit.tar.gz"
+        + text[second_start + len(_VALE_URL) :]
+    )
+    ci_path.write_text(mutated, encoding="utf-8")
+    _git(root, "add", "--", ".github/workflows/ci.yml")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-18" in line for line in fail_lines), r.stdout
+
+
+def test_dc18_registered_text_survives_rewording(tmp_path: Path) -> None:
+    """The registered text in test_vale_doctrine_agreement.py names the workflow
+    as the source of truth. Rewording it (but keeping the meaning) must not
+    break DC-18."""
+    root = _make_tree(tmp_path)
+    # The test file is copied verbatim; the registered text must be present.
+    test_file = root / "tests" / "test_vale_doctrine_agreement.py"
+    assert test_file.exists()
+    text = test_file.read_text(encoding="utf-8")
+    assert "pinned to the same version the CI workflow installs" in text
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc18_missing_registered_text_blocks(tmp_path: Path) -> None:
+    """Control: removing the registered sentence from the test file must
+    turn DC-18 red, because the test file no longer names the workflow as
+    its source of truth."""
+    root = _make_tree(tmp_path)
+    test_file = root / "tests" / "test_vale_doctrine_agreement.py"
+    text = test_file.read_text(encoding="utf-8")
+    text = text.replace(
+        "pinned to the same version the CI workflow installs",
+        "pinned to version X.Y.Z",
+    )
+    test_file.write_text(text, encoding="utf-8")
+    _git(root, "add", "--", "tests/test_vale_doctrine_agreement.py")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-18" in line for line in fail_lines), r.stdout
