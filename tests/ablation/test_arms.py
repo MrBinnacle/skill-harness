@@ -578,6 +578,62 @@ class TestReceiptArmsAgreement:
 
 
 # ---------------------------------------------------------------------------
+# AC6: an arm declared but never sampled fails the run
+# ---------------------------------------------------------------------------
+
+
+class TestDeclaredArmCompleteness:
+    def test_declared_but_never_sampled_arm_fails_the_run(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        """A zero-sample plan completes nothing: the run fails loudly (#554 AC6)."""
+        from skill_harness.ablation.runner import ArmNeverSampledError
+
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        arms = (
+            ArmSpec(name="parent_only", body_texts=("Parent card body.",)),
+            ArmSpec(name="both", body_texts=("Parent card body.", "Sibling body.")),
+        )
+        with pytest.raises(ArmNeverSampledError, match="never sampled") as excinfo:
+            runner.run_arms(
+                skill_id=_SKILL_ID,
+                arms=arms,
+                user_message=_USER_MSG,
+                samples_per_arm=0,
+                max_usd=10.0,
+            )
+        assert "parent_only" in str(excinfo.value)
+        assert "both" in str(excinfo.value)
+
+        # The run is failed, not completed: no completed_at stamp, no
+        # 'completed' state, and the failure names the refusal.
+        cur = ev.execute("SELECT completed_at FROM runs")
+        assert cur.fetchone()[0] is None
+        cur = rt.execute("SELECT state, error FROM run_progress")
+        state, error = cur.fetchone()
+        assert state == "failed"
+        assert error is not None and "declared_arm_never_sampled" in error
+
+    def test_every_declared_arm_sampled_passes_the_gate(
+        self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
+    ) -> None:
+        """The completeness gate reads evidence; a fully sampled arm set passes."""
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        results = runner.run_arms(
+            skill_id=_SKILL_ID,
+            arms=(ArmSpec(name="parent_only", body_texts=("Parent card body.",)),),
+            user_message=_USER_MSG,
+            samples_per_arm=2,
+            max_usd=10.0,
+        )
+        assert results[0].samples_collected == 2
+        cur = rt.execute("SELECT state FROM run_progress")
+        assert cur.fetchone()[0] == "completed"
+
+
+# ---------------------------------------------------------------------------
 # run_arms: the declared-arm sampling loop
 # ---------------------------------------------------------------------------
 

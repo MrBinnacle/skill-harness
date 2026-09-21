@@ -99,6 +99,7 @@ from skill_harness.storage.repositories.evidence.confound_events import insert_c
 from skill_harness.storage.repositories.evidence.oracle_verdicts import mint_oracle_verdict
 from skill_harness.storage.repositories.evidence.runs import (
     complete_run,
+    count_arm_samples_by_arm,
     get_run_by_id,
     insert_arm_sample,
     insert_clause_run_outcome,
@@ -399,6 +400,24 @@ class ReceiptArmsMismatchError(ValueError):
     such a vocabulary is refused before any spend, so the disagreement can
     never be minted into evidence.
     """
+
+
+class ArmNeverSampledError(RuntimeError):
+    """Raised when a declared arm finished its run with zero samples (#554 AC6).
+
+    Evidence is the authority: the gate reads ``arm_samples`` counts per
+    declared arm, so any path that leaves a declared arm unsampled — a
+    zero-sample plan, a loop that skips an arm, a silent partial write — fails
+    the run by name instead of reporting an arm set it never measured.
+    """
+
+    def __init__(self, run_id: str, unsampled: Sequence[str]) -> None:
+        super().__init__(
+            f"Run {run_id!r} ended with declared arms never sampled: {unsampled!r}; "
+            "a declared-arm run must sample every declared arm"
+        )
+        self.run_id = run_id
+        self.unsampled = tuple(unsampled)
 
 
 # ---------------------------------------------------------------------------
@@ -1035,6 +1054,26 @@ class AblationRunner:
 
         except BudgetAbortedError as exc:
             self._handle_budget_abort(exc, run_id, samples_collected)
+
+        # Completeness gate (#554 AC6): every declared arm must hold at least
+        # one arm_samples row. Evidence is the authority, so the gate reads
+        # counts back from the table rather than trusting the loop; an arm
+        # declared but never sampled fails the run by name instead of
+        # reporting an arm set it never measured.
+        counts = count_arm_samples_by_arm(self._evidence, run_id)
+        unsampled = [arm.name for arm in arm_specs if counts.get(arm.name, 0) == 0]
+        if unsampled:
+            failure_ts = self._now()
+            with writer_transaction(self._runtime):
+                update_run_progress(
+                    self._runtime,
+                    run_id,
+                    state="failed",
+                    samples_collected=samples_collected,
+                    last_heartbeat=failure_ts,
+                    error="declared_arm_never_sampled: " + ", ".join(unsampled),
+                )
+            raise ArmNeverSampledError(run_id, unsampled)
 
         # Stamp completed_at exactly ONCE (A20 carve-out), as run_ablation does.
         completed_ts = self._now()
