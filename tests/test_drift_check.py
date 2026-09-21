@@ -45,6 +45,7 @@ _LIVE_IDS = (
     "DC-15",
     "DC-16",
     "DC-17",
+    "DC-18",
     "AC-1",
     "AC-2",
     "AC-3",
@@ -108,6 +109,10 @@ _LIVE_SURFACES = (
     # sitegen directory exist; the predicate itself globs the rest.
     "pyproject.toml",
     "src/skill_harness/sitegen/templates/schema_vocabulary.html",
+    # DC-18 reads the Vale version from ci.yml's curl URLs and the test file's
+    # docstring. Without this copy every synthetic tree would fail on a missing
+    # value site instead of the lane under test.
+    "tests/test_vale_doctrine_agreement.py",
 )
 
 # AC-4 reads a DIRECTORY rather than a named file: its three delegates glob
@@ -1606,8 +1611,9 @@ def test_ac4_refuses_when_its_surface_is_gone(tmp_path: Path) -> None:
     in a tree that has no workflows. This lane deletes the directory and
     asserts the row refuses, in the table's own wording, naming the path.
 
-    The reddened SET is asserted here because no other row reads that
-    directory, so removing it is AC-4's business alone."""
+    The reddened SET is asserted here. Two rows read that directory: AC-4, and
+    DC-18, whose value sites are the Vale pins in ci.yml (#488). Removing it
+    must redden both and nothing else."""
     root = _make_tree(tmp_path)
     shutil.rmtree(root / ".github" / "workflows")
     _git(root, "add", "-A")
@@ -1618,7 +1624,7 @@ def test_ac4_refuses_when_its_surface_is_gone(tmp_path: Path) -> None:
         "AC-4" in line and "has no surface to scan" in line and ".github/workflows" in line
         for line in fail_lines
     ), r.stdout
-    assert _failed_row_ids(r.stdout) == {"AC-4"}, r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-4", "DC-18"}, r.stdout
 
 
 def test_ac4_refuses_when_the_named_release_gate_predicate_is_gone(tmp_path: Path) -> None:
@@ -2163,3 +2169,164 @@ def test_dc17_additions_2_and_4_declined_with_reason() -> None:
     )
     assert "cost dimensions" in section_4, "addition 4 reason must name the missing cost dimensions"
     assert "dominance rule" in section_4, "addition 4 reason must name the missing dominance rule"
+
+
+# ---------------------------------------------------------------------------
+# DC-18: Vale version pins — release URLs and cache keys cite 3.9.1 (#488)
+# ---------------------------------------------------------------------------
+
+_VALE_LINUX_URL = (
+    "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz"
+)
+_VALE_WINDOWS_URL = (
+    "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Windows_64-bit.zip"
+)
+_VALE_CACHE_KEY = "key: vale-${{ runner.os }}-3.9.1"
+
+
+def _replace_nth(text: str, old: str, new: str, n: int) -> str:
+    """Replace the n-th occurrence of old (0-based) and leave the rest alone."""
+    start = -1
+    for _ in range(n + 1):
+        start = text.find(old, start + 1)
+        assert start != -1, f"occurrence {n} of {old!r} not found"
+    return text[:start] + new + text[start + len(old) :]
+
+
+def test_dc18_vale_version_pins_are_green(tmp_path: Path) -> None:
+    """The default synthetic tree carries the real ci.yml and test file, so
+    DC-18 is green by construction. This test pins that property."""
+    root = _make_tree(tmp_path)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+    ok_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("OK")]
+    assert any("DC-18" in line for line in ok_lines), r.stdout
+
+
+def test_dc18_linux_url_drift_blocks(tmp_path: Path) -> None:
+    """Control: changing every Linux release URL must turn DC-18 red."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        ".github/workflows/ci.yml",
+        _VALE_LINUX_URL,
+        "https://github.com/errata-ai/vale/releases/download/v3.9.2/vale_3.9.2_Linux_64-bit.tar.gz",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-18" in line for line in fail_lines), r.stdout
+
+
+def test_dc18_single_linux_url_drift_blocks(tmp_path: Path) -> None:
+    """Control: changing only the first Linux URL (test job) must turn DC-18 red.
+
+    File order puts the test job before the vale job. A single drifted pin is
+    the load-bearing case: one job installs 3.8.0 while the other and the
+    cache key still say 3.9.1.
+    """
+    root = _make_tree(tmp_path)
+    ci_path = root / ".github/workflows/ci.yml"
+    text = ci_path.read_text(encoding="utf-8")
+    mutated = _replace_nth(
+        text,
+        _VALE_LINUX_URL,
+        "https://github.com/errata-ai/vale/releases/download/v3.8.0/vale_3.8.0_Linux_64-bit.tar.gz",
+        0,
+    )
+    ci_path.write_text(mutated, encoding="utf-8")
+    _git(root, "add", "--", ".github/workflows/ci.yml")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-18" in line for line in fail_lines), r.stdout
+
+
+def test_dc18_windows_url_drift_blocks(tmp_path: Path) -> None:
+    """Control: changing only the Windows zip URL must turn DC-18 red."""
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        ".github/workflows/ci.yml",
+        _VALE_WINDOWS_URL,
+        "https://github.com/errata-ai/vale/releases/download/v3.8.0/vale_3.8.0_Windows_64-bit.zip",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-18" in line for line in fail_lines), r.stdout
+
+
+def test_dc18_cache_key_drift_blocks(tmp_path: Path) -> None:
+    """Control: changing a cache key while the URLs stay put must turn DC-18 red.
+
+    A lagging key restores a stale binary on hit and never re-fetches the
+    version the curl URL names.
+    """
+    root = _make_tree(tmp_path)
+    _mutate(
+        root,
+        ".github/workflows/ci.yml",
+        _VALE_CACHE_KEY,
+        "key: vale-${{ runner.os }}-3.8.0",
+    )
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-18" in line for line in fail_lines), r.stdout
+
+
+def test_dc18_registered_text_present_is_green(tmp_path: Path) -> None:
+    """The registered sentence in test_vale_doctrine_agreement.py is present
+    on a green tree. Presence is the green control; absence is the red one
+    below."""
+    root = _make_tree(tmp_path)
+    test_file = root / "tests" / "test_vale_doctrine_agreement.py"
+    assert test_file.exists()
+    text = test_file.read_text(encoding="utf-8")
+    assert "pinned to the same version the CI workflow installs" in text
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc18_missing_registered_text_blocks(tmp_path: Path) -> None:
+    """Control: removing the registered sentence from the test file must
+    turn DC-18 red, because the test file no longer names the workflow as
+    its source of truth."""
+    root = _make_tree(tmp_path)
+    test_file = root / "tests" / "test_vale_doctrine_agreement.py"
+    text = test_file.read_text(encoding="utf-8")
+    text = text.replace(
+        "pinned to the same version the CI workflow installs",
+        "pinned to version X.Y.Z",
+    )
+    test_file.write_text(text, encoding="utf-8")
+    _git(root, "add", "--", "tests/test_vale_doctrine_agreement.py")
+    r = _run(root)
+    assert r.returncode == 1
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-18" in line for line in fail_lines), r.stdout
+
+
+def test_dc18_install_steps_are_split_and_named() -> None:
+    """Criterion 3/4: install failure and prose/test failure are different
+    named steps on both the test job and the vale job.
+
+    Reads the real ci.yml. Fails when either job collapses download and
+    path-install into one step, or renames the path-install step so a check
+    list no longer attributes the failure.
+    """
+    ci = (_REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    test_block = re.search(r"\n  test:\n(?P<body>.*?)(?=\n  [A-Za-z0-9_-]+:\n)", ci, re.DOTALL)
+    vale_block = re.search(r"\n  vale:\n(?P<body>.*?)(?=\n  [A-Za-z0-9_-]+:\n)", ci, re.DOTALL)
+    assert test_block is not None, "could not find the test job in ci.yml"
+    assert vale_block is not None, "could not find the vale job in ci.yml"
+    for name, body in (("test", test_block.group("body")), ("vale", vale_block.group("body"))):
+        assert "- name: Install Vale\n" in body, f"{name} job missing 'Install Vale' step"
+        assert "- name: Install Vale to system path\n" in body, (
+            f"{name} job missing 'Install Vale to system path' step"
+        )
+        assert "cache-vale" in body, f"{name} job missing Vale binary cache step"
+        assert "runner.temp" in body, (
+            f"{name} job must cache under runner.temp so Windows restores the path"
+        )
