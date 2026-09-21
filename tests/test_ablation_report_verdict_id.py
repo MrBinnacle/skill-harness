@@ -33,7 +33,10 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Any:
     merged_env: dict[str, str] = {"COLUMNS": "220"}
     if env is not None:
         merged_env.update(env)
-    return runner.invoke(cli, list(args), env=merged_env)
+    # `run ablation` defaults to ./evidence.db and ./runtime.db. A private cwd
+    # keeps parallel workers from sharing one SQLite file ("database is locked").
+    with runner.isolated_filesystem():
+        return runner.invoke(cli, list(args), env=merged_env)
 
 
 def _make_result(
