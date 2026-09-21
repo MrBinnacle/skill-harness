@@ -125,14 +125,14 @@ body text ("First version", "Body v1") is not present in the registry file.
 
 ## Tests
 
-24 tests covering all acceptance criteria:
+25 tests covering all acceptance criteria:
 - AC1: 4 tests (registry creation, field values, empty registry, listing)
 - AC2: 4 tests (digest pinning, changed file detection, resolution, modification refusal)
 - AC3: 2 tests (separate subjects, receipt naming)
-- AC4: 3 tests (author recording, verdict author, refused author)
+- AC4: 4 tests (author recording, required verdict attribution, refused author)
 - AC5: 3 tests (integrity check, integrity pass, refused receipt)
 - AC6: 3 tests (registration failure, resolution failure, integrity failure)
 - AC7: 2 tests (no bytes copied, structure validation)
 - Edge cases: 2 tests (re-registration, control characters)
 
-All 24 tests pass.
+All 25 tests pass.

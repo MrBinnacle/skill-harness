@@ -47,8 +47,8 @@ class LocalSubject(BaseModel):
         source_path: Absolute or relative path to the subject's SKILL.md.
         source_digest: SHA-256 hex digest of the file at registration time.
         name: Human-readable name (from SKILL.md frontmatter).
-        author: The original author of the skill. Required for third-party
-            subjects; the owner's own work can be empty.
+        author: The original author of the skill. This is always non-empty so
+            a receipt cannot obscure third-party authorship.
         author_source: How the author was determined (e.g., "frontmatter",
             "registry", "manual").
         origin: Where this subject came from (e.g., "local_archive",
@@ -75,6 +75,14 @@ class LocalSubject(BaseModel):
         field_name = getattr(info, "field_name", "field") if info else "field"
         if "\x00" in v or any("\x00" <= ch < "\x20" and ch not in ("\t", "\n", "\r") for ch in v):
             raise ValueError(f"{field_name}: contains forbidden control characters")
+        return v
+
+    @field_validator("author")
+    @classmethod
+    def author_is_present(cls, v: str) -> str:
+        """Refuse an attribution-free declaration before it can reach a receipt."""
+        if not v.strip():
+            raise ValueError("author: must not be empty")
         return v
 
 
@@ -106,6 +114,14 @@ class SubjectReceipt(BaseModel):
     measured_at: str  # ISO 8601
     verdict: str  # e.g., "measured", "refused"
     verdict_reason: str | None = None
+
+    @field_validator("author")
+    @classmethod
+    def author_is_present(cls, v: str) -> str:
+        """Do not permit a receipt that erases the subject's author."""
+        if not v.strip():
+            raise ValueError("author: must not be empty")
+        return v
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +173,7 @@ def register_local_subject(
         .skill_harness/local_subjects.json in the current directory.
     :returns: The registered LocalSubject.
     :raises FileNotFoundError: if skill_md_path does not exist.
-    :raises ValueError: if author is empty for a third-party subject.
+    :raises ValueError: if author is empty.
     """
     if not skill_md_path.is_file():
         raise FileNotFoundError(f"subject file does not exist: {skill_md_path}")
@@ -229,20 +245,21 @@ def resolve_subject(
     current_digest = compute_subject_digest(skill_md_path)
     registry = load_registry(registry_path)
 
-    # Look for a subject with this digest
-    for subject in registry.subjects.values():
-        if subject.source_digest == current_digest:
-            # Also verify the path matches
-            if subject.source_path == str(skill_md_path.resolve()):
-                return subject
-            # Digest matches but path differs — same content at different location
-            # This is still a valid resolution (two copies of same content)
-            return subject
+    resolved_path = str(skill_md_path.resolve())
 
-    raise ValueError(
-        f"no registered subject with digest {current_digest[:16]}… found in registry; "
-        f"file may have been modified or was never registered"
-    )
+    # A declaration binds a particular file to its digest. Resolving a changed
+    # file through another declaration with the same new digest is substitution,
+    # not verification.
+    for subject in registry.subjects.values():
+        if subject.source_path == resolved_path:
+            if subject.source_digest == current_digest:
+                return subject
+            raise ValueError(
+                f"declared digest does not match file on disk: expected "
+                f"{subject.source_digest[:16]}..., got {current_digest[:16]}..."
+            )
+
+    raise ValueError(f"no subject declared for path {resolved_path!r}; file was never registered")
 
 
 def verify_subject_integrity(

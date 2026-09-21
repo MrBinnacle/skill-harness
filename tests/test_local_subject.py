@@ -21,6 +21,7 @@ import pytest
 
 from skill_harness.subject.local import (
     LocalSubject,
+    SubjectReceipt,
     compute_subject_digest,
     list_local_subjects,
     load_registry,
@@ -220,8 +221,10 @@ def test_resolve_subject_verifies_digest_match(skill_a_v1: Path, registry_path: 
     assert resolved.name == "skill-a"
 
 
-def test_resolve_subject_fails_when_file_modified(skill_a_v1: Path, registry_path: Path) -> None:
-    """AC2: resolve_subject fails when file was modified after registration."""
+def test_resolve_subject_refuses_changed_file_even_when_another_copy_matches(
+    skill_a_v1: Path, skill_a_v2: Path, registry_path: Path
+) -> None:
+    """AC2/AC5: another declaration cannot mask a changed registered file."""
     register_local_subject(
         skill_md_path=skill_a_v1,
         name="skill-a",
@@ -231,10 +234,20 @@ def test_resolve_subject_fails_when_file_modified(skill_a_v1: Path, registry_pat
         registry_path=registry_path,
     )
 
-    # Modify the file
+    register_local_subject(
+        skill_md_path=skill_a_v2,
+        name="skill-a-v2",
+        author="owner",
+        author_source="manual",
+        origin="local_archive",
+        registry_path=registry_path,
+    )
+
+    # It now has the other copy's registered digest, but remains the first
+    # declaration's path and must therefore be refused.
     skill_a_v1.write_text(SKILL_A_V2, encoding="utf-8")
 
-    with pytest.raises(ValueError, match="no registered subject with digest"):
+    with pytest.raises(ValueError, match="declared digest does not match file on disk"):
         resolve_subject(skill_a_v1, registry_path=registry_path)
 
 
@@ -343,8 +356,21 @@ def test_verdict_renders_author_in_receipt(skill_third_party: Path, registry_pat
     )
 
     receipt = render_subject_receipt(subject, verdict="measured")
-    # The receipt carries author - a verdict cannot be rendered without it
-    assert receipt.author  # non-empty
+    assert receipt.author == "theswerd"
+
+
+def test_verdict_cannot_be_rendered_without_an_author() -> None:
+    """AC4: an empty attribution cannot be passed off as a receipt field."""
+    with pytest.raises(ValueError, match="author: must not be empty"):
+        SubjectReceipt(
+            subject_id="subject",
+            source_path="/archive/SKILL.md",
+            source_digest="digest",
+            name="third-party-skill",
+            author="",
+            measured_at="2026-09-14T00:00:00+00:00",
+            verdict="measured",
+        )
 
 
 def test_receipt_for_refused_subject_records_author(
