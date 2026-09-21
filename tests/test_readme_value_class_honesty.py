@@ -27,7 +27,7 @@ def test_three_case_reproduction_matches_ticket() -> None:
     p0 = 1.00
     cases = [
         ("append-only-evidence-design", KeepCutVerdict.CANT_TELL_YET),
-        ("git-pull-rebase-trap", KeepCutVerdict.CANT_TELL_YET),
+        ("pull-rebase", KeepCutVerdict.CANT_TELL_YET),
     ]
     for skill_name, expected in cases:
         vc = value_class_for(skill_name)
