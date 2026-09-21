@@ -20,6 +20,13 @@ Public surface:
   SkillCorpusCoverage  — coverage report for a corpus of skill cards.
   skill_corpus_coverage() — measure how many cards in a directory can be
                          loaded by the harness.
+
+  Local-only subject registration (issue #556):
+  register_local_subject() — register a local-only subject by path.
+  resolve_subject() — resolve a subject by verifying its digest matches.
+  compute_subject_digest() — compute SHA-256 digest of a SKILL.md file.
+  render_subject_receipt() — create a receipt for a subject measurement.
+  load_registry() — load the local subject registry.
 """
 
 from skill_harness.subject.inspect_adapter import (
@@ -29,6 +36,14 @@ from skill_harness.subject.inspect_adapter import (
     normalise_skill_frontmatter,
     skill_corpus_coverage,
 )
+from skill_harness.subject.local import (
+    compute_subject_digest,
+    list_local_subjects,
+    load_registry,
+    register_local_subject,
+    render_subject_receipt,
+    resolve_subject,
+)
 from skill_harness.subject.pin import HarnessPin
 
 __all__ = [
@@ -36,6 +51,12 @@ __all__ = [
     "NormalisedSkillResult",
     "SkillCorpusCoverage",
     "build_paired_tasks",
+    "compute_subject_digest",
+    "list_local_subjects",
+    "load_registry",
     "normalise_skill_frontmatter",
+    "register_local_subject",
+    "render_subject_receipt",
+    "resolve_subject",
     "skill_corpus_coverage",
 ]

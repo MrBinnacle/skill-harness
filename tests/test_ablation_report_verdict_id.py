@@ -12,6 +12,8 @@ paths (BLOCKER-1 tier2_uncalibrated, QUAL-1 length_confounded).
 
 from __future__ import annotations
 
+import contextlib
+import tempfile
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -33,7 +35,10 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Any:
     merged_env: dict[str, str] = {"COLUMNS": "220"}
     if env is not None:
         merged_env.update(env)
-    return runner.invoke(cli, list(args), env=merged_env)
+    # `run ablation` defaults to ./evidence.db and ./runtime.db. A private cwd
+    # keeps parallel workers from sharing one SQLite file ("database is locked").
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as cwd, contextlib.chdir(cwd):
+        return runner.invoke(cli, list(args), env=merged_env)
 
 
 def _make_result(
