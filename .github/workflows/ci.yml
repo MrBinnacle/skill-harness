@@ -201,7 +201,9 @@ jobs:
         id: cache-vale
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          path: /tmp/vale-bin
+          # runner.temp is OS-native; actions/cache resolves it on Windows.
+          # /tmp/vale-bin is not a Windows path the cache action can restore.
+          path: ${{ runner.temp }}/vale-bin
           key: vale-${{ runner.os }}-3.9.1
       - name: Install Vale
         if: steps.cache-vale.outputs.cache-hit != 'true'
@@ -219,26 +221,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p /tmp/vale-bin
           case "${{ runner.os }}" in
             Linux)
+              mkdir -p "${RUNNER_TEMP}/vale-bin"
               curl -SfL "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz" \
                 -H "Authorization: Bearer $GITHUB_TOKEN" \
-                | tar xz -C /tmp/vale-bin vale
+                | tar xz -C "${RUNNER_TEMP}/vale-bin" vale
+              chmod +x "${RUNNER_TEMP}/vale-bin/vale"
               ;;
             Windows)
+              # Two Windows traps restored from the pre-cache install (both
+              # observed on runners rather than anticipated):
+              # 1. RUNNER_TEMP is a Windows path (D:\a\_temp). Hand it to
+              #    Windows Python via cygpath -w; never to GNU tar.
+              # 2. vale.zip lands in the workspace cwd as a relative path so
+              #    Windows Python can open it; an MSYS /tmp/... path is not a
+              #    path Windows Python can read.
+              # chmod +x is Linux-only: the Windows artifact is vale.exe.
               curl -SfL "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Windows_64-bit.zip" \
                 -H "Authorization: Bearer $GITHUB_TOKEN" \
-                -o /tmp/vale-bin/vale.zip
-              python -c "import zipfile,sys; zipfile.ZipFile('/tmp/vale-bin/vale.zip').extract('vale.exe', sys.argv[1])" "$(cygpath -w /tmp/vale-bin)"
-              rm -f /tmp/vale-bin/vale.zip
+                -o vale.zip
+              python -c "import zipfile,sys,os; d=os.path.join(sys.argv[1],'vale-bin'); os.makedirs(d,exist_ok=True); zipfile.ZipFile('vale.zip').extract('vale.exe', d)" "$(cygpath -w "$RUNNER_TEMP")"
+              rm -f vale.zip
               ;;
             *)
               echo "Unsupported runner OS: ${{ runner.os }}"
               exit 1
               ;;
           esac
-          chmod +x /tmp/vale-bin/vale
       - name: Install Vale to system path
         # Separate step so a failure here is distinguishable from a test
         # failure at the check list — the original defect (#488).
@@ -246,12 +256,12 @@ jobs:
         run: |
           case "${{ runner.os }}" in
             Linux)
-              cp /tmp/vale-bin/vale /usr/local/bin/vale
+              cp "${RUNNER_TEMP}/vale-bin/vale" /usr/local/bin/vale
               VALE_DIR=/usr/local/bin
               ;;
             Windows)
               mkdir -p "$HOME/bin"
-              cp /tmp/vale-bin/vale.exe "$HOME/bin/vale.exe"
+              python -c "import shutil,sys,os; shutil.copy(os.path.join(sys.argv[1],'vale-bin','vale.exe'), sys.argv[2])" "$(cygpath -w "$RUNNER_TEMP")" "$(cygpath -w "$HOME/bin/vale.exe")"
               VALE_DIR="$HOME/bin"
               cygpath -w "$VALE_DIR" >> "$GITHUB_PATH"
               ;;
@@ -532,7 +542,7 @@ jobs:
         id: cache-vale
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          path: /tmp/vale-bin
+          path: ${{ runner.temp }}/vale-bin
           key: vale-${{ runner.os }}-3.9.1
       - name: Install Vale
         if: steps.cache-vale.outputs.cache-hit != 'true'
@@ -550,16 +560,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p /tmp/vale-bin
+          mkdir -p "${RUNNER_TEMP}/vale-bin"
           curl -SfL "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz" \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
-            | tar xz -C /tmp/vale-bin vale
-          chmod +x /tmp/vale-bin/vale
+            | tar xz -C "${RUNNER_TEMP}/vale-bin" vale
+          chmod +x "${RUNNER_TEMP}/vale-bin/vale"
       - name: Install Vale to system path
         # Separate step so a failure here is distinguishable from a prose
         # finding at the check list — the original defect (#488).
         run: |
-          cp /tmp/vale-bin/vale /usr/local/bin/vale
+          cp "${RUNNER_TEMP}/vale-bin/vale" /usr/local/bin/vale
           vale --version
       - name: Run Vale on fixtures
         # Poison/fail fixtures are DESIGNED to trigger a finding; a nonzero exit here

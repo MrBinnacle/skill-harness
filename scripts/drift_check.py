@@ -1062,30 +1062,34 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
     LiveRow(
         dc_id="DC-18",
         summary=(
-            "Vale version pins: the vale job and the test job in ci.yml cite the "
-            "same version, and test_vale_doctrine_agreement.py names the workflow "
-            "as its source of truth (#488)"
+            "Vale version pins: every release URL and cache key in ci.yml cites "
+            "3.9.1, and test_vale_doctrine_agreement.py names the workflow as its "
+            "source of truth (#488)"
         ),
         value_sites=(
-            # The vale job's curl URL — the version must be 3.9.1.
+            # Linux tar.gz URLs — vale job and test job. ValueSite checks ALL
+            # matches, so one site covers both occurrences.
             ValueSite(
                 ".github/workflows/ci.yml",
                 r'curl -SfL "https://github.com/errata-ai/vale/releases/download/v([\d.]+)/vale_([\d.]+)_Linux_64-bit.tar.gz"',
                 ("3.9.1", "3.9.1"),
             ),
-            # The test job's curl URL — the same version, same check.
-            # The pattern matches any occurrence of the same curl URL in the
-            # file; ValueSite requires at least one match and checks ALL
-            # matches, so two occurrences must both cite 3.9.1.
+            # Windows zip URL in the test job — a silent independent pin.
             ValueSite(
                 ".github/workflows/ci.yml",
-                r'curl -SfL "https://github.com/errata-ai/vale/releases/download/v([\d.]+)/vale_([\d.]+)_Linux_64-bit.tar.gz"',
+                r'curl -SfL "https://github.com/errata-ai/vale/releases/download/v([\d.]+)/vale_([\d.]+)_Windows_64-bit.zip"',
                 ("3.9.1", "3.9.1"),
+            ),
+            # Cache keys in both jobs. A key that lags the URL restores the
+            # wrong binary on a hit and never re-fetches.
+            ValueSite(
+                ".github/workflows/ci.yml",
+                r"key: vale-\$\{\{ runner\.os \}\}-([\d.]+)",
+                ("3.9.1",),
             ),
         ),
         registered_texts=(
-            # The test file names the workflow as its version source; the
-            # sentence must survive rewording but not version drift.
+            # The test file names the workflow as its version source.
             RegisteredText(
                 "tests/test_vale_doctrine_agreement.py",
                 "pinned to the same version the CI workflow installs",
