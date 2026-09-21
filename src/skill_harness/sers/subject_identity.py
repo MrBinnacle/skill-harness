@@ -6,7 +6,8 @@ Each field is the value the harness already computes elsewhere; none is free-typ
 - ``harness_version`` — installed package / ``__version__`` fallback
 - ``metric_version`` — ``ORACLE_METRIC_VERSION`` on the subject ingest module
 - ``implementation_hash`` — SHA-256 of the oracle module source at mint time
-- ``arms`` — which arms ran (``null``, ``full``, or both)
+- ``arms`` — which arms ran: the run's declared arm names (``null`` and ``full``
+  for the two-value vocabulary, named arms for a declared-arm run)
 - ``subject_model`` (SERS 1.4.0): the model that executed the epochs
 
 ``subject_model`` is the one field this helper cannot derive from a file on disk.
@@ -25,7 +26,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-_ARM_VALUES = frozenset({"null", "full"})
+from skill_harness.storage.models import ARM_NAME_PATTERN, is_valid_arm_name
 
 
 def build_subject_identity(
@@ -37,10 +38,13 @@ def build_subject_identity(
     """Return a complete ``subject_identity`` block populated by the harness.
 
     :param skill_md: path to the measured ``SKILL.md``, or its exact bytes
-    :param arms: ``"null"``, ``"full"``, or a sequence of those (both arms)
+    :param arms: the run's declared arm names — ``"null"``, ``"full"``, a
+        sequence of those (both arms), or the named arms a declared-arm run
+        declared (#554)
     :param subject_model: pin of the model that executed the epochs (SERS 1.4.0).
         Omit for a pre-1.4.0 block; the key is then absent rather than blank.
-    :raises ValueError: empty skill bytes, arms outside the closed set, or a
+    :raises ValueError: empty skill bytes, an arm name outside the declared-arm
+        vocabulary (``ARM_NAME_PATTERN``), duplicate arm names, or a
         ``subject_model`` that is supplied but blank
     """
     from skill_harness.cli.main import _resolve_harness_version
@@ -67,17 +71,22 @@ def build_subject_identity(
 
 def _normalize_arms(arms: Sequence[str] | str) -> str | list[str]:
     if isinstance(arms, str):
-        if arms not in _ARM_VALUES:
-            raise ValueError(f"arms must be 'null' or 'full', got {arms!r}")
+        if not is_valid_arm_name(arms):
+            raise ValueError(
+                f"arms must be a declared arm name matching {ARM_NAME_PATTERN}, got {arms!r}"
+            )
         return arms
     values = list(arms)
     if not values:
         raise ValueError("arms sequence is empty")
     if len(values) != len(set(values)):
         raise ValueError(f"arms sequence has duplicates: {values!r}")
-    unknown = [a for a in values if a not in _ARM_VALUES]
+    unknown = [a for a in values if not isinstance(a, str) or not is_valid_arm_name(a)]
     if unknown:
-        raise ValueError(f"arms contains values outside {{null, full}}: {unknown!r}")
+        raise ValueError(
+            f"arms contains values outside the declared-arm vocabulary "
+            f"(names must match {ARM_NAME_PATTERN}): {unknown!r}"
+        )
     if len(values) == 1:
         return values[0]
     return values

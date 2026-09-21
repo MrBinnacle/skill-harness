@@ -288,7 +288,7 @@ the fields.
 | `harness_version` | Harness version that produced the receipt. |
 | `metric_version` | Oracle metric version (e.g. `0.3.0`). |
 | `implementation_hash` | SHA-256 hex of the oracle module source at mint/ingest time. |
-| `arms` | Which arms ran: `null`, `full`, or both as an array. |
+| `arms` | Which arms ran: the run's declared arm names — `null` and `full` for the per-clause instrument's two-value vocabulary, named arms (e.g. a factorial's cells) for a declared-arm run. One arm is a string; several is an array of unique names. |
 | `subject_model` | Model pin of the model that **executed the epochs**. Required from 1.4.0; absent before it. |
 
 `subject_model` sits here rather than in `instrument_identity` because it is a
