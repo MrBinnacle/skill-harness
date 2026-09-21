@@ -32,9 +32,17 @@ cost = {
         input_cache_write=P["cache_write"],
         input_cache_read=P["cache_read"],
     ),
-    # task default model: the "none" provider makes no API call (sized run: zero usage under it)
-    "none/none": ModelCost(input=0, output=0, input_cache_write=0, input_cache_read=0),
 }
+# The task's default model is the "none" provider, which makes no API call (the sized run recorded
+# zero usage under it). cost_limit still needs a price for it, and set_model_cost refuses a model
+# absent from inspect's database, so it is registered as custom model info with a zero cost.
+# (S471: the first live attempt failed at set_model_cost("none/none") before any model call.)
+from inspect_ai.model import ModelInfo, set_model_info
+
+set_model_info(
+    "none/none",
+    ModelInfo(cost=ModelCost(input=0, output=0, input_cache_write=0, input_cache_read=0)),
+)
 prompt = (FIX / "prompt_v3a_pushdiv.txt").read_text(encoding="utf-8")
 pin = HarnessPin.capture(agent_version="2.1.197", model=MODEL, sandbox="docker", cwd="/root")
 tasks = build_paired_tasks(
