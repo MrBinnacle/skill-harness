@@ -50,7 +50,7 @@ _PORTFOLIO_TRIPLES: list[tuple[str, ValueClass, date | None]] = [
     ("github-pages-deploy-verification", ValueClass.TRAP_DISCIPLINE, None),
     ("subagent-research-reliability", ValueClass.TRAP_DISCIPLINE, None),
     ("downstream-instruction-framing", ValueClass.TRAP_DISCIPLINE, None),
-    ("closure-mode-at-boundaries", ValueClass.TRAP_DISCIPLINE, None),
+    ("closure-mode", ValueClass.TRAP_DISCIPLINE, None),
     (
         "skill-necessity-gate",
         ValueClass.TRAP_DISCIPLINE,

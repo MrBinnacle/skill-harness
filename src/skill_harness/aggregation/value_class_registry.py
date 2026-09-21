@@ -49,7 +49,7 @@ SKILL_VALUE_CLASS: dict[str, ValueClass] = {
     "github-pages-deploy-verification": ValueClass.TRAP_DISCIPLINE,
     "subagent-research-reliability": ValueClass.TRAP_DISCIPLINE,
     "downstream-instruction-framing": ValueClass.TRAP_DISCIPLINE,
-    "closure-mode-at-boundaries": ValueClass.TRAP_DISCIPLINE,
+    "closure-mode": ValueClass.TRAP_DISCIPLINE,
     "skill-necessity-gate": ValueClass.TRAP_DISCIPLINE,  # retired 2026-08-31; RETIRED.md
     "parallel-review-disposition-schema": ValueClass.TRAP_DISCIPLINE,
     "mock-masked-stub-trap": ValueClass.TRAP_DISCIPLINE,
