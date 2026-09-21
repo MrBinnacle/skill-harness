@@ -1,6 +1,7 @@
 """Skill Harness storage layer.
 
-Two-database design (per ADR in docs/COUNCIL_FINDINGS.md):
+Two-database design, recorded in the internal ADR log, which is not published
+(see CONTRIBUTING.md):
 
 * ``evidence.db`` — append-only. Schema lives in ``migrations/evidence/``.
   Every evidence table carries BEFORE UPDATE/DELETE triggers that
