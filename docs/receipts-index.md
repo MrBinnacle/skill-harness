@@ -141,14 +141,22 @@ and covers that section only. This page stays the citable surface for every kind
   and merged by hand each time. Per the pre-registered table the candidate
   fails for this subject: v3a is retired as a task version for Sonnet 5, no
   floor is registered, and RAT-0001's frontmatter stays empty with a dated
-  line. The entry rate is a property of the subject on this family, so the
-  next screen changes the subject (`claude-opus-5`, priced at a $16.00 cap)
-  rather than the wording.
+  line. A second screen on `claude-opus-5` under a $16.00 authorisation
+  (Amendment 3, run `EMMSk62u6Gu7AT4ey43kkZ`) returned 0 of 8 entered (2
+  parser-undecided, 0 after the required hand-read), 8 of 8 passed, $2.25.
+  Opus 5 read the fixture's `RELEASING.md`, merged with `--no-ff`, verified
+  the ledger SHAs and said in its summaries that it declined to rebase because
+  that file forbids rewriting. So the lever is the in-repo policy signpost the
+  S414 pass recorded as moved rather than removed, on both subjects, and the
+  family moves to `#611` item 6 (scenario search, first axis the signpost)
+  before any further screen. Total spend for item 3: $3.06.
 - **Refuses to claim:** Any verdict on the `pull-rebase` card; any hazard
-  rate or floor for a subject other than the one measured; that the task
-  cannot elicit the pull on other subjects, which is what the Opus 5 screen
-  measures; that v3c would do better on Sonnet 5, which is expected false and
-  is why it is not run first; and any change to a registered RAT-0001 field.
+  rate or floor for either subject; that no task in this family can elicit
+  the pull, which is what the signpost-free variant will measure; that the
+  maintainer's report of the trap firing on Opus 5 in ordinary work is false,
+  since only this fixture and agent version were measured; that v3c would do
+  better, which is expected false and is why it is not run; and any change to
+  a registered RAT-0001 field.
 
 ### [`docs/findings/gitpull-cost-basis-unregisterable.md`](findings/gitpull-cost-basis-unregisterable.md)
 
