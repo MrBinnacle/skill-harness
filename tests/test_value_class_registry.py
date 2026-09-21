@@ -35,31 +35,39 @@ from skill_harness.aggregation.verdict import (
 # The portfolio classification, measured by this file (#422).
 # Each triple: (skill_name, value_class, retired_on | None).
 # retired_on carries the date the card left the published collection (or was
-# screened out); None means still published.  OBS-0003 is keyed on
-# sqlite-tie-break-red-test-trap, so the row stays (#41).
+# screened out); None means still published. Historic screen records use the
+# pre-2026-09-08 names, so their aliases stay registered as retired. OBS-0003
+# is keyed on sqlite-tie-break-red-test-trap, so that row stays (#41).
 _PORTFOLIO_TRIPLES: list[tuple[str, ValueClass, date | None]] = [
     # --- calibration: make a measurement/evaluation trustworthy ---------------
     ("bayesian-eval-discipline", ValueClass.CALIBRATION, None),
     ("llm-judge-calibration", ValueClass.CALIBRATION, None),
     ("append-only-evidence-design", ValueClass.CALIBRATION, None),
     # --- trap-discipline: guard against one specific wrong action -------------
-    ("git-pull-rebase-trap", ValueClass.TRAP_DISCIPLINE, None),
+    ("git-pull-rebase-trap", ValueClass.TRAP_DISCIPLINE, date(2026, 9, 8)),
     (
         "sqlite-tie-break-red-test-trap",
         ValueClass.TRAP_DISCIPLINE,
         date(2026, 7, 10),  # screened out — RETIRED.md screened-out table
     ),
-    ("github-pages-deploy-verification", ValueClass.TRAP_DISCIPLINE, None),
-    ("subagent-research-reliability", ValueClass.TRAP_DISCIPLINE, None),
-    ("downstream-instruction-framing", ValueClass.TRAP_DISCIPLINE, None),
-    ("closure-mode", ValueClass.TRAP_DISCIPLINE, None),
+    ("github-pages-deploy-verification", ValueClass.TRAP_DISCIPLINE, date(2026, 9, 8)),
+    ("subagent-research-reliability", ValueClass.TRAP_DISCIPLINE, date(2026, 9, 8)),
+    ("downstream-instruction-framing", ValueClass.TRAP_DISCIPLINE, date(2026, 9, 8)),
+    ("closure-mode-at-boundaries", ValueClass.TRAP_DISCIPLINE, date(2026, 9, 8)),
     (
         "skill-necessity-gate",
         ValueClass.TRAP_DISCIPLINE,
         date(2026, 8, 31),  # retired — skills#178, RETIRED.md
     ),
-    ("parallel-review-disposition-schema", ValueClass.TRAP_DISCIPLINE, None),
-    ("mock-masked-stub-trap", ValueClass.TRAP_DISCIPLINE, None),
+    ("parallel-review-disposition-schema", ValueClass.TRAP_DISCIPLINE, date(2026, 9, 8)),
+    ("mock-masked-stub-trap", ValueClass.TRAP_DISCIPLINE, date(2026, 9, 8)),
+    ("pull-rebase", ValueClass.TRAP_DISCIPLINE, None),
+    ("stale-deploy", ValueClass.TRAP_DISCIPLINE, None),
+    ("subagent-handback", ValueClass.TRAP_DISCIPLINE, None),
+    ("decision-rights", ValueClass.TRAP_DISCIPLINE, None),
+    ("closure-mode", ValueClass.TRAP_DISCIPLINE, None),
+    ("disposition-schema", ValueClass.TRAP_DISCIPLINE, None),
+    ("mocked-stub", ValueClass.TRAP_DISCIPLINE, None),
     # --- transformative-lift: intentionally empty (S2-kill fires) -------------
 ]
 
@@ -86,14 +94,24 @@ _KNOWN_LIVE_SKILLS: frozenset[str] = frozenset(
         "bayesian-eval-discipline",
         "llm-judge-calibration",
         "append-only-evidence-design",
-        "git-pull-rebase-trap",
-        "github-pages-deploy-verification",
-        "subagent-research-reliability",
-        "downstream-instruction-framing",
+        "pull-rebase",
+        "stale-deploy",
+        "subagent-handback",
+        "decision-rights",
         "closure-mode",
-        "parallel-review-disposition-schema",
-        "mock-masked-stub-trap",
+        "disposition-schema",
+        "mocked-stub",
     }
+)
+
+_RENAMED_SKILL_NAMES: tuple[tuple[str, str], ...] = (
+    ("git-pull-rebase-trap", "pull-rebase"),
+    ("github-pages-deploy-verification", "stale-deploy"),
+    ("subagent-research-reliability", "subagent-handback"),
+    ("downstream-instruction-framing", "decision-rights"),
+    ("closure-mode-at-boundaries", "closure-mode"),
+    ("parallel-review-disposition-schema", "disposition-schema"),
+    ("mock-masked-stub-trap", "mocked-stub"),
 )
 
 
@@ -105,8 +123,8 @@ def _stale_skill_keys(
     """Return non-retired registry keys that do not name a known live skill.
 
     A key that names a retired skill is excluded (retired skills are expected
-    to be absent from the live collection).  A key present in ``live`` but not
-    in ``retired`` that is missing from ``live`` is stale.
+    to be absent from the live collection). A non-retired key missing from
+    ``live`` is stale.
     """
     return sorted(
         name for name, _vc in registry.items() if name not in retired and name not in live
@@ -165,8 +183,24 @@ def test_portfolio_pinned_by_triples() -> None:
     assert retired == {
         "sqlite-tie-break-red-test-trap": date(2026, 7, 10),
         "skill-necessity-gate": date(2026, 8, 31),
+        "git-pull-rebase-trap": date(2026, 9, 8),
+        "github-pages-deploy-verification": date(2026, 9, 8),
+        "subagent-research-reliability": date(2026, 9, 8),
+        "downstream-instruction-framing": date(2026, 9, 8),
+        "closure-mode-at-boundaries": date(2026, 9, 8),
+        "parallel-review-disposition-schema": date(2026, 9, 8),
+        "mock-masked-stub-trap": date(2026, 9, 8),
     }
-    assert value_class_for("mock-masked-stub-trap") is ValueClass.TRAP_DISCIPLINE
+    assert value_class_for("mocked-stub") is ValueClass.TRAP_DISCIPLINE
+
+
+@pytest.mark.parametrize(("retired_name", "published_name"), _RENAMED_SKILL_NAMES)
+def test_renamed_skill_names_preserve_historic_and_published_lookups(
+    retired_name: str, published_name: str
+) -> None:
+    """#601: renamed cards resolve under their published and historical screen names."""
+    assert value_class_for(retired_name) is ValueClass.TRAP_DISCIPLINE
+    assert value_class_for(published_name) is ValueClass.TRAP_DISCIPLINE
 
 
 def test_s2_kill_condition_transformative_lift_class_is_empty() -> None:
@@ -195,7 +229,9 @@ def test_value_class_for_unregistered_is_none() -> None:
     """The honest default: an unknown skill_name → None → the guard's not-transformative
     path (CAN'T-TELL-YET), never a false CUT."""
     assert value_class_for("some-unregistered-skill") is None
-    assert value_class_for("git-pull-rebase-trap") is ValueClass.TRAP_DISCIPLINE
+    assert value_class_for("pull-rebase") is ValueClass.TRAP_DISCIPLINE
+    assert value_class_for("closure-mode") is ValueClass.TRAP_DISCIPLINE
+    assert value_class_for("closure-mode-at-boundaries") is ValueClass.TRAP_DISCIPLINE
     assert value_class_for("llm-judge-calibration") is ValueClass.CALIBRATION
 
 

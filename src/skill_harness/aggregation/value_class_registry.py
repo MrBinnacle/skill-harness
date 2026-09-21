@@ -8,8 +8,9 @@ for such skills — but only if it KNOWS the skill's class. #76 shipped the guar
 store rows unclassified (every screen → CAN'T-TELL-YET, honest but undiscriminating).
 
 This module is the registration source #76's guard consumes: a static map from the
-skill's ``skill_name`` (the exact string the screen store keys on, == the published
-skill-card name) to its ``ValueClass``. The CLI seams look each screened skill up here
+skill's ``skill_name`` to its ``ValueClass``. Current entries use the published
+skill-card name. Retired aliases retain the name in immutable historic screen records
+and point to the published successor. The CLI seams look each screened skill up here
 and pass the class into ``screen_verdict`` — so a registered non-transformative skill
 renders CAN'T-TELL-YET *on purpose* (registered wrong-instrument), not by the accident
 of being unclassified. That makes the four false CUTs (OBS-0003..0006) structurally
@@ -49,15 +50,23 @@ SKILL_VALUE_CLASS: dict[str, ValueClass] = {
     "llm-judge-calibration": ValueClass.CALIBRATION,
     "append-only-evidence-design": ValueClass.CALIBRATION,
     # --- trap-discipline: guard against one specific wrong action -------------
-    "git-pull-rebase-trap": ValueClass.TRAP_DISCIPLINE,
+    # Renamed 2026-09-08; historic screen records retain these keys. skills#286 (541522a).
+    "git-pull-rebase-trap": ValueClass.TRAP_DISCIPLINE,  # now pull-rebase
     "sqlite-tie-break-red-test-trap": ValueClass.TRAP_DISCIPLINE,  # retired 2026-07-10; RETIRED.md
-    "github-pages-deploy-verification": ValueClass.TRAP_DISCIPLINE,
-    "subagent-research-reliability": ValueClass.TRAP_DISCIPLINE,
-    "downstream-instruction-framing": ValueClass.TRAP_DISCIPLINE,
-    "closure-mode": ValueClass.TRAP_DISCIPLINE,
+    "github-pages-deploy-verification": ValueClass.TRAP_DISCIPLINE,  # now stale-deploy
+    "subagent-research-reliability": ValueClass.TRAP_DISCIPLINE,  # now subagent-handback
+    "downstream-instruction-framing": ValueClass.TRAP_DISCIPLINE,  # now decision-rights
+    "closure-mode-at-boundaries": ValueClass.TRAP_DISCIPLINE,  # now closure-mode
     "skill-necessity-gate": ValueClass.TRAP_DISCIPLINE,  # retired 2026-08-31; RETIRED.md
-    "parallel-review-disposition-schema": ValueClass.TRAP_DISCIPLINE,
-    "mock-masked-stub-trap": ValueClass.TRAP_DISCIPLINE,
+    "parallel-review-disposition-schema": ValueClass.TRAP_DISCIPLINE,  # now disposition-schema
+    "mock-masked-stub-trap": ValueClass.TRAP_DISCIPLINE,  # now mocked-stub
+    "pull-rebase": ValueClass.TRAP_DISCIPLINE,
+    "stale-deploy": ValueClass.TRAP_DISCIPLINE,
+    "subagent-handback": ValueClass.TRAP_DISCIPLINE,
+    "decision-rights": ValueClass.TRAP_DISCIPLINE,
+    "closure-mode": ValueClass.TRAP_DISCIPLINE,
+    "disposition-schema": ValueClass.TRAP_DISCIPLINE,
+    "mocked-stub": ValueClass.TRAP_DISCIPLINE,
     # --- transformative-lift: intentionally empty (S2-kill fires) -------------
 }
 """The portfolio classification. transformative-lift is deliberately empty:
