@@ -1611,8 +1611,9 @@ def test_ac4_refuses_when_its_surface_is_gone(tmp_path: Path) -> None:
     in a tree that has no workflows. This lane deletes the directory and
     asserts the row refuses, in the table's own wording, naming the path.
 
-    The reddened SET is asserted here because no other row reads that
-    directory, so removing it is AC-4's business alone."""
+    The reddened SET is asserted here. Two rows read that directory: AC-4, and
+    DC-18, whose value sites are the Vale pins in ci.yml (#488). Removing it
+    must redden both and nothing else."""
     root = _make_tree(tmp_path)
     shutil.rmtree(root / ".github" / "workflows")
     _git(root, "add", "-A")
@@ -1623,7 +1624,7 @@ def test_ac4_refuses_when_its_surface_is_gone(tmp_path: Path) -> None:
         "AC-4" in line and "has no surface to scan" in line and ".github/workflows" in line
         for line in fail_lines
     ), r.stdout
-    assert _failed_row_ids(r.stdout) == {"AC-4"}, r.stdout
+    assert _failed_row_ids(r.stdout) == {"AC-4", "DC-18"}, r.stdout
 
 
 def test_ac4_refuses_when_the_named_release_gate_predicate_is_gone(tmp_path: Path) -> None:
