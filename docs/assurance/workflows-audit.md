@@ -20,7 +20,7 @@ inspect all triggers for `pull_request_target` or another untrusted-code privile
 | `.github/workflows/scorecard.yml` | All actions pinned to commit SHAs | Workflow `read-all`; analysis job alone adds `security-events: write` and `id-token: write` for SARIF and published results | Default-branch push and weekly schedule; no `pull_request_target` | Pass |
 | `.github/workflows/repo-description-sync.yml` (added 2026-08-28) | All actions pinned to commit SHAs | Workflow `contents: read`; no job elevation. Reads `secrets.GITHUB_TOKEN` for GitHub API rate limit only | Daily schedule, `push` on `main` limited to `pyproject.toml`, and manual dispatch; no `pull_request_target` | Pass |
 | `.github/workflows/triage-label-on-open.yml` (added 2026-08-30) | No `uses:` reference; a single `gh issue edit` shell step | Workflow `contents: read`; the one job alone adds `issues: write`, which `gh issue edit --add-label` consumes | `issues: opened` only, gated on the issue carrying zero labels; no `pull_request_target`. Not on the merge path: it acts on an issue event, never on a pull request | Pass |
-| `.github/workflows/commit-claim-drift.yml` (added 2026-09-05) | All actions pinned to commit SHAs | Workflow `contents: read`; no job elevation. Reads no secret; the two clones it makes are anonymous reads of public repositories | Weekly schedule and manual dispatch only. No `push` trigger, deliberately: the figures it checks are commit counts that rise with every merge, so a push-triggered exact-equality check would fail on the merge that landed it. No `pull_request_target` | Pass |
+| `.github/workflows/commit-claim-drift.yml` (added 2026-09-05) | All actions pinned to commit SHAs | Workflow `contents: read`; no job elevation. Reads no secret; the two clones it makes are anonymous reads of public repositories | Weekly schedule and manual dispatch only. No `push` trigger: it checks whether the fresh machinery-to-collection ratio remains in the durable 3-to-5 band, and that network measurement is not hermetic. No `pull_request_target` | Pass |
 | `.github/workflows/words-to-avoid-drift.yml` (added 2026-09-07) | All actions pinned to commit SHAs | Workflow `contents: read`; no job elevation. Reads `secrets.GITHUB_TOKEN` for GitHub API rate limit only | Daily schedule, `push` on `main` limited to `assets/words_to_avoid.json`, and manual dispatch; no `pull_request_target` | Pass |
 
 ## Findings
@@ -47,12 +47,10 @@ the About-box text is edited through the web UI, out-of-band from every commit, 
 request diff can contain the change that causes the drift. A schedule observes that
 surface; a merge gate cannot.
 
-`commit claim drift` (added 2026-09-05) is a separate workflow for the same reason and one
-more. Like the description sync it makes a network round-trip, so it cannot be hermetic. It
-also compares an exact commit count against two repositories whose counts rise with every
-merge, including the merge that would land the check itself, so on the merge path it would
-be red from its first run onward and could never be held green. It runs weekly, and a red
-run there is the true statement that the page has gone stale.
+`commit claim drift` (added 2026-09-05) is a separate workflow for the same reason. Like
+the description sync it makes a network round-trip, so it cannot be hermetic. It derives the
+two current commit counts and fails only when their ratio leaves the page's durable 3-to-5
+band. It runs weekly because that boundary can change outside a pull request.
 
 No branch-protection setting was changed; maintainers alone decide whether any new check
 becomes required.

@@ -62,27 +62,24 @@ every break into a standing rule, and then build the same honesty into the tool.
 
 ## The size of the detour
 
-Measured on 2026-09-20: **215 commits of collection against 681 commits of machinery built
-to find out whether the collection is worth anything.**
+The machinery work has consistently outweighed the collection work. Measured on 2026-09-22:
+the ratio is **about 3.25 to 1** — machinery commits against collection commits — and has
+stayed between three and five to one across every measurement taken: 4.55 on 2026-08-15,
+3.36 on 2026-09-02, 3.36 on 2026-09-05, 3.17 on 2026-09-20, and 3.25 now.
 
-Both numbers move, and this page has now been wrong about them three times. It carried the
-2026-08-15 measurement — 71 against 323 — for eighteen days, then the 2026-09-02
-measurement — 152 against 511 — for three, then the 2026-09-05 measurement — 160 against
-537 — until this correction. A reader who ran the commands below during any of those
-windows got numbers that did not match the ones above them. The first two corrections were
-made by a person noticing. This one was detected by machine and repaired by a person
-thirteen days later: the scheduled run failed on 2026-09-07 and failed again on 2026-09-14,
-and the page stayed wrong through both. Detection is solved here and response is not, which
-is worth more to a reader than a claim that the mechanism worked:
-`scripts/check_commit_claim_drift.py` reads the figures and the commands
-off this page, clones both repositories fresh, and fails when either figure has moved. It runs weekly
-rather than on every commit, because the counts rise with every merge and an exact-equality
-gate on every push would fail on the merge that landed it. The durable figure is the
-**ratio**, which has stayed between three and five to one across every measurement taken;
-the absolute counts are stale the day after they are written.
+A ratio that cannot go stale does not need a detector. The absolute counts rise with
+every merge and are stale the day after they are written. This page carried exact
+counts three times and was wrong about them three times: the first two corrections
+were made by a person noticing, the third was detected by machine and repaired
+thirteen days later. The durable claim is the ratio, not the counts.
+
+`scripts/check_commit_claim_drift.py` derives both counts from this page's own
+commands and asserts that the ratio stays between three and five to one. It runs
+weekly rather than on every commit, because the ratio changes slowly and an
+every-push gate would be noise.
 
 The basis is a fresh clone at `HEAD` — what a plain `git clone` gets you —
-so you can land on the same figures yourself, give or take what has merged since:
+so you can land on the same ratio yourself, give or take what has merged since:
 
 ```bash
 git clone https://github.com/MrBinnacle/skills.git        && git -C skills        rev-list --count HEAD

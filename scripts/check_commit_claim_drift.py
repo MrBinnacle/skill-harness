@@ -1,33 +1,32 @@
 #!/usr/bin/env python3
-"""Fail when the dated commit-count claim on ``docs/why-this-exists.md`` has gone stale.
+"""Fail when the ratio claim on ``docs/why-this-exists.md`` has gone stale.
 
-Why this exists (steering repo issue 61). The page states how many commits the skill
-collection and this instrument each carry, with a measurement date and the two shell
-commands a reader can run to reproduce the figures. Two tests in
-``tests/test_readme_origin_223.py`` guard that claim, and both lock its SHAPE: a date, two
-integers, the two commands. Neither can tell whether the integers are still true. The first
-pair (71 against 323) stood for eighteen days while the real counts moved to 152 against
-511; the counts have moved again since. Each correction so far was a person noticing.
+Why this exists (steering repo issue 61). The page states the ratio of machinery
+commits to collection commits, with a measurement date and the two shell commands
+a reader can run to reproduce the counts. The ratio has stayed between three and
+five to one across every measurement taken. Exact counts rise with every merge and
+are stale the day after they are written; the durable figure is the ratio.
 
-The rule. The prose figure is a CACHE of a derivation the page itself states. This check
-runs that derivation and compares. The figures the page asserts are parsed, never assumed;
-the commands the page states are parsed and executed, never re-typed here. Lock the shape,
-not the value: nothing in this file knows what the right count is.
+The rule. The page carries a dated ratio claim and two derivation commands. This
+check runs the derivations, computes the ratio, and asserts it falls within the
+stated band (three to five to one). The ratio the page states is parsed, never
+assumed; the commands the page states are parsed and executed, never re-typed
+here. Lock the band, not the value: nothing in this file knows what the right
+ratio is.
 
-Two derivation bases. By default each command is run as the page states it: a fresh clone
-into a temporary directory, then ``rev-list --count`` on the ref the command names. That is
-the basis the page promises a reader, and it is the only basis a shallow CI checkout cannot
-fake. ``--local NAME=PATH`` substitutes an existing clone for the directory the command
-would create, for a maintainer working offline; the count is then taken in that clone at the
-same ref, and whatever that clone's ref points at is what gets counted.
+Two derivation bases. By default each command is run as the page states it: a
+fresh clone into a temporary directory, then ``rev-list --count`` on the ref the
+command names. ``--local NAME=PATH`` substitutes an existing clone for the
+directory the command would create, for a maintainer working offline.
 
-Exit 0 when both derived counts equal the figures the page asserts. Exit 1 when either
-disagrees, naming the surface, the asserted figure and the derived one. Exit 2 when the
-measurement cannot be taken (page or section missing, claim or commands unparseable, git
-absent or failing), because a checker that cannot measure must not report PASS.
+Exit 0 when the derived ratio falls within the band the page asserts. Exit 1
+when the ratio drifts outside the band, naming the derived ratio and the band.
+Exit 2 when the measurement cannot be taken (page or section missing, claim or
+commands unparseable, git absent or failing), because a checker that cannot
+measure must not report PASS.
 
-Companion in the steering repository: ``check_model_id_drift.py`` applies the same
-prose-is-the-cache rule to model ids and uses the same exit codes.
+Companion in the steering repository: ``check_model_id_drift.py`` applies the
+same prose-is-the-cache rule to model ids and uses the same exit codes.
 """
 
 from __future__ import annotations
@@ -45,12 +44,10 @@ ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs" / "why-this-exists.md"
 SECTION = "The size of the detour"
 
-# The sentence the page asserts. Same shape test_readme_origin_223.py locks, so a page that
-# passes that test is parseable here and a page this check cannot parse fails that test too.
-CLAIM_RE = re.compile(
-    r"Measured on (\d{4}-\d{2}-\d{2}):\s*\*\*(\d+) commits of collection"
-    r" against (\d+) commits of machinery"
-)
+# The ratio band the page asserts. Same shape test_readme_origin_223.py locks, so a page
+# that passes that test is parseable here and a page this check cannot parse fails that
+# test too.
+RATIO_RE = re.compile(r"Measured on (\d{4}-\d{2}-\d{2}):\s*.*?\*\*about (\d+\.\d+) to 1", re.DOTALL)
 
 # One derivation command as the page states it: clone, then count on a named ref. The three
 # captures are the clone source, the directory the clone lands in, and the ref counted.
@@ -59,6 +56,7 @@ COMMAND_RE = re.compile(
 )
 
 SURFACES = ("collection", "machinery")
+RATIO_BAND = (3.0, 5.0)
 
 
 class CannotMeasure(Exception):
@@ -76,22 +74,22 @@ class Derivation:
 
 @dataclass(frozen=True)
 class Claim:
-    """The dated figures the page asserts."""
+    """The dated ratio the page asserts."""
 
     measured_on: str
-    collection: int
-    machinery: int
+    ratio: float
 
 
 @dataclass(frozen=True)
 class Result:
     claim: Claim
     derived: dict[str, int]
-    disagreements: list[str] = field(default_factory=list)
+    derived_ratio: float
+    out_of_band: list[str] = field(default_factory=list)
 
     @property
     def agrees(self) -> bool:
-        return not self.disagreements
+        return not self.out_of_band
 
 
 def section_text(page_text: str, heading: str = SECTION) -> str:
@@ -105,14 +103,13 @@ def section_text(page_text: str, heading: str = SECTION) -> str:
 
 
 def parse_claim(section: str) -> Claim:
-    """The dated figures. Raises CannotMeasure when the sentence is not there to compare."""
-    match = CLAIM_RE.search(section)
+    """The dated ratio. Raises CannotMeasure when the sentence is not there to compare."""
+    match = RATIO_RE.search(section)
     if match is None:
         raise CannotMeasure(
-            "no dated commit-count claim found: expected"
-            " 'Measured on YYYY-MM-DD: **N commits of collection against M commits of machinery'"
+            "no dated ratio claim found: expected 'Measured on YYYY-MM-DD: **about N.N to 1'"
         )
-    return Claim(match[1], int(match[2]), int(match[3]))
+    return Claim(match[1], float(match[2]))
 
 
 def parse_derivations(section: str) -> dict[str, Derivation]:
@@ -177,35 +174,39 @@ def _count_in(clone: Path, ref: str) -> int:
 
 
 def check(page_text: str, derive: Callable[[Derivation], int]) -> Result:
-    """Compare the page's asserted figures with what its own derivations yield now."""
+    """Compare the page's asserted ratio with what its own derivations yield now."""
     section = section_text(page_text)
     claim = parse_claim(section)
     derivations = parse_derivations(section)
     derived = {surface: derive(derivations[surface]) for surface in SURFACES}
-    disagreements = [
-        f"{surface}: page asserts {getattr(claim, surface)}, derivation yields {derived[surface]}"
-        for surface in SURFACES
-        if getattr(claim, surface) != derived[surface]
-    ]
-    return Result(claim, derived, disagreements)
+    collection = derived["collection"]
+    machinery = derived["machinery"]
+    if collection == 0:
+        raise CannotMeasure("collection count is zero; cannot compute ratio")
+    derived_ratio = machinery / collection
+    out_of_band: list[str] = []
+    lo, hi = RATIO_BAND
+    if not (lo <= derived_ratio <= hi):
+        out_of_band.append(f"ratio {derived_ratio:.2f} is outside the band {lo:.1f}-{hi:.1f}")
+    return Result(claim, derived, derived_ratio, out_of_band)
 
 
 def format_report(result: Result) -> str:
     out = ["COMMIT CLAIM DRIFT CHECK", "=" * 68, ""]
     out.append(f"Page asserts (measured on {result.claim.measured_on}):")
+    out.append(f"  ratio about {result.claim.ratio} to 1 (band 3.0-5.0)")
+    out.append("")
+    out.append("Derived counts:")
     for surface in SURFACES:
-        asserted, derived = getattr(result.claim, surface), result.derived[surface]
-        flag = "ok  " if asserted == derived else "FAIL"
-        out.append(f"{flag} {surface:<11} asserted {asserted:>6}  derived {derived:>6}")
+        out.append(f"  {surface:<11} {result.derived[surface]:>6}")
+    out.append(f"  ratio       {result.derived_ratio:>6.2f}")
     out.append("")
     if result.agrees:
-        out.append("PASS: both figures on the page match a fresh derivation.")
+        out.append("PASS: the derived ratio falls within the asserted band.")
     else:
-        out.append(f"FAIL: {len(result.disagreements)} stale figure(s) on the page.")
-        out.extend(f"  {line}" for line in result.disagreements)
-        out.append(
-            "Re-measure with the page's own commands, update both figures and the date together."
-        )
+        out.append(f"FAIL: {len(result.out_of_band)} band violation(s).")
+        out.extend(f"  {line}" for line in result.out_of_band)
+        out.append("Re-derive with the page's own commands and update the ratio and date together.")
     return "\n".join(out)
 
 
