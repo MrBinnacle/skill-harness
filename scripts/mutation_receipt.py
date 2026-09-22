@@ -220,6 +220,17 @@ _UNDECIDED_COUNT_DETECTOR = (
     "::test_an_unreadable_epoch_is_undecided_not_avoided"
 )
 
+# #557: the exact-pin comparison in the dependency-anchor pre-flight check.
+# The mutant disables the comparison that produces refusals; the #549 fixture
+# must then turn red.  The control is a permitted (coordinated) bump that
+# stays green under the mutant, excluding an empty-cell kill.  The module lives
+# in scripts/ (not a package); _env adds scripts/ to PYTHONPATH so the
+# isolation and compile assertions can import it.
+_ANCHOR_CHECK = "scripts/check_dependency_anchor.py"
+_ANCHOR_CHECK_MODULE = "check_dependency_anchor"
+_ANCHOR_KILL = "tests/test_check_dependency_anchor.py::TestReproducesIssue549::test_reproduces"
+_ANCHOR_CONTROL = "tests/test_check_dependency_anchor.py::TestPassesCoordinatedBump::test_passes"
+
 
 # #368 Path C: the ablation lane's discordant route.
 _STOPPING = "src/skill_harness/ablation/stopping.py"
@@ -575,6 +586,18 @@ MUTANTS: tuple[Mutant, ...] = (
         "    runtime_version = measure_pi_version(spec.pi_bin, container=spec.container)",
         "    runtime_version = measure_pi_version(spec.pi_bin)  # mutant: container dropped",
         _PI_RUNNER_CONTAINER,
+    ),
+    Mutant(
+        "M-A1",
+        "557-anchor-pin",
+        "disable the exact-pin comparison: check_exact_pin_constraint never "
+        "returns a blocking == pin, so a follower bump above an == anchor passes "
+        "as the #549 scenario did",
+        _ANCHOR_CHECK,
+        _ANCHOR_CHECK_MODULE,
+        "            if proposed > pinned:",
+        "            if False:  # mutant: exact-pin comparison disabled",
+        (_ANCHOR_KILL, _ANCHOR_CONTROL),
     ),
 )
 
