@@ -31,6 +31,7 @@ _PAGES = _REPO_ROOT / ".github" / "workflows" / "pages.yml"
 # (#172) is additive: it is listed here and deliberately absent from
 # _REQUIRED_JOB_IDS below, which is what keeps it out of `all-green`.
 _CI_JOB_IDS = (
+    "dependency-anchor",
     "lint",
     "typecheck",
     "test",
@@ -180,6 +181,10 @@ def test_linkcheck_stays_outside_the_required_check_set() -> None:
 # `_REQUIRED_JOB_IDS` above is what `all-green` depends on, which is a different
 # and larger set. Revisit this tuple whenever branch protection is edited.
 _BRANCH_PROTECTED_JOB_IDS = ("lint", "typecheck", "test")
+# `dependency-anchor` is not a branch-protection context itself. Its refusal
+# makes the protected `lint` job fail before lint resolves the broken
+# constraints, because a skipped required matrix job reads as successful.
+_GATED_BY_BRANCH_PROTECTED_JOB_IDS = ("dependency-anchor",)
 
 
 def _comment_above(job_id: str) -> str:
@@ -198,7 +203,11 @@ def test_every_job_outside_branch_protection_says_so() -> None:
     unmarked = [
         job_id
         for job_id in _job_ids(_CI)
-        if job_id not in _BRANCH_PROTECTED_JOB_IDS and "NON-required" not in _comment_above(job_id)
+        if (
+            job_id not in _BRANCH_PROTECTED_JOB_IDS
+            and job_id not in _GATED_BY_BRANCH_PROTECTED_JOB_IDS
+            and "NON-required" not in _comment_above(job_id)
+        )
     ]
     assert unmarked == [], (
         f"ci.yml jobs outside branch protection with no NON-required marker: {unmarked}"
