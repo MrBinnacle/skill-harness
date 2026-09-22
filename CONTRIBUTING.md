@@ -25,14 +25,14 @@ python -m venv .venv
 pre-commit install
 ```
 
-**Venv isolation matters.** User-site packages (installed via `pip install --user`)
-leak into virtual environments and can register pytest-randomly seeders that
-call `numpy.random.seed(seed)` without a modulo guard. When pytest-randomly's
-per-test seed exceeds 2^32 - 1, numpy's MT19937 rejects it and the suite
-produces non-deterministic failures. A venv created with `python -m venv .venv`
-does not inherit user-site packages; do **not** use `--system-site-packages`.
-If you see `ValueError: Seed must be between 0 and 2**32 - 1`, the environment
-is contaminated — recreate the venv from scratch (#580).
+**Use an isolated venv.** An unisolated Python installation can expose packages
+installed with `pip install --user`. `thinc` registers a pytest-randomly seeder
+that calls `numpy.random.seed(seed)` without a modulo guard. When pytest-randomly's
+per-test seed exceeds 2^32 - 1, numpy's MT19937 rejects it and the suite produces
+non-deterministic failures. `python -m venv .venv` disables user-site packages;
+do **not** use `--system-site-packages`. If you see
+`ValueError: Seed must be between 0 and 2**32 - 1`, recreate the venv from
+scratch (#580).
 
 Verify everything works (`PYTHONHASHSEED=0` is required — the Tier-1
 bit-equality tests refuse to collect without it; on Windows use
