@@ -8,6 +8,7 @@ behaviorally in an inspect-equipped venv (see v0.2-preregistration.md).
 
 from __future__ import annotations
 
+import os
 from importlib.util import find_spec
 from pathlib import Path
 
@@ -155,8 +156,6 @@ def test_write_pinned_compose_bytes_match_pre_sidecar_golden(tmp_path: Path) -> 
     must leave the no-sidecar file name and bytes exactly as main wrote them.
     The literal was captured from unmodified main before the refactor. Bytes
     are compared after the platform newline translation ``write_text`` applies."""
-    import os
-
     from skill_harness.subject.inspect_adapter import write_pinned_compose
 
     path = write_pinned_compose(make_pin(), compose_dir=tmp_path)

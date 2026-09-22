@@ -188,6 +188,21 @@ def test_write_origin_compose_refuses_a_symlink_at_the_compose_path(
         write_origin_compose(pin, origin, compose_dir=tmp_path / "out")
 
 
+def test_write_origin_compose_refuses_a_symlink_at_the_seed_copy_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Simulated like the compose-path test: creating a real symlink needs
+    elevated privilege on Windows. Only the copy target reports as a link."""
+    origin = OriginSidecar.from_seed(make_seed(tmp_path / "seed", hook=True))
+    pin = make_pin()
+    target = tmp_path / "out" / f"origin-seed-{origin.digest[:12]}"
+    real_is_symlink = Path.is_symlink
+    monkeypatch.setattr(Path, "is_symlink", lambda self: self == target or real_is_symlink(self))
+    with pytest.raises(RuntimeError, match="refusing to copy origin seed"):
+        write_origin_compose(pin, origin, compose_dir=tmp_path / "out")
+    assert not target.exists()
+
+
 def test_write_origin_compose_refuses_non_docker_or_undigested_pin(tmp_path: Path) -> None:
     origin = OriginSidecar.from_seed(make_seed(tmp_path / "seed", hook=True))
     with pytest.raises(ValueError, match="docker"):
