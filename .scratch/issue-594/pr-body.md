@@ -46,8 +46,8 @@ Removed the paragraph about exact counts going stale three times.
 
 **Test:** `test_commit_claim_matches_the_public_collection_measurement` in
 `tests/test_readme_origin_223.py` asserts the external claim: a dated measurement, a
-ratio in the durable 3-to-5 band in the form "about N.N to 1", the two derivation
-commands, and the fresh-clone basis.
+ratio in the durable 3-to-5 band in the form "about N.N to 1", the four published
+historical ratios in that band, the two derivation commands, and the fresh-clone basis.
 
 **Observation:** The test passes. The page now carries the durable ratio claim with the
 historical measurements as evidence.

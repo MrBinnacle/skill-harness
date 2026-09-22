@@ -68,6 +68,17 @@ def test_commit_claim_matches_the_public_collection_measurement() -> None:
         "measurement needs a rewritten claim, not a looser shape lock"
     )
     assert "stayed between three and five to one across every measurement taken" in section
+    historical_ratios = {
+        measured_on: float(value)
+        for value, measured_on in re.findall(r"(\d+\.\d+) on (2026-\d{2}-\d{2})", section)
+    }
+    assert historical_ratios == {
+        "2026-08-15": 4.55,
+        "2026-09-02": 3.36,
+        "2026-09-05": 3.36,
+        "2026-09-20": 3.17,
+    }
+    assert all(3.0 <= value <= 5.0 for value in historical_ratios.values())
 
     assert (
         "git clone https://github.com/MrBinnacle/skills.git        "
