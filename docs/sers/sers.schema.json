@@ -51,6 +51,7 @@
         "fdr_correction_failed",
         "mechanical_vacuous",
         "tier2_uncalibrated",
+        "external_check_missing",
         "length_confounded",
         null
       ],
@@ -622,6 +623,7 @@
                 "fdr_correction_failed",
                 "mechanical_vacuous",
                 "tier2_uncalibrated",
+                "external_check_missing",
                 "length_confounded",
                 "not_applicable"
               ]

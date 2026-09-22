@@ -105,7 +105,7 @@ gate rejects it. Reporting "not enough evidence yet" would be a false explanatio
 
 ### `mechanical_vacuous`
 
-No registered Tier-1 mechanical scorer can see this clause's axis, so no amount of
+No registered scorer, Tier-1 or external-check, can see this clause's axis, so no amount of
 further sampling could ever produce a mechanical measurement. This is Rule 0 —
 checked before everything else, including `no_data` — because when no instrument
 exists, "no data yet" is a false explanation: it implies more sampling would
@@ -130,10 +130,10 @@ instrument rather than implying missing effort.
 
 ### `tier2_uncalibrated`
 
-The runner's BLOCKER-1 gate refused the clause before sampling. The clause is not
-Tier-1 measurable, either because its `oracle_tier` is not 1 or because no scorer
-is registered for its axis. No samples and no verdicts exist, because the gate
-runs first.
+The runner's BLOCKER-1 gate refused the clause before sampling. The clause's axis
+has a registered Tier-1 scorer, but its `oracle_tier` is not 1. No samples and no
+verdicts exist, because the gate runs first. An axis with no registered scorer
+gets `mechanical_vacuous` or `external_check_missing` instead.
 
 Distinct from `mechanical_vacuous`, and the difference is which property failed.
 `mechanical_vacuous` is a statement about the axis registry, recomputed at
@@ -145,6 +145,24 @@ awaiting a calibrated judge. The axis has a registered Tier-1 scorer, so
 `mechanical_vacuous` is false. The runner still refuses the clause, because the
 clause asked for a judge that is not calibrated on that axis yet. The sub-reason
 names the uncalibrated judge rather than a missing instrument.
+
+### `external_check_missing`
+
+The runner refused the clause before sampling because no registered oracle can
+measure this clause's axis. The axis is listed in the external-check registry,
+which means a deterministic program could check it, but no checker for it is
+registered. The sub-reason names the oracle that was sought: an external checker
+for the axis of the refused clause.
+
+Distinct from `mechanical_vacuous`, which means the axis is in no registry at
+all. Distinct from `tier2_uncalibrated`, which means the axis has a Tier-1 scorer
+and the clause asked for a judge instead.
+
+Example: a clause on `protected_comment_deletion` asks whether an edit deleted a
+comment of a protected class. That axis is in the external-check registry, but
+this harness ships no checker for it. The runner refuses the clause with
+`external_check_missing`. The fix is to register a checker for
+`protected_comment_deletion`.
 
 ### `length_confounded`
 
