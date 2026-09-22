@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-oheba_vg/M-A1/scripts/check_dependency_anchor.py",
-        "source_digest": "6b64376aa2a24d731d5a62346e1aa26c337e2f88be121b4cd2452aea186eac72",
+        "module_file": "/tmp/mutation-receipt-to7bm56v/M-A1/scripts/check_dependency_anchor.py",
+        "source_digest": "b7afe4102fd6f6ba0d732be8e1d1bc1e52a6e544b44a3416550ef3dfc0d0312b",
         "tests_collected": 2,
-        "worktree_head": "7c66da804fdd986deb3d4e56b6f48f18241804c4"
+        "worktree_head": "14743f924996669280d73f5e663008109ffbfc96"
       },
       "description": "disable the exact-pin comparison: check_exact_pin_constraint never returns a blocking == pin, so a follower bump above an == anchor passes as the #549 scenario did",
       "killing_assertions": [
@@ -17,10 +17,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-oheba_vg/M-A1/scripts/check_dependency_anchor.py",
-        "source_digest": "b2673656f21e0ff1bd9aab9502c42473c7e66997b487f047c6eb971c2d33d6d0",
+        "module_file": "/tmp/mutation-receipt-to7bm56v/M-A1/scripts/check_dependency_anchor.py",
+        "source_digest": "5c694062854b43fd9dd534f96149d65dcc7ee5d81aea3dc5bfe41b7c9aed2cbb",
         "tests_collected": 2,
-        "worktree_head": "7c66da804fdd986deb3d4e56b6f48f18241804c4"
+        "worktree_head": "14743f924996669280d73f5e663008109ffbfc96"
       },
       "mutant_id": "M-A1",
       "notes": [],
@@ -32,18 +32,18 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "7c66da804fdd986deb3d4e56b6f48f18241804c4",
+  "commit_under_test": "14743f924996669280d73f5e663008109ffbfc96",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "scripts/check_dependency_anchor.py": "6b64376aa2a24d731d5a62346e1aa26c337e2f88be121b4cd2452aea186eac72"
+    "scripts/check_dependency_anchor.py": "b7afe4102fd6f6ba0d732be8e1d1bc1e52a6e544b44a3416550ef3dfc0d0312b"
   },
   "production_tree_digest_before": {
-    "scripts/check_dependency_anchor.py": "6b64376aa2a24d731d5a62346e1aa26c337e2f88be121b4cd2452aea186eac72"
+    "scripts/check_dependency_anchor.py": "b7afe4102fd6f6ba0d732be8e1d1bc1e52a6e544b44a3416550ef3dfc0d0312b"
   },
   "production_tree_unchanged": true,
   "python": "3.13.15",
   "target_digests": {
-    "scripts/check_dependency_anchor.py": "6b64376aa2a24d731d5a62346e1aa26c337e2f88be121b4cd2452aea186eac72"
+    "scripts/check_dependency_anchor.py": "b7afe4102fd6f6ba0d732be8e1d1bc1e52a6e544b44a3416550ef3dfc0d0312b"
   },
   "target_files": [
     "scripts/check_dependency_anchor.py"

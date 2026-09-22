@@ -1302,9 +1302,9 @@ by `scripts/mutation_receipt.py --select 557-anchor-pin` into
 [`anchor-pin-mutation-receipt.json`](assurance/anchor-pin-mutation-receipt.json).
 
 - **Claims:** One named mutant (M-A1) was run in its own git worktree at
-  commit `7c66da8` under Python 3.13.15, against
+  commit `14743f9` under Python 3.13.15, against
   `scripts/check_dependency_anchor.py` at
-  `sha256:6b64376aa2a24d731d5a62346e1aa26c337e2f88be121b4cd2452aea186eac72`,
+  `sha256:b7afe4102fd6f6ba0d732be8e1d1bc1e52a6e544b44a3416550ef3dfc0d0312b`,
   and was KILLED by the named test node
   `tests/test_check_dependency_anchor.py::TestReproducesIssue549::test_reproduces`.
   The mutant replaces `if proposed > pinned:` with `if False:` so the

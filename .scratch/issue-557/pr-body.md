@@ -14,7 +14,7 @@ hand-maintained list of known pairs.
 ## Files changed
 
 - `scripts/check_dependency_anchor.py` — the check.
-- `tests/test_check_dependency_anchor.py` — 34 tests, one criterion per
+- `tests/test_check_dependency_anchor.py` — 33 tests, one criterion per
   test where the criterion admits a unit test; AC8 is pinned by the
   mutation receipt below.
 - `.github/workflows/ci.yml` — a dedicated pre-flight job that the `test`
@@ -199,7 +199,7 @@ group is not changed.
 ruff check src tests scripts          All checks passed
 ruff format --check src tests scripts All files already formatted
 mypy --strict src/ tests/             Success: no issues found in 358 source files
-pytest tests/test_check_dependency_anchor.py -q   34 passed
+pytest tests/test_check_dependency_anchor.py -q   33 passed
 scripts/mutation_receipt.py --select 557-anchor-pin  M-A1 KILLED (named fixture)
 scripts/drift_check.py                DRIFT CHECK: PASS
 ```
