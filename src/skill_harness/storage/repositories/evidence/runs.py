@@ -25,6 +25,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
+from skill_harness.storage.errors import ClauseRunOutcomeNotStoredError
 from skill_harness.storage.models import ArmSampleWrite, ClauseRunOutcomeWrite, RunWrite
 
 
@@ -105,7 +106,8 @@ def complete_run(conn: sqlite3.Connection, run_id: str, completed_at: str) -> No
 
 
 # ---------------------------------------------------------------------------
-# clause_run_outcomes (migration 1100, #503) — the persisted refusal sub-reason.
+# clause_run_outcomes (migrations 1100 and 1300, #503 and #629) — the persisted
+# refusal sub-reason.
 # Repository lives in runs.py rather than its own module: the outcomes are
 # children of a run (one row per (run, clause) the runner refused), and the
 # evidence repo module count is structurally pinned (test_evidence_repo_surface).
@@ -113,7 +115,7 @@ def complete_run(conn: sqlite3.Connection, run_id: str, completed_at: str) -> No
 
 
 def insert_clause_run_outcome(conn: sqlite3.Connection, outcome: ClauseRunOutcomeWrite) -> None:
-    """Insert a clause_run_outcome row (append-only, idempotent).
+    """Insert a clause_run_outcome row (append-only, idempotent), then prove it landed.
 
     The sub-reason is validated against UnmeasuredSubReason by the write model,
     so a non-member raises before this call reaches the DB.
@@ -122,30 +124,41 @@ def insert_clause_run_outcome(conn: sqlite3.Connection, outcome: ClauseRunOutcom
     (A40): a refused clause re-refuses deterministically on resume, and the
     (run_id, clause_id) PRIMARY KEY already holds the same reason. The existing
     row is left intact (append-only: no UPDATE/DELETE), which is correct -- the
-    reason does not change on re-refusal. A genuinely different reason for the
-    same (run, clause) cannot arise: the gate is a pure function of the clause
-    spec, which is frozen in runs.config_json.
+    reason does not change on re-refusal.
+
+    OR IGNORE also skips a CHECK violation without an error, which once dropped
+    every ``external_check_missing`` refusal (#629). So the row is read back:
+    absent, or holding a different sub-reason or sought oracle, raises
+    ``ClauseRunOutcomeNotStoredError``. An identical existing row is success.
     """
     conn.execute(
         """
         INSERT OR IGNORE INTO clause_run_outcomes
-            (run_id, clause_id, unmeasured_sub_reason, written_at)
-        VALUES (?, ?, ?, ?)
+            (run_id, clause_id, unmeasured_sub_reason, written_at, sought_oracle)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
             outcome.run_id,
             outcome.clause_id,
             outcome.unmeasured_sub_reason,
             outcome.written_at,
+            outcome.sought_oracle,
         ),
     )
+    stored = get_clause_run_outcome(conn, outcome.run_id, outcome.clause_id)
+    expected = (outcome.unmeasured_sub_reason, outcome.sought_oracle)
+    if stored is None or (stored["unmeasured_sub_reason"], stored["sought_oracle"]) != expected:
+        raise ClauseRunOutcomeNotStoredError(
+            f"clause_run_outcomes did not store ({outcome.run_id!r}, {outcome.clause_id!r}) "
+            f"with (unmeasured_sub_reason, sought_oracle)={expected!r}; stored row: {stored!r}"
+        )
 
 
 def list_clause_run_outcomes_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict[str, Any]]:
     """Return all refused-clause outcomes for a run, ordered by clause_id
     (deterministic; clause_id is the PK component that names the clause)."""
     cur = conn.execute(
-        "SELECT run_id, clause_id, unmeasured_sub_reason, written_at"
+        "SELECT run_id, clause_id, unmeasured_sub_reason, written_at, sought_oracle"
         " FROM clause_run_outcomes WHERE run_id = ? ORDER BY clause_id",
         (run_id,),
     )
@@ -158,7 +171,7 @@ def get_clause_run_outcome(
 ) -> dict[str, Any] | None:
     """Return the refusal outcome for one (run, clause), or None if not refused."""
     cur = conn.execute(
-        "SELECT run_id, clause_id, unmeasured_sub_reason, written_at"
+        "SELECT run_id, clause_id, unmeasured_sub_reason, written_at, sought_oracle"
         " FROM clause_run_outcomes WHERE run_id = ? AND clause_id = ?",
         (run_id, clause_id),
     )

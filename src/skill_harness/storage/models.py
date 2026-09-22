@@ -635,6 +635,10 @@ class ClauseRunOutcomeWrite(BaseModel):
     A clause that reaches the sampling loop is NOT refused here; no row is
     written for it. Historical runs recorded no reason and keep none (#503
     scope boundary: no back-fill).
+
+    ``sought_oracle`` (migration 1300, #629) names the axis whose oracle the
+    clause needed. The runner sets it for ``external_check_missing`` and leaves
+    it ``None`` for every other reason.
     """
 
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
@@ -643,12 +647,18 @@ class ClauseRunOutcomeWrite(BaseModel):
     clause_id: str
     unmeasured_sub_reason: str
     written_at: str
+    sought_oracle: str | None = None
 
     @field_validator("run_id", "clause_id", "written_at")
     @classmethod
     def no_control_chars(cls, v: str, info: object) -> str:
         field_name = getattr(info, "field_name", "field") if info else "field"
         return _check_text(v, field_name)
+
+    @field_validator("sought_oracle")
+    @classmethod
+    def sought_oracle_no_control_chars(cls, v: str | None) -> str | None:
+        return None if v is None else _check_text(v, "sought_oracle")
 
     @field_validator("unmeasured_sub_reason")
     @classmethod

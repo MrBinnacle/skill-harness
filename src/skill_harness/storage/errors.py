@@ -72,3 +72,14 @@ class StalePinError(StorageError):
             f"harness pin mismatch: stored [{stored_str}] vs fresh "
             f"[{fresh_fingerprint}] — screen verdict refused"
         )
+
+
+class ClauseRunOutcomeNotStoredError(StorageError):
+    """A refusal outcome was written but the store does not hold it (#629).
+
+    ``insert_clause_run_outcome`` writes with ``INSERT OR IGNORE`` so a resumed
+    run can re-record the same refusal. OR IGNORE also skips a CHECK violation,
+    which once dropped every ``external_check_missing`` refusal without an error.
+    The writer reads the row back and raises this when it is absent or holds a
+    different sub-reason.
+    """

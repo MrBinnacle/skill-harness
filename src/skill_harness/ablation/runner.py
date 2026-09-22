@@ -339,6 +339,14 @@ class ClauseResult:
     sub-reason, if any, is derived at aggregation from the evidence).
     """
 
+    sought_oracle: str | None = None
+    """The axis whose oracle the clause needed, for ``EXTERNAL_CHECK_MISSING`` (#629).
+
+    Persisted to ``clause_run_outcomes.sought_oracle`` so the record names the
+    checker to register. ``None`` for every other refusal reason and for
+    clauses that reach the sampling loop.
+    """
+
     verdict_id: str | None = None
     """UUID of the last verdict written for this clause (CF-E3-1).
 
@@ -1159,6 +1167,7 @@ class AblationRunner:
                     clause_id=result.clause_id,
                     unmeasured_sub_reason=result.unmeasured_reason,
                     written_at=self._now(),
+                    sought_oracle=result.sought_oracle,
                 ),
             )
 
@@ -1203,6 +1212,11 @@ class AblationRunner:
                     samples_collected=0,
                     length_confounded=False,
                     unmeasured_reason=refusal_reason,
+                    sought_oracle=(
+                        clause_spec.axis
+                        if refusal_reason is UnmeasuredSubReason.EXTERNAL_CHECK_MISSING
+                        else None
+                    ),
                     path_c_unavailable_reason="no_sampling",
                 ),
             )
@@ -1875,7 +1889,8 @@ class AblationRunner:
         Replaces the blanket TIER2_UNCALIBRATED refusal with a specific reason:
         - TIER2_UNCALIBRATED: oracle_tier != 1 but axis is in Tier-1 registry
         - MECHANICAL_VACUOUS: axis not in any registry (Tier-1 or external-check)
-        - EXTERNAL_CHECK_MISSING: axis in external-check registry but no checker
+        - EXTERNAL_CHECK_MISSING: axis in external-check registry but no checker;
+          the refusal record carries the sought axis in ``sought_oracle`` (#629)
         - None: clause is measurable (Tier-1 or external-check)
 
         #555: the receipt names the missing oracle so the caller knows what

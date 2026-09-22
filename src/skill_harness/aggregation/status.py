@@ -99,8 +99,9 @@ class UnmeasuredSubReason(StrEnum):
 
     The axis is program-checkable in principle, but the runner has no scorer
     function for it. Distinct from MECHANICAL_VACUOUS (axis not in any
-    registry) and TIER2_UNCALIBRATED (oracle_tier is not 1). The receipt names
-    the missing oracle so the caller knows what to register.
+    registry) and TIER2_UNCALIBRATED (oracle_tier is not 1). The refusal record
+    in ``clause_run_outcomes`` carries the sought axis in ``sought_oracle``
+    (#629), so the caller knows which checker to register.
     """
     LENGTH_CONFOUNDED = "length_confounded"
     """The runner's QUAL-1 pre-sampling gate refused the clause (#503).
