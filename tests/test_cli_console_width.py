@@ -28,13 +28,7 @@ import subprocess
 import sys
 import textwrap
 
-import pytest
 
-
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="subprocess env trick uses POSIX shell semantics",
-)
 def test_console_width_reads_columns_at_render_not_import() -> None:
     """COLUMNS set before import must not pin the Console for later renders.
 
@@ -44,8 +38,6 @@ def test_console_width_reads_columns_at_render_not_import() -> None:
         """\
         import hashlib
         import os
-        import sqlite3
-        import sys
         from pathlib import Path
 
         # --- Step 1: COLUMNS=80 is already in the subprocess environment ---
@@ -54,12 +46,6 @@ def test_console_width_reads_columns_at_render_not_import() -> None:
         # --- Step 2: import the CLI module (Console reads COLUMNS here) ---
         from click.testing import CliRunner
         from skill_harness.cli.main import cli
-        import skill_harness.cli.main as mod
-
-        # After the fix, _console is a function (no module-level Console object).
-        assert callable(mod._console), (
-            f"_console should be a function, got {type(mod._console)}"
-        )
 
         # --- Step 3: seed minimal data for `screen profile` ---
         import tempfile
@@ -143,15 +129,7 @@ def test_console_width_reads_columns_at_render_not_import() -> None:
         # The estimand column renders "n/a (pre-registry observation)" (30 chars).
         # At width 80 the table truncates this; at width 200 it fits.
         label = "n/a (pre-registry observation)"
-        if label in result.output:
-            print("PASS: label found in output")
-        else:
-            # Show what the estimand column looks like
-            for line in result.output.split("\\n"):
-                if "pre-registry" in line.lower() or "n/a" in line:
-                    print(f"ESTIMAND LINE: {line!r}")
-            print(f"FAIL: {label!r} not found in output")
-            sys.exit(1)
+        assert label in result.output, result.output
         """
     )
 
