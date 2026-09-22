@@ -1729,6 +1729,7 @@ def _check_asset_pairs(root: Path, contract: AssetPairsContract) -> list[str]:
         if not isinstance(pair, dict):
             failures.append(f"{contract.manifest_path}: pairs[{position}] is not an object")
             continue
+        checked: dict[str, tuple[str, str, str]] = {}
         for half in ("source", "export"):
             name = pair.get(half)
             recorded = pair.get(f"{half}_sha256")
@@ -1749,11 +1750,19 @@ def _check_asset_pairs(root: Path, contract: AssetPairsContract) -> list[str]:
                 )
                 continue
             actual = hashlib.sha256(file_path.read_bytes()).hexdigest()
+            checked[half] = (name, recorded, actual)
+        if set(checked) != {"source", "export"}:
+            continue
+        pair_hashes = "; ".join(
+            f"{half} {name}: recorded hash {recorded[:16]}..., file on disk {actual[:16]}..."
+            for half, (name, recorded, actual) in checked.items()
+        )
+        for half, (_, recorded, actual) in checked.items():
             if actual != recorded:
                 failures.append(
-                    f"{name}: recorded hash {recorded[:16]}... disagrees with "
-                    f"the file on disk {actual[:16]}... — one half of a pair was "
-                    "changed without the other, or without re-recording both"
+                    f"asset pair {position} has a mismatched {half}: {pair_hashes} — "
+                    "one half of a pair was changed without the other, or without "
+                    "re-recording both"
                 )
     return failures
 

@@ -17,6 +17,7 @@ tests/test_semantics.py — NOT an allowlist entry; the allowlist stays empty).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -2376,13 +2377,18 @@ def test_dc19_source_changed_without_export_reddens_dc19(tmp_path: Path) -> None
     svg_path = root / "assets" / "social-preview.svg"
     svg_text = svg_path.read_text(encoding="utf-8")
     svg_path.write_text(svg_text.replace("skill-harness", "skill-harness-UNIQUE"), encoding="utf-8")
+    manifest = json.loads((root / "assets" / "asset-pairs.json").read_text(encoding="utf-8"))
     r = _run(root)
     assert r.returncode == 1, r.stdout + r.stderr
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-19" in line for line in fail_lines), r.stdout
-    assert any("social-preview.svg" in line and "recorded hash" in line for line in fail_lines), (
-        r.stdout
-    )
+    failure = next(line for line in fail_lines if "mismatched source" in line)
+    pair = manifest["pairs"][0]
+    assert "assets/social-preview.svg" in failure
+    assert "assets/social-preview.png" in failure
+    assert pair["source_sha256"][:16] in failure
+    assert hashlib.sha256(svg_path.read_bytes()).hexdigest()[:16] in failure
+    assert pair["export_sha256"][:16] in failure
 
 
 def test_dc19_export_changed_without_source_reddens_dc19(tmp_path: Path) -> None:

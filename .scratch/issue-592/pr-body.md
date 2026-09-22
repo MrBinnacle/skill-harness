@@ -19,7 +19,7 @@ hashes, and synthetic-tree tests that prove the check's red lane and green lane.
 **What was built.** DC-19 reads `assets/asset-pairs.json`, computes sha256 of
 each file named in each pair, and compares against the recorded hashes. When the
 SVG source changes its hash no longer matches `source_sha256`, the check refuses
-and names both file paths and both hashes (actual vs. recorded).
+and names both file paths and each path's recorded and actual hash.
 
 **The test that pins it.**
 `tests/test_drift_check.py::test_dc19_source_changed_without_export_reddens_dc19`
@@ -32,9 +32,11 @@ and asserts DC-19 reddens with exit code 1.
   FAIL     DC-19  asset pairs: every source-export pair in assets/asset-pairs.json
            matches its recorded sha256 — a stale export or an edited source
            without re-export is refused (#592)
-           FAIL DC-19: assets/social-preview.svg: recorded hash
-           227ace003abf0d07... disagrees with the file on disk
-           c2ac962a0f8ca95e... — one half of a pair was changed without the
+           FAIL DC-19: asset pair 1 has a mismatched source: source
+           assets/social-preview.svg: recorded hash 227ace003abf0d07..., file
+           on disk c2ac962a0f8ca95e...; export assets/social-preview.png:
+           recorded hash 9f94e92886fb4a44..., file on disk
+           9f94e92886fb4a44... — one half of a pair was changed without the
            other, or without re-recording both
 ```
 
@@ -77,17 +79,18 @@ without saying why.
   FAIL     DC-19  asset pairs: every source-export pair in assets/asset-pairs.json
            matches its recorded sha256 — a stale export or an edited source
            without re-export is refused (#592)
-           FAIL DC-19: assets/social-preview.svg: recorded hash
-           227ace003abf0d07... disagrees with the file on disk
-           c2ac962a0f8ca95e... — one half of a pair was changed without the
+           FAIL DC-19: asset pair 1 has a mismatched source: source
+           assets/social-preview.svg: recorded hash 227ace003abf0d07..., file
+           on disk c2ac962a0f8ca95e...; export assets/social-preview.png:
+           recorded hash 9f94e92886fb4a44..., file on disk
+           9f94e92886fb4a44... — one half of a pair was changed without the
            other, or without re-recording both
 ```
 
-**Mutation campaign.** No `scripts/mutation_receipt.py` run: this check is a
-hash comparison, not a branching decision, so mutants cannot target a named
-assertion. The seven tests above cover every branch of `_check_asset_pairs`
-(manifest missing, unparseable, empty, pair entry malformed, source missing,
-export missing, hash mismatch).
+**Mutation campaign.** No `scripts/mutation_receipt.py` run: the issue does
+not name the #341 standard, a mutation receipt, or its generator. The negative
+control above mutates the shipped fixture tree and asserts the CLI's exit code
+and refusal text; it does not monkeypatch the checker.
 
 ## Files changed
 
