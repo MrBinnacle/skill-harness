@@ -675,3 +675,200 @@ def test_schema_new_properties_are_optional() -> None:
     assert "claim_scope" not in required
     assert "retest_triggers" not in required
     assert "expiry_state" not in required
+
+
+# ---------------------------------------------------------------------------
+# Verdict validity: verdict_scope / currentness / drift_policy (#643)
+# ---------------------------------------------------------------------------
+
+
+def _v16_instance() -> dict[str, Any]:
+    """A minimal conforming 1.6.0 instance with all three new objects."""
+    return {
+        "sers_version": "1.6.0",
+        "skill_name": "verdict-validity-shape",
+        "verdict": "CANT_TELL_YET",
+        "cut_sub_reason": None,
+        "unmeasured_sub_reason": "no_data",
+        "value_class": None,
+        "evidence_admissibility": {"status": "not_applicable"},
+        "cost": {
+            "standing_tokens": {"refusal": "not_applicable"},
+            "fired_tokens": {"refusal": "not_applicable"},
+            "aux_tokens": {"refusal": "not_applicable"},
+        },
+        "instrument_identity": {
+            "extractor_model": {"refusal": "not_applicable"},
+            "prompt_fingerprint": "a",
+            "schema_fingerprint": "b",
+        },
+        "source": {"prose_path": "README.md"},
+        "summary": "Shape instance for the 1.6.0 verdict-validity additions.",
+        "subject_identity": {
+            "skill_id": "aabbccddee0011223344556677889900aabbccddee0011223344556677889900",
+            "harness_version": "0.3.0",
+            "metric_version": "0.4.1",
+            "implementation_hash": (
+                "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+            ),
+            "arms": "null",
+            "subject_model": "anthropic/claude-sonnet-5",
+        },
+        "verdict_scope": {
+            "model_id": "anthropic/claude-sonnet-5",
+            "harness_version": "0.3.0",
+            "fixture_version": "abc123",
+            "task_id": "test-task",
+            "tested_at": "2026-09-22T00:00:00Z",
+            "task_family": "test-family",
+            "estimand": "treatment-policy",
+            "delivery_mechanism": "model-pull",
+            "n_per_arm": 8,
+            "margin_pp": 5.0,
+            "cs_lower_bound": 0.75,
+            "control_world_result": "pass",
+            "placebo_ref": "synthetic-control",
+            "fixture_id": "fixture-001",
+        },
+        "currentness": {
+            "state": "VALIDATED",
+            "basis": "FULL_VALIDATION",
+            "last_checked_at": "2026-09-22T00:00:00Z",
+            "next_check_due": "2026-12-21T00:00:00Z",
+            "max_age_days": 90,
+        },
+        "drift_policy": {
+            "null_trigger_pp": 10,
+            "canary_n": 8,
+            "full_rerun_on_null_trigger": True,
+            "full_rerun_on_canary_failure": True,
+            "full_rerun_on_model_change": True,
+        },
+    }
+
+
+def test_v16_with_all_new_objects_validates(sers_validator: Draft202012Validator) -> None:
+    """A 1.6.0 receipt carrying verdict_scope, currentness and drift_policy validates."""
+    sers_validator.validate(_v16_instance())
+
+
+def test_v16_without_new_objects_still_validates(sers_validator: Draft202012Validator) -> None:
+    """The three objects are optional; a 1.6.0 receipt omitting them still validates."""
+    instance = _v16_instance()
+    del instance["verdict_scope"]
+    del instance["currentness"]
+    del instance["drift_policy"]
+    sers_validator.validate(instance)
+
+
+def test_v16_partial_objects_validates(sers_validator: Draft202012Validator) -> None:
+    """A 1.6.0 receipt carrying only currentness validates."""
+    instance = _v16_instance()
+    del instance["verdict_scope"]
+    del instance["drift_policy"]
+    sers_validator.validate(instance)
+
+
+def test_schema_16_version_in_enum(sers_schema: dict[str, Any]) -> None:
+    """sers_version enum includes 1.6.0."""
+    schema_vals = _schema_enum(sers_schema, "properties", "sers_version", "enum")
+    assert "1.6.0" in schema_vals
+
+
+def test_schema_verdict_validity_properties_are_optional() -> None:
+    """verdict_scope, currentness, drift_policy are not in the top-level required list."""
+    schema = _load_json(_SCHEMA_PATH)
+    required = set(schema.get("required", []))
+    assert "verdict_scope" not in required
+    assert "currentness" not in required
+    assert "drift_policy" not in required
+
+
+def test_poison_validated_sentinel_pass_is_red(sers_validator: Draft202012Validator) -> None:
+    """currentness VALIDATED with SENTINEL_PASS basis must fail (criterion 2)."""
+    path = _POISON_DIR / "poison_validated_sentinel_pass.json"
+    assert path.is_file()
+    instance = _load_json(path)
+    assert instance["currentness"]["state"] == "VALIDATED"
+    assert instance["currentness"]["basis"] == "SENTINEL_PASS"
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "SENTINEL_PASS" in str(excinfo.value) or "basis" in str(excinfo.value)
+
+
+def test_poison_keep_no_model_id_is_red(sers_validator: Draft202012Validator) -> None:
+    """KEEP at 1.6.0 without verdict_scope.model_id must fail (criterion 4)."""
+    path = _POISON_DIR / "poison_keep_no_model_id.json"
+    assert path.is_file()
+    instance = _load_json(path)
+    assert instance["verdict"] == "KEEP"
+    assert instance["sers_version"] == "1.6.0"
+    assert "model_id" not in instance.get("verdict_scope", {})
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "model_id" in str(excinfo.value)
+
+
+def test_poison_keep_no_task_family_is_red(sers_validator: Draft202012Validator) -> None:
+    """KEEP at 1.6.0 without task_family in verdict_scope must fail (S476 criterion 3)."""
+    path = _POISON_DIR / "poison_keep_no_task_family.json"
+    assert path.is_file()
+    instance = _load_json(path)
+    assert instance["verdict"] == "KEEP"
+    assert "task_family" not in instance.get("verdict_scope", {})
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "task_family" in str(excinfo.value)
+
+
+def test_poison_keep_no_delivery_mechanism_is_red(
+    sers_validator: Draft202012Validator,
+) -> None:
+    """KEEP at 1.6.0 without delivery_mechanism in verdict_scope must fail (S476 criterion 3)."""
+    path = _POISON_DIR / "poison_keep_no_delivery_mechanism.json"
+    assert path.is_file()
+    instance = _load_json(path)
+    assert instance["verdict"] == "KEEP"
+    assert "delivery_mechanism" not in instance.get("verdict_scope", {})
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "delivery_mechanism" in str(excinfo.value)
+
+
+def test_carried_forward_requires_tested_at(sers_validator: Draft202012Validator) -> None:
+    """CARRIED_FORWARD currentness requires verdict_scope.tested_at."""
+    instance = _v16_instance()
+    instance["currentness"]["state"] = "CARRIED_FORWARD"
+    instance["currentness"]["basis"] = "SENTINEL_PASS"
+    del instance["verdict_scope"]["tested_at"]
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "tested_at" in str(excinfo.value)
+
+
+def test_carried_forward_with_tested_at_validates(
+    sers_validator: Draft202012Validator,
+) -> None:
+    """CARRIED_FORWARD with tested_at present validates."""
+    instance = _v16_instance()
+    instance["currentness"]["state"] = "CARRIED_FORWARD"
+    instance["currentness"]["basis"] = "SENTINEL_PASS"
+    sers_validator.validate(instance)
+
+
+def test_stale_currentness_validates(sers_validator: Draft202012Validator) -> None:
+    """STALE currentness with NONE basis validates."""
+    instance = _v16_instance()
+    instance["currentness"]["state"] = "STALE"
+    instance["currentness"]["basis"] = "NONE"
+    sers_validator.validate(instance)
+
+
+def test_keep_at_16_requires_verdict_scope(sers_validator: Draft202012Validator) -> None:
+    """KEEP at 1.6.0 requires verdict_scope (not just model_id)."""
+    instance = _v16_instance()
+    instance["verdict"] = "KEEP"
+    del instance["verdict_scope"]
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "verdict_scope" in str(excinfo.value)

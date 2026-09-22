@@ -428,6 +428,8 @@ def render_skill_page(
             instrument_rows=_indent(_identity_rows(receipt), 10),
             source_rows=_indent(_source_rows(receipt, schema), 10),
             subject_identity_section=_subject_identity_section(receipt),
+            verdict_scope_section=_verdict_scope_section(receipt),
+            currentness_section=_currentness_section(receipt),
         )
     return render_page(
         shell=shell,
@@ -952,6 +954,135 @@ def _vocabulary_section(name: str, subschema: Mapping[str, Any]) -> str:
 def _enum_values(subschema: Mapping[str, Any]) -> list[Any]:
     enum = subschema.get("enum")
     return list(enum) if isinstance(enum, list) else []
+
+
+# ---------------------------------------------------------------------------
+# Verdict scope and currentness sections (#643)
+# ---------------------------------------------------------------------------
+
+CARRIED_FORWARD_DISCLAIMER: Final[str] = (
+    "A carried-forward verdict means the historical experiment has not been repeated "
+    "in full on the current model; it has only passed the preregistered freshness "
+    "checks. It must not be read as a new full validation."
+)
+
+
+def _verdict_scope_section(receipt: Mapping[str, Any]) -> str:
+    """Render the verdict scope section, or the empty string for receipts without one."""
+    scope = receipt.get("verdict_scope")
+    if not isinstance(scope, Mapping):
+        return ""
+    keys = (
+        "model_id",
+        "harness_version",
+        "fixture_version",
+        "task_id",
+        "tested_at",
+        "task_family",
+        "estimand",
+        "delivery_mechanism",
+        "n_per_arm",
+        "margin_pp",
+        "cs_lower_bound",
+        "control_world_result",
+        "placebo_ref",
+        "fixture_id",
+    )
+    rows: list[str] = []
+    for key in keys:
+        value = scope.get(key)
+        if isinstance(value, str):
+            text = value
+        elif isinstance(value, (int, float)):
+            text = str(value)
+        elif isinstance(value, Mapping) and isinstance(value.get("refusal"), str):
+            text = f"refused: {value['refusal']}"
+        else:
+            text = ABSENT_TEXT
+        rows.append(f"<dt>{safe(key)}</dt><dd><code>{safe(text)}</code></dd>")
+    return (
+        '<section aria-labelledby="verdict-scope">\n'
+        '  <h2 id="verdict-scope">Verdict scope</h2>\n'
+        '  <dl class="verdict-scope">\n'
+        f"{_indent(rows, 4)}\n"
+        "  </dl>\n"
+        "</section>"
+    )
+
+
+def _currentness_section(receipt: Mapping[str, Any]) -> str:
+    """Render the currentness section with the verbatim disclaimer.
+
+    A missing currentness reads as STALE / NONE at render time, never as
+    validated.
+    """
+    currentness = receipt.get("currentness")
+    if not isinstance(currentness, Mapping):
+        state = "STALE"
+        basis = "NONE"
+    else:
+        state = _string_field(currentness, "state", "STALE")
+        basis = _string_field(currentness, "basis", "NONE")
+    last_checked = ""
+    next_check = ""
+    max_age = ""
+    if isinstance(currentness, Mapping):
+        last_checked = _string_field(currentness, "last_checked_at", "")
+        next_check = _string_field(currentness, "next_check_due", "")
+        age = currentness.get("max_age_days")
+        if isinstance(age, int):
+            max_age = str(age)
+    rows: list[str] = [
+        f"<dt>state</dt><dd><code>{safe(state)}</code></dd>",
+        f"<dt>basis</dt><dd><code>{safe(basis)}</code></dd>",
+    ]
+    if last_checked:
+        dt_str = safe(last_checked)
+        rows.append(f'<dt>last_checked_at</dt><dd><time datetime="{dt_str}">{dt_str}</time></dd>')
+    else:
+        rows.append(f'<dt>last_checked_at</dt><dd class="absent">{safe(ABSENT_TEXT)}</dd>')
+    if next_check:
+        dt_str = safe(next_check)
+        rows.append(f'<dt>next_check_due</dt><dd><time datetime="{dt_str}">{dt_str}</time></dd>')
+    else:
+        rows.append(f'<dt>next_check_due</dt><dd class="absent">{safe(ABSENT_TEXT)}</dd>')
+    if max_age:
+        rows.append(f"<dt>max_age_days</dt><dd>{safe(max_age)}</dd>")
+    else:
+        rows.append(f'<dt>max_age_days</dt><dd class="absent">{safe(ABSENT_TEXT)}</dd>')
+    parts = [
+        '<section aria-labelledby="currentness">',
+        '  <h2 id="currentness">Currentness</h2>',
+        '  <dl class="currentness">',
+        f"{_indent(rows, 4)}",
+        "  </dl>",
+    ]
+    if state == "CARRIED_FORWARD":
+        parts.append(f'  <p class="disclaimer">{safe(CARRIED_FORWARD_DISCLAIMER)}</p>')
+    parts.append("</section>")
+    return "\n".join(parts)
+
+
+def _scope_line(receipt: Mapping[str, Any]) -> str:
+    """Render the S476 scope line for a KEEP verdict.
+
+    A KEEP licenses that scoped sentence only. The line is filled from
+    verdict_scope fields.
+    """
+    scope = receipt.get("verdict_scope")
+    if not isinstance(scope, Mapping):
+        return ""
+    model = _string_field(scope, "model_id", "unknown model")
+    task_family = _string_field(scope, "task_family", "unknown task family")
+    delivery = _string_field(scope, "delivery_mechanism", "unknown delivery")
+    tested_at = _string_field(scope, "tested_at", "unknown date")
+    return (
+        f'<p class="scope-line">'
+        f"Shown here: effect on {safe(task_family)}, {safe(model)}, "
+        f"{safe(delivery)}, measured {safe(tested_at)}. "
+        f"Not shown: other task families, models, environments, or real-world incidence."
+        f"</p>"
+    )
 
 
 # ---------------------------------------------------------------------------
