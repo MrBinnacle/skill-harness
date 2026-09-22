@@ -158,6 +158,23 @@ and covers that section only. This page stays the citable surface for every kind
   better, which is expected false and is why it is not run; and any change to
   a registered RAT-0001 field.
 
+### [`docs/findings/twin-v4-stage1-null-screen.md`](findings/twin-v4-stage1-null-screen.md)
+
+- **Claims:** The `#620` v4 twin Null screen (Stage 1) ran on 2026-09-22 under
+  a dated $12.00 authorisation (board gate `twin-stage1`), run
+  `UEfX5wJp2nGfCnn5k3NeRH`, on `claude-sonnet-5`, 8 epochs per world, $1.76
+  spent. The free identifiability gate passed 9 of 9 first. Of 16 epochs, 1 is
+  void because the agent never started. Of the 15 valid epochs, the first
+  integration action was a merge in 5 (3 of 8 in world A, 2 of 7 in world B),
+  and all 15 ended in the correct world state. Each of the 7 refused epochs
+  recovered, and none was a silent violation. The adopted headroom gate on
+  Null(A) correctness fails at 8 of 8, while the first-action shift has room.
+- **Refuses to claim:** Any verdict on the `pull-rebase` card, since no card
+  arm ran; which clause of the adopted rule governs when recovery saturates
+  the final outcome, which is recorded as open; that p_N is estimated beyond
+  15 epochs on one subject and agent version; and any authorisation for
+  Stage 2.
+
 ### [`docs/findings/gitpull-cost-basis-unregisterable.md`](findings/gitpull-cost-basis-unregisterable.md)
 
 - **Claims:** The rebuilt `gitpull` cost basis `#420` asks for cannot be
