@@ -136,6 +136,35 @@ def test_write_pinned_compose_injects_digest_and_mirrors_generic(tmp_path) -> No
     assert path == write_pinned_compose(make_pin(), compose_dir=tmp_path)
 
 
+_GOLDEN_PINNED_COMPOSE_NAME = "skill-harness-compose-610a65c92da3.yaml"
+_GOLDEN_PINNED_COMPOSE_TEXT = (
+    "# skill-harness pinned compose (generated from the harness pin)\n"
+    "# Mirrors inspect_ai's auto-compose; image is digest-pinned for admissibility.\n"
+    "services:\n"
+    "  default:\n"
+    f'    image: "{PINNED_IMAGE}"\n'
+    '    command: "tail -f /dev/null"\n'
+    "    init: true\n"
+    "    network_mode: none\n"
+    "    stop_grace_period: 1s\n"
+)
+
+
+def test_write_pinned_compose_bytes_match_pre_sidecar_golden(tmp_path: Path) -> None:
+    """#620: existing receipts carry this compose hash, so the sidecar refactor
+    must leave the no-sidecar file name and bytes exactly as main wrote them.
+    The literal was captured from unmodified main before the refactor. Bytes
+    are compared after the platform newline translation ``write_text`` applies."""
+    import os
+
+    from skill_harness.subject.inspect_adapter import write_pinned_compose
+
+    path = write_pinned_compose(make_pin(), compose_dir=tmp_path)
+    assert path.name == _GOLDEN_PINNED_COMPOSE_NAME
+    expected = _GOLDEN_PINNED_COMPOSE_TEXT.replace("\n", os.linesep).encode("utf-8")
+    assert path.read_bytes() == expected
+
+
 def test_write_pinned_compose_refuses_unpinned_or_nondocker(tmp_path) -> None:  # type: ignore[no-untyped-def]
     from skill_harness.subject.inspect_adapter import write_pinned_compose
 
