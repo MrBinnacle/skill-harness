@@ -17,6 +17,7 @@ tests/test_semantics.py — NOT an allowlist entry; the allowlist stays empty).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -46,6 +47,7 @@ _LIVE_IDS = (
     "DC-16",
     "DC-17",
     "DC-18",
+    "DC-19",
     "AC-1",
     "AC-2",
     "AC-3",
@@ -90,6 +92,13 @@ _LIVE_SURFACES = (
     # DC-16 reads the vendored word list; without it every synthetic tree
     # would fail on a missing manifest instead of the lane under test.
     "assets/words_to_avoid.json",
+    # DC-19 reads the asset-pairs manifest; without it every synthetic tree
+    # would fail on a missing manifest instead of the lane under test.
+    "assets/asset-pairs.json",
+    # DC-19 checks the sha256 of these pairs; without them every synthetic
+    # tree would fail on a missing file instead of the lane under test.
+    "assets/social-preview.svg",
+    "assets/social-preview.png",
     # AC-2 reads the two assurance harnesses that RESTATE the schedule and the
     # pass-probability threshold (#545). The third harness named in that ticket,
     # tests/test_aggregation_cs_calibration.py, imports every constant it uses
@@ -2340,3 +2349,116 @@ def test_dc18_install_steps_are_split_and_named() -> None:
         assert "runner.temp" in body, (
             f"{name} job must cache under runner.temp so Windows restores the path"
         )
+
+
+# ---------------------------------------------------------------------------
+# DC-19 (#592): asset pairs — every source-export pair in the manifest
+# matches its recorded sha256
+# ---------------------------------------------------------------------------
+
+
+def test_dc19_synthetic_tree_is_green(tmp_path: Path) -> None:
+    """A tree where the manifest hashes agree with the files on disk is green."""
+    root = _make_tree(tmp_path)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+    ok_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("OK")]
+    assert any("DC-19" in line for line in ok_lines), r.stdout
+
+
+def test_dc19_source_changed_without_export_reddens_dc19(tmp_path: Path) -> None:
+    """Negative control: editing the SVG source without re-exporting the PNG
+    must block, naming the file and both hashes. This is the exact defect
+    #592 was filed to catch — a stale export ships alongside a new source,
+    and nothing in the repository catches it today."""
+    root = _make_tree(tmp_path)
+    # Mutate the SVG source (change its content) so its hash no longer matches
+    # the recorded source_sha256.
+    svg_path = root / "assets" / "social-preview.svg"
+    svg_text = svg_path.read_text(encoding="utf-8")
+    svg_path.write_text(svg_text.replace("skill-harness", "skill-harness-UNIQUE"), encoding="utf-8")
+    manifest = json.loads((root / "assets" / "asset-pairs.json").read_text(encoding="utf-8"))
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-19" in line for line in fail_lines), r.stdout
+    failure = next(line for line in fail_lines if "mismatched source" in line)
+    pair = manifest["pairs"][0]
+    assert "assets/social-preview.svg" in failure
+    assert "assets/social-preview.png" in failure
+    assert pair["source_sha256"][:16] in failure
+    assert hashlib.sha256(svg_path.read_bytes()).hexdigest()[:16] in failure
+    assert pair["export_sha256"][:16] in failure
+
+
+def test_dc19_export_changed_without_source_reddens_dc19(tmp_path: Path) -> None:
+    """Negative control: editing the PNG export without changing the SVG source
+    must block. The manifest records both hashes; if the PNG drifts the
+    recorded export_sha256 disagrees."""
+    root = _make_tree(tmp_path)
+    png_path = root / "assets" / "social-preview.png"
+    # Write garbage at the start — the file is no longer the recorded PNG.
+    data = png_path.read_bytes()
+    png_path.write_bytes(b"GARBAGE" + data[7:])
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-19" in line for line in fail_lines), r.stdout
+    assert any("social-preview.png" in line and "recorded hash" in line for line in fail_lines), (
+        r.stdout
+    )
+
+
+def test_dc19_both_changed_together_is_green(tmp_path: Path) -> None:
+    """Green control: changing both halves of a pair AND re-recording the hashes
+    is the correct workflow. The manifest on disk has the right hashes, so the
+    check passes."""
+    root = _make_tree(tmp_path)
+    # Change both files.
+    svg_path = root / "assets" / "social-preview.svg"
+    svg_text = svg_path.read_text(encoding="utf-8")
+    new_svg = svg_text.replace("skill-harness", "skill-harness-UNIQUE")
+    svg_path.write_text(new_svg, encoding="utf-8")
+    png_path = root / "assets" / "social-preview.png"
+    data = png_path.read_bytes()
+    new_png = b"MODIFIED" + data[8:]
+    png_path.write_bytes(new_png)
+    # Update the manifest with the new hashes. Hash the bytes actually on
+    # disk, not the in-memory string -- on Windows Path.write_text translates
+    # "\n" to "\r\n", so hashing the string would disagree with the file.
+    manifest_path = root / "assets" / "asset-pairs.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["pairs"][0]["source_sha256"] = hashlib.sha256(svg_path.read_bytes()).hexdigest()
+    manifest["pairs"][0]["export_sha256"] = hashlib.sha256(new_png).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    r = _run(root)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dc19_manifest_missing_blocks(tmp_path: Path) -> None:
+    """A missing manifest is a refusal, not a pass — same vacuity rule as DC-16."""
+    root = _make_tree(tmp_path)
+    (root / "assets" / "asset-pairs.json").unlink()
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-19" in line and "missing" in line for line in fail_lines), r.stdout
+
+
+def test_dc19_manifest_empty_pairs_blocks(tmp_path: Path) -> None:
+    """An empty pairs list is vacuous — the check must refuse, not pass."""
+    root = _make_tree(tmp_path)
+    manifest_path = root / "assets" / "asset-pairs.json"
+    manifest_path.write_text('{"pairs": []}\n', encoding="utf-8")
+    r = _run(root)
+    assert r.returncode == 1, r.stdout + r.stderr
+    fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
+    assert any("DC-19" in line and "empty" in line for line in fail_lines), r.stdout
+
+
+def test_dc19_printed_in_green_listing() -> None:
+    """DC-19 must appear in the OK listing on a green run."""
+    r = _run()
+    assert r.returncode == 0
+    ok_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("OK")]
+    assert any("DC-19" in line for line in ok_lines), r.stdout

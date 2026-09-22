@@ -215,6 +215,21 @@ class WordListBan:
 
 
 @dataclass(frozen=True)
+class AssetPairsContract:
+    """DC-19 (#592): every source-export pair recorded in a JSON manifest must
+    agree on sha256. The manifest records both halves of each pair; either half
+    drifting from its recorded hash is refused. This is what stops a copy check
+    from being defeated by editing a text-bearing source and shipping a stale
+    export.
+
+    The manifest path is repo-relative and resolved against the checked root.
+    Each pair carries source, export, source_sha256 and export_sha256 fields.
+    """
+
+    manifest_path: str
+
+
+@dataclass(frozen=True)
 class DelegatedGuard:
     """A guard predicate this table does NOT own, named by path and symbol.
 
@@ -269,6 +284,7 @@ class LiveRow:
     cache_aware_contract: CacheAwareContract | None = None
     word_list_ban: WordListBan | None = None
     mirror_record: MirrorRecordContract | None = None
+    asset_pairs: AssetPairsContract | None = None
 
 
 @dataclass(frozen=True)
@@ -334,6 +350,7 @@ _OC_BAN_EXEMPTIONS = frozenset({"src/skill_harness/oc/crosschecks.py"})
 # a hand-maintained guess at "generated, vendored, or not ours", and git
 # already answers that question exactly.
 _WORD_LIST_MANIFEST = "assets/words_to_avoid.json"
+_ASSET_PAIRS_MANIFEST_PATH = "assets/asset-pairs.json"
 
 # Individual files, each with the reason it is out of scope. Kept minimal the
 # way _PUBLIC_COPY_EXCLUDED is: tests/test_drift_check.py proves every entry
@@ -1096,6 +1113,17 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
             ),
         ),
     ),
+    LiveRow(
+        dc_id="DC-19",
+        summary=(
+            "asset pairs: every source-export pair in assets/asset-pairs.json "
+            "matches its recorded sha256 -- a stale export or an edited source "
+            "without re-export is refused (#592)"
+        ),
+        asset_pairs=AssetPairsContract(
+            manifest_path=_ASSET_PAIRS_MANIFEST_PATH,
+        ),
+    ),
 )
 
 PLANNED_ROWS: tuple[PlannedRow, ...] = (
@@ -1671,6 +1699,74 @@ def _symbol_exists(root: Path, symbol: str, search_roots: tuple[str, ...]) -> bo
     return False
 
 
+def _check_asset_pairs(root: Path, contract: AssetPairsContract) -> list[str]:
+    """DC-19 (#592): every source-export pair in the manifest must match its
+    recorded sha256. Either half drifting from its hash is refused.
+
+    The manifest records the sha256 of both halves of each pair. This is what
+    stops a copy check from being defeated by editing a text-bearing source and
+    shipping a stale export.
+    """
+    path = root / contract.manifest_path
+    if not path.is_file():
+        return [f"{contract.manifest_path}: asset-pairs manifest missing"]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return [f"{contract.manifest_path}: unparseable JSON: {exc}"]
+    if not isinstance(payload, dict):
+        return [f"{contract.manifest_path}: top level is not an object"]
+    pairs = payload.get("pairs")
+    if not isinstance(pairs, list):
+        return [f"{contract.manifest_path}: 'pairs' is not an array"]
+    if not pairs:
+        return [
+            f"{contract.manifest_path}: 'pairs' is empty "
+            "(a freshness check over zero pairs is vacuous)"
+        ]
+    failures: list[str] = []
+    for position, pair in enumerate(pairs, start=1):
+        if not isinstance(pair, dict):
+            failures.append(f"{contract.manifest_path}: pairs[{position}] is not an object")
+            continue
+        checked: dict[str, tuple[str, str, str]] = {}
+        for half in ("source", "export"):
+            name = pair.get(half)
+            recorded = pair.get(f"{half}_sha256")
+            if not isinstance(name, str) or not name:
+                failures.append(f"{contract.manifest_path}: pairs[{position}] names no {half}")
+                continue
+            if not isinstance(recorded, str) or not recorded:
+                failures.append(
+                    f"{contract.manifest_path}: pairs[{position}] {half} {name!r} "
+                    f"records no {half}_sha256, an unrecorded half cannot drift visibly"
+                )
+                continue
+            file_path = root / name
+            if not file_path.is_file():
+                failures.append(
+                    f"{contract.manifest_path}: pairs[{position}] {half} {name!r} "
+                    "does not exist under the checked root"
+                )
+                continue
+            actual = hashlib.sha256(file_path.read_bytes()).hexdigest()
+            checked[half] = (name, recorded, actual)
+        if set(checked) != {"source", "export"}:
+            continue
+        pair_hashes = "; ".join(
+            f"{half} {name}: recorded hash {recorded[:16]}..., file on disk {actual[:16]}..."
+            for half, (name, recorded, actual) in checked.items()
+        )
+        for half, (_, recorded, actual) in checked.items():
+            if actual != recorded:
+                failures.append(
+                    f"asset pair {position} has a mismatched {half}: {pair_hashes}, "
+                    "one half of a pair was changed without the other, or without "
+                    "re-recording both"
+                )
+    return failures
+
+
 def _load_guard_module(module_rel: str) -> ModuleType:
     """Import a guard module from THIS script's repository, by file path.
 
@@ -1760,6 +1856,8 @@ def _run_row(root: Path, row: LiveRow) -> list[str]:
         failures.extend(_check_word_list_ban(root, row.word_list_ban))
     if row.mirror_record is not None:
         failures.extend(_check_mirror_records(root, row.mirror_record))
+    if row.asset_pairs is not None:
+        failures.extend(_check_asset_pairs(root, row.asset_pairs))
     return failures
 
 
