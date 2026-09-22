@@ -43,7 +43,10 @@ from skill_harness.extractor.models import (
     instrument_from_mapping,
 )
 from skill_harness.extractor.parser import parse_skill_file
-from skill_harness.oracles.tier1.axis_registry import TIER1_AXIS_NAMES
+from skill_harness.oracles.tier1.axis_registry import (
+    EXTERNAL_CHECK_AXIS_NAMES,
+    TIER1_AXIS_NAMES,
+)
 
 _PROFILE = settings(
     max_examples=50,
@@ -229,7 +232,11 @@ def test_incomplete_triple_never_compares_as_same(
 
 _STATUS_INPUT = st.builds(
     ClauseStatusInput,
-    axis=st.one_of(st.sampled_from(sorted(TIER1_AXIS_NAMES)), st.text(max_size=12)),
+    axis=st.one_of(
+        st.sampled_from(sorted(TIER1_AXIS_NAMES)),
+        st.sampled_from(sorted(EXTERNAL_CHECK_AXIS_NAMES)),
+        st.text(max_size=12),
+    ),
     admissible_verdict_count=st.integers(min_value=0, max_value=40),
     total_verdict_count=st.integers(min_value=0, max_value=40),
     confounded_verdict_count=st.integers(min_value=0, max_value=40),
@@ -286,13 +293,21 @@ def test_status_derivation_is_deterministic(inp: ClauseStatusInput) -> None:
 def test_unscoreable_axis_dominates_every_other_signal(
     inp: ClauseStatusInput, unscoreable_axis: str
 ) -> None:
-    """An axis no Tier-1 scorer can see is always UNMEASURED(mechanical_vacuous).
+    """An axis no scorer can see is always UNMEASURED(mechanical_vacuous).
 
     Rule 0 must outrank every other input. If any amount of evidence could
     produce NO_DATA on an unscoreable axis, the report would imply that more
     sampling can resolve a clause that no scorer can ever measure.
+
+    #555: the check now covers both TIER1_AXIS_NAMES and EXTERNAL_CHECK_AXIS_NAMES.
+    An axis absent from both registries is MECHANICAL_VACUOUS. An axis in
+    EXTERNAL_CHECK_AXIS_NAMES is scoreable by a deterministic external check
+    and is not MECHANICAL_VACUOUS.
     """
-    assume(unscoreable_axis not in TIER1_AXIS_NAMES)
+    assume(
+        unscoreable_axis not in TIER1_AXIS_NAMES
+        and unscoreable_axis not in EXTERNAL_CHECK_AXIS_NAMES
+    )
     inp.axis = unscoreable_axis
     status, sub_reason = derive_clause_status(inp)
     assert status is ClauseStatus.UNMEASURED
