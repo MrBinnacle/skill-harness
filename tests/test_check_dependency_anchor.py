@@ -214,48 +214,30 @@ class TestParsePyprojectRequirements:
 
 
 class TestRunsBeforeTheMatrix:
-    """AC1: a pre-flight step in the test job precedes the pytest step.
+    """AC1: an isolated gate completes before the test matrix starts.
 
-    Reads the real ci.yml and asserts the anchor-check step is present in the
-    test job before the pytest step, and that it targets requirements-ci.txt
-    (where the pydantic / pydantic-core == pins live; pyproject.toml carries
-    only open-ended >= bounds, so a pyproject diff would never see the #549
-    bump).  A test that passed before this change pinned nothing: the step did
-    not exist.
+    Reads the real ci.yml and asserts that the matrix `test` job needs the
+    dedicated anchor-check job. A same-job step runs too late: a conflicting
+    requirements-ci.txt change fails in each matrix cell's Install step before
+    that step can execute.
     """
 
-    def test_pre_flight_step_precedes_pytest_in_the_test_job(self) -> None:
+    def test_matrix_needs_the_pre_flight_gate(self) -> None:
         text = _CI_YML.read_text(encoding="utf-8")
-        # Isolate the `test:` job block (two-space key to the next two-space key).
+        gate_match = re.search(
+            r"\n  dependency-anchor:\n(?P<body>.*?)(?=\n  [A-Za-z_-]+:\n)", text, re.DOTALL
+        )
+        assert gate_match is not None, "could not find the `dependency-anchor` job in ci.yml"
+        gate = gate_match.group("body")
+        assert "Pre-flight dependency anchor check" in gate
+        assert "requirements-ci.txt" in gate
+
         job_match = re.search(r"\n  test:\n(?P<body>.*?)(?=\n  [A-Za-z_-]+:\n)", text, re.DOTALL)
         assert job_match is not None, "could not find the `test:` job in ci.yml"
         job = job_match.group("body")
-        anchor_step = job.find("Pre-flight dependency anchor check")
-        pytest_step = job.find("run: pytest")
-        assert anchor_step != -1, "the pre-flight anchor-check step is absent from the test job"
-        assert pytest_step != -1, "the pytest step is absent from the test job"
-        assert anchor_step < pytest_step, (
-            "the pre-flight anchor check must run BEFORE the pytest step so an "
-            "unmergeable bump fails the run before the grid is consumed"
-        )
-
-    def test_pre_flight_step_targets_requirements_ci(self) -> None:
-        text = _CI_YML.read_text(encoding="utf-8")
-        job_match = re.search(r"\n  test:\n(?P<body>.*?)(?=\n  [A-Za-z_-]+:\n)", text, re.DOTALL)
-        assert job_match is not None
-        job = job_match.group("body")
-        step_start = job.find("Pre-flight dependency anchor check")
-        assert step_start != -1
-        # The step body runs from its name to the next `- name:` (the next step)
-        # or, as a fallback, to the pytest run.
-        step_end = job.find("\n      - name:", step_start)
-        if step_end == -1:
-            step_end = job.find("run: pytest", step_start)
-        step_body = job[step_start:step_end]
-        assert "requirements-ci.txt" in step_body, (
-            "the pre-flight step must read requirements-ci.txt, where the pydantic / "
-            "pydantic-core == pins live; pyproject.toml carries only >= bounds and a "
-            "pyproject diff would never see the #549 bump"
+        assert re.search(r"^    needs: dependency-anchor$", job, re.MULTILINE), (
+            "the test matrix must wait for the pre-flight anchor-check job; a same-job "
+            "step runs after the constrained install that #549 breaks"
         )
 
 
@@ -294,7 +276,7 @@ class TestRefusesBumpAboveExactPin:
 
         with patch(
             "check_dependency_anchor.fetch_pypi_metadata",
-            side_effect=lambda pkg: (
+            side_effect=lambda pkg, _version: (
                 _pydantic_metadata(_PYDANTIC_REQUIRES_DIST_2_46_5) if pkg == "pydantic" else {}
             ),
         ):
@@ -343,7 +325,7 @@ class TestReproducesIssue549:
 
         with patch(
             "check_dependency_anchor.fetch_pypi_metadata",
-            side_effect=lambda pkg: (
+            side_effect=lambda pkg, _version: (
                 _pydantic_metadata(_PYDANTIC_REQUIRES_DIST_2_46_5) if pkg == "pydantic" else {}
             ),
         ):
@@ -392,7 +374,7 @@ class TestPassesCoordinatedBump:
 
         with patch(
             "check_dependency_anchor.fetch_pypi_metadata",
-            side_effect=lambda pkg: pydantic_2140 if pkg == "pydantic" else {},
+            side_effect=lambda pkg, _version: pydantic_2140 if pkg == "pydantic" else {},
         ):
             result = main(["--requirements", str(req), "--diff", str(diff)])
 
@@ -474,7 +456,7 @@ class TestDiscoversAnchorFromMetadata:
 
         with patch(
             "check_dependency_anchor.fetch_pypi_metadata",
-            side_effect=lambda pkg: anchor_metadata if pkg == "fictitious_anchor" else {},
+            side_effect=lambda pkg, _version: anchor_metadata if pkg == "fictitious_anchor" else {},
         ):
             result = main(["--requirements", str(req), "--diff", str(diff)])
 
@@ -484,13 +466,47 @@ class TestDiscoversAnchorFromMetadata:
         """AC5 / robustness: each candidate anchor is read once, not per pair."""
         calls: list[str] = []
 
-        def _record(pkg: str) -> dict[str, object]:
-            calls.append(pkg)
+        def _record(pkg: str, version: str) -> dict[str, object]:
+            calls.append(f"{pkg}=={version}")
             return _pydantic_metadata([])
 
         with patch("check_dependency_anchor.fetch_pypi_metadata", side_effect=_record):
             collect_anchor_metadata({"a": "1", "b": "2", "c": "3"})
-        assert sorted(calls) == ["a", "b", "c"]
+        assert sorted(calls) == ["a==1", "b==2", "c==3"]
+
+    def test_uses_the_anchor_version_declared_in_constraints(self, tmp_path: Path) -> None:
+        """A newer anchor release cannot stand in for the declared anchor."""
+        req = tmp_path / "requirements-ci.txt"
+        req.write_text(
+            textwrap.dedent("""\
+                pydantic==2.13.5
+                pydantic-core==2.46.5
+            """),
+            encoding="utf-8",
+        )
+        diff = tmp_path / "changes.diff"
+        diff.write_text(
+            textwrap.dedent("""\
+                --- a/requirements-ci.txt
+                +++ b/requirements-ci.txt
+                @@ -1,2 +1,2 @@
+                -pydantic-core==2.46.5
+                +pydantic-core==2.49.0
+            """),
+            encoding="utf-8",
+        )
+
+        def _metadata(package: str, version: str) -> dict[str, object]:
+            if (package, version) == ("pydantic", "2.13.5"):
+                return _pydantic_metadata(["pydantic-core==2.46.5"])
+            if (package, version) == ("pydantic", "2.14.0"):
+                return _pydantic_metadata(["pydantic-core==2.49.0"])
+            return {}
+
+        with patch("check_dependency_anchor.fetch_pypi_metadata", side_effect=_metadata):
+            result = main(["--requirements", str(req), "--diff", str(diff)])
+
+        assert result == 1
 
 
 # ---------------------------------------------------------------------------
@@ -642,7 +658,7 @@ class TestEdgeCases:
 
         with patch(
             "check_dependency_anchor.fetch_pypi_metadata",
-            side_effect=lambda pkg: anchor if pkg == "some-anchor" else {},
+            side_effect=lambda pkg, _version: anchor if pkg == "some-anchor" else {},
         ):
             result = main(["--requirements", str(req), "--diff", str(diff)])
 

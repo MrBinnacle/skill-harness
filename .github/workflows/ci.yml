@@ -19,6 +19,30 @@ permissions:
   contents: read
 
 jobs:
+  dependency-anchor:
+    name: Pre-flight dependency anchor check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+      # #557: this isolated gate must run before a matrix cell resolves the
+      # changed constraints. A pydantic-core bump above pydantic's exact pin
+      # otherwise fails in every cell's Install step before a same-job check
+      # can execute.
+      - name: Install anchor-check dependency
+        run: python -m pip install -c requirements-ci.txt packaging
+      - name: Pre-flight dependency anchor check
+        shell: bash
+        run: |
+          git fetch origin main --depth=1
+          git diff origin/main -- requirements-ci.txt > "$RUNNER_TEMP/dep-anchor.diff"
+          python scripts/check_dependency_anchor.py --requirements requirements-ci.txt --diff "$RUNNER_TEMP/dep-anchor.diff"
+
   lint:
     name: Lint + format
     runs-on: ubuntu-latest
@@ -64,6 +88,7 @@ jobs:
         run: mypy --strict src/ tests/ scripts/drift_check.py scripts/release_gate.py
 
   test:
+    needs: dependency-anchor
     name: Test (${{ matrix.os }} · py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     # 10 -> 15 (#56): the slow-marked full-grid frontier test pushed the
@@ -153,23 +178,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -c requirements-ci.txt -e ".[dev]"
-      # #557: refuse a dependency bump an exact-pinned anchor cannot satisfy.
-      # Runs before the test matrix so a structurally unmergeable bump does
-      # not consume the grid.  Reads PyPI metadata for each candidate anchor;
-      # network failure is a refusal with a distinct message.
-      #
-      # The exact-pinned pydantic / pydantic-core == pins live in
-      # requirements-ci.txt, not pyproject.toml (which carries only open-ended
-      # >= bounds), so the diff and the requirements file both point there: a
-      # pyproject diff would never see the #549 bump.  shell: bash makes the
-      # step work on the windows matrix cells too.  origin/main is fetched
-      # shallow so `git diff` names the PR's actual dependency changes.
-      - name: Pre-flight dependency anchor check
-        shell: bash
-        run: |
-          git fetch origin main --depth=1
-          git diff origin/main -- requirements-ci.txt > "$RUNNER_TEMP/dep-anchor.diff"
-          python scripts/check_dependency_anchor.py --requirements requirements-ci.txt --diff "$RUNNER_TEMP/dep-anchor.diff"
       - name: Install the geometry extra
         if: env.SKILL_HARNESS_GEOMETRY_CELL == '1'
         # Only the designated cell installs playwright. The other three stop at

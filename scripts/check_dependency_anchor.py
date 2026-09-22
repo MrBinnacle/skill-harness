@@ -10,16 +10,18 @@ with ``==``, so ``pydantic-core`` can never move ahead of its anchor.
 Dependabot bumps the follower anyway when the follower has a newer release,
 and pip then fails at install time.  Two occurrences in twenty-eight days:
 2026-08-17 (``pydantic-core`` 2.46.4 -> 2.48.0) and 2026-09-14 (#549,
-``pydantic-core`` 2.46.5 -> 2.49.0).  One PyPI read settles it: ``pydantic``
-latest pins ``pydantic-core==2.46.5``, which is what this repository already
-pins in ``requirements-ci.txt``.
+``pydantic-core`` 2.46.5 -> 2.49.0). One PyPI read at the declared
+``pydantic`` version settles it: that version pins
+``pydantic-core==2.46.5``, which is what this repository already pins in
+``requirements-ci.txt``.
 
-For each requirement the diff changes, this check reads the anchor's
-published PyPI metadata and refuses when an anchor pins the changed
-package with ``==`` at a version below the proposed one.  The probe is one
-read per candidate anchor::
+For each requirement the diff changes, this check reads each candidate
+anchor's published PyPI metadata at the version the constraints file
+declares. It refuses when that anchor pins the changed package with ``==``
+at a version below the proposed one. The probe is one read per candidate
+anchor::
 
-    curl -s https://pypi.org/pypi/<anchor>/json
+    curl -s https://pypi.org/pypi/<anchor>/<declared-version>/json
 
 then ``info.requires_dist`` is compared against the proposed version.  The
 anchor relationship is discovered from published metadata, not from a
@@ -51,7 +53,7 @@ from typing import Final
 
 from packaging.version import InvalidVersion, Version
 
-PYPI_URL: Final[str] = "https://pypi.org/pypi/{package}/json"
+PYPI_URL: Final[str] = "https://pypi.org/pypi/{package}/{version}/json"
 REQUIREMENT_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^([A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?)\s*"
 )
@@ -160,15 +162,15 @@ def parse_diff(diff_text: str) -> dict[str, tuple[str | None, str]]:
     return {k: v for k, v in changes.items() if v[1] != v[0] or v[0] is None}
 
 
-def fetch_pypi_metadata(package: str) -> dict[str, object]:
-    """Fetch the latest published metadata for *package* from PyPI.
+def fetch_pypi_metadata(package: str, version: str) -> dict[str, object]:
+    """Fetch metadata for the declared *package* version from PyPI.
 
     Returns the parsed JSON on success, or ``{}`` for a 404 (a package PyPI does
     not know about cannot be an anchor).  Raises ``NetworkError`` on any other
     failure reaching the index -- a check that cannot read its input must not
     report a clean result.
     """
-    url = PYPI_URL.format(package=package)
+    url = PYPI_URL.format(package=package, version=version)
     try:
         req = urllib.request.Request(url, headers={"Accept": "application/json"})  # noqa: S310
         with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
@@ -229,7 +231,7 @@ def check_exact_pin_constraint(
 def collect_anchor_metadata(
     current_requirements: dict[str, str],
 ) -> dict[str, dict[str, object]]:
-    """Fetch the latest PyPI metadata for every candidate anchor, once.
+    """Fetch metadata for every declared candidate anchor version, once.
 
     A candidate anchor is any package in *current_requirements*: the anchor
     relationship is discovered from published ``requires_dist`` rather than
@@ -239,8 +241,8 @@ def collect_anchor_metadata(
     clean run.  Raises ``NetworkError`` on the first unreachable anchor.
     """
     metadata: dict[str, dict[str, object]] = {}
-    for anchor in sorted(current_requirements):
-        fetched = fetch_pypi_metadata(anchor)
+    for anchor, version in sorted(current_requirements.items()):
+        fetched = fetch_pypi_metadata(anchor, version)
         if fetched:
             metadata[anchor] = fetched
     return metadata
