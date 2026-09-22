@@ -1000,14 +1000,18 @@ def _verdict_scope_section(receipt: Mapping[str, Any]) -> str:
         else:
             text = ABSENT_TEXT
         rows.append(f"<dt>{safe(key)}</dt><dd><code>{safe(text)}</code></dd>")
-    return (
-        '<section aria-labelledby="verdict-scope">\n'
-        '  <h2 id="verdict-scope">Verdict scope</h2>\n'
-        '  <dl class="verdict-scope">\n'
-        f"{_indent(rows, 4)}\n"
-        "  </dl>\n"
-        "</section>"
-    )
+    parts = [
+        '<section aria-labelledby="verdict-scope">',
+        '  <h2 id="verdict-scope">Verdict scope</h2>',
+        '  <dl class="verdict-scope">',
+        f"{_indent(rows, 4)}",
+        "  </dl>",
+    ]
+    scope_line = _scope_line(receipt)
+    if scope_line:
+        parts.append(f"  {scope_line}")
+    parts.append("</section>")
+    return "\n".join(parts)
 
 
 def _currentness_section(receipt: Mapping[str, Any]) -> str:
@@ -1069,6 +1073,8 @@ def _scope_line(receipt: Mapping[str, Any]) -> str:
     A KEEP licenses that scoped sentence only. The line is filled from
     verdict_scope fields.
     """
+    if receipt.get("verdict") != "KEEP":
+        return ""
     scope = receipt.get("verdict_scope")
     if not isinstance(scope, Mapping):
         return ""

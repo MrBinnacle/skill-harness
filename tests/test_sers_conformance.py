@@ -714,6 +714,11 @@ def _v16_instance() -> dict[str, Any]:
             "arms": "null",
             "subject_model": "anthropic/claude-sonnet-5",
         },
+        "delivery": {
+            "channel": "not_instrumented",
+            "exposure": {"refusal": "not_instrumented"},
+            "pi_c": {"refusal": "not_instrumented"},
+        },
         "verdict_scope": {
             "model_id": "anthropic/claude-sonnet-5",
             "harness_version": "0.3.0",
@@ -782,6 +787,35 @@ def test_schema_verdict_validity_properties_are_optional() -> None:
     assert "verdict_scope" not in required
     assert "currentness" not in required
     assert "drift_policy" not in required
+
+
+def test_v16_inherits_subject_identity_and_delivery_requirements(
+    sers_validator: Draft202012Validator,
+) -> None:
+    """A version bump does not weaken the provenance and delivery contract."""
+    instance = _v16_instance()
+    del instance["subject_identity"]
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "subject_identity" in str(excinfo.value)
+
+    instance = _v16_instance()
+    del instance["delivery"]
+    with pytest.raises(ValidationError) as excinfo:
+        sers_validator.validate(instance)
+    assert "delivery" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("field", ["margin_pp", "cs_lower_bound"])
+def test_v16_scope_audit_number_never_accepts_null(
+    field: str, sers_validator: Draft202012Validator
+) -> None:
+    """A missing SERS number is a typed refusal, not null."""
+    instance = _v16_instance()
+    instance["verdict_scope"][field] = None
+
+    with pytest.raises(ValidationError):
+        sers_validator.validate(instance)
 
 
 def test_poison_validated_sentinel_pass_is_red(sers_validator: Draft202012Validator) -> None:

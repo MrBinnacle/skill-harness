@@ -465,12 +465,18 @@
           "description": "Number of epochs per arm in the original validation run."
         },
         "margin_pp": {
-          "type": ["number", "null"],
-          "description": "Pre-registered margin in percentage points for the confidence sequence."
+          "oneOf": [
+            { "type": "number" },
+            { "$ref": "#/$defs/scope_audit_refusal" }
+          ],
+          "description": "Pre-registered margin in percentage points for the confidence sequence, or a typed refusal."
         },
         "cs_lower_bound": {
-          "type": ["number", "null"],
-          "description": "Lower bound of the confidence sequence from the original validation."
+          "oneOf": [
+            { "type": "number" },
+            { "$ref": "#/$defs/scope_audit_refusal" }
+          ],
+          "description": "Lower bound of the confidence sequence from the original validation, or a typed refusal."
         },
         "control_world_result": {
           "type": ["string", "null"],
@@ -695,6 +701,20 @@
     },
     {
       "if": {
+        "properties": { "sers_version": { "const": "1.6.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"],
+        "properties": {
+          "subject_identity": {
+            "required": ["subject_model"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
         "properties": {
           "sers_version": { "const": "1.6.0" },
           "verdict": { "const": "KEEP" }
@@ -829,6 +849,18 @@
           }
         }
       ]
+    },
+    "scope_audit_refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["refusal"],
+      "properties": {
+        "refusal": {
+          "type": "string",
+          "enum": ["not_instrumented", "not_applicable"]
+        },
+        "detail": { "type": "string" }
+      }
     }
   }
 }

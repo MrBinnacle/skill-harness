@@ -320,8 +320,8 @@ registration. Absent on pre-1.6.0 receipts. A receipt with verdict `KEEP` at
 | `estimand` | Registered estimand from the run's `RegisteredScope` (`semantics.py`). |
 | `delivery_mechanism` | Registered delivery mechanism from the run's `RegisteredScope` (`semantics.py`). |
 | `n_per_arm` | Number of epochs per arm in the original validation run. |
-| `margin_pp` | Pre-registered margin in percentage points for the confidence sequence. |
-| `cs_lower_bound` | Lower bound of the confidence sequence from the original validation. |
+| `margin_pp` | Pre-registered margin in percentage points for the confidence sequence, or a typed refusal. |
+| `cs_lower_bound` | Lower bound of the confidence sequence from the original validation, or a typed refusal. |
 | `control_world_result` | Result on the control world. |
 | `placebo_ref` | Reference to the placebo or synthetic control used. |
 | `fixture_id` | Identifier of the fixture set used in the run. |
