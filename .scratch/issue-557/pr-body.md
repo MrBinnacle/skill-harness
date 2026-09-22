@@ -41,12 +41,18 @@ Built: an isolated `dependency-anchor` job that installs only the check's
 `packaging` dependency, fetches `origin/main` shallow, writes the
 `requirements-ci.txt` diff to a temp file, and runs the check against it. The
 matrix `test` job declares `needs: dependency-anchor`, so none of its four
-cells reaches its constrained `Install` step when the check refuses.
+cells reaches its constrained `Install` step when the check refuses. The
+protected `lint` job also waits on the pre-flight job with `if: always()` and
+fails before its own install when the check refuses. A skipped required matrix
+job reads as successful to branch protection; the protected lint context
+therefore carries the refusal as a merge-blocking failure.
 
 Test: `TestRunsBeforeTheMatrix::test_matrix_needs_the_pre_flight_gate` reads
 the real `ci.yml`, asserts the gate names `requirements-ci.txt`, and asserts
-the matrix job needs that gate. A same-job step cannot satisfy the criterion:
-the conflicting constraints fail its preceding install first.
+the matrix and protected lint jobs need that gate. It also asserts lint runs
+after a gate failure and exits 1 before its install. A same-job step cannot
+satisfy the criterion: the conflicting constraints fail its preceding install
+first.
 
 Observed: a same-job check was unreachable on the #549 failure path because
 the constrained install failed first in every matrix cell. The isolated gate

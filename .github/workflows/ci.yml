@@ -19,9 +19,9 @@ permissions:
   contents: read
 
 jobs:
-  # NON-required (#557): not a branch-protection context. This pre-flight gate
-  # runs before the matrix installs so a constraint conflict fails once here
-  # instead of in every cell's Install step.
+  # GATED BY PROTECTED LINT (#557): not a branch-protection context itself, but
+  # lint fails when this gate refuses. A skipped matrix job reads as successful
+  # to branch protection, so the protected lint context must carry the refusal.
   dependency-anchor:
     name: Pre-flight dependency anchor check
     runs-on: ubuntu-latest
@@ -47,10 +47,18 @@ jobs:
           python scripts/check_dependency_anchor.py --requirements requirements-ci.txt --diff "$RUNNER_TEMP/dep-anchor.diff"
 
   lint:
+    needs: dependency-anchor
+    if: always()
     name: Lint + format
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # A failed dependency-anchor would otherwise skip the matrix. GitHub
+      # accepts a skipped required context, so make the protected lint context
+      # red before it resolves or installs the broken constraints.
+      - name: Refuse a failed dependency anchor
+        if: needs.dependency-anchor.result != 'success'
+        run: exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:

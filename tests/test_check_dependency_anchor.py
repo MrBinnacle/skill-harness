@@ -217,6 +217,15 @@ class TestRunsBeforeTheMatrix:
             '--diff "$RUNNER_TEMP/dep-anchor.diff"'
         ) in gate
 
+        lint_match = re.search(r"\n  lint:\n(?P<body>.*?)(?=\n  [A-Za-z_-]+:\n)", text, re.DOTALL)
+        assert lint_match is not None, "could not find the `lint:` job in ci.yml"
+        lint = lint_match.group("body")
+        assert re.search(
+            r"^    needs: dependency-anchor\n    if: always\(\)$", lint, re.MULTILINE
+        ), "the protected lint context must run after an anchor refusal"
+        assert "if: needs.dependency-anchor.result != 'success'" in lint
+        assert "run: exit 1" in lint
+
         job_match = re.search(r"\n  test:\n(?P<body>.*?)(?=\n  [A-Za-z_-]+:\n)", text, re.DOTALL)
         assert job_match is not None, "could not find the `test:` job in ci.yml"
         job = job_match.group("body")
