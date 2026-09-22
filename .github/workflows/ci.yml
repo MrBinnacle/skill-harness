@@ -42,7 +42,7 @@ jobs:
       - name: Pre-flight dependency anchor check
         shell: bash
         run: |
-          git fetch origin main --depth=1
+          git fetch origin main:refs/remotes/origin/main --depth=1
           git diff origin/main -- requirements-ci.txt > "$RUNNER_TEMP/dep-anchor.diff"
           python scripts/check_dependency_anchor.py --requirements requirements-ci.txt --diff "$RUNNER_TEMP/dep-anchor.diff"
 

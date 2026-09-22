@@ -101,35 +101,6 @@ def parse_requirements_file(path: Path) -> dict[str, str]:
     return requirements
 
 
-def parse_pyproject_requirements(path: Path) -> dict[str, str]:
-    """Parse ``[project.dependencies]`` from a pyproject.toml.
-
-    Reads the raw lines between ``dependencies = [`` and the closing ``]``.
-    Each non-comment line is a requirement string; the first version specifier
-    is extracted.  The exact-pinned CI constraints live in ``requirements-ci.txt``,
-    not here, but this parser keeps the check usable against either surface.
-    """
-    text = path.read_text(encoding="utf-8")
-    in_deps = False
-    deps: dict[str, str] = {}
-    for line in text.splitlines():
-        stripped = line.strip()
-        if "dependencies" in stripped and "=" in stripped and "[" in stripped:
-            in_deps = True
-            continue
-        if in_deps:
-            if stripped.startswith("]"):
-                break
-            if stripped.startswith("#") or not stripped:
-                continue
-            cleaned = stripped.strip('",')
-            parsed = parse_requirement(cleaned)
-            if parsed is not None:
-                name, version = parsed
-                deps[name] = version
-    return deps
-
-
 def parse_diff(diff_text: str) -> dict[str, tuple[str | None, str]]:
     """Parse a unified diff into ``{package: (old_version, new_version)}``.
 
@@ -290,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--requirements",
         required=True,
-        help="path to the requirements file (pyproject.toml or requirements*.txt)",
+        help="path to the requirements file",
     )
     parser.add_argument(
         "--diff",
@@ -304,10 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"REFUSE: requirements file not found: {req_path}", file=sys.stderr)
         return 1
 
-    if req_path.name == "pyproject.toml":
-        current_requirements = parse_pyproject_requirements(req_path)
-    else:
-        current_requirements = parse_requirements_file(req_path)
+    current_requirements = parse_requirements_file(req_path)
 
     if args.diff == "-":
         diff_text = sys.stdin.read()

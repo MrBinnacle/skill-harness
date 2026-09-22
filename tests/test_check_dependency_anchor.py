@@ -44,7 +44,6 @@ check_exact_pin_constraint = _mod.check_exact_pin_constraint
 collect_anchor_metadata = _mod.collect_anchor_metadata
 main = _mod.main
 parse_diff = _mod.parse_diff
-parse_pyproject_requirements = _mod.parse_pyproject_requirements
 parse_requirement = _mod.parse_requirement
 parse_requirements_file = _mod.parse_requirements_file
 
@@ -188,26 +187,6 @@ class TestParseRequirementsFile:
         assert result == {"pydantic": "2.13.5", "pydantic_core": "2.46.5"}
 
 
-class TestParsePyprojectRequirements:
-    """parse_pyproject_requirements extracts [project.dependencies]."""
-
-    def test_basic(self, tmp_path: Path) -> None:
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text(
-            textwrap.dedent("""\
-                [project]
-                name = "test"
-                dependencies = [
-                    "pydantic>=2.6",
-                    "click>=8.5.0",
-                ]
-            """),
-            encoding="utf-8",
-        )
-        result = parse_pyproject_requirements(pyproject)
-        assert result == {"pydantic": "2.6", "click": "8.5.0"}
-
-
 # ---------------------------------------------------------------------------
 # AC1: the check runs before the test matrix and fails the run early
 # ---------------------------------------------------------------------------
@@ -231,6 +210,12 @@ class TestRunsBeforeTheMatrix:
         gate = gate_match.group("body")
         assert "Pre-flight dependency anchor check" in gate
         assert "requirements-ci.txt" in gate
+        assert "git fetch origin main:refs/remotes/origin/main --depth=1" in gate
+        assert "git diff origin/main -- requirements-ci.txt" in gate
+        assert (
+            "python scripts/check_dependency_anchor.py --requirements requirements-ci.txt "
+            '--diff "$RUNNER_TEMP/dep-anchor.diff"'
+        ) in gate
 
         job_match = re.search(r"\n  test:\n(?P<body>.*?)(?=\n  [A-Za-z_-]+:\n)", text, re.DOTALL)
         assert job_match is not None, "could not find the `test:` job in ci.yml"

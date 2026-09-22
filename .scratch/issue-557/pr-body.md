@@ -28,10 +28,10 @@ hand-maintained list of known pairs.
 
 `pydantic==2.13.5` and `pydantic_core==2.46.5` are pinned in
 `requirements-ci.txt`, not `pyproject.toml`. `pyproject.toml` carries only
-open-ended `>=` bounds (`pydantic>=2.6`), so a diff against `pyproject.toml`
-would never see the #549 bump. The CI step and the check both read
-`requirements-ci.txt`. The #549 fixture uses the real pin from the ticket,
-`pydantic-core==2.46.5`, not a synthesized range.
+open-ended `>=` bounds (`pydantic>=2.6`), so it cannot describe the #549
+bump. The CI step and the check both read `requirements-ci.txt`. The #549
+fixture uses the real pin from the ticket, `pydantic-core==2.46.5`, not a
+synthesized range.
 
 ## Acceptance criteria
 
