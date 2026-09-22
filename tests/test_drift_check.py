@@ -390,6 +390,8 @@ def test_missing_enforcement_pointer_blocks(tmp_path: Path) -> None:
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-6" in line and "main.py" in line for line in fail_lines), r.stdout
+    # AC-1 reads the report-column order from cli/main.py, so it reddens too (#574).
+    assert _failed_row_ids(r.stdout) == {"AC-1", "DC-6"}, r.stdout
 
 
 def test_spend_gating_sentence_mutation_blocks(tmp_path: Path) -> None:
@@ -490,6 +492,8 @@ def test_empty_oc_package_blocks_import_ban(tmp_path: Path) -> None:
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-8" in line for line in fail_lines), r.stdout
+    # DC-7 pins the grid constants in oc/conventions.py, so it reddens too (#574).
+    assert _failed_row_ids(r.stdout) == {"DC-7", "DC-8"}, r.stdout
 
 
 def test_banned_method_identifier_in_oc_blocks(tmp_path: Path) -> None:
@@ -685,6 +689,8 @@ def test_rat_ledger_missing_dir_blocks(tmp_path: Path) -> None:
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-12" in line for line in fail_lines), r.stdout
+    # docs/ratifications is also DC-17's registered surface (#574).
+    assert _failed_row_ids(r.stdout) == {"DC-12", "DC-17"}, r.stdout
 
 
 def test_rat_valid_record_is_green(tmp_path: Path) -> None:
@@ -824,6 +830,8 @@ def test_dc15_cache_aware_without_worst_case_blocks(tmp_path: Path) -> None:
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-15" in line and "worst_case_cost_usd" in line for line in fail_lines), r.stdout
+    # DC-12 reads worst_case_cost_usd for its cap check, so it reddens too (#574).
+    assert _failed_row_ids(r.stdout) == {"DC-12", "DC-15"}, r.stdout
 
 
 def test_dc15_cache_aware_without_share_blocks(tmp_path: Path) -> None:
@@ -2032,6 +2040,8 @@ def test_dc17_missing_ledger_dir_blocks(tmp_path: Path) -> None:
     assert r.returncode == 1
     fail_lines = [line for line in r.stdout.splitlines() if line.strip().startswith("FAIL")]
     assert any("DC-17" in line and "ledger dir missing" in line for line in fail_lines), r.stdout
+    # docs/ratifications is also DC-12's registered surface (#574).
+    assert _failed_row_ids(r.stdout) == {"DC-12", "DC-17"}, r.stdout
 
 
 def test_dc17_printed_in_green_listing() -> None:
