@@ -131,7 +131,7 @@ Read off the schema, which is the operative artifact.
 - `cut_sub_reason`: `subsumed`, `no_lift`, `harmful`, `null`
 - `unmeasured_sub_reason`: `no_data`, `inadmissible`, `underpowered`, `falsifying_case_missing`,
   `budget_exhausted`, `falsifying_case_stale`, `fdr_correction_failed`, `mechanical_vacuous`,
-  `tier2_uncalibrated`, `length_confounded`, `null`
+  `tier2_uncalibrated`, `external_check_missing`, `length_confounded`, `null`
 - `value_class`: `transformative-lift`, `trap-discipline`, `calibration`, `null`
 - `evidence_admissibility.status`: `admissible`, `inadmissible`, `mixed`, `not_applicable`
 - `delivery.channel` (from 1.2.0): `description_only`, `body_and_description`, `not_instrumented`

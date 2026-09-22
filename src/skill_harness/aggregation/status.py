@@ -4,7 +4,7 @@ Implements `derive_clause_status()` — a pure function that maps clause evidenc
 to a (ClauseStatus, UnmeasuredSubReason | None) pair.
 
 State derivation rules (A57, ordered by priority):
-  0. Axis has no registered Tier-1 mechanical scorer → UNMEASURED(mechanical_vacuous)
+  0. Axis has no registered scorer (Tier-1 or external-check) → UNMEASURED(mechanical_vacuous)
   1. No admissible+non-confounded verdicts → UNMEASURED(no_data)
   2. Verdicts exist but ALL confounded → CONFOUNDED
   3. N < N_min (8) → UNMEASURED(underpowered)
@@ -28,8 +28,10 @@ because they explain WHY there is insufficient admissible evidence.
 
 Rule 0 is load-bearing and must come first: if no registered scorer can ever
 measure the axis, NO_DATA is a false explanation (it implies more sampling would
-resolve the clause). Scoreability is exact membership in TIER1_AXIS_NAMES via
-classify_axis — never fuzzy, never case-insensitive, never a Tier-2 judge.
+resolve the clause). Scoreability is exact membership in TIER1_AXIS_NAMES or
+EXTERNAL_CHECK_AXIS_NAMES via classify_axis — never fuzzy, never case-insensitive,
+never a Tier-2 judge. External-check axes (like protected_comment_deletion) are
+measured by deterministic programs, not LLM judges, so they pass Rule 0.
 """
 
 from __future__ import annotations
@@ -70,12 +72,17 @@ class UnmeasuredSubReason(StrEnum):
     branch with no way to distinguish "not enough evidence yet" from "enough
     evidence, but doesn't survive FDR correction"."""
     MECHANICAL_VACUOUS = "mechanical_vacuous"
-    """No registered Tier-1 mechanical scorer can see this axis.
+    """No registered scorer (Tier-1 or external-check) can see this axis.
 
     Orthogonal to write-time vacuity_flag: a clause may be constructibly
     testable (has a falsifying case) and still mechanically unscoreable.
-    Lifetime is registry-dependent — recomputed at aggregation, never frozen
+    Lifetime is registry-dependent -- recomputed at aggregation, never frozen
     onto clauses.vacuity_flag.
+
+    #555: the check now covers both TIER1_AXIS_NAMES and EXTERNAL_CHECK_AXIS_NAMES.
+    An axis absent from both registries is MECHANICAL_VACUOUS. An axis in
+    EXTERNAL_CHECK_AXIS_NAMES is not this -- it is scoreable by a deterministic
+    external check.
     """
     TIER2_UNCALIBRATED = "tier2_uncalibrated"
     """The runner's BLOCKER-1 pre-sampling gate refused the clause (#503).
@@ -86,6 +93,14 @@ class UnmeasuredSubReason(StrEnum):
     ``MECHANICAL_VACUOUS`` (an axis-registry scoreability property recomputed at
     aggregation): a tier-2 clause whose axis IS registered fails this gate on
     its tier, not on the axis, and ``MECHANICAL_VACUOUS`` would not name that.
+    """
+    EXTERNAL_CHECK_MISSING = "external_check_missing"
+    """The axis is in the external-check registry but no checker is registered (#555).
+
+    The axis is program-checkable in principle, but the runner has no scorer
+    function for it. Distinct from MECHANICAL_VACUOUS (axis not in any
+    registry) and TIER2_UNCALIBRATED (oracle_tier is not 1). The receipt names
+    the missing oracle so the caller knows what to register.
     """
     LENGTH_CONFOUNDED = "length_confounded"
     """The runner's QUAL-1 pre-sampling gate refused the clause (#503).

@@ -674,11 +674,15 @@ class TestIdempotencyResume:
 
 class TestTier2Unmeasured:
     def _assert_unmeasured_no_evidence(
-        self, ev: sqlite3.Connection, run_id: str, result: Any
+        self,
+        ev: sqlite3.Connection,
+        run_id: str,
+        result: Any,
+        expected_reason: str,
     ) -> None:
         """A gated clause: UNMEASURED, zero samples, zero verdicts."""
         assert result.stopping_reason == StoppingReason.UNDERPOWERED_NMAX
-        assert result.unmeasured_reason == "tier2_uncalibrated"
+        assert result.unmeasured_reason == expected_reason
         assert result.samples_collected == 0
         n_samples = ev.execute(
             "SELECT COUNT(*) FROM samples WHERE run_id = ?", (run_id,)
@@ -712,7 +716,7 @@ class TestTier2Unmeasured:
             max_usd=10.0,
             run_id=run_id,
         )
-        self._assert_unmeasured_no_evidence(ev, run_id, results[0])
+        self._assert_unmeasured_no_evidence(ev, run_id, results[0], "tier2_uncalibrated")
 
     def test_unknown_axis_clause_unmeasured_no_fallback(
         self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
@@ -737,7 +741,7 @@ class TestTier2Unmeasured:
             max_usd=10.0,
             run_id=run_id,
         )
-        self._assert_unmeasured_no_evidence(ev, run_id, results[0])
+        self._assert_unmeasured_no_evidence(ev, run_id, results[0], "mechanical_vacuous")
 
     def test_whitespace_padded_registered_axis_is_unmeasured_not_a_crash(
         self, seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection]
@@ -765,7 +769,7 @@ class TestTier2Unmeasured:
             max_usd=10.0,
             run_id=run_id,
         )
-        self._assert_unmeasured_no_evidence(ev, run_id, results[0])
+        self._assert_unmeasured_no_evidence(ev, run_id, results[0], "mechanical_vacuous")
 
 
 # ---------------------------------------------------------------------------

@@ -79,6 +79,7 @@ subset:
 - `fdr_correction_failed`
 - `mechanical_vacuous`
 - `tier2_uncalibrated`
+- `external_check_missing`
 - `length_confounded`
 
 `null` when the receipt is a measured `KEEP`/`CUT` (or a `CANT_TELL_YET` that

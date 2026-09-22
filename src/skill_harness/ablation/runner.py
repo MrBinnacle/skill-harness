@@ -82,7 +82,12 @@ from skill_harness.ablation.subject import (
     sha256_of_output,
 )
 from skill_harness.aggregation.status import UnmeasuredSubReason
-from skill_harness.oracles.tier1.axis_registry import MetricFn
+from skill_harness.oracles.tier1.axis_registry import (
+    AxisScoreability,
+    MetricFn,
+    classify_axis,
+    get_external_check_scorers,
+)
 from skill_harness.storage.article_fingerprint import ArticleFingerprint
 from skill_harness.storage.models import (
     ArmSampleWrite,
@@ -545,6 +550,7 @@ class AblationRunner:
         self._scorers: dict[str, MetricFn] = (
             scorers if scorers is not None else get_default_tier1_scorers()
         )
+        self._external_scorers: dict[str, MetricFn] = get_external_check_scorers()
         self._max_retries = max_retries
         self._retry_delay_s = retry_delay_s
         # #368 Path C: resolved per run_ablation() call. Declared here so the
@@ -1184,7 +1190,10 @@ class AblationRunner:
         # BLOCKER-1: gate Tier-2 / no-Tier-1-scorer clauses to UNMEASURED BEFORE sampling.
         # No samples issued, no acc.add, no admissible verdict — a clause that cannot be
         # measured on its own axis must never enter the pass rule on a fallback axis.
-        if not self._is_tier1_measurable(clause_spec):
+        # #555: the refusal now names the specific reason why the clause is unmeasurable,
+        # rather than blanket-refusing all non-Tier-1 clauses as TIER2_UNCALIBRATED.
+        refusal_reason = self._clause_refusal_reason(clause_spec)
+        if refusal_reason is not None:
             return (
                 samples_collected_ref[0],
                 ClauseResult(
@@ -1193,7 +1202,7 @@ class AblationRunner:
                     stop_decision=BetaBinomialAccumulator().check_stop(),
                     samples_collected=0,
                     length_confounded=False,
-                    unmeasured_reason=UnmeasuredSubReason.TIER2_UNCALIBRATED,
+                    unmeasured_reason=refusal_reason,
                     path_c_unavailable_reason="no_sampling",
                 ),
             )
@@ -1841,8 +1850,50 @@ class AblationRunner:
         that normalised the axis at all would admit clauses that lookup then
         misses, converting a safe UNMEASURED into an uncaught RuntimeError.
         ``axis_registry.classify_axis`` applies the same no-normalisation rule.
+
+        #555: this method only covers Tier-1 axes. External-check axes are
+        measured via ``_is_external_check`` and scored via ``_score_external_axis``.
         """
         return clause_spec.oracle_tier == 1 and clause_spec.axis in self._scorers
+
+    def _is_external_check(self, clause_spec: ClauseSpec) -> bool:
+        """Return True iff the clause can be measured by a registered external checker.
+
+        A clause is externally checkable when its axis resolves to a registered
+        external-check scorer in ``self._external_scorers``. The oracle is a
+        deterministic program, not an LLM judge.
+
+        #555: external-check axes are a separate registry from Tier-1 axes.
+        The runner scores them via ``_score_external_axis`` without routing
+        through the judge.
+        """
+        return clause_spec.axis in self._external_scorers
+
+    def _clause_refusal_reason(self, clause_spec: ClauseSpec) -> UnmeasuredSubReason | None:
+        """Determine why a clause cannot be measured, or None if it can.
+
+        Replaces the blanket TIER2_UNCALIBRATED refusal with a specific reason:
+        - TIER2_UNCALIBRATED: oracle_tier != 1 but axis is in Tier-1 registry
+        - MECHANICAL_VACUOUS: axis not in any registry (Tier-1 or external-check)
+        - EXTERNAL_CHECK_MISSING: axis in external-check registry but no checker
+        - None: clause is measurable (Tier-1 or external-check)
+
+        #555: the receipt names the missing oracle so the caller knows what
+        to register, rather than hiding the reason behind a generic refusal.
+        """
+        if self._is_tier1_measurable(clause_spec):
+            return None
+        if self._is_external_check(clause_spec):
+            return None
+        # Axis not measurable by any registered scorer. Determine why.
+        scoreability = classify_axis(clause_spec.axis)
+        if scoreability is AxisScoreability.UNSCOREABLE:
+            return UnmeasuredSubReason.MECHANICAL_VACUOUS
+        if scoreability is AxisScoreability.EXTERNAL_CHECK:
+            # Axis is in external-check registry but no scorer registered
+            return UnmeasuredSubReason.EXTERNAL_CHECK_MISSING
+        # Tier-1 axis but oracle_tier != 1
+        return UnmeasuredSubReason.TIER2_UNCALIBRATED
 
     def _score_primary_axis(self, text: str, clause_spec: ClauseSpec) -> float:
         """Score text on the clause's primary axis (Tier-1 only in v0.1).
