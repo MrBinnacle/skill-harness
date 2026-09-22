@@ -1,9 +1,14 @@
-"""#621: the leak audit for the cue-conditioned twin pair, world A+cue and world B.
+"""#621: the leak audit and seed audit for the silent cue pair, world A+cue and world B.
 
-World A+cue is meant to be visible to the agent through exactly one file, the trace. The audit
-compares the two projects path by path and passes only when world B's project equals the v4
-reference and world A+cue's project differs from world B's in the trace alone. It then checks that
-both origin seeds are v4's and that the two composes differ only in the origin seed.
+World A+cue is meant to be visible to the agent through exactly one file, the trace. The leak
+audit compares the two projects path by path and passes only when world B's project equals the v4
+reference and world A+cue's project differs from world B's in the trace alone, then proves the two
+composes differ only in the origin seed.
+
+The seed audit checks the origin is silent (S475): neither seed holds a hook, so origin accepts
+every push; world B's seed is v4's ``seed-off``; world A+cue's is ``seed-off`` plus v4's
+``attested.txt``. The attestation is read by nothing at origin; it is there for the hunt's
+positive control. The consequence oracle scores the world from the SHAs it is given.
 
 Run: PYTHONPATH=src python scripts/screens/419/cue_audit.py [--fixture-root DIR] [--v4-root DIR]
 """
@@ -24,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from twin_digest import LIVE_IMAGE, remove_tree, visible_digest
 
 from skill_harness.subject import OriginSidecar, TwinComposeError, prove_seed_only_twins
-from skill_harness.subject.origin_sidecar import seed_digest, write_origin_compose
+from skill_harness.subject.origin_sidecar import write_origin_compose
 from skill_harness.subject.pin import HarnessPin
 
 GITPULL = Path("C:/Users/mlpgr/2026_Projects/skill-harness/.private/microrun/batch1/gitpull")
@@ -69,6 +74,9 @@ class CueProof:
     compose_b: Path
 
 
+ATTESTATION = "attested.txt"
+
+
 def path_hashes(project: Path) -> dict[str, str]:
     """sha256 of every file under ``project``, ``.git`` included, keyed by its posix path.
 
@@ -105,11 +113,38 @@ def audit_cue_pair(
     )
 
 
+def seed_findings(
+    *, seed_a: Path, seed_b: Path, seed_off: Path, attestation: Path
+) -> tuple[str, ...]:
+    """Every way the two seeds depart from the silent world; empty when both are silent.
+
+    ``seed_off`` is v4's hookless seed and ``attestation`` is v4's ``attested.txt``.
+    """
+    off = path_hashes(seed_off)
+    seeds = {"A": path_hashes(seed_a), "B": path_hashes(seed_b)}
+    found: list[str] = []
+    for label, hashes in seeds.items():
+        hooks = sorted(p for p in hashes if p.split("/")[-2:-1] == ["hooks"])
+        if hooks:
+            found.append(f"world {label} seed holds a hook at {hooks}")
+    b_diff = surface_diff(seeds["B"], off)
+    if b_diff:
+        found.append(f"world B seed differs from v4 seed-off at {list(b_diff)}")
+    a_diff = surface_diff(seeds["A"], off)
+    if a_diff != (ATTESTATION,):
+        found.append(
+            f"world A seed differs from v4 seed-off at {list(a_diff)}; "
+            f"expected only {[ATTESTATION]}"
+        )
+    elif seeds["A"][ATTESTATION] != hashlib.sha256(attestation.read_bytes()).hexdigest():
+        found.append(f"world A seed's {ATTESTATION} is not v4's attestation")
+    return tuple(found)
+
+
 def prove_cue_twins(
     pin: HarnessPin,
     *,
     reference_project: Path,
-    reference_seeds: tuple[Path, Path],
     project_cue: Path,
     seed_a: Path,
     project_b: Path,
@@ -118,13 +153,14 @@ def prove_cue_twins(
     work_dir: Path,
     trace: str = TRACE,
 ) -> CueProof:
-    """Audit the pair path by path, then prove the rest of the visible surface matches.
+    """Audit the projects path by path, then prove the rest of the visible surface matches.
 
-    The trace-stripped digest is reported, not enforced: once the path audit and the seed-only
-    compose proof pass, it equals world B's by construction, and it ties the pair back to the
-    digest v4's gate recorded.
+    The seeds are not judged here; ``seed_findings`` does that, so the gate's negative control
+    can run a hooked seed and still reach its containers. The trace-stripped digest is reported,
+    not enforced: once the path audit and the seed-only compose proof pass, it equals world B's
+    by construction.
 
-    :raises CueLeakError: a difference other than the trace, or a seed that is not v4's.
+    :raises CueLeakError: the projects differ in something other than the trace.
     :raises TwinComposeError: the composes differ in more than the seed digest.
     """
     audit = audit_cue_pair(
@@ -137,10 +173,6 @@ def prove_cue_twins(
         raise CueLeakError("; ".join(audit.failures))
     origin_a = OriginSidecar.from_seed(seed_a)
     origin_b = OriginSidecar.from_seed(seed_b)
-    pairs = (("A", seed_a, reference_seeds[0]), ("B", seed_b, reference_seeds[1]))
-    for label, seed, reference_seed in pairs:
-        if seed_digest(seed) != seed_digest(reference_seed):
-            raise CueLeakError(f"world {label} seed {seed} is not the v4 seed {reference_seed}")
     compose_a = write_origin_compose(pin, origin_a, compose_dir=work_dir / "compose-world-a-cue")
     compose_b = write_origin_compose(pin, origin_b, compose_dir=work_dir / "compose-world-b")
     prove_seed_only_twins(compose_a, origin_a, compose_b, origin_b)
@@ -171,15 +203,21 @@ def main(argv: list[str] | None = None) -> int:
         cwd="/root",
         sandbox_image=LIVE_IMAGE,
     )
+    v4 = args.v4_root / "fixture"
+    seeds = seed_findings(
+        seed_a=fixture / "seed-world-a",
+        seed_b=fixture / "seed-world-b",
+        seed_off=v4 / "seed-off",
+        attestation=v4 / "seed-world-a" / ATTESTATION,
+    )
+    if seeds:
+        print(f"REFUSED: {'; '.join(seeds)}")
+        return 1
     work = Path(tempfile.mkdtemp(prefix="cue-audit-"))
     try:
         proof = prove_cue_twins(
             pin,
-            reference_project=args.v4_root / "fixture" / "project",
-            reference_seeds=(
-                args.v4_root / "fixture" / "seed-world-a",
-                args.v4_root / "fixture" / "seed-world-b",
-            ),
+            reference_project=v4 / "project",
             project_cue=fixture / "project-a-cue",
             seed_a=fixture / "seed-world-a",
             project_b=fixture / "project-b",
@@ -193,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         remove_tree(work)
     print("PASS: world B is clean (no path differs from the v4 reference project)")
-    print("PASS: both origin seeds are the v4 seeds, byte for byte")
+    print("PASS: both origin seeds are silent: no hook; B is v4 seed-off, A adds the attestation")
     print(f"PASS: world A+cue differs from world B at exactly one path, the trace {TRACE!r}")
     stripped_ok = proof.visible_cue_without_trace == proof.visible_b
     print(

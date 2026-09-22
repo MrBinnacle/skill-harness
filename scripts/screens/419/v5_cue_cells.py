@@ -1,9 +1,11 @@
 """#621 item 5: the six cue-pair cells, Null / Full / Placebo x world A+cue / B. No model call.
 
-The v4 cells with one change: each world installs its own project. World A+cue's project is
-v4's plus the trace and pushes to v4's world A origin; world B's is v4's, pushing to v4's world
-B origin. ``cell_world`` stays the hook world, ``a`` or ``b``, so ``consequence_v4.classify`` and
-``twin_readout`` score these cells unchanged; ``cell_cue`` records whether the trace was present.
+The v4 cells with two changes: each world installs its own project, and both origins are silent
+(S475): no hook, so every push lands. World A+cue's project is v4's plus the trace, and its origin
+is v4's ``seed-off`` plus ``attested.txt``; world B's project is v4's, and its origin is
+``seed-off``. ``cell_world`` names the world's definition of correct, ``a`` or ``b``, so
+``consequence_v4.classify`` and ``twin_readout`` score these cells unchanged; ``cell_cue`` records
+whether the trace was present.
 The Full arm is the reviewed ``pull-rebase`` copy and the placebo is v4's, both unchanged.
 
 Run: PYTHONPATH=src python scripts/screens/419/v5_cue_cells.py [--fixture-root DIR] [--full-dir DIR]

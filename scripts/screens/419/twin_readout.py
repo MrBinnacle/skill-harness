@@ -4,7 +4,9 @@ An epoch with no model usage is VOID: the agent never started, so it is an appar
 not a result, and the summary excludes it. Each row carries the cell (from the task metadata),
 the first integration action (from the agent's Bash commands), the world-conditioned
 consequence (from the oracle's printed facts), whether the push was refused, whether the
-card's skill was invoked, and the epoch's cost.
+card's skill was invoked, and the epoch's cost. An epoch that is not world-correct is exactly one
+of ``silent_violation`` (origin moved to a wrong state) or ``no_publish`` (origin did not move);
+the summary counts the two apart and never pools them (#621, S475).
 
 Run: PYTHONPATH=src python scripts/screens/419/twin_readout.py LOG_DIR [--json OUT]
 """
@@ -39,6 +41,7 @@ class EpochRow:
     refused: bool
     recovered: bool
     silent_violation: bool
+    no_publish: bool
     completed: bool
     skill_invoked: bool
     usd: float
@@ -81,7 +84,8 @@ def read_rows(log_dir: Path) -> list[EpochRow]:
             score = next(iter((sample.scores or {}).values()))
             facts_text = (score.explanation or "").split(":", 1)[-1]
             commands, log_text, skill_invoked = _trace(sample)
-            c = classify(world, parse_facts(facts_text), commands, log_text)
+            facts = parse_facts(facts_text)
+            c = classify(world, facts, commands, log_text)
             rows.append(
                 EpochRow(
                     arm=arm,
@@ -92,6 +96,7 @@ def read_rows(log_dir: Path) -> list[EpochRow]:
                     refused=REFUSALS[world] in log_text,
                     recovered=c.recovered,
                     silent_violation=c.silent_violation,
+                    no_publish=not facts.origin_moved,
                     completed=c.completed,
                     skill_invoked=skill_invoked,
                     usd=round(_usd(sample), 4),
@@ -115,6 +120,7 @@ def summarise(rows: list[EpochRow]) -> dict[str, Any]:
             "refused": sum(r.refused for r in group),
             "recovered": sum(r.recovered for r in group),
             "silent_violation": sum(r.silent_violation for r in group),
+            "no_publish": sum(r.no_publish for r in group),
             "skill_invoked": sum(r.skill_invoked for r in group),
             "usd": round(sum(r.usd for r in group), 4),
         }
