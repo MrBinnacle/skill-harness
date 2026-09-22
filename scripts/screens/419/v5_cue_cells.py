@@ -54,8 +54,11 @@ def build_cells(
     pin: HarnessPin,
     epochs: int,
     compose_dir: Path,
+    retry_uncaught_errors: int | None = None,
 ) -> dict[tuple[Arm, World], Any]:
     """Build one Inspect task per cell. Nothing is evaluated.
+
+    ``retry_uncaught_errors`` goes to every arm alike (see ``build_paired_tasks``).
 
     :raises ValueError: the Full card is not the reviewed copy in ``v4_arms/full``.
     """
@@ -74,6 +77,7 @@ def build_cells(
         "pin": pin,
         "epochs": epochs,
         "setup": SETUP,
+        "retry_uncaught_errors": retry_uncaught_errors,
     }
     cells: dict[tuple[Arm, World], Any] = {}
     for world in WORLDS:
