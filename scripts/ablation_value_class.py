@@ -21,8 +21,11 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -33,28 +36,43 @@ _RECEIPT_DIRS = [
     _REPO_ROOT / "docs" / "sers" / "receipts",
     _REPO_ROOT / "docs" / "sers" / "receipts" / "superseded",
 ]
+_EVIDENCE_DB = _REPO_ROOT / "evidence.db"
 
 
-def _load_receipts() -> list[tuple[Path, dict[str, Any], bool]]:
+@dataclass(frozen=True)
+class VerdictInput:
+    """One persisted input from which the screen path can derive a verdict."""
+
+    name: str
+    skill: str
+    stored_verdict: str
+    p0: float | None
+    value_class: str | None
+
+
+def _load_receipts(receipt_dirs: Sequence[Path]) -> list[VerdictInput]:
     """Load every JSON receipt from the registered receipt directories.
 
-    Returns (path, data, is_superseded) triples.
+    Paired receipts remain in the result with ``p0=None`` so the report names
+    every receipt it could inspect rather than silently dropping them.
     """
-    receipts: list[tuple[Path, dict[str, Any], bool]] = []
-    for directory in _RECEIPT_DIRS:
+    receipts: list[VerdictInput] = []
+    for directory in receipt_dirs:
         if not directory.is_dir():
             continue
         is_superseded = "superseded" in str(directory)
         for path in sorted(directory.glob("*.json")):
             data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-            receipts.append((path, data, is_superseded))
+            receipts.append(
+                VerdictInput(
+                    name=_short_name(path, is_superseded),
+                    skill=data.get("skill_name", "?"),
+                    stored_verdict=data.get("verdict", "?"),
+                    p0=_extract_p0(data),
+                    value_class=_extract_value_class(data),
+                )
+            )
     return receipts
-
-
-def _has_screen_measurement(data: dict[str, Any]) -> bool:
-    """True if this receipt carries a p0 measurement (screen path)."""
-    measurements: dict[str, Any] = data.get("measurements", {})
-    return "p0" in measurements
 
 
 def _extract_p0(data: dict[str, Any]) -> float | None:
@@ -112,9 +130,61 @@ def _short_name(path: Path, is_superseded: bool) -> str:
     return name
 
 
-def main() -> int:
-    receipts = _load_receipts()
-    if not receipts:
+def _load_evidence_store(evidence_db: Path) -> list[VerdictInput]:
+    """Read every current screen input from an on-disk evidence store.
+
+    The store persists screen trials, not derived verdicts.  Derive p0 through
+    the same read-only repository query used by the CLI, then use the shipped
+    registry lookup that supplies ``screen_verdict`` in production.
+    """
+    if not evidence_db.is_file():
+        return []
+
+    from skill_harness.aggregation.value_class_registry import value_class_for
+    from skill_harness.storage.migrations import open_evidence_readonly
+    from skill_harness.storage.repositories.evidence.screens import derive_p0_by_skill
+
+    conn = open_evidence_readonly(evidence_db)
+    try:
+        return [
+            VerdictInput(
+                name=f"evidence.db:{row.skill_name}",
+                skill=row.skill_name,
+                stored_verdict="not stored",
+                p0=row.p0,
+                value_class=(value_class_for(row.skill_name) or None),
+            )
+            for row in derive_p0_by_skill(conn)
+        ]
+    finally:
+        conn.close()
+
+
+def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--receipt-dir",
+        action="append",
+        type=Path,
+        default=None,
+        help="Receipt directory to inspect. Repeat to add directories.",
+    )
+    parser.add_argument(
+        "--evidence-db",
+        type=Path,
+        default=_EVIDENCE_DB,
+        help=f"Read-only evidence store to inspect when present (default: {_EVIDENCE_DB}).",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
+    receipt_dirs: Sequence[Path] = args.receipt_dir or _RECEIPT_DIRS
+    inputs = _load_receipts(receipt_dirs)
+    evidence_inputs = _load_evidence_store(args.evidence_db)
+    inputs.extend(evidence_inputs)
+    if not inputs:
         print("No receipts found.", file=sys.stderr)
         return 1
 
@@ -122,17 +192,13 @@ def main() -> int:
     changes = 0
     no_recompute = 0
 
-    for path, data, is_superseded in receipts:
-        name = _short_name(path, is_superseded)
-        skill = data.get("skill_name", "?")
-        stored_verdict = data.get("verdict", "?")
-
-        if not _has_screen_measurement(data):
+    for verdict_input in inputs:
+        if verdict_input.p0 is None:
             rows.append(
                 {
-                    "receipt": name,
-                    "skill": skill,
-                    "stored": stored_verdict,
+                    "receipt": verdict_input.name,
+                    "skill": verdict_input.skill,
+                    "stored": verdict_input.stored_verdict,
                     "shipped": "n/a",
                     "ablated": "n/a",
                     "changed": "no_recompute",
@@ -141,23 +207,7 @@ def main() -> int:
             no_recompute += 1
             continue
 
-        p0 = _extract_p0(data)
-        if p0 is None:
-            rows.append(
-                {
-                    "receipt": name,
-                    "skill": skill,
-                    "stored": stored_verdict,
-                    "shipped": "n/a",
-                    "ablated": "n/a",
-                    "changed": "no_recompute",
-                }
-            )
-            no_recompute += 1
-            continue
-
-        value_class = _extract_value_class(data)
-        result = _recompute_screen_verdict(p0, value_class)
+        result = _recompute_screen_verdict(verdict_input.p0, verdict_input.value_class)
         (s_verdict, s_sub), (a_verdict, a_sub) = result
         changed = s_verdict != a_verdict
         if changed:
@@ -165,9 +215,9 @@ def main() -> int:
 
         rows.append(
             {
-                "receipt": name,
-                "skill": skill,
-                "stored": stored_verdict,
+                "receipt": verdict_input.name,
+                "skill": verdict_input.skill,
+                "stored": verdict_input.stored_verdict,
                 "shipped": s_verdict + (f"({s_sub})" if s_sub else ""),
                 "ablated": a_verdict + (f"({a_sub})" if a_sub else ""),
                 "changed": "YES" if changed else "no",
@@ -185,7 +235,9 @@ def main() -> int:
         )
 
     print()
-    print(f"Total receipts:        {len(rows)}")
+    print(f"Total verdict inputs:  {len(rows)}")
+    print(f"SERS receipts:         {len(rows) - len(evidence_inputs)}")
+    print(f"Evidence-store inputs: {len(evidence_inputs)}")
     print(f"Recomputable (screen): {len(rows) - no_recompute}")
     print(f"Not recomputable:      {no_recompute}")
     print(f"Verdicts changed:      {changes}")

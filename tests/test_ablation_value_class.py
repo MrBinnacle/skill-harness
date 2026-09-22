@@ -1,10 +1,4 @@
-"""Ablation-script smoke: one synthetic receipt that must change, one that must not.
-
-Feeds the ablation logic two hand-built SERS receipt dicts and asserts the
-registered outcome for each.  The test exercises the recomputation path
-directly (no subprocess, no I/O) so it fails for the right reason when the
-value_class branch is not ablated.
-"""
+"""External behavior for the registered value_class ablation script."""
 
 from __future__ import annotations
 
@@ -14,7 +8,12 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from skill_harness.aggregation.verdict import ValueClass, screen_verdict
+from skill_harness.storage.migrations import open_evidence
+from skill_harness.storage.models import ScreenRunWrite, ScreenTrialWrite
+from skill_harness.storage.repositories.evidence.screens import (
+    insert_screen_run,
+    insert_screen_trial,
+)
 
 _SCREEN_RECEIPT_TEMPLATE: dict[str, Any] = {
     "sers_version": "1.0.0",
@@ -46,91 +45,57 @@ def _make_receipt(
     return r
 
 
-def _recompute(
-    p0: float, value_class: str | None
-) -> tuple[tuple[str, str | None], tuple[str, str | None]]:
-    """Run the ablation's recomputation logic for a single receipt."""
-    vc_map: dict[str, ValueClass] = {
-        "transformative-lift": ValueClass.TRANSFORMATIVE_LIFT,
-        "trap-discipline": ValueClass.TRAP_DISCIPLINE,
-        "calibration": ValueClass.CALIBRATION,
-    }
-    vc_enum = vc_map.get(value_class) if value_class else None
-
-    shipped = screen_verdict(p0, value_class=vc_enum)
-    ablated = screen_verdict(p0, value_class=ValueClass.TRANSFORMATIVE_LIFT)
-
-    return (
-        shipped.verdict.value,
-        shipped.cut_sub_reason.value if shipped.cut_sub_reason else None,
-    ), (
-        ablated.verdict.value,
-        ablated.cut_sub_reason.value if ablated.cut_sub_reason else None,
-    )
-
-
-def test_trap_discipline_above_bar_must_change() -> None:
-    """A trap-discipline receipt at p0=1.0 MUST change under ablation.
-
-    Shipped: CANT_TELL_YET (wrong instrument -- the transformative-lift
-    instrument cannot see a trap skill's value).
-    Ablated: CUT(subsumed) -- the ablated path treats every class as
-    transformative-lift, so above-bar p0 maps to subsumed.
-    """
-    receipt = _make_receipt("test-trap-skill", "trap-discipline", p0=1.0)
-    p0_val = receipt["measurements"]["p0"]["value"]
-    vc = receipt["value_class"]
-
-    (s_verdict, _s_sub), (a_verdict, _a_sub) = _recompute(p0_val, vc)
-
-    assert s_verdict == "CANT_TELL_YET", (
-        f"shipped verdict must be CANT_TELL_YET for trap-discipline at p0=1.0, got {s_verdict}"
-    )
-    assert a_verdict == "CUT", (
-        f"ablated verdict must be CUT for above-bar p0 under TRANSFORMATIVE_LIFT, got {a_verdict}"
-    )
-    assert s_verdict != a_verdict, (
-        "trap-discipline above-bar receipt did NOT change under ablation -- "
-        "the value_class branch has no effect, which contradicts the instrument"
-    )
+def _seed_evidence_store(path: Path) -> None:
+    """Write one admissible, above-bar screen to a temporary evidence store."""
+    conn = open_evidence(path)
+    try:
+        insert_screen_run(
+            conn,
+            ScreenRunWrite(
+                screen_run_id="screen-pull-rebase",
+                skill_name="pull-rebase",
+                subject_model="test-model",
+                harness_pin_fingerprint=None,
+                source_eval_task_id="test-task",
+                source_eval_sha256="0" * 64,
+                admissibility_state="admissible",
+                inadmissibility_reason=None,
+                d4_check_state="not_applicable",
+                created_at="2026-09-22T00:00:00Z",
+                ingested_at="2026-09-22T00:00:00Z",
+            ),
+        )
+        insert_screen_trial(
+            conn,
+            ScreenTrialWrite(
+                screen_trial_id="trial-pull-rebase",
+                screen_run_id="screen-pull-rebase",
+                epoch=0,
+                passed=1,
+                scorer_name="mechanical",
+                scorer_explanation=None,
+                output_sha256="1" * 64,
+                sampled_at="2026-09-22T00:00:00Z",
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
-def test_transformative_lift_below_bar_must_not_change() -> None:
-    """A transformative-lift receipt at p0=0.0 MUST NOT change under ablation.
-
-    Below the transformative ceiling (0.3), both shipped and ablated paths
-    yield CANT_TELL_YET (sourced candidate). The value_class branch only
-    fires above the ceiling, so ablating it cannot affect this receipt.
-    """
-    receipt = _make_receipt("test-lift-skill", "transformative-lift", p0=0.0)
-    p0_val = receipt["measurements"]["p0"]["value"]
-    vc = receipt["value_class"]
-
-    (s_verdict, _s_sub), (a_verdict, _a_sub) = _recompute(p0_val, vc)
-
-    assert s_verdict == "CANT_TELL_YET", (
-        f"shipped verdict must be CANT_TELL_YET for below-bar p0, got {s_verdict}"
-    )
-    assert a_verdict == "CANT_TELL_YET", (
-        f"ablated verdict must be CANT_TELL_YET for below-bar p0, got {a_verdict}"
-    )
-    assert s_verdict == a_verdict, (
-        "transformative-lift below-bar receipt changed under ablation -- "
-        "the below-bar path must not depend on value_class"
-    )
-
-
-def test_ablation_script_exits_zero(tmp_path: Path) -> None:
-    """The script must exit 0 on a minimal receipt directory."""
+def test_ablation_script_reports_change_and_no_change(tmp_path: Path) -> None:
+    """The script reports both required outcomes from only the supplied receipts."""
     receipt_dir = tmp_path / "docs" / "sers" / "receipts"
     receipt_dir.mkdir(parents=True)
-    receipt = _make_receipt("smoke-skill", "trap-discipline", p0=0.8)
-    (receipt_dir / "smoke.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+    trap = _make_receipt("test-trap-skill", "trap-discipline", p0=1.0)
+    lift = _make_receipt("test-lift-skill", "transformative-lift", p0=0.0)
+    (receipt_dir / "trap.json").write_text(json.dumps(trap, indent=2), encoding="utf-8")
+    (receipt_dir / "lift.json").write_text(json.dumps(lift, indent=2), encoding="utf-8")
 
     script = Path(__file__).resolve().parents[1] / "scripts" / "ablation_value_class.py"
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
     result = subprocess.run(
-        ["python", str(script)],
+        ["python", str(script), "--receipt-dir", str(receipt_dir)],
         capture_output=True,
         text=True,
         timeout=60,
@@ -141,6 +106,64 @@ def test_ablation_script_exits_zero(tmp_path: Path) -> None:
     assert result.returncode == 0, (
         f"script exited {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
-    assert "CUT(subsumed)" in result.stdout, (
-        "script output must show the ablated CUT(subsumed) verdict"
+    rows = {
+        fields[0]: fields
+        for line in result.stdout.splitlines()
+        if (fields := line.split()) and fields[0] in {"trap", "lift"}
+    }
+    assert rows["trap"] == [
+        "trap",
+        "test-trap-skill",
+        "CANT_TELL_YET",
+        "CUT(subsumed)",
+        "YES",
+    ]
+    assert rows["lift"] == [
+        "lift",
+        "test-lift-skill",
+        "CANT_TELL_YET",
+        "CANT_TELL_YET",
+        "no",
+    ]
+    assert "Total verdict inputs:  2" in result.stdout
+    assert "Verdicts unchanged:    1" in result.stdout
+
+
+def test_ablation_script_enumerates_offline_evidence_store(tmp_path: Path) -> None:
+    """The script includes every screen input derivable from an offline store."""
+    evidence_db = tmp_path / "evidence.db"
+    receipt_dir = tmp_path / "receipts"
+    receipt_dir.mkdir()
+    _seed_evidence_store(evidence_db)
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "ablation_value_class.py"
+    result = subprocess.run(
+        [
+            "python",
+            str(script),
+            "--receipt-dir",
+            str(receipt_dir),
+            "--evidence-db",
+            str(evidence_db),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
     )
+
+    assert result.returncode == 0, result.stderr
+    row = next(
+        line.split()
+        for line in result.stdout.splitlines()
+        if line.startswith("evidence.db:pull-rebase")
+    )
+    assert row == [
+        "evidence.db:pull-rebase",
+        "pull-rebase",
+        "CANT_TELL_YET",
+        "CUT(subsumed)",
+        "YES",
+    ]
+    assert "SERS receipts:         0" in result.stdout
+    assert "Evidence-store inputs: 1" in result.stdout

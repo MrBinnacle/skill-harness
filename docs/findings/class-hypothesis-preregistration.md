@@ -196,10 +196,12 @@ above. The review is the reason this document registers no test rather than a wr
 
 ### What was run
 
-`scripts/ablation_value_class.py` loads every SERS receipt on disk (4 current, 3 superseded),
-recomputes each verdict twice — once through `verdict.py` as shipped, once with the `value_class`
-branch replaced by the `TRANSFORMATIVE_LIFT` path for every class — and counts how many change.
-One static run, no network, no model call.
+`scripts/ablation_value_class.py` loads every SERS receipt on disk (4 current, 3 superseded) and
+enumerates `evidence.db` read-only when that offline store is present. It recomputes each verdict
+twice — once through `verdict.py` as shipped, once with the `value_class` branch replaced by the
+`TRANSFORMATIVE_LIFT` path for every class — and counts how many change. One static run, no
+network, no model call. No `evidence.db` was present in the repository root on 2026-09-22, so the
+seven SERS receipts were the complete reachable population for this run.
 
 ### Results
 
@@ -209,10 +211,10 @@ One static run, no network, no model call.
 | reclass-append-only-evidence-design | append-only-evidence-design | CANT_TELL_YET | CANT_TELL_YET | CUT(subsumed) | YES |
 | reclass-git-pull-rebase-trap (superseded) | git-pull-rebase-trap | CANT_TELL_YET | CANT_TELL_YET | CUT(subsumed) | YES |
 
-Three of seven receipts carry a screen measurement (p0) and are recomputable. **All three change
-under ablation.** Four receipts (the paired runs) lack a screen measurement and are not
-recomputable by this script; the paired-verdict path does not branch on `value_class`, so they
-are unaffected by the ablation in principle.
+Three of seven reachable verdict inputs carry a screen measurement (p0) and are recomputable.
+**All three change under ablation.** Four receipts (the paired runs) lack a screen measurement and
+are not recomputable by this script; the paired-verdict path does not branch on `value_class`, so
+they are unaffected by the ablation in principle.
 
 ### Interpretation per the registered rule
 
@@ -235,11 +237,7 @@ instrument (per the census) while classification coverage becomes the binding co
 
 ### Test coverage
 
-`tests/test_ablation_value_class.py` pins both outcomes with synthetic receipts:
-- `test_trap_discipline_above_bar_must_change`: a trap-discipline receipt at p0=1.0 MUST change
-  under ablation (CANT_TELL_YET -> CUT(subsumed)). Fails when the ablation is not applied.
-- `test_transformative_lift_below_bar_must_not_change`: a transformative-lift receipt at p0=0.0
-  MUST NOT change (CANT_TELL_YET both ways). Fails when the below-bar path depends on
-  value_class.
-- `test_ablation_script_exits_zero`: the script runs offline and exits 0 on a minimal receipt
-  directory.
+`tests/test_ablation_value_class.py::test_ablation_script_reports_change_and_no_change` invokes
+the script on exactly two synthetic receipts. It asserts the trap-discipline receipt at p0=1.0
+changes from CANT_TELL_YET to CUT(subsumed), and the transformative-lift receipt at p0=0.0 stays
+CANT_TELL_YET. The first assertion fails if the ablation is not applied.
