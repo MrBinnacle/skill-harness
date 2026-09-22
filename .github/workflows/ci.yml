@@ -313,6 +313,8 @@ jobs:
           path: .coverage
           if-no-files-found: ignore
 
+  # NON-required (#563): not a branch-protection context. Nothing else runs the
+  # calibration marker at merge time, so a red here is advisory.
   calibration:
     name: Calibration CS grid (${{ matrix.os }} · py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
@@ -342,6 +344,9 @@ jobs:
       - name: pytest calibration
         run: pytest -q -m calibration --tb=short
 
+  # NON-required (#563): not a branch-protection context. A real failure still
+  # blocks a merge through test_no_banned_copy_on_public_surfaces in the required
+  # Test job, which scans the real tree.
   structural-bans:
     name: Structural bans (raw sqlite3.connect / oracle_verdicts / timestamp ORDER BY)
     runs-on: ubuntu-latest
@@ -363,6 +368,10 @@ jobs:
       - name: public-surface copy bans
         run: pre-commit run ban-public-surface-copy --all-files
 
+  # NON-required (#563): not a branch-protection context, and kept that way because
+  # DC-17 calls api.github.com, which would make GitHub's availability a merge
+  # dependency. A real failure still blocks a merge through
+  # test_real_tree_is_green_and_exits_zero in the required Test job.
   drift-check:
     name: Drift check (locked contracts)
     runs-on: ubuntu-latest
@@ -386,6 +395,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/drift_check.py
 
+  # NON-required (#563): not a branch-protection context. A real failure still
+  # blocks a merge through tests/test_release_gate_real_tree.py (#569) in the
+  # required Test job.
   release-gate:
     name: Release gate (surface lockstep)
     runs-on: ubuntu-latest
@@ -495,6 +507,7 @@ jobs:
             "site/**/*.html"
           fail: true
 
+  # NON-required (#563): not a branch-protection context. A red here is advisory.
   vale:
     name: Vale (prose lint)
     runs-on: ubuntu-latest
@@ -570,6 +583,10 @@ jobs:
         run: |
           vale --config .vale.ini --minAlertLevel=error --glob='*.md' README.md docs/
 
+  # NON-required (#563): this job is not itself a branch-protection context. Branch
+  # protection on main requires exactly: Lint + format, mypy --strict, the four
+  # Test cells, and residue-check. Every other job in this file is advisory at
+  # merge time. Revisit this comment whenever branch protection is edited.
   all-green:
     name: All checks green
     needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate, vale]
@@ -586,7 +603,7 @@ jobs:
              [[ "${{ needs.drift-check.result }}" != "success" ]] || \
              [[ "${{ needs.release-gate.result }}" != "success" ]] || \
              [[ "${{ needs.vale.result }}" != "success" ]]; then
-            echo "One or more required checks failed."
+            echo "One or more CI jobs failed. Not every job here is a required check; see the comment above this job."
             exit 1
           fi
           echo "All checks passed."
