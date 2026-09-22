@@ -33,6 +33,8 @@ from skill_harness.subject.pin import HarnessPin
 if TYPE_CHECKING:  # pragma: no cover — typing only; runtime import is lazy
     from inspect_ai import Task
 
+    from skill_harness.subject.origin_sidecar import OriginSidecar
+
 _INSTALL_HINT = (
     'the agentic subject layer requires the optional extra: pip install "skill-harness[inspect]"'
 )
@@ -379,6 +381,13 @@ def write_pinned_compose(pin: HarnessPin, compose_dir: Path | None = None) -> Pa
         (possible symlink pre-plant), or the file's content did not match
         what was just written when read back (possible TOCTOU race).
     """
+    require_docker_digest_pin(pin)
+    directory = compose_directory(compose_dir)
+    return write_compose_file(directory, _PINNED_COMPOSE_YAML.format(image=pin.sandbox_image))
+
+
+def require_docker_digest_pin(pin: HarnessPin) -> None:
+    """Refuse a pin whose sandbox image cannot be enforced by a compose file."""
     if pin.sandbox != "docker":
         raise ValueError(
             f"sandbox {pin.sandbox!r} has no pinned-image mechanism; only 'docker' is supported"
@@ -389,18 +398,27 @@ def write_pinned_compose(pin: HarnessPin, compose_dir: Path | None = None) -> Pa
             "capture the pin via HarnessPin.capture()"
         )
 
-    if compose_dir is not None:
-        directory = compose_dir
-    else:
-        # S3: a private, unpredictable-named directory per call — nothing to
-        # pre-plant a symlink into ahead of time (unlike the shared system
-        # temp dir this used to write into directly).
-        directory = Path(tempfile.mkdtemp(prefix="skill-harness-compose-"))
-        # F-6: only auto-created dirs are tracked for cleanup -- an explicit
-        # compose_dir is caller-owned and must never be removed out from under it.
-        _track_auto_created_compose_dir(directory)
 
-    content = _PINNED_COMPOSE_YAML.format(image=pin.sandbox_image)
+def compose_directory(compose_dir: Path | None) -> Path:
+    """Return ``compose_dir``, or a fresh private directory tracked for cleanup."""
+    if compose_dir is not None:
+        return compose_dir
+    # S3: a private, unpredictable-named directory per call — nothing to
+    # pre-plant a symlink into ahead of time (unlike the shared system
+    # temp dir this used to write into directly).
+    directory = Path(tempfile.mkdtemp(prefix="skill-harness-compose-"))
+    # F-6: only auto-created dirs are tracked for cleanup -- an explicit
+    # compose_dir is caller-owned and must never be removed out from under it.
+    _track_auto_created_compose_dir(directory)
+    return directory
+
+
+def write_compose_file(directory: Path, content: str) -> Path:
+    """Write ``content`` to its content-hashed compose path under ``directory``.
+
+    :raises RuntimeError: the target is a symlink or other non-regular file,
+        or the content read back differs from what was written.
+    """
     name_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
     path = directory / f"skill-harness-compose-{name_hash}.yaml"
 
@@ -441,6 +459,7 @@ def build_paired_tasks(
     files: Mapping[str, str | bytes] | None = None,
     setup: str | None = None,
     retry_uncaught_errors: int | None = None,
+    origin: OriginSidecar | None = None,
 ) -> dict[Condition, Task]:
     """Return {'full': Task, 'null': Task} differing ONLY by the skill.
 
@@ -459,11 +478,18 @@ def build_paired_tasks(
         operator-authored harness-config value (a task-definition parameter
         the eval author writes, like ``prompt`` and ``skill_dir``), never
         content extracted from a skill, an agent transcript, or any other
-        untrusted/ingested source. ``network_mode: none`` on the sandbox
-        (module docstring) bounds the blast radius if that assumption is
-        ever violated, but it is not a substitute for it: a future caller
-        that derives ``oracle_arg`` from task or skill material would need
-        argv-based execution and path validation first.
+        untrusted/ingested source. The sandbox's network bounds the blast
+        radius if that assumption is ever violated, but it is not a
+        substitute for it: a future caller that derives ``oracle_arg`` from
+        task or skill material would need argv-based execution and path
+        validation first. The bound depends on ``origin``. Without one,
+        ``default`` runs with ``network_mode: none`` and reaches nothing.
+        With one, ``default`` sits on an ``internal: true`` network whose
+        only other member is the origin sidecar, so it has no route to the
+        internet or the host. It can read and push every repository the
+        seed serves; only the seed's own hooks refuse a push, and whatever
+        a push does ends with the epoch's compose project, because the
+        sidecar serves a per-container copy of the read-only seed.
     :param pin: harness pin; ``pin.cwd`` is passed to the agent so oracle
         paths and agent paths agree, ``pin.sandbox_image`` is injected into
         both arms via a generated compose file, and ``pin.env`` /
@@ -494,6 +520,10 @@ def build_paired_tasks(
         (inspect_swe's documented "scaffold bug" class). A resilience knob,
         not an agent-capability change, so it is NOT part of the pin
         fingerprint; the same value goes to both arms.
+    :param origin: a git origin sidecar (#620) both arms push to. When set,
+        both arms run the two-service compose from ``write_origin_compose``
+        instead of the single-service pinned compose; when None, the compose
+        path and bytes are exactly what they were before the sidecar existed.
     :raises SubjectLayerNotInstalledError: optional extra not installed.
     :raises FileNotFoundError: ``skill_dir`` has no SKILL.md.
     :raises ValueError: pin not digest-pinned, sandbox type unsupported,
@@ -547,7 +577,13 @@ def build_paired_tasks(
     effective_skill_dir = normalised.temp_dir
     dropped_keys = normalised.dropped_keys
 
-    compose_path = write_pinned_compose(pin, compose_dir)
+    if origin is None:
+        compose_path = write_pinned_compose(pin, compose_dir)
+    else:
+        # Deferred: origin_sidecar imports this module's compose helpers.
+        from skill_harness.subject.origin_sidecar import write_origin_compose
+
+        compose_path = write_origin_compose(pin, origin, compose_dir)
     scorer = _build_scorer(oracle, oracle_arg, oracle_target, pin.cwd)
 
     def make_task(condition: Condition) -> Task:

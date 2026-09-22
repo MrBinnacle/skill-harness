@@ -27,6 +27,13 @@ Public surface:
   compute_subject_digest() — compute SHA-256 digest of a SKILL.md file.
   render_subject_receipt() — create a receipt for a subject measurement.
   load_registry() — load the local subject registry.
+
+  Git origin sidecar (issue #620):
+  OriginSidecar        — a seed directory (bare repo + hooks) named by its digest;
+                         passed to build_paired_tasks(origin=...), it is served
+                         from a second container the agent can push to but not read.
+  prove_seed_only_twins() — check two sidecar composes differ only in the seed.
+  SeedTwinProof / TwinComposeError — that check's result and its refusal.
 """
 
 from skill_harness.subject.inspect_adapter import (
@@ -44,17 +51,27 @@ from skill_harness.subject.local import (
     render_subject_receipt,
     resolve_subject,
 )
+from skill_harness.subject.origin_sidecar import (
+    OriginSidecar,
+    SeedTwinProof,
+    TwinComposeError,
+    prove_seed_only_twins,
+)
 from skill_harness.subject.pin import HarnessPin
 
 __all__ = [
     "HarnessPin",
     "NormalisedSkillResult",
+    "OriginSidecar",
+    "SeedTwinProof",
     "SkillCorpusCoverage",
+    "TwinComposeError",
     "build_paired_tasks",
     "compute_subject_digest",
     "list_local_subjects",
     "load_registry",
     "normalise_skill_frontmatter",
+    "prove_seed_only_twins",
     "register_local_subject",
     "render_subject_receipt",
     "resolve_subject",
