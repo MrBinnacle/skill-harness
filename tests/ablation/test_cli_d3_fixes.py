@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -40,7 +41,17 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Any:
     merged_env = {"COLUMNS": "200"}
     if env is not None:
         merged_env.update(env)
-    return runner.invoke(cli, list(args), env=merged_env)
+    has_evidence_db = "--evidence-db" in args
+    has_runtime_db = "--runtime-db" in args
+    if has_evidence_db and has_runtime_db:
+        return runner.invoke(cli, list(args), env=merged_env)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
+        db_args = []
+        if not has_evidence_db:
+            db_args.extend(["--evidence-db", str(Path(tmpdir) / "evidence.db")])
+        if not has_runtime_db:
+            db_args.extend(["--runtime-db", str(Path(tmpdir) / "runtime.db")])
+        return runner.invoke(cli, [*list(args[:2]), *db_args, *list(args[2:])], env=merged_env)
 
 
 # ---------------------------------------------------------------------------

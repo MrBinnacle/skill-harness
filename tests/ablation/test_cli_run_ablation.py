@@ -16,9 +16,11 @@ calls are made. DB connections patched at constructor level for no-DB-conn asser
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner, Result
 
 from skill_harness.cli.main import cli
@@ -37,6 +39,9 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Result:
 
     Sets a dummy ANTHROPIC_API_KEY so --execute tests pass the m3 pre-flight
     without needing a real key (they all patch _execute_ablation_run anyway).
+
+    Passes --evidence-db and --runtime-db into a per-invocation temp directory
+    so parallel xdist workers never share one SQLite file (#600).
     """
     runner = CliRunner()
     # Merge COLUMNS + dummy key into provided env so rich does not truncate table columns
@@ -44,7 +49,19 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Result:
     merged_env = {"COLUMNS": "200", "ANTHROPIC_API_KEY": "sk-test-dummy"}
     if env is not None:
         merged_env.update(env)
-    return runner.invoke(cli, list(args), env=merged_env)
+    has_evidence_db = "--evidence-db" in args
+    has_runtime_db = "--runtime-db" in args
+    if has_evidence_db and has_runtime_db:
+        return runner.invoke(cli, list(args), env=merged_env)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
+        db_args = []
+        if not has_evidence_db:
+            db_args.extend(["--evidence-db", str(Path(tmpdir) / "evidence.db")])
+        if not has_runtime_db:
+            db_args.extend(["--runtime-db", str(Path(tmpdir) / "runtime.db")])
+        # Place --evidence-db/--runtime-db after the subcommand (args[:2])
+        # so Click binds them to the subcommand, not the top-level group.
+        return runner.invoke(cli, [*list(args[:2]), *db_args, *list(args[2:])], env=merged_env)
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +105,41 @@ class TestDryRunDefault:
         assert result.exit_code == 0, (
             f"Dry-run must exit 0 without API key. Exit={result.exit_code}\n{result.output}"
         )
+
+    def test_execute_does_not_create_default_database_files(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The helper must keep execute-mode SQLite files out of the test working directory."""
+        monkeypatch.chdir(tmp_path)
+
+        _invoke(
+            "run",
+            "ablation",
+            "skill-test",
+            *ratified_exec_args("skill-test"),
+            env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
+        )
+
+        assert not (tmp_path / "runtime.db").exists()
+        assert not (tmp_path / "evidence.db").exists()
+
+    def test_execute_with_one_database_path_is_still_isolated(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Supplying one database path must not restore the other command default."""
+        monkeypatch.chdir(tmp_path)
+
+        _invoke(
+            "run",
+            "ablation",
+            "skill-test",
+            *ratified_exec_args("skill-test"),
+            "--evidence-db",
+            str(tmp_path / "provided-evidence.db"),
+            env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
+        )
+
+        assert not (tmp_path / "runtime.db").exists()
 
     def test_dry_run_prints_no_calls_made_terminal_line(self) -> None:
         """Dry-run terminal line must be exactly: 'NO CALLS MADE — re-run with --execute'."""

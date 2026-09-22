@@ -191,7 +191,19 @@ def test_skill_init_comparator_unspecified_exits_cleanly(
     mock_ctx.evidence_conn = object()
 
     runner = CliRunner()
-    result = runner.invoke(cli, ["skill", "init", "--execute", str(_skill_file(tmp_path))])
+    result = runner.invoke(
+        cli,
+        [
+            "skill",
+            "init",
+            "--execute",
+            str(_skill_file(tmp_path)),
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+            "--runtime-db",
+            str(tmp_path / "runtime.db"),
+        ],
+    )
 
     assert result.exit_code != 0
     assert not isinstance(result.exception, ValueError), (
