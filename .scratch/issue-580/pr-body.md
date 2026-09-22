@@ -26,6 +26,10 @@ therefore pins the repository-controlled contributor interface instead:
   asserts that the Development setup section keeps the standard `python -m venv
   .venv` command, rejects `--system-site-packages`, and names the observed
   numpy error.
+- `tests/test_environment_isolation_580.py::test_sers_conformance_passes_without_user_site_three_times`
+  starts three Python subprocesses with `PYTHONNOUSERSITE=1` and runs the
+  specified SERS conformance suite in each. This supplies the acceptance
+  outcome without inheriting packages installed in the user site.
 - `CONTRIBUTING.md` states that an unisolated interpreter can expose packages
   installed with `pip install --user`, explains the `thinc` mechanism, and
   directs the contributor to recreate an isolated venv.
