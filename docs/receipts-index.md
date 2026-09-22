@@ -175,6 +175,23 @@ and covers that section only. This page stays the citable surface for every kind
   15 epochs on one subject and agent version; and any authorisation for
   Stage 2.
 
+### [`docs/findings/twin-v5-cue-identifiability-gate.md`](findings/twin-v5-cue-identifiability-gate.md)
+
+- **Claims:** The `#621` cue-conditioned twin pair passed its free
+  identifiability gate on 2026-09-22, 11 of 11, at $0 with no model call.
+  World A+cue is v4's world A plus one untracked file,
+  `release-manifest.json`, that lists the three local commits' SHAs and names
+  origin as where they were recorded. World B is v4's world B. The leak audit
+  found world B identical to the v4 project and seeds, and found the trace to
+  be the only path differing between the two projects. Scripted merge and
+  rebase runs invert correctness across the worlds, and no hook or
+  attestation file is visible from the agent's container. Six cells (Null,
+  Full, placebo by two worlds) are built and not run. First-action
+  world-correctness is recorded as the PROPOSED primary endpoint.
+- **Refuses to claim:** Any verdict on the `pull-rebase` card; whether an
+  unaided agent notices the trace, which is the headroom question; that one
+  cue strength suffices; and that the primary endpoint is locked.
+
 ### [`docs/findings/gitpull-cost-basis-unregisterable.md`](findings/gitpull-cost-basis-unregisterable.md)
 
 - **Claims:** The rebuilt `gitpull` cost basis `#420` asks for cannot be
