@@ -173,3 +173,38 @@ def test_linkcheck_covers_the_generated_site() -> None:
 def test_linkcheck_stays_outside_the_required_check_set() -> None:
     """#288 widened the job's coverage; it must not widen what blocks a merge."""
     assert "linkcheck" not in _all_green_needs()
+
+
+# The ci.yml jobs whose names are branch-protection contexts on main, measured
+# with `gh api repos/MrBinnacle/skill-harness/branches/main/protection` for #563.
+# `_REQUIRED_JOB_IDS` above is what `all-green` depends on, which is a different
+# and larger set. Revisit this tuple whenever branch protection is edited.
+_BRANCH_PROTECTED_JOB_IDS = ("lint", "typecheck", "test")
+
+
+def _comment_above(job_id: str) -> str:
+    lines = _CI.read_text(encoding="utf-8").splitlines()
+    index = lines.index(f"  {job_id}:")
+    block: list[str] = []
+    for line in reversed(lines[:index]):
+        if not line.lstrip().startswith("#"):
+            break
+        block.append(line)
+    return "\n".join(reversed(block))
+
+
+def test_every_job_outside_branch_protection_says_so() -> None:
+    """A reader must not infer "required" from a missing marker (#563)."""
+    unmarked = [
+        job_id
+        for job_id in _job_ids(_CI)
+        if job_id not in _BRANCH_PROTECTED_JOB_IDS and "NON-required" not in _comment_above(job_id)
+    ]
+    assert unmarked == [], (
+        f"ci.yml jobs outside branch protection with no NON-required marker: {unmarked}"
+    )
+
+
+def test_all_green_does_not_call_its_checks_required() -> None:
+    """all-green is not a protection context, so its failure text must not claim one (#563)."""
+    assert "required checks failed" not in _CI.read_text(encoding="utf-8")
