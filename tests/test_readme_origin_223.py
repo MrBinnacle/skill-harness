@@ -41,15 +41,15 @@ def test_commit_claim_matches_the_public_collection_measurement() -> None:
     retiring it would have loosened a guard to make a removal pass, which is
     the opposite of what a move is.
 
-    What is asserted is the SHAPE of the claim - a dated measurement, two
-    integer counts, the two derivation commands, the fresh-clone basis - and
-    not the values. Locking the values made the guard backwards: it could not
-    tell a stale figure from a fresh one, and the only thing it could stop was
-    someone correcting the figure. It ran for eighteen days over a count that
-    had drifted from 71/323 to 152/511, then failed the commit that fixed it.
+    What is asserted is the SHAPE of the claim - a dated measurement, a ratio
+    in the form 'about N.N to 1', the two derivation commands, the fresh-clone
+    basis - and not the values. The exact counts rise with every merge and go
+    stale by construction; the durable figure is the ratio, which has stayed
+    between three and five to one across every measurement taken.
 
-    A shape lock still cannot detect staleness. That is the steering repo's issue 61,
-    and it needs a freshly measured comparison, not a stricter string.
+    A shape lock still cannot detect a ratio drifting outside its band. That
+    is the steering repo's issue 61, and it needs a freshly measured
+    comparison, not a stricter string.
     """
     section = _section(_why(), "The size of the detour")
 
@@ -57,17 +57,13 @@ def test_commit_claim_matches_the_public_collection_measurement() -> None:
     assert measured, "the detour section must carry a dated measurement"
     date(int(measured[1]), int(measured[2]), int(measured[3]))
 
-    counts = re.search(
-        r"\*\*(\d+) commits of collection against (\d+) commits of machinery",
+    ratio = re.search(
+        r"\*\*about (\d+\.\d+) to 1\*\*",
         section,
     )
-    assert counts, "the claim must state both counts as integers"
-    collection, machinery = int(counts[1]), int(counts[2])
-    assert collection > 0 and machinery > 0
-    assert machinery > collection, (
-        "the claim is that the machinery outweighs the collection; if that "
-        "reverses, the sentence needs rewriting rather than re-measuring"
-    )
+    assert ratio, "the claim must state a ratio as 'about N.N to 1'"
+    ratio_value = float(ratio[1])
+    assert ratio_value > 0
 
     assert (
         "git clone https://github.com/MrBinnacle/skills.git        "

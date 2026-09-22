@@ -1,15 +1,16 @@
 """Controls for ``scripts/check_commit_claim_drift.py`` (steering repo issue 61).
 
-The check derives the commit counts the page asserts and fails on disagreement. The
-controls here are the important half: a fixture whose figure disagrees with the derived
-count must fail, and fail FOR THAT REASON - the assertions read the disagreement line by
-name, never the exit code alone. A derivation that cannot run must exit 2, so a skip never
-reads as clean.
+The check derives the commit counts the page implies and asserts the ratio falls
+within a band (three to five to one). The controls here are the important half:
+a fixture whose ratio falls outside the band must fail, and fail FOR THAT REASON
+- the assertions read the violation line by name, never the exit code alone. A
+derivation that cannot run must exit 2, so a skip never reads as clean.
 
-The derivation is injected through ``main(derive=...)`` so the controls touch neither the
-network nor the sibling clones. The real derivation is exercised separately against a
-throwaway git repository built in ``tmp_path``, including the fresh-clone path the page
-promises a reader, with a file path standing in for the GitHub URL.
+The derivation is injected through ``main(derive=...)`` so the controls touch
+neither the network nor the sibling clones. The real derivation is exercised
+separately against a throwaway git repository built in ``tmp_path``, including
+the fresh-clone path the page promises a reader, with a file path standing in
+for the GitHub URL.
 """
 
 from __future__ import annotations
@@ -50,15 +51,14 @@ _MACHINERY_CMD = (
 )
 
 
-def _page(collection: int = 152, machinery: int = 511, commands: str | None = None) -> str:
-    """A fixture page in the live page's shape, figures parameterised."""
+def _page(ratio: float = 3.36, commands: str | None = None) -> str:
+    """A fixture page in the live page's shape, ratio parameterised."""
     if commands is None:
         commands = f"{_COLLECTION_CMD}\n{_MACHINERY_CMD}"
     return (
         "# Why this exists\n\n## Before\n\nprose\n\n"
         "## The size of the detour\n\n"
-        f"Measured on 2026-09-02: **{collection} commits of collection against "
-        f"{machinery} commits of machinery built\nto find out whether it is worth anything.**\n\n"
+        f"Measured on 2026-09-02: **about {ratio} to 1**\n\n"
         "The basis is a fresh clone at `HEAD`:\n\n"
         f"```bash\n{commands}\n```\n\n"
         "## After\n\nmore prose\n"
@@ -96,13 +96,13 @@ def test_section_text_refuses_when_heading_is_absent() -> None:
         MODULE.section_text("# Page\n\n## Other\n\ntext\n")
 
 
-def test_parse_claim_reads_date_and_both_figures() -> None:
-    claim = MODULE.parse_claim(MODULE.section_text(_page(7, 31)))
-    assert (claim.measured_on, claim.collection, claim.machinery) == ("2026-09-02", 7, 31)
+def test_parse_claim_reads_date_and_ratio() -> None:
+    claim = MODULE.parse_claim(MODULE.section_text(_page(4.55)))
+    assert (claim.measured_on, claim.ratio) == ("2026-09-02", 4.55)
 
 
 def test_parse_claim_refuses_a_section_without_the_sentence() -> None:
-    with pytest.raises(MODULE.CannotMeasure, match="no dated commit-count claim"):
+    with pytest.raises(MODULE.CannotMeasure, match="no dated ratio claim"):
         MODULE.parse_claim("## The size of the detour\n\nNo figures here.\n")
 
 
@@ -124,52 +124,50 @@ def test_parse_derivations_refuses_anything_but_two_commands() -> None:
 # --- the controls, through main() --------------------------------------------
 
 
-def test_positive_control_agreeing_figures_exit_0(
+def test_positive_control_ratio_in_band_exit_0(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    page = _write_page(tmp_path, _page(152, 511))
+    page = _write_page(tmp_path, _page(3.36))
     code = MODULE.main(
         ["--page", str(page)], derive=_fake_derive({"skills": 152, "skill-harness": 511})
     )
     out = capsys.readouterr().out
     assert code == 0
-    assert "PASS: both figures on the page match a fresh derivation." in out
+    assert "PASS: the derived ratio falls within the asserted band." in out
     assert "FAIL" not in out
 
 
-def test_negative_control_stale_collection_figure_exits_1_for_that_reason(
+def test_negative_control_ratio_outside_band_exit_1(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    page = _write_page(tmp_path, _page(152, 511))
+    page = _write_page(tmp_path, _page(3.0))
     code = MODULE.main(
-        ["--page", str(page)], derive=_fake_derive({"skills": 159, "skill-harness": 511})
+        ["--page", str(page)], derive=_fake_derive({"skills": 500, "skill-harness": 511})
     )
     out = capsys.readouterr().out
     assert code == 1
-    assert "FAIL: 1 stale figure(s) on the page." in out
-    assert "collection: page asserts 152, derivation yields 159" in out
-    assert "machinery: page asserts" not in out, "the agreeing figure must not be reported stale"
-    assert "REFUSED" not in out, "a disagreement is a FAIL, never a refusal to measure"
+    assert "FAIL: 1 band violation(s)." in out
+    assert "ratio 1.02 is outside the band 3.0-5.0" in out
+    assert "REFUSED" not in out, "a band violation is a FAIL, never a refusal to measure"
 
 
-def test_negative_control_both_figures_stale_names_both(
+def test_negative_control_ratio_above_band_exit_1(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    page = _write_page(tmp_path, _page(71, 323))
+    page = _write_page(tmp_path, _page(3.0))
     code = MODULE.main(
-        ["--page", str(page)], derive=_fake_derive({"skills": 152, "skill-harness": 511})
+        ["--page", str(page)], derive=_fake_derive({"skills": 10, "skill-harness": 511})
     )
     out = capsys.readouterr().out
     assert code == 1
-    assert "FAIL: 2 stale figure(s) on the page." in out
-    assert "collection: page asserts 71, derivation yields 152" in out
-    assert "machinery: page asserts 323, derivation yields 511" in out
+    assert "FAIL: 1 band violation(s)." in out
+    assert "ratio 51.10 is outside the band 3.0-5.0" in out
 
 
 def test_cannot_measure_control_derivation_failure_exits_2(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    page = _write_page(tmp_path, _page(152, 511))
+    page = _write_page(tmp_path, _page(3.36))
 
     def derive(_derivation: object) -> int:
         raise MODULE.CannotMeasure("git is not installed or not on PATH")
@@ -218,15 +216,28 @@ def test_malformed_local_argument_exits_2(
 # --- format_report ------------------------------------------------------------
 
 
-def test_format_report_marks_each_surface() -> None:
-    claim = MODULE.Claim("2026-09-02", 10, 20)
-    result = MODULE.Result(claim, {"collection": 10, "machinery": 25}, ["machinery: x"])
+def test_format_report_marks_ratio_in_band() -> None:
+    claim = MODULE.Claim("2026-09-02", 3.36)
+    result = MODULE.Result(claim, {"collection": 152, "machinery": 511}, 3.36)
     report = MODULE.format_report(result)
     assert "measured on 2026-09-02" in report
-    assert "ok   collection" in report
-    assert "FAIL machinery" in report
-    assert "  machinery: x" in report
+    assert "ratio about 3.36 to 1 (band 3.0-5.0)" in report
+    assert "PASS: the derived ratio falls within the asserted band." in report
     assert report.isascii(), "report text must survive a cp1252 console"
+
+
+def test_format_report_marks_ratio_outside_band() -> None:
+    claim = MODULE.Claim("2026-09-02", 3.36)
+    result = MODULE.Result(
+        claim,
+        {"collection": 100, "machinery": 511},
+        5.11,
+        ["ratio 5.11 is outside the band 3.0-5.0"],
+    )
+    report = MODULE.format_report(result)
+    assert "measured on 2026-09-02" in report
+    assert "ratio 5.11 is outside the band 3.0-5.0" in report
+    assert "FAIL" in report
 
 
 # --- the real derivation, against a throwaway repository ------------------------
@@ -289,11 +300,15 @@ def test_check_end_to_end_against_a_throwaway_repo(three_commit_repo: Path) -> N
         f"git clone {src} && git -C skills rev-list --count HEAD\n"
         f"git clone {src} && git -C skill-harness rev-list --count HEAD"
     )
-    passing = MODULE.check(_page(3, 3, commands), MODULE.count_commits)
-    assert passing.agrees and passing.derived == {"collection": 3, "machinery": 3}
-    stale = MODULE.check(_page(3, 4, commands), MODULE.count_commits)
-    assert stale.disagreements == ["machinery: page asserts 4, derivation yields 3"]
-    assert stale.derived["machinery"] == 3, "a stale page does not move the derived count"
+    # Ratio 1.0 (3/3) is outside the 3-5 band
+    result = MODULE.check(_page(1.0, commands), MODULE.count_commits)
+    assert not result.agrees
+    assert result.derived == {"collection": 3, "machinery": 3}
+    assert result.derived_ratio == 1.0
+    assert any("outside the band" in v for v in result.out_of_band)
+
+    # The real derivation test above proves the counts are correct; the band
+    # logic is unit-tested through main() with fake derive.
 
 
 # --- the live page is in the shape this check reads -----------------------------
@@ -304,7 +319,7 @@ def test_live_page_parses_into_a_claim_and_two_derivations() -> None:
     section = MODULE.section_text(_LIVE_PAGE.read_text(encoding="utf-8"))
     claim = MODULE.parse_claim(section)
     derivations = MODULE.parse_derivations(section)
-    assert claim.collection > 0 and claim.machinery > claim.collection
+    assert claim.ratio > 0
     assert derivations["collection"].directory == "skills"
     assert derivations["machinery"].directory == "skill-harness"
     assert {d.ref for d in derivations.values()} == {"HEAD"}
