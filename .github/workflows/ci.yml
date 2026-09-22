@@ -61,7 +61,7 @@ jobs:
       - name: mypy
         # Full strict scope (src + tests) restored 2026-07-10 — repo issue #2
         # burn-down; the tests/ override relaxation of 2026-07-09 is removed.
-        run: mypy --strict src/ tests/
+        run: mypy --strict src/ tests/ scripts/drift_check.py scripts/release_gate.py
 
   test:
     name: Test (${{ matrix.os }} · py${{ matrix.python-version }})
