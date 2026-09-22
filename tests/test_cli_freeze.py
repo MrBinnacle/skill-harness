@@ -55,16 +55,16 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Any:
     merged_env: dict[str, str] = {"COLUMNS": "200"}
     if env is not None:
         merged_env.update(env)
-    has_db_flags = "--evidence-db" in args or "--runtime-db" in args
-    if has_db_flags:
+    has_evidence_db = "--evidence-db" in args
+    has_runtime_db = "--runtime-db" in args
+    if has_evidence_db and has_runtime_db:
         return runner.invoke(cli, list(args), env=merged_env)
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
-        db_args = [
-            "--evidence-db",
-            str(Path(tmpdir) / "evidence.db"),
-            "--runtime-db",
-            str(Path(tmpdir) / "runtime.db"),
-        ]
+        db_args = []
+        if not has_evidence_db:
+            db_args.extend(["--evidence-db", str(Path(tmpdir) / "evidence.db")])
+        if not has_runtime_db:
+            db_args.extend(["--runtime-db", str(Path(tmpdir) / "runtime.db")])
         return runner.invoke(cli, [*list(args[:2]), *db_args, *list(args[2:])], env=merged_env)
 
 

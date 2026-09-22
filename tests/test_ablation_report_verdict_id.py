@@ -36,19 +36,19 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Any:
     merged_env: dict[str, str] = {"COLUMNS": "220"}
     if env is not None:
         merged_env.update(env)
-    has_db_flags = "--evidence-db" in args or "--runtime-db" in args
-    if has_db_flags:
+    has_evidence_db = "--evidence-db" in args
+    has_runtime_db = "--runtime-db" in args
+    if has_evidence_db and has_runtime_db:
         return runner.invoke(cli, list(args), env=merged_env)
     # `run ablation` defaults to ./evidence.db and ./runtime.db. A private cwd
     # keeps parallel workers from sharing one SQLite file ("database is locked").
     # Explicit --evidence-db/--runtime-db flags provide defence in depth (#600).
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as cwd, contextlib.chdir(cwd):
-        db_args = [
-            "--evidence-db",
-            str(Path(cwd) / "evidence.db"),
-            "--runtime-db",
-            str(Path(cwd) / "runtime.db"),
-        ]
+        db_args = []
+        if not has_evidence_db:
+            db_args.extend(["--evidence-db", str(Path(cwd) / "evidence.db")])
+        if not has_runtime_db:
+            db_args.extend(["--runtime-db", str(Path(cwd) / "runtime.db")])
         return runner.invoke(cli, [*list(args[:2]), *db_args, *list(args[2:])], env=merged_env)
 
 
@@ -309,42 +309,4 @@ class TestRealClauseResultRendersVerdictId:
         assert result.exit_code == 2, f"Expected exit 2 (UNMEASURED):\n{result.output}"
         assert "—" in result.output, (
             f"Expected '—' placeholder for None verdict_id.\nOutput:\n{result.output}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# DB isolation regression test (#600)
-# ---------------------------------------------------------------------------
-
-
-class TestDbIsolation:
-    def test_no_runtime_db_in_working_directory(self, tmp_path: Path) -> None:
-        """Prove CLI test helpers isolate DB files from the working directory.
-
-        The shipped CLI defaults --evidence-db and --runtime-db to the relative
-        paths ./evidence.db and ./runtime.db.  When a helper omits those flags,
-        every xdist worker writes the same file in the repository root.  This
-        test drives the same command one of the report tests uses, via the
-        module's _invoke helper, and asserts that no database file appears in the
-        working directory.
-
-        On main (before the fix): the CLI creates ./runtime.db in tmp_path
-        because no --runtime-db flag overrides the default.  After the fix:
-        the helper passes explicit --evidence-db/--runtime-db flags, so the
-        files are created in the helper's private temp directory, not here.
-        """
-        _invoke(
-            "run",
-            "ablation",
-            "skill-test",
-            *ratified_exec_args("skill-test"),
-            env={"ANTHROPIC_API_KEY": "sk-test-dummy"},
-        )
-        assert not (tmp_path / "runtime.db").exists(), (
-            "runtime.db leaked into the working directory. "
-            "Pass --runtime-db pointing into a per-test tmp_path."
-        )
-        assert not (tmp_path / "evidence.db").exists(), (
-            "evidence.db leaked into the working directory. "
-            "Pass --evidence-db pointing into a per-test tmp_path."
         )

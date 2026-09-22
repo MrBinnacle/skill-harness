@@ -37,16 +37,16 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> object:
     merged_env: dict[str, str] = {"COLUMNS": "200"}
     if env is not None:
         merged_env.update(env)
-    has_db_flags = "--evidence-db" in args or "--runtime-db" in args
-    if has_db_flags:
+    has_evidence_db = "--evidence-db" in args
+    has_runtime_db = "--runtime-db" in args
+    if has_evidence_db and has_runtime_db:
         return runner.invoke(cli, list(args), env=merged_env, catch_exceptions=False)
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
-        db_args = [
-            "--evidence-db",
-            str(Path(tmpdir) / "evidence.db"),
-            "--runtime-db",
-            str(Path(tmpdir) / "runtime.db"),
-        ]
+        db_args = []
+        if not has_evidence_db:
+            db_args.extend(["--evidence-db", str(Path(tmpdir) / "evidence.db")])
+        if not has_runtime_db:
+            db_args.extend(["--runtime-db", str(Path(tmpdir) / "runtime.db")])
         return runner.invoke(
             cli,
             [*list(args[:2]), *db_args, *list(args[2:])],
@@ -295,19 +295,7 @@ def test_resolver_o_series_bare_with_only_openrouter_rewrites(
 def test_run_ablation_accepts_subject_model_flag() -> None:
     """run ablation --help must list --subject-model as a known option."""
     runner = CliRunner()
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
-        result = runner.invoke(
-            cli,
-            [
-                "run",
-                "ablation",
-                "--evidence-db",
-                str(Path(tmpdir) / "evidence.db"),
-                "--runtime-db",
-                str(Path(tmpdir) / "runtime.db"),
-                "--help",
-            ],
-        )
+    result = runner.invoke(cli, ["run", "ablation", "--help"])
     assert result.exit_code == 0, f"--help failed:\n{result.output}"
     assert "--subject-model" in result.output, (
         f"--subject-model not found in help:\n{result.output}"
@@ -322,19 +310,7 @@ def test_run_ablation_accepts_subject_model_flag() -> None:
 def test_run_ablation_default_subject_model_is_claude_sonnet() -> None:
     """--help output must show default 'claude-sonnet-4-6' for --subject-model."""
     runner = CliRunner()
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
-        result = runner.invoke(
-            cli,
-            [
-                "run",
-                "ablation",
-                "--evidence-db",
-                str(Path(tmpdir) / "evidence.db"),
-                "--runtime-db",
-                str(Path(tmpdir) / "runtime.db"),
-                "--help",
-            ],
-        )
+    result = runner.invoke(cli, ["run", "ablation", "--help"])
     assert result.exit_code == 0
     assert "claude-sonnet-4-6" in result.output, (
         f"Default 'claude-sonnet-4-6' not shown in help:\n{result.output}"

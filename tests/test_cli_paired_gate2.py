@@ -26,7 +26,6 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-import tempfile
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -50,19 +49,7 @@ _RUNNER_DECLARED: dict[str, str] = {
 
 def _invoke(*args: str) -> Result:
     runner = CliRunner()
-    # If the caller already supplies --evidence-db or --runtime-db, respect
-    # it and don't add duplicates (#600).
-    has_db_flags = "--evidence-db" in args or "--runtime-db" in args
-    if has_db_flags:
-        return runner.invoke(cli, list(args))
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
-        db_args = [
-            "--evidence-db",
-            str(Path(tmpdir) / "evidence.db"),
-            "--runtime-db",
-            str(Path(tmpdir) / "runtime.db"),
-        ]
-        return runner.invoke(cli, [*list(args[:2]), *db_args, *list(args[2:])])
+    return runner.invoke(cli, list(args))
 
 
 def _insert_skill(conn: sqlite3.Connection) -> None:

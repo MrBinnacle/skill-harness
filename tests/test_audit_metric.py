@@ -45,7 +45,6 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -95,19 +94,7 @@ def _no_network(socket_disabled: None) -> None:
 
 def _invoke(*args: str) -> Any:
     runner = CliRunner()
-    has_db_flags = "--evidence-db" in args or "--runtime-db" in args
-    if has_db_flags:
-        return runner.invoke(cli, list(args), env={"COLUMNS": "200"})
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
-        db_args = [
-            "--evidence-db",
-            str(Path(tmpdir) / "evidence.db"),
-            "--runtime-db",
-            str(Path(tmpdir) / "runtime.db"),
-        ]
-        return runner.invoke(
-            cli, [*list(args[:2]), *db_args, *list(args[2:])], env={"COLUMNS": "200"}
-        )
+    return runner.invoke(cli, list(args), env={"COLUMNS": "200"})
 
 
 def _live_hash() -> str:

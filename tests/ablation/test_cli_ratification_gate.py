@@ -45,16 +45,16 @@ def _write_record(tmp_path: Path, status: str = "RATIFIED") -> Path:
 def _invoke(*args: str) -> Result:
     runner = CliRunner()
     env = {"COLUMNS": "200", "ANTHROPIC_API_KEY": "sk-test-dummy"}
-    has_db_flags = "--evidence-db" in args or "--runtime-db" in args
-    if has_db_flags:
+    has_evidence_db = "--evidence-db" in args
+    has_runtime_db = "--runtime-db" in args
+    if has_evidence_db and has_runtime_db:
         return runner.invoke(cli, list(args), env=env, catch_exceptions=False)
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
-        db_args = [
-            "--evidence-db",
-            str(Path(tmpdir) / "evidence.db"),
-            "--runtime-db",
-            str(Path(tmpdir) / "runtime.db"),
-        ]
+        db_args = []
+        if not has_evidence_db:
+            db_args.extend(["--evidence-db", str(Path(tmpdir) / "evidence.db")])
+        if not has_runtime_db:
+            db_args.extend(["--runtime-db", str(Path(tmpdir) / "runtime.db")])
         return runner.invoke(
             cli, [*list(args[:2]), *db_args, *list(args[2:])], env=env, catch_exceptions=False
         )
