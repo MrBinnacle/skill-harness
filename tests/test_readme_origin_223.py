@@ -63,7 +63,11 @@ def test_commit_claim_matches_the_public_collection_measurement() -> None:
     )
     assert ratio, "the claim must state a ratio as 'about N.N to 1'"
     ratio_value = float(ratio[1])
-    assert ratio_value > 0
+    assert 3.0 <= ratio_value <= 5.0, (
+        "the dated ratio must support the durable three-to-five claim; a different "
+        "measurement needs a rewritten claim, not a looser shape lock"
+    )
+    assert "stayed between three and five to one across every measurement taken" in section
 
     assert (
         "git clone https://github.com/MrBinnacle/skills.git        "
