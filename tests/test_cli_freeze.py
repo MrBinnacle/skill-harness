@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import tempfile
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -54,7 +55,17 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Any:
     merged_env: dict[str, str] = {"COLUMNS": "200"}
     if env is not None:
         merged_env.update(env)
-    return runner.invoke(cli, list(args), env=merged_env)
+    has_db_flags = "--evidence-db" in args or "--runtime-db" in args
+    if has_db_flags:
+        return runner.invoke(cli, list(args), env=merged_env)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
+        db_args = [
+            "--evidence-db",
+            str(Path(tmpdir) / "evidence.db"),
+            "--runtime-db",
+            str(Path(tmpdir) / "runtime.db"),
+        ]
+        return runner.invoke(cli, [*list(args[:2]), *db_args, *list(args[2:])], env=merged_env)
 
 
 def open_both(tmp_path: Path) -> tuple[sqlite3.Connection, sqlite3.Connection]:

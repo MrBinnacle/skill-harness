@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import tempfile
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -45,10 +46,20 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Any:
     merged_env: dict[str, str] = {"COLUMNS": "260"}
     if env is not None:
         merged_env.update(env)
+    has_db_flags = "--evidence-db" in args or "--runtime-db" in args
+    if has_db_flags:
+        return runner.invoke(cli, list(args), env=merged_env)
     # `run ablation` defaults to ./evidence.db and ./runtime.db. A private cwd
     # keeps parallel workers from sharing one SQLite file ("database is locked").
+    # Explicit --evidence-db/--runtime-db flags provide defence in depth (#600).
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as cwd, contextlib.chdir(cwd):
-        return runner.invoke(cli, list(args), env=merged_env)
+        db_args = [
+            "--evidence-db",
+            str(Path(cwd) / "evidence.db"),
+            "--runtime-db",
+            str(Path(cwd) / "runtime.db"),
+        ]
+        return runner.invoke(cli, [*list(args[:2]), *db_args, *list(args[2:])], env=merged_env)
 
 
 def _render(results: list[ClauseResult]) -> Any:

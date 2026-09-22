@@ -16,6 +16,7 @@ calls are made. DB connections patched at constructor level for no-DB-conn asser
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -37,6 +38,9 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Result:
 
     Sets a dummy ANTHROPIC_API_KEY so --execute tests pass the m3 pre-flight
     without needing a real key (they all patch _execute_ablation_run anyway).
+
+    Passes --evidence-db and --runtime-db into a per-invocation temp directory
+    so parallel xdist workers never share one SQLite file (#600).
     """
     runner = CliRunner()
     # Merge COLUMNS + dummy key into provided env so rich does not truncate table columns
@@ -44,7 +48,21 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Result:
     merged_env = {"COLUMNS": "200", "ANTHROPIC_API_KEY": "sk-test-dummy"}
     if env is not None:
         merged_env.update(env)
-    return runner.invoke(cli, list(args), env=merged_env)
+    # If the caller already supplies --evidence-db or --runtime-db, respect
+    # it and don't add duplicates (#600).
+    has_db_flags = "--evidence-db" in args or "--runtime-db" in args
+    if has_db_flags:
+        return runner.invoke(cli, list(args), env=merged_env)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
+        db_args = [
+            "--evidence-db",
+            str(Path(tmpdir) / "evidence.db"),
+            "--runtime-db",
+            str(Path(tmpdir) / "runtime.db"),
+        ]
+        # Place --evidence-db/--runtime-db after the subcommand (args[:2])
+        # so Click binds them to the subcommand, not the top-level group.
+        return runner.invoke(cli, [*list(args[:2]), *db_args, *list(args[2:])], env=merged_env)
 
 
 # ---------------------------------------------------------------------------
@@ -79,12 +97,11 @@ class TestDryRunDefault:
             f"Expected exit 0 got {result.exit_code}; output:\n{result.output}"
         )
 
-    def test_dry_run_no_api_key_exits_zero(self, tmp_path: Path) -> None:
+    def test_dry_run_no_api_key_exits_zero(self) -> None:
         """run ablation must exit 0 in dry-run even when ANTHROPIC_API_KEY is absent."""
         # Remove API key from environment for this call
         clean_env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-        runner = CliRunner()
-        result = runner.invoke(cli, ["run", "ablation", "skill-xyz"], env=clean_env)
+        result = _invoke("run", "ablation", "skill-xyz", env=clean_env)
         assert result.exit_code == 0, (
             f"Dry-run must exit 0 without API key. Exit={result.exit_code}\n{result.output}"
         )

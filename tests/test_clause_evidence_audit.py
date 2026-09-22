@@ -157,7 +157,21 @@ def test_skill_init_out_works_with_execute(
     mock_ctx.evidence_conn = object()
     out = tmp_path / "with_exec.jsonl"
 
-    result = CliRunner().invoke(cli, ["skill", "init", "--execute", str(skill), "--out", str(out)])
+    result = CliRunner().invoke(
+        cli,
+        [
+            "skill",
+            "init",
+            "--execute",
+            str(skill),
+            "--out",
+            str(out),
+            "--evidence-db",
+            str(tmp_path / "evidence.db"),
+            "--runtime-db",
+            str(tmp_path / "runtime.db"),
+        ],
+    )
     assert result.exit_code == 0, result.output
     loaded = ExtractionResult.model_validate_json(out.read_text(encoding="utf-8").strip())
     assert loaded.source_sha256 == sha
