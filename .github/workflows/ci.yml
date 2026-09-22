@@ -19,6 +19,9 @@ permissions:
   contents: read
 
 jobs:
+  # NON-required (#557): not a branch-protection context. This pre-flight gate
+  # runs before the matrix installs so a constraint conflict fails once here
+  # instead of in every cell's Install step.
   dependency-anchor:
     name: Pre-flight dependency anchor check
     runs-on: ubuntu-latest

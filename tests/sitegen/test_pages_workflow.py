@@ -31,6 +31,7 @@ _PAGES = _REPO_ROOT / ".github" / "workflows" / "pages.yml"
 # (#172) is additive: it is listed here and deliberately absent from
 # _REQUIRED_JOB_IDS below, which is what keeps it out of `all-green`.
 _CI_JOB_IDS = (
+    "dependency-anchor",
     "lint",
     "typecheck",
     "test",
