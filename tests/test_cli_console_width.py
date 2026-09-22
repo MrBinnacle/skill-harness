@@ -1,4 +1,4 @@
-"""Acceptance test for issue #564: Console reads COLUMNS at import, not at render.
+"""Acceptance test for issue #564: Console reads COLUMNS at render, not at import.
 
 The defect: ``_console = Console()`` at module level in ``cli/main.py`` reads
 ``COLUMNS`` once at import and pins ``self._width``.  Tests that later set
