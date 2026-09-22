@@ -65,7 +65,7 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> Any:
             db_args.extend(["--evidence-db", str(Path(tmpdir) / "evidence.db")])
         if not has_runtime_db:
             db_args.extend(["--runtime-db", str(Path(tmpdir) / "runtime.db")])
-        return runner.invoke(cli, [*list(args[:2]), *db_args, *list(args[2:])], env=merged_env)
+        return runner.invoke(cli, [args[0], *db_args, *list(args[1:])], env=merged_env)
 
 
 def open_both(tmp_path: Path) -> tuple[sqlite3.Connection, sqlite3.Connection]:

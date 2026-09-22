@@ -17,7 +17,6 @@ Mock discipline (A32 / PRD §12.1):
 from __future__ import annotations
 
 import contextlib
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -37,22 +36,7 @@ def _invoke(*args: str, env: dict[str, str] | None = None) -> object:
     merged_env: dict[str, str] = {"COLUMNS": "200"}
     if env is not None:
         merged_env.update(env)
-    has_evidence_db = "--evidence-db" in args
-    has_runtime_db = "--runtime-db" in args
-    if has_evidence_db and has_runtime_db:
-        return runner.invoke(cli, list(args), env=merged_env, catch_exceptions=False)
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
-        db_args = []
-        if not has_evidence_db:
-            db_args.extend(["--evidence-db", str(Path(tmpdir) / "evidence.db")])
-        if not has_runtime_db:
-            db_args.extend(["--runtime-db", str(Path(tmpdir) / "runtime.db")])
-        return runner.invoke(
-            cli,
-            [*list(args[:2]), *db_args, *list(args[2:])],
-            env=merged_env,
-            catch_exceptions=False,
-        )
+    return runner.invoke(cli, list(args), env=merged_env, catch_exceptions=False)
 
 
 def _empty_env(monkeypatch: pytest.MonkeyPatch) -> None:
