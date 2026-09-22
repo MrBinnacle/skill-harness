@@ -3,29 +3,39 @@
 Dependabot groups coordinate releases that exist.  It cannot hold back a
 follower whose anchor has nothing new to bump to, so a follower bump above
 an exact-pinned anchor wastes the entire CI matrix before pip fails with
-ResolutionImpossible at install time.
+``ResolutionImpossible`` at install time.
+
+Some pip pairs are exact-pinned: every ``pydantic`` release pins its core
+with ``==``, so ``pydantic-core`` can never move ahead of its anchor.
+Dependabot bumps the follower anyway when the follower has a newer release,
+and pip then fails at install time.  Two occurrences in twenty-eight days:
+2026-08-17 (``pydantic-core`` 2.46.4 -> 2.48.0) and 2026-09-14 (#549,
+``pydantic-core`` 2.46.5 -> 2.49.0).  One PyPI read settles it: ``pydantic``
+latest pins ``pydantic-core==2.46.5``, which is what this repository already
+pins in ``requirements-ci.txt``.
 
 For each requirement the diff changes, this check reads the anchor's
-published PyPI metadata and refuses when an anchor pins the changed package
-with ``==`` at a version below the proposed one.  The probe is one read
-per candidate pair::
+published PyPI metadata and refuses when an anchor pins the changed
+package with ``==`` at a version below the proposed one.  The probe is one
+read per candidate anchor::
 
     curl -s https://pypi.org/pypi/<anchor>/json
 
+then ``info.requires_dist`` is compared against the proposed version.  The
+anchor relationship is discovered from published metadata, not from a
+hand-maintained list of known pairs, because ``pydantic`` is not the only
+split package that pins with ``==``.
+
 Network failure reaching the index is a refusal with a distinct message,
-never a pass.
+never a pass: a check that cannot read its input must not report a clean
+result.
 
-Usage::
-
-    python scripts/check_dependency_anchor.py \\
-        --requirements pyproject.toml \\
-        --diff <(git diff HEAD~1 -- pyproject.toml)
-
-Or in CI::
+Usage in CI (against the exact-pinned CI constraints file, where the
+``pydantic`` / ``pydantic-core`` ``==`` pins live)::
 
     python scripts/check_dependency_anchor.py \\
-        --requirements pyproject.toml \\
-        --diff <(git diff origin/main -- pyproject.toml)
+        --requirements requirements-ci.txt \\
+        --diff /tmp/dep-anchor.diff
 """
 
 from __future__ import annotations
@@ -39,20 +49,25 @@ import urllib.request
 from pathlib import Path
 from typing import Final
 
-from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 PYPI_URL: Final[str] = "https://pypi.org/pypi/{package}/json"
 REQUIREMENT_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^([A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?)\s*"
 )
+EXACT_PIN_PATTERN: Final[re.Pattern[str]] = re.compile(r"^==\s*([^\s,]+)")
+
+
+class NetworkError(Exception):
+    """Raised when PyPI is unreachable."""
 
 
 def parse_requirement(line: str) -> tuple[str, str] | None:
-    """Parse ``package==version`` or ``package>=version`` from a requirement line.
+    """Parse ``package==version`` (or any ``<op>version``) from a requirement line.
 
-    Returns ``(canonical_name, version_string)`` for lines that pin or bound
-    a version, or ``None`` for comment lines, extras, or bare names.
+    Returns ``(canonical_name, version_string)`` for lines that pin or bound a
+    version, or ``None`` for comment lines, option lines, extras, or bare names.
+    The canonical name is lowercased with hyphens folded to underscores.
     """
     stripped = line.strip()
     if not stripped or stripped.startswith("#") or stripped.startswith("-"):
@@ -73,7 +88,7 @@ def parse_requirements_file(path: Path) -> dict[str, str]:
 
     Handles ``package==version``, ``package>=version``, and comment lines.
     For lines with multiple specifiers (e.g. ``package>=1,<2``), the first
-    version specifier is used.
+    version specifier is used; only the name matters for anchor discovery.
     """
     requirements: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -89,7 +104,8 @@ def parse_pyproject_requirements(path: Path) -> dict[str, str]:
 
     Reads the raw lines between ``dependencies = [`` and the closing ``]``.
     Each non-comment line is a requirement string; the first version specifier
-    is extracted.
+    is extracted.  The exact-pinned CI constraints live in ``requirements-ci.txt``,
+    not here, but this parser keeps the check usable against either surface.
     """
     text = path.read_text(encoding="utf-8")
     in_deps = False
@@ -116,8 +132,8 @@ def parse_diff(diff_text: str) -> dict[str, tuple[str | None, str]]:
     """Parse a unified diff into ``{package: (old_version, new_version)}``.
 
     Only lines touching a requirement are considered.  A line starting with
-    ``-`` is a removal; ``+`` is an addition.  ``old_version`` is ``None``
-    when a requirement is added (no previous version).
+    ``-`` is a removal; ``+`` is an addition.  ``old_version`` is ``None`` when a
+    requirement is added (no previous version).  Unchanged lines are dropped.
     """
     changes: dict[str, tuple[str | None, str]] = {}
     for line in diff_text.splitlines():
@@ -145,11 +161,12 @@ def parse_diff(diff_text: str) -> dict[str, tuple[str | None, str]]:
 
 
 def fetch_pypi_metadata(package: str) -> dict[str, object]:
-    """Fetch package metadata from PyPI.
+    """Fetch the latest published metadata for *package* from PyPI.
 
-    Returns the parsed JSON on success.  Raises ``NetworkError`` on any
-    failure reaching the index — a check that cannot read its input must
-    not report a clean result.
+    Returns the parsed JSON on success, or ``{}`` for a 404 (a package PyPI does
+    not know about cannot be an anchor).  Raises ``NetworkError`` on any other
+    failure reaching the index -- a check that cannot read its input must not
+    report a clean result.
     """
     url = PYPI_URL.format(package=package)
     try:
@@ -165,88 +182,89 @@ def fetch_pypi_metadata(package: str) -> dict[str, object]:
         raise NetworkError(f"network error fetching {url}: {exc}") from exc
 
 
-class NetworkError(Exception):
-    """Raised when PyPI is unreachable."""
-
-
 def check_exact_pin_constraint(
     requires_dist: list[str] | None,
     target_package: str,
     proposed_version: str,
 ) -> str | None:
-    """Check whether any version constraint on *target_package* blocks *proposed_version*.
+    """Return the ``==`` pin that blocks *proposed_version*, or ``None``.
 
-    Returns the constraint string (e.g. ``">=2.46.5,<2.47.0"``) if it blocks
-    the proposed version, or ``None`` if no blocking constraint exists.
+    The check is exact-pin only: it refuses when an anchor pins the changed
+    package with ``==`` at a version *below* the proposed one, which is the
+    shape that makes pip raise ``ResolutionImpossible``.  A range cap or a
+    lower bound is out of scope -- the dependabot group coordinates ranges,
+    and the defect this check exists for is the ``==`` anchor that has nothing
+    new to bump to.  Returns the blocking ``==<version>`` string, or ``None``
+    when no ``==`` pin on *target_package* is below *proposed_version*.
     """
     if requires_dist is None:
         return None
-    target_normalized = target_package.lower().replace("-", "_")
+    target = target_package.lower().replace("-", "_")
+    try:
+        proposed = Version(proposed_version)
+    except InvalidVersion:
+        return None
     for req in requires_dist:
         match = REQUIREMENT_PATTERN.match(req.strip())
         if not match:
             continue
-        req_name = match.group(1).lower().replace("-", "_")
-        if req_name != target_normalized:
+        if match.group(1).lower().replace("-", "_") != target:
             continue
         rest = req.strip()[match.end() :].strip()
-        # Strip trailing markers (extras, comments, semicolons)
+        # Drop extras, markers and comments; keep the specifier list.
         rest = re.split(r"[;#\[]", rest)[0].strip().rstrip(",")
-        if not rest:
-            continue
-        try:
-            spec = SpecifierSet(rest)
-        except InvalidVersion:
-            continue
-        try:
-            version = Version(proposed_version)
-        except InvalidVersion:
-            continue
-        if version not in spec:
-            return rest
+        for clause in rest.split(","):
+            pin_match = EXACT_PIN_PATTERN.match(clause.strip())
+            if not pin_match:
+                continue
+            try:
+                pinned = Version(pin_match.group(1))
+            except InvalidVersion:
+                continue
+            if proposed > pinned:
+                return f"=={pin_match.group(1)}"
     return None
 
 
-def find_anchors_for_package(
-    changed_package: str,
+def collect_anchor_metadata(
     current_requirements: dict[str, str],
-) -> list[str]:
-    """Find packages in *current_requirements* that might pin *changed_package*.
+) -> dict[str, dict[str, object]]:
+    """Fetch the latest PyPI metadata for every candidate anchor, once.
 
-    Returns all package names as a candidate list.  The caller fetches
-    metadata for each and checks ``requires_dist``.
+    A candidate anchor is any package in *current_requirements*: the anchor
+    relationship is discovered from published ``requires_dist`` rather than
+    from a hand-maintained list of known pairs.  Fetching each candidate once
+    (rather than once per changed package) keeps the probe at one read per
+    anchor and minimises the surface on which a network failure can refuse a
+    clean run.  Raises ``NetworkError`` on the first unreachable anchor.
     """
-    return sorted(current_requirements.keys())
+    metadata: dict[str, dict[str, object]] = {}
+    for anchor in sorted(current_requirements):
+        fetched = fetch_pypi_metadata(anchor)
+        if fetched:
+            metadata[anchor] = fetched
+    return metadata
 
 
 def check_anchors(
     changed_package: str,
     proposed_version: str,
-    current_requirements: dict[str, str],
+    anchor_metadata: dict[str, dict[str, object]],
 ) -> list[dict[str, str]]:
-    """Check whether any anchor pins *changed_package* below *proposed_version*.
+    """Check whether any anchor pins *changed_package* with ``==`` below *proposed*.
 
-    Returns a list of refusal dicts, each containing:
-    - ``anchor``: the package doing the pinning
-    - ``pin``: the ``==`` constraint that blocks the bump
-    - ``proposed``: the version that was proposed
+    Returns a list of refusal dicts, each carrying the ``anchor``, the changed
+    ``package``, the blocking ``pin`` (``==<version>``) and the ``proposed``
+    version.  The changed package is never checked against itself.
     """
     refusals: list[dict[str, str]] = []
-    candidates = find_anchors_for_package(changed_package, current_requirements)
-    for anchor in candidates:
+    for anchor, metadata in anchor_metadata.items():
         if anchor == changed_package:
-            continue
-        try:
-            metadata = fetch_pypi_metadata(anchor)
-        except NetworkError:
-            raise
-        if not metadata:
             continue
         info_raw = metadata.get("info", {})
         if not isinstance(info_raw, dict):
             continue
-        info: dict[str, object] = info_raw
-        requires_dist = info.get("requires_dist")
+        requires_dist = info_raw.get("requires_dist")
         if not isinstance(requires_dist, list):
             continue
         blocking_pin = check_exact_pin_constraint(requires_dist, changed_package, proposed_version)
@@ -254,6 +272,7 @@ def check_anchors(
             refusals.append(
                 {
                     "anchor": anchor,
+                    "package": changed_package,
                     "pin": blocking_pin,
                     "proposed": proposed_version,
                 }
@@ -302,29 +321,27 @@ def main(argv: list[str] | None = None) -> int:
         print("PASS: no dependency changes detected in diff")
         return 0
 
+    try:
+        anchor_metadata = collect_anchor_metadata(current_requirements)
+    except NetworkError as exc:
+        print(f"REFUSE: network error reaching the index: {exc}", file=sys.stderr)
+        return 1
+
     all_refusals: list[dict[str, str]] = []
     for package, (_old, new_version) in sorted(changes.items()):
-        try:
-            refusals = check_anchors(package, new_version, current_requirements)
-        except NetworkError as exc:
-            print(
-                f"REFUSE: network error checking {package}: {exc}",
-                file=sys.stderr,
-            )
-            return 1
-        all_refusals.extend(refusals)
+        all_refusals.extend(check_anchors(package, new_version, anchor_metadata))
 
     if all_refusals:
-        print("REFUSE: dependency bump blocked by exact-pinned anchor(s):")
+        print("REFUSE: dependency bump blocked by an exact-pinned anchor:", file=sys.stderr)
         for r in all_refusals:
             print(
-                f"  - anchor '{r['anchor']}' pins {r['anchor']}==... "
-                f"with {r['pin']}; proposed {r['proposed']} exceeds the pin"
+                f"  - anchor '{r['anchor']}' pins '{r['package']}' at {r['pin']}; "
+                f"proposed '{r['proposed']}' is above the pin.",
+                file=sys.stderr,
             )
         print(
-            "\nNo published anchor satisfies the proposed version. "
-            "Wait for the anchor to release a compatible version, or "
-            "bump the anchor first.",
+            "No published anchor satisfies the proposed version. "
+            "Wait for a compatible anchor release, or bump the anchor first.",
             file=sys.stderr,
         )
         return 1

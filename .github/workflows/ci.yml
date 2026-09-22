@@ -155,10 +155,21 @@ jobs:
           python -m pip install -c requirements-ci.txt -e ".[dev]"
       # #557: refuse a dependency bump an exact-pinned anchor cannot satisfy.
       # Runs before the test matrix so a structurally unmergeable bump does
-      # not consume the grid.  Reads PyPI metadata for each anchor; network
-      # failure is a refusal with a distinct message.
+      # not consume the grid.  Reads PyPI metadata for each candidate anchor;
+      # network failure is a refusal with a distinct message.
+      #
+      # The exact-pinned pydantic / pydantic-core == pins live in
+      # requirements-ci.txt, not pyproject.toml (which carries only open-ended
+      # >= bounds), so the diff and the requirements file both point there: a
+      # pyproject diff would never see the #549 bump.  shell: bash makes the
+      # step work on the windows matrix cells too.  origin/main is fetched
+      # shallow so `git diff` names the PR's actual dependency changes.
       - name: Pre-flight dependency anchor check
-        run: python scripts/check_dependency_anchor.py --requirements pyproject.toml --diff <(git diff origin/main -- pyproject.toml)
+        shell: bash
+        run: |
+          git fetch origin main --depth=1
+          git diff origin/main -- requirements-ci.txt > "$RUNNER_TEMP/dep-anchor.diff"
+          python scripts/check_dependency_anchor.py --requirements requirements-ci.txt --diff "$RUNNER_TEMP/dep-anchor.diff"
       - name: Install the geometry extra
         if: env.SKILL_HARNESS_GEOMETRY_CELL == '1'
         # Only the designated cell installs playwright. The other three stop at
