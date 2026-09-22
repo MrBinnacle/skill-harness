@@ -30,7 +30,18 @@ from skill_harness.ratification import check_execute_ratification
 from skill_harness.storage.context import StorageContext
 from skill_harness.storage.recovery import find_resumable_run_for_skill
 
-_console = Console()
+
+def _console() -> Console:
+    """Return a fresh Console that reads COLUMNS from the environment.
+
+    A module-level ``Console()`` reads ``COLUMNS`` once at import and pins
+    ``self._width`` for the life of the object.  Every later change to
+    ``os.environ["COLUMNS"]`` is then ignored.  Building a Console per call
+    means each render reads the environment at call time, which is what the
+    test harness (and a resized terminal) expects.  See issue #564.
+    """
+    return Console()
+
 
 # Calibrate command is imported inline to avoid heavy imports at module level
 
@@ -197,13 +208,13 @@ def skill_init(
 def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
     """Print a Rich table summarising the extraction result."""
     mode = "[green]PERSISTED[/]" if persisted else "[yellow]DRY-RUN[/]"
-    _console.print(
+    _console().print(
         f"\n{mode} — skill [bold]{_sanitize_clause_text(result.name, max_len=None)}[/]"
         f" ({result.skill_id[:12]}…)"
     )
-    _console.print(f"  source: {result.source_path}")
-    _console.print(f"  sha256: {result.source_sha256[:16]}…")
-    _console.print(f"  clauses extracted: {len(result.clauses)}")
+    _console().print(f"  source: {result.source_path}")
+    _console().print(f"  sha256: {result.source_sha256[:16]}…")
+    _console().print(f"  clauses extracted: {len(result.clauses)}")
 
     table = Table(title="Extracted Clauses", show_lines=True)
     table.add_column("#", style="dim", width=4)
@@ -227,8 +238,8 @@ def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
             _sanitize_clause_text(clause.clause_text, max_len=80),
         )
 
-    _console.print(table)
-    _console.print(_SKILL_CLAUSES_LEGEND)
+    _console().print(table)
+    _console().print(_SKILL_CLAUSES_LEGEND)
 
     # M2: warn about Tier-1 axes with no registered scorer (TEST-ARCH-2)
     try:
@@ -243,7 +254,7 @@ def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
                 clause.oracle_tier == 1
                 and classify_axis(clause.axis) is AxisScoreability.UNSCOREABLE
             ):
-                _console.print(
+                _console().print(
                     f"[yellow][!] axis {clause.axis!r} has no registered Tier-1 scorer;"
                     f" will return UNMEASURED at run ablation.[/]"
                 )
@@ -251,7 +262,7 @@ def _print_result(result: ExtractionResult, *, persisted: bool) -> None:
         pass  # never crash skill init on a warning
 
     if not persisted:
-        _console.print("[yellow]Dry-run: no data written. Use --execute to persist.[/]")
+        _console().print("[yellow]Dry-run: no data written. Use --execute to persist.[/]")
 
 
 _SKILL_CLAUSES_LEGEND = """\
@@ -306,11 +317,11 @@ def skill_audit(
     except MalformedSkillError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    _console.print("\n[bold]OFFLINE AUDIT[/] — no API calls, no cost")
-    _console.print(f"  skill:  [bold]{_sanitize_clause_text(report.name, max_len=None)}[/]")
-    _console.print(f"  source: {report.source_path}")
-    _console.print(f"  sha256: {report.source_sha256[:16]}…")
-    _console.print(
+    _console().print("\n[bold]OFFLINE AUDIT[/] — no API calls, no cost")
+    _console().print(f"  skill:  [bold]{_sanitize_clause_text(report.name, max_len=None)}[/]")
+    _console().print(f"  source: {report.source_path}")
+    _console().print(f"  sha256: {report.source_sha256[:16]}…")
+    _console().print(
         f"  body:   {report.body_lines} lines / {report.body_words} words · "
         f"frontmatter keys: {', '.join(report.frontmatter_keys) or '(none)'}"
     )
@@ -330,19 +341,19 @@ def skill_audit(
             finding.code,
             _sanitize_clause_text(finding.message, max_len=None),
         )
-    _console.print(table)
+    _console().print(table)
 
-    _console.print("[bold]Evaluability preflight[/] — what a paid run could measure today:")
-    _console.print(
+    _console().print("[bold]Evaluability preflight[/] — what a paid run could measure today:")
+    _console().print(
         f"  Tier-1 mechanical axes: [cyan]{', '.join(report.measurable_axes)}[/] "
         "(style-shaped only)."
     )
-    _console.print(
+    _console().print(
         "  Behavior-shaped claims (correctness, tool use, outcomes): no mechanical"
         " instrument in v0.1 → the recorded state would be [bold]UNMEASURED[/], not an"
         " estimate."
     )
-    _console.print(
+    _console().print(
         "  Judge-graded axes: require a calibrated (judge, axis) pair — none exists"
         " in a fresh install → UNMEASURED until you run `calibrate`."
     )
@@ -351,13 +362,13 @@ def skill_audit(
     lo, hi = report.standing_cost_calibration_range
     factor = report.standing_cost_calibration_factor
     if report.standing_cost_raw is None:
-        _console.print(
+        _console().print(
             "  Standing cost (mechanical): [yellow]UNMEASURED[/] — frontmatter could not"
             " be parsed well enough to count the router listing line"
             " (see standing-cost-unparseable)."
         )
     else:
-        _console.print(
+        _console().print(
             f"  Standing cost (mechanical): raw {report.standing_cost_raw} tokens · "
             f"calibrated {report.standing_cost_calibrated} tokens "
             f"(x{factor}, "
@@ -366,31 +377,31 @@ def skill_audit(
             "0 when disable-model-invocation keeps the skill unlisted."
         )
     if report.fired_cost_raw is None:
-        _console.print(
+        _console().print(
             "  Fired cost (mechanical): [yellow]UNMEASURED[/] — skill body could not be tokenized."
         )
     else:
-        _console.print(
+        _console().print(
             f"  Fired cost (mechanical): raw {report.fired_cost_raw} tokens · "
             f"calibrated {report.fired_cost_calibrated} tokens "
             f"(x{factor}, measured range {lo}-{hi}) -- "
             "skill body charged when the skill runs and its body is read."
         )
     if report.aux_cost_raw is None:
-        _console.print(
+        _console().print(
             "  Aux cost (mechanical): [yellow]UNMEASURED[/] — progressive-disclosure"
             " documentation beside the skill could not be read"
             " (see aux-cost-unreadable)."
         )
     else:
-        _console.print(
+        _console().print(
             f"  Aux cost (mechanical): raw {report.aux_cost_raw} tokens · "
             f"calibrated {report.aux_cost_calibrated} tokens "
             f"(x{factor}, measured range {lo}-{hi}) -- "
             "other documentation files beside the skill (progressive disclosure); "
             "0 when the skill directory has none."
         )
-    _console.print(
+    _console().print(
         f"\nSummary: {report.pass_count} pass · {report.warn_count} warn — "
         "UNMEASURED is a recorded state, not a failure (docs/concepts/why-unmeasured.md)."
     )
@@ -413,20 +424,20 @@ def _print_clause_evidence(source_sha256: str, extraction_path: Path | None) -> 
 
     if extraction_path is None:
         outcome = no_extraction_outcome()
-        _console.print(format_refusal_line(outcome))
+        _console().print(format_refusal_line(outcome))
         return
 
     outcome = load_clause_evidence(extraction_path, source_sha256)
     if outcome.kind != "measured":
-        _console.print(format_refusal_line(outcome))
+        _console().print(format_refusal_line(outcome))
         if outcome.unparseable_line_count and outcome.kind != "unreadable_extraction_file":
-            _console.print(format_unparseable_warning(outcome.unparseable_line_count))
+            _console().print(format_unparseable_warning(outcome.unparseable_line_count))
         return
 
     assert outcome.measured is not None
     measured = outcome.measured
-    _console.print(f"\n[bold]{SECTION_TITLE}[/]")
-    _console.print(format_instrument_line(measured.instrument))
+    _console().print(f"\n[bold]{SECTION_TITLE}[/]")
+    _console().print(format_instrument_line(measured.instrument))
 
     table = Table(
         title="Clauses (scoreable as of current scorer registry)",
@@ -464,11 +475,11 @@ def _print_clause_evidence(source_sha256: str, extraction_path: Path | None) -> 
             reason_cell,
             "Y" if row.constructible_fc else "-",
         )
-    _console.print(table)
+    _console().print(table)
     for line in format_summary_lines(measured.summary):
-        _console.print(line)
+        _console().print(line)
     if outcome.unparseable_line_count:
-        _console.print(format_unparseable_warning(outcome.unparseable_line_count))
+        _console().print(format_unparseable_warning(outcome.unparseable_line_count))
 
 
 @skill.command("clauses")
@@ -493,7 +504,7 @@ def skill_clauses(skill_id: str, evidence_db: Path) -> None:
     from skill_harness.storage.migrations import open_evidence_readonly
 
     if not evidence_db.exists():
-        _console.print(
+        _console().print(
             "\n[yellow]skill not imported — run 'skill init <path>' first[/]"
             f"\n[dim]  (evidence.db not found at {evidence_db})[/]"
         )
@@ -510,7 +521,7 @@ def skill_clauses(skill_id: str, evidence_db: Path) -> None:
             (skill_id,),
         ).fetchall()
     except BootstrapError:
-        _console.print(
+        _console().print(
             "\n[yellow]skill not imported — run 'skill init <path>' first[/]"
             f"\n[dim]  (evidence.db not found or skill_id {skill_id!r} not present)[/]"
         )
@@ -521,7 +532,7 @@ def skill_clauses(skill_id: str, evidence_db: Path) -> None:
         # malformed DB (e.g. missing the clauses table -- sqlite3.OperationalError)
         # fell through uncaught here and surfaced as a raw traceback instead of the
         # same clean CLI hint _cmd_dry_run gives for the equivalent zero-state case.
-        _console.print(
+        _console().print(
             "\n[yellow]skill not imported — run 'skill init <path>' first[/]"
             f"\n[dim]  (evidence.db at {evidence_db} is unreadable or malformed)[/]"
         )
@@ -531,7 +542,7 @@ def skill_clauses(skill_id: str, evidence_db: Path) -> None:
             db_conn.close()
 
     if not rows:
-        _console.print(
+        _console().print(
             f"\n[yellow]No clauses found for skill {skill_id!r}. "
             "Run 'skill init <path>' to import.[/]"
         )
@@ -556,8 +567,8 @@ def skill_clauses(skill_id: str, evidence_db: Path) -> None:
             _sanitize_clause_text(clause_text),
         )
 
-    _console.print(table)
-    _console.print(_SKILL_CLAUSES_LEGEND)
+    _console().print(table)
+    _console().print(_SKILL_CLAUSES_LEGEND)
 
 
 @skill.command("coverage")
@@ -573,10 +584,10 @@ def skill_coverage(corpus_dir: Path) -> None:
 
     report = skill_corpus_coverage(corpus_dir)
 
-    _console.print(f"\n[bold]Skill corpus coverage[/] — {corpus_dir}")
-    _console.print(f"  Candidates:    {report.candidate_count}")
-    _console.print(f"  Constructible: {report.constructible_count}")
-    _console.print(f"  Refused:       {report.refused_count}")
+    _console().print(f"\n[bold]Skill corpus coverage[/] — {corpus_dir}")
+    _console().print(f"  Candidates:    {report.candidate_count}")
+    _console().print(f"  Constructible: {report.constructible_count}")
+    _console().print(f"  Refused:       {report.refused_count}")
 
     if report.refused:
         table = Table(title="Refused cards", show_lines=True)
@@ -584,7 +595,7 @@ def skill_coverage(corpus_dir: Path) -> None:
         table.add_column("Reason", min_width=40)
         for path, reason in report.refused:
             table.add_row(str(path), _sanitize_clause_text(reason, max_len=80))
-        _console.print(table)
+        _console().print(table)
 
 
 @cli.group()
@@ -861,7 +872,7 @@ def _cmd_dry_run(
     # A12-(a) projection one-liner
     min_calls_per_clause = N_MIN * 3
     max_calls_per_clause = N_MAX * 3
-    _console.print(
+    _console().print(
         f"\n[bold]Projection for skill:[/] {skill_id}"
         f"\n  Sampling schedule: N_min={N_MIN} … N_max={N_MAX} (per clause)"
         f"\n  Calls per clause: {min_calls_per_clause} (min) … {max_calls_per_clause} (max)"
@@ -929,11 +940,11 @@ def _cmd_dry_run(
 
     if not_imported:
         # Skill not imported: DB missing or BootstrapError (zero-state default, non-conditional)
-        _console.print(
+        _console().print(
             f"\n[yellow]skill not imported — run 'skill init <path>' first[/]"
             f"\n[dim]  (evidence.db not found or skill_id {skill_id!r} not present)[/]"
         )
-        _console.print(
+        _console().print(
             "\n[bold yellow]NO CALLS MADE — re-run with --execute[/]\n"
             "[dim]Use 'skill clauses <skill_id>' to inspect per-clause detail.[/]"
         )
@@ -952,7 +963,7 @@ def _cmd_dry_run(
             )
     elif evidence_db is not None:
         # DB found but no clauses: skill may have been imported with no clauses
-        _console.print(
+        _console().print(
             f"\n[yellow]No clauses found for skill {skill_id!r}. "
             "Run 'skill init <path>' to import.[/]"
         )
@@ -967,8 +978,8 @@ def _cmd_dry_run(
             "TESTABLE",
         )
 
-    _console.print(table)
-    _console.print(
+    _console().print(table)
+    _console().print(
         "\n[bold yellow]NO CALLS MADE — re-run with --execute[/]"
         "\n[dim]Use 'skill clauses <skill_id>' to inspect per-clause detail before running.[/]"
     )
@@ -987,7 +998,7 @@ def _cmd_show_rendered(skill_id: str, clause_id: str, evidence_db: Path | None =
     except Exception as exc:
         raise click.ClickException(f"Could not render conditions for {clause_id!r}: {exc}") from exc
 
-    _console.print(
+    _console().print(
         f"\n[bold]--show-rendered for clause:[/] {clause_id}"
         f"\n  skill_id: {skill_id}"
         f"\n  ablation_operator_version: [cyan]{operator_version}[/]"
@@ -995,8 +1006,8 @@ def _cmd_show_rendered(skill_id: str, clause_id: str, evidence_db: Path | None =
 
     for condition_name, condition_data in sorted(conditions.items()):
         system_text = condition_data.get("system_text", "")
-        _console.print(f"\n[bold underline]{condition_name.upper()}[/]")
-        _console.print(_sanitize_clause_text(system_text, max_len=None))
+        _console().print(f"\n[bold underline]{condition_name.upper()}[/]")
+        _console().print(_sanitize_clause_text(system_text, max_len=None))
 
 
 def _render_conditions_for_clause(
@@ -1408,7 +1419,7 @@ def _cmd_execute(
             skill_id, runtime_db=runtime_db, evidence_db=evidence_db
         )
         if incomplete_run_id is not None:
-            _console.print(
+            _console().print(
                 f"\n[bold yellow]WARNING:[/] Incomplete prior run detected for skill {skill_id!r}."
                 f"\n  Resumable run_id: [bold]{incomplete_run_id}[/]"
                 f"\n  Re-run with --resume {incomplete_run_id!r} to continue."
@@ -1418,7 +1429,7 @@ def _cmd_execute(
 
     # Resume preview line (A52)
     if resume_run_id is not None:
-        _console.print(
+        _console().print(
             f"\n[bold cyan]Resuming run:[/] {resume_run_id}"
             f"\n  skill_id: {skill_id}"
             "\n  Skipping already-collected samples (A40 idempotency)."
@@ -1456,7 +1467,7 @@ def _cmd_execute(
     # Labels as caps-only — actual run spend requires the run_id from the runner
     # which is not threaded to _cmd_execute. To audit actual spend, query cost_ledger
     # directly via the runtime DB.
-    _console.print(
+    _console().print(
         f"\n[dim]─ caps only (not spend) ─[/]"
         f"\n  Per-run cap: ${max_usd:.2f} (run)  ·  Daily cap: ${daily_cap:.2f} (day)"
         f"\n  [dim]Audit actual spend: query runtime.cost_ledger for the run_id.[/]"
@@ -1644,10 +1655,10 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
             contrib_str,
         )
 
-    _console.print(table)
+    _console().print(table)
 
     # Reporting-honesty caveats (A50)
-    _console.print(
+    _console().print(
         "\n[bold]Contribution note:[/]"
         "\n  Contribution is measured as single-clause LOO (leave-one-out)."
         "\n  This is a lower-bound under redundancy: a clause may contribute jointly"
@@ -1656,7 +1667,7 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
     )
 
     if has_any_unmeasured:
-        _console.print(
+        _console().print(
             "\n[yellow][!] One or more clauses are UNMEASURED.[/]"
             "\n  UNMEASURED != FAILED. No admissible evidence -> no claim."
             "\n  See subreason for each UNMEASURED clause above."
@@ -1664,7 +1675,7 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
 
     # #546: the report states what the registered floor did and did not decide.
     if has_any_floor_rejected_pass:
-        _console.print(
+        _console().print(
             "\n[yellow][!] One or more clauses cleared the scalar rule and failed the "
             "registered effect-size floor.[/]"
             "\n  The Gate-2 verdict is displayed in place of the scalar verdict."
@@ -1675,7 +1686,7 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
         )
 
     if has_any_floor_unapplied:
-        _console.print(
+        _console().print(
             "\n[dim]Gate-2 floor not applied on one or more rows.[/]"
             "\n  No registered thresholds were in force for those clauses, so this"
             "\n  report makes no claim about registered net lift for them. The absence"
@@ -1684,7 +1695,7 @@ def _render_ablation_report(results: list[Any], *, probe_redundancy: bool = Fals
         )
 
     if probe_redundancy:
-        _console.print(
+        _console().print(
             "\n[dim]--probe-redundancy:[/] Redundancy probe is reclassify-only."
             "\n  It cannot promote a clause from UNMEASURED or FAILED to PASSED."
         )
@@ -1805,13 +1816,13 @@ def run_evaluate_skill(
             except Exception as exc:
                 raise click.ClickException(f"Failed to read evidence DB: {exc}") from exc
 
-            _console.print(
+            _console().print(
                 f"\n[bold]Preflight for skill:[/] {skill_id}"
                 f"\n  completed run_ids: {[r[0] for r in run_rows]}"
                 f"\n  clause count: {len(clause_rows)}"
                 f"\n  axes: {sorted({r[1] for r in clause_rows})}"
             )
-            _console.print("\n[bold yellow]NO AGGREGATION DONE — re-run without --dry-run[/]")
+            _console().print("\n[bold yellow]NO AGGREGATION DONE — re-run without --dry-run[/]")
             return
 
         # ------------------------------------------------------------------
@@ -2300,7 +2311,7 @@ def freeze(
         # Dry-run path
         # ------------------------------------------------------------------
         if not execute:
-            _console.print(
+            _console().print(
                 f"\n[bold yellow]DRY-RUN[/] (no writes — use --execute to write)"
                 f"\nWOULD freeze verdict [bold]{verdict_id}[/]:"
                 f"\n  clause_id:              {clause_id}"
@@ -2317,7 +2328,7 @@ def freeze(
         # ------------------------------------------------------------------
         try:
             frozen_case_id = freeze_verdict(ev_conn, verdict_id, oracle_source=oracle_source)
-            _console.print(
+            _console().print(
                 f"\n[green]frozen[/] verdict [bold]{verdict_id}[/] "
                 f"→ frozen_case_id=[bold]{frozen_case_id}[/]"
             )
@@ -2328,7 +2339,7 @@ def freeze(
                 (verdict_id,),
             ).fetchone()
             existing_id = existing_row[0] if existing_row else "(unknown)"
-            _console.print(
+            _console().print(
                 f"[yellow]verdict {verdict_id!r} already frozen "
                 f"as frozen_case_id={existing_id!r}[/]"
             )
@@ -2433,14 +2444,14 @@ def audit_metric(metric_id: str, attest: str | None, execute: bool, evidence_db:
 
         if not execute:
             if plan.action == "already_audited":
-                _console.print(
+                _console().print(
                     f"\n[bold yellow]DRY-RUN[/] (no writes — use --execute to write)"
                     f"\nmetric [bold]{metric_id}[/] is already audited at version "
                     f"{plan.version} with a hash matching the live module — nothing to do."
                     f"\n  attestation (echoed, not stored): {attest}"
                 )
                 return
-            _console.print(
+            _console().print(
                 f"\n[bold yellow]DRY-RUN[/] (no writes — use --execute to write)"
                 f"\nWOULD register audited metric_versions row:"
                 f"\n  metric_id:                        {plan.metric_id}"
@@ -2460,7 +2471,7 @@ def audit_metric(metric_id: str, attest: str | None, execute: bool, evidence_db:
 
         verb = "already audited" if plan.action == "already_audited" else "registered"
         colour = "yellow" if plan.action == "already_audited" else "green"
-        _console.print(
+        _console().print(
             f"\n[{colour}]{verb}[/] audited metric [bold]{row['metric_id']}[/]"
             f" version {row['version']}:"
             f"\n  implementation_hash:              {row['implementation_hash']}"
@@ -2526,7 +2537,7 @@ def _render_evaluate_skill_report(report: Any, vacuity_count: int = 0) -> None:
         coverage_str,
         contrib_str,
     )
-    _console.print(vec_table)
+    _console().print(vec_table)
 
     # Per-clause detail table
     clause_table = Table(title="Per-Clause Results", show_lines=True)
@@ -2585,26 +2596,26 @@ def _render_evaluate_skill_report(report: Any, vacuity_count: int = 0) -> None:
             post_str,
         )
 
-    _console.print(clause_table)
+    _console().print(clause_table)
 
     # M5: bridge note for UNMEASURED(no_data) → ablation sub_reason mapping
     has_no_data = any(c.sub_reason == "no_data" for c in report.clauses)
     if has_no_data:
-        _console.print(
+        _console().print(
             "[dim]Note: UNMEASURED(no_data) at evaluate-skill maps to"
             " UNMEASURED(tier2_uncalibrated) at ablation time when oracle gate fires"
             " before verdict write.[/]"
         )
 
     # A50 footer
-    _console.print(
+    _console().print(
         "\n[bold]Contribution (A50):[/] single-clause LOO; lower-bound under redundancy."
         "\n  Absence of delta is not absence of contribution."
     )
 
     # Link to UNMEASURED explanation when any clause is UNMEASURED
     if any(c.status == "UNMEASURED" for c in report.clauses):
-        _console.print(
+        _console().print(
             "\n[dim]UNMEASURED is not a failure — see"
             " docs/concepts/why-unmeasured.md for sub-reason explanations.[/]"
         )
@@ -2660,12 +2671,12 @@ def _render_diff_report(diff_report: Any) -> None:
             detail[:60],
         )
 
-    _console.print(table)
+    _console().print(table)
 
     divergent_str = "[red]DIVERGENT[/]" if diff_report.divergent else "[green]IDENTICAL[/]"
-    _console.print(f"\n  Diff result: {divergent_str}")
+    _console().print(f"\n  Diff result: {divergent_str}")
     if diff_report.divergent:
-        _console.print("  [dim]Use --exit-on-divergence to signal divergence via exit code.[/]")
+        _console().print("  [dim]Use --exit-on-divergence to signal divergence via exit code.[/]")
 
 
 # ---------------------------------------------------------------------------
@@ -2812,7 +2823,7 @@ def calibrate_cmd(
         )
         if verify_judge_id:
             raise click.ClickException(mismatch_msg + " Refusing (--verify-judge-id).")
-        _console.print(f"[yellow]WARNING:[/] {mismatch_msg}")
+        _console().print(f"[yellow]WARNING:[/] {mismatch_msg}")
 
     # D2: parse_pair_set (inside calibrate()) raises ValueError on malformed JSONL
     # (invalid JSON or a pydantic ValidationError wrapped as ValueError). Previously
@@ -2875,31 +2886,31 @@ def _print_calibrate_result(
     mode = "[green]EXECUTED[/]" if executed else "[yellow]DRY-RUN[/]"
     state = getattr(result, "state", "?")
     n_pairs = getattr(result, "n_pairs", 0)
-    _console.print(f"\n{mode} — calibrate [bold]{state.upper()}[/]")
-    _console.print(f"  pairs: {n_pairs}")
+    _console().print(f"\n{mode} — calibrate [bold]{state.upper()}[/]")
+    _console().print(f"  pairs: {n_pairs}")
 
     # A36 dry-run projection output
     proj = getattr(result, "cost_projection", None)
     if proj is not None:
         model_name = "claude-sonnet-4-6"
-        _console.print(
+        _console().print(
             f"\nprojected: {proj.n_calls} calls ({n_pairs} pairs x2 position swaps), "
             f"{proj.t_in_cache_read + proj.t_in_uncached + proj.t_in_cached:,} input tok"
         )
-        _console.print(
+        _console().print(
             f"           ({proj.t_in_cache_read:,} cache-read + {proj.t_in_uncached:,} uncached + "
             f"{proj.t_in_cached:,} unique tails),"
         )
-        _console.print(f"           {proj.t_out:,} output tok, ≈${proj.usd:.4f} on {model_name};")
-        _console.print(f"           cache reuse: {proj.cache_reuse_pct:.0f}% on input.")
-        _console.print(
+        _console().print(f"           {proj.t_out:,} output tok, ≈${proj.usd:.4f} on {model_name};")
+        _console().print(f"           cache reuse: {proj.cache_reuse_pct:.0f}% on input.")
+        _console().print(
             f"           est_SE_pairwise_agreement: {proj.est_se_pairwise_agreement:.3f}. "
             f"est_CI_95_width: {proj.est_ci_95_width:.3f}."
         )
-        _console.print(f"           Per-run cap: $5.00. Daily cap: ${daily_cap:.2f}.")
+        _console().print(f"           Per-run cap: $5.00. Daily cap: ${daily_cap:.2f}.")
 
     if not executed and state not in ("rejected",):
-        _console.print("[yellow]Dry-run: no data written. Use --execute to persist.[/]")
+        _console().print("[yellow]Dry-run: no data written. Use --execute to persist.[/]")
 
     if state == "dry_run":
         return
@@ -2909,18 +2920,18 @@ def _print_calibrate_result(
         pc = getattr(result, "position_consistency", 0.0)
         ck = getattr(result, "cohen_kappa", 0.0)
         cb = getattr(result, "chance_baseline", 0.0)
-        _console.print(f"  pairwise_agreement:   {pa:.3f}")
-        _console.print(f"  position_consistency: {pc:.3f}")
-        _console.print(f"  cohen_kappa:          {ck:.3f}")
-        _console.print(f"  chance_baseline:      {cb:.3f}")
+        _console().print(f"  pairwise_agreement:   {pa:.3f}")
+        _console().print(f"  position_consistency: {pc:.3f}")
+        _console().print(f"  cohen_kappa:          {ck:.3f}")
+        _console().print(f"  chance_baseline:      {cb:.3f}")
 
     reason = getattr(result, "reason", None)
     if state == "rejected" and reason:
-        _console.print(f"  [red]reason: {reason}[/]")
+        _console().print(f"  [red]reason: {reason}[/]")
 
     cal_id = getattr(result, "calibration_event_id", None)
     if cal_id:
-        _console.print(f"  calibration_event_id: {cal_id}")
+        _console().print(f"  calibration_event_id: {cal_id}")
 
 
 @cli.group()
@@ -2970,7 +2981,7 @@ def screen_verdict_cmd(evidence_db: Path, fresh_pin: str | None) -> None:
     )
 
     if not evidence_db.exists():
-        _console.print(
+        _console().print(
             "\n[yellow]no screen store — run 'screen backfill --execute' or a screen run first[/]"
             f"\n[dim]  (evidence.db not found at {evidence_db})[/]"
         )
@@ -2983,33 +2994,33 @@ def screen_verdict_cmd(evidence_db: Path, fresh_pin: str | None) -> None:
         # Pin filter is applied inside derive so mixed-pin skills keep only fresh rows.
         rows = derive_p0_by_skill(db_conn, fresh_pin=fresh_pin)
     except BootstrapError:
-        _console.print(f"\n[yellow]evidence.db not found at {evidence_db}.[/]")
+        _console().print(f"\n[yellow]evidence.db not found at {evidence_db}.[/]")
         return
     finally:
         if db_conn is not None:
             db_conn.close()
 
     if stale_rows:
-        _console.print(f"\n[red]Stale pin refused ({len(stale_rows)} skill(s)):[/]")
+        _console().print(f"\n[red]Stale pin refused ({len(stale_rows)} skill(s)):[/]")
         for stale in stale_rows:
             refusal = StalePinError(
                 stored_fingerprints=stale.stored_fingerprints,
                 fresh_fingerprint=fresh_pin or "",
             )
-            _console.print(
+            _console().print(
                 f"  [red]{_sanitize_clause_text(stale.skill_name, max_len=None)}: "
                 f"{_sanitize_clause_text(str(refusal), max_len=None)}[/]"
             )
-        _console.print(
+        _console().print(
             "[dim]  These screens were captured under a different harness pin and"
             " must not silently contribute to p0 (#382).[/]"
         )
 
     if not rows:
         if fresh_pin is not None and stale_rows:
-            _console.print("\n[yellow]No admissible screens remain after pin-currency check.[/]")
+            _console().print("\n[yellow]No admissible screens remain after pin-currency check.[/]")
         else:
-            _console.print(
+            _console().print(
                 "\n[yellow]No admissible screens in the store.[/]"
                 "\n[dim]  Backfill batch-1 with 'screen backfill --execute', or run a screen.[/]"
             )
@@ -3044,14 +3055,14 @@ def screen_verdict_cmd(evidence_db: Path, fresh_pin: str | None) -> None:
             f"[dim]{v.estimand_label}[/]",
             _sanitize_clause_text(v.rationale, max_len=None),
         )
-    _console.print(table)
-    _console.print(
+    _console().print(table)
+    _console().print(
         "\n[dim]p0 is derived from ADMISSIBLE screen trials only; inadmissible (voided)"
         " screens are kept in the store but excluded. A verdict is a hardness screen,"
         " not a paired measurement.[/]"
     )
     if fresh_pin is None:
-        _console.print(
+        _console().print(
             "\n[dim]Pin currency check skipped: supply --fresh-pin to refuse rows"
             " captured under a different harness instrument (#382).[/]"
         )
@@ -3124,7 +3135,7 @@ def screen_profile_cmd(
             # (missing screen_runs/screen_trials) makes derive_p0_by_skill raise
             # OperationalError. Fall back to no screens — unlike 'screen verdict',
             # this command can still profile the --skills-root library.
-            _console.print(
+            _console().print(
                 f"\n[yellow]evidence.db at {evidence_db} has no screen store "
                 "(missing/older schema); profiling the skills-root library only.[/]"
             )
@@ -3141,7 +3152,7 @@ def screen_profile_cmd(
     # standing tax is 0 (not None).
     library: dict[str, tuple[int, bool]] = {}
     if skills_root is not None and not skills_root.is_dir():
-        _console.print(
+        _console().print(
             f"\n[yellow]--skills-root {skills_root} is not a directory — skipped.[/] "
             "[dim]The description-token standing-cost axis and library enumeration "
             "are unavailable.[/]"
@@ -3175,7 +3186,7 @@ def screen_profile_cmd(
                 library[candidate.name] = (desc_cost, is_disable)
 
     if not screened and not library:
-        _console.print(
+        _console().print(
             "\n[yellow]nothing to profile[/] — no screened skills and no --skills-root."
             "\n[dim]  Run 'screen backfill --execute' or a screen, and/or pass --skills-root.[/]"
         )
@@ -3267,23 +3278,23 @@ def screen_profile_cmd(
             cells.extend([eff_cell, effpc_cell])
         table.add_row(*cells)
 
-    _console.print(table)
+    _console().print(table)
 
     # --- Footer notes (mirror the 'screen verdict' honesty footer) ------------
-    _console.print(
+    _console().print(
         "\n[dim]Axes are SEPARATE and not fused into any ranking scalar (GRADE / Guyatt"
         " 2008). evidence-quality is an ORDINAL label — compare, do not average"
         " (Velleman & Wilkinson 1993). A verdict is a hardness screen, not a paired"
         " measurement.[/]"
     )
-    _console.print(
+    _console().print(
         "[dim]desc-cost is a chars/4 estimate of the always-on description-token standing"
         " tax (0 for disable-model-invocation skills — never loaded into context)."
         " fired-cost (the per-epoch ledger tax) is HELD: no sanctioned read-only open"
         " path exists for the runtime cost ledger yet.[/]"
     )
     if not library:
-        _console.print(
+        _console().print(
             "[dim]No skills-root library: profiling screened skills only; the"
             " description-token standing-cost axis and full library enumeration are shown"
             " as '—'. UNMEASURABLE also depends on skills-root — the"
@@ -3292,7 +3303,7 @@ def screen_profile_cmd(
             " labelled UNMEASURABLE.[/]"
         )
     if show_held_columns:
-        _console.print(
+        _console().print(
             "[dim]effect (95% CrI) and eff/cost are HELD/scaffolded: the Stage-0 screen"
             " path yields no paired per-skill effect, so both render '—'. Effect is a"
             " Beta(1,1) equal-tailed 95% credible interval when measured — never a bare"
@@ -3345,16 +3356,16 @@ def screen_backfill_cmd(
     )
 
     if not execute:
-        _console.print("\n[bold yellow]DRY-RUN[/] — batch-1 screen manifest (no writes):")
+        _console().print("\n[bold yellow]DRY-RUN[/] — batch-1 screen manifest (no writes):")
         for entry in BATCH1_MANIFEST:
             mark = (
                 "[green]admissible[/]"
                 if entry.admissibility_state == "admissible"
                 else (f"[red]inadmissible[/] ({entry.inadmissibility_reason})")
             )
-            _console.print(f"  {entry.expected_skill}: {mark}")
-            _console.print(f"    [dim]{entry.rel_path}[/]")
-        _console.print("\n[yellow]Dry-run: no data written. Use --execute to persist.[/]")
+            _console().print(f"  {entry.expected_skill}: {mark}")
+            _console().print(f"    [dim]{entry.rel_path}[/]")
+        _console().print("\n[yellow]Dry-run: no data written. Use --execute to persist.[/]")
         return
 
     with StorageContext(evidence_db, runtime_db) as ctx:
@@ -3363,31 +3374,33 @@ def screen_backfill_cmd(
         # Idempotent: already-superseded rows are skipped.
         redispositioned = supersede_d4_screen_runs(ctx.evidence_conn)
 
-    _console.print(f"\n[green]Backfilled[/] {len(report.ingested)} screens into {evidence_db}")
+    _console().print(f"\n[green]Backfilled[/] {len(report.ingested)} screens into {evidence_db}")
     if report.skipped:
-        _console.print(
+        _console().print(
             f"[dim]Skipped {len(report.skipped)} manifest entr"
             f"{'y' if len(report.skipped) == 1 else 'ies'} already in the store (#430):[/]"
         )
         for line in report.skipped:
-            _console.print(f"  [dim]{_sanitize_clause_text(line, max_len=None)}[/]")
+            _console().print(f"  [dim]{_sanitize_clause_text(line, max_len=None)}[/]")
     for result in report.ingested:
         state = result.admissibility_state
         color = "green" if state == "admissible" else "red"
-        _console.print(
+        _console().print(
             f"  {result.skill_name}: [{color}]{state}[/] ({result.n_pass}/{result.n_trials} passed)"
         )
     if redispositioned:
-        _console.print(
+        _console().print(
             f"\n[yellow]Re-dispositioned[/] {len(redispositioned)} screen run(s) "
             "via supersession (#402 D4 / stale-pin disposition table)."
         )
     if report.mismatches:
-        _console.print("\n[bold red]AUDIT MISMATCHES[/] (manifest disagrees with stored evidence):")
+        _console().print(
+            "\n[bold red]AUDIT MISMATCHES[/] (manifest disagrees with stored evidence):"
+        )
         for m in report.mismatches:
-            _console.print(f"  [red]{_sanitize_clause_text(m, max_len=None)}[/]")
+            _console().print(f"  [red]{_sanitize_clause_text(m, max_len=None)}[/]")
         raise click.ClickException("backfill audit failed — see mismatches above")
-    _console.print("\n[dim]Run 'screen verdict' to see the derived keep/cut verdicts.[/]")
+    _console().print("\n[dim]Run 'screen verdict' to see the derived keep/cut verdicts.[/]")
 
 
 @run.command("evaluate-paired")
@@ -3432,7 +3445,7 @@ def run_evaluate_paired(
             evidence_db=evidence_db,
         )
     except PairedGate2Refusal as exc:
-        _console.print(f"[red]REFUSAL[/]: {exc}")
+        _console().print(f"[red]REFUSAL[/]: {exc}")
         raise SystemExit(exc.exit_code) from exc
 
 
@@ -3483,33 +3496,33 @@ def run_pi_paired(config: Path, execute: bool, evidence_db: Path, runtime_db: Pa
     try:
         spec = spec_from_config(raw, base_dir=config.parent.resolve())
     except KeyError as exc:
-        _console.print(f"[red]REFUSAL[/]: config is missing required key {exc}")
+        _console().print(f"[red]REFUSAL[/]: config is missing required key {exc}")
         raise SystemExit(2) from exc
 
     try:
         validated = validate_pre_spend(spec)
     except (PiPairedRunError, PiLaunchError, PiRosterError) as exc:
-        _console.print(f"[red]REFUSAL (pre-spend)[/]: {exc}")
-        _console.print("[yellow]No epoch was launched. Nothing was spent.[/]")
+        _console().print(f"[red]REFUSAL (pre-spend)[/]: {exc}")
+        _console().print("[yellow]No epoch was launched. Nothing was spent.[/]")
         raise SystemExit(3) from exc
 
-    _console.print("[green]Pre-spend gate passed.[/]")
+    _console().print("[green]Pre-spend gate passed.[/]")
     for name in validated.checks:
-        _console.print(f"  ok  {name}")
-    _console.print(f"  runtime version : {validated.runtime_version}")
-    _console.print(
+        _console().print(f"  ok  {name}")
+    _console().print(f"  runtime version : {validated.runtime_version}")
+    _console().print(
         f"  parser identity : {validated.parser['version']} "
         f"({validated.parser['content_hash'][:16]})"
     )
-    _console.print(f"  pin fingerprint : {validated.pin.fingerprint()}")
-    _console.print(f"  treatment       : {validated.treatment.name}")
-    _console.print(
+    _console().print(f"  pin fingerprint : {validated.pin.fingerprint()}")
+    _console().print(f"  treatment       : {validated.treatment.name}")
+    _console().print(
         f"  rosters         : full={[e.name for e in validated.full_roster]} "
         f"null={[e.name for e in validated.null_roster]}"
     )
 
     if not execute:
-        _console.print(
+        _console().print(
             f"[yellow]Dry-run: {spec.n_pairs} pair(s) NOT run, no evidence written. "
             "Use --execute to spend.[/]"
         )
@@ -3519,11 +3532,11 @@ def run_pi_paired(config: Path, execute: bool, evidence_db: Path, runtime_db: Pa
         try:
             result = run_paired_evaluation(spec, ctx.evidence_conn, validated=validated)
         except (PiPairedRunError, PiLaunchError) as exc:
-            _console.print(f"[red]REFUSAL (apparatus)[/]: {exc}")
-            _console.print("[yellow]No evidence was written for this pair.[/]")
+            _console().print(f"[red]REFUSAL (apparatus)[/]: {exc}")
+            _console().print("[yellow]No evidence was written for this pair.[/]")
             raise SystemExit(4) from exc
 
-    _console.print(f"[green]Pair written.[/] run_id={result.run_id}")
+    _console().print(f"[green]Pair written.[/] run_id={result.run_id}")
 
 
 if __name__ == "__main__":  # pragma: no cover
