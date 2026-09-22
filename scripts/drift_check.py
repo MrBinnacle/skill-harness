@@ -1117,7 +1117,7 @@ LIVE_ROWS: tuple[LiveRow, ...] = (
         dc_id="DC-19",
         summary=(
             "asset pairs: every source-export pair in assets/asset-pairs.json "
-            "matches its recorded sha256 — a stale export or an edited source "
+            "matches its recorded sha256 -- a stale export or an edited source "
             "without re-export is refused (#592)"
         ),
         asset_pairs=AssetPairsContract(
@@ -1739,7 +1739,7 @@ def _check_asset_pairs(root: Path, contract: AssetPairsContract) -> list[str]:
             if not isinstance(recorded, str) or not recorded:
                 failures.append(
                     f"{contract.manifest_path}: pairs[{position}] {half} {name!r} "
-                    f"records no {half}_sha256 — an unrecorded half cannot drift visibly"
+                    f"records no {half}_sha256, an unrecorded half cannot drift visibly"
                 )
                 continue
             file_path = root / name
@@ -1760,7 +1760,7 @@ def _check_asset_pairs(root: Path, contract: AssetPairsContract) -> list[str]:
         for half, (_, recorded, actual) in checked.items():
             if actual != recorded:
                 failures.append(
-                    f"asset pair {position} has a mismatched {half}: {pair_hashes} — "
+                    f"asset pair {position} has a mismatched {half}: {pair_hashes}, "
                     "one half of a pair was changed without the other, or without "
                     "re-recording both"
                 )

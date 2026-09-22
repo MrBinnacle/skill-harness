@@ -2413,8 +2413,6 @@ def test_dc19_both_changed_together_is_green(tmp_path: Path) -> None:
     """Green control: changing both halves of a pair AND re-recording the hashes
     is the correct workflow. The manifest on disk has the right hashes, so the
     check passes."""
-    import hashlib as _hashlib
-
     root = _make_tree(tmp_path)
     # Change both files.
     svg_path = root / "assets" / "social-preview.svg"
@@ -2425,11 +2423,13 @@ def test_dc19_both_changed_together_is_green(tmp_path: Path) -> None:
     data = png_path.read_bytes()
     new_png = b"MODIFIED" + data[8:]
     png_path.write_bytes(new_png)
-    # Update the manifest with the new hashes.
+    # Update the manifest with the new hashes. Hash the bytes actually on
+    # disk, not the in-memory string -- on Windows Path.write_text translates
+    # "\n" to "\r\n", so hashing the string would disagree with the file.
     manifest_path = root / "assets" / "asset-pairs.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["pairs"][0]["source_sha256"] = _hashlib.sha256(new_svg.encode()).hexdigest()
-    manifest["pairs"][0]["export_sha256"] = _hashlib.sha256(new_png).hexdigest()
+    manifest["pairs"][0]["source_sha256"] = hashlib.sha256(svg_path.read_bytes()).hexdigest()
+    manifest["pairs"][0]["export_sha256"] = hashlib.sha256(new_png).hexdigest()
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     r = _run(root)
     assert r.returncode == 0, r.stdout + r.stderr
