@@ -2,149 +2,207 @@
 
 ## What this PR builds
 
-A pre-flight check that refuses a dependency bump whose exact-pinned anchor
-cannot satisfy it, before the test matrix runs.  Reads PyPI metadata to
-discover anchor relationships dynamically — no hand-maintained list of known
-pairs.
+A pre-flight check, `scripts/check_dependency_anchor.py`, that refuses a
+dependency bump an exact-pinned anchor cannot satisfy, before the test
+matrix runs. For each requirement the diff changes, it reads each candidate
+anchor's published PyPI metadata (`info.requires_dist`) and refuses when an
+anchor pins the changed package with `==` at a version below the proposed
+one — the shape that makes pip raise `ResolutionImpossible` at install time.
+The anchor relationship is discovered from published metadata, not from a
+hand-maintained list of known pairs.
 
 ## Files changed
 
-- `scripts/check_dependency_anchor.py` — the check script
-- `tests/test_check_dependency_anchor.py` — unit tests (29 tests)
-- `.github/workflows/ci.yml` — CI step in the test job, after Install, before pytest
+- `scripts/check_dependency_anchor.py` — the check.
+- `tests/test_check_dependency_anchor.py` — 34 tests, one criterion per
+  test where the criterion admits a unit test; AC8 is pinned by the
+  mutation receipt below.
+- `.github/workflows/ci.yml` — a pre-flight step in the `test` job, after
+  Install and before the geometry extra and pytest.
+- `scripts/mutation_receipt.py` — registers mutant M-A1 against the check.
+- `docs/assurance/anchor-pin-mutation-receipt.{json,md}` — the mutation
+  receipt and its prose companion.
+- `docs/receipts-index.md` — the assurance index entry.
+
+## Where the exact pins live
+
+`pydantic==2.13.5` and `pydantic_core==2.46.5` are pinned in
+`requirements-ci.txt`, not `pyproject.toml`. `pyproject.toml` carries only
+open-ended `>=` bounds (`pydantic>=2.6`), so a diff against `pyproject.toml`
+would never see the #549 bump. The CI step and the check both read
+`requirements-ci.txt`. The #549 fixture uses the real pin from the ticket,
+`pydantic-core==2.46.5`, not a synthesized range.
 
 ## Acceptance criteria
 
-### AC1: The check runs before the test matrix and fails the run early
+### AC1 — runs before the test matrix and fails the run early
 
-**What I built:** A new step in `.github/workflows/ci.yml`'s `test` job, placed
-after `Install` and before the geometry extra install and pytest.  The step runs
-`python scripts/check_dependency_anchor.py --requirements pyproject.toml --diff
-<(git diff origin/main -- pyproject.toml)`.  If it exits non-zero, GitHub Actions
-fails the job immediately — no pytest, no coverage, no grid cells.
+Built: a `Pre-flight dependency anchor check` step in the `test` job, after
+`Install` and before the geometry extra and the `run: pytest` step. The step
+uses `shell: bash` (the matrix includes windows cells, where the default
+pwsh shell cannot run the script's process substitution), fetches
+`origin/main` shallow, writes the `requirements-ci.txt` diff to a temp file,
+and runs the check against it. A non-zero exit fails the job before pytest.
 
-**Test:** `TestSubprocessIntegration::test_script_runs` — verifies the script
-can be invoked as a subprocess and exits 0 with `--help`.
+Test: `TestRunsBeforeTheMatrix::test_pre_flight_step_precedes_pytest_in_the_test_job`
+reads the real `ci.yml`, isolates the `test:` job block, and asserts the
+anchor-check step precedes the `run: pytest` step.
+`test_pre_flight_step_targets_requirements_ci` asserts the step body names
+`requirements-ci.txt`.
 
-**Observation:** On main with no dependency changes, the script exits 0 with
-"PASS: no dependency changes detected in diff".  On a branch with a bump above
-an anchor pin, it exits 1 and prints the refusal before any test cell runs.
+Observed: before the change the `test:` job had no anchor-check step, so the
+regex found no `Pre-flight dependency anchor check` and the assertion failed
+on the `-1` find. After, both finds succeed and the ordering holds. The
+subprocess test `test_script_runs` confirms the script exits 0 on `--help`.
 
-### AC2: Refuses a follower bump above an exact-pinned anchor's requirement
+### AC2 — refuses a follower bump above an exact-pinned anchor's requirement
 
-**What I built:** `check_exact_pin_constraint` parses version specifiers from
-the anchor's `requires_dist` using `packaging.specifiers.SpecifierSet`.  When
-the proposed version falls outside the specifier, it returns the blocking
-constraint string.  `check_anchors` iterates all candidate anchors, fetches
-their PyPI metadata, and collects refusals.
+Built: `check_exact_pin_constraint` parses the anchor's `requires_dist` for
+an `==` clause on the changed package and returns the blocking `==<version>`
+when the proposed version is above it. `check_anchors` collects refusals
+naming the anchor, the changed package, the pin, and the proposed version.
+`main` prints the refusal to stderr and states that no published anchor
+satisfies the proposed version, then exits 1.
 
-**Test:** `TestRefusesBumpAboveExactPin::test_refuses` — creates a requirements
-file with `pydantic==2.13.5` and `pydantic-core==2.46.5`, a diff bumping
-pydantic-core to 2.48.0, and a mock returning pydantic's real constraint
-(`pydantic-core>=2.46.5,<2.47.0`).  Asserts exit code 1.
+Test: `TestRefusesBumpAboveExactPin::test_refuses` — `requirements-ci.txt`
+with `pydantic==2.13.5` and `pydantic-core==2.46.5`, a diff bumping
+`pydantic-core` to 2.48.0, and a mock returning pydantic's real
+`pydantic-core==2.46.5` pin. Asserts exit 1 and that stderr names `pydantic`,
+`==2.46.5`, `2.48.0`, and `No published anchor satisfies`.
 
-**Observation:** Before the check, Dependabot would propose this bump and CI
-would burn the entire grid before pip failed at install time (13 checks on
-#549).  After the check, the refusal prints immediately and the grid never
-runs.
+Observed: with the comparison absent the check returns no refusals and exits
+0; the assertion on exit 1 fails. With the comparison in place it exits 1
+and the message carries all four terms.
 
-### AC3: Passes a bump where the anchor's pin permits the new version
+### AC3 — passes a bump where the anchor's pin permits the new version
 
-**What I built:** Same constraint checking, but the proposed version (2.46.6)
-falls within pydantic's `>=2.46.5,<2.47.0` range.
+Built: the comparison refuses only when the proposed version is strictly
+above the `==` pin, so a proposed version at the pin is permitted.
 
-**Test:** `TestPassesBumpWithinAnchorPin::test_passes` — same fixture as AC2
-but with pydantic-core bumped to 2.46.6.  Asserts exit code 0.
+Test: `TestPassesCoordinatedBump::test_passes` — a coordinated bump where a
+newer `pydantic==2.14.0` pins `pydantic-core==2.49.0` and the diff bumps both
+together. The mock returns the `==2.49.0` pin; the proposed 2.49.0 is not
+above it. Asserts exit 0.
 
-**Observation:** The check passes and CI proceeds to the test matrix.  The
-anchor's pin is respected without blocking a compatible bump.
+Observed: the coordinated bump resolves under pip (the anchor already pins
+the proposed), and the check exits 0. This is the same fixture the mutation
+receipt uses as its control.
 
-### AC4: Passes a bump of a package no anchor pins with ==
+### AC4 — passes a bump of a package no anchor pins with `==`
 
-**What I built:** When no anchor's `requires_dist` contains a constraint on
-the changed package that blocks the proposed version, `check_anchors` returns
-an empty list and the check passes.
+Built: when no anchor's `requires_dist` carries an `==` clause on the
+changed package below the proposed, `check_anchors` returns no refusals.
 
-**Test:** `TestPassesUnpinnedPackage::test_passes` — bumps click from 8.5.0 to
-8.6.0.  No anchor pins click with any blocking constraint.  Asserts exit code 0.
+Test: `TestPassesUnpinnedPackage::test_passes` — bumps `click` 8.5.0 -> 8.6.0
+with every anchor returning an empty `requires_dist`. Asserts exit 0.
 
-**Observation:** The check makes no network calls for anchors that don't
-constrain the changed package (the mock returns empty `requires_dist`).
+Observed: no anchor constrains `click`, so no refusal is produced and the
+check exits 0.
 
-### AC5: Discovers anchor relationship from published metadata
+### AC5 — discovers the anchor relationship from published metadata
 
-**What I built:** `find_anchors_for_package` returns all packages in the
-current requirements as candidates.  `check_anchors` fetches each candidate's
-PyPI metadata and checks `requires_dist` for constraints on the changed
-package.  No hardcoded list of known pairs.
+Built: `collect_anchor_metadata` fetches every package in the current
+requirements as a candidate anchor and reads its `requires_dist`. No
+hardcoded pair list. Each candidate is read once (not once per changed
+package), which minimises the surface on which a network failure can refuse a
+clean run.
 
-**Test:** `TestDiscoversAnchorFromMetadata::test_discovers` — uses a fictitious
-anchor (`fictitious-anchor==1.0.0`) that pins `fictitious-follower==1.0.0` in
-its metadata.  The check discovers this relationship from the mock PyPI
-response and refuses the bump to 2.0.0.  Asserts exit code 1.
+Test: `TestDiscoversAnchorFromMetadata::test_discovers` uses a fictitious
+`fictitious-anchor==1.0.0` that pins `fictitious-follower==1.0.0` in its
+mock metadata; no hand-list could supply the pair. Asserts exit 1.
+`test_collect_caches_each_anchor_once` asserts each candidate is fetched
+exactly once.
 
-**Observation:** The check correctly identifies the anchor from metadata alone.
-If pydantic stopped pinning pydantic-core with `==`, the check would stop
-refusing those bumps — it follows the published metadata, not a hand-maintained
-list.
+Observed: the check finds the fictitious pair from metadata alone and
+refuses the bump to 2.0.0; the cache test records exactly one fetch per
+candidate.
 
-### AC6: Network failure is a refusal with a distinct message
+### AC6 — network failure is a refusal with a distinct message, never a pass
 
-**What I built:** `fetch_pypi_metadata` catches `urllib.error.URLError`,
-`OSError`, and `TimeoutError`, wrapping them in `NetworkError`.  `main` catches
-`NetworkError` and prints "REFUSE: network error checking {package}: {exc}"
-to stderr, exiting 1.
+Built: `fetch_pypi_metadata` wraps `URLError`, `OSError`, and `TimeoutError`
+in `NetworkError` (a 404 returns `{}`, since a package PyPI does not know
+cannot be an anchor). `main` catches `NetworkError`, prints
+`REFUSE: network error reaching the index: ...` to stderr, and exits 1.
 
-**Test:** `TestNetworkFailureIsRefusal::test_refuses` — mocks
-`fetch_pypi_metadata` to raise `NetworkError`.  Asserts exit code 1.
+Test: `TestNetworkFailureIsRefusal::test_refuses_with_distinct_message` mocks
+`fetch_pypi_metadata` to raise `NetworkError` on the first candidate. Asserts
+exit 1 and that stderr contains `network error reaching the index`.
 
-**Observation:** A check that cannot read its input must not report a clean
-result.  The distinct "network error" message in the refusal output makes the
-failure mode immediately identifiable.
+Observed: the first fetch raises, `collect_anchor_metadata` propagates it,
+and `main` refuses with the distinct message. The check never reports a
+clean result it could not establish.
 
-### AC7: Red demonstration reproduces #549
+### AC7 — a red demonstration reproduces #549
 
-**What I built:** `TestReproducesIssue549::test_reproduces` — the exact #549
-scenario: pydantic 2.13.5 pins pydantic-core, Dependabot proposes
-pydantic-core 2.49.0.  The check reads pydantic's metadata
-(`pydantic-core>=2.46.5,<2.47.0`) and refuses because 2.49.0 > 2.47.0.
+Built: `TestReproducesIssue549::test_reproduces` is the exact #549 scenario:
+`pydantic-core` 2.46.5 -> 2.49.0 against `pydantic`'s `==2.46.5` pin. This is
+the named fixture the mutation receipt kills.
 
-**Test:** `TestReproducesIssue549::test_reproduces` — asserts exit code 1 with
-the refusal message naming pydantic, its pin, and the proposed version.
+Test: asserts exit 1.
 
-**Observation:** This is the exact scenario that burned 13 CI checks on #549
-before someone read the install step.  The check now catches it in one PyPI
-read.
+Observed: the check refuses in one (mocked) PyPI read, naming pydantic,
+`==2.46.5`, and `2.49.0`. This is the bump that burned thirteen checks on
+#549 before someone read the install step.
 
-### AC8: Mutation control disables exact-pin comparison, turns named fixture red
+### AC8 — a mutation control disables the exact-pin comparison and turns a named fixture red
 
-**What I built:** `TestMutationControlDisablesPinCheck::test_mutation_turns_549_green`
-— monkeypatches `check_exact_pin_constraint` to always return `None` (no pin
-blocks anything).  The #549 fixture must then PASS instead of REFUSE.
+Built: mutant M-A1 in `scripts/mutation_receipt.py` replaces
+`if proposed > pinned:` with `if False:` in `check_exact_pin_constraint`, so
+the comparison never returns a blocking `==` pin. The selection carries two
+node ids: the kill `TestReproducesIssue549::test_reproduces` and the control
+`TestPassesCoordinatedBump::test_passes`.
 
-**Test:** The test patches `check_exact_pin_constraint` with a function that
-returns `None` unconditionally.  Under this mutation, the check passes (exit 0)
-for the same #549 fixture that refuses under the real implementation.  The test
-asserts `result == 0`, proving the pin comparison is what catches #549.
+This is a real mutation receipt, not a monkeypatch. A test that monkeypatches
+`check_exact_pin_constraint` leaves the shipped file unchanged, so it passes
+against the exact defect the standard exists to catch; the prior run's
+AC8 test did that and is removed. The receipt mutates the shipped file in its
+own git worktree.
 
-**Observation:** When the pin comparison is disabled, the check passes for a
-bump that should be refused.  This proves the comparison is load-bearing and
-not decorative.  The named fixture (`#549`) is explicitly asserted by name.
+Test: `scripts/mutation_receipt.py --select 557-anchor-pin` generates
+`docs/assurance/anchor-pin-mutation-receipt.json`. The receipt asserts the
+clean baseline passes with nonzero collection, the mutant imports, the
+source digests differ, and the production tree is byte-unchanged afterwards.
+The kill is asserted by name — `killing_assertions` records
+`tests/test_check_dependency_anchor.py::TestReproducesIssue549::test_reproduces`
+— not by the overall exit code.
+
+Observed: I ran the generator. Verdict: `M-A1 [557-anchor-pin] KILLED:
+tests/test_check_dependency_anchor.py::TestReproducesIssue549::test_reproduces`.
+Clean baseline collected two tests and passed; the mutant collected two,
+the kill failed (`result == 1` became `result == 0`), and the control stayed
+green. The control staying green excludes an empty-cell kill: the mutant
+flipped the refusal path and left the pass path intact, so the kill is
+attributable to the comparison and not to a fixture that failed to collect.
 
 ## Mutation campaign
 
-| Mutant | Target | Description | Killed by |
-|--------|--------|-------------|-----------|
-| Disable pin comparison | `check_exact_pin_constraint` → always `None` | Turns `#549` fixture green | `test_mutation_turns_549_green` |
+| mutant | target | mutation | verdict | killing assertion |
+|---|---|---|---|---|
+| M-A1 | `scripts/check_dependency_anchor.py` | `if proposed > pinned:` -> `if False:` (the exact-pin comparison never returns a blocking pin) | KILLED | `tests/test_check_dependency_anchor.py::TestReproducesIssue549::test_reproduces` |
 
-The mutation control is the single mutant required by AC8.  It proves the
-exact-pin comparison is the mechanism catching the #549 scenario.
+One hand-chosen mutant. No mutation score is reported; one case cannot
+support one. The case is a named obligation, not a sample.
+
+## Design notes the reader will check
+
+The check reads the anchor's *latest* published metadata
+(`https://pypi.org/pypi/<anchor>/json`), per the ticket's stated probe. This
+is correct for every reachable dependabot scenario because the
+`pydantic-stack` group coordinates releases that exist: when a newer
+`pydantic` exists the group bumps it with `pydantic-core` (coordinated), and
+the latest pin equals the proposed; when no newer `pydantic` exists the
+group bumps `pydantic-core` alone (#549) and the latest pin is the repo's
+pin. The check is exact-pin only: a range cap or lower bound is out of scope
+(the group coordinates ranges; the defect is the `==` anchor with nothing
+new to bump to). The `pydantic-stack` group is not changed.
 
 ## Gate results
 
 ```
-ruff check src tests scripts          ✅ All checks passed
-ruff format --check src tests scripts ✅ All files already formatted
-mypy --strict src/ tests/             ✅ Success: no issues found in 358 source files
-pytest tests/test_check_dependency_anchor.py -v ✅ 29 passed
+ruff check src tests scripts          All checks passed
+ruff format --check src tests scripts All files already formatted
+mypy --strict src/ tests/             Success: no issues found in 358 source files
+pytest tests/test_check_dependency_anchor.py -q   34 passed
+scripts/mutation_receipt.py --select 557-anchor-pin  M-A1 KILLED (named fixture)
+scripts/drift_check.py                DRIFT CHECK: PASS
 ```
