@@ -1,4 +1,5 @@
-"""Single source of truth for the Tier-1 mechanical scorer axes.
+"""Single source of truth for the Tier-1 mechanical scorer axes and deterministic
+external-check axes.
 
 These names previously existed twice — as ``AXIS_*`` constants in
 ``ablation/confound.py`` and as hand-typed prose in the extractor system prompt
@@ -10,7 +11,7 @@ provenance the ``metric_versions`` table already records. This registers
 nothing at import time.
 
 Containment boundary: the model proposes an axis, code disposes.
-``classify_axis`` is the disposal — an axis absent from this table is
+``classify_axis`` is the disposal — an axis absent from either registry is
 ``UNSCOREABLE`` and can only land in "nothing can score this".
 
 Matching is plain exact comparison, with NO normalisation at all — not even a
@@ -28,6 +29,11 @@ whitespace strip. Two reasons, and both are load-bearing:
   at the extractor boundary (``ExtractedClause._normalise_axis``, #504) so a
   padded axis never reaches this classifier or those consumers; this function
   stays strict and fail-closed on anything that still arrives unstripped.
+
+External-check axes (#555) sit beside Tier-1 axes in a second registry. They
+are deterministic, program-checkable outcomes that need no LLM judge. The
+protected-class comment-deletion rate is the first registered axis: its oracle
+is a deterministic diff checker whose exit status is the score.
 """
 
 from __future__ import annotations
@@ -82,28 +88,64 @@ TIER1_AXIS_NAMES: Final[tuple[str, ...]] = tuple(axis.name for axis in TIER1_AXE
 
 
 # ---------------------------------------------------------------------------
+# External-check axes (#555)
+# ---------------------------------------------------------------------------
+
+EXTERNAL_CHECK_AXES: Final[tuple[Tier1Axis, ...]] = (
+    Tier1Axis(
+        "protected_comment_deletion",
+        "did the edit delete a comment of a protected class (translation, "
+        "rationale, authority, hazard, contract, history)",
+    ),
+)
+"""Deterministic, program-checkable axes whose oracle is an external check.
+
+Each axis maps to a deterministic checker that reads a diff and exits
+non-zero when the diff deletes a comment of a protected class. The oracle
+is not an LLM judge — it is a program that produces an exit status. The
+runner records the score without routing through the judge.
+
+``protected_comment_deletion`` is the first registered axis, carried from
+MrBinnacle/skills#308. The checker reads a unified diff and refuses when
+the diff deletes a comment of a protected class (rationale, authority,
+hazard, contract, history). Translation is removable when the same change
+adds code stating the fact.
+"""
+
+EXTERNAL_CHECK_AXIS_NAMES: Final[tuple[str, ...]] = tuple(axis.name for axis in EXTERNAL_CHECK_AXES)
+"""Just the names of external-check axes, in registry order."""
+
+
+# ---------------------------------------------------------------------------
 # Disposal
 # ---------------------------------------------------------------------------
 
 
 class AxisScoreability(StrEnum):
-    """What, if anything, can mechanically score a proposed axis."""
+    """What, if anything, can score a proposed axis."""
 
     TIER1_MECHANICAL = "tier1_mechanical"
+    EXTERNAL_CHECK = "external_check"
     UNSCOREABLE = "unscoreable"
 
 
 def classify_axis(axis: str) -> AxisScoreability:
-    """Classify a proposed axis against the Tier-1 registry.
+    """Classify a proposed axis against the Tier-1 and external-check registries.
 
     Total over ``str`` — every input maps to a value, including the empty
     string. Never raises and never guesses a nearest match: ``UNSCOREABLE`` is a
     real answer ("nothing can score this"), not an error condition, because this
     sits downstream of model-generated text where a raise would turn an
     unrecognised axis into a crashed extraction.
+
+    Returns ``EXTERNAL_CHECK`` when the axis is in the external-check registry
+    (#555). The runner can score such axes via a deterministic checker without
+    routing through the judge.
     """
     if axis in TIER1_AXIS_NAMES:
         return AxisScoreability.TIER1_MECHANICAL
+    if axis in EXTERNAL_CHECK_AXIS_NAMES:
+        return AxisScoreability.EXTERNAL_CHECK
     return AxisScoreability.UNSCOREABLE
 
 
@@ -141,3 +183,33 @@ def get_tier1_scorers() -> dict[str, MetricFn]:
         compute_citation_presence_per_flag,
     )
     return dict(zip(TIER1_AXIS_NAMES, scorers, strict=True))
+
+
+# ---------------------------------------------------------------------------
+# External-check scorer resolution (#555)
+# ---------------------------------------------------------------------------
+
+
+def get_external_check_scorers() -> dict[str, MetricFn]:
+    """Return the registered external-check axis name -> scoring function mapping.
+
+    Each external-check scorer is a deterministic program that reads input and
+    produces a float. Unlike Tier-1 scorers, external-check scorers may require
+    structured input (e.g., a diff rather than plain text), so the ``MetricFn``
+    signature is a convenience — the runner passes the appropriate input.
+
+    Zipped against ``EXTERNAL_CHECK_AXIS_NAMES`` rather than written as a
+    name-keyed literal, so the names live in exactly one place and ``strict=True``
+    turns a scorer added without its registry entry into an immediate error.
+
+    Currently returns an empty dict because no external-check scorer is
+    implemented in-tree. The checker from #308 is archived outside the
+    repository and will be registered when it is brought in-tree.
+
+    When scorers are added, they must be zipped against EXTERNAL_CHECK_AXIS_NAMES
+    with strict=True, exactly like get_tier1_scorers, so a scorer added without
+    its registry entry turns into an immediate error.
+    """
+    # No external-check scorers registered yet. Return empty dict.
+    # When scorers are added, build the dict by zipping against EXTERNAL_CHECK_AXIS_NAMES.
+    return {}
