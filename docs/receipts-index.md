@@ -1302,9 +1302,9 @@ by `scripts/mutation_receipt.py --select 557-anchor-pin` into
 [`anchor-pin-mutation-receipt.json`](assurance/anchor-pin-mutation-receipt.json).
 
 - **Claims:** One named mutant (M-A1) was run in its own git worktree at
-  commit `8981887` under Python 3.13.15, against
+  commit `7c66da8` under Python 3.13.15, against
   `scripts/check_dependency_anchor.py` at
-  `sha256:0a7e51020dcae0bd9e24fcbd4da2c2daae573a6a40cc717cc6eb04264ecef333`,
+  `sha256:6b64376aa2a24d731d5a62346e1aa26c337e2f88be121b4cd2452aea186eac72`,
   and was KILLED by the named test node
   `tests/test_check_dependency_anchor.py::TestReproducesIssue549::test_reproduces`.
   The mutant replaces `if proposed > pinned:` with `if False:` so the
@@ -1321,10 +1321,9 @@ by `scripts/mutation_receipt.py --select 557-anchor-pin` into
 - **Refuses to claim:** A mutation score — one hand-chosen mutant cannot
   support one; adequacy of the check's test suite as a whole; that the
   check is correct, as distinct from the exact-pin comparison being the
-  operative mechanism for the #549 refusal; and that the latest-read (rather than
-  pinned-read) anchor probe is correct in every reachable dependabot
-  scenario, which holds only because the `pydantic-stack` group coordinates
-  releases that exist and the receipt does not exercise that coupling.
+  operative mechanism for the #549 refusal; or that a pinned-anchor probe
+  catches constraints other than exact pins, which this receipt does not
+  exercise.
 
 ---
 

@@ -6,8 +6,8 @@ exact-pinned anchor cannot satisfy before the test matrix runs.
 **Generator:** `scripts/mutation_receipt.py --select 557-anchor-pin`.
 **Machine-readable record:** `docs/assurance/anchor-pin-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/check_dependency_anchor.py`
-at `sha256:0a7e51020dcae0bd9e24fcbd4da2c2daae573a6a40cc717cc6eb04264ecef333`.
-**Commit at generation:** `8981887` — informational only; currency is checked
+at `sha256:6b64376aa2a24d731d5a62346e1aa26c337e2f88be121b4cd2452aea186eac72`.
+**Commit at generation:** `7c66da8` — informational only; currency is checked
 against the digest above by `tests/test_mutation_receipt.py`.
 
 Each case ran in its **own git worktree** at the recorded commit. Production

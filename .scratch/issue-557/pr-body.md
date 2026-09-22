@@ -17,8 +17,8 @@ hand-maintained list of known pairs.
 - `tests/test_check_dependency_anchor.py` — 34 tests, one criterion per
   test where the criterion admits a unit test; AC8 is pinned by the
   mutation receipt below.
-- `.github/workflows/ci.yml` — a pre-flight step in the `test` job, after
-  Install and before the geometry extra and pytest.
+- `.github/workflows/ci.yml` — a dedicated pre-flight job that the `test`
+  matrix must pass before it resolves the full constraints set.
 - `scripts/mutation_receipt.py` — registers mutant M-A1 against the check.
 - `docs/assurance/anchor-pin-mutation-receipt.{json,md}` — the mutation
   receipt and its prose companion.
@@ -37,23 +37,21 @@ would never see the #549 bump. The CI step and the check both read
 
 ### AC1 — runs before the test matrix and fails the run early
 
-Built: a `Pre-flight dependency anchor check` step in the `test` job, after
-`Install` and before the geometry extra and the `run: pytest` step. The step
-uses `shell: bash` (the matrix includes windows cells, where the default
-pwsh shell cannot run the script's process substitution), fetches
-`origin/main` shallow, writes the `requirements-ci.txt` diff to a temp file,
-and runs the check against it. A non-zero exit fails the job before pytest.
+Built: an isolated `dependency-anchor` job that installs only the check's
+`packaging` dependency, fetches `origin/main` shallow, writes the
+`requirements-ci.txt` diff to a temp file, and runs the check against it. The
+matrix `test` job declares `needs: dependency-anchor`, so none of its four
+cells reaches its constrained `Install` step when the check refuses.
 
-Test: `TestRunsBeforeTheMatrix::test_pre_flight_step_precedes_pytest_in_the_test_job`
-reads the real `ci.yml`, isolates the `test:` job block, and asserts the
-anchor-check step precedes the `run: pytest` step.
-`test_pre_flight_step_targets_requirements_ci` asserts the step body names
-`requirements-ci.txt`.
+Test: `TestRunsBeforeTheMatrix::test_matrix_needs_the_pre_flight_gate` reads
+the real `ci.yml`, asserts the gate names `requirements-ci.txt`, and asserts
+the matrix job needs that gate. A same-job step cannot satisfy the criterion:
+the conflicting constraints fail its preceding install first.
 
-Observed: before the change the `test:` job had no anchor-check step, so the
-regex found no `Pre-flight dependency anchor check` and the assertion failed
-on the `-1` find. After, both finds succeed and the ordering holds. The
-subprocess test `test_script_runs` confirms the script exits 0 on `--help`.
+Observed: a same-job check was unreachable on the #549 failure path because
+the constrained install failed first in every matrix cell. The isolated gate
+now finishes before those cells start. The subprocess test `test_script_runs`
+confirms the script exits 0 on `--help`.
 
 ### AC2 — refuses a follower bump above an exact-pinned anchor's requirement
 
@@ -102,20 +100,22 @@ check exits 0.
 ### AC5 — discovers the anchor relationship from published metadata
 
 Built: `collect_anchor_metadata` fetches every package in the current
-requirements as a candidate anchor and reads its `requires_dist`. No
-hardcoded pair list. Each candidate is read once (not once per changed
-package), which minimises the surface on which a network failure can refuse a
-clean run.
+requirements as a candidate anchor at its declared version and reads its
+`requires_dist`. No hardcoded pair list. Each candidate is read once (not once
+per changed package), which minimises the surface on which a network failure
+can refuse a clean run.
 
 Test: `TestDiscoversAnchorFromMetadata::test_discovers` uses a fictitious
 `fictitious-anchor==1.0.0` that pins `fictitious-follower==1.0.0` in its
 mock metadata; no hand-list could supply the pair. Asserts exit 1.
 `test_collect_caches_each_anchor_once` asserts each candidate is fetched
-exactly once.
+exactly once at its declared version.
+`test_uses_the_anchor_version_declared_in_constraints` proves a newer anchor
+release cannot stand in for the version this repository installs.
 
 Observed: the check finds the fictitious pair from metadata alone and
 refuses the bump to 2.0.0; the cache test records exactly one fetch per
-candidate.
+candidate at its declared version.
 
 ### AC6 — network failure is a refusal with a distinct message, never a pass
 
@@ -140,9 +140,9 @@ the named fixture the mutation receipt kills.
 
 Test: asserts exit 1.
 
-Observed: the check refuses in one (mocked) PyPI read, naming pydantic,
-`==2.46.5`, and `2.49.0`. This is the bump that burned thirteen checks on
-#549 before someone read the install step.
+Observed: the check refuses, naming pydantic, `==2.46.5`, and `2.49.0`. This
+is the bump that burned thirteen checks on #549 before someone read the
+install step.
 
 ### AC8 — a mutation control disables the exact-pin comparison and turns a named fixture red
 
@@ -185,16 +185,13 @@ support one. The case is a named obligation, not a sample.
 
 ## Design notes the reader will check
 
-The check reads the anchor's *latest* published metadata
-(`https://pypi.org/pypi/<anchor>/json`), per the ticket's stated probe. This
-is correct for every reachable dependabot scenario because the
-`pydantic-stack` group coordinates releases that exist: when a newer
-`pydantic` exists the group bumps it with `pydantic-core` (coordinated), and
-the latest pin equals the proposed; when no newer `pydantic` exists the
-group bumps `pydantic-core` alone (#549) and the latest pin is the repo's
-pin. The check is exact-pin only: a range cap or lower bound is out of scope
-(the group coordinates ranges; the defect is the `==` anchor with nothing
-new to bump to). The `pydantic-stack` group is not changed.
+The check reads each anchor's published metadata at the version declared in
+`requirements-ci.txt` (`https://pypi.org/pypi/<anchor>/<version>/json`). A
+newer release cannot stand in for that anchor: pip still resolves the declared
+version until the dependency update changes it. The check is exact-pin only: a
+range cap or lower bound is out of scope (the group coordinates ranges; the
+defect is the `==` anchor with nothing new to bump to). The `pydantic-stack`
+group is not changed.
 
 ## Gate results
 
