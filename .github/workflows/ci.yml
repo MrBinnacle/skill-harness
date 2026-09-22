@@ -153,6 +153,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -c requirements-ci.txt -e ".[dev]"
+      # #557: refuse a dependency bump an exact-pinned anchor cannot satisfy.
+      # Runs before the test matrix so a structurally unmergeable bump does
+      # not consume the grid.  Reads PyPI metadata for each anchor; network
+      # failure is a refusal with a distinct message.
+      - name: Pre-flight dependency anchor check
+        run: python scripts/check_dependency_anchor.py --requirements pyproject.toml --diff <(git diff origin/main -- pyproject.toml)
       - name: Install the geometry extra
         if: env.SKILL_HARNESS_GEOMETRY_CELL == '1'
         # Only the designated cell installs playwright. The other three stop at
