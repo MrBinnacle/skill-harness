@@ -48,8 +48,8 @@ parse_pyproject_requirements = _mod.parse_pyproject_requirements
 parse_requirement = _mod.parse_requirement
 parse_requirements_file = _mod.parse_requirements_file
 
-# Real pydantic metadata shape, per the #549 ticket: pydantic latest pins
-# pydantic-core with ==2.46.5, which is what requirements-ci.txt already pins.
+# Pydantic 2.13.5 metadata shape, per the #549 ticket: its pydantic-core pin
+# is ==2.46.5, which is what requirements-ci.txt already declares.
 _PYDANTIC_REQUIRES_DIST_2_46_5 = [
     "pydantic-core==2.46.5",
     "typing-extensions>=4.12.0",
@@ -543,7 +543,7 @@ class TestNetworkFailureIsRefusal:
         with patch(
             "check_dependency_anchor.fetch_pypi_metadata",
             side_effect=NetworkError(
-                "network error fetching https://pypi.org/pypi/pydantic/json: timeout"
+                "network error fetching https://pypi.org/pypi/pydantic/2.13.5/json: timeout"
             ),
         ):
             result = main(["--requirements", str(req), "--diff", str(diff)])
