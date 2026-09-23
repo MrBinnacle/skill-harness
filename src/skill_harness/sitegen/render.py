@@ -646,8 +646,8 @@ def _verdict_template_text(receipt: Mapping[str, Any]) -> str:
     """Render the verbatim template for CUT(no_lift) or HAZARD_NOT_MET.
 
     Returns the empty string when the receipt does not carry one of these
-    sub-reasons.  The template is filled from ``verdict_scope`` fields; missing
-    fields fall back to sensible defaults rather than raising.
+    sub-reasons. The HAZARD_NOT_MET count comes from the recorded Null-arm
+    hazard-entry measurement, not the immutable verdict scope.
     """
     scope = receipt.get("verdict_scope")
     if not isinstance(scope, Mapping):
@@ -663,10 +663,25 @@ def _verdict_template_text(receipt: Mapping[str, Any]) -> str:
         return f'<p class="verdict-template">{safe(text)}</p>'
     unmeasured = receipt.get("unmeasured_sub_reason")
     if unmeasured == "HAZARD_NOT_MET":
+        measurements = receipt.get("measurements")
+        if not isinstance(measurements, Mapping):
+            raise SiteBuildError("HAZARD_NOT_MET receipt carries no measurements")
+        hazard_entry = measurements.get("hazard_entry_null")
+        if not isinstance(hazard_entry, Mapping):
+            raise SiteBuildError("HAZARD_NOT_MET receipt carries no Null-arm hazard-entry rate")
+        hazard_count = hazard_entry.get("passes")
+        null_runs = hazard_entry.get("epochs")
+        if (
+            isinstance(hazard_count, bool)
+            or not isinstance(hazard_count, int)
+            or isinstance(null_runs, bool)
+            or not isinstance(null_runs, int)
+        ):
+            raise SiteBuildError("HAZARD_NOT_MET receipt carries no Null-arm hazard-entry counts")
         text = HAZARD_NOT_MET_TEMPLATE.format(
             model=_string_field(scope, "model_id", "unknown model"),
-            hazard_count=_string_field(scope, "hazard_count", "?"),
-            null_runs=_string_field(scope, "null_runs", "?"),
+            hazard_count=hazard_count,
+            null_runs=null_runs,
         )
         return f'<p class="verdict-template">{safe(text)}</p>'
     return ""

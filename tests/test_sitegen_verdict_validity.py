@@ -141,13 +141,18 @@ def test_cut_no_lift_renders_verbatim_template() -> None:
     assert "verdict-template" in page
 
 
-def test_hazard_not_met_renders_verbatim_template() -> None:
-    """HAZARD_NOT_MET renders the verbatim template with scope fields."""
+def test_hazard_not_met_renders_verbatim_template(tmp_path: Path) -> None:
+    """A conforming HAZARD_NOT_MET receipt renders the recorded hazard count."""
+    from skill_harness.sitegen import load_schema, validate_receipts
+
     receipt = _receipt(verdict="CANT_TELL_YET")
     receipt["unmeasured_sub_reason"] = "HAZARD_NOT_MET"
-    receipt["verdict_scope"]["hazard_count"] = "3"
-    receipt["verdict_scope"]["null_runs"] = "5"
-    page = _render(receipt)
+    receipt["measurements"] = {"hazard_entry_null": {"value": 0.6, "passes": 3, "epochs": 5}}
+    schema = load_schema(Path("docs/sers/sers.schema.json"))
+    receipts_dir = tmp_path / "receipts"
+    receipts_dir.mkdir()
+    (receipts_dir / "hazard.json").write_text(json.dumps(receipt), encoding="utf-8")
+    page = _render(validate_receipts(schema, receipts_dir)[0])
 
     assert (
         "On the registered fixture, model-2026-09 entered the target hazard in "
@@ -266,4 +271,46 @@ def test_carried_forward_with_changed_scope_refused(tmp_path: Path) -> None:
     carried = _carried_forward_receipt(scope_overrides={"tested_at": "2026-09-25T00:00:00Z"})
     (receipts_dir / "carried.json").write_text(json.dumps(carried), encoding="utf-8")
     with pytest.raises(SiteBuildError, match=r"verdict_scope\.tested_at changed"):
+        validate_receipts(schema, receipts_dir)
+
+
+def test_carried_forward_without_original_scope_is_refused(tmp_path: Path) -> None:
+    """A missing predecessor scope cannot establish an immutable scope."""
+    from skill_harness.sitegen import SiteBuildError, load_schema, validate_receipts
+
+    schema = load_schema(Path("docs/sers/sers.schema.json"))
+    receipts_dir = tmp_path / "receipts"
+    superseded_dir = receipts_dir / "superseded"
+    superseded_dir.mkdir(parents=True)
+    original = _scope_match_receipt()
+    del original["verdict_scope"]
+    (superseded_dir / "original.json").write_text(json.dumps(original), encoding="utf-8")
+    (receipts_dir / "carried.json").write_text(
+        json.dumps(_carried_forward_receipt()), encoding="utf-8"
+    )
+
+    with pytest.raises(SiteBuildError, match=r"carries no verdict_scope"):
+        validate_receipts(schema, receipts_dir)
+
+
+def test_carried_forward_with_ambiguous_original_scope_is_refused(tmp_path: Path) -> None:
+    """A skill with conflicting predecessor scopes has no identifiable original."""
+    from skill_harness.sitegen import SiteBuildError, load_schema, validate_receipts
+
+    schema = load_schema(Path("docs/sers/sers.schema.json"))
+    receipts_dir = tmp_path / "receipts"
+    superseded_dir = receipts_dir / "superseded"
+    superseded_dir.mkdir(parents=True)
+    (superseded_dir / "first.json").write_text(json.dumps(_scope_match_receipt()), encoding="utf-8")
+    conflicting = _scope_match_receipt()
+    conflicting["verdict_scope"] = {
+        **conflicting["verdict_scope"],
+        "model_id": "model-2026-10",
+    }
+    (superseded_dir / "second.json").write_text(json.dumps(conflicting), encoding="utf-8")
+    (receipts_dir / "carried.json").write_text(
+        json.dumps(_carried_forward_receipt()), encoding="utf-8"
+    )
+
+    with pytest.raises(SiteBuildError, match=r"ambiguous superseded verdict scopes"):
         validate_receipts(schema, receipts_dir)

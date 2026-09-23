@@ -181,6 +181,14 @@ ablated arm is now materially shorter than the full arm. Any difference the
 oracle records could be the clause or could be the length. The runner refuses the
 clause rather than attributing the difference to the clause.
 
+### `HAZARD_NOT_MET`
+
+The Null arm entered a registered trap hazard too rarely for the outcome to
+measure the skill's effect. The receipt records the observed
+`hazard_entry_null` count. An outcome oracle cannot distinguish a model that
+avoided the hazard from a model that handled it safely, so the result is not a
+measurement of the trap-discipline skill.
+
 ## Contrast with the field's pattern
 
 The standard pattern in LLM evaluation is to produce a number regardless of whether

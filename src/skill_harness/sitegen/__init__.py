@@ -167,20 +167,32 @@ def _check_carried_forward_immutability(
                 f"CARRIED_FORWARD receipt for {skill_name!r} but no superseded/ "
                 "directory exists to carry forward from"
             )
-        original: dict[str, Any] | None = None
+        originals: list[tuple[Path, Mapping[str, Any]]] = []
         for super_path in sorted(superseded_dir.glob("*.json")):
             super_obj = json.loads(super_path.read_text(encoding="utf-8"))
             if isinstance(super_obj, dict) and super_obj.get("skill_name") == skill_name:
-                original = super_obj
-                break
-        if original is None:
+                originals.append((super_path, super_obj))
+        if not originals:
             raise SiteBuildError(
                 f"CARRIED_FORWARD receipt for {skill_name!r} but no superseded "
                 f"receipt found for that skill in {superseded_dir}"
             )
-        orig_scope = original.get("verdict_scope")
-        if not isinstance(orig_scope, Mapping):
-            continue
+        original_scopes: list[tuple[Path, Mapping[str, Any]]] = []
+        for original_path, original in originals:
+            original_scope = original.get("verdict_scope")
+            if not isinstance(original_scope, Mapping):
+                raise SiteBuildError(
+                    f"CARRIED_FORWARD receipt for {skill_name!r} but superseded receipt "
+                    f"{original_path.name!r} carries no verdict_scope to carry forward"
+                )
+            original_scopes.append((original_path, original_scope))
+        _, orig_scope = original_scopes[0]
+        if any(other_scope != orig_scope for _, other_scope in original_scopes[1:]):
+            names = ", ".join(path.name for path, _ in original_scopes)
+            raise SiteBuildError(
+                f"CARRIED_FORWARD receipt for {skill_name!r} has ambiguous superseded "
+                f"verdict scopes in {names}; the original scope cannot be established"
+            )
         # Compare every key present in either scope.
         all_keys = set(scope.keys()) | set(orig_scope.keys())
         for key in sorted(all_keys):
