@@ -30,7 +30,7 @@ checked against the code enums in CI.
 
 Vocabulary generation of the receipt. Receipts that disagree on
 `sers_version` are not comparable. Supported values: `"1.0.0"`, `"1.1.0"`,
-`"1.2.0"`, `"1.3.0"`, `"1.4.0"`.
+`"1.2.0"`, `"1.3.0"`, `"1.4.0"`, `"1.5.0"`, `"1.6.0"`.
 
 ### `skill_name`
 
@@ -303,6 +303,61 @@ It is the one field in the block the harness cannot derive from a file on disk, 
 `build_subject_identity` takes it as an argument rather than computing it. A blank
 pin is refused: a blank is a manufactured record, not a missing one.
 
+### `verdict_scope` (optional, from `sers_version` 1.6.0)
+
+Registration and provenance block: what was tested, on which model, under which
+registration. Absent on pre-1.6.0 receipts. A receipt with verdict `KEEP` at
+1.6.0 must carry `model_id`, `task_family` and `delivery_mechanism`.
+
+| Field | Meaning |
+| --- | --- |
+| `model_id` | Subject model pin from the harness fingerprint. |
+| `harness_version` | Harness version from the harness fingerprint. |
+| `fixture_version` | Fixture SHA set from `fixture_shas.json` for the task family. |
+| `task_id` | Registered task identifier. |
+| `tested_at` | ISO datetime of the original full validation run. |
+| `task_family` | Registered task family from the run's `RegisteredScope` (`semantics.py`). |
+| `estimand` | Registered estimand from the run's `RegisteredScope` (`semantics.py`). |
+| `delivery_mechanism` | Registered delivery mechanism from the run's `RegisteredScope` (`semantics.py`). |
+| `n_per_arm` | Number of epochs per arm in the original validation run. |
+| `margin_pp` | Pre-registered margin in percentage points for the confidence sequence, or a typed refusal. |
+| `cs_lower_bound` | Lower bound of the confidence sequence from the original validation, or a typed refusal. |
+| `control_world_result` | Result on the control world. |
+| `placebo_ref` | Reference to the placebo or synthetic control used. |
+| `fixture_id` | Identifier of the fixture set used in the run. |
+
+### `currentness` (optional, from `sers_version` 1.6.0)
+
+Separates the verdict from its present validity. A missing `currentness` at
+render time reads as `STALE` / `NONE`, never as validated.
+
+| Field | Meaning |
+| --- | --- |
+| `state` | `VALIDATED` = full re-validation passed; `CARRIED_FORWARD` = sentinel/canary passed but no full re-run; `STALE` = checks failed or max_age elapsed. |
+| `basis` | `FULL_VALIDATION` = a full paired run; `SENTINEL_PASS` = sentinel and canary checks passed; `NONE` = no check performed or checks failed. |
+| `last_checked_at` | ISO datetime of the last currentness check. |
+| `next_check_due` | ISO datetime when the next currentness check is due. |
+| `max_age_days` | Maximum age in days before a verdict is considered STALE. |
+
+Cross-field rules:
+- `state: VALIDATED` requires `basis: FULL_VALIDATION` (SENTINEL_PASS is not a
+  full validation).
+- `state: CARRIED_FORWARD` requires `verdict_scope.tested_at` to be present
+  (the original validation timestamp must be recorded).
+
+### `drift_policy` (optional, from `sers_version` 1.6.0)
+
+Pre-registered policy for the surveillance procedure (sentinel + canary
+launcher). The procedure itself is a separate ticket.
+
+| Field | Meaning |
+| --- | --- |
+| `null_trigger_pp` | Null-arm pass-rate change in percentage points that triggers a full re-run. |
+| `canary_n` | Number of canary card + Null sentinel pairs in the surveillance window. |
+| `full_rerun_on_null_trigger` | Whether a null-trigger fires a full re-run. |
+| `full_rerun_on_canary_failure` | Whether a canary failure fires a full re-run. |
+| `full_rerun_on_model_change` | Whether a model change without a passed sentinel fires a full re-run. |
+
 ## Conformance
 
 ```text
@@ -317,8 +372,10 @@ The harness asserts:
 3. poisoned fixtures under `tests/fixtures/sers/poison_*.json` **fail**
    validation (wrong verdict vocabulary, missing instrument identity, bare
    gate term where the qualified term is required, a 1.4.0 receipt whose
-   `subject_identity` omits `subject_model`, and a free-typed `extractor_model`
-   refusal outside the closed vocabulary);
+   `subject_identity` omits `subject_model`, a free-typed `extractor_model`
+   refusal outside the closed vocabulary, a `VALIDATED` currentness with
+   `SENTINEL_PASS` basis, and a `KEEP` receipt at 1.6.0 without the required
+   `verdict_scope` fields);
 4. no receipt minted before 1.4.0 has gained a `subject_model`. The store is
    append-only, so a back-fill is a rewritten record, not a repair.
 

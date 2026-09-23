@@ -21,7 +21,7 @@
   "properties": {
     "sers_version": {
       "type": "string",
-      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0"],
+      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0"],
       "description": "SERS vocabulary generation. Receipts from different sers_version values are not comparable."
     },
     "skill_name": {
@@ -403,6 +403,153 @@
       "type": "string",
       "enum": ["current", "stale", "no_current_metric_version"],
       "description": "Expiry state of the result, read from the frozen_cases_with_currency VIEW. 'current' = metric version and implementation hash match the current metric version; 'stale' = a newer version exists or the hash mismatches; 'no_current_metric_version' = no audited valid metric version exists."
+    },
+    "verdict_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Registration and provenance block: what was tested, on which model, under which registration. Absent on pre-1.6.0 receipts. A receipt with verdict KEEP must carry model_id, task_family and delivery_mechanism.",
+      "properties": {
+        "model_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Subject model pin from the harness fingerprint (HarnessPin.model)."
+        },
+        "harness_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Harness version from the harness fingerprint (HarnessPin or equivalent)."
+        },
+        "fixture_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Fixture SHA set from fixture_shas.json for the task family."
+        },
+        "task_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Registered task identifier."
+        },
+        "tested_at": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ISO datetime of the original full validation run."
+        },
+        "task_family": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Registered task family from the run's RegisteredScope (semantics.py)."
+        },
+        "estimand": {
+          "type": "string",
+          "enum": ["treatment-policy", "hypothetical"],
+          "description": "Registered estimand from the run's RegisteredScope (semantics.py)."
+        },
+        "delivery_mechanism": {
+          "type": "string",
+          "enum": ["model-pull", "hand-invoked", "hook-nudged", "hook-blocked"],
+          "description": "Registered delivery mechanism from the run's RegisteredScope (semantics.py)."
+        },
+        "n_per_arm": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["refusal"],
+              "properties": {
+                "refusal": { "type": "string", "enum": ["not_instrumented", "not_applicable"] },
+                "detail": { "type": "string" }
+              }
+            }
+          ],
+          "description": "Number of epochs per arm in the original validation run."
+        },
+        "margin_pp": {
+          "oneOf": [
+            { "type": "number" },
+            { "$ref": "#/$defs/scope_audit_refusal" }
+          ],
+          "description": "Pre-registered margin in percentage points for the confidence sequence, or a typed refusal."
+        },
+        "cs_lower_bound": {
+          "oneOf": [
+            { "type": "number" },
+            { "$ref": "#/$defs/scope_audit_refusal" }
+          ],
+          "description": "Lower bound of the confidence sequence from the original validation, or a typed refusal."
+        },
+        "control_world_result": {
+          "type": ["string", "null"],
+          "description": "Result on the control world (e.g. 'pass', 'fail', 'not_applicable')."
+        },
+        "placebo_ref": {
+          "type": ["string", "null"],
+          "description": "Reference to the placebo or synthetic control used."
+        },
+        "fixture_id": {
+          "type": ["string", "null"],
+          "description": "Identifier of the fixture set used in the run."
+        }
+      }
+    },
+    "currentness": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Separates the verdict from its present validity. A missing currentness at render time reads as STALE / NONE, never as validated.",
+      "required": ["state", "basis"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["VALIDATED", "CARRIED_FORWARD", "STALE"],
+          "description": "Whether the verdict is currently supported: VALIDATED = full re-validation passed; CARRIED_FORWARD = sentinel/canary passed but no full re-run; STALE = sentinel or canary failed, model changed, or max_age elapsed."
+        },
+        "basis": {
+          "type": "string",
+          "enum": ["FULL_VALIDATION", "SENTINEL_PASS", "NONE"],
+          "description": "How the currentness was established: FULL_VALIDATION = a full paired run; SENTINEL_PASS = sentinel and canary checks passed; NONE = no check performed or checks failed."
+        },
+        "last_checked_at": {
+          "type": "string",
+          "description": "ISO datetime of the last currentness check."
+        },
+        "next_check_due": {
+          "type": "string",
+          "description": "ISO datetime when the next currentness check is due."
+        },
+        "max_age_days": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum age in days before a verdict is considered STALE."
+        }
+      }
+    },
+    "drift_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Pre-registered policy for the surveillance procedure (sentinel + canary launcher). The procedure itself is a separate ticket.",
+      "properties": {
+        "null_trigger_pp": {
+          "type": "number",
+          "description": "Null-arm pass-rate change in percentage points that triggers a full re-run."
+        },
+        "canary_n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of canary card + Null sentinel pairs in the surveillance window."
+        },
+        "full_rerun_on_null_trigger": {
+          "type": "boolean",
+          "description": "Whether a null-trigger fires a full re-run."
+        },
+        "full_rerun_on_canary_failure": {
+          "type": "boolean",
+          "description": "Whether a canary failure fires a full re-run."
+        },
+        "full_rerun_on_model_change": {
+          "type": "boolean",
+          "description": "Whether a model change without a passed sentinel fires a full re-run."
+        }
+      }
     }
   },
   "allOf": [
@@ -551,6 +698,76 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.6.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"],
+        "properties": {
+          "subject_identity": {
+            "required": ["subject_model"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sers_version": { "const": "1.6.0" },
+          "verdict": { "const": "KEEP" }
+        },
+        "required": ["sers_version", "verdict"]
+      },
+      "then": {
+        "required": ["verdict_scope"],
+        "properties": {
+          "verdict_scope": {
+            "required": ["model_id", "task_family", "delivery_mechanism"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "currentness": {
+            "properties": { "state": { "const": "CARRIED_FORWARD" } },
+            "required": ["state"]
+          }
+        },
+        "required": ["currentness"]
+      },
+      "then": {
+        "required": ["verdict_scope"],
+        "properties": {
+          "verdict_scope": {
+            "required": ["tested_at"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "currentness": {
+            "properties": { "state": { "const": "VALIDATED" } },
+            "required": ["state"]
+          }
+        },
+        "required": ["currentness"]
+      },
+      "then": {
+        "properties": {
+          "currentness": {
+            "properties": {
+              "basis": { "enum": ["FULL_VALIDATION"] }
+            }
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -632,6 +849,18 @@
           }
         }
       ]
+    },
+    "scope_audit_refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["refusal"],
+      "properties": {
+        "refusal": {
+          "type": "string",
+          "enum": ["not_instrumented", "not_applicable"]
+        },
+        "detail": { "type": "string" }
+      }
     }
   }
 }
