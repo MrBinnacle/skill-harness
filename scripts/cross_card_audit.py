@@ -4,11 +4,17 @@ Run the offline skill audit on every published card in the declared ``skills``
 population. The screen refuses claims that the audit cannot establish, rather
 than substituting fixture cards or inferred task families.
 
-Run: PYTHONPATH=src python scripts/cross_card_audit.py > docs/findings/cross-card-audit-screen.md
+Run: PYTHONPATH=src python scripts/cross_card_audit.py --collection <path to the skills clone> \
+    > docs/findings/cross-card-audit-screen.md
+
+The published cards live in the sibling ``skills`` repository, not here. ``--collection`` names
+that clone; without it the screen enumerates this repository, which holds no published card,
+and reports the empty population rather than substituting one.
 """
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -19,19 +25,31 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SKILL_GLOB = "skills/*/*/SKILL.md"
 
 
-def _find_skill_files() -> list[Path]:
+def _find_skill_files(collection: Path) -> list[Path]:
     """Return exactly the published-card population declared by #652."""
     result = subprocess.run(  # noqa: S603
         ["git", "ls-files", _SKILL_GLOB],  # noqa: S607
         capture_output=True,
         text=True,
-        cwd=_REPO_ROOT,
+        cwd=collection,
         check=False,
     )
     if result.returncode != 0:
         message = result.stderr.strip() or "git ls-files failed"
         raise RuntimeError(f"Cannot establish the published-card population: {message}")
-    return [_REPO_ROOT / p for p in result.stdout.splitlines()]
+    return [collection / p for p in result.stdout.splitlines()]
+
+
+def _collection_head(collection: Path) -> str:
+    """The commit the population was read at, so the table is reproducible."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        cwd=collection,
+        check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else "unknown"
 
 
 def _run_skill_audit(path: Path) -> None:
@@ -45,7 +63,7 @@ def _run_skill_audit(path: Path) -> None:
     )
     if result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip() or "skill audit failed"
-        raise RuntimeError(f"skill audit failed for {path.relative_to(_REPO_ROOT)}: {message}")
+        raise RuntimeError(f"skill audit failed for {path}: {message}")
 
 
 def _unmeasured_claims() -> str:
@@ -77,7 +95,17 @@ def _out_of_reach_reason(report: ArtifactAuditReport) -> str:
 
 def main() -> None:
     """Audit all published cards and print the ranked finding document."""
-    skill_files = _find_skill_files()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--collection",
+        type=Path,
+        default=_REPO_ROOT,
+        help="the skills clone whose `skills/*/*/SKILL.md` is the population (default: this repo)",
+    )
+    args = parser.parse_args()
+    collection = args.collection.resolve()
+    skill_files = _find_skill_files(collection)
+    head = _collection_head(collection)
 
     results: list[dict[str, object]] = []
     for path in sorted(skill_files):
@@ -87,7 +115,7 @@ def main() -> None:
         results.append(
             {
                 "name": report.name,
-                "path": str(path.relative_to(_REPO_ROOT)),
+                "path": path.relative_to(collection).as_posix(),
                 "standing_cost_raw": report.standing_cost_raw,
                 "measurable_claims": _unmeasured_claims(),
                 "measurable_axes": ", ".join(report.measurable_axes),
@@ -113,7 +141,8 @@ def main() -> None:
     print("# Cross-card audit screen - Stage 0 comparative baseline (#652)")
     print()
     print("> **Status:** STAGE-0 COMPLETE 2026-09-23. The declared population is")
-    print(f'> `git ls-files "{_SKILL_GLOB}"`: {len(results)} published card(s).')
+    print(f'> `git ls-files "{_SKILL_GLOB}"` in the skills collection at `{head}`:')
+    print(f"> {len(results)} published card(s).")
     print()
     print("**Claims:** This document records the published-card population and runs the")
     print("public `skill-harness skill audit` command on each member. The table reports")
@@ -157,8 +186,9 @@ def main() -> None:
 
     print("## Method")
     print()
-    print(f'1. Enumerated the declared population via `git ls-files "{_SKILL_GLOB}"`.')
-    print("   The screen refuses to substitute fixtures or screen copies when that set is empty.")
+    print(f'1. Enumerated the declared population via `git ls-files "{_SKILL_GLOB}"` in the')
+    print(f"   skills collection (`--collection`, read at `{head}`). The screen refuses to")
+    print("   substitute fixtures or screen copies when that set is empty.")
     print("2. Ran `python -m skill_harness skill audit <card>` on each member, then used")
     print("   its `audit_skill_artifact()` report to render the table (offline, zero cost).")
     print("3. Reported Tier-1 axis availability, but refused measurable claims and a claim")
