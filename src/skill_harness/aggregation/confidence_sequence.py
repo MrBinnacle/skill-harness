@@ -21,6 +21,9 @@ INTERVAL_METHOD_V1
     Stable method id written into SkillReport.interval_method.
 DEFAULT_ALPHA
     Two-sided level (0.05 → "95%" sequence).
+
+``one_sided_betting_bound`` is the one-sided sibling (#649): one capital process only, so a
+lower bound at level alpha is not paying for an upper tail it never reports.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 INTERVAL_METHOD_V1: str = "predictable_plugin_betting_cs_v1"
 DEFAULT_ALPHA: float = 0.05
@@ -158,6 +162,56 @@ def betting_confidence_sequence(
     )
 
 
+def one_sided_betting_bound(
+    observations: Sequence[float],
+    *,
+    alpha: float = DEFAULT_ALPHA,
+    side: Literal["lower", "upper"],
+) -> float:
+    """Terminal one-sided (1-alpha) anytime-valid bound on the mean of [0, 1] observations.
+
+    A lower bound uses only the plus capital process prod[1 + lambda+_i(mu)(X_i - mu)] and an
+    upper bound only the minus process prod[1 - lambda-_i(mu)(X_i - mu)]. The predictable
+    plug-in lambda uses log(1/alpha) rather than the hedged sequence's log(2/alpha), and the set
+    is inverted at 1/alpha. By Ville's inequality the bound holds at any stopping time.
+
+    Empty input yields the vacuous bound: 0 for ``lower``, 1 for ``upper``.
+    """
+    if not 0.0 < alpha < 1.0:
+        raise ValueError(f"alpha must be in (0, 1), got {alpha!r}")
+    if side not in ("lower", "upper"):
+        raise ValueError(f"side must be 'lower' or 'upper', got {side!r}")
+    xs = [float(x) for x in observations]
+    for i, x in enumerate(xs):
+        if not 0.0 <= x <= 1.0 or math.isnan(x):
+            raise ValueError(f"observation[{i}]={x!r} not in [0, 1]")
+    if not xs:
+        return 0.0 if side == "lower" else 1.0
+
+    log_threshold = math.log(1.0 / alpha)
+
+    def rejected(mu: float) -> bool:
+        log_pos, log_neg = _branch_log_wealths(xs, mu, alpha=alpha, sides=1)
+        return (log_pos if side == "lower" else log_neg) >= log_threshold
+
+    grid = [_MU_EPS + (1.0 - 2.0 * _MU_EPS) * i / _N_GRID for i in range(_N_GRID + 1)]
+    if side == "upper":
+        grid.reverse()
+    first = next((i for i, m in enumerate(grid) if not rejected(m)), None)
+    if first is None:
+        return min(1.0, max(0.0, sum(xs) / len(xs)))
+    if first == 0:
+        return 0.0 if side == "lower" else 1.0
+    outside, inside = grid[first - 1], grid[first]
+    for _ in range(_BISECT_ITERS):
+        mid = 0.5 * (outside + inside)
+        if rejected(mid):
+            outside = mid
+        else:
+            inside = mid
+    return float(inside)
+
+
 def miscalibrated_nonpredictable_cs(
     observations: Sequence[float],
     *,
@@ -222,6 +276,25 @@ def _hedged_log_wealth(
             return _LOG_WEALTH_CAP
         return 0.0
 
+    log_pos, log_neg = _branch_log_wealths(xs, mu, alpha=alpha, sides=2)
+
+    # log(theta*e^{lp} + (1-theta)*e^{ln}) with stable log-sum-exp.
+    a = math.log(_THETA) + log_pos
+    b = math.log(1.0 - _THETA) + log_neg
+    m = max(a, b)
+    if m >= _LOG_WEALTH_CAP:
+        return _LOG_WEALTH_CAP
+    return m + math.log(math.exp(a - m) + math.exp(b - m))
+
+
+def _branch_log_wealths(
+    xs: list[float], mu: float, *, alpha: float, sides: int
+) -> tuple[float, float]:
+    """Log wealth of the plus and minus capital processes at ``mu`` in (0, 1).
+
+    ``sides`` sets the plug-in lambda's log(sides/alpha): 2 for the hedged sequence, 1 for a
+    one-sided bound.
+    """
     # Running mean / variance priors (predictable plug-in, WSR §4.3).
     mean_hat = _MEAN_PRIOR
     var_hat = _VAR_PRIOR
@@ -229,15 +302,15 @@ def _hedged_log_wealth(
     log_neg = 0.0
 
     for t, x in enumerate(xs, start=1):
-        lam_p = _lambda_plus(mu, t, var_hat, alpha)
-        lam_m = _lambda_minus(mu, t, var_hat, alpha)
+        lam_p = _lambda_plus(mu, t, var_hat, alpha, sides=sides)
+        lam_m = _lambda_minus(mu, t, var_hat, alpha, sides=sides)
 
         # Factors guaranteed >= 1 - _TRUNC_C > 0 by lambda clipping.
         fp = 1.0 + lam_p * (x - mu)
         fm = 1.0 - lam_m * (x - mu)
         if fp <= 0.0 or fm <= 0.0:
             # Should not happen with correct clipping; refuse rather than NaN.
-            return _LOG_WEALTH_CAP
+            return _LOG_WEALTH_CAP, _LOG_WEALTH_CAP
         log_pos += math.log(fp)
         log_neg += math.log(fm)
 
@@ -247,13 +320,7 @@ def _hedged_log_wealth(
         var_hat = var_hat + (resid * resid - var_hat) / (t + 1)
         var_hat = max(var_hat, 1e-6)
 
-    # log(theta*e^{lp} + (1-theta)*e^{ln}) with stable log-sum-exp.
-    a = math.log(_THETA) + log_pos
-    b = math.log(1.0 - _THETA) + log_neg
-    m = max(a, b)
-    if m >= _LOG_WEALTH_CAP:
-        return _LOG_WEALTH_CAP
-    return m + math.log(math.exp(a - m) + math.exp(b - m))
+    return log_pos, log_neg
 
 
 def _poison_log_wealth(xs: list[float], mu: float, *, alpha: float) -> float:
@@ -294,21 +361,22 @@ def _poison_log_wealth(xs: list[float], mu: float, *, alpha: float) -> float:
     return m + math.log(math.exp(a - m) + math.exp(b - m))
 
 
-def _lambda_plus(mu: float, t: int, var_hat: float, alpha: float) -> float:
+def _lambda_plus(mu: float, t: int, var_hat: float, alpha: float, *, sides: int = 2) -> float:
     """Predictable plug-in lambda+_t(mu) in (0, c/mu]."""
-    return _lambda_raw(t, var_hat, alpha, cap=_TRUNC_C / mu)
+    return _lambda_raw(t, var_hat, alpha, cap=_TRUNC_C / mu, sides=sides)
 
 
-def _lambda_minus(mu: float, t: int, var_hat: float, alpha: float) -> float:
+def _lambda_minus(mu: float, t: int, var_hat: float, alpha: float, *, sides: int = 2) -> float:
     """Predictable plug-in lambda-_t(mu) in (0, c/(1-mu)]."""
-    return _lambda_raw(t, var_hat, alpha, cap=_TRUNC_C / (1.0 - mu))
+    return _lambda_raw(t, var_hat, alpha, cap=_TRUNC_C / (1.0 - mu), sides=sides)
 
 
-def _lambda_raw(t: int, var_hat: float, alpha: float, *, cap: float) -> float:
-    # lambda_t = sqrt(2 log(2/alpha) / (sigma^2_{t-1} * t * log(1+t))) and cap
-    # (WSR predictable plug-in; log(2/alpha) for two-sided hedged mix).
+def _lambda_raw(t: int, var_hat: float, alpha: float, *, cap: float, sides: int = 2) -> float:
+    # lambda_t = sqrt(2 log(sides/alpha) / (sigma^2_{t-1} * t * log(1+t))) and cap
+    # (WSR predictable plug-in; log(2/alpha) for the two-sided hedged mix, log(1/alpha) for
+    # a one-sided bound).
     denom = max(var_hat, 1e-6) * float(t) * math.log(1.0 + float(t))
-    target = math.sqrt(2.0 * math.log(2.0 / alpha) / denom)
+    target = math.sqrt(2.0 * math.log(sides / alpha) / denom)
     if cap <= 0.0:
         return 0.0
     return min(cap, target)
