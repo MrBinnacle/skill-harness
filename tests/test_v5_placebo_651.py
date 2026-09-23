@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 from skill_harness.extractor.parser import parse_skill_file
 
 _SCREEN_DIR = Path(__file__).resolve().parents[1] / "scripts" / "screens" / "419"
@@ -106,6 +108,24 @@ def test_surface_match_check_refuses_a_poison_placebo(tmp_path: Path) -> None:
         sm.PLACEBO_SKILL = original_placebo  # type: ignore[attr-defined]
 
 
+def test_surface_match_check_refuses_a_wrong_name_shape(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sm = _load("v5_surface_match")
+    malformed = tmp_path / "malformed-skill.md"
+    malformed.write_text(
+        PLACEBO_SKILL.read_text(encoding="utf-8").replace("name: parse-csv", "name: parsecsv"),
+        encoding="utf-8",
+    )
+    original_placebo = sm.PLACEBO_SKILL
+    try:
+        sm.PLACEBO_SKILL = malformed  # type: ignore[attr-defined]
+        assert sm.check() == 1
+    finally:
+        sm.PLACEBO_SKILL = original_placebo  # type: ignore[attr-defined]
+    assert "names must use the two-token kebab shape" in capsys.readouterr().out
+
+
 def test_listing_position_regex_matches_numbered_entries() -> None:
     s1a = _load("v5_cue_stage1a")
     assert s1a._LISTING_NUMBERED_RE.match("1. parse-csv: Use before")
@@ -118,3 +138,5 @@ def test_placebo_desc_constant_matches_card() -> None:
     s1a = _load("v5_cue_stage1a")
     placebo = parse_skill_file(PLACEBO_SKILL)
     assert str(placebo.frontmatter["description"]) == s1a.PLACEBO_DESC
+    full = parse_skill_file(FULL_SKILL)
+    assert str(full.frontmatter["description"]) == s1a.FULL_DESC

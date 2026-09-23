@@ -77,6 +77,12 @@ PLACEBO_DESC = (
     "Quoting does NOT stop a spreadsheet's number parse (silently applied); "
     "it drops every leading zero. Check the column type first."
 )
+FULL_DESC = (
+    "Use before `git pull` where `pull.rebase` may be `true`. `--no-ff` does NOT stop a "
+    "rebase under `pull.rebase=true` (silently ignored); it rewrites every local commit SHA. "
+    "Check config first."
+)
+CARD_DESCRIPTIONS = {"full": FULL_DESC, "placebo": PLACEBO_DESC}
 
 Outcome = Literal["CUT_NO_LIFT", "A_PASSES_EARLY", "UNRESOLVED_CONTINUE"]
 Side = Literal["lower", "upper"]
@@ -314,10 +320,26 @@ def _manifest_reads(log_dir: Path) -> dict[tuple[str, int], bool]:
 _LISTING_NUMBERED_RE = re.compile(r"^\d+\.\s", re.MULTILINE)
 
 
-def _listing_position(log_dir: Path, skill_description: str) -> dict[tuple[str, int], int]:
-    """(arm, epoch) -> 1-indexed position of the skill in the first-user-message listing.
+def _message_text(message: Any) -> str:
+    """Return text content from the Inspect message shapes used in eval logs."""
+    content = getattr(message, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            part.get("text", "") if isinstance(part, dict) else getattr(part, "text", "")
+            for part in content
+        ]
+        return " ".join(str(part) for part in parts if part)
+    return ""
 
-    A position other than 1 in any epoch fails the readout (S477).
+
+def _listing_position(log_dir: Path) -> dict[tuple[str, int], int]:
+    """Return each card's position in its first user-message listing.
+
+    Missing descriptions, non-numbered listings, duplicate epoch keys, and positions other than
+    one make the readout refuse. The Full and Placebo listing surfaces must match before their
+    contrast can support the pre-registered attribution claim (S477).
     """
     from inspect_ai.log import read_eval_log
 
@@ -325,39 +347,39 @@ def _listing_position(log_dir: Path, skill_description: str) -> dict[tuple[str, 
     for path in sorted(log_dir.glob("*.eval")):
         log = read_eval_log(str(path))
         arm = str((log.eval.metadata or {})["cell_arm"])
+        description = CARD_DESCRIPTIONS.get(arm)
+        if description is None:
+            continue
         for sample in log.samples or []:
             key = (arm, int(sample.epoch))
             if key in positions:
-                continue
-            # Find the first user message containing the skill description.
-            pos = 0
+                raise ValueError(f"duplicate listing position for {arm} epoch {sample.epoch}")
+            first_user = None
             for message in sample.messages:
-                content = getattr(message, "content", None)
-                text = ""
-                if isinstance(content, str):
-                    text = content
-                elif isinstance(content, list):
-                    parts = [
-                        p.get("text", "") if isinstance(p, dict) else getattr(p, "text", "")
-                        for p in content
-                    ]
-                    text = " ".join(str(t) for t in parts if t)
-                if skill_description not in text:
-                    continue
-                # Count numbered listing entries up to and including the description.
-                numbered = _LISTING_NUMBERED_RE.findall(text)
-                if numbered:
-                    # The description is in the last numbered block that precedes
-                    # or contains it.  Count entries line by line.
-                    count = 0
-                    for line in text.splitlines():
-                        if _LISTING_NUMBERED_RE.match(line):
-                            count += 1
-                        if skill_description in line:
-                            pos = count
-                            break
-                break
-            positions[key] = pos if pos else 1
+                if getattr(message, "role", None) == "user":
+                    first_user = _message_text(message)
+                    break
+            if first_user is None:
+                raise ValueError(f"{arm} epoch {sample.epoch}: no first user message")
+            description_offset = first_user.find(description)
+            if description_offset < 0:
+                raise ValueError(
+                    f"{arm} epoch {sample.epoch}: card description missing from first user message"
+                )
+            position = sum(
+                entry.start() <= description_offset
+                for entry in _LISTING_NUMBERED_RE.finditer(first_user)
+            )
+            if position == 0:
+                raise ValueError(
+                    f"{arm} epoch {sample.epoch}: card description is outside a numbered listing"
+                )
+            if position != 1:
+                raise ValueError(
+                    f"{arm} epoch {sample.epoch}: card appears at listing position {position}, "
+                    "expected 1"
+                )
+            positions[key] = position
     return positions
 
 
@@ -366,7 +388,12 @@ def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, A
 
     rows = read_rows(log_dir)
     manifest = _manifest_reads(log_dir)
-    positions = _listing_position(log_dir, PLACEBO_DESC)
+    positions = _listing_position(log_dir)
+    expected_positions = {(r.arm, r.epoch) for r in rows if r.arm in CARD_DESCRIPTIONS}
+    missing_positions = expected_positions - positions.keys()
+    if missing_positions:
+        missing = ", ".join(f"{arm} epoch {epoch}" for arm, epoch in sorted(missing_positions))
+        raise ValueError(f"listing position missing for {missing}")
     arms: dict[str, Any] = {}
     outcomes: dict[str, dict[int, int]] = {}
     for arm in ("full", "placebo"):
@@ -379,8 +406,6 @@ def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, A
             "no_publish": sum(r.no_publish for r in valid),
             "manifest_read": sum(manifest[(arm, r.epoch)] for r in valid),
         }
-    # Listing position assertion (S477): every epoch's card must be at position 1.
-    bad_positions = {k: v for k, v in positions.items() if v != 1}
     keys, xs = pair_by_launch(outcomes["full"], outcomes["placebo"])
     lb_fp, ub_fp = fp_bounds(xs, pass_alpha=pass_alpha)
     full_stream = tuple(float(outcomes["full"][e]) for e in sorted(outcomes["full"]))
@@ -389,7 +414,7 @@ def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, A
     return {
         "arms": arms,
         "listing_positions": {f"{arm}#{ep}": v for (arm, ep), v in positions.items()},
-        "listing_position_violations": {f"{arm}#{ep}": v for (arm, ep), v in bad_positions.items()},
+        "listing_position_violations": {},
         "null_a": {"n": null_a.n, "correct": null_a.correct, "order": null_order},
         "alpha": ALPHA,
         "pass_alpha": pass_alpha,

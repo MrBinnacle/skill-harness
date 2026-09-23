@@ -28,6 +28,7 @@ BANNED_RE = re.compile(r"\b(git|rebase|manifest|push|commit|sha|config)\b", re.I
 PLACEBO_FILE_TYPES = {".csv", ".tsv", ".xlsx"}
 
 SECTION_RE = re.compile(r"^## (.+)$", re.MULTILINE)
+NAME_RE = re.compile(r"^[a-z]+-[a-z]+$")
 
 
 def tokenize(text: str) -> list[str]:
@@ -50,6 +51,15 @@ def check() -> int:
 
     placebo_desc = str(placebo.frontmatter["description"])
     full_desc = str(full.frontmatter["description"])
+
+    print("=== Name-shape match ===")
+    print(f"  Placebo: {placebo.name}")
+    print(f"  Full:    {full.name}")
+    if not (NAME_RE.fullmatch(placebo.name) and NAME_RE.fullmatch(full.name)):
+        print("  REFUSED: names must use the two-token kebab shape")
+        return 1
+    print("  PASS: both names use the two-token kebab shape")
+    print()
 
     print("=== Description surface match ===")
     print(
