@@ -427,6 +427,17 @@ and covers that section only. This page stays the citable surface for every kind
   the local `one_sided_betting_bound` copy is the engine's; #649 owns that
   function, and the run is repeated if the two differ.
 
+### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
+
+- **Claims:** On 2026-09-23, `git ls-files "skills/*/*/SKILL.md"` returned zero
+  published cards. The Stage-0 screen records that empty population and does not
+  substitute test fixtures or screen copies. No card can be ranked for
+  confirmation spend from this repository state.
+- **Refuses to claim:** A claim class, because `skill audit` does not extract a
+  card's claims; hazard-qualified task-family plausibility or existence, because
+  no card-to-task-family evidence register exists; a keep/cut verdict; or any
+  card's readiness for Stage 1 spend.
+
 ---
 
 ## Observation records
