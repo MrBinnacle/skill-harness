@@ -411,6 +411,22 @@ and covers that section only. This page stays the citable surface for every kind
   run, so they evidence **agreement across cells**, not correctness; the
   behavioural tests carry that.
 
+### [`docs/findings/a-design-sim-ledger-level.md`](findings/a-design-sim-ledger-level.md)
+
+- **Claims:** A no-model simulation of the #621 A-world Stage 1A rule (#650),
+  2,000 replicates per cell, seed 650. The rule pairs Full and Placebo by launch
+  index and uses one-sided capital processes. At the boundary p_F - p_P = 0.20,
+  the largest pass rate is 0.0020 against the 0.0209 level (Monte Carlo SE
+  0.0032), so the calibration holds. At (0.75, 0.25) the rule needs 83 pairs for
+  80% pass and 97 for 90%. At (0.85, 0.25) it needs 47 and 54. Every decision in
+  the fast path equals a direct call of the bound function, and the test asserts
+  this.
+- **Refuses to claim:** That these sizes hold with Null-A fixed at its 7 Stage 1
+  epochs. They do not: with 1 correct in 7, the F - N condition cannot pass at
+  any run count. That void epochs or the B-world condition are modelled. That
+  the local `one_sided_betting_bound` copy is the engine's; #649 owns that
+  function, and the run is repeated if the two differ.
+
 ---
 
 ## Observation records
