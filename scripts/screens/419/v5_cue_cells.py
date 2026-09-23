@@ -6,7 +6,8 @@ is v4's ``seed-off`` plus ``attested.txt``; world B's project is v4's, and its o
 ``seed-off``. ``cell_world`` names the world's definition of correct, ``a`` or ``b``, so
 ``consequence_v4.classify`` and ``twin_readout`` score these cells unchanged; ``cell_cue`` records
 whether the trace was present.
-The Full arm is the reviewed ``pull-rebase`` copy and the placebo is the ``parse-csv`` off-domain card, both unchanged.
+The Full arm is the reviewed ``pull-rebase`` copy and the placebo is the
+``parse-csv`` off-domain card, both unchanged.
 
 Run: PYTHONPATH=src python scripts/screens/419/v5_cue_cells.py [--fixture-root DIR] [--full-dir DIR]
 Builds all six tasks and prints them. It never calls eval.
