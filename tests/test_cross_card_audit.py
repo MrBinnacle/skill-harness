@@ -3,12 +3,14 @@
 Tests that the cross-card audit script produces the expected finding document
 and that the receipts-index.md is updated to include it.
 
-Seam: the script calls audit_skill_artifact() from skill_harness.preflight,
-which is offline and deterministic. The test verifies the output contract.
+The script runs the public ``skill audit`` command and uses its offline,
+deterministic report to render the finding. The test verifies the output contract.
 """
 
 from __future__ import annotations
 
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -29,7 +31,7 @@ def audit_output() -> str:
         capture_output=True,
         text=True,
         cwd=_REPO_ROOT,
-        env={"PYTHONPATH": str(_REPO_ROOT / "src"), **__import__("os").environ},
+        env={"PYTHONPATH": str(_REPO_ROOT / "src"), **os.environ},
         check=False,
     )
     assert result.returncode == 0, f"script failed:\n{result.stderr}"
@@ -44,30 +46,44 @@ class TestCrossCardAuditScript:
         assert audit_output, "script produced no output"
 
     def test_output_has_ranked_table(self, audit_output: str) -> None:
-        """The output must contain a ranked table with a header row."""
+        """The output reports each Stage-0 field the ticket names."""
         assert "## Ranked table" in audit_output
         assert "| Rank | Card |" in audit_output
         assert "| ---: | --- |" in audit_output
+        assert "Standing (raw)" in audit_output
+        assert "Measurable claims" in audit_output
+        assert "Available Tier-1 axes" in audit_output
+        assert "Claim class" in audit_output
+        assert "Hazard family plausible?" in audit_output
+        assert "Hazard family exists?" in audit_output
+        assert "Out of reach, because" in audit_output
 
-    def test_every_published_card_has_a_row(self, audit_output: str) -> None:
-        """Every known published SKILL.md must appear in the ranked table."""
-        known_cards = [
-            "pull-rebase",
-            "push-secret-scan",
-            "declared-synthetic-positive-control",
-        ]
-        for card in known_cards:
-            assert card in audit_output, f"card {card!r} missing from ranked table"
+    def test_table_population_is_exactly_the_declared_published_population(
+        self, audit_output: str
+    ) -> None:
+        """The table must not add fixtures or screen copies to #652's population."""
+        result = subprocess.run(
+            ["git", "ls-files", "skills/*/*/SKILL.md"],
+            capture_output=True,
+            text=True,
+            cwd=_REPO_ROOT,
+            check=True,
+        )
+        expected_paths = sorted(result.stdout.splitlines())
+        actual_paths = re.findall(r"\| `([^`]+/SKILL\.md)` \|", audit_output)
+        assert actual_paths == expected_paths
+        assert "tests/fixtures/" not in audit_output
+        assert "scripts/screens/" not in audit_output
 
     def test_output_has_method_section(self, audit_output: str) -> None:
         """The output must document its method."""
         assert "## Method" in audit_output
 
-    def test_output_has_per_card_detail(self, audit_output: str) -> None:
-        """The output must have per-card detail sections."""
-        assert "## Per-card detail" in audit_output
-        assert "### pull-rebase" in audit_output
-        assert "### push-secret-scan" in audit_output
+    def test_empty_published_population_is_reported_without_a_substitute(
+        self, audit_output: str
+    ) -> None:
+        """An empty declared population is a result, not permission to invent one."""
+        assert 'No published cards matched `git ls-files "skills/*/*/SKILL.md"`.' in audit_output
 
 
 class TestFindingDocument:
@@ -79,11 +95,10 @@ class TestFindingDocument:
             "finding document not found at docs/findings/cross-card-audit-screen.md"
         )
 
-    def test_finding_has_ranked_table(self) -> None:
-        """The finding must contain the ranked table."""
+    def test_finding_is_the_generated_audit_output(self, audit_output: str) -> None:
+        """The committed finding must be regenerated rather than hand-maintained."""
         text = _FINDING.read_text(encoding="utf-8")
-        assert "## Ranked table" in text
-        assert "| Rank | Card |" in text
+        assert text == audit_output
 
     def test_finding_has_claims_and_refuses(self) -> None:
         """The finding must state claims and refuses-to-claim."""
@@ -98,4 +113,4 @@ class TestReceiptsIndex:
     def test_index_includes_finding(self) -> None:
         """The receipts index must list the new finding document."""
         text = _INDEX.read_text(encoding="utf-8")
-        assert "cross-card-audit-screen" in text
+        assert "### [`docs/findings/cross-card-audit-screen.md`]" in text

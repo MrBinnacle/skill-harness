@@ -1,82 +1,34 @@
-# Cross-card audit screen — Stage 0 comparative baseline (#652)
+# Cross-card audit screen - Stage 0 comparative baseline (#652)
 
-> **Status:** STAGE-0 COMPLETE 2026-09-23. Every published card in this repository
-> has been audited offline. The ranked table is the comparative screen the program
-> lacked: which card gets confirmation spend is made by a screen, not by precedent.
+> **Status:** STAGE-0 COMPLETE 2026-09-23. The declared population is
+> `git ls-files "skills/*/*/SKILL.md"`: 0 published card(s).
 
-**Claims:** This document establishes the comparative baseline for every published
-skill card. It records standing cost, measurable claims, claim class, and
-hazard-qualified task family plausibility for each card. The ranking is by
-standing cost ascending — the cheapest cards to evaluate rank first.
+**Claims:** This document records the published-card population and runs the
+public `skill-harness skill audit` command on each member. The table reports
+standing cost and the Tier-1 axes available to the instrument. Rank is a
+reproducible cost order, not a confirmation-spend recommendation.
 
-**Refuses to claim:** A keep/cut verdict on any card; that standing cost is the
-only or decisive factor in card selection; that the claim class assignments are
-final (they are the offline preflight's judgement, not a measurement); that any
-card is ready for Stage 1 spend without a separate operator gate.
+**Refuses to claim:** A claim class, because skill audit does not extract a
+card's claims; hazard-qualified task-family plausibility or existence, because
+the repository supplies no card-to-task-family evidence register; a keep/cut
+verdict; or any card's readiness for Stage 1 spend.
 
 ## Ranked table
 
-| Rank | Card | Path | Standing (raw) | Standing (cal) | Fired (raw) | Claim class | Hazard task family | Out of reach? |
-| ---: | --- | --- | ---: | ---: | ---: | --- | --- | --- |
-| 1 | push-secret-scan | `scripts/screens/419/v4_arms/placebo/push-secret-scan/SKILL.md` | 54 | 61 | 1015 | mechanical | yes (#419 screen) | no |
-| 2 | pull-rebase | `scripts/screens/419/v4_arms/full/pull-rebase/SKILL.md` | 56 | 63 | 1065 | mechanical | yes (#419 screen) | no |
-| 3 | declared-synthetic-positive-control | `tests/fixtures/sers/declared-synthetic-positive-control/SKILL.md` | — | — | 68 | mechanical | no (test fixture only) | test fixture — not a production card |
+| Rank | Card | Path | Standing (raw) | Measurable claims | Available Tier-1 axes | Claim class | Hazard family plausible? | Hazard family exists? | Out of reach, because |
+| ---: | --- | --- | ---: | --- | --- | --- | --- | --- | --- |
 
-## Per-card detail
-
-### push-secret-scan
-
-- **Path:** `scripts/screens/419/v4_arms/placebo/push-secret-scan/SKILL.md`
-- **Standing cost:** 54 raw / 61 calibrated
-- **Fired cost:** 1015 raw / 1145 calibrated
-- **Aux cost:** 0
-- **Measurable axes:** citation_presence_per_flag, compliance_proxy, hedge_index, structure_score, verbosity
-- **Claim class:** mechanical
-- **Hazard task family:** yes (#419 screen)
-- **Structural warns:** 1
-- **Ranking reason:** standing 54 tokens; fired 1015 tokens; 1 structural warn(s)
-
-### pull-rebase
-
-- **Path:** `scripts/screens/419/v4_arms/full/pull-rebase/SKILL.md`
-- **Standing cost:** 56 raw / 63 calibrated
-- **Fired cost:** 1065 raw / 1201 calibrated
-- **Aux cost:** 0
-- **Measurable axes:** citation_presence_per_flag, compliance_proxy, hedge_index, structure_score, verbosity
-- **Claim class:** mechanical
-- **Hazard task family:** yes (#419 screen)
-- **Structural warns:** 0
-- **Ranking reason:** standing 56 tokens; fired 1065 tokens
-
-### declared-synthetic-positive-control
-
-- **Path:** `tests/fixtures/sers/declared-synthetic-positive-control/SKILL.md`
-- **Standing cost:** — raw / — calibrated
-- **Fired cost:** 68 raw / 77 calibrated
-- **Aux cost:** 0
-- **Measurable axes:** citation_presence_per_flag, compliance_proxy, hedge_index, structure_score, verbosity
-- **Claim class:** mechanical
-- **Hazard task family:** no (test fixture only)
-- **Structural warns:** 1
-- **Ranking reason:** standing UNMEASURED; fired 68 tokens; 1 structural warn(s)
-- **Out of reach:** test fixture — not a production card
+No published cards matched `git ls-files "skills/*/*/SKILL.md"`.
+No card can be ranked for confirmation spend from this repository state.
 
 ## Method
 
-1. Enumerated published cards via `git ls-files "skills/*/*/SKILL.md"`.
-   When the glob returned empty (no `skills/` directory), used the three known
-   SKILL.md locations under `scripts/screens/419/` and `tests/fixtures/`.
-2. Called `audit_skill_artifact()` from `skill_harness.preflight` on each card
-   (offline, zero cost, no API calls).
-3. Parsed standing cost, fired cost, measurable axes, and structural findings.
-4. Assigned claim class: mechanical (Tier-1 axes available), behavioral (no
-   mechanical instrument), or unmeasurable (frontmatter unreadable).
-5. Assessed hazard-qualified task family plausibility: cards under #419 are part
-   of an existing screen; test fixtures are not production cards.
-6. Ranked by standing cost ascending — cheapest to evaluate first.
-
-## Stage 1 gate
-
-Stage 1 (Null-only qualification screens on top candidates) is priced at the
-realised $0.083 per epoch. It is not run without an operator gate.
-See `docs/assurance/` for ratified authorisations.
+1. Enumerated the declared population via `git ls-files "skills/*/*/SKILL.md"`.
+   The screen refuses to substitute fixtures or screen copies when that set is empty.
+2. Ran `python -m skill_harness skill audit <card>` on each member, then used
+   its `audit_skill_artifact()` report to render the table (offline, zero cost).
+3. Reported Tier-1 axis availability, but refused measurable claims and a claim
+   class because the audit does not parse claims from a card.
+4. Refused the hazard-family questions because no evidence register maps cards to
+   task families.
+5. Sorted readable standing costs ascending only for stable display order.

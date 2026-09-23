@@ -429,16 +429,14 @@ and covers that section only. This page stays the citable surface for every kind
 
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 
-- **Claims:** Cross-card audit screen for #652: Stage 0 comparative baseline.
-  Every published card audited offline via `audit_skill_artifact()`. Ranked
-  table records standing cost, measurable claims, claim class, and
-  hazard-qualified task family plausibility for each card. Ranking by standing
-  cost ascending — cheapest cards to evaluate first. Cards under #419 screen
-  have existing hazard task families; test fixtures are out of reach.
-- **Refuses to claim:** A keep/cut verdict on any card; that standing cost is
-  the only or decisive factor in card selection; that claim class assignments
-  are final; that any card is ready for Stage 1 spend without a separate
-  operator gate.
+- **Claims:** On 2026-09-23, `git ls-files "skills/*/*/SKILL.md"` returned zero
+  published cards. The Stage-0 screen records that empty population and does not
+  substitute test fixtures or screen copies. No card can be ranked for
+  confirmation spend from this repository state.
+- **Refuses to claim:** A claim class, because `skill audit` does not extract a
+  card's claims; hazard-qualified task-family plausibility or existence, because
+  no card-to-task-family evidence register exists; a keep/cut verdict; or any
+  card's readiness for Stage 1 spend.
 
 ---
 
