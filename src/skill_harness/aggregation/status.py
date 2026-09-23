@@ -111,6 +111,13 @@ class UnmeasuredSubReason(StrEnum):
     runner gates this BEFORE sampling, so no samples and no verdicts are
     produced. No other member names an operator-tolerance refusal.
     """
+    HAZARD_NOT_MET = "HAZARD_NOT_MET"
+    """The Null arm entered a registered trap hazard too rarely to measure.
+
+    Gate 2 refuses this path because an outcome oracle cannot distinguish a
+    model that avoided the hazard from a model that safely handled it. The
+    receipt carries the recorded Null-arm hazard-entry count.
+    """
 
 
 # ---------------------------------------------------------------------------

@@ -81,6 +81,7 @@ subset:
 - `tier2_uncalibrated`
 - `external_check_missing`
 - `length_confounded`
+- `HAZARD_NOT_MET`
 
 `null` when the receipt is a measured `KEEP`/`CUT` (or a `CANT_TELL_YET` that
 is not an aggregation-UNMEASURED path, e.g. wrong-instrument withhold).

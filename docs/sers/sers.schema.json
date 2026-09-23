@@ -53,6 +53,7 @@
         "tier2_uncalibrated",
         "external_check_missing",
         "length_confounded",
+        "HAZARD_NOT_MET",
         null
       ],
       "description": "Qualifies an UNMEASURED / cannot-score path when applicable. Mirrors UnmeasuredSubReason exactly. null when the receipt is not an unmeasured refusal path (e.g. a measured KEEP or CUT)."
@@ -768,6 +769,29 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": { "unmeasured_sub_reason": { "const": "HAZARD_NOT_MET" } },
+        "required": ["unmeasured_sub_reason"]
+      },
+      "then": {
+        "required": ["verdict_scope", "measurements"],
+        "properties": {
+          "verdict": { "const": "CANT_TELL_YET" },
+          "cut_sub_reason": { "type": "null" },
+          "verdict_scope": { "required": ["model_id"] },
+          "measurements": {
+            "required": ["hazard_entry_null"],
+            "properties": {
+              "hazard_entry_null": {
+                "type": "object",
+                "required": ["value", "passes", "epochs"]
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -842,6 +866,7 @@
                 "tier2_uncalibrated",
                 "external_check_missing",
                 "length_confounded",
+                "HAZARD_NOT_MET",
                 "not_applicable"
               ]
             },
