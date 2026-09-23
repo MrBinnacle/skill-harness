@@ -42,6 +42,7 @@ import argparse
 import itertools
 import json
 import random
+import re
 import sys
 import tempfile
 from collections.abc import Iterator, Sequence
@@ -70,6 +71,18 @@ BOUNDARY = 0.20
 LEDGER_PASS_ALPHA = 0.0209
 DRY_RUN_SHUFFLES = 24
 DRY_RUN_SEED = 649
+
+PLACEBO_DESC = (
+    "Use before opening a CSV where a column may hold IDs. "
+    "Quoting does NOT stop a spreadsheet's number parse (silently applied); "
+    "it drops every leading zero. Check the column type first."
+)
+FULL_DESC = (
+    "Use before `git pull` where `pull.rebase` may be `true`. `--no-ff` does NOT stop a "
+    "rebase under `pull.rebase=true` (silently ignored); it rewrites every local commit SHA. "
+    "Check config first."
+)
+CARD_DESCRIPTIONS = {"full": FULL_DESC, "placebo": PLACEBO_DESC}
 
 Outcome = Literal["CUT_NO_LIFT", "A_PASSES_EARLY", "UNRESOLVED_CONTINUE"]
 Side = Literal["lower", "upper"]
@@ -304,11 +317,83 @@ def _manifest_reads(log_dir: Path) -> dict[tuple[str, int], bool]:
     return found
 
 
+_LISTING_NUMBERED_RE = re.compile(r"^\d+\.\s", re.MULTILINE)
+
+
+def _message_text(message: Any) -> str:
+    """Return text content from the Inspect message shapes used in eval logs."""
+    content = getattr(message, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            part.get("text", "") if isinstance(part, dict) else getattr(part, "text", "")
+            for part in content
+        ]
+        return " ".join(str(part) for part in parts if part)
+    return ""
+
+
+def _listing_position(log_dir: Path) -> dict[tuple[str, int], int]:
+    """Return each card's position in its first user-message listing.
+
+    Missing descriptions, non-numbered listings, duplicate epoch keys, and positions other than
+    one make the readout refuse. The Full and Placebo listing surfaces must match before their
+    contrast can support the pre-registered attribution claim (S477).
+    """
+    from inspect_ai.log import read_eval_log
+
+    positions: dict[tuple[str, int], int] = {}
+    for path in sorted(log_dir.glob("*.eval")):
+        log = read_eval_log(str(path))
+        arm = str((log.eval.metadata or {})["cell_arm"])
+        description = CARD_DESCRIPTIONS.get(arm)
+        if description is None:
+            continue
+        for sample in log.samples or []:
+            key = (arm, int(sample.epoch))
+            if key in positions:
+                raise ValueError(f"duplicate listing position for {arm} epoch {sample.epoch}")
+            first_user = None
+            for message in sample.messages:
+                if getattr(message, "role", None) == "user":
+                    first_user = _message_text(message)
+                    break
+            if first_user is None:
+                raise ValueError(f"{arm} epoch {sample.epoch}: no first user message")
+            description_offset = first_user.find(description)
+            if description_offset < 0:
+                raise ValueError(
+                    f"{arm} epoch {sample.epoch}: card description missing from first user message"
+                )
+            position = sum(
+                entry.start() <= description_offset
+                for entry in _LISTING_NUMBERED_RE.finditer(first_user)
+            )
+            if position == 0:
+                raise ValueError(
+                    f"{arm} epoch {sample.epoch}: card description is outside a numbered listing"
+                )
+            if position != 1:
+                raise ValueError(
+                    f"{arm} epoch {sample.epoch}: card appears at listing position {position}, "
+                    "expected 1"
+                )
+            positions[key] = position
+    return positions
+
+
 def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, Any]:
     from twin_readout import read_rows
 
     rows = read_rows(log_dir)
     manifest = _manifest_reads(log_dir)
+    positions = _listing_position(log_dir)
+    expected_positions = {(r.arm, r.epoch) for r in rows if r.arm in CARD_DESCRIPTIONS}
+    missing_positions = expected_positions - positions.keys()
+    if missing_positions:
+        missing = ", ".join(f"{arm} epoch {epoch}" for arm, epoch in sorted(missing_positions))
+        raise ValueError(f"listing position missing for {missing}")
     arms: dict[str, Any] = {}
     outcomes: dict[str, dict[int, int]] = {}
     for arm in ("full", "placebo"):
@@ -328,6 +413,8 @@ def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, A
     ub_n, null_order = null_upper(null_a, pass_alpha / 2)
     return {
         "arms": arms,
+        "listing_positions": {f"{arm}#{ep}": v for (arm, ep), v in positions.items()},
+        "listing_position_violations": {},
         "null_a": {"n": null_a.n, "correct": null_a.correct, "order": null_order},
         "alpha": ALPHA,
         "pass_alpha": pass_alpha,

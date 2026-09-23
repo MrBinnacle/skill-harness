@@ -34,7 +34,7 @@ WORLDS: tuple[World, ...] = ("a", "b")
 CELLS: tuple[tuple[Arm, World], ...] = tuple(itertools.product(ARMS, WORLDS))
 
 HERE = Path(__file__).resolve().parent
-PLACEBO_DIR = HERE / "v4_arms" / "placebo" / "push-secret-scan"
+PLACEBO_DIR = HERE / "v5_arms" / "placebo" / "parse-csv"
 FULL_REFERENCE = HERE / "v4_arms" / "full" / "pull-rebase" / "SKILL.md"
 FULL_DIR_DEFAULT = (
     Path.home() / ".claude/plugins/cache/mrbinnacle-skills/mrbinnacle-engineering/3.0.0/pull-rebase"
