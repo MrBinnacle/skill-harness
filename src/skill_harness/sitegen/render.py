@@ -71,9 +71,7 @@ ABSENT_TEXT: Final[str] = "absent from this receipt"
 NO_QUALIFIER_TEXT: Final[str] = "none stated"
 
 _DELIVERY_CHANNEL_TEXT: Final[dict[str, str]] = {
-    "description_only": (
-        "The standing description carried the value; the skill body was never read."
-    ),
+    "description_only": ("delivery: skill-listing description; body not loaded"),
     "body_and_description": ("The skill body was read in addition to the standing description."),
     "not_instrumented": ("No delivery detector was present; channel is not instrumented."),
 }
@@ -417,6 +415,7 @@ def render_skill_page(
     else:
         body = _template("skill.html").substitute(
             verdict=safe(_string_field(receipt, "verdict", "")),
+            verdict_template_text=_verdict_template_text(receipt),
             qualifier_rows=_indent(_qualifier_rows(receipt, schema), 8),
             summary=safe(_string_field(receipt, "summary", "")),
             cost_rows=_indent(_cost_rows(receipt, schema), 14),
@@ -641,6 +640,36 @@ def _qualifier_text(receipt: Mapping[str, Any]) -> str:
     if isinstance(unmeasured, str):
         parts.append(f"unmeasured: {unmeasured}")
     return ", ".join(parts) if parts else NO_QUALIFIER_TEXT
+
+
+def _verdict_template_text(receipt: Mapping[str, Any]) -> str:
+    """Render the verbatim template for CUT(no_lift) or HAZARD_NOT_MET.
+
+    Returns the empty string when the receipt does not carry one of these
+    sub-reasons.  The template is filled from ``verdict_scope`` fields; missing
+    fields fall back to sensible defaults rather than raising.
+    """
+    scope = receipt.get("verdict_scope")
+    if not isinstance(scope, Mapping):
+        return ""
+    cut = receipt.get("cut_sub_reason")
+    if cut == "no_lift":
+        text = CUT_NO_LIFT_TEMPLATE.format(
+            task_family=_string_field(scope, "task_family", "unknown task family"),
+            model=_string_field(scope, "model_id", "unknown model"),
+            estimand=_string_field(scope, "estimand", "unknown estimand"),
+            delivery=_string_field(scope, "delivery_mechanism", "unknown delivery"),
+        )
+        return f'<p class="verdict-template">{safe(text)}</p>'
+    unmeasured = receipt.get("unmeasured_sub_reason")
+    if unmeasured == "HAZARD_NOT_MET":
+        text = HAZARD_NOT_MET_TEMPLATE.format(
+            model=_string_field(scope, "model_id", "unknown model"),
+            hazard_count=_string_field(scope, "hazard_count", "?"),
+            null_runs=_string_field(scope, "null_runs", "?"),
+        )
+        return f'<p class="verdict-template">{safe(text)}</p>'
+    return ""
 
 
 def _cost_rows(receipt: Mapping[str, Any], schema: Mapping[str, Any]) -> list[str]:
@@ -966,6 +995,18 @@ CARRIED_FORWARD_DISCLAIMER: Final[str] = (
     "checks. It must not be read as a new full validation."
 )
 
+CUT_NO_LIFT_TEMPLATE: Final[str] = (
+    "No measurable benefit was detected for {task_family}, {model}, "
+    "{estimand}, {delivery}, under the registered test; this does not "
+    "establish no benefit outside that scope."
+)
+
+HAZARD_NOT_MET_TEMPLATE: Final[str] = (
+    "On the registered fixture, {model} entered the target hazard in "
+    "{hazard_count}/{null_runs} Null runs; card benefit was therefore not "
+    "estimable under this test."
+)
+
 
 def _verdict_scope_section(receipt: Mapping[str, Any]) -> str:
     """Render the verdict scope section, or the empty string for receipts without one."""
@@ -1071,7 +1112,9 @@ def _scope_line(receipt: Mapping[str, Any]) -> str:
     """Render the S476 scope line for a KEEP verdict.
 
     A KEEP licenses that scoped sentence only. The line is filled from
-    verdict_scope fields.
+    verdict_scope fields.  A CARRIED_FORWARD verdict uses the sentinel-rule
+    wording instead of the standard scope line; ``verdict_scope.model_id``
+    is never rewritten.
     """
     if receipt.get("verdict") != "KEEP":
         return ""
@@ -1079,6 +1122,21 @@ def _scope_line(receipt: Mapping[str, Any]) -> str:
     if not isinstance(scope, Mapping):
         return ""
     model = _string_field(scope, "model_id", "unknown model")
+    # Carried-forward: sentinel-rule wording.
+    currentness = receipt.get("currentness")
+    if isinstance(currentness, Mapping) and currentness.get("state") == "CARRIED_FORWARD":
+        identity = receipt.get("subject_identity")
+        current_model = (
+            _string_field(identity, "subject_model", "current model")
+            if isinstance(identity, Mapping)
+            else "current model"
+        )
+        return (
+            f'<p class="scope-line">'
+            f"demonstrated on {safe(model)}; carried forward to {safe(current_model)} "
+            f"under the sentinel rule; not re-validated on {safe(current_model)}."
+            f"</p>"
+        )
     task_family = _string_field(scope, "task_family", "unknown task family")
     delivery = _string_field(scope, "delivery_mechanism", "unknown delivery")
     tested_at = _string_field(scope, "tested_at", "unknown date")

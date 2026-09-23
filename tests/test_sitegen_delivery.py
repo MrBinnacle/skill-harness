@@ -65,7 +65,7 @@ def _delivery_receipt(
 
 
 def test_delivery_section_description_only() -> None:
-    """description_only channel renders the standing-description prose."""
+    """description_only channel renders the skill-listing-description prose."""
     pi_c = {
         "hat": 0.0,
         "invocations": 0,
@@ -81,8 +81,7 @@ def test_delivery_section_description_only() -> None:
         exposure={"value": 1.0, "passes": 8, "epochs": 8},
     )
     html = _delivery_section(receipt)
-    assert "standing description" in html
-    assert "body was never read" in html
+    assert "skill-listing description; body not loaded" in html
     assert "description_only" not in html  # prose, not raw enum
 
 
@@ -165,7 +164,7 @@ def test_delivery_section_in_full_render() -> None:
         marker=_MARKER,
     )
     assert "Value delivery" in page
-    assert "standing description" in page
+    assert "skill-listing description; body not loaded" in page
 
 
 def test_full_render_no_delivery_block() -> None:
@@ -186,3 +185,23 @@ def test_full_render_no_delivery_block() -> None:
         marker=_MARKER,
     )
     assert "Value delivery" not in page
+
+
+def test_description_only_receipt_never_renders_model_pull() -> None:
+    """A description_only receipt must never render bare 'model-pull' in the delivery section."""
+    pi_c = {
+        "hat": 0.0,
+        "invocations": 0,
+        "trials": 8,
+        "ci_low": 0.0,
+        "ci_high": 0.369,
+        "confidence": 0.95,
+        "detector": "v1",
+    }
+    receipt = _delivery_receipt(
+        "description_only",
+        pi_c=pi_c,
+        exposure={"value": 1.0, "passes": 8, "epochs": 8},
+    )
+    html = _delivery_section(receipt)
+    assert "model-pull" not in html

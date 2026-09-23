@@ -134,7 +134,65 @@ def validate_receipts(
         if not isinstance(receipt_obj, dict):
             raise SiteBuildError(f"{path}: SERS receipt must be a JSON object")
         loaded.append(receipt_obj)
+    _check_carried_forward_immutability(loaded, receipts_dir)
     return loaded
+
+
+def _check_carried_forward_immutability(
+    receipts: list[dict[str, Any]],
+    receipts_dir: Path,
+) -> None:
+    """A CARRIED_FORWARD receipt's verdict_scope must match the original.
+
+    The schema enforces that ``tested_at`` is present, but a schema cannot
+    compare two separate files.  This step loads the superseded receipt for
+    the same skill and refuses any change to ``verdict_scope`` fields.
+    """
+    superseded_dir = receipts_dir / "superseded"
+    for receipt in receipts:
+        currentness = receipt.get("currentness")
+        if not isinstance(currentness, Mapping):
+            continue
+        if currentness.get("state") != "CARRIED_FORWARD":
+            continue
+        skill_name = receipt.get("skill_name")
+        if not isinstance(skill_name, str):
+            continue
+        scope = receipt.get("verdict_scope")
+        if not isinstance(scope, Mapping):
+            continue
+        # Find the superseded receipt for the same skill.
+        if not superseded_dir.is_dir():
+            raise SiteBuildError(
+                f"CARRIED_FORWARD receipt for {skill_name!r} but no superseded/ "
+                "directory exists to carry forward from"
+            )
+        original: dict[str, Any] | None = None
+        for super_path in sorted(superseded_dir.glob("*.json")):
+            super_obj = json.loads(super_path.read_text(encoding="utf-8"))
+            if isinstance(super_obj, dict) and super_obj.get("skill_name") == skill_name:
+                original = super_obj
+                break
+        if original is None:
+            raise SiteBuildError(
+                f"CARRIED_FORWARD receipt for {skill_name!r} but no superseded "
+                f"receipt found for that skill in {superseded_dir}"
+            )
+        orig_scope = original.get("verdict_scope")
+        if not isinstance(orig_scope, Mapping):
+            continue
+        # Compare every key present in either scope.
+        all_keys = set(scope.keys()) | set(orig_scope.keys())
+        for key in sorted(all_keys):
+            new_val = scope.get(key)
+            old_val = orig_scope.get(key)
+            if new_val != old_val:
+                raise SiteBuildError(
+                    f"CARRIED_FORWARD receipt for {skill_name!r}: "
+                    f"verdict_scope.{key} changed from {old_val!r} to "
+                    f"{new_val!r}; verdict_scope must not change when "
+                    "carrying forward"
+                )
 
 
 def build_site(
