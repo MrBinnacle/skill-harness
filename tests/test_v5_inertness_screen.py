@@ -67,12 +67,49 @@ def test_null_b_loader_reads_summary(tmp_path: Path) -> None:
     screen = _load("v5_inertness_screen")
     readout = {
         "summary": {"null/b": {"n": 8, "correct": 5}},
-        "rows": [],
     }
     path = tmp_path / "readout.json"
     path.write_text(json.dumps(readout))
-    correct, n = screen._load_null_b(path)
+    outcomes, correct, n = screen._load_null_b(path)
+    assert outcomes is None
     assert (correct, n) == (5, 8)
+
+
+def test_screen_uses_recorded_epoch_order_for_its_bounds() -> None:
+    screen = _load("v5_inertness_screen")
+    placebo = (0,) * 4 + (1,) * 12
+    null = (1,) + (0,) * 7
+    result = screen.inertness_screen(
+        placebo_correct=sum(placebo),
+        placebo_n=len(placebo),
+        null_correct=sum(null),
+        null_n=len(null),
+        placebo_outcomes=placebo,
+        null_outcomes=null,
+    )
+    assert result["placebo"]["order"] == "epoch order"
+    assert result["placebo"]["lb_at_alpha"] == pytest.approx(
+        screen.one_sided_betting_bound(placebo, alpha=screen.ALPHA, side="lower")
+    )
+
+
+def test_screen_uses_least_favorable_order_when_only_counts_remain() -> None:
+    screen = _load("v5_inertness_screen")
+    result = screen.inertness_screen(placebo_correct=2, placebo_n=16, null_correct=1, null_n=8)
+    assert result["placebo"]["order"] == "counts only: least favorable epoch order"
+    assert result["null"]["order"] == "counts only: least favorable epoch order"
+
+
+def test_screen_refuses_inconsistent_recorded_outcomes_before_cant_tell_yet() -> None:
+    screen = _load("v5_inertness_screen")
+    with pytest.raises(ValueError, match="outcomes disagree"):
+        screen.inertness_screen(
+            placebo_correct=4,
+            placebo_n=10,
+            null_correct=1,
+            null_n=8,
+            placebo_outcomes=(1,) * 10,
+        )
 
 
 def test_placebo_b_loader_reads_rows(tmp_path: Path) -> None:
@@ -114,6 +151,37 @@ def test_placebo_b_loader_reads_rows(tmp_path: Path) -> None:
     path.write_text(json.dumps(readout))
     correct, n = screen._load_placebo_b(path)
     assert (correct, n) == (1, 2)
+
+
+def test_null_b_loader_refuses_rows_that_disagree_with_the_summary(tmp_path: Path) -> None:
+    screen = _load("v5_inertness_screen")
+    path = tmp_path / "readout.json"
+    path.write_text(
+        json.dumps(
+            {
+                "summary": {"null/b": {"n": 8, "correct": 1}},
+                "rows": [
+                    {
+                        "arm": "null",
+                        "world": "b",
+                        "epoch": 1,
+                        "void": False,
+                        "final_world_correct": False,
+                    }
+                ],
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="rows disagree with the summary"):
+        screen._load_null_b(path)
+
+
+def test_null_b_loader_refuses_present_rows_without_null_b_results(tmp_path: Path) -> None:
+    screen = _load("v5_inertness_screen")
+    path = tmp_path / "readout.json"
+    path.write_text(json.dumps({"summary": {"null/b": {"n": 8, "correct": 1}}, "rows": []}))
+    with pytest.raises(ValueError, match="rows disagree with the summary"):
+        screen._load_null_b(path)
 
 
 def test_inertness_tasks_launches_only_the_sixteen_epoch_placebo_b_cell(

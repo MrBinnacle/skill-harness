@@ -71,7 +71,8 @@ def test_placebo_names_no_fixture_file_types() -> None:
     """The surface-match check refuses when the fixture tree contains file types the placebo names.
     The fixture tree has .md, .py, .sh, .yaml — not .csv, .tsv, .xlsx."""
     sm = _load("v5_surface_match")
-    fixture_types = sm.fixture_file_types(sm.HERE)
+    fixture = Path(__file__).resolve().parent
+    fixture_types = sm.fixture_file_types(fixture)
     placebo_types = sm.PLACEBO_FILE_TYPES
     assert not (placebo_types & fixture_types), (
         f"fixture tree has types {placebo_types & fixture_types} that the placebo names"
@@ -80,7 +81,18 @@ def test_placebo_names_no_fixture_file_types() -> None:
 
 def test_surface_match_check_passes() -> None:
     sm = _load("v5_surface_match")
-    assert sm.check() == 0
+    assert sm.check(Path(__file__).resolve().parent) == 0
+
+
+def test_surface_match_check_refuses_a_fixture_with_a_named_file_type(tmp_path: Path) -> None:
+    sm = _load("v5_surface_match")
+    (tmp_path / "input.csv").touch()
+    assert sm.check(tmp_path) == 1
+
+
+def test_surface_match_check_refuses_an_unavailable_fixture() -> None:
+    sm = _load("v5_surface_match")
+    assert sm.check(Path("does-not-exist")) == 1
 
 
 def test_surface_match_check_refuses_a_poison_placebo(tmp_path: Path) -> None:

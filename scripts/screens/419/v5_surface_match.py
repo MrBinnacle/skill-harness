@@ -10,11 +10,14 @@ Run: PYTHONPATH=src python scripts/screens/419/v5_surface_match.py
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from cue_audit import FIXTURE_ROOT_DEFAULT
 
 from skill_harness.extractor.parser import parse_skill_file
 
@@ -29,6 +32,8 @@ PLACEBO_FILE_TYPES = {".csv", ".tsv", ".xlsx"}
 
 SECTION_RE = re.compile(r"^## (.+)$", re.MULTILINE)
 NAME_RE = re.compile(r"^[a-z]+-[a-z]+$")
+NUMBERED_RE = re.compile(r"^\d+\. ", re.MULTILINE)
+BULLET_RE = re.compile(r"^- ", re.MULTILINE)
 
 
 def tokenize(text: str) -> list[str]:
@@ -41,11 +46,20 @@ def heading_counts(body: str) -> list[str]:
 
 
 def fixture_file_types(root: Path) -> set[str]:
-    """All file extensions in the fixture tree (the screen directory itself)."""
+    """All file extensions in the declared fixture tree."""
     return {p.suffix.lower() for p in root.rglob("*") if p.is_file()}
 
 
-def check() -> int:
+def _shape(body: str) -> dict[str, int]:
+    return {
+        "headings": len(heading_counts(body)),
+        "fences": body.count("```"),
+        "steps": len(NUMBERED_RE.findall(body)),
+        "bullets": len(BULLET_RE.findall(body)),
+    }
+
+
+def check(fixture_root: Path = FIXTURE_ROOT_DEFAULT) -> int:
     placebo = parse_skill_file(PLACEBO_SKILL)
     full = parse_skill_file(FULL_SKILL)
 
@@ -100,7 +114,10 @@ def check() -> int:
 
     print()
     print("=== Fixture file-type check ===")
-    existing = fixture_file_types(HERE)
+    if not fixture_root.is_dir():
+        print(f"  REFUSED: fixture root does not exist: {fixture_root}")
+        return 1
+    existing = fixture_file_types(fixture_root)
     collision = PLACEBO_FILE_TYPES & existing
     if collision:
         print(f"  REFUSED: placebo names file types present in fixture: {collision}")
@@ -114,6 +131,9 @@ def check() -> int:
         errors.append(f"description char diff {desc_char_ratio:.1%} exceeds 10%")
     if word_ratio > 0.10:
         errors.append(f"body word diff {word_ratio:.1%} exceeds 10%")
+    placebo_shape, full_shape = _shape(placebo.body), _shape(full.body)
+    if placebo_shape != full_shape:
+        errors.append(f"body shape differs: placebo={placebo_shape} full={full_shape}")
     if errors:
         for e in errors:
             print(f"  REFUSED: {e}")
@@ -124,4 +144,6 @@ def check() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(check())
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--fixture-root", type=Path, default=FIXTURE_ROOT_DEFAULT)
+    sys.exit(check(parser.parse_args().fixture_root))
