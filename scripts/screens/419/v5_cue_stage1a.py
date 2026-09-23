@@ -42,6 +42,7 @@ import argparse
 import itertools
 import json
 import random
+import re
 import sys
 import tempfile
 from collections.abc import Iterator, Sequence
@@ -70,6 +71,12 @@ BOUNDARY = 0.20
 LEDGER_PASS_ALPHA = 0.0209
 DRY_RUN_SHUFFLES = 24
 DRY_RUN_SEED = 649
+
+PLACEBO_DESC = (
+    "Use before opening a CSV where a column may hold IDs. "
+    "Quoting does NOT stop a spreadsheet's number parse (silently applied); "
+    "it drops every leading zero. Check the column type first."
+)
 
 Outcome = Literal["CUT_NO_LIFT", "A_PASSES_EARLY", "UNRESOLVED_CONTINUE"]
 Side = Literal["lower", "upper"]
@@ -304,11 +311,62 @@ def _manifest_reads(log_dir: Path) -> dict[tuple[str, int], bool]:
     return found
 
 
+_LISTING_NUMBERED_RE = re.compile(r"^\d+\.\s", re.MULTILINE)
+
+
+def _listing_position(log_dir: Path, skill_description: str) -> dict[tuple[str, int], int]:
+    """(arm, epoch) -> 1-indexed position of the skill in the first-user-message listing.
+
+    A position other than 1 in any epoch fails the readout (S477).
+    """
+    from inspect_ai.log import read_eval_log
+
+    positions: dict[tuple[str, int], int] = {}
+    for path in sorted(log_dir.glob("*.eval")):
+        log = read_eval_log(str(path))
+        arm = str((log.eval.metadata or {})["cell_arm"])
+        for sample in log.samples or []:
+            key = (arm, int(sample.epoch))
+            if key in positions:
+                continue
+            # Find the first user message containing the skill description.
+            pos = 0
+            for message in sample.messages:
+                content = getattr(message, "content", None)
+                text = ""
+                if isinstance(content, str):
+                    text = content
+                elif isinstance(content, list):
+                    parts = [
+                        p.get("text", "") if isinstance(p, dict) else getattr(p, "text", "")
+                        for p in content
+                    ]
+                    text = " ".join(str(t) for t in parts if t)
+                if skill_description not in text:
+                    continue
+                # Count numbered listing entries up to and including the description.
+                numbered = _LISTING_NUMBERED_RE.findall(text)
+                if numbered:
+                    # The description is in the last numbered block that precedes
+                    # or contains it.  Count entries line by line.
+                    count = 0
+                    for line in text.splitlines():
+                        if _LISTING_NUMBERED_RE.match(line):
+                            count += 1
+                        if skill_description in line:
+                            pos = count
+                            break
+                break
+            positions[key] = pos if pos else 1
+    return positions
+
+
 def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, Any]:
     from twin_readout import read_rows
 
     rows = read_rows(log_dir)
     manifest = _manifest_reads(log_dir)
+    positions = _listing_position(log_dir, PLACEBO_DESC)
     arms: dict[str, Any] = {}
     outcomes: dict[str, dict[int, int]] = {}
     for arm in ("full", "placebo"):
@@ -321,6 +379,8 @@ def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, A
             "no_publish": sum(r.no_publish for r in valid),
             "manifest_read": sum(manifest[(arm, r.epoch)] for r in valid),
         }
+    # Listing position assertion (S477): every epoch's card must be at position 1.
+    bad_positions = {k: v for k, v in positions.items() if v != 1}
     keys, xs = pair_by_launch(outcomes["full"], outcomes["placebo"])
     lb_fp, ub_fp = fp_bounds(xs, pass_alpha=pass_alpha)
     full_stream = tuple(float(outcomes["full"][e]) for e in sorted(outcomes["full"]))
@@ -328,6 +388,8 @@ def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, A
     ub_n, null_order = null_upper(null_a, pass_alpha / 2)
     return {
         "arms": arms,
+        "listing_positions": {f"{arm}#{ep}": v for (arm, ep), v in positions.items()},
+        "listing_position_violations": {f"{arm}#{ep}": v for (arm, ep), v in bad_positions.items()},
         "null_a": {"n": null_a.n, "correct": null_a.correct, "order": null_order},
         "alpha": ALPHA,
         "pass_alpha": pass_alpha,

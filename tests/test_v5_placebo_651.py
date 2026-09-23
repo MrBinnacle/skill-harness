@@ -104,3 +104,17 @@ def test_surface_match_check_refuses_a_poison_placebo(tmp_path: Path) -> None:
         assert sm.check() == 1
     finally:
         sm.PLACEBO_SKILL = original_placebo  # type: ignore[attr-defined]
+
+
+def test_listing_position_regex_matches_numbered_entries() -> None:
+    s1a = _load("v5_cue_stage1a")
+    assert s1a._LISTING_NUMBERED_RE.match("1. parse-csv: Use before")
+    assert s1a._LISTING_NUMBERED_RE.match("2. pull-rebase: Use before")
+    assert not s1a._LISTING_NUMBERED_RE.match("Skills:")
+    assert not s1a._LISTING_NUMBERED_RE.match("- a bullet")
+
+
+def test_placebo_desc_constant_matches_card() -> None:
+    s1a = _load("v5_cue_stage1a")
+    placebo = parse_skill_file(PLACEBO_SKILL)
+    assert str(placebo.frontmatter["description"]) == s1a.PLACEBO_DESC
