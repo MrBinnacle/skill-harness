@@ -81,7 +81,7 @@ def test_delivery_section_description_only() -> None:
         exposure={"value": 1.0, "passes": 8, "epochs": 8},
     )
     html = _delivery_section(receipt)
-    assert "skill-listing description; body not loaded" in html
+    assert "<p>delivery: skill-listing description; body not loaded</p>" in html
     assert "description_only" not in html  # prose, not raw enum
 
 
