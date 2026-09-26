@@ -68,6 +68,7 @@ def test_full_listing_all_cards_visible_with_position() -> None:
     result = extract_delivered_listing(messages, subject)
 
     assert len(result.subject_cards) == 2
+    assert tuple(card.name for card in result.subject_cards) == ("alpha-skill", "beta-skill")
 
     alpha = next(c for c in result.subject_cards if c.name == "alpha-skill")
     assert alpha.status == "visible"
@@ -88,6 +89,7 @@ def test_full_listing_records_listing_text() -> None:
 
     assert "- my-skill: A short description." in result.listing_text
     assert result.listing_description_tokens > 0
+    assert result.empty_reason is None
 
 
 # ---------------------------------------------------------------------------
@@ -159,10 +161,8 @@ def test_poison_one_description_truncated_at_limit() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_no_listing_records_empty_with_typed_reason() -> None:
-    """AC4: a transcript with no listing records every subject card as
-    dropped with listing_text empty. The reason is structural (no listing
-    found), never a guessed one."""
+def test_no_user_messages_records_empty_with_typed_reason() -> None:
+    """AC4: a transcript with no user messages records a typed, empty listing."""
     subject = {"my-skill": "Some description."}
     messages = [
         _system("You are helpful."),
@@ -172,6 +172,7 @@ def test_no_listing_records_empty_with_typed_reason() -> None:
 
     assert result.listing_text == ""
     assert result.listing_description_tokens == 0
+    assert result.empty_reason == "no_user_messages"
     assert len(result.subject_cards) == 1
     card = result.subject_cards[0]
     assert card.name == "my-skill"
@@ -180,13 +181,14 @@ def test_no_listing_records_empty_with_typed_reason() -> None:
 
 
 def test_empty_listing_block_records_empty() -> None:
-    """AC4: a user message with no skill card lines records empty."""
+    """AC4: a user message without the Claude Code listing records empty."""
     subject = {"my-skill": "Some description."}
     messages = [_user("Hello, no skills here.")]
     result = extract_delivered_listing(messages, subject)
 
     assert result.listing_text == ""
     assert all(c.status == "dropped" for c in result.subject_cards)
+    assert result.empty_reason == "no_listing"
 
 
 def test_messages_list_with_no_user_messages() -> None:
@@ -200,6 +202,46 @@ def test_messages_list_with_no_user_messages() -> None:
 
     assert result.listing_text == ""
     assert all(c.status == "dropped" for c in result.subject_cards)
+    assert result.empty_reason == "no_user_messages"
+
+
+def test_listing_header_without_cards_records_typed_empty_listing() -> None:
+    """AC4: a delivered listing header with no cards is structurally empty."""
+    subject = {"my-skill": "Some description."}
+    messages = [_user("The following skills are available for use with the Skill tool:")]
+    result = extract_delivered_listing(messages, subject)
+
+    assert result.listing_text == ""
+    assert result.listing_description_tokens == 0
+    assert result.empty_reason == "listing_empty"
+    assert result.subject_cards[0].status == "dropped"
+
+
+def test_uses_only_the_first_user_message_for_the_delivered_listing() -> None:
+    """A later listing is not the surface delivered before the run started."""
+    subject = {"my-skill": "My skill description."}
+    messages = [
+        _system(
+            "The following skills are available for use with the Skill tool:\n"
+            "- my-skill: My skill description."
+        ),
+        _user("Perform the task."),
+        _listing_message(subject),
+    ]
+    result = extract_delivered_listing(messages, subject)
+
+    assert result.empty_reason == "no_listing"
+    assert result.subject_cards[0].status == "dropped"
+
+
+def test_unrelated_bullets_in_the_first_user_message_are_not_a_listing() -> None:
+    """Task Markdown must not be attributed to Claude Code's delivered surface."""
+    subject = {"my-skill": "My skill description."}
+    messages = [_user("Follow these steps:\n- my-skill: My skill description.")]
+    result = extract_delivered_listing(messages, subject)
+
+    assert result.empty_reason == "no_listing"
+    assert result.subject_cards[0].status == "dropped"
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +341,15 @@ def test_content_as_list_of_dicts() -> None:
     subject = {"s": "desc."}
     messages = [
         SimpleNamespace(
-            content=[{"text": "- s: desc.\n"}],
+            role="user",
+            content=[
+                {
+                    "text": (
+                        "The following skills are available for use with the Skill tool:\n"
+                        "- s: desc.\n"
+                    )
+                }
+            ],
         ),
     ]
     result = extract_delivered_listing(messages, subject)
@@ -311,7 +361,15 @@ def test_content_as_list_of_namespace_parts() -> None:
     subject = {"s": "desc."}
     messages = [
         SimpleNamespace(
-            content=[SimpleNamespace(text="- s: desc.\n")],
+            role="user",
+            content=[
+                SimpleNamespace(
+                    text=(
+                        "The following skills are available for use with the Skill tool:\n"
+                        "- s: desc.\n"
+                    )
+                )
+            ],
         ),
     ]
     result = extract_delivered_listing(messages, subject)

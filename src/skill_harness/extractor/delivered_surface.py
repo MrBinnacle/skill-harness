@@ -32,6 +32,8 @@ CardStatus = Literal["visible", "truncated", "dropped"]
 # Why a listing was classified as empty.
 EmptyReason = Literal["no_listing", "listing_empty", "no_user_messages"]
 
+_LISTING_HEADER = "The following skills are available for use with the Skill tool:"
+
 
 class DeliveredCard(BaseModel):
     """One subject card's delivery status within the delivered listing."""
@@ -75,6 +77,9 @@ class DeliveredListing(BaseModel):
     listing_description_tokens: int
     """Total estimated token count across all descriptions in the listing.
     Zero when no listing was found."""
+
+    empty_reason: EmptyReason | None
+    """Structural reason no listing was extracted, or ``None`` for a listing."""
 
 
 def _estimate_tokens(text: str) -> int:
@@ -123,10 +128,10 @@ def extract_delivered_listing(
         description text as declared in SKILL.md frontmatter.
     :returns: A ``DeliveredListing`` recording per-card delivery status.
     """
-    listing_text = _find_listing_text(messages)
+    listing_text, empty_reason = _find_listing_text(messages)
 
-    if not listing_text:
-        return _empty_listing(subject_cards, "no_listing")
+    if empty_reason is not None:
+        return _empty_listing(subject_cards, empty_reason)
 
     parsed_cards = _parse_listing_cards(listing_text)
 
@@ -136,8 +141,7 @@ def extract_delivered_listing(
     subject_names = set(subject_cards.keys())
 
     delivered_cards: list[DeliveredCard] = []
-    for name in subject_names:
-        description = subject_cards[name]
+    for name, description in subject_cards.items():
         card = _classify_card(name, description, parsed_cards)
         delivered_cards.append(card)
 
@@ -150,17 +154,21 @@ def extract_delivered_listing(
         non_subject_cards=non_subject,
         listing_text=listing_text,
         listing_description_tokens=total_tokens,
+        empty_reason=None,
     )
 
 
-def _find_listing_text(messages: Sequence[object]) -> str:
+def _find_listing_text(messages: Sequence[object]) -> tuple[str, EmptyReason | None]:
     """Find the skill listing text from the first user message.
 
-    Scans messages in order for the first user-role message whose content
-    contains a skill listing (identified by the ``- skill-name:`` pattern).
-    Returns the listing text if found, empty string otherwise.
+    Returns a typed structural reason when no listing can be extracted. A
+    listing on a non-user message or a later user message is not delivered
+    context and must not be attributed to the run.
     """
     for message in messages:
+        if getattr(message, "role", None) != "user":
+            continue
+
         content = getattr(message, "content", None)
         text = ""
         if isinstance(content, str):
@@ -176,24 +184,19 @@ def _find_listing_text(messages: Sequence[object]) -> str:
                         parts.append(t)
             text = "\n".join(parts)
 
-        if not text:
-            continue
-
         if _contains_listing(text):
-            return text
-    return ""
+            return text, None
+        return "", "no_listing"
+    return "", "no_user_messages"
 
 
 def _contains_listing(text: str) -> bool:
     """Check whether text contains a skill listing block.
 
-    A listing is identified by at least one ``- name: description`` line.
+    Claude Code's documented listing header distinguishes delivered cards from
+    unrelated Markdown bullets in the task text.
     """
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("- ") and ": " in stripped[2:]:
-            return True
-    return False
+    return _LISTING_HEADER in text
 
 
 def _classify_card(
@@ -268,4 +271,5 @@ def _empty_listing(
         non_subject_cards=(),
         listing_text="",
         listing_description_tokens=0,
+        empty_reason=reason,
     )

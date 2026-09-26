@@ -72,14 +72,15 @@ characters matches. The test pins the specific length recorded.
 
 ### AC4: Transcript with no listing records empty, never guessed
 
-**Tests:** `test_no_listing_records_empty_with_typed_reason`
-(`tests/test_delivered_surface.py:120`), `test_empty_listing_block_records_empty`
-(`tests/test_delivered_surface.py:153`), `test_messages_list_with_no_user_messages`
-(`tests/test_delivered_surface.py:165`)
+**Tests:** `test_no_user_messages_records_empty_with_typed_reason`,
+`test_empty_listing_block_records_empty`,
+`test_messages_list_with_no_user_messages`, and
+`test_listing_header_without_cards_records_typed_empty_listing`
 
-Three scenarios: (a) no user messages at all, (b) a user message with no card
-lines, (c) messages with no listing pattern. All assert `listing_text == ""`,
-`listing_description_tokens == 0`, and every subject card reads `dropped`.
+Three scenarios: (a) no user messages at all, (b) a user message with no
+listing, and (c) a listing header with no cards. All assert `listing_text == ""`,
+`listing_description_tokens == 0`, a typed `empty_reason`, and every subject
+card reads `dropped`.
 
 **Observation:** All three passed on the first run. The extractor returns an
 empty listing when `_find_listing_text` finds no listing block. The reason is
@@ -116,7 +117,7 @@ typing and formatting standards.
 | File | Change |
 |------|--------|
 | `src/skill_harness/extractor/delivered_surface.py` | New module: models + extraction function |
-| `tests/test_delivered_surface.py` | New test file: 15 tests covering all 6 ACs |
+| `tests/test_delivered_surface.py` | New test file: 18 tests covering all 6 ACs |
 
 ## Mutation campaign
 
