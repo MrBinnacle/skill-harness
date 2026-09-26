@@ -178,6 +178,54 @@ def test_worst_fn_takes_the_highest_null_upper_bound(s1a: ModuleType) -> None:
     assert worst == pytest.approx(lb_f - ub_n)
 
 
+def test_epochs_per_arm_flag_replaces_constant(s1a: ModuleType) -> None:
+    """Criterion 1: --epochs-per-arm N changes the table size from (N+1)^2."""
+    # Default N=16 gives (16+1)^2 = 289 cells
+    cells_16 = s1a.operating_table(null_correct=1, n_null=7, pass_alpha=0.0209, n=16, shuffles=0)
+    assert len(cells_16) == 289
+    # N=10 gives (10+1)^2 = 121 cells
+    cells_10 = s1a.operating_table(null_correct=1, n_null=7, pass_alpha=0.0209, n=10, shuffles=0)
+    assert len(cells_10) == 121
+    assert {(c.correct_f, c.correct_p) for c in cells_10} == {
+        (f, p) for f in range(11) for p in range(11)
+    }
+    # N=3 gives (3+1)^2 = 16 cells
+    cells_3 = s1a.operating_table(null_correct=1, n_null=7, pass_alpha=0.0209, n=3, shuffles=0)
+    assert len(cells_3) == 16
+
+
+def test_default_epochs_per_arm_reproduces_289_cell_table(s1a: ModuleType) -> None:
+    """Criterion 1: the default N=16 table is byte-for-byte identical to the existing one."""
+    cells_default = s1a.operating_table(null_correct=1, n_null=7, pass_alpha=0.0209, shuffles=0)
+    cells_explicit = s1a.operating_table(
+        null_correct=1, n_null=7, pass_alpha=0.0209, n=16, shuffles=0
+    )
+    assert len(cells_default) == 289
+    assert len(cells_explicit) == 289
+    for a, b in zip(cells_default, cells_explicit, strict=True):
+        assert a.correct_f == b.correct_f
+        assert a.correct_p == b.correct_p
+        assert a.ub_fp == pytest.approx(b.ub_fp)
+        assert a.lb_fp == pytest.approx(b.lb_fp)
+        assert a.lb_fn == pytest.approx(b.lb_fn)
+        assert a.outcome == b.outcome
+
+
+def test_hard_cap_formula(s1a: ModuleType) -> None:
+    """Criterion 1: cap = (3*N - n_reused) * PER_SAMPLE_CAP."""
+    assert s1a._hard_cap(16, 7) == pytest.approx((48 - 7) * 0.30)
+    assert s1a._hard_cap(97, 7) == pytest.approx((291 - 7) * 0.30)
+    assert s1a._hard_cap(10, 0) == pytest.approx(30 * 0.30)
+
+
+def test_render_table_uses_n_not_constant(s1a: ModuleType) -> None:
+    """Criterion 1: render_table accepts n parameter."""
+    cells = s1a.operating_table(null_correct=1, n_null=7, pass_alpha=0.0209, n=10, shuffles=0)
+    rendered = s1a.render_table(cells, pass_alpha=0.0209, n_null=7, n=10)
+    assert "10 Full against 7 Null-A" in rendered
+    assert "cells: 121" in rendered
+
+
 def test_operating_table_covers_289_cells(s1a: ModuleType) -> None:
     cells = s1a.operating_table(null_correct=1, n_null=7, pass_alpha=0.0209, shuffles=0)
     assert len(cells) == 289
