@@ -62,12 +62,6 @@ from skill_harness.task_frontier.admission import (
     audit_observation,
     matched_evidence,
 )
-from skill_harness.task_frontier.family_record import (
-    FamilyRecord,
-    check_fixture_path_uniqueness,
-    check_predate_first_epoch,
-    load_family_record,
-)
 from skill_harness.task_frontier.manifest import (
     Arm,
     FrozenHashes,
@@ -79,7 +73,6 @@ from skill_harness.task_frontier.manifest import (
 __all__ = [
     "Admission",
     "Arm",
-    "FamilyRecord",
     "FrozenHashes",
     "Observation",
     "Phase",
@@ -87,9 +80,6 @@ __all__ = [
     "TaskFamilyManifest",
     "admit",
     "audit_observation",
-    "check_fixture_path_uniqueness",
-    "check_predate_first_epoch",
-    "load_family_record",
     "load_manifest",
     "matched_evidence",
 ]
