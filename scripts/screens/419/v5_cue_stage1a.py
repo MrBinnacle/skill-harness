@@ -421,12 +421,34 @@ def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, A
     lb_fp, ub_fp = fp_bounds(xs, pass_alpha=pass_alpha)
     full_stream = tuple(float(outcomes["full"][e]) for e in sorted(outcomes["full"]))
     lb_f = _bound(full_stream, pass_alpha / 2, "lower")
-    ub_n, null_order = null_upper(null_a, pass_alpha / 2)
+    # Null-A: combine reused epochs from --null-readout with new epochs from eval logs.
+    # The reused epochs come first in launch order, followed by the new ones.
+    null_new_rows = sorted(
+        (r for r in rows if r.arm == "null" and r.world == "a" and not r.void),
+        key=lambda r: r.epoch,
+    )
+    null_new_outcomes = tuple(float(r.final_world_correct) for r in null_new_rows)
+    if null_a.outcomes is not None:
+        null_stream = tuple(float(o) for o in null_a.outcomes) + null_new_outcomes
+        null_order = "Null-A reused epochs then new epochs in launch order"
+    else:
+        null_stream = null_new_outcomes if null_new_outcomes else None
+        null_order = "Null-A new epochs only (no per-epoch order in readout)"
+    if null_stream is not None and len(null_stream) > 0:
+        ub_n = _bound(null_stream, pass_alpha / 2, "upper")
+    else:
+        ub_n, null_order = null_upper(null_a, pass_alpha / 2)
+    total_null_n = null_a.n + len(null_new_rows)
+    total_null_correct = null_a.correct + sum(int(r.final_world_correct) for r in null_new_rows)
     return {
         "arms": arms,
         "listing_positions": {f"{arm}#{ep}": v for (arm, ep), v in positions.items()},
         "listing_position_violations": {},
-        "null_a": {"n": null_a.n, "correct": null_a.correct, "order": null_order},
+        "null_a": {
+            "n": total_null_n,
+            "correct": total_null_correct,
+            "order": null_order,
+        },
         "alpha": ALPHA,
         "pass_alpha": pass_alpha,
         "boundary": BOUNDARY,
@@ -440,7 +462,7 @@ def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, A
             "ub_mu_n": ub_n,
             "each_at": pass_alpha / 2,
             "n_full": len(full_stream),
-            "n_null": null_a.n,
+            "n_null": total_null_n,
         },
         "outcome": stop_rule(ub_fp=ub_fp, lb_fp=lb_fp, lb_fn=lb_f - ub_n),
         "void_epochs": [f"{r.arm}/{r.world}#{r.epoch}" for r in rows if r.void],
@@ -495,7 +517,10 @@ def main(argv: list[str] | None = None) -> int:
     from v5_cue_stage1 import _model_cost  # imports the [inspect] extra
 
     cost = _model_cost()
-    pin, tasks = stage1a_tasks(Path(tempfile.mkdtemp(prefix="cue-stage1a-")), epochs=n)
+    # Full and Placebo run N epochs each; Null-A runs N - n_reused new epochs.
+    compose_dir = Path(tempfile.mkdtemp(prefix="cue-stage1a-"))
+    pin, tasks = stage1a_tasks(compose_dir, epochs=n)
+    fp_tasks = [tasks[0], tasks[1]]  # Full and Placebo
     print("pin fingerprint:", pin.fingerprint(), "| image:", pin.sandbox_image)
     print(
         f"tasks={[t.name for t in tasks]} epochs/arm={n} model={MODEL} "
@@ -509,8 +534,10 @@ def main(argv: list[str] | None = None) -> int:
 
     import inspect_ai
 
-    logs = inspect_ai.eval(
-        tasks,
+    # Run Full + Placebo for N epochs, then Null-A for N - n_reused new epochs.
+    null_new_epochs = n - null_a.n
+    logs_fp = inspect_ai.eval(
+        fp_tasks,
         log_dir=str(args.out),
         display="plain",
         retry_on_error=0,
@@ -519,8 +546,31 @@ def main(argv: list[str] | None = None) -> int:
         cost_limit=PER_SAMPLE_CAP,
         model_cost_config=cost,
     )
-    for log in logs:
+    for log in logs_fp:
         print("LOG:", log.location, "STATUS:", log.status, "run_id:", log.eval.run_id)
+    if null_new_epochs > 0:
+        # Build a Null-A task with N - n_reused epochs for the new run.
+        null_cells = build_cells(
+            fixture_root=FIXTURE_ROOT_DEFAULT,
+            full_dir=FULL_DIR_DEFAULT,
+            pin=pin,
+            epochs=null_new_epochs,
+            compose_dir=compose_dir,
+            retry_uncaught_errors=RETRY_UNCAUGHT_ERRORS,
+        )
+        null_task_new = null_cells[("null", "a")]
+        logs_null = inspect_ai.eval(
+            [null_task_new],
+            log_dir=str(args.out),
+            display="plain",
+            retry_on_error=0,
+            max_sandboxes=1,
+            fail_on_error=False,
+            cost_limit=PER_SAMPLE_CAP,
+            model_cost_config=cost,
+        )
+        for log in logs_null:
+            print("LOG:", log.location, "STATUS:", log.status, "run_id:", log.eval.run_id)
     readout = read_stage1a(args.out, null_a, args.pass_alpha)
     (args.out / "readout.json").write_text(json.dumps(readout, indent=2), encoding="utf-8")
     print(json.dumps(readout, indent=2))
