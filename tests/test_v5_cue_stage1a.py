@@ -388,7 +388,7 @@ def test_smallest_look_finds_first_firing_epoch(s1a: ModuleType) -> None:
     looks = s1a.smallest_look(cells, n=10)
     # CUT_NO_LIFT should fire at some look.
     assert looks["CUT_NO_LIFT"] is not None
-    assert 1 <= looks["CUT_NO_LIFT"] <= 10  # type: ignore[arg-type]
+    assert 1 <= looks["CUT_NO_LIFT"] <= 10
     # UNRESOLVED_CONTINUE should fire at look 1 (trivial case).
     assert looks["UNRESOLVED_CONTINUE"] is not None
     assert looks["UNRESOLVED_CONTINUE"] == 1
@@ -417,11 +417,11 @@ def test_dry_run_at_n97_prints_new_epochs_and_cap(
         "--dry-run",
     ]
     original_shuffles = s1a.DRY_RUN_SHUFFLES
-    s1a.DRY_RUN_SHUFFLES = 0
+    monkeypatch.setattr(s1a, "DRY_RUN_SHUFFLES", 0)
     try:
         assert s1a.main(argv) == 0
     finally:
-        s1a.DRY_RUN_SHUFFLES = original_shuffles
+        monkeypatch.setattr(s1a, "DRY_RUN_SHUFFLES", original_shuffles)
 
 
 def test_dry_run_price_line_at_n97(s1a: ModuleType, tmp_path: Path) -> None:
