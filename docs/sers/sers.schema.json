@@ -405,6 +405,30 @@
       "enum": ["current", "stale", "no_current_metric_version"],
       "description": "Expiry state of the result, read from the frozen_cases_with_currency VIEW. 'current' = metric version and implementation hash match the current metric version; 'stale' = a newer version exists or the hash mismatches; 'no_current_metric_version' = no audited valid metric version exists."
     },
+    "designer": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The seat or person who designed the task family. Recorded for the claim ladder: REPLICATED records designer and designer_independent; ROBUST requires at least one family designed by an independent seat."
+    },
+    "designer_independent": {
+      "type": "boolean",
+      "description": "True when the designer of this family is independent from the card's author. At REPLICATED, recorded for disclosure. At ROBUST, at least one of the three families must have designer_independent=true."
+    },
+    "family_replication": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of materially distinct task families that cleared the preregistered KEEP rule. 1 = KEEP (scoped sentence only); 2+ = REPLICATED (program policy)."
+    },
+    "model_replication": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of distinct model families the result has been replicated on. Recorded separately from family_replication; model generalization is its own ladder rung."
+    },
+    "claim_level": {
+      "type": ["string", "null"],
+      "enum": ["KEEP", "REPLICATED", "ROBUST", null],
+      "description": "Ledger claim ladder above KEEP. KEEP = one admissible registration; REPLICATED = 2+ independently designed families; ROBUST = 3+ materially distinct families with at least one independent designer. null = not yet classified."
+    },
     "verdict_scope": {
       "type": "object",
       "additionalProperties": false,
@@ -790,6 +814,61 @@
               }
             }
           }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "claim_level": { "const": "KEEP" } },
+        "required": ["claim_level"]
+      },
+      "then": {
+        "required": ["verdict", "family_replication", "model_replication"],
+        "properties": {
+          "verdict": { "const": "KEEP" },
+          "family_replication": { "const": 1 },
+          "model_replication": { "const": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "claim_level": { "const": "REPLICATED" } },
+        "required": ["claim_level"]
+      },
+      "then": {
+        "required": [
+          "verdict",
+          "designer",
+          "designer_independent",
+          "family_replication",
+          "model_replication"
+        ],
+        "properties": {
+          "verdict": { "const": "KEEP" },
+          "family_replication": { "type": "integer", "minimum": 2 },
+          "model_replication": { "const": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "claim_level": { "const": "ROBUST" } },
+        "required": ["claim_level"]
+      },
+      "then": {
+        "required": [
+          "verdict",
+          "designer",
+          "designer_independent",
+          "family_replication",
+          "model_replication"
+        ],
+        "properties": {
+          "verdict": { "const": "KEEP" },
+          "designer_independent": { "const": true },
+          "family_replication": { "type": "integer", "minimum": 3 },
+          "model_replication": { "const": 1 }
         }
       }
     }

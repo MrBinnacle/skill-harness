@@ -1165,6 +1165,58 @@ def _scope_line(receipt: Mapping[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Claim level sentences (#647)
+# ---------------------------------------------------------------------------
+
+CLAIM_LEVEL_KEEP_TEMPLATE: Final[str] = (
+    "This result is a single registration under program policy; it is a scoped claim only."
+)
+
+CLAIM_LEVEL_REPLICATED_TEMPLATE: Final[str] = "Replicated across {n_families} families"
+
+CLAIM_LEVEL_REPLICATED_SAME_DESIGNER_SUFFIX: Final[str] = " (same designer)"
+CLAIM_LEVEL_PROGRAM_POLICY_SUFFIX: Final[str] = " under program policy."
+
+CLAIM_LEVEL_ROBUST_TEMPLATE: Final[str] = (
+    "Robust across {n_families} families under program policy; "
+    "at least one family was designed by an independent seat."
+)
+
+
+def render_claim_level_sentence(
+    claim_level: str | None,
+    family_replication: int,
+    designer: str,
+    designer_independent: bool,
+) -> str:
+    """Render the claim level sentence for a receipt.
+
+    Three sentences, one per rung of the claim ladder (#647):
+
+    KEEP — a single registration; the scoped sentence only.
+    REPLICATED — two or more families, with the "(same designer)" qualifier
+      when the designer is the same across families.
+    ROBUST — three or more families, with the independent-designer mandate.
+
+    Returns the empty string when ``claim_level`` is ``None`` (not yet
+    classified).
+    """
+    if claim_level is None:
+        return ""
+    if claim_level == "KEEP":
+        return CLAIM_LEVEL_KEEP_TEMPLATE
+    if claim_level == "REPLICATED":
+        sentence = CLAIM_LEVEL_REPLICATED_TEMPLATE.format(n_families=family_replication)
+        if not designer_independent:
+            sentence += CLAIM_LEVEL_REPLICATED_SAME_DESIGNER_SUFFIX
+        sentence += CLAIM_LEVEL_PROGRAM_POLICY_SUFFIX
+        return sentence
+    if claim_level == "ROBUST":
+        return CLAIM_LEVEL_ROBUST_TEMPLATE.format(n_families=family_replication)
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # Small helpers
 # ---------------------------------------------------------------------------
 
