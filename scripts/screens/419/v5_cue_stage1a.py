@@ -515,6 +515,25 @@ def sequential_evaluate(
     return "UNRESOLVED_CONTINUE", None
 
 
+def smallest_look(cells: Sequence[TableCell], *, n: int) -> dict[Outcome, int | None]:
+    """For each outcome, the smallest epoch index at which it first appears in the table.
+
+    The table has (n+1)^2 cells for (correct_F, correct_P) in 0..n. The epoch index
+    at which an outcome fires is min(correct_F, correct_P) + 1 (the number of paired
+    epochs needed to reach that (correct_F, correct_P) cell).
+    """
+    result: dict[Outcome, int | None] = {
+        "CUT_NO_LIFT": None,
+        "A_PASSES_EARLY": None,
+        "UNRESOLVED_CONTINUE": None,
+    }
+    for c in cells:
+        look = min(c.correct_f, c.correct_p) + 1
+        if result[c.outcome] is None or look < result[c.outcome]:  # type: ignore[operator]
+            result[c.outcome] = look
+    return result
+
+
 def dry_run(null_a: NullA, *, n: int = EPOCHS_PER_ARM) -> None:
     print(
         f"Null-A: {null_a.correct} correct of {null_a.n} valid "
@@ -535,6 +554,10 @@ def dry_run(null_a: NullA, *, n: int = EPOCHS_PER_ARM) -> None:
             shuffles=DRY_RUN_SHUFFLES,
         )
         print(render_table(cells, pass_alpha=pass_alpha, n_null=null_a.n, n=n))
+        looks = smallest_look(cells, n=n)
+        for outcome_name in ("CUT_NO_LIFT", "A_PASSES_EARLY", "UNRESOLVED_CONTINUE"):
+            look = looks[outcome_name]
+            print(f"  smallest look for {outcome_name}: {look if look is not None else 'never'}")
     new_epochs = 3 * n - null_a.n
     cap = _hard_cap(n, null_a.n)
     print(f"new epochs: {new_epochs} (3*{n} - {null_a.n})")
@@ -553,6 +576,10 @@ def main(argv: list[str] | None = None) -> int:
     null_a = load_null_a(args.null_readout)
     n = args.epochs_per_arm
     hard_cap = _hard_cap(n, null_a.n)
+    if args.dry_run:
+        dry_run(null_a, n=n)
+        return 0
+
     from v5_cue_stage1 import _model_cost  # imports the [inspect] extra
 
     cost = _model_cost()
@@ -567,9 +594,6 @@ def main(argv: list[str] | None = None) -> int:
         f"retry_uncaught_errors={RETRY_UNCAUGHT_ERRORS} retry_on_error=0 "
         f"pass-alpha={args.pass_alpha}"
     )
-    if args.dry_run:
-        dry_run(null_a, n=n)
-        return 0
 
     import inspect_ai
 
