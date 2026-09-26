@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -226,27 +227,61 @@ def test_render_table_uses_n_not_constant(s1a: ModuleType) -> None:
     assert "cells: 121" in rendered
 
 
-def test_null_a_reused_then_new_order_changes_bound(s1a: ModuleType, tmp_path: Path) -> None:
+def test_read_stage1a_uses_reused_then_new_null_a_order(
+    s1a: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Criterion 2: Null-A rate is read over reused then new epochs in that order.
 
     The betting bound depends on observation order (predictable plug-in lambdas).
-    We verify the combined stream is reused-first by showing a different ordering
-    of the same observations gives a different UB.
+    This drives the launcher readout rather than checking a separately constructed stream.
     """
-    # Reused: alternating outcomes (1, 0, 1, 0, 1, 0, 1, 0) — 4/8.
-    reused_outcomes = [1, 0, 1, 0, 1, 0, 1, 0]
-    null_a = s1a.NullA(outcomes=tuple(reused_outcomes), correct=4, n=8)
-    # The combined reused-first stream is exactly reused_outcomes here (no new epochs).
-    # But we test that the order of observations matters by comparing two different
-    # orderings of the same multiset: alternating vs all-1s-first.
-    ub_alternating = s1a._bound(tuple(float(o) for o in reused_outcomes), 0.025, "upper")
-    grouped = (1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0)  # same 4/8, different order
-    ub_grouped = s1a._bound(grouped, 0.025, "upper")
-    assert ub_alternating != ub_grouped, (
-        "order must change the bound for this test to be meaningful"
+
+    @dataclass(frozen=True)
+    class FakeRow:
+        arm: str
+        world: str
+        epoch: int
+        final_world_correct: bool
+        void: bool = False
+        silent_violation: bool = False
+        no_publish: bool = False
+        usd: float = 0.083
+
+    def row(arm: str, epoch: int, correct: bool) -> FakeRow:
+        return FakeRow(arm=arm, world="a", epoch=epoch, final_world_correct=correct)
+
+    rows = [
+        *(row("full", epoch, True) for epoch in range(1, 10)),
+        *(row("placebo", epoch, False) for epoch in range(1, 10)),
+        row("null", 9, False),
+    ]
+    twin_readout = ModuleType("twin_readout")
+    twin_readout.read_rows = lambda _: rows  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "twin_readout", twin_readout)
+    monkeypatch.setattr(
+        s1a,
+        "_manifest_reads",
+        lambda _: {(arm, i): True for arm in ("full", "placebo") for i in range(1, 10)},
     )
-    assert null_a.outcomes is not None
-    assert null_a.outcomes == (1, 0, 1, 0, 1, 0, 1, 0)
+    monkeypatch.setattr(
+        s1a,
+        "_listing_position",
+        lambda _: {(arm, i): 1 for arm in ("full", "placebo") for i in range(1, 10)},
+    )
+
+    reused_outcomes = (1, 0, 1, 0, 1, 0, 1, 0)
+    null_a = s1a.NullA(outcomes=reused_outcomes, correct=4, n=8)
+    readout = s1a.read_stage1a(tmp_path, null_a, 0.05, n=9)
+    expected = one_sided_betting_bound(
+        [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0], alpha=0.025, side="upper"
+    )
+    assert readout["f_minus_n"]["ub_mu_n"] == pytest.approx(expected)
+    assert readout["null_a"]["n"] == 9
+    assert readout["null_a"]["correct"] == 4
+
+    grouped = (1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    ub_grouped = s1a._bound(grouped, 0.025, "upper")
+    assert expected != ub_grouped, "order must change the bound for this test to be meaningful"
 
 
 def test_operating_table_covers_289_cells(s1a: ModuleType) -> None:
@@ -331,27 +366,17 @@ def test_dry_run_prints_both_tables_and_calls_no_model(
 
 def test_sequential_stops_at_first_firing_look(s1a: ModuleType) -> None:
     """Criterion 3: a sequential run stops at the first look where the rule fires."""
-    # Script a stream where UB(F-P) drops below 0.20 at epoch 3.
-    # Full: all correct (1,1,1,...); Placebo: all wrong (0,0,0,...).
-    # At epoch 1: x=(1-0+1)/2=1.0, UB might be high.
-    # At epoch 2: x=(1,1), UB still high.
-    # At epoch 3: x=(1,1,1), UB starts tightening.
-    # We use a stream where CUT_NO_LIFT fires at a specific epoch.
     full = {i: 1 for i in range(1, 17)}
     placebo = {i: 0 for i in range(1, 17)}
-    # Null: all wrong to make LB(F-N) low, so A_PASSES_EARLY cannot fire.
     null_combined = (0.0,) * 16
     outcome, fired_at = s1a.sequential_evaluate(
         full, placebo, null_combined, n=16, pass_alpha=0.0209
     )
-    # With 16 pairs of (1,0), the UB should be well above 0.20, so no CUT_NO_LIFT.
-    # Check that it either fires or reaches N unresolved.
-    assert outcome in ("CUT_NO_LIFT", "A_PASSES_EARLY", "UNRESOLVED_CONTINUE")
-    if outcome == "UNRESOLVED_CONTINUE":
-        assert fired_at is None
-    else:
-        assert fired_at is not None
-        assert 1 <= fired_at <= 16
+    assert (outcome, fired_at) == ("A_PASSES_EARLY", 16)
+    assert s1a.sequential_evaluate(full, placebo, null_combined, n=15, pass_alpha=0.0209) == (
+        "UNRESOLVED_CONTINUE",
+        None,
+    )
 
 
 def test_sequential_never_fires_ends_at_n(s1a: ModuleType) -> None:
@@ -376,10 +401,11 @@ def test_sequential_stops_never_later_than_first_firing(s1a: ModuleType) -> None
     outcome, fired_at = s1a.sequential_evaluate(
         full, placebo, null_combined, n=16, pass_alpha=0.0209
     )
-    # With Full=0 and Placebo=1, F-P is negative, UB(F-P) should be below 0.20 quickly.
-    assert outcome == "CUT_NO_LIFT"
-    assert fired_at is not None
-    assert fired_at <= 16
+    assert (outcome, fired_at) == ("CUT_NO_LIFT", 6)
+    assert s1a.sequential_evaluate(full, placebo, null_combined, n=5, pass_alpha=0.0209) == (
+        "UNRESOLVED_CONTINUE",
+        None,
+    )
 
 
 def test_smallest_look_finds_first_firing_epoch(s1a: ModuleType) -> None:
@@ -399,11 +425,15 @@ def test_smallest_look_finds_first_firing_epoch(s1a: ModuleType) -> None:
     ]
     looks_all_cut = s1a.smallest_look(cells_all_cut, n=1)
     assert looks_all_cut["A_PASSES_EARLY"] is None
+    delayed_cut = [s1a.TableCell(0, 6, 0.1, -0.5, -0.5, "CUT_NO_LIFT")]
+    assert s1a.smallest_look(delayed_cut, n=10)["CUT_NO_LIFT"] == 7
 
 
-@pytest.mark.slow
 def test_dry_run_at_n97_prints_new_epochs_and_cap(
-    s1a: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    s1a: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Criterion 4: dry run at N=97 prints new epochs 284 and cap $85.20."""
     readout = _null_readout(tmp_path, [0, 0, 0, 0, 0, 1, 0])
@@ -416,12 +446,18 @@ def test_dry_run_at_n97_prints_new_epochs_and_cap(
         "97",
         "--dry-run",
     ]
-    original_shuffles = s1a.DRY_RUN_SHUFFLES
-    monkeypatch.setattr(s1a, "DRY_RUN_SHUFFLES", 0)
-    try:
-        assert s1a.main(argv) == 0
-    finally:
-        monkeypatch.setattr(s1a, "DRY_RUN_SHUFFLES", original_shuffles)
+
+    def table(**kwargs: Any) -> list[Any]:
+        assert kwargs["n"] == 97
+        return [s1a.TableCell(0, 0, 1.0, -1.0, -1.0, "UNRESOLVED_CONTINUE")]
+
+    monkeypatch.setattr(s1a, "operating_table", table)
+    assert s1a.main(argv) == 0
+    output = capsys.readouterr().out
+    assert "97 Full against 7 Null-A" in output
+    assert "new epochs: 284 (3*97 - 7)" in output
+    assert "expected: $23.57 at $0.083/epoch; $24.71 at $0.087/epoch" in output
+    assert "cap: $85.20 (new epochs * $0.3)" in output
 
 
 def test_dry_run_price_line_at_n97(s1a: ModuleType, tmp_path: Path) -> None:
@@ -433,3 +469,58 @@ def test_dry_run_price_line_at_n97(s1a: ModuleType, tmp_path: Path) -> None:
     cap = s1a._hard_cap(n, null_a.n)
     assert new_epochs == 284
     assert cap == pytest.approx(85.20)
+
+
+def test_main_stops_after_the_first_firing_look(
+    s1a: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Criterion 3: the launcher does not spend on a second look after a stop."""
+    readout = _null_readout(tmp_path, [0, 0, 0, 0, 0, 1, 0])
+    pin = SimpleNamespace(fingerprint=lambda: "pin", sandbox_image="image")
+    tasks = [
+        SimpleNamespace(name="full"),
+        SimpleNamespace(name="placebo"),
+        SimpleNamespace(name="null"),
+    ]
+    monkeypatch.setattr(s1a, "stage1a_tasks", lambda *_args, **_kwargs: (pin, tasks))
+    stage1 = ModuleType("v5_cue_stage1")
+    stage1._model_cost = lambda: {}  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "v5_cue_stage1", stage1)
+
+    calls: list[list[str]] = []
+
+    def evaluate(eval_tasks: list[SimpleNamespace], **kwargs: Any) -> list[SimpleNamespace]:
+        calls.append([task.name for task in eval_tasks])
+        Path(kwargs["log_dir"]).mkdir(parents=True, exist_ok=True)
+        return [
+            SimpleNamespace(
+                location="log.eval",
+                status="success",
+                eval=SimpleNamespace(run_id="run"),
+            )
+            for _ in eval_tasks
+        ]
+
+    inspect_ai = ModuleType("inspect_ai")
+    inspect_ai.eval = evaluate  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "inspect_ai", inspect_ai)
+    stopped = {
+        "outcome": "CUT_NO_LIFT",
+        "sequential": {"fired_at": 1},
+    }
+    monkeypatch.setattr(s1a, "read_stage1a", lambda *_args, **_kwargs: stopped)
+
+    assert (
+        s1a.main(
+            [
+                "--out",
+                str(tmp_path / "logs"),
+                "--null-readout",
+                str(readout),
+                "--epochs-per-arm",
+                "8",
+            ]
+        )
+        == 0
+    )
+    assert calls == [["full", "placebo"]]

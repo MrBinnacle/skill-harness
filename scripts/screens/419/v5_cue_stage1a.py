@@ -53,7 +53,7 @@ import re
 import sys
 import tempfile
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
 from typing import Any, Literal
@@ -70,7 +70,7 @@ from skill_harness.subject import HarnessPin
 
 EPOCHS_PER_ARM = 16
 PER_SAMPLE_CAP = 0.30
-HARD_CAP_USD = 2 * EPOCHS_PER_ARM * PER_SAMPLE_CAP  # legacy; new formula in _hard_cap()
+REALIZED_EPOCH_COSTS = (0.083, 0.087)
 MODEL = "anthropic/claude-sonnet-5"
 RETRY_UNCAUGHT_ERRORS = 1
 ALPHA = 0.05
@@ -311,20 +311,34 @@ def stage1a_tasks(
     return pin, [cells[("full", "a")], cells[("placebo", "a")], cells[("null", "a")]]
 
 
+def _look_directories(log_dir: Path) -> list[Path]:
+    """Return sequential-look directories, or the legacy single log directory."""
+    look_dirs = sorted(path for path in log_dir.glob("look-*") if path.is_dir())
+    return look_dirs or [log_dir]
+
+
+def _launch_index(path: Path, sample_epoch: int) -> int:
+    """Recover a sequential launch index from a per-look log path."""
+    if path.parent.name.startswith("look-"):
+        return int(path.parent.name.removeprefix("look-"))
+    return sample_epoch
+
+
 def _manifest_reads(log_dir: Path) -> dict[tuple[str, int], bool]:
     """(arm, epoch) -> whether any tool call named the trace file."""
     from inspect_ai.log import read_eval_log
 
     found: dict[tuple[str, int], bool] = {}
-    for path in sorted(log_dir.glob("*.eval")):
-        log = read_eval_log(str(path))
-        arm = str((log.eval.metadata or {})["cell_arm"])
-        for sample in log.samples or []:
-            found[(arm, int(sample.epoch))] = any(
-                TRACE in json.dumps(call.arguments)
-                for message in sample.messages
-                for call in getattr(message, "tool_calls", None) or []
-            )
+    for look_dir in _look_directories(log_dir):
+        for path in sorted(look_dir.glob("*.eval")):
+            log = read_eval_log(str(path))
+            arm = str((log.eval.metadata or {})["cell_arm"])
+            for sample in log.samples or []:
+                found[(arm, _launch_index(path, int(sample.epoch)))] = any(
+                    TRACE in json.dumps(call.arguments)
+                    for message in sample.messages
+                    for call in getattr(message, "tool_calls", None) or []
+                )
     return found
 
 
@@ -355,49 +369,62 @@ def _listing_position(log_dir: Path) -> dict[tuple[str, int], int]:
     from inspect_ai.log import read_eval_log
 
     positions: dict[tuple[str, int], int] = {}
-    for path in sorted(log_dir.glob("*.eval")):
-        log = read_eval_log(str(path))
-        arm = str((log.eval.metadata or {})["cell_arm"])
-        description = CARD_DESCRIPTIONS.get(arm)
-        if description is None:
-            continue
-        for sample in log.samples or []:
-            key = (arm, int(sample.epoch))
-            if key in positions:
-                raise ValueError(f"duplicate listing position for {arm} epoch {sample.epoch}")
-            first_user = None
-            for message in sample.messages:
-                if getattr(message, "role", None) == "user":
-                    first_user = _message_text(message)
-                    break
-            if first_user is None:
-                raise ValueError(f"{arm} epoch {sample.epoch}: no first user message")
-            description_offset = first_user.find(description)
-            if description_offset < 0:
-                raise ValueError(
-                    f"{arm} epoch {sample.epoch}: card description missing from first user message"
+    for look_dir in _look_directories(log_dir):
+        for path in sorted(look_dir.glob("*.eval")):
+            log = read_eval_log(str(path))
+            arm = str((log.eval.metadata or {})["cell_arm"])
+            description = CARD_DESCRIPTIONS.get(arm)
+            if description is None:
+                continue
+            for sample in log.samples or []:
+                epoch = _launch_index(path, int(sample.epoch))
+                key = (arm, epoch)
+                if key in positions:
+                    raise ValueError(f"duplicate listing position for {arm} epoch {epoch}")
+                first_user = None
+                for message in sample.messages:
+                    if getattr(message, "role", None) == "user":
+                        first_user = _message_text(message)
+                        break
+                if first_user is None:
+                    raise ValueError(f"{arm} epoch {epoch}: no first user message")
+                description_offset = first_user.find(description)
+                if description_offset < 0:
+                    raise ValueError(
+                        f"{arm} epoch {epoch}: card description missing from first user message"
+                    )
+                position = sum(
+                    entry.start() <= description_offset
+                    for entry in _LISTING_NUMBERED_RE.finditer(first_user)
                 )
-            position = sum(
-                entry.start() <= description_offset
-                for entry in _LISTING_NUMBERED_RE.finditer(first_user)
-            )
-            if position == 0:
-                raise ValueError(
-                    f"{arm} epoch {sample.epoch}: card description is outside a numbered listing"
-                )
-            if position != 1:
-                raise ValueError(
-                    f"{arm} epoch {sample.epoch}: card appears at listing position {position}, "
-                    "expected 1"
-                )
-            positions[key] = position
+                if position == 0:
+                    raise ValueError(
+                        f"{arm} epoch {epoch}: card description is outside a numbered listing"
+                    )
+                if position != 1:
+                    raise ValueError(
+                        f"{arm} epoch {epoch}: card appears at listing position {position}, "
+                        "expected 1"
+                    )
+                positions[key] = position
     return positions
 
 
-def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, Any]:
+def _read_rows_by_launch(log_dir: Path) -> list[Any]:
+    """Read rows and retain the outer sequential look as each row's launch index."""
     from twin_readout import read_rows
 
-    rows = read_rows(log_dir)
+    rows: list[Any] = []
+    for look_dir in _look_directories(log_dir):
+        for row in read_rows(look_dir):
+            rows.append(replace(row, epoch=_launch_index(look_dir / "placeholder.eval", row.epoch)))
+    return rows
+
+
+def read_stage1a(
+    log_dir: Path, null_a: NullA, pass_alpha: float, *, n: int = EPOCHS_PER_ARM
+) -> dict[str, Any]:
+    rows = _read_rows_by_launch(log_dir)
     manifest = _manifest_reads(log_dir)
     positions = _listing_position(log_dir)
     expected_positions = {(r.arm, r.epoch) for r in rows if r.arm in CARD_DESCRIPTIONS}
@@ -423,26 +450,47 @@ def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, A
     lb_f = _bound(full_stream, pass_alpha / 2, "lower")
     # Null-A: combine reused epochs from --null-readout with new epochs from eval logs.
     # The reused epochs come first in launch order, followed by the new ones.
-    null_new_rows = sorted(
-        (r for r in rows if r.arm == "null" and r.world == "a" and not r.void),
+    null_rows = sorted(
+        (r for r in rows if r.arm == "null" and r.world == "a"),
         key=lambda r: r.epoch,
     )
-    null_new_outcomes = tuple(float(r.final_world_correct) for r in null_new_rows)
-    null_stream: tuple[float, ...] | None = None
+    null_new_rows = [r for r in null_rows if not r.void]
+    null_stream: tuple[float | None, ...] | None = None
     if null_a.outcomes is not None:
-        null_stream = tuple(float(o) for o in null_a.outcomes) + null_new_outcomes
+        null_new_by_launch = {r.epoch: float(r.final_world_correct) for r in null_new_rows}
+        if null_rows and max(r.epoch for r in null_rows) <= n - null_a.n:
+            # A legacy one-shot Null task numbers its top-up epochs from one.
+            new_stream = tuple(float(r.final_world_correct) for r in null_new_rows)
+        else:
+            new_stream = tuple(
+                null_new_by_launch.get(launch) for launch in range(null_a.n + 1, n + 1)
+            )
+        null_stream = tuple(float(o) for o in null_a.outcomes) + new_stream
         null_order = "Null-A reused epochs then new epochs in launch order"
-    elif null_new_outcomes:
-        null_stream = null_new_outcomes
+    elif null_new_rows:
+        null_stream = tuple(float(r.final_world_correct) for r in null_new_rows)
         null_order = "Null-A new epochs only (no per-epoch order in readout)"
     else:
         null_order = "Null-A counts only (no per-epoch order in readout)"
-    if null_stream is not None and len(null_stream) > 0:
-        ub_n = _bound(null_stream, pass_alpha / 2, "upper")
+    observed_null_stream = tuple(value for value in null_stream or () if value is not None)
+    if observed_null_stream:
+        ub_n = _bound(observed_null_stream, pass_alpha / 2, "upper")
     else:
         ub_n, null_order = null_upper(null_a, pass_alpha / 2)
     total_null_n = null_a.n + len(null_new_rows)
     total_null_correct = null_a.correct + sum(int(r.final_world_correct) for r in null_new_rows)
+    if null_stream is None:
+        sequential_outcome: Outcome = stop_rule(ub_fp=ub_fp, lb_fp=lb_fp, lb_fn=lb_f - ub_n)
+        fired_at: int | None = None
+    else:
+        sequential_outcome, fired_at = sequential_evaluate(
+            outcomes["full"], outcomes["placebo"], null_stream, n=n, pass_alpha=pass_alpha
+        )
+    readout_outcome = (
+        "CANT_TELL_YET_AT_N_MAX"
+        if sequential_outcome == "UNRESOLVED_CONTINUE"
+        else sequential_outcome
+    )
     return {
         "arms": arms,
         "listing_positions": {f"{arm}#{ep}": v for (arm, ep), v in positions.items()},
@@ -467,7 +515,12 @@ def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, A
             "n_full": len(full_stream),
             "n_null": total_null_n,
         },
-        "outcome": stop_rule(ub_fp=ub_fp, lb_fp=lb_fp, lb_fn=lb_f - ub_n),
+        "outcome": readout_outcome,
+        "sequential": {
+            "outcome": sequential_outcome,
+            "fired_at": fired_at,
+            "n_max": n,
+        },
         "void_epochs": [f"{r.arm}/{r.world}#{r.epoch}" for r in rows if r.void],
         "total_usd": round(sum(r.usd for r in rows), 4),
     }
@@ -482,7 +535,7 @@ def _hard_cap(n: int, n_reused: int) -> float:
 def sequential_evaluate(
     full_outcomes: dict[int, int],
     placebo_outcomes: dict[int, int],
-    null_outcomes_combined: tuple[float, ...],
+    null_outcomes_combined: tuple[float | None, ...],
     *,
     n: int,
     pass_alpha: float,
@@ -501,11 +554,12 @@ def sequential_evaluate(
     full_prefix: list[float] = []
     null_prefix: list[float] = []
     for i in range(1, n + 1):
+        if i in full_outcomes:
+            full_prefix.append(float(full_outcomes[i]))
         if i in full_outcomes and i in placebo_outcomes:
             paired_xs.append((full_outcomes[i] - placebo_outcomes[i] + 1) / 2)
-            full_prefix.append(float(full_outcomes[i]))
         # Accumulate Null-A outcomes up to index i.
-        if i <= len(null_outcomes_combined):
+        if i <= len(null_outcomes_combined) and null_outcomes_combined[i - 1] is not None:
             null_prefix.append(null_outcomes_combined[i - 1])
         if not paired_xs:
             continue
@@ -531,7 +585,7 @@ def smallest_look(cells: Sequence[TableCell], *, n: int) -> dict[Outcome, int | 
         "UNRESOLVED_CONTINUE": None,
     }
     for c in cells:
-        look = min(c.correct_f, c.correct_p) + 1
+        look = max(c.correct_f, c.correct_p) + 1
         if result[c.outcome] is None or look < result[c.outcome]:  # type: ignore[operator]
             result[c.outcome] = look
     return result
@@ -564,6 +618,10 @@ def dry_run(null_a: NullA, *, n: int = EPOCHS_PER_ARM) -> None:
     new_epochs = 3 * n - null_a.n
     cap = _hard_cap(n, null_a.n)
     print(f"new epochs: {new_epochs} (3*{n} - {null_a.n})")
+    expected = "; ".join(
+        f"${new_epochs * cost:.2f} at ${cost:.3f}/epoch" for cost in REALIZED_EPOCH_COSTS
+    )
+    print(f"expected: {expected}")
     print(f"cap: ${cap:.2f} (new epochs * ${PER_SAMPLE_CAP})")
     print("DRY RUN: no model call.")
 
@@ -578,17 +636,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     null_a = load_null_a(args.null_readout)
     n = args.epochs_per_arm
+    if n < 1:
+        parser.error("--epochs-per-arm must be positive")
+    if n < null_a.n:
+        parser.error(f"--epochs-per-arm ({n}) is below the {null_a.n} valid reused Null-A epochs")
     hard_cap = _hard_cap(n, null_a.n)
     if args.dry_run:
         dry_run(null_a, n=n)
         return 0
+    if null_a.outcomes is None:
+        parser.error("--null-readout must retain per-epoch Null-A outcomes for sequential reads")
 
     from v5_cue_stage1 import _model_cost  # imports the [inspect] extra
 
     cost = _model_cost()
-    # Full and Placebo run N epochs each; Null-A runs N - n_reused new epochs.
+    # Each look uses fresh one-epoch tasks so a fired boundary prevents later spend.
     compose_dir = Path(tempfile.mkdtemp(prefix="cue-stage1a-"))
-    pin, tasks = stage1a_tasks(compose_dir, epochs=n)
+    pin, tasks = stage1a_tasks(compose_dir, epochs=1)
     fp_tasks = [tasks[0], tasks[1]]  # Full and Placebo
     print("pin fingerprint:", pin.fingerprint(), "| image:", pin.sandbox_image)
     print(
@@ -600,44 +664,38 @@ def main(argv: list[str] | None = None) -> int:
 
     import inspect_ai
 
-    # Run Full + Placebo for N epochs, then Null-A for N - n_reused new epochs.
-    null_new_epochs = n - null_a.n
-    logs_fp = inspect_ai.eval(
-        fp_tasks,
-        log_dir=str(args.out),
-        display="plain",
-        retry_on_error=0,
-        max_sandboxes=2,
-        fail_on_error=False,
-        cost_limit=PER_SAMPLE_CAP,
-        model_cost_config=cost,
-    )
-    for log in logs_fp:
-        print("LOG:", log.location, "STATUS:", log.status, "run_id:", log.eval.run_id)
-    if null_new_epochs > 0:
-        # Build a Null-A task with N - n_reused epochs for the new run.
-        null_cells = build_cells(
-            fixture_root=FIXTURE_ROOT_DEFAULT,
-            full_dir=FULL_DIR_DEFAULT,
-            pin=pin,
-            epochs=null_new_epochs,
-            compose_dir=compose_dir,
-            retry_uncaught_errors=RETRY_UNCAUGHT_ERRORS,
-        )
-        null_task_new = null_cells[("null", "a")]
-        logs_null = inspect_ai.eval(
-            [null_task_new],
-            log_dir=str(args.out),
+    args.out.mkdir(parents=True, exist_ok=True)
+    for look in range(1, n + 1):
+        look_dir = args.out / f"look-{look:03d}"
+        logs = inspect_ai.eval(
+            fp_tasks,
+            log_dir=str(look_dir),
             display="plain",
             retry_on_error=0,
-            max_sandboxes=1,
+            max_sandboxes=2,
             fail_on_error=False,
             cost_limit=PER_SAMPLE_CAP,
             model_cost_config=cost,
         )
-        for log in logs_null:
+        for log in logs:
             print("LOG:", log.location, "STATUS:", log.status, "run_id:", log.eval.run_id)
-    readout = read_stage1a(args.out, null_a, args.pass_alpha)
+        if look > null_a.n:
+            logs = inspect_ai.eval(
+                [tasks[2]],
+                log_dir=str(look_dir),
+                display="plain",
+                retry_on_error=0,
+                max_sandboxes=1,
+                fail_on_error=False,
+                cost_limit=PER_SAMPLE_CAP,
+                model_cost_config=cost,
+            )
+            for log in logs:
+                print("LOG:", log.location, "STATUS:", log.status, "run_id:", log.eval.run_id)
+        interim = read_stage1a(args.out, null_a, args.pass_alpha, n=n)
+        if interim["sequential"]["fired_at"] is not None:
+            break
+    readout = read_stage1a(args.out, null_a, args.pass_alpha, n=n)
     (args.out / "readout.json").write_text(json.dumps(readout, indent=2), encoding="utf-8")
     print(json.dumps(readout, indent=2))
     print("OUTCOME:", readout["outcome"])
