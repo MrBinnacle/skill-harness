@@ -16,6 +16,7 @@ from skill_harness.extractor.delivered_surface import (
     TRUNCATION_LIMIT,
     extract_delivered_listing,
 )
+from skill_harness.oracles.tier1.verbosity import count_tokens
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -90,6 +91,30 @@ def test_full_listing_records_listing_text() -> None:
     assert "- my-skill: A short description." in result.listing_text
     assert result.listing_description_tokens > 0
     assert result.empty_reason is None
+
+
+def test_listing_excludes_task_bullets_before_and_after_the_delivered_block() -> None:
+    """Only Claude Code's listing cards contribute positions and token counts."""
+    description = "Antidisestablishmentarianism requires careful handling."
+    subject = {"my-skill": description}
+    messages = [
+        _user(
+            "Task checklist:\n"
+            "- prepare-worktree: create an isolated worktree\n"
+            "<system-reminder> The following skills are available for use with the Skill tool:\n"
+            f"- my-skill: {description}\n"
+            "</system-reminder>\n"
+            "- report-result: state the outcome"
+        )
+    ]
+    result = extract_delivered_listing(messages, subject)
+
+    card = result.subject_cards[0]
+    assert card.status == "visible"
+    assert card.position == 0
+    assert card.description_tokens == count_tokens(description)
+    assert result.non_subject_cards == ()
+    assert result.listing_description_tokens == count_tokens(description)
 
 
 # ---------------------------------------------------------------------------
@@ -329,10 +354,8 @@ def test_listing_description_tokens_sum_of_all_cards() -> None:
     messages = [_listing_message(delivered)]
     result = extract_delivered_listing(messages, subject)
 
-    assert result.listing_description_tokens > 0
-    # All three cards contribute
     assert result.listing_description_tokens == (
-        len("AAAA") // 4 + len("BBBB") // 4 + len("CCCCCCCC") // 4
+        count_tokens("AAAA") + count_tokens("BBBB") + count_tokens("CCCCCCCC")
     )
 
 

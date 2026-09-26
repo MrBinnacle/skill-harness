@@ -23,6 +23,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from skill_harness.oracles.tier1.verbosity import count_tokens
+
 # Claude Code's documented truncation limit per description.
 TRUNCATION_LIMIT: int = 1536
 
@@ -80,11 +82,6 @@ class DeliveredListing(BaseModel):
 
     empty_reason: EmptyReason | None
     """Structural reason no listing was extracted, or ``None`` for a listing."""
-
-
-def _estimate_tokens(text: str) -> int:
-    """Estimate token count from text. Roughly one token per 4 characters."""
-    return max(1, len(text) // 4) if text else 0
 
 
 def _parse_listing_cards(
@@ -147,7 +144,7 @@ def extract_delivered_listing(
 
     non_subject = tuple(name for name, _ in parsed_cards if name not in subject_names)
 
-    total_tokens = sum(_estimate_tokens(desc) for _, desc in parsed_cards)
+    total_tokens = sum(count_tokens(desc) for _, desc in parsed_cards)
 
     return DeliveredListing(
         subject_cards=tuple(delivered_cards),
@@ -184,19 +181,31 @@ def _find_listing_text(messages: Sequence[object]) -> tuple[str, EmptyReason | N
                         parts.append(t)
             text = "\n".join(parts)
 
-        if _contains_listing(text):
-            return text, None
+        listing_start = text.find(_LISTING_HEADER)
+        if listing_start >= 0:
+            return _listing_block(text[listing_start:]), None
         return "", "no_listing"
     return "", "no_user_messages"
 
 
-def _contains_listing(text: str) -> bool:
-    """Check whether text contains a skill listing block.
+def _listing_block(text_after_header: str) -> str:
+    """Extract the header and contiguous card lines from a user message.
 
-    Claude Code's documented listing header distinguishes delivered cards from
-    unrelated Markdown bullets in the task text.
+    The first user message also carries task text, which can contain Markdown
+    bullets. Only the contiguous card lines following Claude Code's header are
+    part of the delivered listing.
     """
-    return _LISTING_HEADER in text
+    lines = text_after_header.splitlines()
+    if not lines:
+        return ""
+
+    listing_lines = [lines[0]]
+    for line in lines[1:]:
+        stripped = line.strip()
+        if not stripped.startswith("- ") or ": " not in stripped[2:]:
+            break
+        listing_lines.append(line)
+    return "\n".join(listing_lines)
 
 
 def _classify_card(
@@ -219,7 +228,7 @@ def _classify_card(
                 status="visible",
                 position=i,
                 delivered_description_length=None,
-                description_tokens=_estimate_tokens(card_desc),
+                description_tokens=count_tokens(card_desc),
             )
 
         if (
@@ -231,7 +240,7 @@ def _classify_card(
                 status="truncated",
                 position=i,
                 delivered_description_length=len(card_desc),
-                description_tokens=_estimate_tokens(card_desc),
+                description_tokens=count_tokens(card_desc),
             )
 
         return DeliveredCard(
@@ -239,7 +248,7 @@ def _classify_card(
             status="truncated",
             position=i,
             delivered_description_length=len(card_desc),
-            description_tokens=_estimate_tokens(card_desc),
+            description_tokens=count_tokens(card_desc),
         )
 
     return DeliveredCard(
