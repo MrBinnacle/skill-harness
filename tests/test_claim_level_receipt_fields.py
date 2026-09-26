@@ -145,7 +145,11 @@ class TestReceiptWithClaimLevel:
     def test_receipt_with_claim_level_keep_validates(
         self, sers_validator: Draft202012Validator
     ) -> None:
-        instance = _minimal_receipt(claim_level="KEEP")
+        instance = _minimal_receipt(
+            claim_level="KEEP",
+            family_replication=1,
+            model_replication=1,
+        )
         errors = sorted(sers_validator.iter_errors(instance), key=lambda e: list(e.path))
         assert not errors, "KEEP claim_level failed validation:\n" + "\n".join(
             f"  - {e.message} (at {list(e.path)})" for e in errors
@@ -154,7 +158,13 @@ class TestReceiptWithClaimLevel:
     def test_receipt_with_claim_level_replicated_validates(
         self, sers_validator: Draft202012Validator
     ) -> None:
-        instance = _minimal_receipt(claim_level="REPLICATED")
+        instance = _minimal_receipt(
+            claim_level="REPLICATED",
+            designer="alice",
+            designer_independent=False,
+            family_replication=2,
+            model_replication=1,
+        )
         errors = sorted(sers_validator.iter_errors(instance), key=lambda e: list(e.path))
         assert not errors, "REPLICATED claim_level failed validation:\n" + "\n".join(
             f"  - {e.message} (at {list(e.path)})" for e in errors
@@ -163,7 +173,13 @@ class TestReceiptWithClaimLevel:
     def test_receipt_with_claim_level_robust_validates(
         self, sers_validator: Draft202012Validator
     ) -> None:
-        instance = _minimal_receipt(claim_level="ROBUST")
+        instance = _minimal_receipt(
+            claim_level="ROBUST",
+            designer="bob",
+            designer_independent=True,
+            family_replication=3,
+            model_replication=1,
+        )
         errors = sorted(sers_validator.iter_errors(instance), key=lambda e: list(e.path))
         assert not errors, "ROBUST claim_level failed validation:\n" + "\n".join(
             f"  - {e.message} (at {list(e.path)})" for e in errors
@@ -176,6 +192,34 @@ class TestReceiptWithClaimLevel:
         instance = _minimal_receipt()
         errors = sorted(sers_validator.iter_errors(instance), key=lambda e: list(e.path))
         assert not errors
+
+
+class TestClaimLevelThresholds:
+    def test_replicated_requires_two_families_on_one_model(
+        self, sers_validator: Draft202012Validator
+    ) -> None:
+        instance = _minimal_receipt(
+            claim_level="REPLICATED",
+            designer="alice",
+            designer_independent=False,
+            family_replication=1,
+            model_replication=2,
+        )
+
+        assert list(sers_validator.iter_errors(instance))
+
+    def test_robust_requires_three_families_and_an_independent_designer(
+        self, sers_validator: Draft202012Validator
+    ) -> None:
+        instance = _minimal_receipt(
+            claim_level="ROBUST",
+            designer="alice",
+            designer_independent=False,
+            family_replication=2,
+            model_replication=1,
+        )
+
+        assert list(sers_validator.iter_errors(instance))
 
     def test_claim_level_invalid_value_is_rejected(
         self, sers_validator: Draft202012Validator

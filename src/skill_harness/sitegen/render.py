@@ -1169,14 +1169,13 @@ def _scope_line(receipt: Mapping[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 CLAIM_LEVEL_KEEP_TEMPLATE: Final[str] = (
-    "This result is a single registration; it is a scoped claim only."
+    "This result is a single registration under program policy; it is a scoped claim only."
 )
 
-CLAIM_LEVEL_REPLICATED_TEMPLATE: Final[str] = (
-    "Replicated across {n_families} families under program policy."
-)
+CLAIM_LEVEL_REPLICATED_TEMPLATE: Final[str] = "Replicated across {n_families} families"
 
 CLAIM_LEVEL_REPLICATED_SAME_DESIGNER_SUFFIX: Final[str] = " (same designer)"
+CLAIM_LEVEL_PROGRAM_POLICY_SUFFIX: Final[str] = " under program policy."
 
 CLAIM_LEVEL_ROBUST_TEMPLATE: Final[str] = (
     "Robust across {n_families} families under program policy; "
@@ -1210,6 +1209,7 @@ def render_claim_level_sentence(
         sentence = CLAIM_LEVEL_REPLICATED_TEMPLATE.format(n_families=family_replication)
         if not designer_independent:
             sentence += CLAIM_LEVEL_REPLICATED_SAME_DESIGNER_SUFFIX
+        sentence += CLAIM_LEVEL_PROGRAM_POLICY_SUFFIX
         return sentence
     if claim_level == "ROBUST":
         return CLAIM_LEVEL_ROBUST_TEMPLATE.format(n_families=family_replication)

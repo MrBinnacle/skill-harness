@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Final
 
 _KNOWN_FIELDS: Final[frozenset[str]] = frozenset(
@@ -87,12 +88,13 @@ def check_predate_first_epoch(
     """Refuse a family whose registration predates no epoch.
 
     The family's ``registered_at`` must be strictly before ``first_epoch_at``.
-    Both are ISO-8601 datetime strings; lexicographic comparison is valid for
-    ``Z``-suffixed UTC timestamps.
+    Both values must be ISO-8601 datetimes with an explicit UTC offset.
 
     :raises ValueError: If the family was registered on or after the first epoch.
     """
-    if family.registered_at >= first_epoch_at:
+    registered_at = _parse_timestamp(family.registered_at, "registered_at")
+    first_epoch = _parse_timestamp(first_epoch_at, "first_epoch_at")
+    if registered_at >= first_epoch:
         raise ValueError(
             f"family record {family.mechanism_id!r}: registered_at "
             f"{family.registered_at!r} is not before first_epoch_at "
@@ -130,3 +132,16 @@ def _require_str(data: Mapping[str, Any], key: str, where: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{where}: key {key!r} must be a non-empty string; got {value!r}")
     return value
+
+
+def _parse_timestamp(value: str, field: str) -> datetime:
+    """Parse an offset-aware ISO-8601 timestamp for an ordering check."""
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(
+            f"family record: {field} must be an ISO-8601 datetime; got {value!r}"
+        ) from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"family record: {field} must include a UTC offset; got {value!r}")
+    return parsed

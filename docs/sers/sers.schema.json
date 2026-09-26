@@ -816,6 +816,61 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": { "claim_level": { "const": "KEEP" } },
+        "required": ["claim_level"]
+      },
+      "then": {
+        "required": ["verdict", "family_replication", "model_replication"],
+        "properties": {
+          "verdict": { "const": "KEEP" },
+          "family_replication": { "const": 1 },
+          "model_replication": { "const": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "claim_level": { "const": "REPLICATED" } },
+        "required": ["claim_level"]
+      },
+      "then": {
+        "required": [
+          "verdict",
+          "designer",
+          "designer_independent",
+          "family_replication",
+          "model_replication"
+        ],
+        "properties": {
+          "verdict": { "const": "KEEP" },
+          "family_replication": { "type": "integer", "minimum": 2 },
+          "model_replication": { "const": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "claim_level": { "const": "ROBUST" } },
+        "required": ["claim_level"]
+      },
+      "then": {
+        "required": [
+          "verdict",
+          "designer",
+          "designer_independent",
+          "family_replication",
+          "model_replication"
+        ],
+        "properties": {
+          "verdict": { "const": "KEEP" },
+          "designer_independent": { "const": true },
+          "family_replication": { "type": "integer", "minimum": 3 },
+          "model_replication": { "const": 1 }
+        }
+      }
     }
   ],
   "$defs": {

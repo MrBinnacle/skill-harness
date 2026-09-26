@@ -50,9 +50,7 @@ class TestReplicatedSentence:
             designer="alice",
             designer_independent=False,
         )
-        assert "2 families" in sentence
-        assert "(same designer)" in sentence
-        assert "replicated" in sentence.lower()
+        assert sentence == "Replicated across 2 families (same designer) under program policy."
 
     def test_replicated_sentence_independent_designer(self) -> None:
         sentence = render_claim_level_sentence(
@@ -61,9 +59,7 @@ class TestReplicatedSentence:
             designer="bob",
             designer_independent=True,
         )
-        assert "3 families" in sentence
-        assert "(same designer)" not in sentence
-        assert "replicated" in sentence.lower()
+        assert sentence == "Replicated across 3 families under program policy."
 
     def test_replicated_sentence_program_policy(self) -> None:
         sentence = render_claim_level_sentence(

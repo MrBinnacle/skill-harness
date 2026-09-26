@@ -132,6 +132,18 @@ class TestPredateFirstEpoch:
         with pytest.raises(ValueError, match="not before first_epoch_at"):
             check_predate_first_epoch(family, "2026-09-19T00:00:00Z")
 
+    def test_offset_timestamps_compare_as_instants_not_strings(self) -> None:
+        family = load_family_record(_record(registered_at="2026-09-20T00:00:00+01:00"))
+
+        check_predate_first_epoch(family, "2026-09-19T23:30:00Z")
+
+    @pytest.mark.parametrize("first_epoch_at", ["not-a-date", "2026-09-21T00:00:00"])
+    def test_first_epoch_must_be_an_offset_aware_iso_datetime(self, first_epoch_at: str) -> None:
+        family = load_family_record(_MINIMAL_DATA)
+
+        with pytest.raises(ValueError, match=r"ISO-8601 datetime|UTC offset"):
+            check_predate_first_epoch(family, first_epoch_at)
+
 
 # ---------------------------------------------------------------------------
 # AC4 — fixture-path uniqueness guard.
