@@ -428,12 +428,15 @@ def read_stage1a(log_dir: Path, null_a: NullA, pass_alpha: float) -> dict[str, A
         key=lambda r: r.epoch,
     )
     null_new_outcomes = tuple(float(r.final_world_correct) for r in null_new_rows)
+    null_stream: tuple[float, ...] | None = None
     if null_a.outcomes is not None:
         null_stream = tuple(float(o) for o in null_a.outcomes) + null_new_outcomes
         null_order = "Null-A reused epochs then new epochs in launch order"
-    else:
-        null_stream = null_new_outcomes if null_new_outcomes else None
+    elif null_new_outcomes:
+        null_stream = null_new_outcomes
         null_order = "Null-A new epochs only (no per-epoch order in readout)"
+    else:
+        null_order = "Null-A counts only (no per-epoch order in readout)"
     if null_stream is not None and len(null_stream) > 0:
         ub_n = _bound(null_stream, pass_alpha / 2, "upper")
     else:
