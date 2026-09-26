@@ -178,6 +178,15 @@ def test_schema_value_class_enum_matches_code(sers_schema: dict[str, Any]) -> No
     assert schema_vals == code_vals
 
 
+def test_schema_claim_level_enum_matches_code(sers_schema: dict[str, Any]) -> None:
+    """claim_level closed vocabulary equals the ClaimLevel code enum (#647)."""
+    from skill_harness.aggregation.verdict import ClaimLevel
+
+    schema_vals = _schema_enum(sers_schema, "properties", "claim_level", "enum")
+    code_vals = {m.value for m in ClaimLevel}
+    assert schema_vals == code_vals
+
+
 def test_schema_outcome_type_enum_matches_code(sers_schema: dict[str, Any]) -> None:
     """outcome_type closed vocabulary equals the registered set (#424)."""
     schema_vals = _schema_enum(sers_schema, "properties", "outcome_type", "enum")

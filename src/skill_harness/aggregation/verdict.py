@@ -130,6 +130,33 @@ class KeepCutVerdict(StrEnum):
     CANT_TELL_YET = "CANT_TELL_YET"
 
 
+class ClaimLevel(StrEnum):
+    """Ledger claim ladder above KEEP (#647).
+
+    Three rungs, adopted as program policy:
+
+    KEEP — one admissible KEEP in one registration.  Licences the scoped
+      sentence only (built by #643).
+
+    REPLICATED — at least 2 independently designed task families, each
+      clearing the preregistered KEEP rule.  Design independence means the
+      family record was frozen before its result and not derived from the
+      winning fixture.  The receipt records ``designer`` and
+      ``designer_independent``; when the designer is the same as family 1's,
+      the rendered sentence says so.
+
+    ROBUST — at least 3 materially distinct families, the set predeclared
+      to challenge the mechanism.  At least one family must be designed by
+      an independent seat (a different model family through the
+      cross-family review channel, or a person who is not the card's
+      author).
+    """
+
+    KEEP = "KEEP"
+    REPLICATED = "REPLICATED"
+    ROBUST = "ROBUST"
+
+
 class CutSubReason(StrEnum):
     """Sub-reason qualifying a CUT verdict."""
 
