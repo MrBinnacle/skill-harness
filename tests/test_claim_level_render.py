@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from skill_harness.sitegen.render import render_claim_level_sentence
 
-
 # ---------------------------------------------------------------------------
 # AC1 — KEEP sentence
 # ---------------------------------------------------------------------------
