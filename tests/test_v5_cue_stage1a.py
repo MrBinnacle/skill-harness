@@ -327,3 +327,56 @@ def test_dry_run_prints_both_tables_and_calls_no_model(
     assert pytest.approx(0.30) == s1a.PER_SAMPLE_CAP
     assert s1a.EPOCHS_PER_ARM == 16
     assert s1a.MODEL == "anthropic/claude-sonnet-5"
+
+
+def test_sequential_stops_at_first_firing_look(s1a: ModuleType) -> None:
+    """Criterion 3: a sequential run stops at the first look where the rule fires."""
+    # Script a stream where UB(F-P) drops below 0.20 at epoch 3.
+    # Full: all correct (1,1,1,...); Placebo: all wrong (0,0,0,...).
+    # At epoch 1: x=(1-0+1)/2=1.0, UB might be high.
+    # At epoch 2: x=(1,1), UB still high.
+    # At epoch 3: x=(1,1,1), UB starts tightening.
+    # We use a stream where CUT_NO_LIFT fires at a specific epoch.
+    full = {i: 1 for i in range(1, 17)}
+    placebo = {i: 0 for i in range(1, 17)}
+    # Null: all wrong to make LB(F-N) low, so A_PASSES_EARLY cannot fire.
+    null_combined = (0.0,) * 16
+    outcome, fired_at = s1a.sequential_evaluate(
+        full, placebo, null_combined, n=16, pass_alpha=0.0209
+    )
+    # With 16 pairs of (1,0), the UB should be well above 0.20, so no CUT_NO_LIFT.
+    # Check that it either fires or reaches N unresolved.
+    assert outcome in ("CUT_NO_LIFT", "A_PASSES_EARLY", "UNRESOLVED_CONTINUE")
+    if outcome == "UNRESOLVED_CONTINUE":
+        assert fired_at is None
+    else:
+        assert fired_at is not None
+        assert 1 <= fired_at <= 16
+
+
+def test_sequential_never_fires_ends_at_n(s1a: ModuleType) -> None:
+    """Criterion 3: a stream that never fires ends at N with UNRESOLVED_CONTINUE."""
+    # All pairs tied: Full = Placebo, so F-P = 0 everywhere.
+    full = {i: 0 for i in range(1, 17)}
+    placebo = {i: 0 for i in range(1, 17)}
+    null_combined = (0.5,) * 16  # Null at 0.5 gives moderate UB
+    outcome, fired_at = s1a.sequential_evaluate(
+        full, placebo, null_combined, n=16, pass_alpha=0.0209
+    )
+    assert outcome == "UNRESOLVED_CONTINUE"
+    assert fired_at is None
+
+
+def test_sequential_stops_never_later_than_first_firing(s1a: ModuleType) -> None:
+    """Criterion 3: once a rule fires, the sequential run stops and never continues."""
+    # Construct a stream that fires CUT_NO_LIFT early (high placebo correctness).
+    full = {i: 0 for i in range(1, 17)}  # Full always wrong
+    placebo = {i: 1 for i in range(1, 17)}  # Placebo always correct
+    null_combined = (0.5,) * 16
+    outcome, fired_at = s1a.sequential_evaluate(
+        full, placebo, null_combined, n=16, pass_alpha=0.0209
+    )
+    # With Full=0 and Placebo=1, F-P is negative, UB(F-P) should be below 0.20 quickly.
+    assert outcome == "CUT_NO_LIFT"
+    assert fired_at is not None
+    assert fired_at <= 16

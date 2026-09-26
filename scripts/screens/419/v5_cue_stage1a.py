@@ -476,6 +476,45 @@ def _hard_cap(n: int, n_reused: int) -> float:
     return new_epochs * PER_SAMPLE_CAP
 
 
+def sequential_evaluate(
+    full_outcomes: dict[int, int],
+    placebo_outcomes: dict[int, int],
+    null_outcomes_combined: tuple[float, ...],
+    *,
+    n: int,
+    pass_alpha: float,
+) -> tuple[Outcome, int | None]:
+    """Evaluate the stop rule sequentially after each completed epoch index.
+
+    After every epoch index i (1..n), if Full and Placebo are both valid at i,
+    compute the F-P pair and the F-N bounds on the prefix. Returns the outcome
+    and the epoch index at which the rule first fires, or (UNRESOLVED_CONTINUE, None)
+    if no rule fires by epoch n.
+
+    The bounds are ``one_sided_betting_bound``, which is anytime-valid (Waudby-Smith &
+    Ramdas, 2024), so a look after every epoch spends no extra level.
+    """
+    paired_xs: list[float] = []
+    full_prefix: list[float] = []
+    null_prefix: list[float] = []
+    for i in range(1, n + 1):
+        if i in full_outcomes and i in placebo_outcomes:
+            paired_xs.append((full_outcomes[i] - placebo_outcomes[i] + 1) / 2)
+            full_prefix.append(float(full_outcomes[i]))
+        # Accumulate Null-A outcomes up to index i.
+        if i <= len(null_outcomes_combined):
+            null_prefix.append(null_outcomes_combined[i - 1])
+        if not paired_xs:
+            continue
+        lb_fp, ub_fp = fp_bounds(paired_xs, pass_alpha=pass_alpha)
+        lb_f = _bound(tuple(full_prefix), pass_alpha / 2, "lower") if full_prefix else 0.0
+        ub_n = _bound(tuple(null_prefix), pass_alpha / 2, "upper") if null_prefix else 1.0
+        outcome = stop_rule(ub_fp=ub_fp, lb_fp=lb_fp, lb_fn=lb_f - ub_n)
+        if outcome != "UNRESOLVED_CONTINUE":
+            return outcome, i
+    return "UNRESOLVED_CONTINUE", None
+
+
 def dry_run(null_a: NullA, *, n: int = EPOCHS_PER_ARM) -> None:
     print(
         f"Null-A: {null_a.correct} correct of {null_a.n} valid "
