@@ -342,7 +342,8 @@ def _manifest_reads(log_dir: Path) -> dict[tuple[str, int], bool]:
     return found
 
 
-_LISTING_NUMBERED_RE = re.compile(r"^\d+\.\s", re.MULTILINE)
+_LISTING_HEADER = "The following skills are available for use with the Skill tool:"
+_LISTING_BULLET_RE = re.compile(r"^- [^:\n]+: ", re.MULTILINE)
 
 
 def _message_text(message: Any) -> str:
@@ -360,11 +361,13 @@ def _message_text(message: Any) -> str:
 
 
 def _listing_position(log_dir: Path) -> dict[tuple[str, int], int]:
-    """Return each card's position in its first user-message listing.
+    """Return each card's bullet position in the Skill-tool listing, whatever message carries it.
 
-    Missing descriptions, non-numbered listings, duplicate epoch keys, and positions other than
-    one make the readout refuse. The Full and Placebo listing surfaces must match before their
-    contrast can support the pre-registered attribution claim (S477).
+    Claude Code 2.1.197 delivers the listing in a system-role message, not the first user
+    message (S486). Missing listings or descriptions, cards outside a bullet, duplicate epoch
+    keys, and positions other than one make the readout refuse. The Full and Placebo listing
+    surfaces must match before their contrast can support the pre-registered
+    attribution claim (S477).
     """
     from inspect_ai.log import read_eval_log
 
@@ -381,25 +384,28 @@ def _listing_position(log_dir: Path) -> dict[tuple[str, int], int]:
                 key = (arm, epoch)
                 if key in positions:
                     raise ValueError(f"duplicate listing position for {arm} epoch {epoch}")
-                first_user = None
-                for message in sample.messages:
-                    if getattr(message, "role", None) == "user":
-                        first_user = _message_text(message)
-                        break
-                if first_user is None:
-                    raise ValueError(f"{arm} epoch {epoch}: no first user message")
-                description_offset = first_user.find(description)
+                listing = next(
+                    (
+                        text.split(_LISTING_HEADER, 1)[1]
+                        for text in map(_message_text, sample.messages)
+                        if _LISTING_HEADER in text
+                    ),
+                    None,
+                )
+                if listing is None:
+                    raise ValueError(f"{arm} epoch {epoch}: no skill listing in any message")
+                description_offset = listing.find(description)
                 if description_offset < 0:
                     raise ValueError(
-                        f"{arm} epoch {epoch}: card description missing from first user message"
+                        f"{arm} epoch {epoch}: card description missing from the skill listing"
                     )
                 position = sum(
                     entry.start() <= description_offset
-                    for entry in _LISTING_NUMBERED_RE.finditer(first_user)
+                    for entry in _LISTING_BULLET_RE.finditer(listing)
                 )
                 if position == 0:
                     raise ValueError(
-                        f"{arm} epoch {epoch}: card description is outside a numbered listing"
+                        f"{arm} epoch {epoch}: card description is outside a bulleted listing"
                     )
                 if position != 1:
                     raise ValueError(
