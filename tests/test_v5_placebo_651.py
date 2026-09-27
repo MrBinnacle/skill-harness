@@ -138,12 +138,13 @@ def test_surface_match_check_refuses_a_wrong_name_shape(
     assert "names must use the two-token kebab shape" in capsys.readouterr().out
 
 
-def test_listing_position_regex_matches_numbered_entries() -> None:
+def test_listing_position_regex_matches_bulleted_entries() -> None:
     s1a = _load("v5_cue_stage1a")
-    assert s1a._LISTING_NUMBERED_RE.match("1. parse-csv: Use before")
-    assert s1a._LISTING_NUMBERED_RE.match("2. pull-rebase: Use before")
-    assert not s1a._LISTING_NUMBERED_RE.match("Skills:")
-    assert not s1a._LISTING_NUMBERED_RE.match("- a bullet")
+    assert s1a._LISTING_BULLET_RE.match("- parse-csv: Use before")
+    assert s1a._LISTING_BULLET_RE.match("- pull-rebase: Use before")
+    assert not s1a._LISTING_BULLET_RE.match("Skills:")
+    assert not s1a._LISTING_BULLET_RE.match("1. parse-csv: Use before")
+    assert not s1a._LISTING_BULLET_RE.match("- a bullet with no name")
 
 
 def test_placebo_desc_constant_matches_card() -> None:
