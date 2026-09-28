@@ -22,6 +22,7 @@ Build locally::
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -133,9 +134,41 @@ def validate_receipts(
         validator.validate(receipt_obj)
         if not isinstance(receipt_obj, dict):
             raise SiteBuildError(f"{path}: SERS receipt must be a JSON object")
+        _check_multiplicity(path, receipt_obj)
         loaded.append(receipt_obj)
     _check_carried_forward_immutability(loaded, receipts_dir)
     return loaded
+
+
+def _check_multiplicity(path: Path, receipt: Mapping[str, Any]) -> None:
+    """Enforce online-FDR relationships that JSON Schema cannot compare (#644)."""
+    if receipt.get("sers_version") != "1.7.0" or receipt.get("verdict") != "KEEP":
+        return
+    multiplicity = receipt.get("multiplicity")
+    if not isinstance(multiplicity, Mapping):
+        return  # The schema reports a clearer shape error before this guard matters.
+
+    p_card = multiplicity.get("anytime_valid_p")
+    p_fn = multiplicity.get("p_fn")
+    p_fp = multiplicity.get("p_fp")
+    test_level = multiplicity.get("test_level")
+    if not all(isinstance(value, (int, float)) for value in (p_card, p_fn, p_fp, test_level)):
+        return  # The schema owns scalar types.
+    assert isinstance(p_card, (int, float))
+    assert isinstance(p_fn, (int, float))
+    assert isinstance(p_fp, (int, float))
+    assert isinstance(test_level, (int, float))
+    expected = max(p_fn, p_fp)
+    if not math.isclose(p_card, expected, rel_tol=0.0, abs_tol=1e-12):
+        raise SiteBuildError(
+            f"{path}: multiplicity.anytime_valid_p must equal max(p_fn, p_fp); "
+            f"got {p_card!r}, expected {expected!r}"
+        )
+    if p_card > test_level:
+        raise SiteBuildError(
+            f"{path}: multiplicity.anytime_valid_p {p_card!r} exceeds "
+            f"multiplicity.test_level {test_level!r}"
+        )
 
 
 def _check_carried_forward_immutability(

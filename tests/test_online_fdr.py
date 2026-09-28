@@ -1,374 +1,267 @@
-"""Tests for aggregation/online_fdr.py — LORDdep online FDR procedure (#644).
-
-Acceptance criteria 1-11: cold-start levels, normalisation, paper condition,
-global index, wealth never negative, poison test, anytime-valid p-value,
-card level, gate, order, coverage floor.
-"""
+"""External acceptance coverage for the normalised LORDdep ledger (#644)."""
 
 from __future__ import annotations
 
+import json
 import math
 import random
+from pathlib import Path
+from typing import Any
 
 import pytest
 
+from skill_harness.aggregation.confidence_sequence import one_sided_betting_bound
 from skill_harness.aggregation.online_fdr import (
     _N_GRID,
+    DEFAULT_W0,
+    CardPValues,
     K,
     NormalisedLORDdep,
     anytime_valid_p_value,
+    card_anytime_valid_p_values,
     xi,
 )
-
-# ---------------------------------------------------------------------------
-# Test 1: Cold-start levels
-# ---------------------------------------------------------------------------
+from skill_harness.aggregation.verdict import KeepCutVerdict
+from skill_harness.sitegen import SiteBuildError, load_schema, validate_receipts
 
 
-def test_cold_start_levels() -> None:
-    """With no discovery, alpha_1..alpha_5 equal the expected values within 1e-9."""
-    expected = [
-        0.0148105042,
-        0.0074052521,
-        0.0012399141,
-        0.0004628283,
-        0.0002366211,
-    ]
+def _order(size: int) -> list[str]:
+    return [f"card-{number}" for number in range(1, size + 1)]
+
+
+def _card_p_values(value: float) -> CardPValues:
+    return CardPValues(anytime_valid_p=value, p_fn=value, p_fp=value)
+
+
+def test_cold_start_levels_are_pinned() -> None:
+    with pytest.raises(TypeError):
+        NormalisedLORDdep(w0=0.1)  # type: ignore[call-arg]
+
     proc = NormalisedLORDdep()
-    proc.set_order([1, 2, 3, 4, 5])
-    for i, exp in enumerate(expected):
-        alpha = proc.test_level(0.5)
-        assert abs(alpha - exp) < 1e-9, f"alpha_{i + 1} = {alpha}, expected {exp}"
-        proc.step(0.5)
+    proc.set_order(_order(5))
+    expected = [0.0148105042, 0.0074052521, 0.0012399141, 0.0004628283, 0.0002366211]
+
+    for expected_alpha in expected:
+        assert proc.test_level() == pytest.approx(expected_alpha, abs=1e-9)
+        assert proc.step(0.5) is False
 
 
-# ---------------------------------------------------------------------------
-# Test 2: Normalisation
-# ---------------------------------------------------------------------------
+def test_normalisation_and_paper_condition_are_computed_from_the_definition() -> None:
+    partial_sum = math.fsum(1.0 / (j * math.log(max(j, 2)) ** 3) for j in range(1, _N_GRID + 1))
+    tail_bound = 1.0 / (2.0 * math.log(_N_GRID) ** 2)
+    assert K * (partial_sum + tail_bound) == pytest.approx(1.0, abs=1e-12)
+
+    condition = math.fsum(xi(j) * (1.0 + math.log(j)) for j in range(1, _N_GRID + 1))
+    condition += K * (tail_bound + 1.0 / math.log(_N_GRID))
+    assert condition <= 0.05 / 0.025
+    assert condition == pytest.approx(1.4162, abs=0.001)
 
 
-def test_normalisation() -> None:
-    """K * (S + T) = 1 within 1e-12, computed from definitions."""
-    S = 0.0
-    for j in range(1, _N_GRID + 1):
-        S += 1.0 / (j * math.log(max(j, 2)) ** 3)
-    T = 1.0 / (2 * math.log(_N_GRID) ** 2)
-    K_computed = 1.0 / (S + T)
-    assert abs(K_computed * (S + T) - 1.0) < 1e-12
-    assert abs(K_computed - K) < 1e-12
-
-
-# ---------------------------------------------------------------------------
-# Test 3: Paper's condition
-# ---------------------------------------------------------------------------
-
-
-def test_paper_condition() -> None:
-    """sum_{j=1}^{10^6} xi_j (1 + log j) + tail bound <= q / b0 = 2."""
-    q = 0.05
-    b0 = 0.025
-    N = 10**6
-    condition = 0.0
-    for j in range(1, N + 1):
-        xij = xi(j)
-        condition += xij * (1 + math.log(j))
-    tail = K * (1.0 / (2 * math.log(N) ** 2) + 1.0 / math.log(N))
-    condition += tail
-    assert condition <= q / b0, f"condition {condition} > {q / b0}"
-    # Measured value is about 1.4162
-    assert abs(condition - 1.4162) < 0.001
-
-
-# ---------------------------------------------------------------------------
-# Test 4: Global index
-# ---------------------------------------------------------------------------
-
-
-def test_global_index() -> None:
-    """A discovery at hypothesis 2 followed by hypothesis 3 gives W(2) and alpha_3."""
+def test_global_index_uses_the_wealth_at_the_last_discovery() -> None:
     proc = NormalisedLORDdep()
-    proc.set_order([1, 2, 3])
-
-    # Hypothesis 1: no discovery
+    proc.set_order(_order(4))
     proc.step(0.5)
-
-    # Hypothesis 2: discovery
     assert proc.step(0.001) is True
+    wealth_at_discovery = proc.wealth
+    assert wealth_at_discovery == pytest.approx(0.0277842437, abs=1e-9)
 
-    # W(2) after discovery at hypothesis 2
-    assert abs(proc.wealth - 0.0277842437) < 1e-9
-
-    # Hypothesis 3: after discovery at 2, alpha_3 = xi_3 * W(2)
-    alpha_3 = proc.test_level(0.5)
-    assert abs(alpha_3 - 0.0013780031) < 1e-9
-
-    # Using xi_1 * W(2) must fail this test
-    wrong_alpha = xi(1) * proc.wealth
-    assert abs(wrong_alpha - alpha_3) > 1e-9
+    assert proc.test_level() == pytest.approx(0.0013780031, abs=1e-9)
+    proc.step(0.5)
+    # This catches the old implementation, which used W(3) instead of W(2).
+    assert proc.test_level() == pytest.approx(xi(4) * wealth_at_discovery, abs=1e-15)
 
 
-# ---------------------------------------------------------------------------
-# Test 5: Wealth never negative
-# ---------------------------------------------------------------------------
-
-
-def test_wealth_never_negative_500_non_rejections() -> None:
-    """Over 500 consecutive non-rejections from a cold start, W(t) >= 0 at every t."""
+def test_wealth_stays_non_negative_and_levels_do_not_exceed_it() -> None:
     proc = NormalisedLORDdep()
-    proc.set_order(list(range(1, 501)))
+    proc.set_order(_order(500))
     for _ in range(500):
+        assert proc.test_level() <= proc.wealth + 1e-15
         proc.step(0.5)
-        assert proc.wealth >= 0, f"wealth went negative: {proc.wealth}"
+        assert proc.wealth >= 0.0
 
-
-def test_wealth_never_negative_random_10000() -> None:
-    """Over a seeded random stream of 10,000 p-values, W(t) >= 0 at every t."""
+    random_proc = NormalisedLORDdep()
+    random_proc.set_order(_order(10_000))
     rng = random.Random(42)
-    proc = NormalisedLORDdep()
-    proc.set_order(list(range(1, 10001)))
-    for _ in range(10000):
-        p = rng.random()
-        proc.step(p)
-        assert proc.wealth >= 0, f"wealth went negative: {proc.wealth}"
+    for _ in range(10_000):
+        assert random_proc.test_level() <= random_proc.wealth + 1e-15
+        random_proc.step(rng.random())
+        assert random_proc.wealth >= 0.0
 
 
-def test_alpha_never_exceeds_wealth_500() -> None:
-    """alpha_t <= W(t-1) at every t for 500 consecutive non-rejections."""
-    proc = NormalisedLORDdep()
-    proc.set_order(list(range(1, 501)))
-    for _ in range(500):
-        w_before = proc.wealth
-        alpha = proc.test_level(0.5)
-        assert alpha <= w_before + 1e-15, f"alpha {alpha} > wealth {w_before}"
-        proc.step(0.5)
-
-
-# ---------------------------------------------------------------------------
-# Test 6: Poison — unnormalised sequence
-# ---------------------------------------------------------------------------
-
-
-def test_poison_unnormalised_sequence() -> None:
-    """The same wealth test, run against the old C = 0.139307 sequence with
-    the alpha/b0 factor, must find a t with W(t) < 0.
-
-    The old sequence spends alpha_1 = 0.0209 and alpha_2 = 0.0105 against
-    a wealth of 0.025, so wealth is negative after two non-rejections.
-    """
-    C = 0.139307
-    w0 = 0.025
-    alpha_over_b0 = 2.0
-
-    def xi_old(j: int) -> float:
-        return C / (j * math.log(max(j, 2)) ** 3)
-
-    wealth = w0
-    found_negative = False
-    for t in range(1, 501):
-        alpha_t = xi_old(t) * w0 * alpha_over_b0
-        wealth = wealth - alpha_t
-        if wealth < 0:
-            found_negative = True
+def test_unnormalised_poison_sequence_exhausts_the_wealth() -> None:
+    old_constant = 0.139307
+    wealth = DEFAULT_W0
+    for index in range(1, 501):
+        alpha = old_constant / (index * math.log(max(index, 2)) ** 3) * DEFAULT_W0 * 2.0
+        wealth -= alpha
+        if wealth < 0.0:
             break
-    assert found_negative, "Unnormalised sequence did not produce negative wealth in 500 steps"
+    assert wealth < 0.0
 
 
-# ---------------------------------------------------------------------------
-# Test 7: Anytime-valid p-value
-# ---------------------------------------------------------------------------
+def test_anytime_valid_p_value_inverts_the_same_bound_to_micro_precision() -> None:
+    observations = [0.25] * 80
+    p_value = anytime_valid_p_value(observations)
+    assert one_sided_betting_bound(observations, alpha=p_value, side="lower") > 0.20
+    just_below = max(1e-12, p_value - 1e-6)
+    assert one_sided_betting_bound(observations, alpha=just_below, side="lower") <= 0.20
 
 
-def test_anytime_valid_p_value_bound_at_margin() -> None:
-    """A constructed stream whose one-sided lower bound sits exactly at 0.20
-    at level a returns p = a within 1e-3."""
-    # Use a stream of 0.20 observations — the bound should converge to 0.20.
-    observations = [0.20] * 20
-    from skill_harness.aggregation.confidence_sequence import one_sided_betting_bound
+def test_card_p_value_is_the_maximum_of_both_contrasts() -> None:
+    p_values = card_anytime_valid_p_values([0.9] * 80, [0.8] * 80)
+    assert p_values.anytime_valid_p == max(p_values.p_fn, p_values.p_fp)
 
-    # Find the alpha where the bound crosses 0.20 by bisection
-    lo, hi = 0.001, 0.999
-    for _ in range(64):
-        mid = 0.5 * (lo + hi)
-        bound = one_sided_betting_bound(observations, alpha=mid, side="lower")
-        if bound < 0.20:
-            lo = mid
-        else:
-            hi = mid
-    alpha_crossing = hi
 
-    # The p-value should be the smallest alpha where bound > margin.
-    # Use a fine grid around the crossing point.
-    fine_grid = [alpha_crossing - 0.01 + 0.0001 * i for i in range(200)]
-    fine_grid = [a for a in fine_grid if 0.001 <= a <= 0.999]
-    p = anytime_valid_p_value(observations, 0.20, alpha_grid=fine_grid)
-    assert abs(p - alpha_crossing) < 0.01, (
-        f"p-value {p} != alpha {alpha_crossing} when bound sits at 0.20"
+def test_cut_and_failed_b_world_do_not_advance_the_ledger() -> None:
+    proc = NormalisedLORDdep()
+    proc.set_order(_order(2))
+    p_values = _card_p_values(0.001)
+
+    assert (
+        proc.record_verdict(
+            KeepCutVerdict.CUT,
+            ledger_hypothesis_id="card-1",
+            card_p_values=p_values,
+            b_world_condition=True,
+            shared_control_family_id="control-a",
+            batch_order=1,
+        )
+        is None
+    )
+    assert proc.hypothesis_index == proc.discovery_count == 0
+
+    assert (
+        proc.record_verdict(
+            KeepCutVerdict.KEEP,
+            ledger_hypothesis_id="card-1",
+            card_p_values=p_values,
+            b_world_condition=False,
+            shared_control_family_id="control-a",
+            batch_order=1,
+        )
+        is None
+    )
+    assert proc.hypothesis_index == proc.discovery_count == 0
+
+
+def test_registered_keep_receives_a_reconstructable_multiplicity_record() -> None:
+    proc = NormalisedLORDdep()
+    proc.set_order(["card-a"])
+    multiplicity = proc.record_verdict(
+        KeepCutVerdict.KEEP,
+        ledger_hypothesis_id="card-a",
+        card_p_values=_card_p_values(0.001),
+        b_world_condition=True,
+        shared_control_family_id="control-a",
+        batch_order=1,
+    )
+
+    assert multiplicity is not None
+    assert multiplicity.hypothesis_index == 1
+    assert multiplicity.anytime_valid_p <= multiplicity.test_level
+    assert multiplicity.wealth_after == pytest.approx(
+        multiplicity.wealth_before - multiplicity.test_level + multiplicity.payout
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 9: Gate — KEEP enters ledger only when conditions hold
-# ---------------------------------------------------------------------------
-
-
-def test_gate_keep_requires_p_below_level() -> None:
-    """A KEEP enters the ledger only when anytime_valid_p <= alpha_t."""
+def test_order_is_fixed_before_results_and_identifies_each_hypothesis_once() -> None:
     proc = NormalisedLORDdep()
-    proc.set_order([1, 2, 3])
+    with pytest.raises(ValueError, match="repeat"):
+        proc.set_order(["card-a", "card-a"])
 
-    # Hypothesis 1: p > alpha, should not be a discovery
-    proc.test_level(0.5)
-    assert proc.step(0.5) is False
-
-    # Hypothesis 2: p < alpha, should be a discovery
-    alpha_2 = proc.test_level(0.001)
-    assert proc.step(0.001) is True
-    assert proc.discovery_count == 1
-
-    # Hypothesis 3: p just above alpha, should not be a discovery
-    alpha_3_p = alpha_2 + 0.0001
-    proc.test_level(alpha_3_p)
-    assert proc.step(alpha_3_p) is False
-    assert proc.discovery_count == 1
-
-
-def test_gate_cut_no_lift_never_advances_ledger() -> None:
-    """CUT(no_lift) never consumes or advances the ledger state."""
-    proc = NormalisedLORDdep()
-    proc.set_order([1, 2, 3, 4, 5])
-
-    # Process 5 hypotheses, all non-rejections (simulating CUT(no_lift))
-    for _ in range(5):
-        proc.step(0.5)
-
-    # Ledger state unchanged: no discoveries, wealth decreased
-    assert proc.discovery_count == 0
-    assert proc.discovery_index == 0
-    assert proc.hypothesis_index == 5
-
-
-def test_gate_cut_harmful_never_advances_ledger() -> None:
-    """CUT(harmful) never consumes or advances the ledger state."""
-    proc = NormalisedLORDdep()
-    proc.set_order([1, 2, 3, 4, 5])
-
-    # Process 5 hypotheses, all non-rejections (simulating CUT(harmful))
-    for _ in range(5):
-        proc.step(0.5)
-
-    # Ledger state unchanged
-    assert proc.discovery_count == 0
-    assert proc.discovery_index == 0
-
-
-# ---------------------------------------------------------------------------
-# Test 10: Order — hypothesis order fixed before result available
-# ---------------------------------------------------------------------------
-
-
-def test_order_fixed_before_results() -> None:
-    """Hypothesis order is fixed before the hypothesis's result is available."""
-    proc = NormalisedLORDdep()
-    order = [3, 1, 4, 1, 5]
-    proc.set_order(order)
-
-    # Order is set before any tests
-    assert proc.order == tuple(order)
-
-    # Running with the same p-values in the same order gives identical results
-    p_values = [0.5, 0.001, 0.5, 0.5, 0.001]
-    proc1 = NormalisedLORDdep()
-    proc1.set_order(order)
-    results1 = [proc1.step(p) for p in p_values]
-    wealth1 = proc1.wealth
-
-    proc2 = NormalisedLORDdep()
-    proc2.set_order(order)
-    results2 = [proc2.step(p) for p in p_values]
-    wealth2 = proc2.wealth
-
-    assert results1 == results2
-    assert wealth1 == wealth2
-
-
-def test_order_re_run_same_batch_identical() -> None:
-    """Re-running a registered batch in the same order gives identical indices."""
-    order = [1, 2, 3, 4, 5]
-    p_values = [0.5, 0.001, 0.5, 0.001, 0.5]
-
-    proc1 = NormalisedLORDdep()
-    proc1.set_order(order)
-    for p in p_values:
-        proc1.step(p)
-
-    proc2 = NormalisedLORDdep()
-    proc2.set_order(order)
-    for p in p_values:
-        proc2.step(p)
-
-    assert proc1.hypothesis_index == proc2.hypothesis_index
-    assert proc1.discovery_index == proc2.discovery_index
-    assert proc1.discovery_count == proc2.discovery_count
-    assert abs(proc1.wealth - proc2.wealth) < 1e-15
-
-
-def test_order_cannot_change_after_tests() -> None:
-    """Order cannot be set after tests have been run."""
-    proc = NormalisedLORDdep()
-    proc.set_order([1, 2, 3])
+    proc.set_order(["card-a", "card-b"])
     proc.step(0.5)
     with pytest.raises(ValueError, match="Cannot set order"):
-        proc.set_order([4, 5, 6])
+        proc.set_order(["card-b", "card-a"])
 
 
-def test_anytime_valid_p_value_never_fixed_sample() -> None:
-    """The anytime-valid p-value must never come from a fixed-sample test
-    at the stopping time."""
-    # A fixed-sample test at a data-dependent stop is invalid.
-    # The anytime-valid p-value uses the same betting CS at every prefix,
-    # so it is valid at every stop.
-    observations = [0.8, 0.9, 0.7, 0.85, 0.75]
-    p = anytime_valid_p_value(observations, 0.20)
-    # The p-value should be a valid probability
-    assert 0.0 <= p <= 1.0
-    # And it should be computed from the CS, not from a z-test at the stop.
-    # The CS-based p-value is always >= the fixed-sample p-value at the stop.
-    # We verify this by checking the p-value is not suspiciously small.
-    assert p >= 0.001, f"p-value {p} is suspiciously small for this data"
+def test_registered_order_replays_with_identical_indices_and_levels() -> None:
+    order = ["card-a", "card-b", "card-c"]
+    p_values = [0.5, 0.001, 0.5]
+    first = NormalisedLORDdep()
+    second = NormalisedLORDdep()
+    first.set_order(order)
+    second.set_order(order)
+
+    first_levels: list[float] = []
+    second_levels: list[float] = []
+    for p_value in p_values:
+        first_levels.append(first.test_level())
+        second_levels.append(second.test_level())
+        assert first.step(p_value) is second.step(p_value)
+
+    assert first_levels == second_levels
+    assert first.hypothesis_index == second.hypothesis_index
+    assert first.discovery_index == second.discovery_index
+    assert first.discovery_count == second.discovery_count
+    assert first.wealth == second.wealth
 
 
-# ---------------------------------------------------------------------------
-# Test 8: Card level — anytime_valid_p == max(p_FN, p_FP)
-# ---------------------------------------------------------------------------
+def _receipt(multiplicity: dict[str, str | int | float]) -> dict[str, Any]:
+    return {
+        "sers_version": "1.7.0",
+        "skill_name": "ledger-fixture",
+        "verdict": "KEEP",
+        "cut_sub_reason": None,
+        "unmeasured_sub_reason": None,
+        "value_class": "transformative-lift",
+        "evidence_admissibility": {"status": "not_applicable"},
+        "cost": {
+            "standing_tokens": {"refusal": "not_applicable"},
+            "fired_tokens": {"refusal": "not_applicable"},
+            "aux_tokens": {"refusal": "not_applicable"},
+        },
+        "instrument_identity": {
+            "extractor_model": {"refusal": "not_applicable"},
+            "prompt_fingerprint": "a",
+            "schema_fingerprint": "b",
+        },
+        "source": {"prose_path": "README.md"},
+        "summary": "Receipt fixture for the online FDR ledger.",
+        "subject_identity": {
+            "skill_id": "aa" * 32,
+            "harness_version": "0.3.0",
+            "metric_version": "0.4.1",
+            "implementation_hash": "bb" * 32,
+            "arms": ["null", "full"],
+            "subject_model": "model-2026-09",
+        },
+        "delivery": {
+            "channel": "not_instrumented",
+            "exposure": {"refusal": "not_instrumented"},
+            "pi_c": {"refusal": "not_instrumented"},
+        },
+        "verdict_scope": {
+            "model_id": "model-2026-09",
+            "task_family": "ledger-test",
+            "estimand": "treatment-policy",
+            "delivery_mechanism": "hook-nudged",
+            "control_world_result": "pass",
+        },
+        "multiplicity": multiplicity,
+    }
 
 
-def test_card_level_anytime_valid_p_equals_max() -> None:
-    """anytime_valid_p == max(p_FN, p_FP) within 1e-12."""
-    # Construct two contrasts with known p-values.
-    # p_FN is the p-value for the FN contrast (one-sided lower bound).
-    # p_FP is the p-value for the FP contrast (one-sided lower bound).
-    # The card-level p is max(p_FN, p_FP).
-    obs_fn = [0.8, 0.9, 0.85, 0.9, 0.88]
-    obs_fp = [0.6, 0.7, 0.65, 0.7, 0.68]
-    margin = 0.20
+def test_sers_refuses_an_invalid_keep_multiplicity_record(tmp_path: Path) -> None:
+    proc = NormalisedLORDdep()
+    proc.set_order(["card-a"])
+    multiplicity = proc.record_verdict(
+        KeepCutVerdict.KEEP,
+        ledger_hypothesis_id="card-a",
+        card_p_values=_card_p_values(0.001),
+        b_world_condition=True,
+        shared_control_family_id="control-a",
+        batch_order=1,
+    )
+    assert multiplicity is not None
+    receipt = _receipt(multiplicity.as_dict())
+    receipts_dir = tmp_path / "receipts"
+    receipts_dir.mkdir()
+    (receipts_dir / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+    schema = load_schema(Path("docs/sers/sers.schema.json"))
+    assert validate_receipts(schema, receipts_dir) == [receipt]
 
-    p_fn = anytime_valid_p_value(obs_fn, margin)
-    p_fp = anytime_valid_p_value(obs_fp, margin)
-    p_card = max(p_fn, p_fp)
-
-    # The card-level p should equal max(p_FN, p_FP)
-    assert abs(p_card - max(p_fn, p_fp)) < 1e-12
-
-
-def test_card_level_rejects_p_below_max() -> None:
-    """A receipt with anytime_valid_p < max(p_FN, p_FP) is rejected."""
-    obs_fn = [0.8, 0.9, 0.85]
-    obs_fp = [0.6, 0.7, 0.65]
-    margin = 0.20
-
-    p_fn = anytime_valid_p_value(obs_fn, margin)
-    p_fp = anytime_valid_p_value(obs_fp, margin)
-    p_card = max(p_fn, p_fp)
-
-    # A p_card below the max is invalid
-    assert p_card >= min(p_fn, p_fp), "p_card must not be less than either contrast p-value"
+    receipt["multiplicity"]["anytime_valid_p"] = 0.02
+    (receipts_dir / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+    with pytest.raises(SiteBuildError, match="anytime_valid_p"):
+        validate_receipts(schema, receipts_dir)
