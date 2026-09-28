@@ -79,6 +79,7 @@ actually buys.
 | `src/skill_harness/aggregation/errors.py` | 0 | 0 | 100% | n/a | no branches |
 | `src/skill_harness/aggregation/fit.py` | 20 | 1 | 94.4% | 95.0% | OK |
 | `src/skill_harness/aggregation/matched_bridge.py` | 32 | 2 | absent | 93.8% | BELOW 80% |
+| `src/skill_harness/aggregation/online_fdr.py` | 21 | 0 | absent | 100.0% | BELOW 80% |
 | `src/skill_harness/aggregation/profile.py` | 22 | 1 | 98.0% | 95.5% | OK |
 | `src/skill_harness/aggregation/report.py` | 0 | 0 | 97.6% | n/a | no branches |
 | `src/skill_harness/aggregation/status.py` | 20 | 0 | 100% | 100.0% | OK |
