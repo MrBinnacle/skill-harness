@@ -105,7 +105,7 @@ dev = [
   "pytest-socket>=0.8.1",
   # CONTRIBUTING.md's setup says `pre-commit install` right after `pip install -e ".[dev]"`;
   # ship the tool that command needs.
-  "pre-commit>=4",
+  "pre-commit>=4.6.2",
   # #161 — test-time numerical-reference + hygiene surface (assurance-pass manifest).
   # scipy/statsmodels already runtime deps; re-declared here so `pip install -e ".[dev]"`
   # alone still lands the full test stack. numpy is the explicit numerical base.
