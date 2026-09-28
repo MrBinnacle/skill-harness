@@ -10,7 +10,7 @@ Issues live in GitHub Issues (`MrBinnacle/skill-harness`), operated via the `gh`
 
 ### Triage labels
 
-Default five-role vocabulary — `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix` — with label strings equal to role names. See `docs/agents/triage-labels.md`.
+The five canonical triage roles plus a disposition axis, each label string equal to its name. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
