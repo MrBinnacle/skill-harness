@@ -105,40 +105,35 @@ def test_pairing_is_by_epoch_and_drops_a_void_partner(s1a: ModuleType) -> None:
     assert xs == (0.0, 1.0)
 
 
-def _install_listing_logs(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, s1a: ModuleType, *, placebo_position: int = 1
-) -> None:
-    full_path = tmp_path / "full.eval"
-    placebo_path = tmp_path / "placebo.eval"
-    full_path.touch()
-    placebo_path.touch()
-    full_text = f"Skills:\n1. pull-rebase: {s1a.FULL_DESC}"
-    placebo_text = "\n".join(
-        [
-            "Skills:",
-            *(
-                f"{index}. {'parse-csv' if index == placebo_position else 'built-in'}: "
-                f"{s1a.PLACEBO_DESC if index == placebo_position else 'built-in description'}"
-                for index in range(1, placebo_position + 1)
-            ),
-        ]
+_LISTING_FIXTURE = Path(__file__).parent / "fixtures" / "stage1a_listing" / "look-001-listing.json"
+
+
+def _demote_first_bullet(text: str) -> str:
+    """Swap the listing's first two bullets, so the card sits at position 2."""
+    head, header, listing = text.partition(
+        "The following skills are available for use with the Skill tool:\n\n- "
     )
-    logs = {
-        str(full_path): SimpleNamespace(
-            eval=SimpleNamespace(metadata={"cell_arm": "full"}),
-            samples=[
-                SimpleNamespace(epoch=1, messages=[SimpleNamespace(role="user", content=full_text)])
-            ],
-        ),
-        str(placebo_path): SimpleNamespace(
-            eval=SimpleNamespace(metadata={"cell_arm": "placebo"}),
-            samples=[
-                SimpleNamespace(
-                    epoch=1, messages=[SimpleNamespace(role="user", content=placebo_text)]
-                )
-            ],
-        ),
-    }
+    first, second, rest = listing.split("\n- ", 2)
+    return f"{head}{header}{second}\n- {first}\n- {rest}"
+
+
+def _install_listing_logs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, placebo_position: int = 1
+) -> None:
+    """Serve the trimmed real look-001 messages (S485) as two Inspect logs."""
+    arms = json.loads(_LISTING_FIXTURE.read_text(encoding="utf-8"))["arms"]
+    logs = {}
+    for arm, sample in arms.items():
+        path = tmp_path / f"{arm}.eval"
+        path.touch()
+        messages = [SimpleNamespace(**message) for message in sample["messages"]]
+        if arm == "placebo" and placebo_position == 2:
+            listing = messages[-1]
+            listing.content = _demote_first_bullet(listing.content)
+        logs[str(path)] = SimpleNamespace(
+            eval=SimpleNamespace(metadata={"cell_arm": arm}),
+            samples=[SimpleNamespace(epoch=sample["epoch"], messages=messages)],
+        )
     inspect_ai = ModuleType("inspect_ai")
     inspect_log = ModuleType("inspect_ai.log")
     inspect_log.read_eval_log = lambda path: logs[path]  # type: ignore[attr-defined]
@@ -147,17 +142,17 @@ def _install_listing_logs(
     monkeypatch.setitem(sys.modules, "inspect_ai.log", inspect_log)
 
 
-def test_listing_position_reads_both_cards_from_the_first_user_message(
+def test_listing_position_reads_both_cards_from_the_real_system_listing(
     s1a: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    _install_listing_logs(monkeypatch, tmp_path, s1a)
+    _install_listing_logs(monkeypatch, tmp_path)
     assert s1a._listing_position(tmp_path) == {("full", 1): 1, ("placebo", 1): 1}
 
 
 def test_listing_position_refuses_a_nonfirst_card(
     s1a: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    _install_listing_logs(monkeypatch, tmp_path, s1a, placebo_position=2)
+    _install_listing_logs(monkeypatch, tmp_path, placebo_position=2)
     with pytest.raises(ValueError, match="placebo epoch 1: card appears at listing position 2"):
         s1a._listing_position(tmp_path)
 
