@@ -203,7 +203,7 @@ jobs:
         run: python -m playwright install chromium
       - name: Cache Vale binary
         id: cache-vale
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # runner.temp is OS-native; actions/cache resolves it on Windows.
           # /tmp/vale-bin is not a Windows path the cache action can restore.
@@ -557,7 +557,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Cache Vale binary
         id: cache-vale
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/vale-bin
           key: vale-${{ runner.os }}-3.9.1
