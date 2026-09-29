@@ -79,6 +79,7 @@ actually buys.
 | `src/skill_harness/aggregation/errors.py` | 0 | 0 | 100% | n/a | no branches |
 | `src/skill_harness/aggregation/fit.py` | 20 | 1 | 94.4% | 95.0% | OK |
 | `src/skill_harness/aggregation/matched_bridge.py` | 32 | 2 | absent | 93.8% | BELOW 80% |
+| `src/skill_harness/aggregation/online_fdr.py` | 40 | 11 | absent | 72.5% | BELOW 80% |
 | `src/skill_harness/aggregation/profile.py` | 22 | 1 | 98.0% | 95.5% | OK |
 | `src/skill_harness/aggregation/report.py` | 0 | 0 | 97.6% | n/a | no branches |
 | `src/skill_harness/aggregation/status.py` | 20 | 0 | 100% | 100.0% | OK |
@@ -143,13 +144,29 @@ arm-level records into the four-cell table, and routes it through Gate 2. It is 
 the Aggregation table above because the attention rule applies to it, not because
 it was part of the census: **the 7-of-20 figure and the 2,210/1,909 branch totals
 are the 2026-08-12 result and do not include later rows.** Counting the three later
-flagged rows (this module, `binding.py`, and `ablation/arms.py`) leaves it 10
-flagged of 23 today:
+flagged rows (this module, `binding.py`, `ablation/arms.py`, and
+`online_fdr.py`) leaves it 11 flagged of 24 today:
 #247 moved this module's branch figure over the floor, but the attention rule
 reads both instruments, and mutation still reads `absent` for this module — so
 the row stays flagged on the mutation arm of the rule until #166's instrument
 measures it. Branch coverage alone does not clear a flag; that is the point of
 pairing the columns.
+
+`aggregation/online_fdr.py` landed with #644. Its figures - 40 branches, 11
+uncovered, 72.5% - were re-measured on 2026-09-29 with coverage.py 7.15.2 and
+the flags in "How to reproduce", under `tests/test_online_fdr.py`. The first
+measurement, on 2026-09-28, read 36 branches, 12 uncovered, 66.7%. Between the
+two, the fix-forward after the first verification added the order cursor, tests
+for the unexercised receipt refusals, and a test for a CUT passing over its
+registered slot. The 11 arcs still uncovered are input refusals: `xi` below
+index 1, an invalid margin, a p-value of 1 when the bound never clears the
+margin, out-of-range card p-values, two `set_order` refusals (an empty order and
+an empty id), an exhausted order in `test_level` and in `record_verdict`, a
+p-value outside [0, 1] in `step`, and the empty family id and the batch order
+below 1 in `record_verdict`. This narrower selection exercises the module's
+ledger, p-value inversion, and receipt boundary. It does not replace the
+ordinary CI measurement. Mutation is absent because #166 predates the module, so
+the attention rule flags it on both figures.
 
 Its figures - 32 branches, 2 uncovered, 93.8% - were re-measured on 2026-08-17
 with coverage.py 7.15.2 and the flags in "How to reproduce", over
@@ -171,9 +188,9 @@ cross-partition id collision instead of pairing a calibration row into the
 effect (INVARIANTS #7).
 
 Mutation reads `absent` for the same reason `confidence_sequence.py` does: #166
-predates the module. Four of the 23 modules are now unmeasured by the stronger
-instrument (`confidence_sequence.py`, this module, `binding.py`, and
-`ablation/arms.py`).
+predates the module. Five of the 24 modules are now unmeasured by the stronger
+instrument (`confidence_sequence.py`, this module, `binding.py`,
+`ablation/arms.py`, and `online_fdr.py`).
 
 **The 2 arcs still uncovered are both unreachable, and neither is suppressed.**
 The earlier draft of this row named three uncovered refusal guards - a pair

@@ -21,7 +21,7 @@
   "properties": {
     "sers_version": {
       "type": "string",
-      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0"],
+      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0"],
       "description": "SERS vocabulary generation. Receipts from different sers_version values are not comparable."
     },
     "skill_name": {
@@ -429,6 +429,29 @@
       "enum": ["KEEP", "REPLICATED", "ROBUST", null],
       "description": "Ledger claim ladder above KEEP. KEEP = one admissible registration; REPLICATED = 2+ independently designed families; ROBUST = 3+ materially distinct families with at least one independent designer. null = not yet classified."
     },
+    "multiplicity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Online-FDR ledger facts for a 1.7.0 KEEP receipt. The SERS validation gate checks the cross-field p-value inequalities that JSON Schema cannot express.",
+      "required": ["ledger_hypothesis_id", "hypothesis_index", "discovery_type", "procedure", "target_fdr", "test_level", "anytime_valid_p", "p_fn", "p_fp", "initial_wealth", "payout", "wealth_before", "wealth_after", "shared_control_family_id", "batch_order"],
+      "properties": {
+        "ledger_hypothesis_id": { "type": "string", "minLength": 1 },
+        "hypothesis_index": { "type": "integer", "minimum": 1 },
+        "discovery_type": { "const": "KEEP" },
+        "procedure": { "const": "LORDdep" },
+        "target_fdr": { "const": 0.05 },
+        "test_level": { "type": "number", "minimum": 0, "maximum": 1 },
+        "anytime_valid_p": { "type": "number", "minimum": 0, "maximum": 1 },
+        "p_fn": { "type": "number", "minimum": 0, "maximum": 1 },
+        "p_fp": { "type": "number", "minimum": 0, "maximum": 1 },
+        "initial_wealth": { "const": 0.025 },
+        "payout": { "const": 0.025 },
+        "wealth_before": { "type": "number", "minimum": 0 },
+        "wealth_after": { "type": "number", "minimum": 0 },
+        "shared_control_family_id": { "type": "string", "minLength": 1 },
+        "batch_order": { "type": "integer", "minimum": 1 }
+      }
+    },
     "verdict_scope": {
       "type": "object",
       "additionalProperties": false,
@@ -736,6 +759,52 @@
             "required": ["subject_model"]
           }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.7.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"],
+        "properties": {
+          "subject_identity": {
+            "required": ["subject_model"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sers_version": { "const": "1.7.0" },
+          "verdict": { "const": "KEEP" }
+        },
+        "required": ["sers_version", "verdict"]
+      },
+      "then": {
+        "required": ["multiplicity", "verdict_scope"],
+        "properties": {
+          "verdict_scope": {
+            "required": ["model_id", "task_family", "delivery_mechanism", "control_world_result"],
+            "properties": {
+              "control_world_result": { "const": "pass" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sers_version": { "const": "1.7.0" },
+          "verdict": { "enum": ["CUT", "CANT_TELL_YET"] }
+        },
+        "required": ["sers_version", "verdict"]
+      },
+      "then": {
+        "not": { "required": ["multiplicity"] }
       }
     },
     {
