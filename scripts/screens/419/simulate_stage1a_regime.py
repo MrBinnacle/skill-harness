@@ -373,7 +373,7 @@ def per_look_tsv(results: Sequence[CellResult]) -> str:
 
 def _quantiles(values: Sequence[float]) -> list[str]:
     if not values:
-        return ["" for _ in QUANTILES]
+        return ["NA" for _ in QUANTILES]
     return [f"{float(q):.4f}" for q in np.quantile(np.asarray(values), QUANTILES)]
 
 
