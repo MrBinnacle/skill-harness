@@ -79,7 +79,7 @@ actually buys.
 | `src/skill_harness/aggregation/errors.py` | 0 | 0 | 100% | n/a | no branches |
 | `src/skill_harness/aggregation/fit.py` | 20 | 1 | 94.4% | 95.0% | OK |
 | `src/skill_harness/aggregation/matched_bridge.py` | 32 | 2 | absent | 93.8% | BELOW 80% |
-| `src/skill_harness/aggregation/online_fdr.py` | 36 | 12 | absent | 66.7% | BELOW 80% |
+| `src/skill_harness/aggregation/online_fdr.py` | 40 | 11 | absent | 72.5% | BELOW 80% |
 | `src/skill_harness/aggregation/profile.py` | 22 | 1 | 98.0% | 95.5% | OK |
 | `src/skill_harness/aggregation/report.py` | 0 | 0 | 97.6% | n/a | no branches |
 | `src/skill_harness/aggregation/status.py` | 20 | 0 | 100% | 100.0% | OK |
@@ -152,13 +152,21 @@ the row stays flagged on the mutation arm of the rule until #166's instrument
 measures it. Branch coverage alone does not clear a flag; that is the point of
 pairing the columns.
 
-`aggregation/online_fdr.py` landed on 2026-09-28 with #644. Its 36 branches,
-12 uncovered branches, and 66.7% branch coverage were measured on 2026-09-28
-with coverage.py 7.15.2 and the branch-coverage flags above, under
-`tests/test_online_fdr.py`. This narrower selection exercises the module's
+`aggregation/online_fdr.py` landed with #644. Its figures - 40 branches, 11
+uncovered, 72.5% - were re-measured on 2026-09-29 with coverage.py 7.15.2 and
+the flags in "How to reproduce", under `tests/test_online_fdr.py`. The first
+measurement, on 2026-09-28, read 36 branches, 12 uncovered, 66.7%. Between the
+two, the fix-forward after the first verification added the order cursor, tests
+for the unexercised receipt refusals, and a test for a CUT passing over its
+registered slot. The 11 arcs still uncovered are input refusals: `xi` below
+index 1, an invalid margin, a p-value of 1 when the bound never clears the
+margin, out-of-range card p-values, two `set_order` refusals (an empty order and
+an empty id), an exhausted order in `test_level` and in `record_verdict`, a
+p-value outside [0, 1] in `step`, and the empty family id and the batch order
+below 1 in `record_verdict`. This narrower selection exercises the module's
 ledger, p-value inversion, and receipt boundary. It does not replace the
-ordinary CI measurement. Mutation is absent because #166 predates the module,
-so the attention rule flags it on both figures.
+ordinary CI measurement. Mutation is absent because #166 predates the module, so
+the attention rule flags it on both figures.
 
 Its figures - 32 branches, 2 uncovered, 93.8% - were re-measured on 2026-08-17
 with coverage.py 7.15.2 and the flags in "How to reproduce", over
