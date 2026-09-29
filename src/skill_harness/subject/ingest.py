@@ -346,9 +346,11 @@ def detect_skill_exposure(messages: Iterable[object], skill_description: str) ->
 
     Fires iff the message stream contains a message whose content includes
     the skill's description text as a substring. Under the
-    ``inspect_swe.claude_code`` solver, the first user message carries
-    Claude Code's skill listing and the card's frontmatter description
-    appears in it verbatim. Role is not required: an undercount can only
+    ``inspect_swe.claude_code`` solver, Claude Code delivers its skill
+    listing in a message before the agent acts: the first user message in
+    older releases, a system message in current ones (#675). The card's
+    frontmatter description appears in the listing verbatim, so the scan
+    reads every message whatever its role. Role is not required: an undercount can only
     make the unexposed-Full refusal fire more, never fabricate an exposure.
 
     Deliberately conservative: any shape this duck-typed scan does not

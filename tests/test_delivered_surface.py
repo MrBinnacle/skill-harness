@@ -8,6 +8,8 @@ Fixture-only: no network, no model calls.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -242,21 +244,74 @@ def test_listing_header_without_cards_records_typed_empty_listing() -> None:
     assert result.subject_cards[0].status == "dropped"
 
 
-def test_uses_only_the_first_user_message_for_the_delivered_listing() -> None:
-    """A later listing is not the surface delivered before the run started."""
+def test_listing_in_a_system_message_before_the_first_action_is_delivered() -> None:
+    """#675: current Claude Code delivers the listing in a system message.
+
+    Any message before the agent's first action is context the model received,
+    so a listing there is the delivered surface.
+    """
     subject = {"my-skill": "My skill description."}
     messages = [
         _system(
             "The following skills are available for use with the Skill tool:\n"
-            "- my-skill: My skill description."
+            "- my-skill: My skill description.\n"
+            "- other-skill: Something else."
         ),
         _user("Perform the task."),
+        _assistant("Working on it."),
+    ]
+    result = extract_delivered_listing(messages, subject)
+
+    assert result.empty_reason is None
+    assert result.subject_cards[0].status == "visible"
+    assert result.subject_cards[0].position == 0
+    assert result.non_subject_cards == ("other-skill",)
+
+
+def test_listing_after_the_first_assistant_message_is_not_delivered() -> None:
+    """#675: a listing that first appears after the agent acts (for example,
+    echoed in a tool result) is not the surface delivered before the run."""
+    subject = {"my-skill": "My skill description."}
+    messages = [
+        _system("You are helpful."),
+        _user("Perform the task."),
+        _assistant("Reading the listing."),
         _listing_message(subject),
     ]
     result = extract_delivered_listing(messages, subject)
 
     assert result.empty_reason == "no_listing"
     assert result.subject_cards[0].status == "dropped"
+
+
+_REAL_LISTING_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "stage1a_listing" / "look-001-listing.json"
+)
+
+
+def test_real_claude_code_log_listing_in_system_message_is_delivered() -> None:
+    """#675: the trimmed S485 look-001 log (the #674 fixture).
+
+    The first user message holds only ``currentDate`` and the task; the listing
+    sits in the following system message. The subject card must read as delivered.
+    """
+    arms = json.loads(_REAL_LISTING_FIXTURE.read_text(encoding="utf-8"))["arms"]
+    messages = [SimpleNamespace(**m) for m in arms["full"]["messages"]]
+    assert [m.role for m in messages] == ["user", "system"]
+    subject = {
+        "pull-rebase": (
+            "Use before `git pull` where `pull.rebase` may be `true`. `--no-ff` does NOT "
+            "stop a rebase under `pull.rebase=true` (silently ignored); it rewrites every "
+            "local commit SHA. Check config first."
+        )
+    }
+    result = extract_delivered_listing(messages, subject)
+
+    assert result.empty_reason is None
+    card = result.subject_cards[0]
+    assert card.status == "visible"
+    assert card.position == 0
+    assert "deep-research" in result.non_subject_cards
 
 
 def test_unrelated_bullets_in_the_first_user_message_are_not_a_listing() -> None:
