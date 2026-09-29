@@ -446,6 +446,24 @@ and covers that section only. This page stays the citable surface for every kind
   fixed budget, which is #685. It does not name a single binding condition from
   the joint terminal states.
 
+### [`docs/findings/stage1a-lever-adjudication-685.md`](findings/stage1a-lever-adjudication-685.md)
+
+- **Claims:** A no-model simulation varying each of four design levers (pairs,
+  null allocation, F-N construction, optional stopping) against the #684
+  baseline (97 pairs, 1:1:1). Stage 1: null allocation x F-N construction at
+  caps 97 and 400, 200 replicates per cell, seed 685. Calibration holds for
+  every design at d = 0.20. No design under $100 meets the default target
+  (P(PASS) >= 0.80 at d = 0.30) at 97 pairs. The null allocation lever moves
+  P(CUT) at d = 0.00 but has minimal effect on P(PASS) at d >= 0.25. The
+  direct F-N construction differs from the union bound. A crashed-look rule
+  and void-epoch rule are stated in advance for the next paid run.
+- **Refuses to claim:** How many real Claude Code epochs are required. The
+  results hold under the declared independent-Bernoulli model only. The full
+  grid (630 cells at 2000 replicates) has not been run; the initial data uses
+  200 replicates on a subset. It refuses any matched-pairs advantage from
+  launch-index pairing. It does not name a design that meets the default
+  target; the fork reaches the operator unanchored.
+
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 
 - **Claims:** On 2026-09-23, `git ls-files "skills/*/*/SKILL.md"` returned zero
