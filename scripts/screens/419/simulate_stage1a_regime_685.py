@@ -457,13 +457,13 @@ def run_cell(
 
             # F-N pass check
             if design.fn_construction == "direct":
-                if lb_fn_br.unsure[r] or not (
-                    lb_fn_br.lo[r] >= a650.BOUNDARY or lb_fn_br.hi[r] < a650.BOUNDARY
-                ):
+                fn_sure_yes = 2 * lb_fn_br.lo[r] - 1 >= a650.BOUNDARY
+                fn_sure_no = 2 * lb_fn_br.hi[r] - 1 < a650.BOUNDARY
+                if lb_fn_br.unsure[r] or not (fn_sure_yes or fn_sure_no):
                     xs_fn = xs_fn_all[r, : fn_counts[k]].tolist()
                     fn_clears = 2 * _exact(xs_fn, pass_alpha, "lower") - 1 >= a650.BOUNDARY
                 else:
-                    fn_clears = bool(lb_fn_br.lo[r] >= a650.BOUNDARY)
+                    fn_clears = bool(fn_sure_yes)
             else:
                 f_sure_yes = lb_f_br.lo[r] - ub_n_br.hi[r] >= a650.BOUNDARY
                 f_sure_no = lb_f_br.hi[r] - ub_n_br.lo[r] < a650.BOUNDARY
