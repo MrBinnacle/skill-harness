@@ -11,6 +11,7 @@ from typing import Any
 import jsonschema
 import pytest
 
+from skill_harness.aggregation import online_fdr
 from skill_harness.aggregation.confidence_sequence import one_sided_betting_bound
 from skill_harness.aggregation.online_fdr import (
     _N_GRID,
@@ -72,32 +73,43 @@ def test_global_index_uses_the_wealth_at_the_last_discovery() -> None:
     assert proc.test_level() == pytest.approx(xi(4) * wealth_at_discovery, abs=1e-15)
 
 
-def test_wealth_stays_non_negative_and_levels_do_not_exceed_it() -> None:
-    proc = NormalisedLORDdep()
-    proc.set_order(_order(500))
-    for _ in range(500):
-        assert proc.test_level() <= proc.wealth + 1e-15
-        proc.step(0.5)
-        assert proc.wealth >= 0.0
-
-    random_proc = NormalisedLORDdep()
-    random_proc.set_order(_order(10_000))
+def _wealth_violations() -> list[tuple[str, int, str]]:
+    """Run AC5's wealth check over both streams and return every violation found."""
     rng = random.Random(42)
-    for _ in range(10_000):
-        assert random_proc.test_level() <= random_proc.wealth + 1e-15
-        random_proc.step(rng.random())
-        assert random_proc.wealth >= 0.0
+    streams = (
+        ("500 non-rejections", [0.5] * 500),
+        ("seeded stream", [rng.random() for _ in range(10_000)]),
+    )
+    violations: list[tuple[str, int, str]] = []
+    for name, p_values in streams:
+        proc = NormalisedLORDdep()
+        proc.set_order(_order(len(p_values)))
+        for index, p_value in enumerate(p_values, start=1):
+            if proc.test_level() > proc.wealth + 1e-15:
+                violations.append((name, index, "level exceeds wealth"))
+            proc.step(p_value)
+            if proc.wealth < 0.0:
+                violations.append((name, index, "negative wealth"))
+    return violations
 
 
-def test_unnormalised_poison_sequence_exhausts_the_wealth() -> None:
-    old_constant = 0.139307
-    wealth = DEFAULT_W0
-    for index in range(1, 501):
-        alpha = old_constant / (index * math.log(max(index, 2)) ** 3) * DEFAULT_W0 * 2.0
-        wealth -= alpha
-        if wealth < 0.0:
-            break
-    assert wealth < 0.0
+def test_wealth_stays_non_negative_and_levels_do_not_exceed_it() -> None:
+    assert _wealth_violations() == []
+
+
+def test_the_wealth_check_detects_the_unnormalised_sequence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unnormalised_xi(j: int) -> float:
+        return 0.139307 * 0.05 / (0.025 * j * math.log(max(j, 2)) ** 3)
+
+    monkeypatch.setattr(online_fdr, "xi", unnormalised_xi)
+    violations = _wealth_violations()
+
+    # S484 measured W(1) = 0.00408 and W(2) = -0.00637 for this sequence from a cold start.
+    assert ("500 non-rejections", 2, "level exceeds wealth") in violations
+    assert ("500 non-rejections", 2, "negative wealth") in violations
+    assert ("500 non-rejections", 1, "negative wealth") not in violations
 
 
 def test_anytime_valid_p_value_inverts_the_same_bound_to_micro_precision() -> None:
