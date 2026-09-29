@@ -1,8 +1,9 @@
 """Delivered skill surface extractor (#664).
 
-Extracts the skill listing Claude Code delivered in a run's first user
-message. For each subject card, records whether it was visible, truncated
-(with delivered description length), or dropped. Also records each card's
+Extracts the skill listing Claude Code delivered before the agent's first
+action, from whichever message carries it (#675). For each subject card,
+records whether it was visible, truncated (with delivered description
+length), or dropped. Also records each card's
 position in the listing and the listing's total description tokens.
 
 A listing that holds none of the subject's cards records as ``empty``,
@@ -114,10 +115,10 @@ def extract_delivered_listing(
 ) -> DeliveredListing:
     """Extract the delivered skill surface from a run's transcript.
 
-    Scans ``messages`` for the skill listing Claude Code delivered in the
-    first user message. For each entry in ``subject_cards`` (a mapping of
-    skill name to its full description text), determines whether the card
-    was visible, truncated, or dropped.
+    Scans ``messages`` for the skill listing Claude Code delivered before
+    the first assistant message, in a message of any role. For each entry
+    in ``subject_cards`` (a mapping of skill name to its full description
+    text), determines whether the card was visible, truncated, or dropped.
 
     :param messages: The run's message list. Each message may have a
         ``content`` attribute that is a string or a list of text parts.
@@ -156,51 +157,68 @@ def extract_delivered_listing(
 
 
 def _find_listing_text(messages: Sequence[object]) -> tuple[str, EmptyReason | None]:
-    """Find the skill listing text from the first user message.
+    """Find the skill listing in any message before the agent's first action.
 
-    Returns a typed structural reason when no listing can be extracted. A
-    listing on a non-user message or a later user message is not delivered
-    context and must not be attributed to the run.
+    Claude Code has delivered the listing in the first user message and, in
+    current releases, in a system message (#675). Every message before the
+    first ``assistant`` message is context the model received before it acted,
+    whatever its role, so the first of them that holds Claude Code's header
+    carries the delivered listing. A listing that first appears at or after the
+    first assistant message (for example, echoed in a tool result) was not
+    delivered before the run and is never attributed to it.
+
+    Returns a typed structural reason when no listing can be extracted:
+    ``no_user_messages`` when the stream has no user message at all, and
+    ``no_listing`` otherwise.
     """
     for message in messages:
-        if getattr(message, "role", None) != "user":
-            continue
-
-        content = getattr(message, "content", None)
-        text = ""
-        if isinstance(content, str):
-            text = content
-        elif isinstance(content, list):
-            parts: list[str] = []
-            for part in content:
-                if isinstance(part, dict):
-                    parts.append(part.get("text", ""))
-                else:
-                    t = getattr(part, "text", None)
-                    if isinstance(t, str):
-                        parts.append(t)
-            text = "\n".join(parts)
-
+        if getattr(message, "role", None) == "assistant":
+            break
+        text = _message_text(message)
         listing_start = text.find(_LISTING_HEADER)
         if listing_start >= 0:
             return _listing_block(text[listing_start:]), None
-        return "", "no_listing"
-    return "", "no_user_messages"
+    if not any(getattr(message, "role", None) == "user" for message in messages):
+        return "", "no_user_messages"
+    return "", "no_listing"
+
+
+def _message_text(message: object) -> str:
+    """Join a message's text, whether its content is a string or a list of parts."""
+    content = getattr(message, "content", None)
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for part in content:
+        if isinstance(part, dict):
+            parts.append(part.get("text", ""))
+        else:
+            t = getattr(part, "text", None)
+            if isinstance(t, str):
+                parts.append(t)
+    return "\n".join(parts)
 
 
 def _listing_block(text_after_header: str) -> str:
-    """Extract the header and contiguous card lines from a user message.
+    """Extract the header and contiguous card lines that follow it.
 
-    The first user message also carries task text, which can contain Markdown
-    bullets. Only the contiguous card lines following Claude Code's header are
-    part of the delivered listing.
+    The message that carries the listing can also carry task text or other
+    context, which can contain Markdown bullets. Only the contiguous card lines
+    following Claude Code's header are part of the delivered listing. Blank
+    lines between the header and the first card are skipped: current Claude
+    Code writes one there.
     """
     lines = text_after_header.splitlines()
     if not lines:
         return ""
 
     listing_lines = [lines[0]]
-    for line in lines[1:]:
+    body = lines[1:]
+    while body and not body[0].strip():
+        body = body[1:]
+    for line in body:
         stripped = line.strip()
         if not stripped.startswith("- ") or ": " not in stripped[2:]:
             break
