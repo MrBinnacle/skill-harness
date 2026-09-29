@@ -120,6 +120,21 @@ def test_double_null_allocation_increases_null_draws() -> None:
     assert r2.design.total_epochs == 120
 
 
+def test_null_allocation_uses_exactly_the_declared_observations() -> None:
+    assert reg.null_draw_counts(97, 0.5).sum() == reg.Design(97, 0.5).n_null
+    assert reg.null_draw_counts(97, 1.0).sum() == reg.Design(97, 1.0).n_null
+    assert reg.null_draw_counts(97, 2.0).sum() == reg.Design(97, 2.0).n_null
+    assert reg.null_draw_counts(4, 0.5).tolist() == [0, 1, 0, 1]
+    assert reg.null_draw_counts(4, 2.0).tolist() == [2, 2, 2, 2]
+
+
+def test_half_null_allocation_handles_a_cap_before_its_first_null_epoch() -> None:
+    result = reg.run_cell(
+        reg.Cell(0.55, 0.35, 0.35), reg.Design(n_pairs=1, null_per_pair=0.5), replicates=10, seed=11
+    )
+    assert [row.look for row in result.per_look] == [1]
+
+
 def test_every_look_up_to_the_cap_is_recorded() -> None:
     design = reg.Design(n_pairs=20)
     result = reg.run_cell(reg.Cell(0.85, 0.25, 0.30), design, replicates=200, seed=12)
@@ -159,34 +174,6 @@ def test_direct_construction_differs_from_union() -> None:
     p_union = r_union.per_look[-1].p_pass
     p_direct = r_direct.per_look[-1].p_pass
     assert p_union != p_direct, "union and direct should produce different pass rates"
-
-
-# ---------------------------------------------------------------------------
-# Simulation: optional stopping lever
-# ---------------------------------------------------------------------------
-
-
-def test_fixed_n_evaluation_matches_anytime_at_cap() -> None:
-    cell = reg.Cell(0.85, 0.25, 0.35)
-    design = reg.Design(n_pairs=30)
-    result = reg.run_cell(cell, design, replicates=200, seed=30, fixed_n_look=30)
-    assert result.fixed_n_result is not None
-    ub_rate, lb_rate, fn_rate = result.fixed_n_result
-    assert 0.0 <= ub_rate <= 1.0
-    assert 0.0 <= lb_rate <= 1.0
-    assert 0.0 <= fn_rate <= 1.0
-
-
-def test_fixed_n_pass_rate_differs_from_anytime() -> None:
-    cell = reg.Cell(0.75, 0.35, 0.30)
-    design = reg.Design(n_pairs=40)
-    result = reg.run_cell(cell, design, replicates=500, seed=31, fixed_n_look=40)
-    assert result.fixed_n_result is not None
-    _, lb_rate, fn_rate = result.fixed_n_result
-    anytime_pass = result.per_look[-1].p_pass
-    fixed_n_pass = lb_rate * fn_rate
-    assert 0.0 <= anytime_pass <= 1.0
-    assert 0.0 <= fixed_n_pass <= 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -245,20 +232,18 @@ def test_calibration_holds_for_direct_construction_400_pairs() -> None:
 def test_calibration_fails_when_pass_alpha_is_loosened() -> None:
     design = reg.Design(n_pairs=97)
     cell = reg.Cell(0.55, 0.35, 0.30)
-    result = reg.run_cell(cell, design, replicates=600, seed=685)
+    result = reg.run_cell(cell, design, replicates=600, seed=685, pass_alpha=0.6)
     limit = a650.PASS_ALPHA + a650.calibration_tolerance(600)
-    assert result.per_look[-1].p_pass <= limit, "baseline calibration should hold at d=0.20"
+    assert result.per_look[-1].p_pass > limit
 
 
 def test_calibration_fails_for_loosened_rule_under_non_baseline_design() -> None:
     """New negative control: loosened rule fails under a non-baseline design."""
     design = reg.Design(n_pairs=97, null_per_pair=0.5)
     cell = reg.Cell(0.55, 0.35, 0.30)
-    result = reg.run_cell(cell, design, replicates=600, seed=685)
+    result = reg.run_cell(cell, design, replicates=600, seed=685, pass_alpha=0.6)
     limit = a650.PASS_ALPHA + a650.calibration_tolerance(600)
-    assert result.per_look[-1].p_pass <= limit, (
-        "half-null design should also hold calibration at d=0.20"
-    )
+    assert result.per_look[-1].p_pass > limit
 
 
 # ---------------------------------------------------------------------------
@@ -303,13 +288,12 @@ def test_stage1_grid_has_expected_structure() -> None:
         assert 0.0 <= cell.d <= 0.5
 
 
-def test_stage1_grid_skips_redundant_baseline() -> None:
-    """null_per_pair=1.0 at n_pairs=400 is the same as at n_pairs=97 scaled,
-    so it is skipped in the grid."""
+def test_stage1_grid_includes_the_400_pair_baseline() -> None:
     grid = reg.stage1_grid()
-    for _cell, design in grid:
-        if design.null_per_pair == 1.0:
-            assert design.n_pairs == 97, "null_per_pair=1.0 should only appear at n_pairs=97"
+    assert any(
+        design.n_pairs == 400 and design.null_per_pair == 1.0 and design.fn_construction == "union"
+        for _cell, design in grid
+    )
 
 
 # ---------------------------------------------------------------------------

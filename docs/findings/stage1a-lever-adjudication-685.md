@@ -1,12 +1,12 @@
 # Lever adjudication for the registered Stage 1A rule (#685)
 
-**Date:** 2026-09-29. **Script:** `scripts/screens/419/simulate_stage1a_regime_685.py`. **Test:** `tests/test_simulate_stage1a_regime_685.py`. **Data:** `.scratch/issue-685/data/` (`per_look.tsv`, `terminal_states.tsv`, `summary.md`). **Model calls:** none. **Network calls:** none. **Spend:** none.
+**Date:** 2026-09-29. **Script:** `scripts/screens/419/simulate_stage1a_regime_685.py`. **Test:** `tests/test_simulate_stage1a_regime_685.py`. **Model calls:** none. **Network calls:** none. **Spend:** none.
 
-These results establish operating characteristics under the declared independent-Bernoulli model. They do not establish how many real Claude Code epochs are required.
+**Status:** no operating-characteristic result is published. The original 200-replicate tables treated missing Null epochs as zero outcomes and used one Null epoch where the double-Null design declares two. They did not simulate the declared designs and are withdrawn.
 
 ## Why this record exists
 
-#684 measured the registered design (97 pairs, 1:1:1) at p_P, p_N in {0.30, 0.35, 0.40} and found P(PASS) at most 0.055 in the observed cell and at most 0.321 anywhere on its grid, with P(CUT) never sized below d = 0.20. This record varies each of the four design levers alone against that baseline, then combines, to find which lever moves the operating characteristics most.
+#684 measured the registered design (97 pairs, 1:1:1) at p_P, p_N in {0.30, 0.35, 0.40} and found P(PASS) at most 0.055 in the observed cell and at most 0.321 anywhere on its grid, with P(CUT) never sized below d = 0.20. This record defines the Stage 1 simulation required to vary null allocation and F-N construction against that baseline. It does not adjudicate the four levers until the corrected full grid runs.
 
 The four levers are:
 1. **Pairs** (cap at 400).
@@ -20,15 +20,15 @@ Full and Placebo are paired by launch index; under independent draws this confer
 
 ## What was simulated
 
-**Stage 1 grid.** Null allocation x F-N construction, at caps 97 and 400. Null allocation levels: 0.5 (strictly alternating, Null-A after even-numbered pairs), 1.0 (every pair), 2.0 (every pair, two Null draws). F-N constructions: union (registered: LB(mu_F) at alpha/2 minus UB(mu_N) at alpha/2) and direct (one-sided bound on mu_F - mu_N at alpha).
+**Stage 1 grid.** Null allocation x F-N construction, at caps 97 and 400. Null allocation levels: 0.5 (strictly alternating, Null-A after even-numbered pairs), 1.0 (every pair), 2.0 (every pair, two Null draws). F-N constructions: union (registered: LB(mu_F) at alpha/2 minus UB(mu_N) at alpha/2) and direct (one-sided bound on the Full-minus-mean-Null observation at alpha). The direct construction uses only scheduled Null looks; it averages the two Null draws at a double-Null look.
 
 **Baseline design.** n_full = n_placebo = n_null = 97, total_epochs = 291, null_per_pair = 1.0.
 
 **Effect axis.** d = p_F - p_P in {0.00, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40}. Baselines p_P, p_N in {0.30, 0.35, 0.40}.
 
-**Monte Carlo.** 200 replicates per cell, seed 685. The draws are seeded per cell on (seed, p_F, p_P, p_N). The MC standard error of P(PASS) at the nominal 0.0209 is sqrt(0.0209 x 0.9791 / 200) = 0.01012. The calibration limit is 0.0209 + 3 SE = 0.05125.
+**Monte Carlo.** The full grid has not run. Its command defaults to 2,000 replicates per cell, seed 685. The draws are seeded per cell on (seed, p_F, p_P, p_N).
 
-**Every look is recorded.** The rule at a look does not depend on the cap, so a replicate that stops at look k counts as stopped for every cap >= k. `per_look.tsv` gives P(PASS), P(CUT), P(CANT_TELL_YET), the SE of P(PASS) and E[pairs] for every cell and every cap. Any smaller cap can be read from it.
+**Every look is recorded.** The rule at a look does not depend on the cap, so a replicate that stops at look k counts as stopped for every cap >= k. The script writes `per_look.tsv` with P(PASS), P(CUT), P(CANT_TELL_YET), the SE of P(PASS) and E[pairs] for every cell and every cap. Any smaller cap can be read from it.
 
 ## Crashed-look rule and void-epoch rule for the next paid run
 
@@ -36,17 +36,9 @@ Full and Placebo are paired by launch index; under independent draws this confer
 
 **Void-epoch rule:** An epoch that produces no model output (timeout, error, or empty response) is void and excluded from the bound calculation. The run continues; void epochs do not count toward the pair cap.
 
-## Findings
+## Finding
 
-1. **Calibration holds for every design at d = 0.20.** Across all tested designs (baseline, half-null, double-null, direct construction), P(PASS) at the boundary is at most 0.005 against the limit of 0.05125. The rule is conservative at the boundary under every lever setting.
-
-2. **The null allocation lever moves P(CUT) at d = 0.00 but has minimal effect on P(PASS) at d >= 0.25.** At d = 0.00, the null_per_pair = 0.5 design has fewer Null draws, so the F-N condition clears less often and fewer replicates are cut. At d >= 0.25, the dominant constraint is the F-P condition, which does not depend on the Null allocation.
-
-3. **The direct F-N construction differs from the union bound.** The direct construction applies a single one-sided bound at alpha = 0.0209 to the paired difference mu_F - mu_N, while the union bound applies two bounds at alpha/2 = 0.01045 each. The direct construction is less conservative (one test instead of two), so it can produce higher P(PASS) at the same design.
-
-4. **No design under $100 meets the default target at 97 pairs.** The default target is P(PASS) >= 0.80 at d = 0.30 and P(CUT) >= 0.80 at d = 0.10. At 97 pairs, the largest P(PASS) on the grid is below 0.80 for every design. The fork is genuine: relax the margin, accept a lower target, or stop testing this card on this world.
-
-5. **The price of optional stopping is measurable.** For any design, the fixed-n pass rate at the same alpha and n gives the cost of the right to stop early. The anytime-valid rule pays for adaptivity by requiring more evidence than a fixed-horizon test.
+The prior tables cannot support a claim about calibration, power, price, a binding condition, or the relative effect of any lever. The script now executes the declared Null allocation. A full Stage 1 run is the next action. The pair-cap and optional-stopping levers remain unimplemented Stage 2 work.
 
 ## Model statement
 
@@ -54,13 +46,13 @@ These results establish operating characteristics under the declared independent
 
 ## Relation to #684
 
-This record changes no #684 code, test or number. The #684 script, its test file and `stage1a-regime-operating-characteristics.md` are untouched. The negative controls in `tests/test_simulate_stage1a_regime_684.py` still run, and one new negative control shows that calibration holds for non-baseline designs under the registered rule.
+This record changes no #684 code, test or number. The #684 script, its test file and `stage1a-regime-operating-characteristics.md` are untouched. The negative controls in `tests/test_simulate_stage1a_regime_684.py` still run. The new negative controls loosen the pass alpha to 0.6 and show calibration failure for both the baseline and a half-Null design.
 
 ## Limits of this simulation
 
 1. **The draws are independent Bernoulli.** This record contains no dependence model.
 2. **Void epochs are not modelled.** Every draw is a valid epoch.
-3. **The full grid has not been run.** The initial data files use 200 replicates on a subset of the grid. The full grid (630 cells at 2000 replicates) requires approximately 4 hours on 8 workers and should be run before a paid run is sized from these results.
+3. **The full grid has not been run.** The grid contains 756 cells at 2,000 replicates. It must run before a paid run is sized from its results.
 4. **The terminal bounds are summarised by quantiles.** The per-replicate values are not stored.
 
 *Revisit if:* the engine's `one_sided_betting_bound` changes. Then re-run the surface.
