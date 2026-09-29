@@ -427,6 +427,25 @@ and covers that section only. This page stays the citable surface for every kind
   the local `one_sided_betting_bound` copy is the engine's; #649 owns that
   function, and the run is repeated if the two differ.
 
+### [`docs/findings/stage1a-regime-operating-characteristics.md`](findings/stage1a-regime-operating-characteristics.md)
+
+- **Claims:** A no-model simulation of the registered Stage 1A rule in the
+  regime that was run (#684). The design is n_full = n_placebo = n_null = 97
+  (291 epochs, 1:1:1), and the rule reads the engine's `one_sided_betting_bound`.
+  The run uses 45 cells (p_P and p_N in {0.30, 0.35, 0.40}, d from 0.20 to 0.40)
+  at 10,000 replicates per cell, seed 684. Calibration holds: 2 of 90,000
+  boundary replicates passed, against a limit of 0.0252 (0.0209 + 3 SE, with
+  SE = 0.00143). P(PASS) does not reach 0.80 by 97 pairs in any of the nine
+  baseline cells. At p_P = p_N = 0.35, P(PASS) at d = 0.40 is 0.055, and
+  P(CANT_TELL_YET) is between 0.944 and 0.996 across the grid. Every look to 97
+  and the joint terminal state of each open replicate are recorded.
+- **Refuses to claim:** How many real Claude Code epochs are required. The
+  results hold under the declared independent-Bernoulli model only. It also
+  refuses any matched-pairs advantage from launch-index pairing, because
+  independent draws give none. It says nothing about the Null allocation at a
+  fixed budget, which is #685. It does not name a single binding condition from
+  the joint terminal states.
+
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 
 - **Claims:** On 2026-09-23, `git ls-files "skills/*/*/SKILL.md"` returned zero
