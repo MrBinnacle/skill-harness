@@ -10,7 +10,7 @@ Levers:
   4. Optional stopping (anytime-valid vs fixed-n look).
 
 Stage 1 (this script): levers 2 and 3 at caps 97 and 400.
-Stage 2 (only if stage 1 leaves the target unmet): levers 1 and 4, then combinations.
+Stage 2 (pairs and optional stopping) is not implemented here.
 
 Usage:
   python scripts/screens/419/simulate_stage1a_regime_685.py --out DIR \
@@ -45,7 +45,6 @@ SEED = 685
 PAIRS_CAP = 400
 NULL_PER_PAIR_LEVELS = (0.5, 1.0, 2.0)
 FN_CONSTRUCTIONS = ("union", "direct")
-STOPPING_MODES = ("anytime", "fixed-n")
 
 JointState = Literal["fp_passes_fn_fails", "fn_passes_fp_fails", "neither_passes", "both_pass"]
 JOINT_STATES: tuple[JointState, ...] = (
@@ -123,7 +122,6 @@ class CellResult:
     per_look: tuple[LookRow, ...]
     terminal: dict[JointState, TerminalSample]
     library_calls: int
-    fixed_n_result: tuple[float, float, float] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +241,18 @@ def null_mask(n_pairs: int, null_per_pair: float) -> list[bool]:
     raise ValueError(f"unsupported null_per_pair: {null_per_pair}")
 
 
+def null_draw_counts(n_pairs: int, null_per_pair: float) -> a650.Ints:
+    """Number of actual Null epochs after each Full/Placebo pair."""
+    draws_when_scheduled = 1 if null_per_pair <= 1.0 else 2
+    return np.array(
+        [
+            0 if not scheduled else draws_when_scheduled
+            for scheduled in null_mask(n_pairs, null_per_pair)
+        ],
+        dtype=np.int64,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Simulation core
 # ---------------------------------------------------------------------------
@@ -286,12 +296,12 @@ def _joint_state(lb_fp: float, lb_fn: float) -> JointState:
 
 
 def _terminal_bounds_union(
-    full: a650.Ints, placebo: a650.Ints, null_used: a650.Ints
+    full: a650.Ints, placebo: a650.Ints, null_used: a650.Ints, pass_alpha: float
 ) -> tuple[a650.Floats, a650.Floats, a650.Floats]:
     """Union-bound terminal bounds: registered construction."""
     xs_fp = (full - placebo + 1) / 2.0
-    half = a650.PASS_ALPHA / 2
-    lb_fp = 2 * _bound(xs_fp, a650.PASS_ALPHA, "lower") - 1
+    half = pass_alpha / 2
+    lb_fp = 2 * _bound(xs_fp, pass_alpha, "lower") - 1
     ub_fp = 2 * _bound(xs_fp, a650.FUTILITY_ALPHA, "upper") - 1
     lb_fn = _bound(full.astype(np.float64), half, "lower") - _bound(
         null_used.astype(np.float64), half, "upper"
@@ -300,24 +310,28 @@ def _terminal_bounds_union(
 
 
 def _terminal_bounds_direct(
-    full: a650.Ints, placebo: a650.Ints, null_used: a650.Ints
+    full: a650.Ints, placebo: a650.Ints, xs_fn: a650.Floats, pass_alpha: float
 ) -> tuple[a650.Floats, a650.Floats, a650.Floats]:
     """Direct one-sided bound on mu_F - mu_N at alpha."""
     xs_fp = (full - placebo + 1) / 2.0
-    xs_fn = (full - null_used + 1) / 2.0
-    lb_fp = 2 * _bound(xs_fp, a650.PASS_ALPHA, "lower") - 1
+    lb_fp = 2 * _bound(xs_fp, pass_alpha, "lower") - 1
     ub_fp = 2 * _bound(xs_fp, a650.FUTILITY_ALPHA, "upper") - 1
-    lb_fn = 2 * _bound(xs_fn, a650.PASS_ALPHA, "lower") - 1
+    lb_fn = 2 * _bound(xs_fn, pass_alpha, "lower") - 1
     return lb_fp, ub_fp, lb_fn
 
 
 def tally_terminal(
-    full: a650.Ints, placebo: a650.Ints, null_used: a650.Ints, fn_construction: str
+    full: a650.Ints,
+    placebo: a650.Ints,
+    null_used: a650.Ints,
+    xs_fn: a650.Floats,
+    fn_construction: str,
+    pass_alpha: float,
 ) -> dict[JointState, TerminalSample]:
     if fn_construction == "direct":
-        lb_fp, ub_fp, lb_fn = _terminal_bounds_direct(full, placebo, null_used)
+        lb_fp, ub_fp, lb_fn = _terminal_bounds_direct(full, placebo, xs_fn, pass_alpha)
     else:
-        lb_fp, ub_fp, lb_fn = _terminal_bounds_union(full, placebo, null_used)
+        lb_fp, ub_fp, lb_fn = _terminal_bounds_union(full, placebo, null_used, pass_alpha)
     if bool(np.any(ub_fp < a650.BOUNDARY)):
         raise RuntimeError("an open replicate has UB(F - P) < 0.20")
     states = [_joint_state(float(f), float(n)) for f, n in zip(lb_fp, lb_fn, strict=True)]
@@ -344,40 +358,44 @@ def run_cell(
     *,
     replicates: int,
     seed: int,
-    fixed_n_look: int | None = None,
+    pass_alpha: float = a650.PASS_ALPHA,
 ) -> CellResult:
     """Run one cell: draw streams, apply the rule, record per-look and terminal.
 
-    Supports variable null allocation, union/direct F-N construction, and
-    optional stopping (anytime vs fixed-n).
+    Supports variable null allocation and union/direct F-N construction.
     """
     horizon = design.n_pairs
     rng = cell_rng(seed, cell)
     full = (rng.random((replicates, horizon)) < cell.p_full).astype(np.int64)
     placebo = (rng.random((replicates, horizon)) < cell.p_placebo).astype(np.int64)
-    null_all = (rng.random((replicates, horizon)) < cell.p_null).astype(np.int64)
+    null_all = (rng.random((replicates, horizon, 2)) < cell.p_null).astype(np.int64)
+    null_draws = null_draw_counts(horizon, design.null_per_pair)
+    null_counts = np.cumsum(null_draws)
+    fn_mask = null_draws > 0
+    fn_counts = np.cumsum(fn_mask)
+    scheduled_nulls = [(k, count) for k, count in enumerate(null_draws) if count]
+    if scheduled_nulls:
+        null_used = np.concatenate([null_all[:, k, :count] for k, count in scheduled_nulls], axis=1)
+        null_mean = np.array(
+            [null_all[:, k, :count].mean(axis=1) for k, count in scheduled_nulls]
+        ).T
+    else:
+        null_used = np.empty((replicates, 0), dtype=np.int64)
+        null_mean = np.empty((replicates, 0), dtype=np.float64)
+    xs_fn_all = (full[:, fn_mask] - null_mean + 1) / 2.0
 
-    mask = null_mask(horizon, design.null_per_pair)
-    null_used = null_all.copy()
-    for k in range(horizon):
-        if not mask[k]:
-            null_used[:, k] = 0
-
-    half = a650.PASS_ALPHA / 2
+    half = pass_alpha / 2
 
     # --- Anytime-valid rule ---
     fp_fut = a650.WealthGrid(replicates, a650.FUTILITY_ALPHA, 1)
-    fp_pass = a650.WealthGrid(replicates, a650.PASS_ALPHA, 1)
+    fp_pass = a650.WealthGrid(replicates, pass_alpha, 1)
     f_pass = a650.WealthGrid(replicates, half, 1)
     n_pass = a650.WealthGrid(replicates, half, 1)
     if design.fn_construction == "direct":
-        fn_diff = a650.WealthGrid(replicates, a650.PASS_ALPHA, 1)
+        fn_diff = a650.WealthGrid(replicates, pass_alpha, 1)
 
     xs_fp_all = (full - placebo + 1) / 2.0
     xs_f_all = full.astype(np.float64)
-    xs_n_all = null_used.astype(np.float64)
-    if design.fn_construction == "direct":
-        xs_fn_all = (full - null_used + 1) / 2.0
 
     stop_at = np.full(replicates, horizon + 1, dtype=np.int64)
     passed = np.zeros(replicates, dtype=np.bool_)
@@ -388,10 +406,10 @@ def run_cell(
         fp_fut.step(xs_fp_all[:, k])
         fp_pass.step(xs_fp_all[:, k])
         f_pass.step(xs_f_all[:, k])
-        if mask[k]:
-            n_pass.step(xs_n_all[:, k])
-        if design.fn_construction == "direct":
-            fn_diff.step(xs_fn_all[:, k])
+        for null_draw in range(null_draws[k]):
+            n_pass.step(null_all[:, k, null_draw].astype(np.float64))
+        if design.fn_construction == "direct" and fn_mask[k]:
+            fn_diff.step(xs_fn_all[:, fn_counts[k] - 1])
 
         ub = a650.bracket(fp_fut, "upper", "one_sided")
         lb = a650.bracket(fp_pass, "lower", "one_sided")
@@ -405,7 +423,7 @@ def run_cell(
         for r in np.flatnonzero(stop_at > horizon).tolist():
             xs_fp = xs_fp_all[r, : k + 1].tolist()
             xs_f = xs_f_all[r, : k + 1].tolist()
-            xs_n = xs_n_all[r, : k + 1].tolist()
+            xs_n = null_used[r, : null_counts[k]].astype(np.float64).tolist()
             used = 0
 
             def _exact(xs: list[float], alpha: float, side: a650.Side) -> float:
@@ -430,7 +448,7 @@ def run_cell(
             if lb.unsure[r] or not (
                 2 * lb.lo[r] - 1 >= a650.BOUNDARY or 2 * lb.hi[r] - 1 < a650.BOUNDARY
             ):
-                fp_clears = 2 * _exact(xs_fp, a650.PASS_ALPHA, "lower") - 1 >= a650.BOUNDARY
+                fp_clears = 2 * _exact(xs_fp, pass_alpha, "lower") - 1 >= a650.BOUNDARY
             else:
                 fp_clears = bool(2 * lb.lo[r] - 1 >= a650.BOUNDARY)
             if not fp_clears:
@@ -442,8 +460,8 @@ def run_cell(
                 if lb_fn_br.unsure[r] or not (
                     lb_fn_br.lo[r] >= a650.BOUNDARY or lb_fn_br.hi[r] < a650.BOUNDARY
                 ):
-                    xs_fn = xs_fn_all[r, : k + 1].tolist()
-                    fn_clears = 2 * _exact(xs_fn, a650.PASS_ALPHA, "lower") - 1 >= a650.BOUNDARY
+                    xs_fn = xs_fn_all[r, : fn_counts[k]].tolist()
+                    fn_clears = 2 * _exact(xs_fn, pass_alpha, "lower") - 1 >= a650.BOUNDARY
                 else:
                     fn_clears = bool(lb_fn_br.lo[r] >= a650.BOUNDARY)
             else:
@@ -461,36 +479,11 @@ def run_cell(
                 passed[r] = True
             calls += used
 
-    # --- Fixed-n evaluation (optional stopping lever) ---
-    fixed_n_result: tuple[float, float, float] | None = None
-    if fixed_n_look is not None and fixed_n_look <= horizon:
-        n = fixed_n_look
-        xs_fp_n = xs_fp_all[:, :n]
-        xs_f_n = xs_f_all[:, :n]
-        xs_n_n = xs_n_all[:, :n]
-        half_n = a650.PASS_ALPHA / 2
-        ub_val = float(
-            np.mean(2 * _bound(xs_fp_n, a650.FUTILITY_ALPHA, "upper") - 1 < a650.BOUNDARY)
-        )
-        lb_val = float(np.mean(2 * _bound(xs_fp_n, a650.PASS_ALPHA, "lower") - 1 >= a650.BOUNDARY))
-        if design.fn_construction == "direct":
-            xs_fn_n = (full[:, :n] - null_used[:, :n] + 1) / 2.0
-            fn_val = float(
-                np.mean(2 * _bound(xs_fn_n, a650.PASS_ALPHA, "lower") - 1 >= a650.BOUNDARY)
-            )
-        else:
-            fn_val = float(
-                np.mean(
-                    _bound(xs_f_n, half_n, "lower") - _bound(xs_n_n, half_n, "upper")
-                    >= a650.BOUNDARY
-                )
-            )
-        fixed_n_result = (ub_val, lb_val, fn_val)
-
     unresolved = stop_at > horizon
     unresolved_full = full[unresolved]
     unresolved_placebo = placebo[unresolved]
     unresolved_null = null_used[unresolved]
+    unresolved_fn = xs_fn_all[unresolved]
 
     return CellResult(
         cell=cell,
@@ -498,10 +491,14 @@ def run_cell(
         replicates=replicates,
         per_look=per_look_rows(stop_at, passed, cut, horizon),
         terminal=tally_terminal(
-            unresolved_full, unresolved_placebo, unresolved_null, design.fn_construction
+            unresolved_full,
+            unresolved_placebo,
+            unresolved_null,
+            unresolved_fn,
+            design.fn_construction,
+            pass_alpha,
         ),
         library_calls=calls,
-        fixed_n_result=fixed_n_result,
     )
 
 
@@ -520,8 +517,6 @@ def stage1_grid() -> list[tuple[Cell, Design]]:
                 for n_pairs in (97, PAIRS_CAP):
                     for null_pp in NULL_PER_PAIR_LEVELS:
                         for fn_con in FN_CONSTRUCTIONS:
-                            if null_pp == 1.0 and n_pairs != 97:
-                                continue
                             design = Design(
                                 n_pairs=n_pairs,
                                 null_per_pair=null_pp,
