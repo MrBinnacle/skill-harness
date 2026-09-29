@@ -8,6 +8,7 @@ import random
 from pathlib import Path
 from typing import Any
 
+import jsonschema
 import pytest
 
 from skill_harness.aggregation.confidence_sequence import one_sided_betting_bound
@@ -409,3 +410,71 @@ def test_the_p_value_is_valid_at_every_early_look_and_differs_from_a_fixed_sampl
     # level, and the fixed-sample test read at a data-dependent stop does not.
     assert anytime_rejections / streams <= level_a
     assert fixed_rejections / streams > level_a
+
+
+def _keep_multiplicity(p_value: float) -> dict[str, str | int | float]:
+    proc = NormalisedLORDdep()
+    proc.set_order(["card-a"])
+    multiplicity = proc.record_verdict(
+        KeepCutVerdict.KEEP,
+        ledger_hypothesis_id="card-a",
+        card_p_values=_card_p_values(p_value),
+        b_world_condition=True,
+        shared_control_family_id="control-a",
+        batch_order=1,
+    )
+    assert multiplicity is not None
+    return multiplicity.as_dict()
+
+
+def _validate_one(tmp_path: Path, receipt: dict[str, Any]) -> list[dict[str, Any]]:
+    receipts_dir = tmp_path / "receipts"
+    receipts_dir.mkdir(exist_ok=True)
+    (receipts_dir / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+    return validate_receipts(load_schema(Path("docs/sers/sers.schema.json")), receipts_dir)
+
+
+def test_sers_refuses_a_keep_whose_card_p_exceeds_its_test_level(tmp_path: Path) -> None:
+    receipt = _receipt(_keep_multiplicity(0.001))
+    # p_fn, p_fp and the card p agree, so only the test-level guard can refuse this.
+    for key in ("anytime_valid_p", "p_fn", "p_fp"):
+        receipt["multiplicity"][key] = 0.02
+    assert receipt["multiplicity"]["test_level"] < 0.02
+
+    with pytest.raises(SiteBuildError, match=r"exceeds multiplicity.test_level"):
+        _validate_one(tmp_path, receipt)
+
+
+def test_sers_refuses_a_keep_whose_card_p_is_below_a_contrast_p(tmp_path: Path) -> None:
+    receipt = _receipt(_keep_multiplicity(0.001))
+    receipt["multiplicity"]["p_fp"] = 0.002
+
+    with pytest.raises(SiteBuildError, match=r"must equal max\(p_fn, p_fp\)"):
+        _validate_one(tmp_path, receipt)
+
+
+def test_sers_refuses_a_keep_without_a_multiplicity_record(tmp_path: Path) -> None:
+    receipt = _receipt(_keep_multiplicity(0.001))
+    del receipt["multiplicity"]
+
+    with pytest.raises(jsonschema.ValidationError, match="'multiplicity' is a required property"):
+        _validate_one(tmp_path, receipt)
+
+
+def test_sers_refuses_a_cut_carrying_a_multiplicity_record(tmp_path: Path) -> None:
+    receipt = _receipt(_keep_multiplicity(0.001))
+    receipt["verdict"] = "CUT"
+    receipt["cut_sub_reason"] = "no_lift"
+    multiplicity = receipt.pop("multiplicity")
+    assert _validate_one(tmp_path, receipt) == [receipt]
+
+    receipt["multiplicity"] = multiplicity
+    with pytest.raises(jsonschema.ValidationError, match="should not be valid"):
+        _validate_one(tmp_path, receipt)
+
+
+def test_card_p_values_refuse_a_card_p_below_either_contrast() -> None:
+    with pytest.raises(ValueError, match=r"max\(p_fn, p_fp\)"):
+        CardPValues(anytime_valid_p=0.01, p_fn=0.02, p_fp=0.005)
+    with pytest.raises(ValueError, match=r"max\(p_fn, p_fp\)"):
+        CardPValues(anytime_valid_p=0.01, p_fn=0.005, p_fp=0.02)
