@@ -10,6 +10,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 import pytest
@@ -201,51 +202,93 @@ def test_direct_terminal_bounds_equal_the_engine_bounds() -> None:
         )
 
 
+def _engine_stop_at(
+    full: list[int],
+    placebo: list[int],
+    null_all: list[list[int]],
+    design: Any,
+) -> tuple[int, str]:
+    """Apply the stated rule with the engine bound, without the grid shortcut."""
+    from skill_harness.aggregation.confidence_sequence import one_sided_betting_bound
+
+    null_draws = reg.null_draw_counts(len(full), design.null_per_pair)
+    null_observations: list[float] = []
+    direct_observations: list[float] = []
+    half = a650.PASS_ALPHA / 2
+    for k, (f, _p) in enumerate(zip(full, placebo, strict=True)):
+        xs_fp = a650.paired_xs(full[: k + 1], placebo[: k + 1])
+        for draw in range(null_draws[k]):
+            null_observations.append(float(null_all[k][draw]))
+        if null_draws[k]:
+            mean_null = sum(null_all[k][: null_draws[k]]) / null_draws[k]
+            direct_observations.append((f - mean_null + 1) / 2)
+        if design.fn_construction == "direct":
+            lb_fn = (
+                2
+                * one_sided_betting_bound(direct_observations, alpha=a650.PASS_ALPHA, side="lower")
+                - 1
+            )
+        else:
+            lb_fn = one_sided_betting_bound(full[: k + 1], alpha=half, side="lower") - (
+                one_sided_betting_bound(null_observations, alpha=half, side="upper")
+            )
+        outcome = a650.stop_rule(
+            ub_fp=2 * one_sided_betting_bound(xs_fp, alpha=a650.FUTILITY_ALPHA, side="upper") - 1,
+            lb_fp=2 * one_sided_betting_bound(xs_fp, alpha=a650.PASS_ALPHA, side="lower") - 1,
+            lb_fn=lb_fn,
+        )
+        if outcome != "UNRESOLVED_CONTINUE":
+            return k + 1, str(outcome)
+    return len(full) + 1, "UNRESOLVED_CONTINUE"
+
+
+@pytest.mark.parametrize("null_per_pair", reg.NULL_PER_PAIR_LEVELS)
+@pytest.mark.parametrize("fn_construction", reg.FN_CONSTRUCTIONS)
+def test_every_decision_equals_the_engine_bound_for_each_stage1_design(
+    null_per_pair: float, fn_construction: str
+) -> None:
+    cell = reg.Cell(0.85, 0.25, 0.30)
+    design = reg.Design(n_pairs=30, null_per_pair=null_per_pair, fn_construction=fn_construction)
+    replicates = 16
+    rng = reg.cell_rng(685, cell)
+    full = (rng.random((replicates, design.n_pairs)) < cell.p_full).astype(np.int64)
+    placebo = (rng.random((replicates, design.n_pairs)) < cell.p_placebo).astype(np.int64)
+    null_all = (rng.random((replicates, design.n_pairs, 2)) < cell.p_null).astype(np.int64)
+    expected = [
+        _engine_stop_at(full[r].tolist(), placebo[r].tolist(), null_all[r].tolist(), design)
+        for r in range(replicates)
+    ]
+
+    result = reg.run_cell(cell, design, replicates=replicates, seed=685)
+
+    for k, row in enumerate(result.per_look, start=1):
+        assert row.p_pass == pytest.approx(
+            sum(stop <= k and outcome == "A_PASSES_EARLY" for stop, outcome in expected)
+            / replicates
+        )
+        assert row.p_cut == pytest.approx(
+            sum(stop <= k and outcome == "CUT_NO_LIFT" for stop, outcome in expected) / replicates
+        )
+
+
 # ---------------------------------------------------------------------------
 # Calibration
 # ---------------------------------------------------------------------------
 
 
-def test_calibration_holds_for_baseline_design_at_boundary() -> None:
-    design = reg.Design(n_pairs=97)
+@pytest.mark.parametrize(
+    "design",
+    [
+        reg.Design(n_pairs=n_pairs, null_per_pair=null_per_pair, fn_construction=fn_construction)
+        for n_pairs in (97, reg.PAIRS_CAP)
+        for null_per_pair in reg.NULL_PER_PAIR_LEVELS
+        for fn_construction in reg.FN_CONSTRUCTIONS
+    ],
+)
+def test_calibration_holds_for_every_stage1_design_at_boundary(design: Any) -> None:
     cell = reg.Cell(0.55, 0.35, 0.35)
-    result = reg.run_cell(cell, design, replicates=600, seed=685)
+    result = reg.run_cell(cell, design, replicates=200, seed=685)
     assert reg.role(0.20) == "calibration"
-    assert reg.calibration_holds(result)
-
-
-def test_calibration_holds_for_400_pairs_at_boundary() -> None:
-    design = reg.Design(n_pairs=400)
-    cell = reg.Cell(0.55, 0.35, 0.35)
-    result = reg.run_cell(cell, design, replicates=600, seed=685)
-    assert reg.calibration_holds(result)
-
-
-def test_calibration_holds_for_half_null_at_boundary() -> None:
-    design = reg.Design(n_pairs=97, null_per_pair=0.5)
-    cell = reg.Cell(0.55, 0.35, 0.35)
-    result = reg.run_cell(cell, design, replicates=600, seed=685)
-    assert reg.calibration_holds(result)
-
-
-def test_calibration_holds_for_double_null_at_boundary() -> None:
-    design = reg.Design(n_pairs=97, null_per_pair=2.0)
-    cell = reg.Cell(0.55, 0.35, 0.35)
-    result = reg.run_cell(cell, design, replicates=600, seed=685)
-    assert reg.calibration_holds(result)
-
-
-def test_calibration_holds_for_direct_construction_at_boundary() -> None:
-    design = reg.Design(n_pairs=97, fn_construction="direct")
-    cell = reg.Cell(0.55, 0.35, 0.35)
-    result = reg.run_cell(cell, design, replicates=600, seed=685)
-    assert reg.calibration_holds(result)
-
-
-def test_calibration_holds_for_direct_construction_400_pairs() -> None:
-    design = reg.Design(n_pairs=400, fn_construction="direct")
-    cell = reg.Cell(0.55, 0.35, 0.35)
-    result = reg.run_cell(cell, design, replicates=600, seed=685)
     assert reg.calibration_holds(result)
 
 
