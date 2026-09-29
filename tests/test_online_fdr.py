@@ -129,11 +129,12 @@ def test_cut_and_failed_b_world_do_not_advance_the_ledger() -> None:
         is None
     )
     assert proc.hypothesis_index == proc.discovery_count == 0
+    assert proc.wealth == DEFAULT_W0
 
     assert (
         proc.record_verdict(
             KeepCutVerdict.KEEP,
-            ledger_hypothesis_id="card-1",
+            ledger_hypothesis_id="card-2",
             card_p_values=p_values,
             b_world_condition=False,
             shared_control_family_id="control-a",
@@ -142,6 +143,7 @@ def test_cut_and_failed_b_world_do_not_advance_the_ledger() -> None:
         is None
     )
     assert proc.hypothesis_index == proc.discovery_count == 0
+    assert proc.wealth == DEFAULT_W0
 
 
 def test_registered_keep_receives_a_reconstructable_multiplicity_record() -> None:
@@ -265,3 +267,81 @@ def test_sers_refuses_an_invalid_keep_multiplicity_record(tmp_path: Path) -> Non
     (receipts_dir / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
     with pytest.raises(SiteBuildError, match="anytime_valid_p"):
         validate_receipts(schema, receipts_dir)
+
+
+def _record(
+    proc: NormalisedLORDdep,
+    verdict: KeepCutVerdict,
+    hypothesis_id: str,
+    p_value: float,
+    *,
+    b_world_condition: bool = True,
+) -> Any:
+    return proc.record_verdict(
+        verdict,
+        ledger_hypothesis_id=hypothesis_id,
+        card_p_values=_card_p_values(p_value),
+        b_world_condition=b_world_condition,
+        shared_control_family_id="control-a",
+        batch_order=1,
+    )
+
+
+def test_a_cut_passes_over_its_registered_slot_without_spending() -> None:
+    proc = NormalisedLORDdep()
+    proc.set_order(["c1", "c2"])
+
+    assert _record(proc, KeepCutVerdict.CUT, "c1", 0.001) is None
+    assert proc.wealth == DEFAULT_W0
+    assert proc.hypothesis_index == 0
+
+    multiplicity = _record(proc, KeepCutVerdict.KEEP, "c2", 0.001)
+
+    assert multiplicity is not None
+    assert multiplicity.ledger_hypothesis_id == "c2"
+    assert multiplicity.hypothesis_index == 1
+    assert multiplicity.wealth_before == DEFAULT_W0
+    # xi(1) * w0, the level c2 would get if c1 had never been registered.
+    assert multiplicity.test_level == pytest.approx(0.0148105042, abs=1e-9)
+
+
+def test_a_non_keep_out_of_registered_order_is_refused() -> None:
+    proc = NormalisedLORDdep()
+    proc.set_order(["c1", "c2"])
+    with pytest.raises(ValueError, match="registered order"):
+        _record(proc, KeepCutVerdict.CUT, "c2", 0.5)
+    with pytest.raises(ValueError, match="registered order"):
+        _record(proc, KeepCutVerdict.KEEP, "c2", 0.001, b_world_condition=False)
+
+
+def test_a_mixed_batch_replays_with_identical_indices_levels_and_wealth() -> None:
+    order = ["k1", "cut", "bfail", "k-miss", "k2"]
+    outcomes: list[tuple[KeepCutVerdict, float, bool]] = [
+        (KeepCutVerdict.KEEP, 0.001, True),
+        (KeepCutVerdict.CUT, 0.001, True),
+        (KeepCutVerdict.KEEP, 0.001, False),
+        (KeepCutVerdict.KEEP, 0.5, True),
+        (KeepCutVerdict.KEEP, 0.0001, True),
+    ]
+
+    def replay() -> tuple[list[float], list[Any], float, int, int]:
+        proc = NormalisedLORDdep()
+        proc.set_order(order)
+        levels: list[float] = []
+        records: list[Any] = []
+        for hypothesis_id, (verdict, p_value, b_world) in zip(order, outcomes, strict=True):
+            levels.append(proc.test_level())
+            records.append(
+                _record(proc, verdict, hypothesis_id, p_value, b_world_condition=b_world)
+            )
+        return levels, records, proc.wealth, proc.hypothesis_index, proc.discovery_count
+
+    first = replay()
+    assert first == replay()
+
+    levels, records, _, hypothesis_index, discovery_count = first
+    assert [record.hypothesis_index for record in records if record is not None] == [1, 3]
+    assert hypothesis_index == 3
+    assert discovery_count == 2
+    # The CUT and the failed B-world check leave the level for the next KEEP at xi(2) * W(1).
+    assert levels[1] == levels[2] == levels[3]

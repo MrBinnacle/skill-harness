@@ -144,6 +144,7 @@ class NormalisedLORDdep:
     """Pinned LORDdep state for a pre-registered sequence of card hypotheses."""
 
     _hypothesis_index: int = field(default=0, init=False, repr=False)
+    _order_cursor: int = field(default=0, init=False, repr=False)
     _discovery_index: int = field(default=0, init=False, repr=False)
     _wealth: float = field(default=DEFAULT_W0, init=False, repr=False)
     _discovery_wealth: float = field(default=DEFAULT_W0, init=False, repr=False)
@@ -152,7 +153,7 @@ class NormalisedLORDdep:
 
     @property
     def hypothesis_index(self) -> int:
-        """Number of hypotheses that have consumed a ledger position."""
+        """LORDdep's global test index t: the number of KEEPs that were tested."""
         return self._hypothesis_index
 
     @property
@@ -177,7 +178,7 @@ class NormalisedLORDdep:
 
     def set_order(self, order: Sequence[str]) -> None:
         """Register the hypothesis order before any result is available."""
-        if self._hypothesis_index > 0:
+        if self._hypothesis_index > 0 or self._order_cursor > 0:
             raise ValueError("Cannot set order after tests have been run")
         if not order:
             raise ValueError("order must contain at least one hypothesis")
@@ -222,18 +223,21 @@ class NormalisedLORDdep:
         shared_control_family_id: str,
         batch_order: int,
     ) -> Multiplicity | None:
-        """Admit a registered KEEP or leave CUT outcomes outside the ledger.
+        """Admit a registered KEEP or pass a CUT over its registered slot.
 
-        A rejected KEEP receives its multiplicity record.  A failed FDR test
-        consumes the registered position but produces no discovery.  CUT and
-        B-world failures do neither, so they cannot spend or advance the ledger.
+        Every verdict must arrive in the registered order.  A KEEP that meets
+        the B-world condition is tested at the next global index t; a rejected
+        one receives its multiplicity record.  A CUT or a failed B-world
+        condition moves past its registered slot and leaves t and the wealth
+        unchanged, so it neither spends nor advances the ledger.
         """
-        if verdict is not KeepCutVerdict.KEEP or not b_world_condition:
-            return None
-        if self._hypothesis_index >= len(self._order):
+        if self._order_cursor >= len(self._order):
             raise ValueError("No more hypotheses in the order")
-        if self._order[self._hypothesis_index] != ledger_hypothesis_id:
+        if self._order[self._order_cursor] != ledger_hypothesis_id:
             raise ValueError("ledger_hypothesis_id does not match the registered order")
+        if verdict is not KeepCutVerdict.KEEP or not b_world_condition:
+            self._order_cursor += 1
+            return None
         if not shared_control_family_id:
             raise ValueError("shared_control_family_id must be non-empty")
         if batch_order < 1:
@@ -242,6 +246,7 @@ class NormalisedLORDdep:
         wealth_before = self._wealth
         test_level = self.test_level()
         rejected = self.step(card_p_values.anytime_valid_p)
+        self._order_cursor += 1
         if not rejected:
             return None
         return Multiplicity(
