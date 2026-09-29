@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import numpy as np
 import pytest
 
 _SCREEN_DIR = Path(__file__).resolve().parents[1] / "scripts" / "screens" / "419"
@@ -174,6 +175,30 @@ def test_direct_construction_differs_from_union() -> None:
     p_union = r_union.per_look[-1].p_pass
     p_direct = r_direct.per_look[-1].p_pass
     assert p_union != p_direct, "union and direct should produce different pass rates"
+
+
+def test_direct_terminal_bounds_equal_the_engine_bounds() -> None:
+    from skill_harness.aggregation.confidence_sequence import one_sided_betting_bound
+
+    full = np.array([[1, 1, 0, 1], [0, 1, 1, 0]], dtype=np.int64)
+    placebo = np.array([[0, 1, 0, 0], [1, 0, 0, 1]], dtype=np.int64)
+    xs_fn = np.array([[1.0, 0.5, 0.0], [0.5, 1.0, 0.5]], dtype=np.float64)
+    lb_fp, ub_fp, lb_fn = reg._terminal_bounds_direct(full, placebo, xs_fn, a650.PASS_ALPHA)
+
+    for r in range(len(full)):
+        xs_fp = ((full[r] - placebo[r] + 1) / 2.0).tolist()
+        assert lb_fp[r] == pytest.approx(
+            2 * one_sided_betting_bound(xs_fp, alpha=a650.PASS_ALPHA, side="lower") - 1,
+            abs=1e-9,
+        )
+        assert ub_fp[r] == pytest.approx(
+            2 * one_sided_betting_bound(xs_fp, alpha=a650.FUTILITY_ALPHA, side="upper") - 1,
+            abs=1e-9,
+        )
+        assert lb_fn[r] == pytest.approx(
+            2 * one_sided_betting_bound(xs_fn[r].tolist(), alpha=a650.PASS_ALPHA, side="lower") - 1,
+            abs=1e-9,
+        )
 
 
 # ---------------------------------------------------------------------------
