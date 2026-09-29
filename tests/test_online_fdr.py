@@ -345,3 +345,67 @@ def test_a_mixed_batch_replays_with_identical_indices_levels_and_wealth() -> Non
     assert discovery_count == 2
     # The CUT and the failed B-world check leave the level for the next KEEP at xi(2) * W(1).
     assert levels[1] == levels[2] == levels[3]
+
+
+def _lower_bound(observations: list[float], alpha: float) -> float:
+    return one_sided_betting_bound(observations, alpha=alpha, side="lower")
+
+
+def _binomial_upper_tail_p(successes: int, trials: int, rate: float) -> float:
+    """Fixed-sample exact p-value for H0: rate <= margin, read at a single look."""
+    return math.fsum(
+        math.comb(trials, k) * rate**k * (1.0 - rate) ** (trials - k)
+        for k in range(successes, trials + 1)
+    )
+
+
+def test_a_stream_whose_bound_sits_at_the_margin_at_level_a_returns_a() -> None:
+    level_a = 0.05
+    length = 60
+    below, above = 0.20, 1.0
+    for _ in range(80):
+        value = (below + above) / 2.0
+        if _lower_bound([value] * length, level_a) > 0.20:
+            above = value
+        else:
+            below = value
+    constructed = [above] * length
+    assert _lower_bound(constructed, level_a) == pytest.approx(0.20, abs=1e-12)
+
+    assert anytime_valid_p_value(constructed) == pytest.approx(level_a, abs=1e-6)
+
+
+def test_the_p_value_is_valid_at_every_early_look_and_differs_from_a_fixed_sample_p() -> None:
+    looks = (20, 40, 60)
+    level_a = 0.10
+    rng = random.Random(644)
+
+    stream = [1.0 if rng.random() < 0.40 else 0.0 for _ in range(looks[-1])]
+    decisions: list[bool] = []
+    for look in looks:
+        prefix = stream[:look]
+        anytime_p = anytime_valid_p_value(prefix)
+        decisions.append(anytime_p <= level_a)
+        assert decisions[-1] is (_lower_bound(prefix, level_a) > 0.20)
+        fixed_p = _binomial_upper_tail_p(int(sum(prefix)), look, 0.20)
+        assert fixed_p < anytime_p / 2.0
+    # The stream crosses level a between looks, so the check above sees both decisions.
+    assert set(decisions) == {True, False}
+
+    streams = 200
+    anytime_rejections = 0
+    fixed_rejections = 0
+    for _ in range(streams):
+        null_stream = [1.0 if rng.random() < 0.20 else 0.0 for _ in range(looks[-1])]
+        prefixes = [null_stream[:look] for look in looks]
+        if any(_lower_bound(prefix, level_a) > 0.20 for prefix in prefixes):
+            anytime_rejections += 1
+        if any(
+            _binomial_upper_tail_p(int(sum(prefix)), len(prefix), 0.20) <= level_a
+            for prefix in prefixes
+        ):
+            fixed_rejections += 1
+    # Peeking at three looks under the boundary null: the anytime-valid test keeps its
+    # level, and the fixed-sample test read at a data-dependent stop does not.
+    assert anytime_rejections / streams <= level_a
+    assert fixed_rejections / streams > level_a
