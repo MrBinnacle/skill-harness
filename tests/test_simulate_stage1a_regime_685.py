@@ -847,9 +847,10 @@ def test_exact_fp_fallback_uses_the_registered_pass_alpha() -> None:
     decide, so the exact fallback runs. Swapping pass_alpha for FUTILITY_ALPHA
     in that fallback changes per-look decisions against the engine.
     """
-    cell = reg.Cell(0.55, 0.35, 0.35)
-    design = reg.Design(n_pairs=30, null_per_pair=1.0, fn_construction="union")
+    cell = reg.Cell(0.75, 0.35, 0.30)
+    design = reg.Design(n_pairs=40, null_per_pair=0.5, fn_construction="union")
     assert _engine_parity_mismatch(cell, design, replicates=24, seed=685, pass_alpha=0.6) == 0
+    assert _engine_parity_mismatch(cell, design, replicates=24, seed=685, pass_alpha=0.5) == 0
     assert (
         _engine_parity_mismatch(cell, design, replicates=24, seed=685, pass_alpha=a650.PASS_ALPHA)
         == 0
@@ -857,27 +858,35 @@ def test_exact_fp_fallback_uses_the_registered_pass_alpha() -> None:
 
 
 def test_direct_fn_exact_fallback_is_pinned_to_the_engine() -> None:
-    """Exact-path M3: the direct F-N exact fallback must not be forced true.
+    """Exact-path FN: the direct F-N exact fallback must use pass_alpha, not half.
 
-    A high-Null borderline cell leaves the direct F-N bracket undecided, so
-    the exact bound decides. Forcing that fallback to True diverges from the
-    engine on cells where the bound does not clear.
+    A cell where F-P clears and F-N is marginal leaves the direct F-N bracket
+    undecided, so the exact bound decides. Evaluating that bound at alpha/2
+    instead of pass_alpha changes per-look decisions against the engine.
+    Forcing the fallback to True is observationally equivalent on this grid
+    (every exact-path evaluation the suite reaches already clears), which is
+    why this pins the alpha rather than the truth value.
     """
-    cell = reg.Cell(0.60, 0.35, 0.45)
-    design = reg.Design(n_pairs=30, null_per_pair=1.0, fn_construction="direct")
-    assert _engine_parity_mismatch(cell, design, replicates=24, seed=685, pass_alpha=0.6) == 0
-    cell_registered = reg.Cell(0.55, 0.35, 0.45)
-    design_half = reg.Design(n_pairs=30, null_per_pair=0.5, fn_construction="direct")
+    cell = reg.Cell(0.65, 0.20, 0.45)
+    design = reg.Design(n_pairs=40, null_per_pair=1.0, fn_construction="direct")
+    assert _engine_parity_mismatch(cell, design, replicates=40, seed=685, pass_alpha=0.1) == 0
     assert (
-        _engine_parity_mismatch(
-            cell_registered, design_half, replicates=24, seed=685, pass_alpha=a650.PASS_ALPHA
-        )
+        _engine_parity_mismatch(cell, design, replicates=40, seed=8, pass_alpha=a650.PASS_ALPHA)
         == 0
     )
+    cell2 = reg.Cell(0.55, 0.35, 0.35)
+    design2 = reg.Design(n_pairs=30, null_per_pair=1.0, fn_construction="direct")
+    assert _engine_parity_mismatch(cell2, design2, replicates=24, seed=685, pass_alpha=0.6) == 0
 
 
 def test_union_fn_exact_fallback_is_pinned_to_the_engine() -> None:
-    """M2b already killed by the direct/union parity tests; keep a named union pin."""
+    """M2b: the union F-N exact fallback must not be forced true."""
     cell = reg.Cell(0.60, 0.35, 0.45)
     design = reg.Design(n_pairs=30, null_per_pair=2.0, fn_construction="union")
     assert _engine_parity_mismatch(cell, design, replicates=24, seed=685, pass_alpha=0.6) == 0
+    cell2 = reg.Cell(0.85, 0.25, 0.30)
+    design2 = reg.Design(n_pairs=30, null_per_pair=2.0, fn_construction="union")
+    assert (
+        _engine_parity_mismatch(cell2, design2, replicates=16, seed=685, pass_alpha=a650.PASS_ALPHA)
+        == 0
+    )

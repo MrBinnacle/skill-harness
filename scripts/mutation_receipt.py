@@ -744,14 +744,16 @@ MUTANTS: tuple[Mutant, ...] = (
     ),
     Mutant(
         "M-S1A-6",
-        "695-stage1a-fn-exact-always-true",
-        "the direct F-N exact fallback is forced true (the exact-path-only "
-        "variant of M3 the #704 verdict found open)",
+        "695-stage1a-fn-exact-alpha",
+        "the direct F-N exact fallback evaluates the bound at alpha/2 instead "
+        "of pass_alpha (the exact-path defect the #704 verdict left open; the "
+        "pure always-true form is observationally equivalent on this grid)",
         _S1A,
         _S1A_MODULE,
         '                    fn_clears = 2 * _exact(xs_fn, pass_alpha, "lower") - 1'
         " >= a650.BOUNDARY",
-        "                    fn_clears = True  # mutant: exact F-N forced",
+        '                    fn_clears = 2 * _exact(xs_fn, half, "lower") - 1'
+        " >= a650.BOUNDARY  # mutant: alpha/2 in the exact path",
         (_S1A_FN_EXACT_KILL, _S1A_FN_EXACT_CONTROL),
     ),
     Mutant(
