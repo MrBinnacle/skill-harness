@@ -446,6 +446,19 @@ and covers that section only. This page stays the citable surface for every kind
   fixed budget, which is #685. It does not name a single binding condition from
   the joint terminal states.
 
+### [`docs/findings/stage1a-lever-adjudication-685.md`](findings/stage1a-lever-adjudication-685.md)
+
+- **Claims:** The Stage 1 simulation design for null allocation x F-N
+  construction at fixed 300- and 1,200-epoch budgets. It states the model,
+  launch-index pairing, crashed-look rule, and void-epoch rule for the next paid run. The script
+  records every look and names its design fields in each output row.
+- **Refuses to claim:** Any operating characteristic. The 200-replicate tables
+  previously attached to this record used fabricated zero outcomes for missing
+  Null epochs and omitted the second Null draw in a double-Null design. They
+  are withdrawn. The corrected 756-cell grid at 2,000 replicates has not run.
+  It refuses any matched-pairs advantage from launch-index pairing and any
+  claim about real Claude Code epochs.
+
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 
 - **Claims:** On 2026-09-23, `git ls-files "skills/*/*/SKILL.md"` returned zero
