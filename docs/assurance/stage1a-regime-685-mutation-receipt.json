@@ -1,0 +1,359 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-1/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "description": "the exit-on-calibration-failure path returns 0 anyway, so a run whose boundary cells over-pass publishes its tables as if calibration held",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_calibration_fails"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-1/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "c8eb5eb4952eee15bbfd3a3b99a5160e8eea8b3b7aee308ba3c16e9cac6aa3c8",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "mutant_id": "M-S1A-1",
+      "notes": [],
+      "obligation": "695-stage1a-exit",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_calibration_fails",
+        "tests/test_simulate_stage1a_regime_685.py::test_main_exits_zero_when_calibration_holds"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-2/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "description": "the direct F-N grid shortcut compares the raw one-sided bound against the d-scale boundary instead of 2*bound - 1, the pre-rebuild defect",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_equals_the_engine_bound_for_each_stage1_design[direct-1.0]"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-2/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "63ef60b669b21eb4d04bae522da29b8bdaf1ecde437353d0b1293460609a30bc",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "mutant_id": "M-S1A-2",
+      "notes": [],
+      "obligation": "695-stage1a-direct-online-scale",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_equals_the_engine_bound_for_each_stage1_design[direct-1.0]",
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-1.0]"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-3/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe",
+        "tests_collected": 1,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "description": "the direct F-N terminal bound drops the 2*bound - 1 scale, so the joint state tally reads bounds on the wrong scale",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_direct_terminal_bounds_equal_the_engine_bounds"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-3/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "a7030a653ed63bf6b958fda08458d12dfc18909fe316d2b0e951ebe884bbb1d9",
+        "tests_collected": 1,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "mutant_id": "M-S1A-3",
+      "notes": [],
+      "obligation": "695-stage1a-direct-terminal-scale",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_direct_terminal_bounds_equal_the_engine_bounds"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-4/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "description": "the grid compares null allocations at a fixed 400-pair cap again, so allocations are no longer compared at equal total epochs",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_stage1_grid_holds_each_epoch_budget_constant_across_null_allocations",
+        "tests/test_simulate_stage1a_regime_685.py::test_stage1_grid_has_expected_structure"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-4/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "799159ea9c0695f6befc223ebf59ced942bd3780041331c56da2e4f4f7a64332",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "mutant_id": "M-S1A-4",
+      "notes": [],
+      "obligation": "695-stage1a-equal-epoch-grid",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_stage1_grid_holds_each_epoch_budget_constant_across_null_allocations",
+        "tests/test_simulate_stage1a_regime_685.py::test_stage1_grid_has_expected_structure"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-5/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "description": "a double-null design draws one Null epoch per pair again, the defect that made the withdrawn tables simulate the wrong allocation",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_null_allocation_uses_exactly_the_declared_observations"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-5/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "b3d485ac0d31d8d9d53f9fc7c1b1d11f5afe324737abb6b01357fa6cb893e650",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "mutant_id": "M-S1A-5",
+      "notes": [],
+      "obligation": "695-stage1a-null-draw-count",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_null_allocation_uses_exactly_the_declared_observations",
+        "tests/test_simulate_stage1a_regime_685.py::test_null_mask_double"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-6/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe",
+        "tests_collected": 1,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "description": "the epoch profile omits Null epochs, so E[total epochs] underprices every design that draws Nulls",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_expected_epochs_track_the_null_allocation_profile"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-6/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0c80347508f056b07f8c224ebc75cf37b135a788686848d6a81ea04215ab7ae5",
+        "tests_collected": 1,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "mutant_id": "M-S1A-6",
+      "notes": [],
+      "obligation": "695-stage1a-epochs-profile",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_expected_epochs_track_the_null_allocation_profile"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-7/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe",
+        "tests_collected": 1,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "description": "the expected-spend price line multiplies E[total epochs] by the cap rate instead of the list rate",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_every_per_look_row_carries_expected_epochs_and_expected_spend"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-7/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "e65ba02fb39658ac2b5f67036bacf9a23c7b113ac28b7caf9c5896d4f4350912",
+        "tests_collected": 1,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "mutant_id": "M-S1A-7",
+      "notes": [],
+      "obligation": "695-stage1a-expected-spend-rate",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_every_per_look_row_carries_expected_epochs_and_expected_spend"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-8/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "description": "the stage-2 trigger is hardcoded to never fire, so an unmet target still reports as met",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_stage2_trigger_fires_when_the_power_half_is_unmet"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-8/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "72786a92eaeac84c3723201d99b48bd0cfcd42dd5079a616f604707ed0d19776",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "mutant_id": "M-S1A-8",
+      "notes": [],
+      "obligation": "695-stage1a-trigger-never-fires",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_stage2_trigger_fires_when_the_power_half_is_unmet",
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_states_both_halves_for_0_80_and_0_90_from_data_only"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-9/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe",
+        "tests_collected": 1,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "description": "the calibration half of the target is assumed to hold regardless of the simulated boundary cells",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_stage2_trigger_fires_when_the_calibration_half_fails"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-9/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "e7532bbb70e2a6fc51a1cd67f327a1c25550b91c3307d9cba2cc97579208b0d1",
+        "tests_collected": 1,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "mutant_id": "M-S1A-9",
+      "notes": [],
+      "obligation": "695-stage1a-calibration-half-assumed",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_stage2_trigger_fires_when_the_calibration_half_fails"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-10/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "description": "the power half of the target is assumed reached regardless of which baseline cells actually reach it",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_stage2_trigger_fires_when_the_power_half_is_unmet"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-10/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "95441316f15f38101b11536c169e0d232804f67007351d303ecfbe37979e9052",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "mutant_id": "M-S1A-10",
+      "notes": [],
+      "obligation": "695-stage1a-power-half-assumed",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_stage2_trigger_fires_when_the_power_half_is_unmet",
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_states_both_halves_for_0_80_and_0_90_from_data_only"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-11/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "description": "the headline smallest-d search inverts its inequality, so a target is reported reached by the cells that never clear it",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_states_both_halves_for_0_80_and_0_90_from_data_only",
+        "tests/test_simulate_stage1a_regime_685.py::test_stage2_trigger_fires_when_the_power_half_is_unmet"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-eivqb1ua/M-S1A-11/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "3a08ad65ace488c4252bfddd7e2c82f6dbc7d62cf8c9a3124406e8dc1ebb2149",
+        "tests_collected": 2,
+        "worktree_head": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70"
+      },
+      "mutant_id": "M-S1A-11",
+      "notes": [],
+      "obligation": "695-stage1a-headline-inverted",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_states_both_halves_for_0_80_and_0_90_from_data_only",
+        "tests/test_simulate_stage1a_regime_685.py::test_stage2_trigger_fires_when_the_power_half_is_unmet"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "9f0d302fc60c6ee40020bd5d0dcc571cd6ab6e70",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe"
+  },
+  "production_tree_digest_before": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.15",
+  "target_digests": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "52f968c36c4bb634ec6412e125d640f79f51c94ff01cd6f1d241c923282bcffe"
+  },
+  "target_files": [
+    "scripts/screens/419/simulate_stage1a_regime_685.py"
+  ]
+}
