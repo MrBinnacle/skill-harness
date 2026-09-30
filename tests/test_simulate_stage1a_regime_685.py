@@ -727,3 +727,157 @@ def test_headline_reads_the_pairs_cap_designs_in_the_results() -> None:
     curve = reg.headline_power_curve(results, 0.80)
     assert curve[("union", 0.35, 0.35)] == 0.40
     assert reg.smallest_d_reaching({0.30: 0.20, 0.40: 0.85}, 0.80) == 0.40
+
+
+# ---------------------------------------------------------------------------
+# Requirement 6: every #694 survivor turned red; exit path has its own test
+# ---------------------------------------------------------------------------
+
+
+def test_role_labels_d_equal_to_0_15_as_no_lift() -> None:
+    """M8: role() uses d <= 0.15, so d = 0.15 is no-lift, not a real effect."""
+    assert reg.role(0.15) == "no-lift"
+    assert reg.role(0.00) == "no-lift"
+    assert reg.role(0.14999) == "no-lift"
+    assert reg.role(0.15001) == "small real effect" or reg.role(0.15001) == "real effect"
+    assert reg.role(0.20) == "calibration"
+    assert reg.role(0.25) == "small real effect"
+    assert reg.role(0.30) == "real effect"
+
+
+def _boundary_result_for_calibration_holds(*, pass_alpha: float, replicates: int) -> Any:
+    design = reg.Design(n_pairs=97, null_per_pair=0.5)
+    cell = reg.Cell(0.55, 0.35, 0.30)
+    return reg.run_cell(cell, design, replicates=replicates, seed=685, pass_alpha=pass_alpha)
+
+
+def test_calibration_holds_reads_the_cap_look_not_look_one() -> None:
+    """M9: calibration_holds must read per_look[-1], not per_look[0]."""
+    result = _boundary_result_for_calibration_holds(pass_alpha=0.6, replicates=600)
+    limit = a650.PASS_ALPHA + a650.calibration_tolerance(600)
+    assert result.per_look[0].p_pass < limit, "look 1 must sit under the limit"
+    assert result.per_look[-1].p_pass > limit, "the cap must sit over the limit"
+    assert reg.calibration_holds(result) is False
+
+
+def test_main_exits_zero_when_calibration_holds(tmp_path: Path) -> None:
+    grid = [(reg.Cell(0.55, 0.35, 0.30), reg.Design(n_pairs=30, null_per_pair=0.5))]
+    code = reg.main(
+        ["--out", str(tmp_path / "out"), "--replicates", "600", "--workers", "1", "--seed", "685"],
+        grid=grid,
+    )
+    assert code == 0
+
+
+def test_main_exits_non_zero_when_calibration_fails(tmp_path: Path) -> None:
+    """M13: the exit-on-calibration-failure path returns 1, not 0."""
+    grid = [(reg.Cell(0.55, 0.35, 0.30), reg.Design(n_pairs=30, null_per_pair=0.5))]
+    code = reg.main(
+        ["--out", str(tmp_path / "out"), "--replicates", "600", "--workers", "1", "--seed", "685"],
+        grid=grid,
+        pass_alpha=0.6,
+    )
+    assert code == 1
+    assert (tmp_path / "out" / "summary.md").is_file()
+
+
+def _engine_parity_mismatch(
+    cell: Any,
+    design: Any,
+    *,
+    replicates: int,
+    seed: int,
+    pass_alpha: float,
+) -> int:
+    """Count per-look rows where run_cell disagrees with the engine bound."""
+    from skill_harness.aggregation.confidence_sequence import one_sided_betting_bound as bound
+
+    rng = reg.cell_rng(seed, cell)
+    full = (rng.random((replicates, design.n_pairs)) < cell.p_full).astype(np.int64)
+    placebo = (rng.random((replicates, design.n_pairs)) < cell.p_placebo).astype(np.int64)
+    null_all = (rng.random((replicates, design.n_pairs, 2)) < cell.p_null).astype(np.int64)
+    null_draws = reg.null_draw_counts(design.n_pairs, design.null_per_pair)
+    half = pass_alpha / 2
+
+    def engine_stop(
+        f_list: list[int], p_list: list[int], n_rows: list[list[int]]
+    ) -> tuple[int, str]:
+        null_obs: list[float] = []
+        direct_obs: list[float] = []
+        for k in range(len(f_list)):
+            xs_fp = reg.a650.paired_xs(f_list[: k + 1], p_list[: k + 1])
+            for draw in range(null_draws[k]):
+                null_obs.append(float(n_rows[k][draw]))
+            if null_draws[k]:
+                mean_null = sum(n_rows[k][: null_draws[k]]) / null_draws[k]
+                direct_obs.append((f_list[k] - mean_null + 1) / 2)
+            if design.fn_construction == "direct":
+                lb_fn = 2 * bound(direct_obs, alpha=pass_alpha, side="lower") - 1
+            else:
+                lb_fn = bound(f_list[: k + 1], alpha=half, side="lower") - bound(
+                    null_obs, alpha=half, side="upper"
+                )
+            outcome = reg.a650.stop_rule(
+                ub_fp=2 * bound(xs_fp, alpha=reg.a650.FUTILITY_ALPHA, side="upper") - 1,
+                lb_fp=2 * bound(xs_fp, alpha=pass_alpha, side="lower") - 1,
+                lb_fn=lb_fn,
+            )
+            if outcome != "UNRESOLVED_CONTINUE":
+                return k + 1, str(outcome)
+        return len(f_list) + 1, "UNRESOLVED_CONTINUE"
+
+    expected = [
+        engine_stop(full[r].tolist(), placebo[r].tolist(), null_all[r].tolist())
+        for r in range(replicates)
+    ]
+    result = reg.run_cell(cell, design, replicates=replicates, seed=seed, pass_alpha=pass_alpha)
+    mismatches = 0
+    for k, row in enumerate(result.per_look, start=1):
+        exp_pass = sum(s <= k and o == "A_PASSES_EARLY" for s, o in expected) / replicates
+        exp_cut = sum(s <= k and o == "CUT_NO_LIFT" for s, o in expected) / replicates
+        if abs(row.p_pass - exp_pass) > 1e-9 or abs(row.p_cut - exp_cut) > 1e-9:
+            mismatches += 1
+    return mismatches
+
+
+def test_exact_fp_fallback_uses_the_registered_pass_alpha() -> None:
+    """M1b: the exact F-P fallback must call the bound at pass_alpha.
+
+    On a borderline cell under a loosened pass alpha the grid bracket cannot
+    decide, so the exact fallback runs. Swapping pass_alpha for FUTILITY_ALPHA
+    in that fallback changes per-look decisions against the engine.
+    """
+    cell = reg.Cell(0.55, 0.35, 0.35)
+    design = reg.Design(n_pairs=30, null_per_pair=1.0, fn_construction="union")
+    assert _engine_parity_mismatch(cell, design, replicates=24, seed=685, pass_alpha=0.6) == 0
+    assert (
+        _engine_parity_mismatch(cell, design, replicates=24, seed=685, pass_alpha=a650.PASS_ALPHA)
+        == 0
+    )
+
+
+def test_direct_fn_exact_fallback_is_pinned_to_the_engine() -> None:
+    """Exact-path M3: the direct F-N exact fallback must not be forced true.
+
+    A high-Null borderline cell leaves the direct F-N bracket undecided, so
+    the exact bound decides. Forcing that fallback to True diverges from the
+    engine on cells where the bound does not clear.
+    """
+    cell = reg.Cell(0.60, 0.35, 0.45)
+    design = reg.Design(n_pairs=30, null_per_pair=1.0, fn_construction="direct")
+    assert _engine_parity_mismatch(cell, design, replicates=24, seed=685, pass_alpha=0.6) == 0
+    cell_registered = reg.Cell(0.55, 0.35, 0.45)
+    design_half = reg.Design(n_pairs=30, null_per_pair=0.5, fn_construction="direct")
+    assert (
+        _engine_parity_mismatch(
+            cell_registered, design_half, replicates=24, seed=685, pass_alpha=a650.PASS_ALPHA
+        )
+        == 0
+    )
+
+
+def test_union_fn_exact_fallback_is_pinned_to_the_engine() -> None:
+    """M2b already killed by the direct/union parity tests; keep a named union pin."""
+    cell = reg.Cell(0.60, 0.35, 0.45)
+    design = reg.Design(n_pairs=30, null_per_pair=2.0, fn_construction="union")
+    assert _engine_parity_mismatch(cell, design, replicates=24, seed=685, pass_alpha=0.6) == 0

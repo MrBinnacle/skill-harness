@@ -1050,9 +1050,9 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
 # ---------------------------------------------------------------------------
 
 
-def _run(job: tuple[Cell, Design, int, int]) -> CellResult:
-    cell, design, replicates, seed = job
-    result = run_cell(cell, design, replicates=replicates, seed=seed)
+def _run(job: tuple[Cell, Design, int, int, float]) -> CellResult:
+    cell, design, replicates, seed, pass_alpha = job
+    result = run_cell(cell, design, replicates=replicates, seed=seed, pass_alpha=pass_alpha)
     print(
         f"({cell.d:.2f}, {cell.p_placebo:.2f}, {cell.p_null:.2f}) "
         f"n={design.n_pairs} null_pp={design.null_per_pair:.2f} "
@@ -1062,7 +1062,12 @@ def _run(job: tuple[Cell, Design, int, int]) -> CellResult:
     return result
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    grid: Sequence[tuple[Cell, Design]] | None = None,
+    pass_alpha: float = a650.PASS_ALPHA,
+) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--replicates", type=int, default=REPLICATES)
@@ -1070,8 +1075,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 4))
     args = ap.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
-    grid = stage1_grid()
-    jobs = [(cell, design, args.replicates, args.seed) for cell, design in grid]
+    jobs = [
+        (cell, design, args.replicates, args.seed, pass_alpha)
+        for cell, design in (stage1_grid() if grid is None else grid)
+    ]
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         results = list(pool.map(_run, jobs))
     (args.out / "terminal_states.tsv").write_text(terminal_tsv(results), encoding="utf-8")
