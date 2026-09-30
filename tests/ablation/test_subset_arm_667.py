@@ -20,7 +20,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from skill_harness.ablation.arms import ArmSpec
+from skill_harness.ablation.arms import ArmSpec, ArmSpecError
 from skill_harness.ablation.runner import RunConfig
 from skill_harness.ablation.subject import SubjectClient
 from skill_harness.ablation.subset_arm import (
@@ -491,3 +491,92 @@ class TestDeliveryIntegrityFlag:
         assert record.delivery_integrity.integrity_ok is True
         assert record.delivery_integrity.flagged_names == ()
         assert record.subset_draws == (draw.record,)
+
+
+# ---------------------------------------------------------------------------
+# Documented refusals of the draw and the record seam (#171 floor row: these
+# pin the module's raise contracts and its listing-free record path).
+# ---------------------------------------------------------------------------
+
+
+class TestSubsetArmRefusals:
+    def test_an_empty_package_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="no cards"):
+            draw_subset_arm({})
+
+    def test_a_blank_card_name_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="blank card name"):
+            draw_subset_arm({"card-00": "A description.", "   ": "No name."})
+
+    def test_an_ill_formed_arm_name_is_refused(self) -> None:
+        """The draw's arm must clear the same declared-name vocabulary #554
+        enforces, refused at the draw rather than at the wire."""
+        with pytest.raises(ArmSpecError, match="not a valid declared-arm name"):
+            draw_subset_arm(_package(4), seed=_SEED_A, arm_name="Bad Name")
+
+    def test_a_trace_for_an_arm_the_run_never_drew_is_refused(self) -> None:
+        draw = draw_subset_arm(_package(4), seed=_SEED_A)
+        config_json = RunConfig(
+            run_id="r-trace",
+            skill_id=_SKILL_ID,
+            clauses=[],
+            subject_model="claude-sonnet-4-6",
+            user_message=_USER_MSG,
+            subset_draws=(draw.record,),
+        ).to_json()
+        with pytest.raises(ValueError, match="no subset draw"):
+            trace_subset_draw(config_json, arm_name="never_drawn")
+
+    def test_a_record_without_a_listing_carries_no_integrity_block(self) -> None:
+        """AC4: the record is assembled from the config alone when no listing
+        is supplied — the draw is durable before the delivery is known."""
+        draw = draw_subset_arm(_package(4), seed=_SEED_A)
+        config_json = RunConfig(
+            run_id="r-nolist",
+            skill_id=_SKILL_ID,
+            clauses=[],
+            subject_model="claude-sonnet-4-6",
+            user_message=_USER_MSG,
+            subset_draws=(draw.record,),
+        ).to_json()
+        record = build_subset_run_record("r-nolist", config_json, None)
+        assert record.subset_draws == (draw.record,)
+        assert record.delivery_integrity is None
+
+    def test_overlapping_subsets_across_two_draws_are_counted_once(self) -> None:
+        """Two subset arms in one run may share a card; the intended list the
+        integrity check receives names each card once."""
+        first = SubsetArmDrawRecord(
+            arm_name="subset_half",
+            seed=_SEED_A,
+            card_names=("card-00", "card-01"),
+        )
+        second = SubsetArmDrawRecord(
+            arm_name="other_half",
+            seed=_SEED_B,
+            card_names=("card-01", "card-02"),
+        )
+        config_json = RunConfig(
+            run_id="r-two",
+            skill_id=_SKILL_ID,
+            clauses=[],
+            subject_model="claude-sonnet-4-6",
+            user_message=_USER_MSG,
+            subset_draws=(first, second),
+        ).to_json()
+
+        package = {"card-00": "Zero.", "card-01": "One.", "card-02": "Two."}
+        listing = extract_delivered_listing(
+            [_listing_message({name: desc for name, desc in package.items() if name != "card-01"})],
+            package,
+        )
+        record = build_subset_run_record("r-two", config_json, listing)
+
+        assert record.subset_draws == (first, second)
+        assert record.delivery_integrity is not None
+        assert record.delivery_integrity.intended_names == (
+            "card-00",
+            "card-01",
+            "card-02",
+        )
+        assert record.delivery_integrity.flagged_names == ("card-01",)
