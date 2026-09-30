@@ -22,7 +22,7 @@ record and never rewrites evidence.
 New module: `src/skill_harness/ablation/subset_arm.py`. Changed:
 `src/skill_harness/ablation/runner.py` (`RunConfig.subset_draws`,
 `run_arms(subset_draws=...)`). Tests: `tests/ablation/test_subset_arm_667.py`
-(33 tests). All fixture-only; the subject model is mocked at the SDK
+(34 tests). All fixture-only; the subject model is mocked at the SDK
 boundary per the A32 precedent.
 
 ## Acceptance criteria
@@ -162,7 +162,7 @@ by named assertions:
 | m7 | recorded seed written as `0` | `TestRunRecordCarriesTheDraw::test_run_config_json_freezes_the_seed_and_the_subset_names` |
 | m8 | undeclared-arm check emptied | `TestRunRecordCarriesTheDraw::test_a_draw_naming_an_undeclared_arm_is_refused_before_any_run_row` |
 | m9 | trace match inverted (`!=`) | `TestRunRecordCarriesTheDraw::test_a_receipt_traces_back_to_the_seed_and_the_subset_names`, `TestSubsetArmRefusals::test_a_trace_for_an_arm_the_run_never_drew_is_refused` |
-| m10 | duplicate-name guard removed | `TestSubsetArmRefusals::test_overlapping_subsets_across_two_draws_are_counted_once` |
+| m10 | duplicate-name guard removed | `TestRunRecordCarriesTheDraw::test_duplicate_draws_for_one_arm_are_refused_before_any_run_row` |
 
 This is a hand-run pass, not the #166 instrument. It does not fill the
 `absent` mutation score in `docs/assurance/coverage-floors.md`, and no

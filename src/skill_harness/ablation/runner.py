@@ -246,11 +246,12 @@ class RunConfig:
     """The run's seeded random-subset draws (#667). Empty unless the run
     declared a subset arm drawn from a subject package. Each record freezes
     one draw — the arm name, the seed, and the chosen card names — into
-    ``runs.config_json`` at run start, so the stored run alone answers which
-    subset of which package at which seed the arm assembled, and a receipt
-    naming the arm traces back to that record. Written even when empty, for
-    the same reason ``arms`` and ``ratification_id`` are: absence must read as
-    'this run drew no subset', not as 'this row predates the field'.
+    ``runs.config_json`` at run start, so the stored run preserves the chosen
+    card names and seed for each subset arm. A receipt naming the arm traces
+    back to that record. The full source package is caller input and is not
+    recorded here. Written even when empty, for the same reason ``arms`` and
+    ``ratification_id`` are: absence must read as 'this run drew no subset',
+    not as 'this row predates the field'.
     """
 
     def receipt_arm_names(self) -> tuple[str, ...]:

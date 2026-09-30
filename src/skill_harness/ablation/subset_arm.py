@@ -81,8 +81,8 @@ class SubsetArmDraw:
     ------
     seed : int
         The draw's seed — caller-supplied when passed, drawn from fresh
-        entropy otherwise. Recorded so the subset is reproducible from the
-        run record alone.
+        entropy otherwise. Recorded with the chosen names so a caller holding
+        the source package can reproduce the draw.
     card_names : tuple[str, ...]
         The chosen card names, in package order (the caller's mapping
         order), so one seed always yields the same names in the same
