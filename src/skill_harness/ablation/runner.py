@@ -81,6 +81,7 @@ from skill_harness.ablation.subject import (
     project_call_cost,
     sha256_of_output,
 )
+from skill_harness.ablation.subset_arm import SubsetArmDraw, SubsetArmDrawRecord
 from skill_harness.aggregation.status import UnmeasuredSubReason
 from skill_harness.oracles.tier1.axis_registry import (
     AxisScoreability,
@@ -241,6 +242,18 @@ class RunConfig:
     assemblies the runner resolves from these specs; the names travel into
     ``subject_identity.arms`` on the run's receipt."""
 
+    subset_draws: tuple[SubsetArmDrawRecord, ...] = ()
+    """The run's seeded random-subset draws (#667). Empty unless the run
+    declared a subset arm drawn from a subject package. Each record freezes
+    one draw — the arm name, the seed, and the chosen card names — into
+    ``runs.config_json`` at run start, so the stored run preserves the chosen
+    card names and seed for each subset arm. A receipt naming the arm traces
+    back to that record. The full source package is caller input and is not
+    recorded here. Written even when empty, for the same reason ``arms`` and
+    ``ratification_id`` are: absence must read as 'this run drew no subset',
+    not as 'this row predates the field'.
+    """
+
     def receipt_arm_names(self) -> tuple[str, ...]:
         """The arm vocabulary a receipt for this run declares (#554).
 
@@ -282,6 +295,11 @@ class RunConfig:
                 # receipt must declare. Written even when empty, for the same
                 # reason ratification_id is written when None.
                 "arms": [arm_to_json_dict(a) for a in self.arms],
+                # #667 acceptance: the seeded random-subset draws travel into
+                # runs.config_json, so a stored run names the seed and the
+                # chosen card names its subset arms assembled from. Written
+                # even when empty, for the same reason.
+                "subset_draws": [d.to_json_dict() for d in self.subset_draws],
             },
             sort_keys=True,
         )
@@ -305,6 +323,9 @@ class RunConfig:
             ratification_path=d.get("ratification_path"),
             stopping_reasons=d.get("stopping_reasons", {}),
             arms=tuple(arm_from_json_dict(a) for a in d.get("arms", [])),
+            subset_draws=tuple(
+                SubsetArmDrawRecord.from_json_dict(raw) for raw in d.get("subset_draws", [])
+            ),
         )
 
 
@@ -914,6 +935,7 @@ class AblationRunner:
         subject_model: str = "claude-sonnet-4-6",
         run_id: str | None = None,
         receipt_arms: Sequence[str] | str | None = None,
+        subset_draws: Sequence[SubsetArmDraw | SubsetArmDrawRecord] | None = None,
     ) -> list[ArmResult]:
         """Execute a declared-arm run: sample every named arm (#554).
 
@@ -940,6 +962,12 @@ class AblationRunner:
             (a single name or a sequence). Supplied by a pre-registered study
             design; the run is refused before any spend when it disagrees with
             the declared arms (#554).
+        :param subset_draws: The seeded random-subset draws (#667) behind this
+            run's subset arms — ``SubsetArmDraw`` values from
+            ``draw_subset_arm`` or their durable records. Frozen into
+            ``runs.config_json`` so the run record carries the seed and the
+            chosen card names. Each draw's arm must be among the declared arms;
+            anything else is refused before any run row is written.
         :returns: One ArmResult per declared arm, in declared order.
         :raises ArmSpecError: The declared set is malformed (empty, ill-formed
             or duplicate names, unreadable body path, duplicate assemblies).
@@ -947,12 +975,39 @@ class AblationRunner:
         :raises ReceiptArmsMismatchError: The receipt's declared arm
             vocabulary disagrees with the config's declared arms. Refused
             before any run row is written.
+        :raises ValueError: A subset draw names an arm this run does not
+            declare. Refused before any run row is written.
         :raises BudgetAbortedError: If the budget cap is exceeded (A42).
         """
         if run_id is None:
             run_id = str(uuid.uuid4())
 
         arm_specs = tuple(arms)
+
+        subset_records: tuple[SubsetArmDrawRecord, ...] = ()
+        if subset_draws is not None:
+            subset_records = tuple(
+                draw.record if isinstance(draw, SubsetArmDraw) else draw for draw in subset_draws
+            )
+            declared_names = {spec.name for spec in arm_specs}
+            undeclared = [r.arm_name for r in subset_records if r.arm_name not in declared_names]
+            if undeclared:
+                raise ValueError(
+                    f"subset draws name arms the run does not declare: {undeclared!r}; "
+                    "a draw's record must describe a declared arm of this run"
+                )
+            seen_subset_arm_names: set[str] = set()
+            duplicate_subset_arm_names: list[str] = []
+            for record in subset_records:
+                if record.arm_name in seen_subset_arm_names:
+                    duplicate_subset_arm_names.append(record.arm_name)
+                else:
+                    seen_subset_arm_names.add(record.arm_name)
+            if duplicate_subset_arm_names:
+                raise ValueError(
+                    f"subset draws repeat declared arms: {duplicate_subset_arm_names!r}; "
+                    "a receipt arm must trace to exactly one draw"
+                )
 
         run_config = RunConfig(
             run_id=run_id,
@@ -963,6 +1018,7 @@ class AblationRunner:
             max_usd=max_usd,
             family_size=len(arm_specs),
             arms=arm_specs,
+            subset_draws=subset_records,
         )
 
         # Refuse a disagreeing receipt vocabulary before any write or spend:

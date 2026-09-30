@@ -1010,7 +1010,9 @@ and covers that section only. This page stays the citable surface for every kind
   #246), `binding.py` (2026-08-17, #263), and `ablation/arms.py` (2026-09-21,
   #554) each carry a row under the same attention rule and a dated paragraph in
   the report; the three later rows are unmeasured by #166 and stay flagged on
-  the mutation arm of the rule.
+  the mutation arm of the rule. `ablation/subset_arm.py` (2026-09-30, #667) is
+  appended the same way: 22 branches, 0 uncovered, mutation absent, flagged on
+  the mutation arm.
 - **Refuses to claim:** That coverage is evidence of correctness — a branch is
   counted when a test steps on it, whether or not anything asserted on the
   result; that a module reporting 0 branches carries any information, which is
