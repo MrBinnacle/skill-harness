@@ -106,6 +106,7 @@ class LookRow:
     p_cant_tell_yet: float
     se_pass: float
     expected_pairs: float
+    expected_epochs: float
 
 
 @dataclass(frozen=True)
@@ -263,7 +264,11 @@ QUANTILES = (0.0, 0.10, 0.25, 0.50, 0.75, 0.90, 1.0)
 
 
 def per_look_rows(
-    stop_at: a650.Ints, passed: a650.Bools, cut: a650.Bools, n_pairs: int
+    stop_at: a650.Ints,
+    passed: a650.Bools,
+    cut: a650.Bools,
+    n_pairs: int,
+    epochs_profile: a650.Floats,
 ) -> tuple[LookRow, ...]:
     reps = len(stop_at)
     rows = []
@@ -271,6 +276,7 @@ def per_look_rows(
         stopped = stop_at <= k
         p_pass = float(np.mean(stopped & passed))
         p_cut = float(np.mean(stopped & cut))
+        used = np.minimum(stop_at, k)
         rows.append(
             LookRow(
                 look=k,
@@ -278,7 +284,8 @@ def per_look_rows(
                 p_cut=p_cut,
                 p_cant_tell_yet=1.0 - p_pass - p_cut,
                 se_pass=math.sqrt(p_pass * (1.0 - p_pass) / reps),
-                expected_pairs=float(np.mean(np.minimum(stop_at, k))),
+                expected_pairs=float(np.mean(used)),
+                expected_epochs=float(np.mean(epochs_profile[used])),
             )
         )
     return tuple(rows)
@@ -486,11 +493,14 @@ def run_cell(
     unresolved_null = null_used[unresolved]
     unresolved_fn = xs_fn_all[unresolved]
 
+    null_cum = np.concatenate((np.zeros(1, dtype=np.int64), np.cumsum(null_draws)))
+    epochs_profile = 2.0 * np.arange(horizon + 1) + null_cum
+
     return CellResult(
         cell=cell,
         design=design,
         replicates=replicates,
-        per_look=per_look_rows(stop_at, passed, cut, horizon),
+        per_look=per_look_rows(stop_at, passed, cut, horizon, epochs_profile),
         terminal=tally_terminal(
             unresolved_full,
             unresolved_placebo,
@@ -570,17 +580,25 @@ def _price(total_epochs: int) -> str:
     return f"${lo:.2f}-${hi:.2f} (cap ${cap:.2f})"
 
 
+def _expected_spend(expected_epochs: float) -> str:
+    lo = expected_epochs * _PRICE_LO
+    hi = expected_epochs * _PRICE_HI
+    return f"${lo:.2f}-${hi:.2f}"
+
+
 def per_look_tsv(results: Sequence[CellResult]) -> str:
     lines = [
         f"{_DESIGN_HEADER}\t{_CELL_HEADER}\treplicates\tlook\tp_pass\tp_cut"
-        "\tp_cant_tell_yet\tse_pass\texpected_pairs\tprice_range"
+        "\tp_cant_tell_yet\tse_pass\texpected_pairs\texpected_epochs"
+        "\texpected_spend\tprice_range"
     ]
     for res in results:
         price = _price(res.design.total_epochs)
         lines += [
             f"{_design_cols(res.design)}\t{_cell_cols(res.cell)}\t{res.replicates}\t{row.look}"
             f"\t{row.p_pass:.5f}\t{row.p_cut:.5f}\t{row.p_cant_tell_yet:.5f}\t{row.se_pass:.5f}"
-            f"\t{row.expected_pairs:.3f}\t{price}"
+            f"\t{row.expected_pairs:.3f}\t{row.expected_epochs:.3f}"
+            f"\t{_expected_spend(row.expected_epochs)}\t{price}"
             for row in res.per_look
         ]
     return "\n".join(lines) + "\n"
@@ -590,15 +608,22 @@ def terminal_tsv(results: Sequence[CellResult]) -> str:
     qnames = [f"q{round(q * 100):02d}" for q in QUANTILES]
     stat_cols = "\t".join(f"{name}_{q}" for name in ("lb_fp", "lb_fn", "ub_fp") for q in qnames)
     lines = [
-        f"{_DESIGN_HEADER}\t{_CELL_HEADER}\treplicates\tjoint_state\tcount\tshare\t{stat_cols}"
+        f"{_DESIGN_HEADER}\t{_CELL_HEADER}\treplicates\tjoint_state\tcount\tshare\tse_share"
+        f"\texpected_epochs\texpected_spend\tprice_range\t{stat_cols}"
     ]
     for res in results:
+        price = _price(res.design.total_epochs)
+        expected_epochs = res.per_look[-1].expected_epochs
+        spend = _expected_spend(expected_epochs)
         for state in JOINT_STATES:
             t = res.terminal[state]
+            share = len(t.lb_fp) / res.replicates
+            se_share = math.sqrt(share * (1.0 - share) / res.replicates)
             stats = [*_quantiles(t.lb_fp), *_quantiles(t.lb_fn), *_quantiles(t.ub_fp)]
             lines.append(
                 f"{_design_cols(res.design)}\t{_cell_cols(res.cell)}\t{res.replicates}\t{state}"
-                f"\t{len(t.lb_fp)}\t{len(t.lb_fp) / res.replicates:.5f}\t" + "\t".join(stats)
+                f"\t{len(t.lb_fp)}\t{share:.8f}\t{se_share:.8f}\t{expected_epochs:.3f}"
+                f"\t{spend}\t{price}\t" + "\t".join(stats)
             )
     return "\n".join(lines) + "\n"
 
@@ -606,9 +631,9 @@ def terminal_tsv(results: Sequence[CellResult]) -> str:
 def _surface_lines(results: Sequence[CellResult]) -> list[str]:
     lines = [
         "| n_pairs | null_pp | fn_con | p_P | p_N | d | role | p_F | P(PASS) "
-        "| SE | P(CUT) | P(CANT) | E[pairs] | cal | price |",
+        "| SE | P(CUT) | P(CANT) | E[pairs] | cal | E[epochs] | expected spend | price |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- "
-        "| --- | --- | --- | --- | --- | --- |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for res in results:
         c, row = res.cell, res.per_look[-1]
@@ -625,6 +650,7 @@ def _surface_lines(results: Sequence[CellResult]) -> list[str]:
             f"| {c.p_placebo:.2f} | {c.p_null:.2f} | {c.d:.2f} | {r} | {c.p_full:.2f} | "
             f"{row.p_pass:.4f} | {row.se_pass:.4f} | {row.p_cut:.4f} | "
             f"{row.p_cant_tell_yet:.4f} | {row.expected_pairs:.1f} | {holds} | "
+            f"{row.expected_epochs:.1f} | {_expected_spend(row.expected_epochs)} | "
             f"{_price(d_result.total_epochs)} |"
         )
     return lines

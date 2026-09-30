@@ -389,3 +389,110 @@ def test_price_function() -> None:
     price = reg._price(291)
     assert "$" in price
     assert "0.083" in price or "24.15" in price
+
+
+# ---------------------------------------------------------------------------
+# Expected total epochs and expected-spend price line (rebuild requirement 4)
+# ---------------------------------------------------------------------------
+
+_DESIGN_FIELDS = (
+    "n_full",
+    "n_placebo",
+    "n_null",
+    "total_epochs",
+    "null_per_pair",
+    "fn_construction",
+    "stopping",
+)
+
+
+def _split_tsv(text: str) -> tuple[list[str], list[list[str]]]:
+    lines = text.rstrip("\n").split("\n")
+    return lines[0].split("\t"), [line.split("\t") for line in lines[1:]]
+
+
+def _parse_spend(cell: str) -> tuple[float, float]:
+    lo_str, hi_str = cell.removeprefix("$").split("-$")
+    return float(lo_str), float(hi_str)
+
+
+def test_every_per_look_row_carries_expected_epochs_and_expected_spend() -> None:
+    design = reg.Design(n_pairs=20, null_per_pair=1.0)
+    result = reg.run_cell(reg.Cell(0.85, 0.25, 0.30), design, replicates=200, seed=13)
+    cols, rows = _split_tsv(reg.per_look_tsv([result]))
+    for name in (*_DESIGN_FIELDS, "replicates", "se_pass", "expected_epochs", "expected_spend"):
+        assert name in cols, f"per_look.tsv is missing the {name} column"
+    i_price = len(cols) - 1
+    i_pairs, i_epochs, i_spend = (
+        cols.index(name) for name in ("expected_pairs", "expected_epochs", "expected_spend")
+    )
+    assert cols[i_price] == "price_range"
+    for row in rows:
+        assert len(row) == len(cols)
+        expected_pairs = float(row[i_pairs])
+        expected_epochs = float(row[i_epochs])
+        assert expected_epochs == pytest.approx(3.0 * expected_pairs, abs=0.01)
+        assert 0.0 < expected_epochs <= design.total_epochs
+        lo, hi = _parse_spend(row[i_spend])
+        assert lo == pytest.approx(expected_epochs * reg._PRICE_LO, abs=0.01)
+        assert hi == pytest.approx(expected_epochs * reg._PRICE_HI, abs=0.01)
+        assert "cap $" in row[i_price]
+    cap_lo = design.total_epochs * reg._PRICE_LO
+    assert _parse_spend(rows[0][i_spend])[0] < cap_lo
+
+
+def test_expected_epochs_track_the_null_allocation_profile() -> None:
+    cell = reg.Cell(0.85, 0.25, 0.30)
+    for null_per_pair, epochs_per_pair in ((1.0, 3.0), (2.0, 4.0)):
+        design = reg.Design(n_pairs=20, null_per_pair=null_per_pair)
+        result = reg.run_cell(cell, design, replicates=150, seed=15)
+        cols, rows = _split_tsv(reg.per_look_tsv([result]))
+        i_pairs, i_epochs = cols.index("expected_pairs"), cols.index("expected_epochs")
+        for row in rows:
+            assert float(row[i_epochs]) == pytest.approx(
+                epochs_per_pair * float(row[i_pairs]), abs=0.01
+            )
+    half = reg.Design(n_pairs=20, null_per_pair=0.5)
+    result = reg.run_cell(cell, half, replicates=150, seed=15)
+    cols, rows = _split_tsv(reg.per_look_tsv([result]))
+    i_pairs, i_epochs = cols.index("expected_pairs"), cols.index("expected_epochs")
+    for row in rows:
+        expected_pairs = float(row[i_pairs])
+        expected_epochs = float(row[i_epochs])
+        assert 2.5 * expected_pairs - 0.5 <= expected_epochs <= 2.5 * expected_pairs + 1e-9
+
+
+def test_every_terminal_row_carries_mc_se_expected_epochs_and_cap_price() -> None:
+    design = reg.Design(n_pairs=20, null_per_pair=1.0)
+    result = reg.run_cell(reg.Cell(0.55, 0.35, 0.35), design, replicates=400, seed=14)
+    cols, rows = _split_tsv(reg.terminal_tsv([result]))
+    for name in (*_DESIGN_FIELDS, "replicates", "se_share", "expected_epochs", "expected_spend"):
+        assert name in cols, f"terminal_states.tsv is missing the {name} column"
+    i_share, i_se = cols.index("share"), cols.index("se_share")
+    i_spend, i_price = cols.index("expected_spend"), cols.index("price_range")
+    i_epochs, i_reps = cols.index("expected_epochs"), cols.index("replicates")
+    for row in rows:
+        assert len(row) == len(cols)
+        share, se, reps = float(row[i_share]), float(row[i_se]), int(row[i_reps])
+        assert se == pytest.approx((share * (1.0 - share) / reps) ** 0.5, abs=1e-6)
+        expected_epochs = float(row[i_epochs])
+        assert expected_epochs == pytest.approx(result.per_look[-1].expected_epochs, abs=0.001)
+        lo, hi = _parse_spend(row[i_spend])
+        assert lo == pytest.approx(expected_epochs * reg._PRICE_LO, abs=0.01)
+        assert hi == pytest.approx(expected_epochs * reg._PRICE_HI, abs=0.01)
+        assert "cap $" in row[i_price]
+
+
+def test_surface_rows_carry_expected_epochs_and_expected_spend_beside_the_cap_price() -> None:
+    design = reg.Design(n_pairs=20)
+    result = reg.run_cell(reg.Cell(0.85, 0.25, 0.30), design, replicates=150, seed=16)
+    lines = reg._surface_lines([result])
+    header = lines[0]
+    assert "E[epochs]" in header
+    assert "expected spend" in header
+    assert header.rstrip("| ").endswith("price")
+    header_cells = header.strip("| ").split(" | ")
+    row = lines[2].strip("| ").split(" | ")
+    assert len(row) == len(header_cells)
+    epochs_index = header_cells.index("E[epochs]")
+    assert float(row[epochs_index]) == pytest.approx(result.per_look[-1].expected_epochs, abs=0.05)
