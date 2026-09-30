@@ -10,6 +10,8 @@ Mock discipline: all API calls mocked at the SDK boundary
 
 from __future__ import annotations
 
+import pytest
+
 from skill_harness.ablation.subset_arm import SUBSET_ARM_NAME, draw_subset_arm
 
 # Seeds pinned for AC1: same seed, same subset; these two differ.
@@ -85,3 +87,44 @@ class TestSameSeedSameSubset:
         package = _package(14)
         draw = draw_subset_arm(package, seed=_SEED_A)
         assert draw.seed == _SEED_A
+
+
+# ---------------------------------------------------------------------------
+# AC2: the subset size is half the package, rounded down, and never zero for
+# a package of two or more.
+# ---------------------------------------------------------------------------
+
+
+class TestSubsetSizeIsHalfRoundedDown:
+    @pytest.mark.parametrize(
+        ("package_size", "expected_subset"),
+        [
+            (2, 1),
+            (3, 1),
+            (4, 2),
+            (5, 2),
+            (7, 3),
+            (14, 7),
+        ],
+    )
+    def test_subset_size_is_the_package_size_divided_by_two_rounded_down(
+        self,
+        package_size: int,
+        expected_subset: int,
+    ) -> None:
+        """AC2: len(subset) == floor(len(package) / 2) at any seed, so an odd
+        package loses its last card rather than keeping it."""
+        package = _package(package_size)
+        for seed in (_SEED_A, _SEED_B):
+            draw = draw_subset_arm(package, seed=seed)
+            assert len(draw.card_names) == expected_subset
+            assert len(draw.arm.body_texts) == expected_subset
+
+    @pytest.mark.parametrize("package_size", [2, 3, 5, 7, 14, 15])
+    def test_subset_is_never_zero_for_a_package_of_two_or_more(
+        self,
+        package_size: int,
+    ) -> None:
+        """AC2: every package of two or more yields at least one card."""
+        draw = draw_subset_arm(_package(package_size), seed=_SEED_A)
+        assert len(draw.card_names) >= 1

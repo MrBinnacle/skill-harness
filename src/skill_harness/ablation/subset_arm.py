@@ -3,9 +3,9 @@
 A declared-arm run's unit of comparison is a named arm: a whole prompt
 assembly (#554). This module adds one arm factory and nothing else — no
 second arm system. Given a subject package (card name -> description) and a
-seed, ``draw_subset_arm`` resolves the package to a fixed subset of about
-half its descriptions and returns it as a plain ``ArmSpec`` the existing
-machinery assembles and samples.
+seed, ``draw_subset_arm`` resolves the package to a fixed subset of half its
+descriptions (rounded down) and returns it as a plain ``ArmSpec`` the
+existing machinery assembles and samples.
 
 The same package and seed give the same subset on every call. A new run
 draws a new seed unless one is passed: the seed is caller input when given
@@ -66,9 +66,10 @@ def draw_subset_arm(
 ) -> SubsetArmDraw:
     """Draw a seeded random-subset arm from a subject package (#667).
 
-    The subset holds about half the package's descriptions. The same package
-    and seed always give the same subset; a package order fixes the sequence
-    of names and bodies for that subset.
+    The subset holds half the package's descriptions, rounded down — at least
+    one card for any package of two or more. The same package and seed always
+    give the same subset; a package order fixes the sequence of names and
+    bodies for that subset.
 
     :param subject_cards: The subject package — card name to its full
         description text, in a fixed order.
@@ -92,7 +93,9 @@ def draw_subset_arm(
     if seed is None:
         seed = secrets.randbelow(2**63)
 
-    subset_size = len(names) - len(names) // 2
+    # Half the package, rounded down: floor(n / 2), which is at least 1 for
+    # every package of two or more (#667 AC2).
+    subset_size = len(names) // 2
     # Mersenne Twister seeded from the caller's integer: a pure function of
     # (package, seed), the same convention as fit.py's bootstrap stream. The
     # seed comes from the caller or from secrets, never from module state.
