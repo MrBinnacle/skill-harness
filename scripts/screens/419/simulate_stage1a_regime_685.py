@@ -5,11 +5,11 @@ then combines. No model calls, no network, no spend.
 
 Levers:
   1. Pairs (cap at 400).
-  2. Null allocation at fixed total epochs (null_per_pair in {0.5, 1, 2}).
+  2. Null allocation at fixed total-epoch budgets (null_per_pair in {0.5, 1, 2}).
   3. F - N construction (registered union bound vs direct one-sided bound).
   4. Optional stopping (anytime-valid vs fixed-n look).
 
-Stage 1 (this script): levers 2 and 3 at caps 97 and 400.
+Stage 1 (this script): levers 2 and 3 at 300- and 1,200-epoch budgets.
 Stage 2 (pairs and optional stopping) is not implemented here.
 
 Usage:
@@ -43,6 +43,7 @@ POWER_TARGETS = (0.80, 0.90)
 REPLICATES = 2_000
 SEED = 685
 PAIRS_CAP = 400
+EPOCH_BUDGETS = (300, PAIRS_CAP * 3)
 NULL_PER_PAIR_LEVELS = (0.5, 1.0, 2.0)
 FN_CONSTRUCTIONS = ("union", "direct")
 
@@ -507,18 +508,29 @@ def run_cell(
 # ---------------------------------------------------------------------------
 
 
+def pairs_for_epoch_budget(epoch_budget: int, null_per_pair: float) -> int:
+    """Return the integral Full/Placebo-pair count that spends ``epoch_budget`` exactly."""
+    pair_half_epochs = int(2 * (2 + null_per_pair))
+    budget_half_epochs = 2 * epoch_budget
+    if budget_half_epochs % pair_half_epochs:
+        raise ValueError(
+            f"epoch budget {epoch_budget} cannot be divided across {null_per_pair} Nulls per pair"
+        )
+    return budget_half_epochs // pair_half_epochs
+
+
 def stage1_grid() -> list[tuple[Cell, Design]]:
-    """Stage 1: null allocation x F-N construction, caps 97 and 400."""
+    """Stage 1: null allocation x F-N construction at fixed epoch budgets."""
     jobs: list[tuple[Cell, Design]] = []
     for p_p in BASELINES:
         for p_n in BASELINES:
             for d in EFFECTS:
                 cell = Cell(round(p_p + d, 10), p_p, p_n)
-                for n_pairs in (97, PAIRS_CAP):
+                for epoch_budget in EPOCH_BUDGETS:
                     for null_pp in NULL_PER_PAIR_LEVELS:
                         for fn_con in FN_CONSTRUCTIONS:
                             design = Design(
-                                n_pairs=n_pairs,
+                                n_pairs=pairs_for_epoch_budget(epoch_budget, null_pp),
                                 null_per_pair=null_pp,
                                 fn_construction=fn_con,
                             )
@@ -674,7 +686,7 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "",
         "## Stage 1 designs",
         "",
-        "Null allocation x F-N construction, at caps 97 and 400.",
+        "Null allocation x F-N construction, at fixed 300- and 1,200-epoch budgets.",
         f"Null allocation levels: {NULL_PER_PAIR_LEVELS}.",
         f"F-N constructions: {FN_CONSTRUCTIONS}.",
         "",

@@ -278,12 +278,10 @@ def test_every_decision_equals_the_engine_bound_for_each_stage1_design(
 
 @pytest.mark.parametrize(
     "design",
-    [
-        reg.Design(n_pairs=n_pairs, null_per_pair=null_per_pair, fn_construction=fn_construction)
-        for n_pairs in (97, reg.PAIRS_CAP)
-        for null_per_pair in reg.NULL_PER_PAIR_LEVELS
-        for fn_construction in reg.FN_CONSTRUCTIONS
-    ],
+    sorted(
+        {design for _cell, design in reg.stage1_grid()},
+        key=repr,
+    ),
 )
 def test_calibration_holds_for_every_stage1_design_at_boundary(design: Any) -> None:
     cell = reg.Cell(0.55, 0.35, 0.35)
@@ -350,10 +348,28 @@ def test_stage1_grid_has_expected_structure() -> None:
     grid = reg.stage1_grid()
     assert len(grid) > 0
     for cell, design in grid:
-        assert design.n_pairs in (97, reg.PAIRS_CAP)
+        assert design.total_epochs in reg.EPOCH_BUDGETS
         assert design.null_per_pair in reg.NULL_PER_PAIR_LEVELS
         assert design.fn_construction in reg.FN_CONSTRUCTIONS
         assert 0.0 <= cell.d <= 0.5
+
+
+def test_stage1_grid_holds_each_epoch_budget_constant_across_null_allocations() -> None:
+    expected_pairs = {
+        300: {0.5: 120, 1.0: 100, 2.0: 75},
+        1200: {0.5: 480, 1.0: 400, 2.0: 300},
+    }
+    for epoch_budget in reg.EPOCH_BUDGETS:
+        designs = {
+            design for _cell, design in reg.stage1_grid() if design.total_epochs == epoch_budget
+        }
+        assert {design.null_per_pair for design in designs} == set(reg.NULL_PER_PAIR_LEVELS)
+        assert {design.total_epochs for design in designs} == {epoch_budget}
+        assert {
+            design.null_per_pair: design.n_pairs
+            for design in designs
+            if design.fn_construction == "union"
+        } == expected_pairs[epoch_budget]
 
 
 def test_stage1_grid_includes_the_400_pair_baseline() -> None:

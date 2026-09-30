@@ -20,9 +20,9 @@ Full and Placebo are paired by launch index; under independent draws this confer
 
 ## What was simulated
 
-**Stage 1 grid.** Null allocation x F-N construction, at caps 97 and 400. Null allocation levels: 0.5 (strictly alternating, Null-A after even-numbered pairs), 1.0 (every pair), 2.0 (every pair, two Null draws). F-N constructions: union (registered: LB(mu_F) at alpha/2 minus UB(mu_N) at alpha/2) and direct (one-sided bound on the Full-minus-mean-Null observation at alpha). The direct construction uses only scheduled Null looks; it averages the two Null draws at a double-Null look.
+**Stage 1 grid.** Null allocation x F-N construction, at fixed 300- and 1,200-epoch budgets. Null allocation levels: 0.5 (strictly alternating, Null-A after even-numbered pairs), 1.0 (every pair), 2.0 (every pair, two Null draws). The resulting Full/Placebo pair counts are 120, 100 and 75 at 300 epochs, and 480, 400 and 300 at 1,200 epochs. F-N constructions: union (registered: LB(mu_F) at alpha/2 minus UB(mu_N) at alpha/2) and direct (one-sided bound on the Full-minus-mean-Null observation at alpha). The direct construction uses only scheduled Null looks; it averages the two Null draws at a double-Null look.
 
-**Baseline design.** n_full = n_placebo = n_null = 97, total_epochs = 291, null_per_pair = 1.0.
+**Baseline design.** #684 ran n_full = n_placebo = n_null = 97, total_epochs = 291, null_per_pair = 1.0. The lower allocation budget is 300 epochs because it is the smallest budget at or above 291 that divides exactly across every declared allocation. The 1,200-epoch budget retains the 400-pair 1:1:1 design.
 
 **Effect axis.** d = p_F - p_P in {0.00, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40}. Baselines p_P, p_N in {0.30, 0.35, 0.40}.
 

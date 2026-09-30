@@ -449,8 +449,8 @@ and covers that section only. This page stays the citable surface for every kind
 ### [`docs/findings/stage1a-lever-adjudication-685.md`](findings/stage1a-lever-adjudication-685.md)
 
 - **Claims:** The Stage 1 simulation design for null allocation x F-N
-  construction at caps 97 and 400. It states the model, launch-index pairing,
-  crashed-look rule, and void-epoch rule for the next paid run. The script
+  construction at fixed 300- and 1,200-epoch budgets. It states the model,
+  launch-index pairing, crashed-look rule, and void-epoch rule for the next paid run. The script
   records every look and names its design fields in each output row.
 - **Refuses to claim:** Any operating characteristic. The 200-replicate tables
   previously attached to this record used fabricated zero outcomes for missing
