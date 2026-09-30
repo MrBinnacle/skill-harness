@@ -608,3 +608,69 @@ def test_main_exits_non_zero_when_calibration_fails(tmp_path: Path) -> None:
     )
     assert code == 1
     assert (tmp_path / "out" / "summary.md").is_file()
+
+
+# ---------------------------------------------------------------------------
+# Committed smoke-run data (acceptance: every data row carries the schema)
+# ---------------------------------------------------------------------------
+
+_SMOKE_DIR = (
+    Path(__file__).resolve().parents[1] / "docs" / "findings" / "data" / "stage1a-regime-685"
+)
+
+
+def test_committed_smoke_per_look_rows_carry_the_full_schema() -> None:
+    path = _SMOKE_DIR / "per_look.tsv"
+    assert path.is_file(), "the smoke-run per_look.tsv must be committed"
+    cols, rows = _split_tsv(path.read_text(encoding="utf-8"))
+    for name in (*_DESIGN_FIELDS, "replicates", "se_pass", "expected_epochs", "expected_spend"):
+        assert name in cols, f"committed per_look.tsv is missing {name}"
+    i = {name: cols.index(name) for name in cols}
+    assert rows, "the committed per_look.tsv has no data rows"
+    assert len(rows) > 1000, "the smoke run must commit enough rows to show the schema"
+    seen: dict[str, set[str]] = {name: set() for name in _DESIGN_FIELDS}
+    for row in rows:
+        assert len(row) == len(cols)
+        for name in _DESIGN_FIELDS:
+            value = row[i[name]]
+            assert value, f"empty {name} on a data row"
+            seen[name].add(value)
+        assert float(row[i["replicates"]]) > 0
+        assert float(row[i["se_pass"]]) >= 0.0
+        assert float(row[i["expected_epochs"]]) > 0.0
+        assert _parse_spend(row[i["expected_spend"]])[0] > 0.0
+        assert "cap $" in row[i["price_range"]]
+    assert seen["null_per_pair"] == {"0.50", "1.00", "2.00"}
+    assert seen["fn_construction"] == {"union", "direct"}
+    assert seen["stopping"] == {"anytime"}
+    assert "300" in seen["total_epochs"] and "1200" in seen["total_epochs"]
+
+
+def test_committed_smoke_terminal_rows_carry_mc_se_and_price_lines() -> None:
+    path = _SMOKE_DIR / "terminal_states.tsv"
+    assert path.is_file(), "the smoke-run terminal_states.tsv must be committed"
+    cols, rows = _split_tsv(path.read_text(encoding="utf-8"))
+    for name in (*_DESIGN_FIELDS, "replicates", "se_share", "expected_epochs", "expected_spend"):
+        assert name in cols, f"committed terminal_states.tsv is missing {name}"
+    i = {name: cols.index(name) for name in cols}
+    assert rows, "the committed terminal_states.tsv has no data rows"
+    assert len(rows) > 500, "the smoke run must commit enough terminal rows to show the schema"
+    for row in rows:
+        assert len(row) == len(cols)
+        share, se = float(row[i["share"]]), float(row[i["se_share"]])
+        reps = int(row[i["replicates"]])
+        assert se == pytest.approx((share * (1.0 - share) / reps) ** 0.5, abs=1e-6)
+        assert _parse_spend(row[i["expected_spend"]])[0] > 0.0
+        assert "cap $" in row[i["price_range"]]
+
+
+def test_committed_smoke_summary_reports_the_target_check() -> None:
+    path = _SMOKE_DIR / "summary.md"
+    assert path.is_file(), "the smoke-run summary.md must be committed"
+    summary = path.read_text(encoding="utf-8")
+    assert "## Target check" in summary
+    assert "Replicates per cell: 20." in summary
+    for target in ("0.80", "0.90"):
+        assert f"Stage-2 trigger for target {target}:" in summary
+        for fn in reg.FN_CONSTRUCTIONS:
+            assert f"| {target} | {fn} |" in summary

@@ -449,15 +449,27 @@ and covers that section only. This page stays the citable surface for every kind
 ### [`docs/findings/stage1a-lever-adjudication-685.md`](findings/stage1a-lever-adjudication-685.md)
 
 - **Claims:** The Stage 1 simulation design for null allocation x F-N
-  construction at fixed 300- and 1,200-epoch budgets. It states the model,
-  launch-index pairing, crashed-look rule, and void-epoch rule for the next paid run. The script
-  records every look and names its design fields in each output row.
+  construction at fixed 300- and 1,200-epoch budgets, with allocations
+  compared at equal total epochs. It states the model, launch-index pairing,
+  crashed-look rule, and void-epoch rule for the next paid run. Every output
+  row carries the design fields, the replicate count and an MC SE; per-look and
+  terminal rows carry E[total epochs] and an expected-spend price line beside
+  the cap price. The headline target check reports both halves of the target
+  (calibration at d = 0.20, power at the 1,200-epoch budget) for 0.80 and 0.90
+  and states whether the stage-2 trigger fires, from data only. A smoke run at
+  20 replicates, seed 685, is committed under
+  `docs/findings/data/stage1a-regime-685/` as filtered views (the pre-commit
+  500 KB gate refuses the full 29 MB `per_look.tsv`; the committed subset keeps
+  every design-field value and the price lines on every row) and exits 0 on
+  calibration; it shows the schema and is not an operating-characteristic
+  result.
 - **Refuses to claim:** Any operating characteristic. The 200-replicate tables
   previously attached to this record used fabricated zero outcomes for missing
   Null epochs and omitted the second Null draw in a double-Null design. They
-  are withdrawn. The corrected 756-cell grid at 2,000 replicates has not run.
-  It refuses any matched-pairs advantage from launch-index pairing and any
-  claim about real Claude Code epochs.
+  are withdrawn. The corrected 756-cell grid at 2,000 replicates has not run;
+  the committed smoke numbers are schema evidence only. It refuses any
+  matched-pairs advantage from launch-index pairing and any claim about real
+  Claude Code epochs.
 
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 
