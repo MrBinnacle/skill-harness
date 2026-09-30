@@ -20,10 +20,12 @@ card names become durable.
 
 from __future__ import annotations
 
+import json
 import random
 import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from skill_harness.ablation.arms import ArmSpec, validate_arm_specs
 
@@ -31,6 +33,38 @@ from skill_harness.ablation.arms import ArmSpec, validate_arm_specs
 # ARM_NAME_PATTERN (storage/models.py), which is what validate_arm_specs
 # enforces below.
 SUBSET_ARM_NAME: str = "subset_half"
+
+
+@dataclass(frozen=True)
+class SubsetArmDrawRecord:
+    """One seeded random-subset draw, frozen into the run record (#667).
+
+    The durable form of a draw: what ``runs.config_json.subset_draws`` holds
+    once the run starts. Keyed by ``arm_name`` so a receipt's
+    ``subject_identity.arms`` vocabulary (#554) points back at exactly this
+    record — the trace from a published receipt to the seed and the subset.
+    """
+
+    arm_name: str
+    seed: int
+    card_names: tuple[str, ...]
+
+    def to_json_dict(self) -> dict[str, Any]:
+        """Serialize for ``runs.config_json.subset_draws``."""
+        return {
+            "arm_name": self.arm_name,
+            "seed": self.seed,
+            "card_names": list(self.card_names),
+        }
+
+    @staticmethod
+    def from_json_dict(d: Mapping[str, Any]) -> SubsetArmDrawRecord:
+        """Deserialize from ``runs.config_json.subset_draws``."""
+        return SubsetArmDrawRecord(
+            arm_name=str(d["arm_name"]),
+            seed=int(d["seed"]),
+            card_names=tuple(str(name) for name in d["card_names"]),
+        )
 
 
 @dataclass(frozen=True)
@@ -56,6 +90,15 @@ class SubsetArmDraw:
     seed: int
     card_names: tuple[str, ...]
     arm: ArmSpec
+
+    @property
+    def record(self) -> SubsetArmDrawRecord:
+        """The durable form of this draw, for the run record to freeze."""
+        return SubsetArmDrawRecord(
+            arm_name=self.arm.name,
+            seed=self.seed,
+            card_names=self.card_names,
+        )
 
 
 def draw_subset_arm(
@@ -109,3 +152,25 @@ def draw_subset_arm(
     )
     validate_arm_specs((arm,))
     return SubsetArmDraw(seed=seed, card_names=card_names, arm=arm)
+
+
+def trace_subset_draw(config_json: str, arm_name: str) -> SubsetArmDrawRecord:
+    """Trace a receipt's arm name back to the seed and the subset names (#667).
+
+    A SERS receipt carries ``subject_identity.arms`` — the run's declared arm
+    vocabulary (#554). Given that name and the run's ``runs.config_json``,
+    return the subset draw frozen for the arm: its seed and its chosen card
+    names. This is the join that makes a published receipt re-checkable
+    against the record of what was actually assembled.
+
+    :param config_json: The stored ``runs.config_json`` text of one run.
+    :param arm_name: The arm name to look up, as the receipt declares it.
+    :returns: The draw recorded for that arm.
+    :raises ValueError: the run record carries no subset draw for that arm.
+    """
+    config = json.loads(config_json)
+    for raw in config.get("subset_draws", []):
+        record = SubsetArmDrawRecord.from_json_dict(raw)
+        if record.arm_name == arm_name:
+            return record
+    raise ValueError(f"run record carries no subset draw for arm {arm_name!r}")
