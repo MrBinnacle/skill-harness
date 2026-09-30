@@ -451,13 +451,36 @@ and covers that section only. This page stays the citable surface for every kind
 - **Claims:** The Stage 1 simulation design for null allocation x F-N
   construction at fixed 300- and 1,200-epoch budgets. It states the model,
   launch-index pairing, crashed-look rule, and void-epoch rule for the next paid run. The script
-  records every look and names its design fields in each output row.
-- **Refuses to claim:** Any operating characteristic. The 200-replicate tables
-  previously attached to this record used fabricated zero outcomes for missing
+  records every look and names its design fields in each output row, including E[total epochs],
+  an expected-spend price line beside the cap price, and MC SE on every row. The headline table
+  checks both halves of the #685 target (P(PASS) >= target at d = 0.30 and P(CUT) >= target at
+  d = 0.10) for 0.80 and 0.90 and states whether the stage-2 trigger fires, from data only.
+  A 20-replicate smoke run is committed under `docs/findings/data/stage1a-regime-685/`.
+- **Refuses to claim:** Any operating characteristic from the smoke numbers. The 200-replicate
+  tables previously attached to this record used fabricated zero outcomes for missing
   Null epochs and omitted the second Null draw in a double-Null design. They
-  are withdrawn. The corrected 756-cell grid at 2,000 replicates has not run.
-  It refuses any matched-pairs advantage from launch-index pairing and any
+  are withdrawn. The corrected 756-cell grid at 2,000 replicates has not run
+  (part (b), #696). It refuses any matched-pairs advantage from launch-index pairing and any
   claim about real Claude Code epochs.
+
+### [`docs/assurance/stage1a-regime-685-mutation-receipt.md`](assurance/stage1a-regime-685-mutation-receipt.md)
+
+- **Claims:** Twelve mutants against the Stage 1A regime simulator (#685 part a, ticket #695),
+  each run in its own git worktree at a fixed commit with production never mutated in place,
+  each case recording and asserting both worktree HEADs, the `module.__file__` actually
+  imported, clean and mutant source digests, that the digests differ, that the clean baseline
+  passed first with nonzero collection, that the mutant imports, the named failing assertion,
+  and that the production tree was byte-unchanged afterwards. All twelve KILLED. The campaign
+  covers every mutant the #694 verdict listed as survived (M1b, M5, M6, M8, M9, M10, M13) plus
+  the scale and equal-epoch defects the same verdict had already killed, re-pinned by name, plus
+  the exact-path F-N alpha defect the #704 verdict left open. The pure always-true form of that
+  exact-path mutant is observationally equivalent on this grid; the receipt records that finding
+  rather than folding it into a score.
+- **Refuses to claim:** Any mutation score, adequacy of the Stage 1A suite as a whole, or that
+  any surviving mutant outside the twelve named cases is safe. It refuses any operating
+  characteristic from the smoke numbers in `docs/findings/data/stage1a-regime-685/`; the full
+  grid belongs to #696. It refuses any claim about the #694 verdict comment itself, which this
+  container could not read.
 
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 

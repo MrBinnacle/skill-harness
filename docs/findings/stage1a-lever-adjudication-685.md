@@ -1,8 +1,8 @@
 # Lever adjudication for the registered Stage 1A rule (#685)
 
-**Date:** 2026-09-29. **Script:** `scripts/screens/419/simulate_stage1a_regime_685.py`. **Test:** `tests/test_simulate_stage1a_regime_685.py`. **Model calls:** none. **Network calls:** none. **Spend:** none.
+**Date:** 2026-09-29. **Updated:** 2026-09-30 by #695. **Script:** `scripts/screens/419/simulate_stage1a_regime_685.py`. **Test:** `tests/test_simulate_stage1a_regime_685.py`. **Data:** `docs/findings/data/stage1a-regime-685/` (20-replicate smoke run). **Model calls:** none. **Network calls:** none. **Spend:** none.
 
-**Status:** no operating-characteristic result is published. The original 200-replicate tables treated missing Null epochs as zero outcomes and used one Null epoch where the double-Null design declares two. They did not simulate the declared designs and are withdrawn.
+**Status:** no operating-characteristic result is published. The original 200-replicate tables treated missing Null epochs as zero outcomes and used one Null epoch where the double-Null design declares two. They did not simulate the declared designs and are withdrawn. The 20-replicate smoke run under `docs/findings/data/stage1a-regime-685/` is schema evidence only; the full grid is part (b), #696.
 
 ## Why this record exists
 
@@ -26,9 +26,11 @@ Full and Placebo are paired by launch index; under independent draws this confer
 
 **Effect axis.** d = p_F - p_P in {0.00, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40}. Baselines p_P, p_N in {0.30, 0.35, 0.40}.
 
-**Monte Carlo.** The full grid has not run. Its command defaults to 2,000 replicates per cell, seed 685. The draws are seeded per cell on (seed, p_F, p_P, p_N).
+**Monte Carlo.** The full grid has not run. Its command defaults to 2,000 replicates per cell, seed 685. The draws are seeded per cell on (seed, p_F, p_P, p_N). A 20-replicate smoke run is committed under `docs/findings/data/stage1a-regime-685/` to show the schema; its numbers are not operating characteristics.
 
-**Every look is recorded.** The rule at a look does not depend on the cap, so a replicate that stops at look k counts as stopped for every cap >= k. The script writes `per_look.tsv` with P(PASS), P(CUT), P(CANT_TELL_YET), the SE of P(PASS) and E[pairs] for every cell and every cap. Any smaller cap can be read from it.
+**Every look is recorded.** The rule at a look does not depend on the cap, so a replicate that stops at look k counts as stopped for every cap >= k. The script writes `per_look.tsv` with P(PASS), P(CUT), P(CANT_TELL_YET), the MC SE of P(PASS), E[pairs], E[total epochs], an expected-spend price line (E[total epochs] x $0.083 and x $0.087) and the cap price for every cell and every cap. Any smaller cap can be read from it.
+
+**Target check.** For each design family (null allocation x F-N construction) and each target in {0.80, 0.90}, the headline table reports the smallest priced epoch-budget configuration that meets P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10, each required in all nine baseline cells, or "not reached". The stage-2 trigger for a target fires when no design family reaches that target: Stage 2 (pairs and optional stopping) is gated on Stage 1 leaving the target unmet.
 
 ## Crashed-look rule and void-epoch rule for the next paid run
 
@@ -38,7 +40,7 @@ Full and Placebo are paired by launch index; under independent draws this confer
 
 ## Finding
 
-The prior tables cannot support a claim about calibration, power, price, a binding condition, or the relative effect of any lever. The script now executes the declared Null allocation. A full Stage 1 run is the next action. The pair-cap and optional-stopping levers remain unimplemented Stage 2 work.
+The prior tables cannot support a claim about calibration, power, price, a binding condition, or the relative effect of any lever. The script now executes the declared Null allocation, prices every row at E[total epochs] beside the cap price, and checks both halves of the target from data only. A full Stage 1 run is the next action. The pair-cap and optional-stopping levers remain unimplemented Stage 2 work.
 
 ## Model statement
 
@@ -46,13 +48,18 @@ These results establish operating characteristics under the declared independent
 
 ## Relation to #684
 
-This record changes no #684 code, test or number. The #684 script, its test file and `stage1a-regime-operating-characteristics.md` are untouched. The negative controls in `tests/test_simulate_stage1a_regime_684.py` still run. The new negative controls loosen the pass alpha to 0.6 and show calibration failure for both the baseline and a half-Null design.
+This record changes no #684 code, test or number. The #684 script, its test file and `stage1a-regime-operating-characteristics.md` are untouched. The negative controls in `tests/test_simulate_stage1a_regime_684.py` still run. The new negative controls loosen the pass alpha to 0.6 and show calibration failure for both the baseline design and a half-Null non-baseline design.
+
+## Mutation assurance
+
+Twelve mutants are registered in `scripts/mutation_receipt.py` under obligation prefix `695-stage1a`. The campaign record is `docs/assurance/stage1a-regime-685-mutation-receipt.json` with its prose companion; both are indexed in `docs/receipts-index.md`. All twelve KILLED.
 
 ## Limits of this simulation
 
 1. **The draws are independent Bernoulli.** This record contains no dependence model.
 2. **Void epochs are not modelled.** Every draw is a valid epoch.
-3. **The full grid has not been run.** The grid contains 756 cells at 2,000 replicates. It must run before a paid run is sized from its results.
+3. **The full grid has not been run.** The grid contains 756 cells at 2,000 replicates. It must run before a paid run is sized from its results. Part (b) is #696.
 4. **The terminal bounds are summarised by quantiles.** The per-replicate values are not stored.
+5. **The smoke numbers are schema evidence.** Twenty replicates per cell cannot support an operating-characteristic claim.
 
 *Revisit if:* the engine's `one_sided_betting_bound` changes. Then re-run the surface.
