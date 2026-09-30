@@ -496,3 +496,90 @@ def test_surface_rows_carry_expected_epochs_and_expected_spend_beside_the_cap_pr
     assert len(row) == len(header_cells)
     epochs_index = header_cells.index("E[epochs]")
     assert float(row[epochs_index]) == pytest.approx(result.per_look[-1].expected_epochs, abs=0.05)
+
+
+# ---------------------------------------------------------------------------
+# Target check: both halves, 0.80 and 0.90, stage-2 trigger (rebuild req 5)
+# ---------------------------------------------------------------------------
+
+
+def _hand_result(cell: Any, design: Any, p_pass: float) -> Any:
+    row = reg.LookRow(
+        look=design.n_pairs,
+        p_pass=p_pass,
+        p_cut=0.0,
+        p_cant_tell_yet=1.0 - p_pass,
+        se_pass=0.0,
+        expected_pairs=float(design.n_pairs),
+        expected_epochs=float(design.total_epochs),
+    )
+    terminal = {
+        state: reg.TerminalSample(lb_fp=(), lb_fn=(), ub_fp=()) for state in reg.JOINT_STATES
+    }
+    return reg.CellResult(
+        cell=cell,
+        design=design,
+        replicates=200,
+        per_look=(row,),
+        terminal=terminal,
+        library_calls=0,
+    )
+
+
+def _target_check_results(*, cal_p_pass: float, power_p_pass: float) -> list[Any]:
+    results: list[Any] = []
+    for fn in reg.FN_CONSTRUCTIONS:
+        results.append(
+            _hand_result(
+                reg.Cell(0.55, 0.35, 0.35),
+                reg.Design(n_pairs=100, fn_construction=fn),
+                cal_p_pass,
+            )
+        )
+        for p_p in reg.BASELINES:
+            for p_n in reg.BASELINES:
+                results.append(
+                    _hand_result(
+                        reg.Cell(round(p_p + 0.40, 10), p_p, p_n),
+                        reg.Design(n_pairs=reg.PAIRS_CAP, null_per_pair=1.0, fn_construction=fn),
+                        power_p_pass,
+                    )
+                )
+    return results
+
+
+def test_target_check_states_both_halves_for_0_80_and_0_90_from_data_only() -> None:
+    summary = reg.summary_md(_target_check_results(cal_p_pass=0.0, power_p_pass=0.95), 200, 685)
+    assert "## Target check" in summary
+    assert "Calibration half" in summary
+    assert "Power half" in summary
+    for target in ("0.80", "0.90"):
+        for fn in reg.FN_CONSTRUCTIONS:
+            assert f"| {target} | {fn} | holds | 9/9 | 0.40 | does not fire |" in summary
+        assert f"Stage-2 trigger for target {target}: does not fire" in summary
+
+
+def test_stage2_trigger_fires_when_the_power_half_is_unmet() -> None:
+    summary = reg.summary_md(_target_check_results(cal_p_pass=0.0, power_p_pass=0.05), 200, 685)
+    for target in ("0.80", "0.90"):
+        for fn in reg.FN_CONSTRUCTIONS:
+            assert f"| {target} | {fn} | holds | 0/9 | not reached | fires |" in summary
+        assert f"Stage-2 trigger for target {target}: fires" in summary
+
+
+def test_stage2_trigger_reads_each_target_from_its_own_power_half() -> None:
+    summary = reg.summary_md(_target_check_results(cal_p_pass=0.0, power_p_pass=0.85), 200, 685)
+    assert "| 0.80 | union | holds | 9/9 | 0.40 | does not fire |" in summary
+    assert "| 0.80 | direct | holds | 9/9 | 0.40 | does not fire |" in summary
+    assert "| 0.90 | union | holds | 0/9 | not reached | fires |" in summary
+    assert "| 0.90 | direct | holds | 0/9 | not reached | fires |" in summary
+    assert "Stage-2 trigger for target 0.80: does not fire" in summary
+    assert "Stage-2 trigger for target 0.90: fires" in summary
+
+
+def test_stage2_trigger_fires_when_the_calibration_half_fails() -> None:
+    summary = reg.summary_md(_target_check_results(cal_p_pass=0.5, power_p_pass=0.95), 200, 685)
+    for target in ("0.80", "0.90"):
+        for fn in reg.FN_CONSTRUCTIONS:
+            assert f"| {target} | {fn} | FAILS | 9/9 | 0.40 | fires |" in summary
+        assert f"Stage-2 trigger for target {target}: fires" in summary

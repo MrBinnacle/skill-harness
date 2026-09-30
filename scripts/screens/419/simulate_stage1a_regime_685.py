@@ -701,6 +701,59 @@ def headline(
     return out
 
 
+@dataclass(frozen=True)
+class TargetCheckRow:
+    """One cell of the Stage 1 target check: both halves, one construction."""
+
+    target: float
+    fn_construction: str
+    calibration_holds: bool
+    cells_reached: int
+    cells_total: int
+    worst_smallest_d: float | None
+    trigger_fires: bool
+
+
+def target_check_rows(results: Sequence[CellResult]) -> tuple[TargetCheckRow, ...]:
+    """Check both halves of the target per construction, from data only.
+
+    Calibration half: every d = 0.20 cell under the construction passes the
+    calibration check. A construction with no calibration evidence in
+    ``results`` fails this half. Power half: every one of the nine baseline
+    (p_P, p_N) cells at the 1,200-epoch budget reaches the target on the
+    effect axis. The stage-2 trigger fires when either half is unmet.
+    """
+    rows: list[TargetCheckRow] = []
+    for target in POWER_TARGETS:
+        for fn_con in FN_CONSTRUCTIONS:
+            cal_cells = [
+                r
+                for r in results
+                if role(r.cell.d) == "calibration" and r.design.fn_construction == fn_con
+            ]
+            cal_holds = bool(cal_cells) and all(calibration_holds(r) for r in cal_cells)
+            curve_by_cell: dict[tuple[float, float], float | None] = {}
+            for (c_fn, p_p, p_n), d in headline(results, target).items():
+                if c_fn == fn_con:
+                    curve_by_cell[(p_p, p_n)] = d
+            cells_total = len(BASELINES) ** 2
+            reached = [d for d in curve_by_cell.values() if d is not None]
+            cells_reached = len(reached)
+            all_reached = cells_reached == cells_total and len(curve_by_cell) == cells_total
+            rows.append(
+                TargetCheckRow(
+                    target=target,
+                    fn_construction=fn_con,
+                    calibration_holds=cal_holds,
+                    cells_reached=cells_reached,
+                    cells_total=cells_total,
+                    worst_smallest_d=max(reached) if all_reached else None,
+                    trigger_fires=(not cal_holds) or not all_reached,
+                )
+            )
+    return tuple(rows)
+
+
 def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str:
     se_nominal = math.sqrt(a650.PASS_ALPHA * (1 - a650.PASS_ALPHA) / replicates)
     limit = a650.PASS_ALPHA + a650.calibration_tolerance(replicates)
@@ -747,6 +800,36 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
     for (fn_con, p_p, p_n), d in headline(results, POWER_TARGETS[1]).items():
         shown = _NOT_REACHED if d is None else f"{d:.2f}"
         lines.append(f"| {fn_con} | {p_p:.2f} | {p_n:.2f} | {shown} |")
+    checks = target_check_rows(results)
+    lines += [
+        "",
+        "## Target check",
+        "",
+        "The Stage 1 target has two halves. Calibration half: every d = 0.20 cell "
+        "under the construction passes the calibration check (P(PASS) at or below "
+        "0.0209 + 3 SE of the replicate count). Power half: at the 1,200-epoch "
+        "budget (400 pairs, null_per_pair=1.0) all nine (p_P, p_N) baseline cells "
+        "reach the target on the effect axis. The stage-2 trigger fires when "
+        "either half is unmet; stage 2 is the pair-cap and optional-stopping levers.",
+        "",
+        "| target | fn_construction | calibration half | power half: cells reached "
+        "| worst smallest d | stage-2 trigger |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for check in checks:
+        cal = "holds" if check.calibration_holds else "FAILS"
+        reached = f"{check.cells_reached}/{check.cells_total}"
+        worst = "not reached" if check.worst_smallest_d is None else f"{check.worst_smallest_d:.2f}"
+        trigger = "fires" if check.trigger_fires else "does not fire"
+        lines.append(
+            f"| {check.target:.2f} | {check.fn_construction} | {cal} | {reached} "
+            f"| {worst} | {trigger} |"
+        )
+    lines.append("")
+    for target in POWER_TARGETS:
+        fires = any(c.trigger_fires for c in checks if c.target == target)
+        status = "fires" if fires else "does not fire"
+        lines.append(f"Stage-2 trigger for target {target:.2f}: {status}.")
     lines += [
         "",
         "## Price lines",
