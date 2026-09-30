@@ -12,6 +12,11 @@ draws a new seed unless one is passed: the seed is caller input when given
 and fresh entropy when not, and either way it is reported on the draw for
 the run record to freeze.
 
+Delivery integrity (#667, against #664): after a run, the delivered listing
+is compared with the subset the arm intended. A card the arm included that
+was dropped or truncated is flagged on the run record. The run is kept —
+the check reports, never silently corrects.
+
 This module is data + pure functions only. It never calls a model and never
 writes evidence; the runner owns the run row, and the record seam
 (``subset_draws`` in ``runs.config_json``) is where the seed and the chosen
@@ -23,11 +28,12 @@ from __future__ import annotations
 import json
 import random
 import secrets
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from skill_harness.ablation.arms import ArmSpec, validate_arm_specs
+from skill_harness.extractor.delivered_surface import DeliveredListing
 
 # Default declared-arm name for a seeded random-subset arm. Must match
 # ARM_NAME_PATTERN (storage/models.py), which is what validate_arm_specs
@@ -174,3 +180,106 @@ def trace_subset_draw(config_json: str, arm_name: str) -> SubsetArmDrawRecord:
         if record.arm_name == arm_name:
             return record
     raise ValueError(f"run record carries no subset draw for arm {arm_name!r}")
+
+
+@dataclass(frozen=True)
+class DeliveryIntegrity:
+    """Post-run comparison of the intended subset against the delivered listing (#667).
+
+    Every intended card the arm included is checked against #664's delivered
+    listing. A card that was dropped or truncated is flagged by name.
+    ``integrity_ok`` is the flag: ``False`` when any intended card was
+    delivered damaged or not at all. The check never rewrites the listing,
+    the run, or the evidence — the run is kept, and the flag rides on the
+    record.
+    """
+
+    intended_names: tuple[str, ...]
+    """The arm's intended card names, in subset order."""
+
+    flagged_names: tuple[str, ...]
+    """Intended cards that were dropped or truncated in the delivered listing."""
+
+    integrity_ok: bool
+    """``True`` when every intended card was delivered whole; ``False``
+    otherwise. This is the integrity flag."""
+
+
+def check_delivery_integrity(
+    listing: DeliveredListing,
+    intended_names: Sequence[str],
+) -> DeliveryIntegrity:
+    """Compare the delivered listing with the subset the arm intended (#667).
+
+    A card the arm included that is missing from the delivered listing (the
+    extractor records that as ``dropped``) or present only in truncated form
+    is flagged. Cards delivered whole leave the flag down. Pure function: no
+    writes, no corrections, no exceptions for a damaged delivery — the damage
+    is reported, the run is kept.
+
+    :param listing: The delivered skill surface extracted from the run's
+        transcript (#664).
+    :param intended_names: The card names the arm's subset included.
+    :returns: The integrity verdict naming every flagged card.
+    """
+    delivered = {card.name: card for card in listing.subject_cards}
+    flagged: list[str] = []
+    for name in intended_names:
+        card = delivered.get(name)
+        if card is None or card.status in ("dropped", "truncated"):
+            flagged.append(name)
+    return DeliveryIntegrity(
+        intended_names=tuple(intended_names),
+        flagged_names=tuple(flagged),
+        integrity_ok=not flagged,
+    )
+
+
+@dataclass(frozen=True)
+class SubsetRunRecord:
+    """The screen-facing record of one seeded-subset run (#667).
+
+    The run record for a subset arm: the draw frozen into ``runs.config_json``
+    at run start, plus — once the delivered listing is known — the delivery
+    integrity verdict. Assembled from the stored config; it never rewrites it.
+    """
+
+    run_id: str
+    subset_draws: tuple[SubsetArmDrawRecord, ...]
+    delivery_integrity: DeliveryIntegrity | None
+    """The post-run delivery check, or ``None`` when no listing was supplied."""
+
+
+def build_subset_run_record(
+    run_id: str,
+    config_json: str,
+    listing: DeliveredListing | None = None,
+) -> SubsetRunRecord:
+    """Assemble the subset run record from the frozen config and listing (#667).
+
+    Reads the draws the run froze into ``runs.config_json`` and, when a
+    delivered listing is supplied, flags every intended card the listing
+    dropped or truncated. The run is kept: a failed integrity check flags the
+    record and never corrects, rewrites, or discards the run or its evidence.
+
+    :param run_id: The run's identifier.
+    :param config_json: The stored ``runs.config_json`` text of that run.
+    :param listing: The delivered listing extracted from the transcript, or
+        ``None`` to record the draw without a delivery verdict.
+    :returns: The run record carrying the draw and, if supplied, the flag.
+    """
+    config = json.loads(config_json)
+    draws = tuple(SubsetArmDrawRecord.from_json_dict(raw) for raw in config.get("subset_draws", []))
+    integrity: DeliveryIntegrity | None = None
+    if listing is not None:
+        intended: list[str] = []
+        for draw in draws:
+            for name in draw.card_names:
+                if name not in intended:
+                    intended.append(name)
+        integrity = check_delivery_integrity(listing, intended)
+    return SubsetRunRecord(
+        run_id=run_id,
+        subset_draws=draws,
+        delivery_integrity=integrity,
+    )

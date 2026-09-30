@@ -14,6 +14,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -25,9 +26,12 @@ from skill_harness.ablation.subject import SubjectClient
 from skill_harness.ablation.subset_arm import (
     SUBSET_ARM_NAME,
     SubsetArmDrawRecord,
+    build_subset_run_record,
+    check_delivery_integrity,
     draw_subset_arm,
     trace_subset_draw,
 )
+from skill_harness.extractor.delivered_surface import extract_delivered_listing
 from skill_harness.sers import build_subject_identity
 from skill_harness.storage.migrations import open_evidence, open_runtime
 
@@ -354,3 +358,136 @@ class TestRunRecordCarriesTheDraw:
                 subset_draws=(rogue,),
             )
         assert ev.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
+
+
+# ---------------------------------------------------------------------------
+# AC4: after a run, the delivered listing (#664) is compared with the intended
+# subset. An intended card dropped or truncated raises the integrity flag on
+# the run record; every card delivered does not. The run is kept.
+# ---------------------------------------------------------------------------
+
+
+def _listing_message(cards: dict[str, str]) -> SimpleNamespace:
+    """A user message carrying Claude Code's skill listing (#664 fixture form)."""
+    lines = ["The following skills are available for use with the Skill tool:"]
+    lines.extend(f"- {name}: {desc}" for name, desc in cards.items())
+    lines.append("Use the Skill tool to invoke them.")
+    return SimpleNamespace(role="user", content="\n".join(lines))
+
+
+def _delivered_without(package: dict[str, str], *missing: str) -> SimpleNamespace:
+    delivered = {name: desc for name, desc in package.items() if name not in missing}
+    return _listing_message(delivered)
+
+
+class TestDeliveryIntegrityFlag:
+    def test_an_intended_card_absent_from_the_delivered_listing_raises_the_flag(
+        self,
+    ) -> None:
+        """AC4: the arm included a card; the delivered listing does not hold
+        it (the extractor records it dropped) — the integrity flag raises and
+        names that card."""
+        package = _package(14)
+        draw = draw_subset_arm(package, seed=_SEED_A)
+        missing = draw.card_names[0]
+
+        listing = extract_delivered_listing(
+            [_delivered_without(package, missing)],
+            package,
+        )
+        integrity = check_delivery_integrity(listing, draw.card_names)
+
+        assert integrity.integrity_ok is False
+        assert integrity.flagged_names == (missing,)
+        assert integrity.intended_names == draw.card_names
+
+    def test_when_every_intended_card_is_delivered_the_flag_does_not_raise(
+        self,
+    ) -> None:
+        """AC4: a listing that holds every intended card leaves the flag down."""
+        package = _package(14)
+        draw = draw_subset_arm(package, seed=_SEED_A)
+
+        listing = extract_delivered_listing([_listing_message(package)], package)
+        integrity = check_delivery_integrity(listing, draw.card_names)
+
+        assert integrity.integrity_ok is True
+        assert integrity.flagged_names == ()
+
+    def test_a_truncated_intended_card_is_also_flagged(self) -> None:
+        """AC4: dropped or truncated — a card whose delivered description was
+        cut short raises the flag the same way a dropped card does."""
+        package = _package(6)
+        draw = draw_subset_arm(package, seed=_SEED_A)
+        short_name = draw.card_names[0]
+
+        delivered = dict(package)
+        delivered[short_name] = package[short_name][:-5]
+        listing = extract_delivered_listing([_listing_message(delivered)], package)
+        integrity = check_delivery_integrity(listing, draw.card_names)
+
+        assert integrity.integrity_ok is False
+        assert short_name in integrity.flagged_names
+
+    def test_the_run_record_carries_the_flag_and_the_run_is_kept(
+        self,
+        seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection],
+    ) -> None:
+        """AC4: after a run, the record assembled from the frozen config plus
+        the delivered listing carries the flag. The run row is kept — still
+        present, still completed; nothing is silently corrected."""
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        package = _package(14)
+        draw, _ = _run_one_subset_arm(runner, package, seed=_SEED_A)
+
+        cur = ev.execute(
+            "SELECT run_id, config_json, completed_at FROM runs WHERE skill_id = ?",
+            (_SKILL_ID,),
+        )
+        run_id, config_json, completed_at = cur.fetchone()
+        assert completed_at is not None
+
+        missing = draw.card_names[0]
+        listing = extract_delivered_listing(
+            [_delivered_without(package, missing)],
+            package,
+        )
+        record = build_subset_run_record(run_id, config_json, listing)
+
+        assert record.run_id == run_id
+        assert record.subset_draws == (draw.record,)
+        assert record.delivery_integrity is not None
+        assert record.delivery_integrity.integrity_ok is False
+        assert record.delivery_integrity.flagged_names == (missing,)
+
+        kept = ev.execute(
+            "SELECT completed_at FROM runs WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+        assert kept is not None
+        assert kept[0] == completed_at
+
+    def test_a_full_delivery_builds_a_clean_run_record(
+        self,
+        seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection],
+    ) -> None:
+        """AC4: the fixture where every card is delivered leaves the record's
+        integrity block clean — flag down, no flagged names."""
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        package = _package(14)
+        draw, _ = _run_one_subset_arm(runner, package, seed=_SEED_A)
+
+        cur = ev.execute(
+            "SELECT run_id, config_json FROM runs WHERE skill_id = ?",
+            (_SKILL_ID,),
+        )
+        run_id, config_json = cur.fetchone()
+        listing = extract_delivered_listing([_listing_message(package)], package)
+        record = build_subset_run_record(run_id, config_json, listing)
+
+        assert record.delivery_integrity is not None
+        assert record.delivery_integrity.integrity_ok is True
+        assert record.delivery_integrity.flagged_names == ()
+        assert record.subset_draws == (draw.record,)
