@@ -523,3 +523,207 @@ def test_surface_rows_carry_expected_epochs_and_expected_spend_beside_the_cap_pr
     expected_epochs = result.per_look[-1].expected_epochs
     assert lo == pytest.approx(expected_epochs * reg._PRICE_LO, abs=0.05)
     assert hi == pytest.approx(expected_epochs * reg._PRICE_HI, abs=0.05)
+
+
+# ---------------------------------------------------------------------------
+# Requirement 5: headline both halves, 0.80 and 0.90, stage-2 trigger, data only
+# ---------------------------------------------------------------------------
+
+
+def _hand_result(
+    cell: Any,
+    design: Any,
+    *,
+    p_pass: float,
+    p_cut: float,
+    replicates: int = 200,
+) -> Any:
+    look = design.n_pairs
+    row = reg.LookRow(
+        look=look,
+        p_pass=p_pass,
+        p_cut=p_cut,
+        p_cant_tell_yet=max(0.0, 1.0 - p_pass - p_cut),
+        se_pass=0.0,
+        expected_pairs=float(look),
+        expected_epochs=float(design.total_epochs),
+    )
+    terminal = {
+        state: reg.TerminalSample(lb_fp=(), lb_fn=(), ub_fp=()) for state in reg.JOINT_STATES
+    }
+    return reg.CellResult(
+        cell=cell,
+        design=design,
+        replicates=replicates,
+        per_look=(row,),
+        terminal=terminal,
+        library_calls=0,
+    )
+
+
+def _results_for_budget(
+    *,
+    epoch_budget: int,
+    null_per_pair: float,
+    fn_construction: str,
+    p_pass_at_0_30: float,
+    p_cut_at_0_10: float,
+    p_pass_at_other_d: float = 0.0,
+    p_cut_at_other_d: float = 0.0,
+) -> list[Any]:
+    """One design family at one budget, filled across the nine baseline cells."""
+    results: list[Any] = []
+    n_pairs = reg.pairs_for_epoch_budget(epoch_budget, null_per_pair)
+    design = reg.Design(
+        n_pairs=n_pairs, null_per_pair=null_per_pair, fn_construction=fn_construction
+    )
+    for p_p in reg.BASELINES:
+        for p_n in reg.BASELINES:
+            results.append(
+                _hand_result(
+                    reg.Cell(round(p_p + 0.30, 10), p_p, p_n),
+                    design,
+                    p_pass=p_pass_at_0_30,
+                    p_cut=0.0,
+                )
+            )
+            results.append(
+                _hand_result(
+                    reg.Cell(round(p_p + 0.10, 10), p_p, p_n),
+                    design,
+                    p_pass=0.0,
+                    p_cut=p_cut_at_0_10,
+                )
+            )
+            for d in (0.00, 0.15, 0.20, 0.25, 0.40):
+                results.append(
+                    _hand_result(
+                        reg.Cell(round(p_p + d, 10), p_p, p_n),
+                        design,
+                        p_pass=p_pass_at_other_d if d >= 0.20 else 0.0,
+                        p_cut=p_cut_at_other_d if d < 0.20 else 0.0,
+                    )
+                )
+    return results
+
+
+def test_target_check_reports_the_smallest_priced_config_meeting_both_halves() -> None:
+    """Both halves at d=0.30 (P(PASS)) and d=0.10 (P(CUT)), from data only."""
+    cheap = _results_for_budget(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        p_pass_at_0_30=0.85,
+        p_cut_at_0_10=0.85,
+    )
+    dear = _results_for_budget(
+        epoch_budget=1200,
+        null_per_pair=1.0,
+        fn_construction="union",
+        p_pass_at_0_30=0.95,
+        p_cut_at_0_10=0.95,
+    )
+    rows = reg.target_check_rows(cheap + dear)
+    by_key = {(r.null_per_pair, r.fn_construction, r.target): r for r in rows}
+    row = by_key[(1.0, "union", 0.80)]
+    assert row.reached
+    assert row.total_epochs == 300
+    assert row.p_pass_at_d030 == pytest.approx(0.85)
+    assert row.p_cut_at_d010 == pytest.approx(0.85)
+    assert not row.trigger_fires
+    row90 = by_key[(1.0, "union", 0.90)]
+    assert row90.reached
+    assert row90.total_epochs == 1200
+
+
+def test_target_check_not_reached_when_the_cut_half_fails() -> None:
+    """P(PASS) at d=0.30 met but P(CUT) at d=0.10 unmet is NOT a meeting config."""
+    results = _results_for_budget(
+        epoch_budget=1200,
+        null_per_pair=1.0,
+        fn_construction="union",
+        p_pass_at_0_30=0.95,
+        p_cut_at_0_10=0.20,
+    )
+    rows = reg.target_check_rows(results)
+    for row in rows:
+        assert not row.reached
+        assert row.total_epochs is None
+        assert row.trigger_fires
+        assert "P(CUT)" in row.missing_half or "P(CUT) at d=0.10" in row.missing_half
+
+
+def test_target_check_not_reached_when_the_pass_half_fails() -> None:
+    """P(CUT) at d=0.10 met but P(PASS) at d=0.30 unmet is NOT a meeting config."""
+    results = _results_for_budget(
+        epoch_budget=1200,
+        null_per_pair=1.0,
+        fn_construction="direct",
+        p_pass_at_0_30=0.10,
+        p_cut_at_0_10=0.95,
+    )
+    rows = reg.target_check_rows(results)
+    for row in rows:
+        assert not row.reached
+        assert row.trigger_fires
+        assert "P(PASS)" in row.missing_half
+
+
+def test_stage2_trigger_fires_only_when_no_design_reaches_the_target() -> None:
+    meets_0_80 = _results_for_budget(
+        epoch_budget=300,
+        null_per_pair=0.5,
+        fn_construction="direct",
+        p_pass_at_0_30=0.85,
+        p_cut_at_0_10=0.85,
+    )
+    fails_0_90_everywhere = _results_for_budget(
+        epoch_budget=1200,
+        null_per_pair=2.0,
+        fn_construction="union",
+        p_pass_at_0_30=0.50,
+        p_cut_at_0_10=0.50,
+    )
+    # Direct/0.5 reaches 0.80; nothing reaches 0.90.
+    rows = reg.target_check_rows(meets_0_80 + fails_0_90_everywhere)
+    fires = {r.target: reg.stage2_trigger_fires(rows, r.target) for r in rows}
+    assert fires[0.80] is False
+    assert fires[0.90] is True
+
+
+def test_summary_renders_both_halves_and_the_stage2_trigger_from_data() -> None:
+    # P(PASS) at d=0.30 clears 0.80 in every baseline cell; P(CUT) at d=0.10 does not.
+    failing = _results_for_budget(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        p_pass_at_0_30=0.85,
+        p_cut_at_0_10=0.10,
+    )
+    summary = reg.summary_md(failing, 200, 685)
+    assert "## Target check" in summary
+    assert "P(PASS) >= target at d = 0.30" in summary
+    assert "P(CUT) >= target at d = 0.10" in summary
+    assert "not reached" in summary
+    assert "Stage-2 trigger for target 0.80: fires" in summary
+    assert "Stage-2 trigger for target 0.90: fires" in summary
+    assert "union" in summary
+
+
+def test_headline_reads_the_pairs_cap_designs_in_the_results() -> None:
+    """M10: headline() must read n_pairs from the results, not a stale 97."""
+    design = reg.Design(n_pairs=reg.PAIRS_CAP, null_per_pair=1.0, fn_construction="union")
+    results = [
+        _hand_result(
+            reg.Cell(round(p_p + d, 10), p_p, p_n),
+            design,
+            p_pass=p_pass,
+            p_cut=0.0,
+        )
+        for p_p in reg.BASELINES
+        for p_n in reg.BASELINES
+        for d, p_pass in ((0.30, 0.20), (0.40, 0.85))
+    ]
+    curve = reg.headline_power_curve(results, 0.80)
+    assert curve[("union", 0.35, 0.35)] == 0.40
+    assert reg.smallest_d_reaching({0.30: 0.20, 0.40: 0.85}, 0.80) == 0.40

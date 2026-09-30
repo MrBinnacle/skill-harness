@@ -145,6 +145,233 @@ def smallest_d_reaching(curve: dict[float, float], target: float) -> float | Non
     return next((d for d in sorted(curve) if curve[d] >= target), None)
 
 
+def headline_power_curve(
+    results: Sequence[CellResult], target: float
+) -> dict[tuple[str, float, float], float | None]:
+    """Per (fn_construction, p_P, p_N), smallest d whose P(PASS) at the cap reaches target.
+
+    Reads the design fields off each result: only rows at ``PAIRS_CAP`` with
+    ``null_per_pair == 1.0`` enter the curve, so a result set that carries no
+    such row yields ``None`` rather than a stale pair count.
+    """
+    out: dict[tuple[str, float, float], float | None] = {}
+    for fn_con in FN_CONSTRUCTIONS:
+        for p_p in BASELINES:
+            for p_n in BASELINES:
+                curve = {
+                    r.cell.d: r.per_look[-1].p_pass
+                    for r in results
+                    if (
+                        r.design.fn_construction == fn_con
+                        and r.design.n_pairs == PAIRS_CAP
+                        and r.design.null_per_pair == 1.0
+                        and (r.cell.p_placebo, r.cell.p_null) == (p_p, p_n)
+                    )
+                }
+                out[(fn_con, p_p, p_n)] = smallest_d_reaching(curve, target)
+    return out
+
+
+def headline(
+    results: Sequence[CellResult], target: float
+) -> dict[tuple[float, float], float | None]:
+    """Per (p_P, p_N) at the union/1:1:1 cap design, smallest d with P(PASS) >= target."""
+    curve_by_cell: dict[tuple[float, float], dict[float, float]] = {}
+    for r in results:
+        if (
+            r.design.fn_construction == "union"
+            and r.design.n_pairs == PAIRS_CAP
+            and r.design.null_per_pair == 1.0
+        ):
+            curve_by_cell.setdefault((r.cell.p_placebo, r.cell.p_null), {})[r.cell.d] = r.per_look[
+                -1
+            ].p_pass
+    return {cell: smallest_d_reaching(curve, target) for cell, curve in curve_by_cell.items()}
+
+
+@dataclass(frozen=True)
+class TargetCheckRow:
+    """One design family at one target: the smallest priced configuration meeting both halves."""
+
+    target: float
+    null_per_pair: float
+    fn_construction: str
+    reached: bool
+    total_epochs: int | None
+    n_pairs: int | None
+    expected_spend: str | None
+    p_pass_at_d030: float | None
+    p_cut_at_d010: float | None
+    missing_half: str
+    trigger_fires: bool
+
+
+_TARGET_HALF_ONE = "P(PASS) >= target at d = 0.30"
+_TARGET_HALF_TWO = "P(CUT) >= target at d = 0.10"
+
+
+def _design_family_meets_target(
+    results: Sequence[CellResult],
+    *,
+    null_per_pair: float,
+    fn_construction: str,
+    epoch_budget: int,
+    target: float,
+) -> tuple[bool, float | None, float | None, str]:
+    """Does this design family at this budget meet both halves, across every baseline?
+
+    Returns (meets, min_p_pass_at_0_30, min_p_cut_at_0_10, missing_half).
+    Both halves must hold in all nine (p_P, p_N) baseline cells.
+    """
+    pass_vals: list[float] = []
+    cut_vals: list[float] = []
+    for p_p in BASELINES:
+        for p_n in BASELINES:
+            pass_row = next(
+                (
+                    r
+                    for r in results
+                    if r.design.null_per_pair == null_per_pair
+                    and r.design.fn_construction == fn_construction
+                    and r.design.total_epochs == epoch_budget
+                    and math.isclose(r.cell.d, 0.30, abs_tol=1e-9)
+                    and math.isclose(r.cell.p_placebo, p_p, abs_tol=1e-9)
+                    and math.isclose(r.cell.p_null, p_n, abs_tol=1e-9)
+                ),
+                None,
+            )
+            cut_row = next(
+                (
+                    r
+                    for r in results
+                    if r.design.null_per_pair == null_per_pair
+                    and r.design.fn_construction == fn_construction
+                    and r.design.total_epochs == epoch_budget
+                    and math.isclose(r.cell.d, 0.10, abs_tol=1e-9)
+                    and math.isclose(r.cell.p_placebo, p_p, abs_tol=1e-9)
+                    and math.isclose(r.cell.p_null, p_n, abs_tol=1e-9)
+                ),
+                None,
+            )
+            if pass_row is None or cut_row is None:
+                return False, None, None, f"missing d=0.30/d=0.10 cells for ({p_p}, {p_n})"
+            pass_vals.append(pass_row.per_look[-1].p_pass)
+            cut_vals.append(cut_row.per_look[-1].p_cut)
+    min_pass = min(pass_vals)
+    min_cut = min(cut_vals)
+    missing: list[str] = []
+    if min_pass < target:
+        missing.append(_TARGET_HALF_ONE)
+    if min_cut < target:
+        missing.append(_TARGET_HALF_TWO)
+    if missing:
+        return False, min_pass, min_cut, " and ".join(missing)
+    return True, min_pass, min_cut, ""
+
+
+def target_check_rows(results: Sequence[CellResult]) -> tuple[TargetCheckRow, ...]:
+    """Smallest priced configuration per design family per target, from data only.
+
+    Both halves of the #685 target: P(PASS) >= target at d = 0.30 and
+    P(CUT) >= target at d = 0.10, each required in all nine baseline cells.
+    Configurations are the declared epoch budgets, ranked by total_epochs
+    (the cap price). A design family that meets both halves at a budget
+    reports that budget as its smallest priced configuration. The stage-2
+    trigger for a target fires when no design family reaches that target.
+    """
+    families = sorted(
+        {(r.design.null_per_pair, r.design.fn_construction) for r in results},
+        key=lambda t: (t[1], t[0]),
+    )
+    budgets = sorted({r.design.total_epochs for r in results})
+    rows: list[TargetCheckRow] = []
+    reached_any: dict[float, bool] = {target: False for target in POWER_TARGETS}
+    staged: dict[tuple[float, float, str], TargetCheckRow] = {}
+    for target in POWER_TARGETS:
+        for null_pp, fn_con in families:
+            chosen: TargetCheckRow | None = None
+            missing = "no configuration on this grid"
+            min_pass: float | None = None
+            min_cut: float | None = None
+            for budget in budgets:
+                meets, mp, mc, missing_half = _design_family_meets_target(
+                    results,
+                    null_per_pair=null_pp,
+                    fn_construction=fn_con,
+                    epoch_budget=budget,
+                    target=target,
+                )
+                min_pass, min_cut = mp, mc
+                missing = missing_half
+                if meets:
+                    sample = next(
+                        r
+                        for r in results
+                        if r.design.null_per_pair == null_pp
+                        and r.design.fn_construction == fn_con
+                        and r.design.total_epochs == budget
+                    )
+                    chosen = TargetCheckRow(
+                        target=target,
+                        null_per_pair=null_pp,
+                        fn_construction=fn_con,
+                        reached=True,
+                        total_epochs=budget,
+                        n_pairs=sample.design.n_pairs,
+                        expected_spend=_expected_spend(sample.per_look[-1].expected_epochs),
+                        p_pass_at_d030=mp,
+                        p_cut_at_d010=mc,
+                        missing_half="",
+                        trigger_fires=False,
+                    )
+                    reached_any[target] = True
+                    break
+            if chosen is None:
+                chosen = TargetCheckRow(
+                    target=target,
+                    null_per_pair=null_pp,
+                    fn_construction=fn_con,
+                    reached=False,
+                    total_epochs=None,
+                    n_pairs=None,
+                    expected_spend=None,
+                    p_pass_at_d030=min_pass,
+                    p_cut_at_d010=min_cut,
+                    missing_half=missing,
+                    trigger_fires=True,
+                )
+            staged[(target, null_pp, fn_con)] = chosen
+    for target in POWER_TARGETS:
+        fires = not reached_any[target]
+        for (t, _null_pp, _fn_con), row in staged.items():
+            if t != target:
+                continue
+            rows.append(
+                TargetCheckRow(
+                    target=row.target,
+                    null_per_pair=row.null_per_pair,
+                    fn_construction=row.fn_construction,
+                    reached=row.reached,
+                    total_epochs=row.total_epochs,
+                    n_pairs=row.n_pairs,
+                    expected_spend=row.expected_spend,
+                    p_pass_at_d030=row.p_pass_at_d030,
+                    p_cut_at_d010=row.p_cut_at_d010,
+                    missing_half=row.missing_half,
+                    trigger_fires=fires,
+                )
+            )
+    return tuple(rows)
+
+
+def stage2_trigger_fires(rows: Sequence[TargetCheckRow], target: float) -> bool:
+    """Stage 2 is gated on Stage 1 leaving the target unmet (#685 lever split)."""
+    relevant = [r for r in rows if r.target == target]
+    if not relevant:
+        return True
+    return not any(r.reached for r in relevant)
+
+
 def cell_rng(seed: int, cell: Cell) -> np.random.Generator:
     return np.random.default_rng(
         [seed, round(cell.p_full * 1000), round(cell.p_placebo * 1000), round(cell.p_null * 1000)]
@@ -679,28 +906,6 @@ def _terminal_lines(results: Sequence[CellResult]) -> list[str]:
     return lines
 
 
-def headline(
-    results: Sequence[CellResult], target: float
-) -> dict[tuple[str, float, float], float | None]:
-    """Per (fn_construction, p_P, p_N), smallest d whose P(PASS) >= target."""
-    out: dict[tuple[str, float, float], float | None] = {}
-    for fn_con in FN_CONSTRUCTIONS:
-        for p_p in BASELINES:
-            for p_n in BASELINES:
-                curve = {
-                    r.cell.d: r.per_look[-1].p_pass
-                    for r in results
-                    if (
-                        r.design.fn_construction == fn_con
-                        and r.design.n_pairs == PAIRS_CAP
-                        and r.design.null_per_pair == 1.0
-                        and (r.cell.p_placebo, r.cell.p_null) == (p_p, p_n)
-                    )
-                }
-                out[(fn_con, p_p, p_n)] = smallest_d_reaching(curve, target)
-    return out
-
-
 def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str:
     se_nominal = math.sqrt(a650.PASS_ALPHA * (1 - a650.PASS_ALPHA) / replicates)
     limit = a650.PASS_ALPHA + a650.calibration_tolerance(replicates)
@@ -734,7 +939,7 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "| fn_construction | p_P | p_N | smallest d |",
         "| --- | --- | --- | --- |",
     ]
-    for (fn_con, p_p, p_n), d in headline(results, POWER_TARGETS[0]).items():
+    for (fn_con, p_p, p_n), d in headline_power_curve(results, POWER_TARGETS[0]).items():
         shown = _NOT_REACHED if d is None else f"{d:.2f}"
         lines.append(f"| {fn_con} | {p_p:.2f} | {p_n:.2f} | {shown} |")
     lines += [
@@ -744,9 +949,51 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "| fn_construction | p_P | p_N | smallest d |",
         "| --- | --- | --- | --- |",
     ]
-    for (fn_con, p_p, p_n), d in headline(results, POWER_TARGETS[1]).items():
+    for (fn_con, p_p, p_n), d in headline_power_curve(results, POWER_TARGETS[1]).items():
         shown = _NOT_REACHED if d is None else f"{d:.2f}"
         lines.append(f"| {fn_con} | {p_p:.2f} | {p_n:.2f} | {shown} |")
+    checks = target_check_rows(results)
+    lines += [
+        "",
+        "## Target check",
+        "",
+        "Both halves of the #685 target, read from the data only. A configuration "
+        "meets the target when P(PASS) >= target at d = 0.30 and P(CUT) >= target "
+        "at d = 0.10, each required in all nine (p_P, p_N) baseline cells. "
+        "Configurations are the declared epoch budgets, ranked by total_epochs "
+        "(the cap price). The smallest priced configuration that meets both halves "
+        "is reported per design family; otherwise the cell reads not reached. "
+        "The stage-2 trigger for a target fires when no design family reaches "
+        "that target: Stage 2 (pairs and optional stopping) is gated on Stage 1 "
+        "leaving the target unmet.",
+        "",
+        "| target | null_pp | fn_con | smallest priced configuration | total_epochs "
+        "| expected spend | P(PASS) at d=0.30 | P(CUT) at d=0.10 | missing half "
+        "| stage-2 trigger |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for check in checks:
+        config = (
+            f"{check.n_pairs} pairs"
+            if check.reached and check.n_pairs is not None
+            else "not reached"
+        )
+        epochs = "-" if check.total_epochs is None else str(check.total_epochs)
+        spend = check.expected_spend or "-"
+        min_pass = "-" if check.p_pass_at_d030 is None else f"{check.p_pass_at_d030:.4f}"
+        min_cut = "-" if check.p_cut_at_d010 is None else f"{check.p_cut_at_d010:.4f}"
+        missing = check.missing_half or "-"
+        trigger = "fires" if check.trigger_fires else "does not fire"
+        lines.append(
+            f"| {check.target:.2f} | {check.null_per_pair:.2f} | {check.fn_construction} "
+            f"| {config} | {epochs} | {spend} | {min_pass} | {min_cut} | {missing} "
+            f"| {trigger} |"
+        )
+    lines.append("")
+    for target in POWER_TARGETS:
+        fires = stage2_trigger_fires(checks, target)
+        status = "fires" if fires else "does not fire"
+        lines.append(f"Stage-2 trigger for target {target:.2f}: {status}.")
     lines += [
         "",
         "## Price lines",
