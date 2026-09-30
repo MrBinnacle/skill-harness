@@ -231,6 +231,61 @@ _ANCHOR_CHECK_MODULE = "check_dependency_anchor"
 _ANCHOR_KILL = "tests/test_check_dependency_anchor.py::TestReproducesIssue549::test_reproduces"
 _ANCHOR_CONTROL = "tests/test_check_dependency_anchor.py::TestPassesCoordinatedBump::test_passes"
 
+# #695: the Stage 1A regime simulator (#685 part a). The screen scripts live
+# under scripts/screens/419 and are loaded by file path in tests; the receipt
+# generator imports them by bare name, which is why _env adds that directory.
+_S1A = "scripts/screens/419/simulate_stage1a_regime_685.py"
+_S1A_MODULE = "simulate_stage1a_regime_685"
+_S1A_EXIT_FAIL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_calibration_fails"
+)
+_S1A_EXIT_HOLDS = (
+    "tests/test_simulate_stage1a_regime_685.py::test_main_exits_zero_when_calibration_holds"
+)
+_S1A_DIRECT_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[direct-1.0]"
+)
+_S1A_UNION_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-1.0]"
+)
+_S1A_TERMINAL_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_direct_terminal_bounds_equal_the_engine_bounds"
+)
+_S1A_EQUAL_EPOCHS_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_stage1_grid_holds_each_epoch_budget_constant_across_null_allocations"
+)
+_S1A_GRID_STRUCTURE_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_stage1_grid_has_expected_structure"
+)
+_S1A_NULL_DRAWS_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_null_allocation_uses_exactly_the_declared_observations"
+)
+_S1A_NULL_MASK_CONTROL = "tests/test_simulate_stage1a_regime_685.py::test_null_mask_double"
+_S1A_EPOCHS_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_expected_epochs_track_the_null_allocation_profile"
+)
+_S1A_SPEND_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_per_look_row_carries_expected_epochs_and_expected_spend"
+)
+_S1A_TRIGGER_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_stage2_trigger_fires_when_the_power_half_is_unmet"
+)
+_S1A_CAL_HALF_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_stage2_trigger_fires_when_the_calibration_half_fails"
+)
+_S1A_TARGET_CHECK_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_target_check_states_both_halves_for_0_80_and_0_90_from_data_only"
+)
+
 
 # #368 Path C: the ablation lane's discordant route.
 _STOPPING = "src/skill_harness/ablation/stopping.py"
@@ -599,6 +654,132 @@ MUTANTS: tuple[Mutant, ...] = (
         "            if False:  # mutant: exact-pin comparison disabled",
         (_ANCHOR_KILL, _ANCHOR_CONTROL),
     ),
+    # #695: the Stage 1A regime simulator (#685 part a). Each mutant restores a
+    # defect the rebuild list names; each selection carries the named killing
+    # assertion and, where one exists, a control that stays green under the
+    # mutant so the kill cannot pass on an emptied cell.
+    Mutant(
+        "M-S1A-1",
+        "695-stage1a-exit",
+        "the exit-on-calibration-failure path returns 0 anyway, so a run whose "
+        "boundary cells over-pass publishes its tables as if calibration held",
+        _S1A,
+        _S1A_MODULE,
+        "    return 0 if all_hold else 1",
+        "    return 0  # mutant: calibration failure ignored",
+        (_S1A_EXIT_FAIL, _S1A_EXIT_HOLDS),
+    ),
+    Mutant(
+        "M-S1A-2",
+        "695-stage1a-direct-online-scale",
+        "the direct F-N grid shortcut compares the raw one-sided bound against "
+        "the d-scale boundary instead of 2*bound - 1, the pre-rebuild defect",
+        _S1A,
+        _S1A_MODULE,
+        "                fn_sure_yes = 2 * lb_fn_br.lo[r] - 1 >= a650.BOUNDARY",
+        "                fn_sure_yes = lb_fn_br.lo[r] >= a650.BOUNDARY  # mutant: unscaled",
+        (_S1A_DIRECT_KILL, _S1A_UNION_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-3",
+        "695-stage1a-direct-terminal-scale",
+        "the direct F-N terminal bound drops the 2*bound - 1 scale, so the joint "
+        "state tally reads bounds on the wrong scale",
+        _S1A,
+        _S1A_MODULE,
+        '    lb_fn = 2 * _bound(xs_fn, pass_alpha, "lower") - 1',
+        '    lb_fn = _bound(xs_fn, pass_alpha, "lower") - 1  # mutant: unscaled',
+        (_S1A_TERMINAL_KILL,),
+    ),
+    Mutant(
+        "M-S1A-4",
+        "695-stage1a-equal-epoch-grid",
+        "the grid compares null allocations at a fixed 400-pair cap again, so "
+        "allocations are no longer compared at equal total epochs",
+        _S1A,
+        _S1A_MODULE,
+        "                                n_pairs=pairs_for_epoch_budget(epoch_budget, null_pp),",
+        "                                n_pairs=PAIRS_CAP,  # mutant: unequal total epochs",
+        (_S1A_EQUAL_EPOCHS_KILL, _S1A_GRID_STRUCTURE_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-5",
+        "695-stage1a-null-draw-count",
+        "a double-null design draws one Null epoch per pair again, the defect "
+        "that made the withdrawn tables simulate the wrong allocation",
+        _S1A,
+        _S1A_MODULE,
+        "    draws_when_scheduled = 1 if null_per_pair <= 1.0 else 2",
+        "    draws_when_scheduled = 1  # mutant: double-null runs one draw",
+        (_S1A_NULL_DRAWS_KILL, _S1A_NULL_MASK_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-6",
+        "695-stage1a-epochs-profile",
+        "the epoch profile omits Null epochs, so E[total epochs] underprices "
+        "every design that draws Nulls",
+        _S1A,
+        _S1A_MODULE,
+        "    epochs_profile = 2.0 * np.arange(horizon + 1) + null_cum",
+        "    epochs_profile = 2.0 * np.arange(horizon + 1)  # mutant: Null epochs unpriced",
+        (_S1A_EPOCHS_KILL,),
+    ),
+    Mutant(
+        "M-S1A-7",
+        "695-stage1a-expected-spend-rate",
+        "the expected-spend price line multiplies E[total epochs] by the cap "
+        "rate instead of the list rate",
+        _S1A,
+        _S1A_MODULE,
+        "    lo = expected_epochs * _PRICE_LO\n    hi = expected_epochs * _PRICE_HI",
+        "    lo = expected_epochs * _PRICE_CAP\n"
+        "    hi = expected_epochs * _PRICE_CAP  # mutant: cap rate",
+        (_S1A_SPEND_KILL,),
+    ),
+    Mutant(
+        "M-S1A-8",
+        "695-stage1a-trigger-never-fires",
+        "the stage-2 trigger is hardcoded to never fire, so an unmet target still reports as met",
+        _S1A,
+        _S1A_MODULE,
+        "            trigger_fires=(not cal_holds) or not all_reached,",
+        "            trigger_fires=False,  # mutant: stage-2 trigger never fires",
+        (_S1A_TRIGGER_KILL, _S1A_TARGET_CHECK_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-9",
+        "695-stage1a-calibration-half-assumed",
+        "the calibration half of the target is assumed to hold regardless of "
+        "the simulated boundary cells",
+        _S1A,
+        _S1A_MODULE,
+        "            cal_holds = bool(cal_cells) and all(calibration_holds(r) for r in cal_cells)",
+        "            cal_holds = True  # mutant: calibration half assumed",
+        (_S1A_CAL_HALF_KILL,),
+    ),
+    Mutant(
+        "M-S1A-10",
+        "695-stage1a-power-half-assumed",
+        "the power half of the target is assumed reached regardless of which "
+        "baseline cells actually reach it",
+        _S1A,
+        _S1A_MODULE,
+        "            all_reached = cells_reached == cells_total"
+        " and len(curve_by_cell) == cells_total",
+        "            all_reached = True  # mutant: power half assumed reached",
+        (_S1A_TRIGGER_KILL, _S1A_TARGET_CHECK_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-11",
+        "695-stage1a-headline-inverted",
+        "the headline smallest-d search inverts its inequality, so a target is "
+        "reported reached by the cells that never clear it",
+        _S1A,
+        _S1A_MODULE,
+        "    return next((d for d in sorted(curve) if curve[d] >= target), None)",
+        "    return next((d for d in sorted(curve) if curve[d] <= target), None)  # mutant",
+        (_S1A_TARGET_CHECK_CONTROL, _S1A_TRIGGER_KILL),
+    ),
 )
 
 
@@ -635,6 +816,12 @@ def _env(root: Path | None = None) -> dict[str, str]:
     asserts module.__file__ actually resolves inside its worktree, so a silent
     reversion to the editable install invalidates the receipt instead of
     quietly passing.
+
+    scripts/screens/419 joins src and scripts (#695): the Stage 1A regime
+    simulators live there as bare modules, and the generator imports them by
+    bare name for the isolation and compile assertions. Without that path a
+    case targeting a screen script records INVALID_ISOLATION rather than a
+    measurement.
     """
     env = {**os.environ, "PYTHONHASHSEED": "0", "PYTHONUTF8": "1"}
     if root is not None:
@@ -642,7 +829,13 @@ def _env(root: Path | None = None) -> dict[str, str]:
         # harness, which lives there and is not a package. Without it the compile
         # and isolation assertions cannot import the mutated module at all, and
         # the case would be recorded as INVALID_ISOLATION rather than measured.
-        env["PYTHONPATH"] = os.pathsep.join([str(root / "src"), str(root / "scripts")])
+        env["PYTHONPATH"] = os.pathsep.join(
+            [
+                str(root / "src"),
+                str(root / "scripts"),
+                str(root / "scripts" / "screens" / "419"),
+            ]
+        )
     return env
 
 
