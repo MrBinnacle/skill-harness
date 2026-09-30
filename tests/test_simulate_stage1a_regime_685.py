@@ -583,3 +583,28 @@ def test_stage2_trigger_fires_when_the_calibration_half_fails() -> None:
         for fn in reg.FN_CONSTRUCTIONS:
             assert f"| {target} | {fn} | FAILS | 9/9 | 0.40 | fires |" in summary
         assert f"Stage-2 trigger for target {target}: fires" in summary
+
+
+# ---------------------------------------------------------------------------
+# Exit-on-calibration-failure path (rebuild requirement 6)
+# ---------------------------------------------------------------------------
+
+
+def test_main_exits_zero_when_calibration_holds(tmp_path: Path) -> None:
+    grid = [(reg.Cell(0.55, 0.35, 0.30), reg.Design(n_pairs=30, null_per_pair=0.5))]
+    code = reg.main(
+        ["--out", str(tmp_path / "out"), "--replicates", "600", "--workers", "1", "--seed", "685"],
+        grid=grid,
+    )
+    assert code == 0
+
+
+def test_main_exits_non_zero_when_calibration_fails(tmp_path: Path) -> None:
+    grid = [(reg.Cell(0.55, 0.35, 0.30), reg.Design(n_pairs=30, null_per_pair=0.5))]
+    code = reg.main(
+        ["--out", str(tmp_path / "out"), "--replicates", "600", "--workers", "1", "--seed", "685"],
+        grid=grid,
+        pass_alpha=0.6,
+    )
+    assert code == 1
+    assert (tmp_path / "out" / "summary.md").is_file()
