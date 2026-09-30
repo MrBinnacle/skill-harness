@@ -359,6 +359,25 @@ class TestRunRecordCarriesTheDraw:
             )
         assert ev.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
 
+    def test_duplicate_draws_for_one_arm_are_refused_before_any_run_row(
+        self,
+        seeded_db_pair: tuple[sqlite3.Connection, sqlite3.Connection],
+    ) -> None:
+        """AC3: receipt arm names are a one-to-one trace to one frozen draw."""
+        ev, rt = seeded_db_pair
+        runner, _ = _make_runner(ev, rt)
+        draw = draw_subset_arm(_package(14), seed=_SEED_A)
+        with pytest.raises(ValueError, match="exactly one draw"):
+            runner.run_arms(
+                skill_id=_SKILL_ID,
+                arms=(draw.arm,),
+                user_message=_USER_MSG,
+                samples_per_arm=1,
+                max_usd=10.0,
+                subset_draws=(draw, draw),
+            )
+        assert ev.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
+
 
 # ---------------------------------------------------------------------------
 # AC4: after a run, the delivered listing (#664) is compared with the intended

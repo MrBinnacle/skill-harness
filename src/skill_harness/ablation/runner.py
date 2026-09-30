@@ -995,6 +995,18 @@ class AblationRunner:
                     f"subset draws name arms the run does not declare: {undeclared!r}; "
                     "a draw's record must describe a declared arm of this run"
                 )
+            seen_subset_arm_names: set[str] = set()
+            duplicate_subset_arm_names: list[str] = []
+            for record in subset_records:
+                if record.arm_name in seen_subset_arm_names:
+                    duplicate_subset_arm_names.append(record.arm_name)
+                else:
+                    seen_subset_arm_names.add(record.arm_name)
+            if duplicate_subset_arm_names:
+                raise ValueError(
+                    f"subset draws repeat declared arms: {duplicate_subset_arm_names!r}; "
+                    "a receipt arm must trace to exactly one draw"
+                )
 
         run_config = RunConfig(
             run_id=run_id,
