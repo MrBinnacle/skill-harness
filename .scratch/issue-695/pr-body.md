@@ -137,7 +137,7 @@ The smoke run and the mutation campaign both executed offline. No spend path exi
 
 **Red phase observed:** before the seam the exit tests failed with `TypeError` (unexpected keyword arguments). After the seam both pass. With the mutant `return 0 if all_hold else 1` -> `return 0`, the failure-path test turns red and the control stays green -- not an empty-cell kill.
 
-**Campaign:** `scripts/mutation_receipt.py --select 695-stage1a` on the committed tree recorded twelve M-S1A cases; **all twelve KILLED**, production tree byte-unchanged (digest `e04fc9333564d02934ed585a834e4528163e91ef5a50246fc275391b067c3587`). Record: `docs/assurance/stage1a-regime-685-mutation-receipt.json`, prose companion `docs/assurance/stage1a-regime-685-mutation-receipt.md`, indexed in `docs/receipts-index.md`.
+**Campaign:** `scripts/mutation_receipt.py --select 695-stage1a` on the committed tree recorded twelve M-S1A cases; **all twelve KILLED**, production tree byte-unchanged (digest `8ee8c40e03b5a9c6905e7f81d9b0bbc48d8a8d368100d582ed44c58e2dfc3e6f`). Record: `docs/assurance/stage1a-regime-685-mutation-receipt.json`, prose companion `docs/assurance/stage1a-regime-685-mutation-receipt.md`, indexed in `docs/receipts-index.md`.
 
 | mutant | mutation | killing assertion |
 |---|---|---|

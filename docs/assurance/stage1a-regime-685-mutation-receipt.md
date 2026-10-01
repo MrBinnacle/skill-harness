@@ -4,8 +4,8 @@
 failed on the whole ticket. **Generator:** `scripts/mutation_receipt.py --select 695-stage1a`.
 **Machine-readable record:** `docs/assurance/stage1a-regime-685-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685.py` at
-`sha256:e04fc9333564d02934ed585a834e4528163e91ef5a50246fc275391b067c3587`.
-**Commit at generation:** `0f74ef97813c` — informational only; currency is checked against the
+`sha256:8ee8c40e03b5a9c6905e7f81d9b0bbc48d8a8d368100d582ed44c58e2dfc3e6f`.
+**Commit at generation:** `5cae7566e214` — informational only; currency is checked against the
 digest above by `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
 
 Each case runs in its own git worktree at a fixed commit. Production is never mutated in place.
