@@ -1005,9 +1005,9 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "",
         "## Model statement",
         "",
-        "These results establish operating characteristics under the declared "
-        "independent-Bernoulli model. They do not establish how many real "
-        "Claude Code epochs are required.",
+        "These smoke-run results establish only the output schema under the declared "
+        "independent-Bernoulli model. They do not establish operating characteristics "
+        "or how many real Claude Code epochs are required.",
         "",
         "## Pairing statement",
         "",

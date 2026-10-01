@@ -44,7 +44,7 @@ The prior tables cannot support a claim about calibration, power, price, a bindi
 
 ## Model statement
 
-These results establish operating characteristics under the declared independent-Bernoulli model. They do not establish how many real Claude Code epochs are required.
+The full grid will establish operating characteristics under the declared independent-Bernoulli model. The smoke run establishes only the output schema. Neither establishes how many real Claude Code epochs are required.
 
 ## Relation to #684
 

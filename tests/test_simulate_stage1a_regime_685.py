@@ -710,6 +710,13 @@ def test_summary_renders_both_halves_and_the_stage2_trigger_from_data() -> None:
     assert "union" in summary
 
 
+def test_summary_marks_smoke_output_as_schema_evidence() -> None:
+    summary = reg.summary_md([], 20, 685)
+    assert "establish only the output schema" in summary
+    assert "They do not establish operating characteristics" in summary
+    assert "These results establish operating characteristics" not in summary
+
+
 def test_headline_reads_the_pairs_cap_designs_in_the_results() -> None:
     """M10: headline() must read n_pairs from the results, not a stale 97."""
     design = reg.Design(n_pairs=reg.PAIRS_CAP, null_per_pair=1.0, fn_construction="union")
@@ -969,6 +976,8 @@ def test_committed_smoke_summary_reports_the_target_check() -> None:
     assert "Replicates per cell: 20." in summary
     assert "P(PASS) >= target at d = 0.30" in summary
     assert "P(CUT) >= target at d = 0.10" in summary
+    assert "establish only the output schema" in summary
+    assert "These results establish operating characteristics" not in summary
     for target in ("0.80", "0.90"):
         assert f"Stage-2 trigger for target {target}:" in summary
         assert f"| {target} |" in summary
