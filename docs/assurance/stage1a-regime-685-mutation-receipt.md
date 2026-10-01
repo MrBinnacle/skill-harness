@@ -4,9 +4,9 @@
 failed on the whole ticket. **Generator:** `scripts/mutation_receipt.py --select 695-stage1a`.
 **Machine-readable record:** `docs/assurance/stage1a-regime-685-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685.py` at
-`sha256:8ee8c40e03b5a9c6905e7f81d9b0bbc48d8a8d368100d582ed44c58e2dfc3e6f`.
-**Commit at generation:** `5cae7566e214` — informational only; currency is checked against the
-digest above by `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
+`sha256:9ac9d41ad8b420407bc344024d38d2e282976285bdbf639da85699ea9e8d459d`.
+**Commit at generation:** `9de26f8f242f` — informational only; currency is checked against the
+digest above by `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
 
 Each case runs in its own git worktree at a fixed commit. Production is never mutated in place.
 `PYTHONPATH` pins every case to its own sources; `scripts/screens/419` joins `src` and `scripts`
@@ -36,7 +36,7 @@ Twelve hand-chosen mutants. **No mutation score is reported**, because twelve ca
 support one; each case is a named obligation, not a sample.
 
 The #694 verdict comment (PR #694, issue comment 5902938377) could not be read from the container
-that ran this campaign: the container holds no GitHub token and network use is forbidden. The
+that chose these mutants: the container holds no GitHub token and network use is forbidden. The
 mutants above are the defect classes the #695 ticket names and the classes the #694 verdict
 table listed as survived (M1b, M5, M6, M8, M9, M10, M13) plus the already-killed scale and
 equal-epoch defects re-pinned by name, plus the exact-path F-N defect the #704 verdict found
@@ -53,7 +53,7 @@ numbers are final operating characteristics; those come from
 `docs/findings/data/stage1a-regime-685/` at a stated replicate count and the full grid belongs
 to part (b), #696. It says twelve specific defects are detected, in isolated worktrees, against
 baselines that passed first, and that the production tree was byte-unchanged throughout. It
-refuses any claim about the #694 verdict comment itself, which this container could not read.
+refuses any claim about the #694 verdict comment itself, which the build container could not read.
 
 *Revisit if:* the #695 deliverable changes. Then regenerate with
 `scripts/mutation_receipt.py --select 695-stage1a`; the currency gate reddens automatically the
