@@ -4,8 +4,8 @@
 failed on the whole ticket. **Generator:** `scripts/mutation_receipt.py --select 695-stage1a`.
 **Machine-readable record:** `docs/assurance/stage1a-regime-685-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685.py` at
-`sha256:817d2d572b0381afde9cb89527710714b37032fe4b99c8cb51d4a73107e5f719`.
-**Commit at generation:** `8398a49475bd` — informational only; currency is checked against the
+`sha256:e04fc9333564d02934ed585a834e4528163e91ef5a50246fc275391b067c3587`.
+**Commit at generation:** `0f74ef97813c` — informational only; currency is checked against the
 digest above by `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
 
 Each case runs in its own git worktree at a fixed commit. Production is never mutated in place.
@@ -30,7 +30,7 @@ after.
 | M-S1A-9 | 695-stage1a-price-cap | cap price rate $0.30 shifted to $0.03 (#694 M6) | **KILLED** | `test_cap_price_string_carries_the_cap_rate` and `test_price_constants_are_the_registered_rates` |
 | M-S1A-10 | 695-stage1a-role-boundary | role() uses d < 0.15 instead of d <= 0.15 (#694 M8) | **KILLED** | `test_role_labels_d_equal_to_0_15_as_no_lift` |
 | M-S1A-11 | 695-stage1a-calibration-look-one | calibration_holds reads look 1 instead of the cap (#694 M9) | **KILLED** | `test_calibration_holds_reads_the_cap_look_not_look_one` |
-| M-S1A-12 | 695-stage1a-headline-pairs | headline_power_curve filters on a stale 97-pair count (#694 M10) | **KILLED** | `test_headline_reads_the_pairs_cap_designs_in_the_results` |
+| M-S1A-12 | 695-stage1a-headline-pairs | headline filters on a stale 97-pair count (#694 M10) | **KILLED** | `test_headline_reads_the_pairs_cap_designs_in_the_results` |
 
 Twelve hand-chosen mutants. **No mutation score is reported**, because twelve cases cannot
 support one; each case is a named obligation, not a sample.

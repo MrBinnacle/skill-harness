@@ -137,7 +137,7 @@ The smoke run and the mutation campaign both executed offline. No spend path exi
 
 **Red phase observed:** before the seam the exit tests failed with `TypeError` (unexpected keyword arguments). After the seam both pass. With the mutant `return 0 if all_hold else 1` -> `return 0`, the failure-path test turns red and the control stays green -- not an empty-cell kill.
 
-**Campaign:** `scripts/mutation_receipt.py --select 695-stage1a` on the committed tree recorded twelve M-S1A cases; **all twelve KILLED**, production tree byte-unchanged (digest `817d2d572b0381afde9cb89527710714b37032fe4b99c8cb51d4a73107e5f719`). Record: `docs/assurance/stage1a-regime-685-mutation-receipt.json`, prose companion `docs/assurance/stage1a-regime-685-mutation-receipt.md`, indexed in `docs/receipts-index.md`.
+**Campaign:** `scripts/mutation_receipt.py --select 695-stage1a` on the committed tree recorded twelve M-S1A cases; **all twelve KILLED**, production tree byte-unchanged (digest `e04fc9333564d02934ed585a834e4528163e91ef5a50246fc275391b067c3587`). Record: `docs/assurance/stage1a-regime-685-mutation-receipt.json`, prose companion `docs/assurance/stage1a-regime-685-mutation-receipt.md`, indexed in `docs/receipts-index.md`.
 
 | mutant | mutation | killing assertion |
 |---|---|---|
@@ -152,7 +152,7 @@ The smoke run and the mutation campaign both executed offline. No spend path exi
 | M-S1A-9 | cap price rate $0.30 shifted to $0.03 (#694 M6) | `test_cap_price_string_carries_the_cap_rate` and `test_price_constants_are_the_registered_rates` |
 | M-S1A-10 | role() uses d < 0.15 instead of d <= 0.15 (#694 M8) | `test_role_labels_d_equal_to_0_15_as_no_lift` |
 | M-S1A-11 | calibration_holds reads look 1 instead of the cap (#694 M9) | `test_calibration_holds_reads_the_cap_look_not_look_one` |
-| M-S1A-12 | headline_power_curve filters on a stale 97-pair count (#694 M10) | `test_headline_reads_the_pairs_cap_designs_in_the_results` |
+| M-S1A-12 | headline filters on a stale 97-pair count (#694 M10) | `test_headline_reads_the_pairs_cap_designs_in_the_results` |
 
 **Exact-path note:** the pure always-true form of direct F-N in the exact fallback is observationally equivalent on this grid. 108 exact-path evaluations across the searched cells never had a failing bound, so forcing True does not change any per-look output. M-S1A-6 therefore pins the alpha defect in that same path, which is observable at a marginal-F-N cell under loosened and registered pass alphas. The receipt records this finding rather than folding it into a score.
 
