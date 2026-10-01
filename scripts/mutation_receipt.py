@@ -819,8 +819,7 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M-S1A-12",
         "695-stage1a-headline-pairs",
-        "headline_power_curve filters on a stale 97-pair count instead of "
-        "PAIRS_CAP (the #694 M10 survivor)",
+        "headline filters on a stale 97-pair count instead of PAIRS_CAP (the #694 M10 survivor)",
         _S1A,
         _S1A_MODULE,
         "                        and r.design.n_pairs == PAIRS_CAP\n"

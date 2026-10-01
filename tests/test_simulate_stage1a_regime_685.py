@@ -724,8 +724,9 @@ def test_headline_reads_the_pairs_cap_designs_in_the_results() -> None:
         for p_n in reg.BASELINES
         for d, p_pass in ((0.30, 0.20), (0.40, 0.85))
     ]
-    curve = reg.headline_power_curve(results, 0.80)
+    curve = reg.headline(results, 0.80)
     assert curve[("union", 0.35, 0.35)] == 0.40
+    assert curve[("direct", 0.35, 0.35)] is None
     assert reg.smallest_d_reaching({0.30: 0.20, 0.40: 0.85}, 0.80) == 0.40
 
 

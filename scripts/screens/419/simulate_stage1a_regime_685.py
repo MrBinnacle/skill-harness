@@ -145,7 +145,7 @@ def smallest_d_reaching(curve: dict[float, float], target: float) -> float | Non
     return next((d for d in sorted(curve) if curve[d] >= target), None)
 
 
-def headline_power_curve(
+def headline(
     results: Sequence[CellResult], target: float
 ) -> dict[tuple[str, float, float], float | None]:
     """Per (fn_construction, p_P, p_N), smallest d whose P(PASS) at the cap reaches target.
@@ -170,23 +170,6 @@ def headline_power_curve(
                 }
                 out[(fn_con, p_p, p_n)] = smallest_d_reaching(curve, target)
     return out
-
-
-def headline(
-    results: Sequence[CellResult], target: float
-) -> dict[tuple[float, float], float | None]:
-    """Per (p_P, p_N) at the union/1:1:1 cap design, smallest d with P(PASS) >= target."""
-    curve_by_cell: dict[tuple[float, float], dict[float, float]] = {}
-    for r in results:
-        if (
-            r.design.fn_construction == "union"
-            and r.design.n_pairs == PAIRS_CAP
-            and r.design.null_per_pair == 1.0
-        ):
-            curve_by_cell.setdefault((r.cell.p_placebo, r.cell.p_null), {})[r.cell.d] = r.per_look[
-                -1
-            ].p_pass
-    return {cell: smallest_d_reaching(curve, target) for cell, curve in curve_by_cell.items()}
 
 
 @dataclass(frozen=True)
@@ -939,7 +922,7 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "| fn_construction | p_P | p_N | smallest d |",
         "| --- | --- | --- | --- |",
     ]
-    for (fn_con, p_p, p_n), d in headline_power_curve(results, POWER_TARGETS[0]).items():
+    for (fn_con, p_p, p_n), d in headline(results, POWER_TARGETS[0]).items():
         shown = _NOT_REACHED if d is None else f"{d:.2f}"
         lines.append(f"| {fn_con} | {p_p:.2f} | {p_n:.2f} | {shown} |")
     lines += [
@@ -949,7 +932,7 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "| fn_construction | p_P | p_N | smallest d |",
         "| --- | --- | --- | --- |",
     ]
-    for (fn_con, p_p, p_n), d in headline_power_curve(results, POWER_TARGETS[1]).items():
+    for (fn_con, p_p, p_n), d in headline(results, POWER_TARGETS[1]).items():
         shown = _NOT_REACHED if d is None else f"{d:.2f}"
         lines.append(f"| {fn_con} | {p_p:.2f} | {p_n:.2f} | {shown} |")
     checks = target_check_rows(results)
