@@ -1014,16 +1014,10 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "Full and Placebo are paired by launch index; under independent draws "
         "this confers no matched-pairs advantage.",
         "",
-        "## Crashed-look rule and void-epoch rule for the next paid run",
+        "## Crashed-look and void-epoch rules",
         "",
-        "Crashed-look rule: If a look crashes after at least two valid epochs, "
-        "the look is void and the run continues from the next look. If the crash "
-        "occurs at look 1, the entire cell is void and must be rerun.",
-        "",
-        "Void-epoch rule: An epoch that produces no model output (timeout, "
-        "error, or empty response) is void and excluded from the bound "
-        "calculation. The run continues; void epochs do not count toward the "
-        "pair cap.",
+        "skill-harness #697 owns the crashed-look rule and the void-epoch rule "
+        "for the next paid run; this record states neither.",
     ]
     return "\n".join(lines) + "\n"
 

@@ -32,11 +32,9 @@ Full and Placebo are paired by launch index; under independent draws this confer
 
 **Target check.** For each design family (null allocation x F-N construction) and each target in {0.80, 0.90}, the headline table reports the smallest priced epoch-budget configuration that meets P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10, each required in all nine baseline cells, or "not reached". The stage-2 trigger for a target fires when no design family reaches that target: Stage 2 (pairs and optional stopping) is gated on Stage 1 leaving the target unmet.
 
-## Crashed-look rule and void-epoch rule for the next paid run
+## Crashed-look and void-epoch rules
 
-**Crashed-look rule:** If a look crashes after at least two valid epochs, the look is void and the run continues from the next look. If the crash occurs at look 1, the entire cell is void and must be rerun.
-
-**Void-epoch rule:** An epoch that produces no model output (timeout, error, or empty response) is void and excluded from the bound calculation. The run continues; void epochs do not count toward the pair cap.
+skill-harness #697 owns the crashed-look rule and the void-epoch rule for the next paid run; this record states neither.
 
 ## Finding
 

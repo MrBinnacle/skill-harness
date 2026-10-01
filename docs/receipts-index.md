@@ -449,8 +449,8 @@ and covers that section only. This page stays the citable surface for every kind
 ### [`docs/findings/stage1a-lever-adjudication-685.md`](findings/stage1a-lever-adjudication-685.md)
 
 - **Claims:** The Stage 1 simulation design for null allocation x F-N
-  construction at fixed 300- and 1,200-epoch budgets. It states the model,
-  launch-index pairing, crashed-look rule, and void-epoch rule for the next paid run. The script
+  construction at fixed 300- and 1,200-epoch budgets. It states the model
+  and launch-index pairing. The script
   records every look and names its design fields in each output row, including E[total epochs],
   an expected-spend price line beside the cap price, and MC SE on every row. The headline table
   checks both halves of the #685 target (P(PASS) >= target at d = 0.30 and P(CUT) >= target at
@@ -461,7 +461,8 @@ and covers that section only. This page stays the citable surface for every kind
   Null epochs and omitted the second Null draw in a double-Null design. They
   are withdrawn. The corrected 756-cell grid at 2,000 replicates has not run
   (part (b), #696). It refuses any matched-pairs advantage from launch-index pairing and any
-  claim about real Claude Code epochs.
+  claim about real Claude Code epochs. It states no crashed-look rule and no void-epoch rule
+  for the next paid run; skill-harness #697 owns both.
 
 ### [`docs/assurance/stage1a-regime-685-mutation-receipt.md`](assurance/stage1a-regime-685-mutation-receipt.md)
 
