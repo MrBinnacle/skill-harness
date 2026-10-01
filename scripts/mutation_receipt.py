@@ -231,6 +231,88 @@ _ANCHOR_CHECK_MODULE = "check_dependency_anchor"
 _ANCHOR_KILL = "tests/test_check_dependency_anchor.py::TestReproducesIssue549::test_reproduces"
 _ANCHOR_CONTROL = "tests/test_check_dependency_anchor.py::TestPassesCoordinatedBump::test_passes"
 
+# #695: the Stage 1A regime simulator (#685 part a). The screen scripts live
+# under scripts/screens/419 and are loaded by file path in tests; the receipt
+# generator imports them by bare name, which is why _env adds that directory.
+# Each mutant below restores a defect the #694 verdict listed as survived, or
+# the exact-path-only variant of M3 that the #704 verdict found still open.
+_S1A = "scripts/screens/419/simulate_stage1a_regime_685.py"
+_S1A_MODULE = "simulate_stage1a_regime_685"
+_S1A_EXIT_FAIL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_calibration_fails"
+)
+_S1A_EXIT_HOLDS = (
+    "tests/test_simulate_stage1a_regime_685.py::test_main_exits_zero_when_calibration_holds"
+)
+_S1A_FP_ALPHA_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_exact_fp_fallback_uses_the_registered_pass_alpha"
+)
+_S1A_FP_ALPHA_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-1.0]"
+)
+_S1A_PRICE_HI_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_price_constants_are_the_registered_rates"
+)
+_S1A_PRICE_HI_CONTROL = "tests/test_simulate_stage1a_regime_685.py::test_price_function"
+_S1A_PRICE_CAP_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_cap_price_string_carries_the_cap_rate"
+)
+_S1A_PRICE_CAP_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_price_constants_are_the_registered_rates"
+)
+_S1A_ROLE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_role_labels_d_equal_to_0_15_as_no_lift"
+)
+_S1A_ROLE_CONTROL = "tests/test_simulate_stage1a_regime_685.py::test_design_fields_at_baseline"
+_S1A_CAL_HOLDS_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_calibration_holds_reads_the_cap_look_not_look_one"
+)
+_S1A_CAL_HOLDS_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_main_exits_zero_when_calibration_holds"
+)
+_S1A_HEADLINE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_headline_reads_the_pairs_cap_designs_in_the_results"
+)
+_S1A_HEADLINE_CONTROL = "tests/test_simulate_stage1a_regime_685.py::test_null_mask_1_to_1"
+_S1A_FN_EXACT_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_direct_fn_exact_fallback_is_pinned_to_the_engine"
+)
+_S1A_FN_EXACT_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[direct-1.0]"
+)
+_S1A_ONLINE_SCALE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[direct-1.0]"
+)
+_S1A_ONLINE_SCALE_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-1.0]"
+)
+_S1A_TERMINAL_SCALE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_direct_terminal_bounds_equal_the_engine_bounds"
+)
+_S1A_EQUAL_EPOCHS_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_stage1_grid_holds_each_epoch_budget_constant_across_null_allocations"
+)
+_S1A_EQUAL_EPOCHS_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_stage1_grid_has_expected_structure"
+)
+_S1A_UNION_EXACT_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_union_fn_exact_fallback_is_pinned_to_the_engine"
+)
+_S1A_UNION_EXACT_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-2.0]"
+)
+
 
 # #368 Path C: the ablation lane's discordant route.
 _STOPPING = "src/skill_harness/ablation/stopping.py"
@@ -599,6 +681,153 @@ MUTANTS: tuple[Mutant, ...] = (
         "            if False:  # mutant: exact-pin comparison disabled",
         (_ANCHOR_KILL, _ANCHOR_CONTROL),
     ),
+    # #695: Stage 1A regime simulator (#685 part a). Every mutant below is a
+    # defect the #694 verdict listed as survived, the exact-path-only variant
+    # of M3 the #704 verdict found open, or a rebuild requirement the verdict
+    # already killed and this campaign re-pins by name. Each selection carries
+    # the named killing assertion and, where one exists, a control that stays
+    # green under the mutant so the kill cannot pass on an emptied cell.
+    Mutant(
+        "M-S1A-1",
+        "695-stage1a-exit",
+        "the exit-on-calibration-failure path returns 0 anyway, so a run whose "
+        "boundary cells over-pass publishes its tables as if calibration held",
+        _S1A,
+        _S1A_MODULE,
+        "    return 0 if all_hold else 1",
+        "    return 0  # mutant: calibration failure ignored",
+        (_S1A_EXIT_FAIL, _S1A_EXIT_HOLDS),
+    ),
+    Mutant(
+        "M-S1A-2",
+        "695-stage1a-direct-online-scale",
+        "the direct F-N grid shortcut compares the raw one-sided bound against "
+        "the d-scale boundary instead of 2*bound - 1 (the #694 R1 defect)",
+        _S1A,
+        _S1A_MODULE,
+        "                fn_sure_yes = 2 * lb_fn_br.lo[r] - 1 >= a650.BOUNDARY",
+        "                fn_sure_yes = lb_fn_br.lo[r] >= a650.BOUNDARY  # mutant: unscaled",
+        (_S1A_ONLINE_SCALE_KILL, _S1A_ONLINE_SCALE_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-3",
+        "695-stage1a-direct-terminal-scale",
+        "the direct F-N terminal bound drops the 2*bound - 1 scale",
+        _S1A,
+        _S1A_MODULE,
+        '    lb_fn = 2 * _bound(xs_fn, pass_alpha, "lower") - 1',
+        '    lb_fn = _bound(xs_fn, pass_alpha, "lower") - 1  # mutant: unscaled',
+        (_S1A_TERMINAL_SCALE_KILL,),
+    ),
+    Mutant(
+        "M-S1A-4",
+        "695-stage1a-equal-epoch-grid",
+        "the grid compares null allocations at a fixed pair cap again, so "
+        "allocations are no longer compared at equal total epochs",
+        _S1A,
+        _S1A_MODULE,
+        "                                n_pairs=pairs_for_epoch_budget(epoch_budget, null_pp),",
+        "                                n_pairs=PAIRS_CAP,  # mutant: unequal total epochs",
+        (_S1A_EQUAL_EPOCHS_KILL, _S1A_EQUAL_EPOCHS_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-5",
+        "695-stage1a-fp-exact-alpha",
+        "the exact F-P fallback swaps pass_alpha for FUTILITY_ALPHA (the #694 "
+        "M1b survivor), so the fallback tests at the wrong level",
+        _S1A,
+        _S1A_MODULE,
+        '                fp_clears = 2 * _exact(xs_fp, pass_alpha, "lower") - 1 >= a650.BOUNDARY',
+        '                fp_clears = 2 * _exact(xs_fp, a650.FUTILITY_ALPHA, "lower") - 1'
+        " >= a650.BOUNDARY  # mutant: alpha swapped",
+        (_S1A_FP_ALPHA_KILL, _S1A_FP_ALPHA_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-6",
+        "695-stage1a-fn-exact-alpha",
+        "the direct F-N exact fallback evaluates the bound at alpha/2 instead "
+        "of pass_alpha (the exact-path defect the #704 verdict left open; the "
+        "pure always-true form is observationally equivalent on this grid)",
+        _S1A,
+        _S1A_MODULE,
+        '                    fn_clears = 2 * _exact(xs_fn, pass_alpha, "lower") - 1'
+        " >= a650.BOUNDARY",
+        '                    fn_clears = 2 * _exact(xs_fn, half, "lower") - 1'
+        " >= a650.BOUNDARY  # mutant: alpha/2 in the exact path",
+        (_S1A_FN_EXACT_KILL, _S1A_FN_EXACT_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-7",
+        "695-stage1a-union-fn-exact-always-true",
+        "the union F-N exact fallback is forced true (the #694 M2b survivor)",
+        _S1A,
+        _S1A_MODULE,
+        "                    fn_clears = (\n"
+        '                        _exact(xs_f, half, "lower") - _exact(xs_n, half, "upper")'
+        " >= a650.BOUNDARY\n"
+        "                    )",
+        "                    fn_clears = True  # mutant: union exact F-N forced",
+        (_S1A_UNION_EXACT_KILL, _S1A_UNION_EXACT_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-8",
+        "695-stage1a-price-hi",
+        "the list high price rate is shifted from $0.087 to $0.078 (the #694 M5 survivor)",
+        _S1A,
+        _S1A_MODULE,
+        "_PRICE_HI = 0.087",
+        "_PRICE_HI = 0.078  # mutant: list high rate shifted",
+        (_S1A_PRICE_HI_KILL, _S1A_PRICE_HI_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-9",
+        "695-stage1a-price-cap",
+        "the cap price rate is shifted from $0.30 to $0.03 (the #694 M6 survivor)",
+        _S1A,
+        _S1A_MODULE,
+        "_PRICE_CAP = 0.30",
+        "_PRICE_CAP = 0.03  # mutant: cap rate shifted",
+        (_S1A_PRICE_CAP_KILL, _S1A_PRICE_CAP_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-10",
+        "695-stage1a-role-boundary",
+        "role() uses d < 0.15 instead of d <= 0.15 (the #694 M8 survivor), so "
+        "d = 0.15 is relabelled from no-lift to a real effect",
+        _S1A,
+        _S1A_MODULE,
+        "    if d <= 0.15:",
+        "    if d < 0.15:  # mutant: d = 0.15 relabelled",
+        (_S1A_ROLE_KILL, _S1A_ROLE_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-11",
+        "695-stage1a-calibration-look-one",
+        "calibration_holds reads look 1 instead of the cap (the #694 M9 "
+        "survivor), so a loosened rule that fails only at the cap is called "
+        "calibrated",
+        _S1A,
+        _S1A_MODULE,
+        "def calibration_holds(res: CellResult) -> bool:\n"
+        "    limit = a650.PASS_ALPHA + a650.calibration_tolerance(res.replicates)\n"
+        "    return res.per_look[-1].p_pass <= limit",
+        "def calibration_holds(res: CellResult) -> bool:\n"
+        "    limit = a650.PASS_ALPHA + a650.calibration_tolerance(res.replicates)\n"
+        "    return res.per_look[0].p_pass <= limit  # mutant: look 1, not the cap",
+        (_S1A_CAL_HOLDS_KILL, _S1A_CAL_HOLDS_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-12",
+        "695-stage1a-headline-pairs",
+        "headline filters on a stale 97-pair count instead of PAIRS_CAP (the #694 M10 survivor)",
+        _S1A,
+        _S1A_MODULE,
+        "                        and r.design.n_pairs == PAIRS_CAP\n"
+        "                        and r.design.null_per_pair == 1.0",
+        "                        and r.design.n_pairs == 97\n"
+        "                        and r.design.null_per_pair == 1.0  # mutant: stale pair count",
+        (_S1A_HEADLINE_KILL, _S1A_HEADLINE_CONTROL),
+    ),
 )
 
 
@@ -639,10 +868,15 @@ def _env(root: Path | None = None) -> dict[str, str]:
     env = {**os.environ, "PYTHONHASHSEED": "0", "PYTHONUTF8": "1"}
     if root is not None:
         # scripts/ joins src/ because #443's mutants target the acceptance-matrix
-        # harness, which lives there and is not a package. Without it the compile
-        # and isolation assertions cannot import the mutated module at all, and
-        # the case would be recorded as INVALID_ISOLATION rather than measured.
-        env["PYTHONPATH"] = os.pathsep.join([str(root / "src"), str(root / "scripts")])
+        # harness, which lives there and is not a package. scripts/screens/419
+        # joins them because #695's Stage 1A simulator lives there and is loaded
+        # by bare module name in the isolation assertion. Without both entries
+        # the compile and isolation assertions cannot import the mutated module
+        # at all, and the case would be recorded as INVALID_ISOLATION rather
+        # than measured.
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(root / "src"), str(root / "scripts"), str(root / "scripts" / "screens" / "419")]
+        )
     return env
 
 
