@@ -452,7 +452,7 @@ and covers that section only. This page stays the citable surface for every kind
   construction at fixed 300- and 1,200-epoch budgets, under the declared independent-Bernoulli
   model with launch-index pairing: 756 configurations at 2,000 replicates, seed 685, committed
   under `docs/findings/data/stage1a-regime-685/` with replicate count and MC SE on every row
-  (#696). No design family reaches P(PASS) >= target at d = 0.30 together with P(CUT) >= target
+  (#696), anytime stopping only. No anytime design family reaches P(PASS) >= target at d = 0.30 together with P(CUT) >= target
   at d = 0.10 on the p_P = p_N diagonal, for 0.80 or 0.90, at either budget (best halves 0.2335
   and 0.5070), so the stage-2 trigger fires for both targets. Calibration holds: the largest
   P(PASS) where a PASS is an error is 0.0080 and the largest P(CUT) where a CUT is an error is
@@ -462,8 +462,10 @@ and covers that section only. This page stays the citable surface for every kind
 - **Refuses to claim:** Any operating characteristic from the smoke numbers. The 200-replicate
   tables previously attached to this record used fabricated zero outcomes for missing
   Null epochs and omitted the second Null draw in a double-Null design. They
-  are withdrawn. It refuses any claim about the pair-cap and fixed-n levers (Stage 2, not
-  simulated), any matched-pairs advantage from launch-index pairing, any claim about real
+  are withdrawn. It refuses any claim about a fixed-n design: #685 requirement 3 asks Stage 1 for a
+  fixed-n look beside each anytime design, the script has none, and the stage-2 trigger
+  statement therefore holds for anytime designs only. It refuses any claim about the pair-cap
+  lever (Stage 2, not simulated), any matched-pairs advantage from launch-index pairing, any claim about real
   Claude Code epochs, and any decision on the direct-form amendment, the margin or the power
   target. It states no crashed-look rule and no void-epoch rule
   for the next paid run; skill-harness #697 owns both.

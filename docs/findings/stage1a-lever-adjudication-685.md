@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-29. **Updated:** 2026-09-30 by #695; 2026-10-02 by #696 (the full grid). **Script:** `scripts/screens/419/simulate_stage1a_regime_685.py`. **Test:** `tests/test_simulate_stage1a_regime_685.py`. **Data:** `docs/findings/data/stage1a-regime-685/` (756 configurations at 2,000 replicates, seed 685; the earlier 20-replicate smoke run is in its `smoke/` subdirectory and is schema evidence only). **Model calls:** none. **Network calls:** none. **Spend:** none.
 
-**Status:** the full Stage 1 grid has run. No stage-1 design reaches the power target at 0.80 or at 0.90, at either budget, and the stage-2 trigger fires for both targets. Calibration holds in every configuration where a PASS or a CUT would be an error, and the script's exit code is 0. The original 200-replicate tables treated missing Null epochs as zero outcomes and used one Null epoch where the double-Null design declares two; they did not simulate the declared designs and stay withdrawn.
+**Status:** the Stage 1 grid the script defines has run in full: anytime stopping only, at the 300- and 1,200-epoch budgets. No anytime stage-1 design reaches the power target at 0.80 or at 0.90, at either budget, and the script's stage-2 trigger fires for both targets. **The fixed-n look that #685 requirement 3 and #696 ask for beside each anytime design is not in the script and was not run; no claim here covers a fixed-n design** (see Limits, item 3). Calibration holds in every configuration where a PASS or a CUT would be an error, and the script's exit code is 0. The original 200-replicate tables treated missing Null epochs as zero outcomes and used one Null epoch where the double-Null design declares two; they did not simulate the declared designs and stay withdrawn.
 
 ## Why this record exists
 
@@ -14,7 +14,7 @@ The four levers are:
 3. **F - N construction** (registered union bound vs direct one-sided bound).
 4. **Optional stopping** (anytime-valid vs fixed-n look).
 
-Stage 1 varies levers 2 and 3 at two epoch budgets. Levers 1 and 4 are Stage 2 and are not simulated here.
+Stage 1 varies levers 2 and 3 at two epoch budgets. Lever 1 is Stage 2. Lever 4 is not simulated here either: #685 requirement 3 asks Stage 1 to report a fixed-n look beside each anytime design, and the script has no fixed-n stopping rule.
 
 ## Pairing statement
 
@@ -55,9 +55,9 @@ Every figure is P at the final look of its configuration, read from `per_look.ts
 | 1,200 | 2.0 | union | 300 | 0.0235 | 0.3525 | not reached | not reached |
 | 1,200 | 2.0 | direct | 300 | 0.2255 | 0.3525 | not reached | not reached |
 
-The best PASS half is 0.2335 (1,200 epochs, Null per pair 1.0, direct) and the best CUT half is 0.5070 (1,200 epochs, Null per pair 0.5, either construction). No diagonal cell is within 2 MC SE of 0.80 or of 0.90, so no threshold crossing is claimed or denied on Monte Carlo noise.
+The best PASS half is 0.2335 (1,200 epochs, Null per pair 1.0, direct) and the best CUT half is 0.5070 (1,200 epochs, Null per pair 0.5, either construction). No value in this headline table is within 2 MC SE of 0.80 or of 0.90 (the nearest is more than 20 SE away), so no threshold crossing is claimed or denied on Monte Carlo noise.
 
-**Stage-2 trigger statement.** No stage-1 design family meets the price-free diagonal target at either budget, for 0.80 or for 0.90. The stage-2 trigger fires for both targets. It fires on the data: the diagonal contains no cell where an alternative sits at its own null, so the result is not forced by the construction of the grid.
+**Stage-2 trigger statement.** No anytime stage-1 design family meets the price-free diagonal target at either budget, for 0.80 or for 0.90. The script's stage-2 trigger fires for both targets. It fires on the data: the diagonal contains no cell where an alternative sits at its own null, so the result is not forced by the construction of the grid. The statement is about the anytime designs only. #685 describes the gap between an anytime design and a fixed-n look at the same alpha and the same n as "the price of the right to stop early", so it expects the fixed-n look to do better; this grid has no fixed-n row and cannot say whether a fixed-n stage-1 design reaches the target.
 
 ### Per-lever marginals
 
@@ -100,9 +100,9 @@ Expected epochs on the diagonal, from `per_look.tsv`:
 | --- | --- | --- | --- | --- |
 | 1,200 | 0.5 | union | 1,188 to 1,190 | 800 to 838 |
 | 1,200 | 0.5 | direct | 1,117 to 1,122 | 800 to 838 |
-| 1,200 | 1.0 | union | 1,185 to 1,191 | 863 to 877 |
-| 1,200 | 1.0 | direct | 1,066 to 1,079 | 863 to 877 |
-| 1,200 | 2.0 | union | 1,183 to 1,188 | 925 to 955 |
+| 1,200 | 1.0 | union | 1,185 to 1,191 | 863 to 876 |
+| 1,200 | 1.0 | direct | 1,066 to 1,079 | 863 to 876 |
+| 1,200 | 2.0 | union | 1,182 to 1,188 | 925 to 955 |
 | 1,200 | 2.0 | direct | 1,079 to 1,087 | 925 to 955 |
 
 At 300 epochs every design runs close to its cap at d = 0.30 (296 to 300 expected epochs) and at d = 0.10 (266 to 278). No design reaches the target, so no row here prices a design that meets it.
@@ -113,7 +113,7 @@ skill-harness #697 owns the crashed-look rule and the void-epoch rule for the ne
 
 ## Finding
 
-Under the declared independent-Bernoulli model, neither null allocation nor the F-N construction brings the registered Stage 1A rule to P(PASS) >= 0.80 at d = 0.30 together with P(CUT) >= 0.80 at d = 0.10, at 300 or at 1,200 epochs. The direct F-N construction raises P(PASS) about tenfold over the registered union construction at 1,200 epochs and stays inside the PASS level in every cell where a PASS would be an error; it still leaves every design short at d = 0.30. The rule keeps its error rates throughout the grid.
+Under the declared independent-Bernoulli model and anytime stopping, neither null allocation nor the F-N construction brings the registered Stage 1A rule to P(PASS) >= 0.80 at d = 0.30 together with P(CUT) >= 0.80 at d = 0.10, at 300 or at 1,200 epochs. The direct F-N construction raises P(PASS) about tenfold over the registered union construction at 1,200 epochs and stays inside the PASS level in every cell where a PASS would be an error; it still leaves every design short at d = 0.30. The rule keeps its error rates throughout the grid.
 
 This record does not decide whether to file a pre-registration amendment for the direct form, what Stage 2 is, whether the margin or the d = 0.30 target should change, or anything about price. Those belong to the owner of the pre-registration and to the operator's gate. No pre-registration text, threshold, estimand or harness file was edited to produce it.
 
@@ -137,7 +137,7 @@ Twelve mutants are registered in `scripts/mutation_receipt.py` under obligation 
 
 1. **The draws are independent Bernoulli.** This record contains no dependence model.
 2. **Void epochs are not modelled.** Every draw is a valid epoch.
-3. **Only anytime stopping ran.** The fixed-n look and the pair cap are Stage 2 levers and are not in this grid.
+3. **Only anytime stopping ran, and that is short of what was asked.** #685 requirement 3 defines Stage 1 as levers 2 and 3 "anytime and fixed-n, at caps 97 and 400", and #696 repeats it. The merged script has no fixed-n stopping rule, and it compares allocations at equal 300- and 1,200-epoch budgets (requirement 2) where requirement 3 names caps of 97 and 400 pairs; the 400-pair design is the Null-per-pair-1.0 row at 1,200 epochs, and a 97-pair cap reads off the per-look rows of the 100-pair design. Whether "the full stage-1 grid" means the grid the script defines or the grid that sentence describes is open on #696 and is not decided here. Until a fixed-n look is run, the stage-2 trigger statement holds for anytime designs only.
 4. **The grid has no uptake axis.** The effect axis is the intention-to-treat difference; no configuration varies how often the card is taken up (#696 comment 5954740080, a lead for the Stage 2 design and not a finding).
 5. **The terminal bounds are summarised by quantiles.** The per-replicate values are not stored.
 6. **The committed data files carry five decimal places.** A fresh run now writes ten (#712). The rebuild re-reads the five-place columns, so a value in `summary.md` can differ from the as-run summary in its last printed digit; none of the figures in this record is affected.
