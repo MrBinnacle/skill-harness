@@ -7,8 +7,8 @@ calibration read, constant pin, and replicate-count model statement for the
 record:** `docs/assurance/stage1a-regime-708-mutation-receipt.json`.
 **Pinned by content, not by commit:**
 `scripts/screens/419/simulate_stage1a_regime_685.py` at
-`sha256:1a295c27a442116a29bcbbbdb64d44e72f45ab4cba8567ed4157ae881c3ea205`.
-**Commit at generation:** `bcb421f0219ba12f615dd01d372d52630b9a15a1` —
+`sha256:0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee`.
+**Commit at generation:** `0ec2266d2330d9c2cceec4799df78aae18cb7e1a` —
 informational only; currency is checked against the digest above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
 

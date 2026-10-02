@@ -6,8 +6,8 @@ CUT half of the calibration read, and the simulator's inability to read its
 own output. **Generator:** `scripts/mutation_receipt.py --select 712-stage1a`.
 **Machine-readable record:** `docs/assurance/stage1a-regime-712-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685.py` at
-`sha256:1a295c27a442116a29bcbbbdb64d44e72f45ab4cba8567ed4157ae881c3ea205`.
-**Commit at generation:** `1b316f6704358114638233513d94485ac6427ac0` —
+`sha256:0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee`.
+**Commit at generation:** `f09c1ac1695f4e8ceff128b795eecf64391f117b` —
 informational only; currency is checked against the digest above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
 

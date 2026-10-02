@@ -127,7 +127,7 @@ the existing digest-pinned receipts for the same file were regenerated:
 `stage1a-regime-685-mutation-receipt.json` (prefix `695-stage1a`, twelve
 mutants) and `stage1a-regime-708-mutation-receipt.json` (prefix
 `708-stage1a`, five mutants). Both prose companions name the new digest
-`sha256:1a295c27a442116a29bcbbbdb64d44e72f45ab4cba8567ed4157ae881c3ea205`.
+`sha256:0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee`.
 
 | mutant | obligation | mutation | verdict | killing test |
 |---|---|---|---|---|
