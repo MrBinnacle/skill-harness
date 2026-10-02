@@ -1171,9 +1171,11 @@ def test_union_fn_exact_fallback_is_pinned_to_the_engine() -> None:
 # Committed smoke-run data (acceptance: every data row carries the schema)
 # ---------------------------------------------------------------------------
 
-_SMOKE_DIR = (
+_DATA_DIR = (
     Path(__file__).resolve().parents[1] / "docs" / "findings" / "data" / "stage1a-regime-685"
 )
+# #696 put the full grid in _DATA_DIR; the 20-replicate smoke run moved beside it.
+_SMOKE_DIR = _DATA_DIR / "smoke"
 
 
 def test_committed_smoke_per_look_rows_carry_the_full_schema() -> None:
@@ -1260,6 +1262,48 @@ def test_committed_smoke_lives_under_docs_findings_data_not_scratch() -> None:
     assert (_SMOKE_DIR / "summary.md").is_file()
     scratch_data = Path(__file__).resolve().parents[1] / ".scratch" / "issue-695" / "data"
     assert not scratch_data.exists(), "smoke output must not land under .scratch/"
+
+
+# ---------------------------------------------------------------------------
+# #696: the committed full grid (756 configurations at 2,000 replicates)
+# ---------------------------------------------------------------------------
+
+
+def test_committed_full_grid_carries_every_configuration_at_2000_replicates() -> None:
+    cols, rows = _split_tsv((_DATA_DIR / "per_look.tsv").read_text(encoding="utf-8"))
+    i = {name: cols.index(name) for name in cols}
+    assert {row[i["replicates"]] for row in rows} == {"2000"}
+    assert {row[i["stopping"]] for row in rows} == {"anytime"}
+    configurations = {
+        tuple(row[i[name]] for name in (*_DESIGN_FIELDS, "p_full", "p_placebo", "p_null"))
+        for row in rows
+    }
+    assert len(configurations) == 756
+    for row in rows:
+        assert float(row[i["se_pass"]]) >= 0.0
+
+
+def test_committed_full_summary_is_what_rebuild_writes_and_calibration_holds(
+    tmp_path: Path,
+) -> None:
+    """#696: the committed headline is derived from the committed data, exit code 0."""
+    out = tmp_path / "out"
+    out.mkdir()
+    for name in ("per_look.tsv", "terminal_states.tsv"):
+        (out / name).write_bytes((_DATA_DIR / name).read_bytes())
+
+    assert reg.main(["--out", str(out), "--rebuild"]) == 0
+
+    committed = (_DATA_DIR / "summary.md").read_text(encoding="utf-8")
+    assert (out / "summary.md").read_text(encoding="utf-8") == committed
+    assert "Replicates per cell: 2000." in committed
+    assert "establish only the output schema" not in committed
+    for target in ("0.80", "0.90"):
+        assert f"Stage-2 trigger for target {target}: fires." in committed
+        best_pass = f"| {target} | 1.00 | direct | not reached | - | - | 0.2335 | 0.4585 |"
+        best_cut = f"| {target} | 0.50 | direct | not reached | - | - | 0.1560 | 0.5070 |"
+        assert best_pass in committed
+        assert best_cut in committed
 
 
 # ---------------------------------------------------------------------------
