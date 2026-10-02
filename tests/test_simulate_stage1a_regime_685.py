@@ -290,6 +290,79 @@ def test_calibration_holds_for_every_stage1_design_at_boundary(design: Any) -> N
     assert reg.calibration_holds(result)
 
 
+def test_calibration_covers_the_fn_margin_cell_at_d030() -> None:
+    """#708: the F-N margin cell (0.30, 0.40) at d=0.30 is a PASS-calibration cell.
+
+    True F - N = 0.60 - 0.40 = 0.20 = BOUNDARY, so P(PASS) there is an error
+    whenever it exceeds PASS_ALPHA + tolerance. Leaving this cell out of the
+    calibration set is the defect this test pins.
+    """
+    cell = reg.Cell(0.60, 0.30, 0.40)
+    assert cell.d == pytest.approx(0.30)
+    assert reg.true_fn_diff(cell) == pytest.approx(0.20)
+    assert reg.is_pass_calibration_cell(cell), "F-N = 0.20 must make this a PASS-calibration cell"
+    assert reg.is_cut_calibration_cell(cell), (
+        "F-P = 0.30 >= BOUNDARY must make this a CUT-calibration cell"
+    )
+    design = reg.Design(n_pairs=97)
+    failing = _hand_result(cell, design, p_pass=0.50, p_cut=0.0)
+    assert reg.calibration_holds(failing) is False
+    passing = _hand_result(cell, design, p_pass=0.0, p_cut=0.0)
+    assert reg.calibration_holds(passing) is True
+
+
+def test_calibration_set_includes_every_pass_and_cut_error_cell() -> None:
+    """#708: PASS wherever F-P or F-N <= BOUNDARY; CUT wherever F-P >= BOUNDARY."""
+    effects = (0.00, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40)
+    cells = [
+        reg.Cell(round(p_p + d, 10), p_p, p_n)
+        for p_p in reg.BASELINES
+        for p_n in reg.BASELINES
+        for d in effects
+    ]
+    pass_cells = {(c.p_placebo, c.p_null, c.d) for c in cells if reg.is_pass_calibration_cell(c)}
+    expected_pass = {
+        (c.p_placebo, c.p_null, c.d)
+        for c in cells
+        if c.d <= 0.20 + 1e-9 or reg.true_fn_diff(c) <= 0.20 + 1e-9
+    }
+    assert pass_cells == expected_pass
+    assert (0.30, 0.40, 0.30) in pass_cells, (
+        "the F-N margin cell (0.30, 0.40) at d=0.30 must be a PASS-calibration cell"
+    )
+    cut_cells = {(c.p_placebo, c.p_null, c.d) for c in cells if reg.is_cut_calibration_cell(c)}
+    expected_cut = {(c.p_placebo, c.p_null, c.d) for c in cells if c.d >= 0.20 - 1e-9}
+    assert cut_cells == expected_cut
+
+
+def test_cut_calibration_uses_the_futility_nominal_level() -> None:
+    """#708: P(CUT) is compared against FUTILITY_ALPHA + tolerance, not PASS_ALPHA."""
+    cell = reg.Cell(0.75, 0.35, 0.35)  # F-P = 0.40 >= BOUNDARY
+    design = reg.Design(n_pairs=97)
+    assert reg.is_cut_calibration_cell(cell)
+    limit = a650.FUTILITY_ALPHA + a650.calibration_tolerance(200, a650.FUTILITY_ALPHA)
+    over = _hand_result(cell, design, p_pass=0.0, p_cut=limit + 0.05)
+    under = _hand_result(cell, design, p_pass=0.0, p_cut=0.0)
+    assert reg.cut_calibration_holds(over) is False
+    assert reg.cut_calibration_holds(under) is True
+    assert reg.calibration_holds(over) is False
+    assert reg.calibration_holds(under) is True
+
+
+def test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration(
+    tmp_path: Path,
+) -> None:
+    """#708: exit code reflects a PASS-calibration failure in the F-N margin cell."""
+    cell = reg.Cell(0.60, 0.30, 0.40)
+    design = reg.Design(n_pairs=30)
+    code = reg.main(
+        ["--out", str(tmp_path / "out"), "--replicates", "600", "--workers", "1", "--seed", "685"],
+        grid=[(cell, design)],
+        pass_alpha=0.6,
+    )
+    assert code == 1
+
+
 # ---------------------------------------------------------------------------
 # Negative control: calibration fails under loosened rule
 # ---------------------------------------------------------------------------

@@ -481,9 +481,61 @@ def cell_rng(seed: int, cell: Cell) -> np.random.Generator:
     )
 
 
-def calibration_holds(res: CellResult) -> bool:
+def true_fp_diff(cell: Cell) -> float:
+    """True F - Placebo contrast of a cell."""
+    return round(cell.p_full - cell.p_placebo, 10)
+
+
+def true_fn_diff(cell: Cell) -> float:
+    """True F - Null contrast of a cell."""
+    return round(cell.p_full - cell.p_null, 10)
+
+
+def is_pass_calibration_cell(cell: Cell) -> bool:
+    """P(PASS) is an error wherever the true F-P or F-N is at or below BOUNDARY.
+
+    #708: the calibration read covers every cell where a PASS is an error, not
+    only the d = BOUNDARY diagonal. The F-N margin cell (p_P 0.30, p_N 0.40) at
+    d = 0.30 has true F - N = 0.20 and must be included.
+    """
+    return true_fp_diff(cell) <= a650.BOUNDARY + 1e-9 or true_fn_diff(cell) <= a650.BOUNDARY + 1e-9
+
+
+def is_cut_calibration_cell(cell: Cell) -> bool:
+    """P(CUT) is an error wherever the true F-P is at or above BOUNDARY."""
+    return true_fp_diff(cell) >= a650.BOUNDARY - 1e-9
+
+
+def is_calibration_cell(cell: Cell) -> bool:
+    """Any cell where a PASS or a CUT is an error under the registered rule."""
+    return is_pass_calibration_cell(cell) or is_cut_calibration_cell(cell)
+
+
+def pass_calibration_holds(res: CellResult) -> bool:
+    """P(PASS) at the cap sits at or under PASS_ALPHA + 3 MC SE."""
     limit = a650.PASS_ALPHA + a650.calibration_tolerance(res.replicates)
     return res.per_look[-1].p_pass <= limit
+
+
+def cut_calibration_holds(res: CellResult) -> bool:
+    """P(CUT) at the cap sits at or under FUTILITY_ALPHA + 3 MC SE."""
+    limit = a650.FUTILITY_ALPHA + a650.calibration_tolerance(res.replicates, a650.FUTILITY_ALPHA)
+    return res.per_look[-1].p_cut <= limit
+
+
+def calibration_holds(res: CellResult) -> bool:
+    """Both calibration halves that apply to this cell, at the cap look.
+
+    PASS is checked where F-P or F-N sits at or below BOUNDARY; CUT is checked
+    where F-P sits at or above BOUNDARY. Each half is compared against its own
+    nominal level plus the existing tolerance.
+    """
+    ok = True
+    if is_pass_calibration_cell(res.cell):
+        ok = pass_calibration_holds(res) and ok
+    if is_cut_calibration_cell(res.cell):
+        ok = cut_calibration_holds(res) and ok
+    return ok
 
 
 def calibration_holds_direct(res: CellResult, alpha: float) -> bool:
@@ -1220,7 +1272,7 @@ def main(
     (args.out / "summary.md").write_text(summary, encoding="utf-8")
     print(summary)
 
-    cal_results = [r for r in results if role(r.cell.d) == "calibration"]
+    cal_results = [r for r in results if is_calibration_cell(r.cell)]
     all_hold = all(calibration_holds(r) for r in cal_results)
     if not all_hold:
         for r in cal_results:
@@ -1228,11 +1280,15 @@ def main(
                 dsg = r.design
                 c = r.cell
                 pp = r.per_look[-1].p_pass
+                pc = r.per_look[-1].p_cut
                 print(
                     f"CALIBRATION FAILURE: n={dsg.n_pairs} "
                     f"null_pp={dsg.null_per_pair:.2f} "
                     f"{dsg.fn_construction} p_P={c.p_placebo:.2f} "
-                    f"p_N={c.p_null:.2f} p_pass={pp:.5f}"
+                    f"p_N={c.p_null:.2f} d={c.d:.2f} "
+                    f"p_pass={pp:.5f} p_cut={pc:.5f} "
+                    f"pass_check={is_pass_calibration_cell(c)} "
+                    f"cut_check={is_cut_calibration_cell(c)}"
                 )
     return 0 if all_hold else 1
 
