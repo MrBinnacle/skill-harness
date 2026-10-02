@@ -1413,3 +1413,96 @@ def test_calibration_exit_code_filters_on_is_calibration_cell() -> None:
     assert reg.calibration_exit_code([pass_failing]) == 1
     assert reg.calibration_exit_code([ok]) == 0
     assert reg.calibration_exit_code([cut_failing, pass_failing, ok]) == 1
+
+
+# ---------------------------------------------------------------------------
+# #712: rebuild summary.md and the exit code from an output directory
+# ---------------------------------------------------------------------------
+
+
+def _small_run_grid() -> list[tuple[Any, Any]]:
+    """A cheap grid that still exercises calibration, headline and sensitivity paths."""
+    return [
+        (reg.Cell(0.55, 0.35, 0.30), reg.Design(n_pairs=30, null_per_pair=0.5)),
+        (
+            reg.Cell(0.65, 0.25, 0.30),
+            reg.Design(n_pairs=40, null_per_pair=1.0, fn_construction="union"),
+        ),
+        (
+            reg.Cell(0.65, 0.25, 0.30),
+            reg.Design(n_pairs=40, null_per_pair=1.0, fn_construction="direct"),
+        ),
+        (reg.Cell(0.45, 0.30, 0.30), reg.Design(n_pairs=30, null_per_pair=2.0)),
+    ]
+
+
+def test_rebuild_reproduces_summary_and_exit_code_byte_identically(tmp_path: Path) -> None:
+    """#712: --rebuild from a run's output directory reproduces summary.md and the exit code.
+
+    The rebuild must come from the same functions a run uses (summary_md,
+    headline, target_check_rows, sensitivity_rows, calibration_exit_code),
+    reading per_look.tsv and terminal_states.tsv, with no second aggregation.
+    """
+    out = tmp_path / "out"
+    grid = _small_run_grid()
+    run_code = reg.main(
+        ["--out", str(out), "--replicates", "40", "--workers", "1", "--seed", "685"],
+        grid=grid,
+    )
+    written = (out / "summary.md").read_text(encoding="utf-8")
+    assert written, "the run must have written summary.md"
+    assert (out / "per_look.tsv").is_file()
+    assert (out / "terminal_states.tsv").is_file()
+
+    rebuild_code = reg.main(["--out", str(out), "--rebuild"], grid=grid)
+    rebuilt = (out / "summary.md").read_text(encoding="utf-8")
+    assert rebuilt == written, "rebuild summary.md must be byte-identical to the run's"
+    assert rebuild_code == run_code, "rebuild must return the same exit code as the run"
+
+
+def test_rebuild_makes_no_simulation_call(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#712: rebuilding from an output directory never calls run_cell."""
+    out = tmp_path / "out"
+    grid = _small_run_grid()
+    reg.main(
+        ["--out", str(out), "--replicates", "40", "--workers", "1", "--seed", "685"],
+        grid=grid,
+    )
+    written = (out / "summary.md").read_text(encoding="utf-8")
+
+    def _boom(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("rebuild must not call run_cell")
+
+    monkeypatch.setattr(reg, "run_cell", _boom)
+    code = reg.main(["--out", str(out), "--rebuild"], grid=grid)
+    assert (out / "summary.md").read_text(encoding="utf-8") == written
+    assert code in (0, 1)
+
+
+def test_rebuild_reads_headline_calibration_and_sensitivity_from_disk(
+    tmp_path: Path,
+) -> None:
+    """#712: rebuilt summary carries headline, stage-2 trigger, calibration, sensitivity."""
+    out = tmp_path / "out"
+    grid = _small_run_grid()
+    reg.main(
+        ["--out", str(out), "--replicates", "40", "--workers", "1", "--seed", "685"],
+        grid=grid,
+    )
+    written = (out / "summary.md").read_text(encoding="utf-8")
+    reg.main(["--out", str(out), "--rebuild"], grid=grid)
+    rebuilt = (out / "summary.md").read_text(encoding="utf-8")
+    for needle in (
+        "## Headline: smallest d with P(PASS) >= 0.80",
+        "## Headline: smallest d with P(PASS) >= 0.90",
+        "## Target check",
+        "Stage-2 trigger for target 0.80:",
+        "Stage-2 trigger for target 0.90:",
+        "## Sensitivity (off-diagonal cells)",
+        "off-diagonal minima",
+        "Replicates per cell: 40.",
+        "Seed: 685.",
+    ):
+        assert needle in rebuilt, f"rebuilt summary is missing {needle!r}"
+        assert needle in written
+    assert rebuilt == written
