@@ -273,6 +273,28 @@ _S1A_CAL_HOLDS_KILL = (
 _S1A_CAL_HOLDS_CONTROL = (
     "tests/test_simulate_stage1a_regime_685.py::test_main_exits_zero_when_calibration_holds"
 )
+_S1A_DIAG_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum"
+)
+_S1A_DIAG_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_target_check_reports_the_smallest_priced_config_meeting_both_halves"
+)
+_S1A_FN_CAL_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_calibration_covers_the_fn_margin_cell_at_d030"
+)
+_S1A_FN_CAL_SET_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_calibration_set_includes_every_pass_and_cut_error_cell"
+)
+_S1A_FN_CAL_EXIT_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration"
+)
+_S1A_MODEL_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_summary_marks_smoke_output_as_schema_evidence"
+)
 _S1A_HEADLINE_KILL = (
     "tests/test_simulate_stage1a_regime_685.py"
     "::test_headline_reads_the_pairs_cap_designs_in_the_results"
@@ -803,15 +825,17 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M-S1A-11",
         "695-stage1a-calibration-look-one",
-        "calibration_holds reads look 1 instead of the cap (the #694 M9 "
+        "pass_calibration_holds reads look 1 instead of the cap (the #694 M9 "
         "survivor), so a loosened rule that fails only at the cap is called "
         "calibrated",
         _S1A,
         _S1A_MODULE,
-        "def calibration_holds(res: CellResult) -> bool:\n"
+        "def pass_calibration_holds(res: CellResult) -> bool:\n"
+        '    """P(PASS) at the cap sits at or under PASS_ALPHA + 3 MC SE."""\n'
         "    limit = a650.PASS_ALPHA + a650.calibration_tolerance(res.replicates)\n"
         "    return res.per_look[-1].p_pass <= limit",
-        "def calibration_holds(res: CellResult) -> bool:\n"
+        "def pass_calibration_holds(res: CellResult) -> bool:\n"
+        '    """P(PASS) at the cap sits at or under PASS_ALPHA + 3 MC SE."""\n'
         "    limit = a650.PASS_ALPHA + a650.calibration_tolerance(res.replicates)\n"
         "    return res.per_look[0].p_pass <= limit  # mutant: look 1, not the cap",
         (_S1A_CAL_HOLDS_KILL, _S1A_CAL_HOLDS_CONTROL),
@@ -827,6 +851,74 @@ MUTANTS: tuple[Mutant, ...] = (
         "                        and r.design.n_pairs == 97\n"
         "                        and r.design.null_per_pair == 1.0  # mutant: stale pair count",
         (_S1A_HEADLINE_KILL, _S1A_HEADLINE_CONTROL),
+    ),
+    # #708: the #696 diagonal aggregation ruling, the broader calibration read,
+    # and the replicate-count model statement. Each mutant is one defect class
+    # the #708 ticket names; the killing assertion is the test written for it.
+    Mutant(
+        "M-S1A-13",
+        "708-stage1a-diagonal-min-to-max",
+        "the diagonal target check takes max instead of min, so a family with "
+        "one strong diagonal cell is reported as meeting the target",
+        _S1A,
+        _S1A_MODULE,
+        "    min_pass = min(pass_vals)\n"
+        "    min_cut = min(cut_vals)\n"
+        "    missing_halves: list[str] = []",
+        "    min_pass = max(pass_vals)\n"
+        "    min_cut = max(cut_vals)  # mutant: max, not min\n"
+        "    missing_halves: list[str] = []",
+        (_S1A_DIAG_KILL, _S1A_DIAG_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-14",
+        "708-stage1a-diagonal-to-all-nine",
+        "the diagonal target check reverts to the nine-cell aggregate, which "
+        "the #696 ruling rejects: the (0.30, 0.40) F-N margin cell caps "
+        "P(PASS) at PASS_ALPHA for every design",
+        _S1A,
+        _S1A_MODULE,
+        "    diag = diagonal_cells()\n    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        "    diag = tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES)\n"
+        "  # mutant: nine cells, not the diagonal\n"
+        "    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        (_S1A_DIAG_KILL, _S1A_DIAG_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-15",
+        "708-stage1a-diagonal-to-single-cell",
+        "the diagonal target check reads only the single cell (0.35, 0.35) "
+        "instead of the three diagonal cells",
+        _S1A,
+        _S1A_MODULE,
+        "    diag = diagonal_cells()\n    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        "    diag = ((0.35, 0.35),)\n  # mutant: single diagonal cell\n"
+        "    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        (_S1A_DIAG_KILL, _S1A_DIAG_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-16",
+        "708-stage1a-pass-calibration-drops-fn",
+        "is_pass_calibration_cell checks only true F-P <= BOUNDARY and drops "
+        "the true F-N half, so the F-N margin cell (0.30, 0.40) at d=0.30 "
+        "leaves the calibration set",
+        _S1A,
+        _S1A_MODULE,
+        "    return true_fp_diff(cell) <= a650.BOUNDARY + 1e-9"
+        " or true_fn_diff(cell) <= a650.BOUNDARY + 1e-9",
+        "    return true_fp_diff(cell) <= a650.BOUNDARY + 1e-9  # mutant: F-N half dropped",
+        (_S1A_FN_CAL_KILL, _S1A_FN_CAL_SET_KILL, _S1A_FN_CAL_EXIT_KILL),
+    ),
+    Mutant(
+        "M-S1A-17",
+        "708-stage1a-model-statement-always-smoke",
+        "summary_md prints the smoke schema sentence whatever the replicate "
+        "count, so a full run is filed as schema evidence",
+        _S1A,
+        _S1A_MODULE,
+        "    if replicates < REPLICATES:\n",
+        "    if True:  # mutant: always smoke, whatever the replicate count\n",
+        (_S1A_MODEL_KILL,),
     ),
 )
 

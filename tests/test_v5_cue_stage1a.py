@@ -68,6 +68,21 @@ def test_stop_rule_on_constructed_bounds(
     assert s1a.stop_rule(ub_fp=ub_fp, lb_fp=lb_fp, lb_fn=lb_fn) == expected
 
 
+def test_simulator_constants_pin_to_the_registered_launcher(s1a: ModuleType) -> None:
+    """#708: simulate_a_design's constants agree with the launcher's registered rule.
+
+    The #684/#685 simulators read BOUNDARY, PASS_ALPHA and FUTILITY_ALPHA from
+    simulate_a_design. The registered rule lives in v5_cue_stage1a as BOUNDARY,
+    LEDGER_PASS_ALPHA and ALPHA. The values agreed by inspection; this test
+    makes one side's move fail the other's. Changing any one of the six values
+    breaks an equality below.
+    """
+    sim = _load("simulate_a_design")
+    assert sim.BOUNDARY == s1a.BOUNDARY
+    assert sim.PASS_ALPHA == s1a.LEDGER_PASS_ALPHA
+    assert sim.FUTILITY_ALPHA == s1a.ALPHA
+
+
 @pytest.mark.parametrize("value", [0, 1])
 @pytest.mark.parametrize("pass_alpha", [0.05, 0.0209])
 def test_all_equal_pairs_contain_zero_and_never_pass(

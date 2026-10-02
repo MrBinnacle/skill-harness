@@ -124,25 +124,56 @@ F-N constructions: ('union', 'direct').
 
 ## Target check
 
-Both halves of the #685 target, read from the data only. A configuration meets the target when P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10, each required in all nine (p_P, p_N) baseline cells. Configurations are the declared epoch budgets, ranked by total_epochs (the cap price). The smallest priced configuration that meets both halves is reported per design family; otherwise the cell reads not reached. The stage-2 trigger for a target fires when no design family reaches that target: Stage 2 (pairs and optional stopping) is gated on Stage 1 leaving the target unmet.
+Both halves of the #685 target, read from the data only, on the diagonal p_P = p_N cells (0.30, 0.35, 0.40) where both true contrasts equal d. A configuration meets the target when P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10, each required as the minimum over those three diagonal cells. The six off-diagonal (p_P, p_N) cells are sensitivity and do not enter this verdict; they are reported separately below. Configurations are the declared epoch budgets, ranked by total_epochs (the cap price). The smallest priced configuration that meets both halves on the diagonal is reported per design family; otherwise the cell reads not reached. The stage-2 trigger for a target fires when no design family reaches that target on the diagonal at any declared budget: Stage 2 (pairs and optional stopping) is gated on Stage 1 leaving the target unmet.
 
 | target | null_pp | fn_con | smallest priced configuration | total_epochs | expected spend | P(PASS) at d=0.30 | P(CUT) at d=0.10 | missing half | stage-2 trigger |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0.80 | 0.50 | direct | not reached | - | - | 0.0000 | 0.3500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
-| 0.80 | 1.00 | direct | not reached | - | - | 0.0000 | 0.3500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
-| 0.80 | 2.00 | direct | not reached | - | - | 0.0000 | 0.2500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
+| 0.80 | 0.50 | direct | not reached | - | - | 0.0500 | 0.3500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
+| 0.80 | 1.00 | direct | not reached | - | - | 0.1500 | 0.5000 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
+| 0.80 | 2.00 | direct | not reached | - | - | 0.2000 | 0.3000 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
 | 0.80 | 0.50 | union | not reached | - | - | 0.0000 | 0.3500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
-| 0.80 | 1.00 | union | not reached | - | - | 0.0000 | 0.3500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
-| 0.80 | 2.00 | union | not reached | - | - | 0.0000 | 0.2500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
-| 0.90 | 0.50 | direct | not reached | - | - | 0.0000 | 0.3500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
-| 0.90 | 1.00 | direct | not reached | - | - | 0.0000 | 0.3500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
-| 0.90 | 2.00 | direct | not reached | - | - | 0.0000 | 0.2500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
+| 0.80 | 1.00 | union | not reached | - | - | 0.0000 | 0.5000 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
+| 0.80 | 2.00 | union | not reached | - | - | 0.0000 | 0.3000 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
+| 0.90 | 0.50 | direct | not reached | - | - | 0.0500 | 0.3500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
+| 0.90 | 1.00 | direct | not reached | - | - | 0.1500 | 0.5000 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
+| 0.90 | 2.00 | direct | not reached | - | - | 0.2000 | 0.3000 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
 | 0.90 | 0.50 | union | not reached | - | - | 0.0000 | 0.3500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
-| 0.90 | 1.00 | union | not reached | - | - | 0.0000 | 0.3500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
-| 0.90 | 2.00 | union | not reached | - | - | 0.0000 | 0.2500 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
+| 0.90 | 1.00 | union | not reached | - | - | 0.0000 | 0.5000 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
+| 0.90 | 2.00 | union | not reached | - | - | 0.0000 | 0.3000 | P(PASS) >= target at d = 0.30 and P(CUT) >= target at d = 0.10 | fires |
 
 Stage-2 trigger for target 0.80: fires.
 Stage-2 trigger for target 0.90: fires.
+
+## Sensitivity (off-diagonal cells)
+
+The six off-diagonal (p_P, p_N) cells are sensitivity, never the target. Each row is the minimum P(PASS) at d = 0.30 and the minimum P(CUT) at d = 0.10 over those six cells, at the stated declared budget. These numbers describe what a nine-cell aggregate would have read; the #696 ruling does not use them to decide whether a design meets the target.
+
+| target | null_pp | fn_con | total_epochs | off-diag min P(PASS) at d=0.30 | off-diag min P(CUT) at d=0.10 |
+| --- | --- | --- | --- | --- | --- |
+| 0.80 | 0.50 | direct | 300 | 0.0000 | 0.1000 |
+| 0.80 | 0.50 | direct | 1200 | 0.0000 | 0.3500 |
+| 0.80 | 1.00 | direct | 300 | 0.0000 | 0.0500 |
+| 0.80 | 1.00 | direct | 1200 | 0.0000 | 0.3500 |
+| 0.80 | 2.00 | direct | 300 | 0.0000 | 0.0500 |
+| 0.80 | 2.00 | direct | 1200 | 0.0000 | 0.2500 |
+| 0.80 | 0.50 | union | 300 | 0.0000 | 0.1000 |
+| 0.80 | 0.50 | union | 1200 | 0.0000 | 0.3500 |
+| 0.80 | 1.00 | union | 300 | 0.0000 | 0.0500 |
+| 0.80 | 1.00 | union | 1200 | 0.0000 | 0.3500 |
+| 0.80 | 2.00 | union | 300 | 0.0000 | 0.0500 |
+| 0.80 | 2.00 | union | 1200 | 0.0000 | 0.2500 |
+| 0.90 | 0.50 | direct | 300 | 0.0000 | 0.1000 |
+| 0.90 | 0.50 | direct | 1200 | 0.0000 | 0.3500 |
+| 0.90 | 1.00 | direct | 300 | 0.0000 | 0.0500 |
+| 0.90 | 1.00 | direct | 1200 | 0.0000 | 0.3500 |
+| 0.90 | 2.00 | direct | 300 | 0.0000 | 0.0500 |
+| 0.90 | 2.00 | direct | 1200 | 0.0000 | 0.2500 |
+| 0.90 | 0.50 | union | 300 | 0.0000 | 0.1000 |
+| 0.90 | 0.50 | union | 1200 | 0.0000 | 0.3500 |
+| 0.90 | 1.00 | union | 300 | 0.0000 | 0.0500 |
+| 0.90 | 1.00 | union | 1200 | 0.0000 | 0.3500 |
+| 0.90 | 2.00 | union | 300 | 0.0000 | 0.0500 |
+| 0.90 | 2.00 | union | 1200 | 0.0000 | 0.2500 |
 
 ## Price lines
 
