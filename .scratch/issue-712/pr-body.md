@@ -33,8 +33,9 @@ the numbers are the minima over the six off-diagonal cells only. The previous
 wording ("These numbers describe what a nine-cell aggregate would have read")
 is gone from both.
 
-**Test.** `test_summary_sensitivity_sentence_names_the_off_diagonal_minimum`
-and `test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima` in
+**Test.** `test_summary_sensitivity_sentence_names_the_off_diagonal_minimum`,
+`test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima`, and
+`test_committed_smoke_summary_reports_the_target_check` in
 `tests/test_simulate_stage1a_regime_685.py`. The fixture
 `_off_diag_vs_nine_cell_rates` sets every off-diagonal P(PASS) at d = 0.30 to
 at least 0.75 and the diagonal cell (0.30, 0.30) to 0.40, so the off-diagonal
@@ -181,6 +182,7 @@ outside `docs/assurance/` and `docs/receipts-index.md` changed.
 |---|---|---|
 | 1 | `test_summary_sensitivity_sentence_names_the_off_diagonal_minimum` | "nine-cell" present, or the printed row is the nine-cell minimum |
 | 1 | `test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima` | `sensitivity_rows` reports 0.40 instead of 0.75 |
+| 1 | `test_committed_smoke_summary_reports_the_target_check` | the committed smoke summary still carries the false nine-cell sentence |
 | 2 | `test_calibration_read_includes_cut_error_cells_above_boundary` | `is_calibration_cell` excludes the CUT-only cell, or the exit code is 0 |
 | 2 | `test_calibration_exit_code_filters_on_is_calibration_cell` | the filter drops CUT-only or PASS-only failures |
 | 3 | `test_rebuild_reproduces_summary_and_exit_code_byte_identically` | no `--rebuild`, or rebuild recomputes different bytes / a different exit code |
