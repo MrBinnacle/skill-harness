@@ -52,11 +52,11 @@ streams), so the observed difference is 0. The interval is therefore symmetric.
 n_placebo=97 correct_placebo=34
 n_null=97 correct_null=34
 anytime_valid_interval=[-0.3925, 0.3925] (union bound, one_sided_betting_bound at alpha=0.025 each)
-excludes_plus_minus_0_20=false
+excludes_plus_minus_0.20=false
 inertness_established=false
-n_to_exclude_pm_0_20=263 (same rates, evenly-spaced launch order)
+n_to_exclude_pm_0.20=263 (same rates, evenly-spaced launch order)
 fixed_n_newcombe_interval=[-0.1322, 0.1322] (direct two-sided fixed-n comparison)
-fixed_n_excludes_plus_minus_0_20=true
+fixed_n_excludes_plus_minus_0.20=true
 ```
 
 **Finding.** The anytime-valid interval [−0.3925, 0.3925] does **not** exclude ±0.20 at

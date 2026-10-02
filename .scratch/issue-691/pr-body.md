@@ -35,7 +35,7 @@ sections:
    excludes zero — the note that #685 must model the correlation before any sizing is
    relied on.
 
-**Test:** `tests/test_stage1a_readout_691.py`, 23 tests. The fixture is an n=10 readout
+**Test:** `tests/test_stage1a_readout_691.py`, 26 tests. The fixture is an n=10 readout
 with Full 7/10 correct and manifest_read on epochs 1–5; Placebo 4/10 correct and
 manifest_read on epochs 1–3; Null-A 4/10 correct. Hand-computed expectations:
 
@@ -58,11 +58,10 @@ manifest_read on epochs 1–3; Null-A 4/10 correct. Hand-computed expectations:
 
 **Observation, red then green.** Before the change, every test in the module failed at
 setup with `FileNotFoundError: scripts/screens/419/stage1a_readout_691.py`. That is the
-right reason: the instrument did not exist. After the script landed, 20 of 23 passed and
-three failed. Those three looked for machine-parseable labels `excludes_plus_minus_0_20`,
-`n_to_exclude_pm_0_20`, and `fixed_n_excludes_plus_minus_0_20`; the script printed
-`excludes_plus_minus_0.20` and siblings (decimal point, not underscore). The fix
-sanitises the boundary tag (`0.20` → `0_20`). After that, all 23 passed. The engine-bound
+right reason: the instrument did not exist. The initial fixture's three expectations for
+`excludes_plus_minus_0_20`, `n_to_exclude_pm_0_20`, and
+`fixed_n_excludes_plus_minus_0_20` changed the screen's public `0.20` labels solely to
+make the fixture pass. The labels now retain the reported threshold. The engine-bound
 pin (`test_inertness_uses_the_engine_bound_not_a_hand_rolled_one`) and the order-sensitivity
 pin (`test_inertness_order_matters_for_the_anytime_valid_bound`) both compare the screen's
 interval against `one_sided_betting_bound` called directly, so they fail if the screen
@@ -170,7 +169,7 @@ mypy --strict src/ tests/ scripts/drift_check.py scripts/release_gate.py scripts
 All three green after the final commit. Targeted pytest modules green:
 
 ```
-tests/test_stage1a_readout_691.py     23 passed
+tests/test_stage1a_readout_691.py     26 passed
 tests/test_receipts_index.py          18 passed
 ```
 

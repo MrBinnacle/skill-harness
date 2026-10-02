@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from collections.abc import Sequence
 from functools import lru_cache
@@ -58,9 +57,6 @@ POST_TREATMENT_SENTENCE = (
 MATERIAL_POSITIVE_NOTE = (
     "materially positive: name it as an input #685 must model before any sizing is relied on."
 )
-
-_JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
-
 
 # ---------------------------------------------------------------------------
 # Readout loading
@@ -100,30 +96,40 @@ def load_readout(path: Path) -> dict[str, Any]:
 
 def _json_from_log_tail(text: str, *, source: str) -> dict[str, Any]:
     """Return the last JSON object in ``text``; raise when none parses."""
-    candidates = list(_JSON_BLOCK_RE.finditer(text))
-    for match in reversed(candidates):
+    decoder = json.JSONDecoder()
+    last_object: dict[str, Any] | None = None
+    start = text.find("{")
+    while start >= 0:
         try:
-            parsed = json.loads(match.group(0))
+            parsed, end = decoder.raw_decode(text, start)
         except json.JSONDecodeError:
+            start = text.find("{", start + 1)
             continue
         if isinstance(parsed, dict):
-            return parsed
+            last_object = parsed
+        start = text.find("{", end)
+    if last_object is not None:
+        return last_object
     raise ValueError(f"{source}: no JSON object found in the log tail")
 
 
-def _cell_outcomes(rows: Sequence[dict[str, Any]], arm: str) -> list[tuple[int, int, bool | None]]:
-    """Return (launch_index, correct, manifest_read) for valid epochs of ``arm``."""
+def _cell_outcomes(
+    rows: Sequence[dict[str, Any]], arm: str, world: str = "a"
+) -> list[tuple[int, int, bool | None]]:
+    """Return valid (launch_index, correct, manifest_read) rows for one Stage 1A cell."""
     selected = [
         row
         for row in rows
-        if str(row.get("arm", "")).lower() == arm and not bool(row.get("void", False))
+        if str(row.get("arm", "")).lower() == arm
+        and str(row.get("world", "")).lower() == world
+        and not bool(row.get("void", False))
     ]
     if not selected:
-        raise ValueError(f"readout has no valid {arm} epochs")
+        raise ValueError(f"readout has no valid {arm}/{world} epochs")
     selected.sort(key=lambda row: int(row["epoch"]))
     epochs = [int(row["epoch"]) for row in selected]
     if len(epochs) != len(set(epochs)):
-        raise ValueError(f"duplicate {arm} epoch in readout")
+        raise ValueError(f"duplicate {arm}/{world} epoch in readout")
     out: list[tuple[int, int, bool | None]] = []
     for row in selected:
         correct = int(bool(row["final_world_correct"]))
@@ -218,35 +224,46 @@ def evenly_spaced(n: int, k: int) -> list[float]:
 
 @lru_cache(maxsize=64)
 def n_to_exclude_pm(
-    correct_ref: int,
-    n_ref: int,
+    correct_placebo: int,
+    n_placebo: int,
+    correct_null: int,
+    n_null: int,
     *,
     alpha_arm: float = ALPHA_ARM,
     boundary: float = BOUNDARY,
     cap: int = N_SEARCH_CAP,
 ) -> int | None:
-    """Smallest n at which the same rate excludes +/-boundary under even spacing.
+    """Smallest per-arm n at which the same observed rates exclude +/-boundary.
 
-    The same counts means the same rate ``correct_ref / n_ref``, scaled to each
-    candidate n. Order is the evenly-spaced launch-index convention named in
-    the output. Geometric probing finds a bracket in which exclusion holds;
+    Each arm retains its observed rate, scaled to a common candidate n. Order is
+    the evenly-spaced launch-index convention named in the output. Geometric
+    probing finds a bracket in which exclusion holds;
     a binary search then returns the first n in that bracket. Exclusion is
     treated as monotone in n under this convention (the interval shrinks as
     n grows at a fixed rate). Returns None when no n <= cap reaches exclusion.
     """
-    if n_ref <= 0:
-        raise ValueError(f"n_ref must be positive; got {n_ref}")
-    rate = correct_ref / n_ref
+    if n_placebo <= 0 or n_null <= 0:
+        raise ValueError(
+            f"arm sample sizes must be positive; got placebo={n_placebo}, null={n_null}"
+        )
+    placebo_rate = correct_placebo / n_placebo
+    null_rate = correct_null / n_null
 
     def excludes(n: int) -> bool:
-        k = round(rate * n)
-        lo, hi = _av_interval(evenly_spaced(n, k), evenly_spaced(n, k), alpha_arm=alpha_arm)
+        placebo_k = round(placebo_rate * n)
+        null_k = round(null_rate * n)
+        lo, hi = _av_interval(
+            evenly_spaced(n, placebo_k),
+            evenly_spaced(n, null_k),
+            alpha_arm=alpha_arm,
+        )
         return hi < boundary and lo > -boundary
 
-    if excludes(n_ref):
-        return n_ref
-    probe = n_ref
-    last_no: int = n_ref
+    start_n = max(n_placebo, n_null)
+    if excludes(start_n):
+        return start_n
+    probe = start_n
+    last_no: int = start_n
     while probe < cap:
         probe = min(cap, probe * 2)
         if excludes(probe):
@@ -286,7 +303,14 @@ def placebo_inertness(
     fixed_excludes = bool(fixed_hi < boundary and fixed_lo > -boundary)
     n_excl = None
     if not excludes:
-        n_excl = n_to_exclude_pm(k_p, n_p, alpha_arm=alpha_arm, boundary=boundary)
+        n_excl = n_to_exclude_pm(
+            k_p,
+            n_p,
+            k_n,
+            n_n,
+            alpha_arm=alpha_arm,
+            boundary=boundary,
+        )
     return {
         "n_placebo": n_p,
         "correct_placebo": k_p,
@@ -426,8 +450,8 @@ def build_report(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _boundary_tag(boundary: float) -> str:
-    """Machine-parseable tag for a boundary value: 0.20 -> ``0_20``."""
-    return f"{boundary:.2f}".replace(".", "_")
+    """Render a boundary value without changing the reported threshold."""
+    return f"{boundary:.2f}"
 
 
 def render(report: dict[str, Any]) -> str:

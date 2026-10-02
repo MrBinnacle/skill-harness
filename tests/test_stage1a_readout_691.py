@@ -11,6 +11,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from statistics import NormalDist
 from types import ModuleType
 from typing import Any
 
@@ -150,7 +151,7 @@ def test_inertness_exclusion_statement_is_false_at_this_n(
 ) -> None:
     """The n=10 interval is wide; it does not exclude +/-0.20, so inertness is not established."""
     out = _run(screen, _write_fixture(tmp_path), capsys)
-    assert "excludes_plus_minus_0_20=false" in out
+    assert "excludes_plus_minus_0.20=false" in out
     assert "inertness_established=false" in out
     assert "not established" in out
 
@@ -160,15 +161,33 @@ def test_inertness_prints_the_n_at_which_the_same_counts_exclude(
 ) -> None:
     out = _run(screen, _write_fixture(tmp_path), capsys)
     # Same rate 4/10 under the evenly-spaced launch-order convention.
-    assert "n_to_exclude_pm_0_20=286" in out
+    assert "n_to_exclude_pm_0.20=286" in out
+
+
+def test_n_to_exclude_retains_each_arm_rate(screen: ModuleType) -> None:
+    """The projection must not replace the Null-A rate with the Placebo rate."""
+    rows = _fixture_rows()
+    for row in rows:
+        if row["arm"] == "null" and row["epoch"] == 4:
+            row["final_world_correct"] = False
+    report = screen.render(screen.build_report({"rows": rows}))
+    assert "n_to_exclude_pm_0.20=1463" in report
 
 
 def test_inertness_prints_the_direct_fixed_n_comparison(
     screen: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = _run(screen, _write_fixture(tmp_path), capsys)
-    assert "fixed_n_newcombe_interval=" in out
-    assert "fixed_n_excludes_plus_minus_0_20=" in out
+    z = NormalDist().inv_cdf(0.975)
+    p = 0.4
+    wilson_center = (4 + z * z / 2.0) / (10 + z * z)
+    wilson_half_width = z * (4 * 6 / 10 + z * z / 4.0) ** 0.5 / (10 + z * z)
+    wilson_lo, wilson_hi = wilson_center - wilson_half_width, wilson_center + wilson_half_width
+    expected_half_width = ((p - wilson_lo) ** 2 + (wilson_hi - p) ** 2) ** 0.5
+    assert (
+        f"fixed_n_newcombe_interval=[{-expected_half_width:.4f}, {expected_half_width:.4f}]" in out
+    )
+    assert "fixed_n_excludes_plus_minus_0.20=false" in out
 
 
 def test_inertness_uses_the_engine_bound_not_a_hand_rolled_one(screen: ModuleType) -> None:
@@ -273,7 +292,6 @@ def test_correlation_prints_a_95pct_interval(
     out = _run(screen, _write_fixture(tmp_path), capsys)
     assert "phi_95_ci=[" in out
     from math import atanh, sqrt, tanh
-    from statistics import NormalDist
 
     phi = 12.0 / sqrt(504.0)
     n = 10
@@ -352,21 +370,14 @@ def test_correlation_phi_matches_the_2x2_table(screen: ModuleType) -> None:
     assert result["phi"] == pytest.approx(expected_phi)
 
 
-def test_correlation_is_zero_when_the_arms_are_independent_in_the_fixture(
+def test_correlation_is_zero_for_a_balanced_independent_fixture(
     screen: ModuleType,
 ) -> None:
-    """A constructed independent table yields phi near zero, so the screen can distinguish."""
+    """A balanced 2x2 table yields phi zero, so the screen can distinguish it from dependence."""
     rows: list[dict[str, Any]] = []
-    # Full correct on even epochs, Placebo correct on epochs 1-5 — tune to zero phi.
-    # Simpler: both arms all-correct and all-wrong in lockstep would give phi=1;
-    # use a table with ad=bc.
-    # a=5,b=5,c=5,d=5 -> phi=0
-    full_bits = [1] * 5 + [0] * 5
-    placebo_bits = [1, 0, 1, 0, 1, 1, 0, 1, 0, 0]
-    # Build a table with a=2,b=3,c=3,d=2 -> ad-bc=4-9=-5, not zero.
-    # Use a=4,b=1,c=1,d=4 -> ad-bc=16-1=15. Let's just compute phi from any table
-    # and assert the function returns the formula value.
-    placebo_bits = [1, 1, 1, 1, 0, 0, 0, 0, 0, 0]  # same as full -> phi=1 at extremes
+    # a=b=c=d=3, so ad-bc=0.
+    full_bits = [1] * 6 + [0] * 6
+    placebo_bits = [1] * 3 + [0] * 3 + [1] * 3 + [0] * 3
     for epoch, (f, p) in enumerate(zip(full_bits, placebo_bits, strict=True), start=1):
         rows.append(
             {
@@ -389,13 +400,18 @@ def test_correlation_is_zero_when_the_arms_are_independent_in_the_fixture(
             }
         )
     result = screen.within_pair_correlation(rows)
-    a = sum(1 for f, p in zip(full_bits, placebo_bits, strict=True) if f and p)
-    b = sum(1 for f, p in zip(full_bits, placebo_bits, strict=True) if f and not p)
-    c = sum(1 for f, p in zip(full_bits, placebo_bits, strict=True) if not f and p)
-    d = sum(1 for f, p in zip(full_bits, placebo_bits, strict=True) if not f and not p)
-    denom = ((a + b) * (c + d) * (a + c) * (b + d)) ** 0.5
-    expected = (a * d - b * c) / denom if denom else 0.0
-    assert result["phi"] == pytest.approx(expected)
+    assert (
+        result["both_correct"],
+        result["full_only"],
+        result["placebo_only"],
+        result["neither"],
+    ) == (
+        3,
+        3,
+        3,
+        3,
+    )
+    assert result["phi"] == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +429,40 @@ def test_script_accepts_a_run_log_path_with_json_at_the_tail(
     assert "Placebo inertness" in out
     assert "Adherence" in out
     assert "Within-pair correlation" in out
+
+
+def test_script_reads_the_last_json_object_from_a_run_log(
+    screen: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log_path = tmp_path / "run.log"
+    log_path.write_text(
+        '{"launcher": {"status": "complete"}}\n' + json.dumps({"rows": _fixture_rows()}) + "\n",
+        encoding="utf-8",
+    )
+    out = _run(screen, log_path, capsys)
+    assert "n_placebo=10 correct_placebo=4" in out
+
+
+def test_script_uses_only_world_a_rows(
+    screen: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rows = _fixture_rows()
+    rows.extend(
+        {
+            "arm": arm,
+            "world": "b",
+            "epoch": 1,
+            "void": False,
+            "final_world_correct": False,
+            "manifest_read": False,
+        }
+        for arm in ("full", "placebo", "null")
+    )
+    path = tmp_path / "both-worlds.json"
+    path.write_text(json.dumps({"rows": rows}), encoding="utf-8")
+    out = _run(screen, path, capsys)
+    assert "n_placebo=10 correct_placebo=4" in out
+    assert "n_null=10 correct_null=4" in out
 
 
 def test_script_accepts_a_directory_containing_run_log(
