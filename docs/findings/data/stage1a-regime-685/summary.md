@@ -146,7 +146,7 @@ Stage-2 trigger for target 0.90: fires.
 
 ## Sensitivity (off-diagonal cells)
 
-The six off-diagonal (p_P, p_N) cells are sensitivity, never the target. Each row is the minimum P(PASS) at d = 0.30 and the minimum P(CUT) at d = 0.10 over those six cells, at the stated declared budget. These numbers describe what a nine-cell aggregate would have read; the #696 ruling does not use them to decide whether a design meets the target.
+The six off-diagonal (p_P, p_N) cells are sensitivity, never the target. Each row is the minimum P(PASS) at d = 0.30 and the minimum P(CUT) at d = 0.10 over those six cells, at the stated declared budget. These numbers are the off-diagonal minima over those six cells only; the #696 ruling does not use them to decide whether a design meets the target.
 
 | target | null_pp | fn_con | total_epochs | off-diag min P(PASS) at d=0.30 | off-diag min P(CUT) at d=0.10 |
 | --- | --- | --- | --- | --- | --- |

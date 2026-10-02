@@ -15,11 +15,13 @@ Stage 2 (pairs and optional stopping) is not implemented here.
 Usage:
   python scripts/screens/419/simulate_stage1a_regime_685.py --out DIR \
          [--replicates 2000] [--seed 685] [--workers N]
+  python scripts/screens/419/simulate_stage1a_regime_685.py --out DIR --rebuild
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import sys
@@ -322,8 +324,9 @@ def _design_family_meets_target(
 def sensitivity_rows(results: Sequence[CellResult], *, target: float) -> tuple[SensitivityRow, ...]:
     """Off-diagonal minima per design family per declared budget. Sensitivity only.
 
-    The six off-diagonal (p_P, p_N) cells are never the target. These rows
-    report what the nine-cell reading would have seen, beside the target check.
+    The six off-diagonal (p_P, p_N) cells are never the target. Each row
+    reports the minimum over those six cells alone, beside the target check;
+    it is not a reading over the full nine-cell grid.
     """
     families = sorted(
         {(r.design.null_per_pair, r.design.fn_construction) for r in results},
@@ -541,6 +544,20 @@ def calibration_holds(res: CellResult) -> bool:
 def calibration_holds_direct(res: CellResult, alpha: float) -> bool:
     limit = alpha + a650.calibration_tolerance(res.replicates, alpha)
     return res.per_look[-1].p_pass <= limit
+
+
+def calibration_exit_code(results: Sequence[CellResult]) -> int:
+    """Exit code from the calibration read: 0 iff every calibration cell holds.
+
+    #712: the read covers every cell where a PASS or a CUT is an error —
+    PASS wherever F-P or F-N sits at or below BOUNDARY, CUT wherever F-P
+    sits at or above BOUNDARY — including CUT-error cells above d = 0.20.
+    Returning only the PASS half of the filter drops those cells and a run
+    whose futility side is broken exits 0.
+    """
+    cal_results = [r for r in results if is_calibration_cell(r.cell)]
+    all_hold = all(calibration_holds(r) for r in cal_results)
+    return 0 if all_hold else 1
 
 
 def _bound(xs: a650.Floats, alpha: float, side: a650.Side) -> a650.Floats:
@@ -978,8 +995,8 @@ def per_look_tsv(results: Sequence[CellResult]) -> str:
         price = _price(res.design.total_epochs)
         lines += [
             f"{_design_cols(res.design)}\t{_cell_cols(res.cell)}\t{res.replicates}\t{row.look}"
-            f"\t{row.p_pass:.5f}\t{row.p_cut:.5f}\t{row.p_cant_tell_yet:.5f}\t{row.se_pass:.5f}"
-            f"\t{row.expected_pairs:.3f}\t{row.expected_epochs:.3f}"
+            f"\t{row.p_pass:.10f}\t{row.p_cut:.10f}\t{row.p_cant_tell_yet:.10f}"
+            f"\t{row.se_pass:.10f}\t{row.expected_pairs:.10f}\t{row.expected_epochs:.10f}"
             f"\t{_expected_spend(row.expected_epochs)}\t{price}"
             for row in res.per_look
         ]
@@ -1061,7 +1078,13 @@ def _terminal_lines(results: Sequence[CellResult]) -> list[str]:
     return lines
 
 
-def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str:
+def summary_md(
+    results: Sequence[CellResult],
+    replicates: int,
+    seed: int,
+    *,
+    terminal_available: bool = True,
+) -> str:
     se_nominal = math.sqrt(a650.PASS_ALPHA * (1 - a650.PASS_ALPHA) / replicates)
     limit = a650.PASS_ALPHA + a650.calibration_tolerance(replicates)
     lines = [
@@ -1160,9 +1183,9 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "The six off-diagonal (p_P, p_N) cells are sensitivity, never the "
         "target. Each row is the minimum P(PASS) at d = 0.30 and the minimum "
         "P(CUT) at d = 0.10 over those six cells, at the stated declared "
-        "budget. These numbers describe what a nine-cell aggregate would have "
-        "read; the #696 ruling does not use them to decide whether a design "
-        "meets the target.",
+        "budget. These numbers are the off-diagonal minima over those six "
+        "cells only; the #696 ruling does not use them to decide whether a "
+        "design meets the target.",
         "",
         "| target | null_pp | fn_con | total_epochs "
         "| off-diag min P(PASS) at d=0.30 | off-diag min P(CUT) at d=0.10 |",
@@ -1208,7 +1231,13 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "Median [10th, 90th percentile]. LB(F-P) and UB(F-P) on d scale.",
         "",
     ]
-    lines += _terminal_lines(subset)
+    if terminal_available:
+        lines += _terminal_lines(subset)
+    else:
+        lines += [
+            "Terminal-state data are unavailable for one or more cap cells, so this section "
+            "cannot be rebuilt from the supplied output directory.",
+        ]
     if replicates < REPLICATES:
         model_lines = [
             "These smoke-run results establish only the output schema under the declared "
@@ -1247,6 +1276,163 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
 # Main
 # ---------------------------------------------------------------------------
 
+_RUN_META_NAME = "run_meta.json"
+
+
+def _write_run_meta(out_dir: Path, *, replicates: int, seed: int) -> None:
+    payload = {"replicates": replicates, "seed": seed}
+    (out_dir / _RUN_META_NAME).write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def _read_run_meta(out_dir: Path) -> tuple[int, int] | None:
+    path = out_dir / _RUN_META_NAME
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return int(data["replicates"]), int(data["seed"])
+
+
+def _tsv_columns(header: str) -> dict[str, int]:
+    return {name: idx for idx, name in enumerate(header.split("\t"))}
+
+
+def _design_from_row(row: list[str], cols: dict[str, int]) -> Design:
+    return Design(
+        n_pairs=int(row[cols["n_full"]]),
+        null_per_pair=float(row[cols["null_per_pair"]]),
+        fn_construction=row[cols["fn_construction"]],
+        stopping=row[cols["stopping"]],
+    )
+
+
+def _cell_from_row(row: list[str], cols: dict[str, int]) -> Cell:
+    return Cell(
+        p_full=float(row[cols["p_full"]]),
+        p_placebo=float(row[cols["p_placebo"]]),
+        p_null=float(row[cols["p_null"]]),
+    )
+
+
+def _result_key(design: Design, cell: Cell) -> tuple[object, ...]:
+    return (
+        design.n_pairs,
+        design.null_per_pair,
+        design.fn_construction,
+        design.stopping,
+        cell.p_full,
+        cell.p_placebo,
+        cell.p_null,
+    )
+
+
+def results_from_output_dir(out_dir: Path) -> tuple[list[CellResult], int, bool]:
+    """Rebuild CellResults from a run's per_look.tsv and terminal_states.tsv.
+
+    #712: issue 696 holds a finished full-grid output directory and needs the
+    headline, calibration read and summary re-derived from that file by this
+    code, without a second simulation. The aggregation functions a run uses
+    (headline, target_check_rows, sensitivity_rows, calibration_exit_code)
+    read the reconstructed CellResults; this parser is I/O only.
+
+    terminal_states.tsv is optional. The headline, target check, sensitivity,
+    and calibration read need only per_look.tsv. A missing cap-cell terminal
+    row is not a zero-count state, so the rebuilt summary refuses to render
+    its terminal-state table when those data are incomplete.
+    """
+    per_look_path = out_dir / "per_look.tsv"
+    terminal_path = out_dir / "terminal_states.tsv"
+    if not per_look_path.is_file():
+        raise FileNotFoundError(f"missing {per_look_path}; rebuild needs a run's per_look.tsv")
+
+    order: list[tuple[object, ...]] = []
+    builders: dict[tuple[object, ...], dict[str, object]] = {}
+    replicates_values: set[int] = set()
+    terminal_states: dict[tuple[object, ...], set[str]] = {}
+    per_lines = per_look_path.read_text(encoding="utf-8").rstrip("\n").split("\n")
+    per_cols = _tsv_columns(per_lines[0])
+    for line in per_lines[1:]:
+        row = line.split("\t")
+        design = _design_from_row(row, per_cols)
+        cell = _cell_from_row(row, per_cols)
+        key = _result_key(design, cell)
+        replicates_values.add(int(row[per_cols["replicates"]]))
+        if key not in builders:
+            order.append(key)
+            builders[key] = {
+                "design": design,
+                "cell": cell,
+                "replicates": int(row[per_cols["replicates"]]),
+                "looks": [],
+                "terminal": {
+                    state: TerminalSample(lb_fp=(), lb_fn=(), ub_fp=()) for state in JOINT_STATES
+                },
+            }
+        builders[key]["looks"].append(  # type: ignore[union-attr]
+            LookRow(
+                look=int(row[per_cols["look"]]),
+                p_pass=float(row[per_cols["p_pass"]]),
+                p_cut=float(row[per_cols["p_cut"]]),
+                p_cant_tell_yet=float(row[per_cols["p_cant_tell_yet"]]),
+                se_pass=float(row[per_cols["se_pass"]]),
+                expected_pairs=float(row[per_cols["expected_pairs"]]),
+                expected_epochs=float(row[per_cols["expected_epochs"]]),
+            )
+        )
+
+    if terminal_path.is_file():
+        term_lines = terminal_path.read_text(encoding="utf-8").rstrip("\n").split("\n")
+        term_cols = _tsv_columns(term_lines[0])
+        for line in term_lines[1:]:
+            row = line.split("\t")
+            design = _design_from_row(row, term_cols)
+            cell = _cell_from_row(row, term_cols)
+            key = _result_key(design, cell)
+            builder = builders.get(key)
+            if builder is None:
+                continue
+            state = row[term_cols["joint_state"]]
+            terminal_states.setdefault(key, set()).add(state)
+            count = int(row[term_cols["count"]])
+            if count <= 0:
+                continue
+            med_fp = float(row[term_cols["lb_fp_q50"]])
+            med_fn = float(row[term_cols["lb_fn_q50"]])
+            med_ub = float(row[term_cols["ub_fp_q50"]])
+            builder["terminal"][state] = TerminalSample(  # type: ignore[index]
+                lb_fp=tuple([med_fp] * count),
+                lb_fn=tuple([med_fn] * count),
+                ub_fp=tuple([med_ub] * count),
+            )
+
+    if len(replicates_values) != 1:
+        raise ValueError(f"per_look.tsv disagrees on replicates: {sorted(replicates_values)}")
+    replicates = replicates_values.pop()
+
+    results: list[CellResult] = []
+    for key in order:
+        builder = builders[key]
+        looks = sorted(builder["looks"], key=lambda r: r.look)  # type: ignore[union-attr]
+        results.append(
+            CellResult(
+                cell=builder["cell"],  # type: ignore[arg-type]
+                design=builder["design"],  # type: ignore[arg-type]
+                replicates=builder["replicates"],  # type: ignore[arg-type]
+                per_look=tuple(looks),
+                terminal=builder["terminal"],  # type: ignore[arg-type]
+                library_calls=0,
+            )
+        )
+    terminal_available = all(
+        set(JOINT_STATES) <= terminal_states.get(_result_key(result.design, result.cell), set())
+        for result in results
+        if result.design.n_pairs == PAIRS_CAP
+        and result.design.null_per_pair == 1.0
+        and result.design.fn_construction == "union"
+    )
+    return results, replicates, terminal_available
+
 
 def _run(job: tuple[Cell, Design, int, int, float]) -> CellResult:
     cell, design, replicates, seed, pass_alpha = job
@@ -1271,7 +1457,26 @@ def main(
     ap.add_argument("--replicates", type=int, default=REPLICATES)
     ap.add_argument("--seed", type=int, default=SEED)
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 4))
+    ap.add_argument(
+        "--rebuild",
+        action="store_true",
+        help=(
+            "rebuild summary.md and the calibration exit code from an existing "
+            "output directory (per_look.tsv, terminal_states.tsv) without simulation"
+        ),
+    )
     args = ap.parse_args(argv)
+    if args.rebuild:
+        results, replicates, terminal_available = results_from_output_dir(args.out)
+        meta = _read_run_meta(args.out)
+        seed = args.seed if meta is None else meta[1]
+        if meta is not None:
+            replicates = meta[0]
+        summary = summary_md(results, replicates, seed, terminal_available=terminal_available)
+        (args.out / "summary.md").write_text(summary, encoding="utf-8")
+        print(summary)
+        return calibration_exit_code(results)
+
     args.out.mkdir(parents=True, exist_ok=True)
     jobs = [
         (cell, design, args.replicates, args.seed, pass_alpha)
@@ -1281,13 +1486,13 @@ def main(
         results = list(pool.map(_run, jobs))
     (args.out / "terminal_states.tsv").write_text(terminal_tsv(results), encoding="utf-8")
     (args.out / "per_look.tsv").write_text(per_look_tsv(results), encoding="utf-8")
+    _write_run_meta(args.out, replicates=args.replicates, seed=args.seed)
     summary = summary_md(results, args.replicates, args.seed)
     (args.out / "summary.md").write_text(summary, encoding="utf-8")
     print(summary)
 
     cal_results = [r for r in results if is_calibration_cell(r.cell)]
-    all_hold = all(calibration_holds(r) for r in cal_results)
-    if not all_hold:
+    if not all(calibration_holds(r) for r in cal_results):
         for r in cal_results:
             if not calibration_holds(r):
                 dsg = r.design
@@ -1303,7 +1508,7 @@ def main(
                     f"pass_check={is_pass_calibration_cell(c)} "
                     f"cut_check={is_cut_calibration_cell(c)}"
                 )
-    return 0 if all_hold else 1
+    return calibration_exit_code(results)
 
 
 if __name__ == "__main__":

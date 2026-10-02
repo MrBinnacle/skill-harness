@@ -511,6 +511,44 @@ and covers that section only. This page stays the citable surface for every kind
   receipt records only that six one-off attribute moves each broke its
   equalities.
 
+### [`docs/assurance/stage1a-regime-712-mutation-receipt.md`](assurance/stage1a-regime-712-mutation-receipt.md)
+
+- **Claims:** Four mutants against the Stage 1A regime simulator under the
+  #712 repair (the false nine-cell sensitivity sentence, the CUT half of the
+  calibration read dropped from the exit code, the `--rebuild` path that must
+  not simulate, and `off_diagonal_cells` widened to the nine-cell grid), each
+  run in its own git worktree at a fixed commit with production never mutated
+  in place, each case recording and asserting both worktree HEADs, the
+  `module.__file__` actually imported, clean and mutant source digests, that
+  the digests differ, that the clean baseline passed first with nonzero
+  collection, that the mutant imports, the named failing assertion, and that
+  the production tree was byte-unchanged afterwards. All four KILLED. M-S1A-18
+  restores the false sentence and is killed by
+  `test_summary_sensitivity_sentence_names_the_off_diagonal_minimum`, whose
+  fixture puts the off-diagonal minimum at 0.75 and the nine-cell minimum at
+  0.40. M-S1A-19 narrows `is_calibration_cell` to the PASS half and is killed
+  by `test_calibration_read_includes_cut_error_cells_above_boundary` and
+  `test_calibration_exit_code_filters_on_is_calibration_cell`. M-S1A-20
+  removes the `--rebuild` early return and is killed by
+  `test_rebuild_makes_no_simulation_call` and
+  `test_rebuild_reproduces_summary_and_exit_code_byte_identically`. M-S1A-21
+  turns `off_diagonal_cells` into the nine-cell grid and is killed by
+  `test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima`.
+  The companion campaigns
+  `docs/assurance/stage1a-regime-685-mutation-receipt.md` and
+  `docs/assurance/stage1a-regime-708-mutation-receipt.md` were regenerated in
+  the same change because the simulator digest moved; each carries the same
+  digest as this receipt.
+- **Refuses to claim:** Any mutation score, adequacy of the Stage 1A suite as a
+  whole, or that any surviving mutant outside the four named cases is safe. It
+  refuses any operating characteristic from the #696 full-grid files, which
+  live on the operator's host and are not in this repository. It refuses any
+  claim about the #711 verdict comment itself, which this container could not
+  read. The constant pin in `tests/test_v5_cue_stage1a.py`
+  (`test_simulator_constants_pin_to_the_registered_launcher`) is outside this
+  campaign's mutant set and was not edited; no registered constant in the
+  simulator or in `scripts/screens/419/v5_cue_stage1a.py` changed.
+
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 
 - **Claims:** On 2026-09-23, `git ls-files "skills/*/*/SKILL.md"` returned zero
