@@ -334,6 +334,39 @@ _S1A_UNION_EXACT_CONTROL = (
     "tests/test_simulate_stage1a_regime_685.py"
     "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-2.0]"
 )
+# #712: the sensitivity sentence, the CUT half of the calibration read, and
+# the --rebuild path. Each mutant is one defect class the #712 ticket names.
+_S1A_SENS_SENTENCE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_summary_sensitivity_sentence_names_the_off_diagonal_minimum"
+)
+_S1A_SENS_SENTENCE_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_summary_reports_off_diagonal_cells_as_sensitivity"
+)
+_S1A_CUT_CAL_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_calibration_read_includes_cut_error_cells_above_boundary"
+)
+_S1A_CUT_CAL_EXIT_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_calibration_exit_code_filters_on_is_calibration_cell"
+)
+_S1A_CUT_CAL_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration"
+)
+_S1A_REBUILD_NO_SIM_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_rebuild_makes_no_simulation_call"
+)
+_S1A_REBUILD_BYTE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_rebuild_reproduces_summary_and_exit_code_byte_identically"
+)
+_S1A_SENS_ROWS_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima"
+)
 
 
 # #368 Path C: the ablation lane's discordant route.
@@ -919,6 +952,61 @@ MUTANTS: tuple[Mutant, ...] = (
         "    if replicates < REPLICATES:\n",
         "    if True:  # mutant: always smoke, whatever the replicate count\n",
         (_S1A_MODEL_KILL,),
+    ),
+    # #712: the sensitivity sentence, the CUT half of the calibration read,
+    # and the --rebuild path that must not simulate.
+    Mutant(
+        "M-S1A-18",
+        "712-stage1a-sensitivity-sentence-nine-cell",
+        "the sensitivity sentence is restored to the false claim that the "
+        "numbers describe what a nine-cell aggregate would have read; on the "
+        "#712 fixture the off-diagonal minimum is 0.75 and the nine-cell "
+        "minimum is 0.40, so the sentence and the printed numbers disagree",
+        _S1A,
+        _S1A_MODULE,
+        '        "budget. These numbers are the off-diagonal minima over those six "\n'
+        '        "cells only; the #696 ruling does not use them to decide whether a "\n'
+        '        "design meets the target.",',
+        '        "budget. These numbers describe what a nine-cell aggregate would have "\n'
+        '        "read; the #696 ruling does not use them to decide whether a design "\n'
+        '        "meets the target.",',
+        (_S1A_SENS_SENTENCE_KILL, _S1A_SENS_SENTENCE_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-19",
+        "712-stage1a-calibration-read-drops-cut",
+        "is_calibration_cell returns only the PASS half, so every CUT-error "
+        "cell above d = 0.20 leaves the exit-code filter and a broken "
+        "futility side exits 0",
+        _S1A,
+        _S1A_MODULE,
+        "    return is_pass_calibration_cell(cell) or is_cut_calibration_cell(cell)",
+        "    return is_pass_calibration_cell(cell)  # mutant: CUT half dropped",
+        (_S1A_CUT_CAL_KILL, _S1A_CUT_CAL_EXIT_KILL, _S1A_CUT_CAL_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-20",
+        "712-stage1a-rebuild-disabled",
+        "the --rebuild early return is removed, so rebuilding from an output "
+        "directory runs a second simulation instead of reading the files",
+        _S1A,
+        _S1A_MODULE,
+        "    if args.rebuild:",
+        "    if False:  # mutant: rebuild disabled, falls through to simulation",
+        (_S1A_REBUILD_NO_SIM_KILL, _S1A_REBUILD_BYTE_KILL),
+    ),
+    Mutant(
+        "M-S1A-21",
+        "712-stage1a-off-diag-cells-to-all-nine",
+        "off_diagonal_cells returns the full nine-cell grid, so the sensitivity "
+        "rows and the sentence that names them report nine-cell minima",
+        _S1A,
+        _S1A_MODULE,
+        "    return tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES"
+        " if (p_p, p_n) not in diag)",
+        "    return tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES)"
+        "  # mutant: nine cells",
+        (_S1A_SENS_ROWS_KILL, _S1A_SENS_SENTENCE_KILL),
     ),
 )
 
