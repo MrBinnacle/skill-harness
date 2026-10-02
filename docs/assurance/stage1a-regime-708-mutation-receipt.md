@@ -10,7 +10,7 @@ record:** `docs/assurance/stage1a-regime-708-mutation-receipt.json`.
 `sha256:49b0576185f11964372036c14a8b0ab6b424c11e0208a32ec73252ccc05ded9b`.
 **Commit at generation:** `2aa61170f049996a80c30390ef53cac3dbf23e87` —
 informational only; currency is checked against the digest above by
-`tests/test_mutation_receipt.py`. **Python:** 3.13.1.
+`tests/test_mutation_receipt.py`. **Python:** 3.13.15.
 
 Each case runs in its own git worktree at a fixed commit. Production is never
 mutated in place. All five cases resolved `simulate_stage1a_regime_685` inside

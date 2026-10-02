@@ -340,9 +340,14 @@ def test_cut_calibration_uses_the_futility_nominal_level() -> None:
     cell = reg.Cell(0.75, 0.35, 0.35)  # F-P = 0.40 >= BOUNDARY
     design = reg.Design(n_pairs=97)
     assert reg.is_cut_calibration_cell(cell)
-    limit = a650.FUTILITY_ALPHA + a650.calibration_tolerance(200, a650.FUTILITY_ALPHA)
-    over = _hand_result(cell, design, p_pass=0.0, p_cut=limit + 0.05)
+    pass_limit = a650.PASS_ALPHA + a650.calibration_tolerance(200, a650.PASS_ALPHA)
+    cut_limit = a650.FUTILITY_ALPHA + a650.calibration_tolerance(200, a650.FUTILITY_ALPHA)
+    assert pass_limit < cut_limit
+    between_limits = _hand_result(cell, design, p_pass=0.0, p_cut=(pass_limit + cut_limit) / 2)
+    over = _hand_result(cell, design, p_pass=0.0, p_cut=cut_limit + 0.05)
     under = _hand_result(cell, design, p_pass=0.0, p_cut=0.0)
+    assert reg.cut_calibration_holds(between_limits) is True
+    assert reg.calibration_holds(between_limits) is True
     assert reg.cut_calibration_holds(over) is False
     assert reg.cut_calibration_holds(under) is True
     assert reg.calibration_holds(over) is False
@@ -926,17 +931,14 @@ def test_summary_reports_off_diagonal_cells_as_sensitivity() -> None:
         cut_at=cut_at,
     )
     summary = reg.summary_md(results, 200, 685)
-    assert "sensitivity" in summary.lower()
-    assert "## Target check" in summary
-    # Off-diagonal readings are present and are not filed under the target heading alone.
-    sens_idx = summary.lower().find("sensitivity")
+    sensitivity_heading = "## Sensitivity (off-diagonal cells)"
+    assert sensitivity_heading in summary
     target_idx = summary.find("## Target check")
-    assert target_idx != -1 and sens_idx != -1
-    # The off-diagonal minimum PASS value 0.50 appears in the sensitivity block.
-    sens_block = summary[sens_idx:]
-    assert "0.5000" in sens_block or "0.50" in sens_block
-    # Never label an off-diagonal reading as the target itself.
-    assert "off-diagonal" in summary.lower() or "sensitivity" in summary.lower()
+    sens_idx = summary.find(sensitivity_heading)
+    assert target_idx < sens_idx
+    sensitivity_block = summary[sens_idx : summary.find("## Price lines", sens_idx)]
+    assert "never the target" in sensitivity_block
+    assert "| 0.80 | 1.00 | union | 300 | 0.5000 | 0.5000 |" in sensitivity_block
 
 
 def test_summary_renders_both_halves_and_the_stage2_trigger_from_data() -> None:
