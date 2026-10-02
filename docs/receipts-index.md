@@ -448,20 +448,24 @@ and covers that section only. This page stays the citable surface for every kind
 
 ### [`docs/findings/stage1a-lever-adjudication-685.md`](findings/stage1a-lever-adjudication-685.md)
 
-- **Claims:** The Stage 1 simulation design for null allocation x F-N
-  construction at fixed 300- and 1,200-epoch budgets. It states the model
-  and launch-index pairing. The script
-  records every look and names its design fields in each output row, including E[total epochs],
-  an expected-spend price line beside the cap price, and MC SE on every row. The headline table
-  checks both halves of the #685 target (P(PASS) >= target at d = 0.30 and P(CUT) >= target at
-  d = 0.10) for 0.80 and 0.90 and states whether the stage-2 trigger fires, from data only.
-  A 20-replicate smoke run is committed under `docs/findings/data/stage1a-regime-685/`.
+- **Claims:** The Stage 1 simulation of null allocation x F-N
+  construction at fixed 300- and 1,200-epoch budgets, under the declared independent-Bernoulli
+  model with launch-index pairing: 756 configurations at 2,000 replicates, seed 685, committed
+  under `docs/findings/data/stage1a-regime-685/` with replicate count and MC SE on every row
+  (#696). No design family reaches P(PASS) >= target at d = 0.30 together with P(CUT) >= target
+  at d = 0.10 on the p_P = p_N diagonal, for 0.80 or 0.90, at either budget (best halves 0.2335
+  and 0.5070), so the stage-2 trigger fires for both targets. Calibration holds: the largest
+  P(PASS) where a PASS is an error is 0.0080 and the largest P(CUT) where a CUT is an error is
+  0.0360. The committed `summary.md` is what `--rebuild` writes from the committed data, and a
+  test checks that. The 20-replicate smoke run is under
+  `docs/findings/data/stage1a-regime-685/smoke/` and is schema evidence only.
 - **Refuses to claim:** Any operating characteristic from the smoke numbers. The 200-replicate
   tables previously attached to this record used fabricated zero outcomes for missing
   Null epochs and omitted the second Null draw in a double-Null design. They
-  are withdrawn. The corrected 756-cell grid at 2,000 replicates has not run
-  (part (b), #696). It refuses any matched-pairs advantage from launch-index pairing and any
-  claim about real Claude Code epochs. It states no crashed-look rule and no void-epoch rule
+  are withdrawn. It refuses any claim about the pair-cap and fixed-n levers (Stage 2, not
+  simulated), any matched-pairs advantage from launch-index pairing, any claim about real
+  Claude Code epochs, and any decision on the direct-form amendment, the margin or the power
+  target. It states no crashed-look rule and no void-epoch rule
   for the next paid run; skill-harness #697 owns both.
 
 ### [`docs/assurance/stage1a-regime-685-mutation-receipt.md`](assurance/stage1a-regime-685-mutation-receipt.md)
@@ -479,8 +483,8 @@ and covers that section only. This page stays the citable surface for every kind
   rather than folding it into a score.
 - **Refuses to claim:** Any mutation score, adequacy of the Stage 1A suite as a whole, or that
   any surviving mutant outside the twelve named cases is safe. It refuses any operating
-  characteristic from the smoke numbers in `docs/findings/data/stage1a-regime-685/`; the full
-  grid belongs to #696. It refuses any claim about the #694 verdict comment itself, which this
+  characteristic from the smoke numbers in `docs/findings/data/stage1a-regime-685/smoke/`; the
+  full grid belongs to #696. It refuses any claim about the #694 verdict comment itself, which this
   container could not read.
 
 ### [`docs/assurance/stage1a-regime-708-mutation-receipt.md`](assurance/stage1a-regime-708-mutation-receipt.md)
