@@ -1243,6 +1243,8 @@ def test_committed_smoke_summary_reports_the_target_check() -> None:
     assert "Replicates per cell: 20." in summary
     assert "P(PASS) >= target at d = 0.30" in summary
     assert "P(CUT) >= target at d = 0.10" in summary
+    assert "These numbers are the off-diagonal minima over those six cells only" in summary
+    assert "These numbers describe what a nine-cell aggregate would have read" not in summary
     assert "establish only the output schema" in summary
     assert "These results establish operating characteristics" not in summary
     for target in ("0.80", "0.90"):
@@ -1506,3 +1508,19 @@ def test_rebuild_reads_headline_calibration_and_sensitivity_from_disk(
         assert needle in rebuilt, f"rebuilt summary is missing {needle!r}"
         assert needle in written
     assert rebuilt == written
+
+
+def test_rebuild_refuses_to_invent_missing_terminal_states(tmp_path: Path) -> None:
+    """#712: absent terminal rows must not be rendered as zero-count observations."""
+    out = tmp_path / "out"
+    out.mkdir()
+    for name in ("per_look.tsv", "terminal_states.tsv"):
+        (out / name).write_text((_SMOKE_DIR / name).read_text(encoding="utf-8"), encoding="utf-8")
+
+    code = reg.main(["--out", str(out), "--rebuild"])
+    summary = (out / "summary.md").read_text(encoding="utf-8")
+    terminal_block = summary[summary.find("## Joint terminal state") :]
+
+    assert code in (0, 1)
+    assert "Terminal-state data are unavailable for one or more cap cells" in terminal_block
+    assert "| n_pairs | null_per_pair | fn_construction |" not in terminal_block

@@ -1078,7 +1078,13 @@ def _terminal_lines(results: Sequence[CellResult]) -> list[str]:
     return lines
 
 
-def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str:
+def summary_md(
+    results: Sequence[CellResult],
+    replicates: int,
+    seed: int,
+    *,
+    terminal_available: bool = True,
+) -> str:
     se_nominal = math.sqrt(a650.PASS_ALPHA * (1 - a650.PASS_ALPHA) / replicates)
     limit = a650.PASS_ALPHA + a650.calibration_tolerance(replicates)
     lines = [
@@ -1225,7 +1231,13 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "Median [10th, 90th percentile]. LB(F-P) and UB(F-P) on d scale.",
         "",
     ]
-    lines += _terminal_lines(subset)
+    if terminal_available:
+        lines += _terminal_lines(subset)
+    else:
+        lines += [
+            "Terminal-state data are unavailable for one or more cap cells, so this section "
+            "cannot be rebuilt from the supplied output directory.",
+        ]
     if replicates < REPLICATES:
         model_lines = [
             "These smoke-run results establish only the output schema under the declared "
@@ -1315,7 +1327,7 @@ def _result_key(design: Design, cell: Cell) -> tuple[object, ...]:
     )
 
 
-def results_from_output_dir(out_dir: Path) -> tuple[list[CellResult], int]:
+def results_from_output_dir(out_dir: Path) -> tuple[list[CellResult], int, bool]:
     """Rebuild CellResults from a run's per_look.tsv and terminal_states.tsv.
 
     #712: issue 696 holds a finished full-grid output directory and needs the
@@ -1324,11 +1336,10 @@ def results_from_output_dir(out_dir: Path) -> tuple[list[CellResult], int]:
     (headline, target_check_rows, sensitivity_rows, calibration_exit_code)
     read the reconstructed CellResults; this parser is I/O only.
 
-    terminal_states.tsv is optional. When absent, or when it does not carry
-    every design in per_look.tsv, the missing joint terminal samples stay
-    empty and the summary's terminal section reads '-', which is what the
-    same code prints for a state with zero replicates. The headline,
-    target check, sensitivity and calibration read need only per_look.tsv.
+    terminal_states.tsv is optional. The headline, target check, sensitivity,
+    and calibration read need only per_look.tsv. A missing cap-cell terminal
+    row is not a zero-count state, so the rebuilt summary refuses to render
+    its terminal-state table when those data are incomplete.
     """
     per_look_path = out_dir / "per_look.tsv"
     terminal_path = out_dir / "terminal_states.tsv"
@@ -1338,6 +1349,7 @@ def results_from_output_dir(out_dir: Path) -> tuple[list[CellResult], int]:
     order: list[tuple[object, ...]] = []
     builders: dict[tuple[object, ...], dict[str, object]] = {}
     replicates_values: set[int] = set()
+    terminal_states: dict[tuple[object, ...], set[str]] = {}
     per_lines = per_look_path.read_text(encoding="utf-8").rstrip("\n").split("\n")
     per_cols = _tsv_columns(per_lines[0])
     for line in per_lines[1:]:
@@ -1381,6 +1393,7 @@ def results_from_output_dir(out_dir: Path) -> tuple[list[CellResult], int]:
             if builder is None:
                 continue
             state = row[term_cols["joint_state"]]
+            terminal_states.setdefault(key, set()).add(state)
             count = int(row[term_cols["count"]])
             if count <= 0:
                 continue
@@ -1411,7 +1424,14 @@ def results_from_output_dir(out_dir: Path) -> tuple[list[CellResult], int]:
                 library_calls=0,
             )
         )
-    return results, replicates
+    terminal_available = all(
+        set(JOINT_STATES) <= terminal_states.get(_result_key(result.design, result.cell), set())
+        for result in results
+        if result.design.n_pairs == PAIRS_CAP
+        and result.design.null_per_pair == 1.0
+        and result.design.fn_construction == "union"
+    )
+    return results, replicates, terminal_available
 
 
 def _run(job: tuple[Cell, Design, int, int, float]) -> CellResult:
@@ -1447,12 +1467,12 @@ def main(
     )
     args = ap.parse_args(argv)
     if args.rebuild:
-        results, replicates = results_from_output_dir(args.out)
+        results, replicates, terminal_available = results_from_output_dir(args.out)
         meta = _read_run_meta(args.out)
         seed = args.seed if meta is None else meta[1]
         if meta is not None:
             replicates = meta[0]
-        summary = summary_md(results, replicates, seed)
+        summary = summary_md(results, replicates, seed, terminal_available=terminal_available)
         (args.out / "summary.md").write_text(summary, encoding="utf-8")
         print(summary)
         return calibration_exit_code(results)

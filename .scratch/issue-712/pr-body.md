@@ -82,7 +82,7 @@ still pass against the extracted function.
 
 **Built.** `main()` accepts `--rebuild`. It calls
 `results_from_output_dir`, which parses `per_look.tsv` into `CellResult`s
-(and `terminal_states.tsv` when present and complete), then calls the same
+(and `terminal_states.tsv` when present), then calls the same
 `summary_md`, `headline`, `target_check_rows`, `sensitivity_rows` and
 `calibration_exit_code` a run uses. I/O only; no second aggregation. Runs
 write `run_meta.json` with replicates and seed; rebuild reads it when present,
@@ -91,16 +91,20 @@ else takes replicates from the TSV and seed from `--seed` (default 685).
 `terminal_states.tsv` is optional: the committed smoke terminal file is missing
 the 1,200-epoch designs, and #696 needs the headline, stage-2 trigger,
 calibration read and sensitivity — all of which need only `per_look.tsv`.
+When cap-cell terminal rows are absent, rebuild states that the terminal table
+cannot be rebuilt rather than presenting their absence as zero observations.
 
 **Test.** `test_rebuild_reproduces_summary_and_exit_code_byte_identically`,
 `test_rebuild_makes_no_simulation_call`,
-`test_rebuild_reads_headline_calibration_and_sensitivity_from_disk`. The
+`test_rebuild_reads_headline_calibration_and_sensitivity_from_disk`, and
+`test_rebuild_refuses_to_invent_missing_terminal_states`. The
 first runs `main` on a four-cell grid, captures `summary.md` and the exit
 code, then rebuilds and asserts byte-identity and the same exit code. The
 second monkeypatches `run_cell` to raise before rebuilding. The third checks
 the rebuilt summary carries the headline for 0.80 and 0.90, the stage-2
 trigger lines, the sensitivity section with "off-diagonal minima", and the
-replicate/seed header.
+replicate/seed header. The fourth rebuilds the committed incomplete terminal
+file and requires an explicit refusal instead of zero-count terminal rows.
 
 **Observed.** Before `--rebuild` existed all three tests failed with
 `argparse` `unrecognized arguments: --rebuild`. After implementing the flag
@@ -193,10 +197,8 @@ outside `docs/assurance/` and `docs/receipts-index.md` changed.
 No change to any pre-registration text, threshold, estimand or the launcher.
 No full-grid run. No change to what the headline is (the diagonal minimum,
 per the ruling in issue #696 comment 5944534509). The data commit and the
-findings record are issue #696's. The committed smoke `summary.md` under
-`docs/findings/data/stage1a-regime-685/` still carries the old sensitivity
-sentence; no test reads that sentence from the committed file, and the ticket
-states the data commit belongs to #696.
+findings record are issue #696's. The committed smoke `summary.md` receives
+only the corrected sensitivity sentence; its measured rows are unchanged.
 
 ## Revisit if
 
