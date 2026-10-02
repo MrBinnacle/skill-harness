@@ -483,6 +483,34 @@ and covers that section only. This page stays the citable surface for every kind
   grid belongs to #696. It refuses any claim about the #694 verdict comment itself, which this
   container could not read.
 
+### [`docs/assurance/stage1a-regime-708-mutation-receipt.md`](assurance/stage1a-regime-708-mutation-receipt.md)
+
+- **Claims:** Five mutants against the Stage 1A regime simulator under the #708
+  repair (#696 diagonal aggregation ruling, the broader PASS/CUT calibration
+  read, and the replicate-count model statement), each run in its own git
+  worktree at a fixed commit with production never mutated in place, each case
+  recording and asserting both worktree HEADs, the `module.__file__` actually
+  imported, clean and mutant source digests, that the digests differ, that the
+  clean baseline passed first with nonzero collection, that the mutant imports,
+  the named failing assertion, and that the production tree was
+  byte-unchanged afterwards. All five KILLED. M-S1A-13/14/15 are the three
+  aggregation mutants the #708 ticket names (min→max, diagonal→all nine,
+  diagonal→single cell (0.35, 0.35)); each is killed by
+  `test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum`.
+  M-S1A-16 drops the true F-N half of the PASS-calibration predicate and is
+  killed by the F-N margin-cell tests. M-S1A-17 always prints the smoke
+  model statement and is killed by
+  `test_summary_marks_smoke_output_as_schema_evidence`.
+- **Refuses to claim:** Any mutation score, adequacy of the Stage 1A suite as a
+  whole, or that any surviving mutant outside the five named cases is safe. It
+  refuses any operating characteristic from the #696 full-grid files, which
+  live on the operator's host at `C:/Users/mlpgr/wt-696-out/full` and are not
+  in this repository. It refuses any claim about the #696 issue-comment table
+  itself, which this container could not read. The constant pin in
+  `tests/test_v5_cue_stage1a.py` is outside this campaign's mutant set; the
+  receipt records only that six one-off attribute moves each broke its
+  equalities.
+
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 
 - **Claims:** On 2026-09-23, `git ls-files "skills/*/*/SKILL.md"` returned zero

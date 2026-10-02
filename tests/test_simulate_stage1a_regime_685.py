@@ -290,6 +290,84 @@ def test_calibration_holds_for_every_stage1_design_at_boundary(design: Any) -> N
     assert reg.calibration_holds(result)
 
 
+def test_calibration_covers_the_fn_margin_cell_at_d030() -> None:
+    """#708: the F-N margin cell (0.30, 0.40) at d=0.30 is a PASS-calibration cell.
+
+    True F - N = 0.60 - 0.40 = 0.20 = BOUNDARY, so P(PASS) there is an error
+    whenever it exceeds PASS_ALPHA + tolerance. Leaving this cell out of the
+    calibration set is the defect this test pins.
+    """
+    cell = reg.Cell(0.60, 0.30, 0.40)
+    assert cell.d == pytest.approx(0.30)
+    assert reg.true_fn_diff(cell) == pytest.approx(0.20)
+    assert reg.is_pass_calibration_cell(cell), "F-N = 0.20 must make this a PASS-calibration cell"
+    assert reg.is_cut_calibration_cell(cell), (
+        "F-P = 0.30 >= BOUNDARY must make this a CUT-calibration cell"
+    )
+    design = reg.Design(n_pairs=97)
+    failing = _hand_result(cell, design, p_pass=0.50, p_cut=0.0)
+    assert reg.calibration_holds(failing) is False
+    passing = _hand_result(cell, design, p_pass=0.0, p_cut=0.0)
+    assert reg.calibration_holds(passing) is True
+
+
+def test_calibration_set_includes_every_pass_and_cut_error_cell() -> None:
+    """#708: PASS wherever F-P or F-N <= BOUNDARY; CUT wherever F-P >= BOUNDARY."""
+    effects = (0.00, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40)
+    cells = [
+        reg.Cell(round(p_p + d, 10), p_p, p_n)
+        for p_p in reg.BASELINES
+        for p_n in reg.BASELINES
+        for d in effects
+    ]
+    pass_cells = {(c.p_placebo, c.p_null, c.d) for c in cells if reg.is_pass_calibration_cell(c)}
+    expected_pass = {
+        (c.p_placebo, c.p_null, c.d)
+        for c in cells
+        if c.d <= 0.20 + 1e-9 or reg.true_fn_diff(c) <= 0.20 + 1e-9
+    }
+    assert pass_cells == expected_pass
+    assert (0.30, 0.40, 0.30) in pass_cells, (
+        "the F-N margin cell (0.30, 0.40) at d=0.30 must be a PASS-calibration cell"
+    )
+    cut_cells = {(c.p_placebo, c.p_null, c.d) for c in cells if reg.is_cut_calibration_cell(c)}
+    expected_cut = {(c.p_placebo, c.p_null, c.d) for c in cells if c.d >= 0.20 - 1e-9}
+    assert cut_cells == expected_cut
+
+
+def test_cut_calibration_uses_the_futility_nominal_level() -> None:
+    """#708: P(CUT) is compared against FUTILITY_ALPHA + tolerance, not PASS_ALPHA."""
+    cell = reg.Cell(0.75, 0.35, 0.35)  # F-P = 0.40 >= BOUNDARY
+    design = reg.Design(n_pairs=97)
+    assert reg.is_cut_calibration_cell(cell)
+    pass_limit = a650.PASS_ALPHA + a650.calibration_tolerance(200, a650.PASS_ALPHA)
+    cut_limit = a650.FUTILITY_ALPHA + a650.calibration_tolerance(200, a650.FUTILITY_ALPHA)
+    assert pass_limit < cut_limit
+    between_limits = _hand_result(cell, design, p_pass=0.0, p_cut=(pass_limit + cut_limit) / 2)
+    over = _hand_result(cell, design, p_pass=0.0, p_cut=cut_limit + 0.05)
+    under = _hand_result(cell, design, p_pass=0.0, p_cut=0.0)
+    assert reg.cut_calibration_holds(between_limits) is True
+    assert reg.calibration_holds(between_limits) is True
+    assert reg.cut_calibration_holds(over) is False
+    assert reg.cut_calibration_holds(under) is True
+    assert reg.calibration_holds(over) is False
+    assert reg.calibration_holds(under) is True
+
+
+def test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration(
+    tmp_path: Path,
+) -> None:
+    """#708: exit code reflects a PASS-calibration failure in the F-N margin cell."""
+    cell = reg.Cell(0.60, 0.30, 0.40)
+    design = reg.Design(n_pairs=30)
+    code = reg.main(
+        ["--out", str(tmp_path / "out"), "--replicates", "600", "--workers", "1", "--seed", "685"],
+        grid=[(cell, design)],
+        pass_alpha=0.6,
+    )
+    assert code == 1
+
+
 # ---------------------------------------------------------------------------
 # Negative control: calibration fails under loosened rule
 # ---------------------------------------------------------------------------
@@ -691,6 +769,178 @@ def test_stage2_trigger_fires_only_when_no_design_reaches_the_target() -> None:
     assert fires[0.90] is True
 
 
+def _results_with_per_cell_rates(
+    *,
+    epoch_budget: int,
+    null_per_pair: float,
+    fn_construction: str,
+    pass_at: dict[tuple[float, float], float],
+    cut_at: dict[tuple[float, float], float],
+) -> list[Any]:
+    """One design family at one budget, with per-(p_P, p_N) rates at d=0.30 and d=0.10."""
+    results: list[Any] = []
+    n_pairs = reg.pairs_for_epoch_budget(epoch_budget, null_per_pair)
+    design = reg.Design(
+        n_pairs=n_pairs, null_per_pair=null_per_pair, fn_construction=fn_construction
+    )
+    for p_p in reg.BASELINES:
+        for p_n in reg.BASELINES:
+            results.append(
+                _hand_result(
+                    reg.Cell(round(p_p + 0.30, 10), p_p, p_n),
+                    design,
+                    p_pass=pass_at[(p_p, p_n)],
+                    p_cut=0.0,
+                )
+            )
+            results.append(
+                _hand_result(
+                    reg.Cell(round(p_p + 0.10, 10), p_p, p_n),
+                    design,
+                    p_pass=0.0,
+                    p_cut=cut_at[(p_p, p_n)],
+                )
+            )
+            for d in (0.00, 0.15, 0.20, 0.25, 0.40):
+                results.append(
+                    _hand_result(
+                        reg.Cell(round(p_p + d, 10), p_p, p_n),
+                        design,
+                        p_pass=0.0,
+                        p_cut=0.0,
+                    )
+                )
+    return results
+
+
+def test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum() -> None:
+    """#708: aggregation rule is the diagonal minimum; the nine-cell minimum is ill-posed.
+
+    Fixture rates at d=0.30 (P(PASS)) and d=0.10 (P(CUT)) are unequal across the
+    nine (p_P, p_N) cells so that four readings disagree:
+
+      diagonal minimum      PASS 0.85, CUT 0.84  -> meets 0.80
+      nine-cell minimum     PASS 0.50, CUT 0.50  -> fails 0.80
+      diagonal maximum      PASS 0.92, CUT 0.88  -> meets 0.80
+      single cell (0.35,0.35) PASS 0.88, CUT 0.86 -> meets 0.80
+
+    The #696 ruling reads the diagonal minimum. This test asserts those numbers
+    and the resulting reached/trigger verdict. A min->max mutant, a
+    diagonal->all-nine mutant, and a diagonal->single-cell mutant each report a
+    different pair and each fails this assertion.
+    """
+    pass_at: dict[tuple[float, float], float] = {
+        (0.30, 0.30): 0.85,
+        (0.35, 0.35): 0.88,
+        (0.40, 0.40): 0.92,
+        (0.30, 0.35): 0.50,
+        (0.30, 0.40): 0.95,
+        (0.35, 0.30): 0.95,
+        (0.35, 0.40): 0.95,
+        (0.40, 0.30): 0.95,
+        (0.40, 0.35): 0.95,
+    }
+    cut_at: dict[tuple[float, float], float] = {
+        (0.30, 0.30): 0.84,
+        (0.35, 0.35): 0.86,
+        (0.40, 0.40): 0.88,
+        (0.30, 0.35): 0.50,
+        (0.30, 0.40): 0.95,
+        (0.35, 0.30): 0.95,
+        (0.35, 0.40): 0.95,
+        (0.40, 0.30): 0.95,
+        (0.40, 0.35): 0.95,
+    }
+    diagonal_pass = min(pass_at[(p, p)] for p in reg.BASELINES)
+    diagonal_cut = min(cut_at[(p, p)] for p in reg.BASELINES)
+    nine_pass = min(pass_at.values())
+    nine_cut = min(cut_at.values())
+    diagonal_pass_max = max(pass_at[(p, p)] for p in reg.BASELINES)
+    single_pass = pass_at[(0.35, 0.35)]
+    single_cut = cut_at[(0.35, 0.35)]
+    assert {diagonal_pass, nine_pass, diagonal_pass_max, single_pass} == {0.85, 0.50, 0.92, 0.88}
+    assert {diagonal_cut, nine_cut, max(cut_at[(p, p)] for p in reg.BASELINES), single_cut} == {
+        0.84,
+        0.50,
+        0.88,
+        0.86,
+    }
+
+    results = _results_with_per_cell_rates(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        pass_at=pass_at,
+        cut_at=cut_at,
+    )
+    rows = reg.target_check_rows(results)
+    row = next(
+        r
+        for r in rows
+        if r.null_per_pair == 1.0 and r.fn_construction == "union" and r.target == 0.80
+    )
+    assert row.p_pass_at_d030 == pytest.approx(diagonal_pass), (
+        "target check must report the diagonal minimum P(PASS) at d=0.30"
+    )
+    assert row.p_cut_at_d010 == pytest.approx(diagonal_cut), (
+        "target check must report the diagonal minimum P(CUT) at d=0.10"
+    )
+    assert row.reached, "diagonal minima clear 0.80, so the family meets the target"
+    assert not row.trigger_fires
+    assert reg.stage2_trigger_fires(rows, 0.80) is False
+    # The nine-cell reading does NOT meet; if the code used it, reached would flip.
+    assert nine_pass < 0.80 and nine_cut < 0.80
+
+
+def test_summary_target_check_text_says_diagonal_not_all_nine() -> None:
+    """#708: the summary names the diagonal aggregation and never 'all nine'."""
+    results = _results_for_budget(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        p_pass_at_0_30=0.85,
+        p_cut_at_0_10=0.85,
+    )
+    summary = reg.summary_md(results, 200, 685)
+    assert "## Target check" in summary
+    assert "diagonal" in summary.lower()
+    assert "all nine" not in summary
+    assert "p_P = p_N" in summary or "p_P = p_N" in summary.replace(" ", "")
+
+
+def test_summary_reports_off_diagonal_cells_as_sensitivity() -> None:
+    """#708: the six off-diagonal cells appear as sensitivity, labelled, never as the target."""
+    pass_at: dict[tuple[float, float], float] = {
+        (0.30, 0.30): 0.85,
+        (0.35, 0.35): 0.88,
+        (0.40, 0.40): 0.92,
+        (0.30, 0.35): 0.50,
+        (0.30, 0.40): 0.60,
+        (0.35, 0.30): 0.70,
+        (0.35, 0.40): 0.75,
+        (0.40, 0.30): 0.80,
+        (0.40, 0.35): 0.77,
+    }
+    cut_at: dict[tuple[float, float], float] = {key: 0.84 for key in pass_at}
+    cut_at[(0.30, 0.35)] = 0.50
+    results = _results_with_per_cell_rates(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        pass_at=pass_at,
+        cut_at=cut_at,
+    )
+    summary = reg.summary_md(results, 200, 685)
+    sensitivity_heading = "## Sensitivity (off-diagonal cells)"
+    assert sensitivity_heading in summary
+    target_idx = summary.find("## Target check")
+    sens_idx = summary.find(sensitivity_heading)
+    assert target_idx < sens_idx
+    sensitivity_block = summary[sens_idx : summary.find("## Price lines", sens_idx)]
+    assert "never the target" in sensitivity_block
+    assert "| 0.80 | 1.00 | union | 300 | 0.5000 | 0.5000 |" in sensitivity_block
+
+
 def test_summary_renders_both_halves_and_the_stage2_trigger_from_data() -> None:
     # P(PASS) at d=0.30 clears 0.80 in every baseline cell; P(CUT) at d=0.10 does not.
     failing = _results_for_budget(
@@ -711,10 +961,27 @@ def test_summary_renders_both_halves_and_the_stage2_trigger_from_data() -> None:
 
 
 def test_summary_marks_smoke_output_as_schema_evidence() -> None:
-    summary = reg.summary_md([], 20, 685)
-    assert "establish only the output schema" in summary
-    assert "They do not establish operating characteristics" in summary
-    assert "These results establish operating characteristics" not in summary
+    """#708: the smoke sentence appears only at a smoke count; a full run states its model.
+
+    Smoke is decided by comparing the replicate count with the script's
+    REPLICATES default (2,000). Below that default the summary establishes only
+    the output schema. At the default (or above) it states what the simulation
+    does and does not establish under the declared independent-Bernoulli model.
+    """
+    smoke = reg.summary_md([], 20, 685)
+    assert "establish only the output schema" in smoke
+    assert "They do not establish operating characteristics" in smoke
+    assert "These results establish operating characteristics" not in smoke
+
+    full = reg.summary_md([], reg.REPLICATES, 685)
+    assert "establish only the output schema" not in full
+    assert "do not establish operating characteristics" not in full
+    assert "establish the operating characteristics" in full
+    assert "do not establish" in full
+    assert "Claude Code epochs" in full
+
+    just_below = reg.summary_md([], reg.REPLICATES - 1, 685)
+    assert "establish only the output schema" in just_below
 
 
 def test_headline_reads_the_pairs_cap_designs_in_the_results() -> None:
