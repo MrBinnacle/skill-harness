@@ -1258,3 +1258,93 @@ def test_committed_smoke_lives_under_docs_findings_data_not_scratch() -> None:
     assert (_SMOKE_DIR / "summary.md").is_file()
     scratch_data = Path(__file__).resolve().parents[1] / ".scratch" / "issue-695" / "data"
     assert not scratch_data.exists(), "smoke output must not land under .scratch/"
+
+
+# ---------------------------------------------------------------------------
+# #712: sensitivity sentence names the off-diagonal minimum
+# ---------------------------------------------------------------------------
+
+
+def _off_diag_vs_nine_cell_rates() -> tuple[
+    dict[tuple[float, float], float], dict[tuple[float, float], float]
+]:
+    """Rates where the off-diagonal minimum and the nine-cell minimum disagree.
+
+    Every off-diagonal P(PASS) at d=0.30 sits at or above 0.75; the diagonal
+    cell (0.30, 0.30) sits at 0.40. Off-diagonal minimum = 0.75; nine-cell
+    minimum = 0.40. CUT rates are flat and uninformative.
+    """
+    pass_at: dict[tuple[float, float], float] = {
+        (0.30, 0.30): 0.40,
+        (0.35, 0.35): 0.90,
+        (0.40, 0.40): 0.95,
+        (0.30, 0.35): 0.75,
+        (0.30, 0.40): 0.80,
+        (0.35, 0.30): 0.85,
+        (0.35, 0.40): 0.88,
+        (0.40, 0.30): 0.92,
+        (0.40, 0.35): 0.90,
+    }
+    cut_at = {key: 0.84 for key in pass_at}
+    return pass_at, cut_at
+
+
+def test_summary_sensitivity_sentence_names_the_off_diagonal_minimum() -> None:
+    """#712: the printed sensitivity numbers are off-diagonal minima, not a nine-cell read.
+
+    Fixture: off-diagonal P(PASS) at d=0.30 min is 0.75; nine-cell min is
+    0.40 (the diagonal cell 0.30, 0.30). The summary must say the numbers are
+    the off-diagonal minima. Restoring the previous wording — "These numbers
+    describe what a nine-cell aggregate would have read" — fails this test.
+    """
+    pass_at, cut_at = _off_diag_vs_nine_cell_rates()
+    off_diag = tuple((p_p, p_n) for p_p in reg.BASELINES for p_n in reg.BASELINES if p_p != p_n)
+    off_diag_pass = min(pass_at[k] for k in off_diag)
+    nine_cell_pass = min(pass_at.values())
+    assert off_diag_pass == pytest.approx(0.75)
+    assert nine_cell_pass == pytest.approx(0.40)
+    assert off_diag_pass != nine_cell_pass
+
+    results = _results_with_per_cell_rates(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        pass_at=pass_at,
+        cut_at=cut_at,
+    )
+    summary = reg.summary_md(results, 200, 685)
+    sens_idx = summary.find("## Sensitivity (off-diagonal cells)")
+    assert sens_idx >= 0
+    sensitivity_block = summary[sens_idx : summary.find("## Price lines", sens_idx)]
+
+    assert "nine-cell" not in sensitivity_block, (
+        "the sensitivity sentence must not claim the numbers describe a nine-cell aggregate; "
+        "on this fixture the nine-cell minimum is "
+        f"{nine_cell_pass:.4f} while the off-diagonal minimum is {off_diag_pass:.4f}"
+    )
+    assert "off-diagonal minima" in sensitivity_block, (
+        "the sensitivity sentence must say what the numbers are: the minima over the "
+        "six off-diagonal cells"
+    )
+    assert f"| 0.80 | 1.00 | union | 300 | {off_diag_pass:.4f} |" in sensitivity_block, (
+        "the printed sensitivity row must carry the off-diagonal minimum"
+    )
+    assert f"| 0.80 | 1.00 | union | 300 | {nine_cell_pass:.4f} |" not in sensitivity_block, (
+        "the printed sensitivity row must not carry the nine-cell minimum"
+    )
+
+
+def test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima() -> None:
+    """#712: sensitivity_rows computes the off-diagonal minimum on the disagreeing fixture."""
+    pass_at, cut_at = _off_diag_vs_nine_cell_rates()
+    results = _results_with_per_cell_rates(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        pass_at=pass_at,
+        cut_at=cut_at,
+    )
+    rows = reg.sensitivity_rows(results, target=0.80)
+    row = next(r for r in rows if r.null_per_pair == 1.0 and r.fn_construction == "union")
+    assert row.off_diag_min_pass_at_d030 == pytest.approx(0.75)
+    assert row.off_diag_min_pass_at_d030 != pytest.approx(0.40)

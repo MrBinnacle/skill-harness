@@ -322,8 +322,9 @@ def _design_family_meets_target(
 def sensitivity_rows(results: Sequence[CellResult], *, target: float) -> tuple[SensitivityRow, ...]:
     """Off-diagonal minima per design family per declared budget. Sensitivity only.
 
-    The six off-diagonal (p_P, p_N) cells are never the target. These rows
-    report what the nine-cell reading would have seen, beside the target check.
+    The six off-diagonal (p_P, p_N) cells are never the target. Each row
+    reports the minimum over those six cells alone, beside the target check;
+    it is not a reading over the full nine-cell grid.
     """
     families = sorted(
         {(r.design.null_per_pair, r.design.fn_construction) for r in results},
@@ -1160,9 +1161,9 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "The six off-diagonal (p_P, p_N) cells are sensitivity, never the "
         "target. Each row is the minimum P(PASS) at d = 0.30 and the minimum "
         "P(CUT) at d = 0.10 over those six cells, at the stated declared "
-        "budget. These numbers describe what a nine-cell aggregate would have "
-        "read; the #696 ruling does not use them to decide whether a design "
-        "meets the target.",
+        "budget. These numbers are the off-diagonal minima over those six "
+        "cells only; the #696 ruling does not use them to decide whether a "
+        "design meets the target.",
         "",
         "| target | null_pp | fn_con | total_epochs "
         "| off-diag min P(PASS) at d=0.30 | off-diag min P(CUT) at d=0.10 |",
