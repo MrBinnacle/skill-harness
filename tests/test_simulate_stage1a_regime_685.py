@@ -959,10 +959,27 @@ def test_summary_renders_both_halves_and_the_stage2_trigger_from_data() -> None:
 
 
 def test_summary_marks_smoke_output_as_schema_evidence() -> None:
-    summary = reg.summary_md([], 20, 685)
-    assert "establish only the output schema" in summary
-    assert "They do not establish operating characteristics" in summary
-    assert "These results establish operating characteristics" not in summary
+    """#708: the smoke sentence appears only at a smoke count; a full run states its model.
+
+    Smoke is decided by comparing the replicate count with the script's
+    REPLICATES default (2,000). Below that default the summary establishes only
+    the output schema. At the default (or above) it states what the simulation
+    does and does not establish under the declared independent-Bernoulli model.
+    """
+    smoke = reg.summary_md([], 20, 685)
+    assert "establish only the output schema" in smoke
+    assert "They do not establish operating characteristics" in smoke
+    assert "These results establish operating characteristics" not in smoke
+
+    full = reg.summary_md([], reg.REPLICATES, 685)
+    assert "establish only the output schema" not in full
+    assert "do not establish operating characteristics" not in full
+    assert "establish the operating characteristics" in full
+    assert "do not establish" in full
+    assert "Claude Code epochs" in full
+
+    just_below = reg.summary_md([], reg.REPLICATES - 1, 685)
+    assert "establish only the output schema" in just_below
 
 
 def test_headline_reads_the_pairs_cap_designs_in_the_results() -> None:

@@ -1209,13 +1209,26 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "",
     ]
     lines += _terminal_lines(subset)
+    if replicates < REPLICATES:
+        model_lines = [
+            "These smoke-run results establish only the output schema under the declared "
+            "independent-Bernoulli model. They do not establish operating characteristics "
+            "or how many real Claude Code epochs are required.",
+        ]
+    else:
+        model_lines = [
+            f"These results at {replicates} replicates per cell are simulations under the "
+            "declared independent-Bernoulli model at the stated baselines and effect sizes. "
+            "They establish the operating characteristics of the registered Stage 1A rule "
+            "on that model grid at the declared budgets. They do not establish how many "
+            "real Claude Code epochs are required, and they do not speak to any subject "
+            "model other than the independent-Bernoulli stand-in declared here.",
+        ]
     lines += [
         "",
         "## Model statement",
         "",
-        "These smoke-run results establish only the output schema under the declared "
-        "independent-Bernoulli model. They do not establish operating characteristics "
-        "or how many real Claude Code epochs are required.",
+        *model_lines,
         "",
         "## Pairing statement",
         "",
