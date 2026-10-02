@@ -1348,3 +1348,68 @@ def test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima() -> N
     row = next(r for r in rows if r.null_per_pair == 1.0 and r.fn_construction == "union")
     assert row.off_diag_min_pass_at_d030 == pytest.approx(0.75)
     assert row.off_diag_min_pass_at_d030 != pytest.approx(0.40)
+
+
+# ---------------------------------------------------------------------------
+# #712: calibration read covers CUT-error cells above d = 0.20
+# ---------------------------------------------------------------------------
+
+
+def test_calibration_read_includes_cut_error_cells_above_boundary() -> None:
+    """#712: CUT-error cells above d = 0.20 enter the exit code, not only PASS halves.
+
+    Cell (0.65, 0.35, 0.35) has d = 0.30 > BOUNDARY and F-N = 0.30 > BOUNDARY,
+    so it is a CUT-calibration cell and not a PASS-calibration cell. A run
+    whose only calibration failure is P(CUT) above the futility limit on such
+    a cell must exit 1. Returning only the PASS half of ``is_calibration_cell``
+    drops the cell, ``all()`` over an empty set is True, and the exit code
+    becomes 0 — that is the defect this test pins.
+    """
+    cell = reg.Cell(0.65, 0.35, 0.35)
+    assert cell.d == pytest.approx(0.30)
+    assert cell.d > a650.BOUNDARY
+    assert reg.true_fp_diff(cell) > a650.BOUNDARY
+    assert reg.true_fn_diff(cell) > a650.BOUNDARY
+    assert not reg.is_pass_calibration_cell(cell), (
+        "this cell is not a PASS-error cell; the CUT half alone must enter the read"
+    )
+    assert reg.is_cut_calibration_cell(cell)
+    assert reg.is_calibration_cell(cell), (
+        "is_calibration_cell must include CUT-error cells above d = 0.20"
+    )
+
+    design = reg.Design(n_pairs=97)
+    cut_limit = a650.FUTILITY_ALPHA + a650.calibration_tolerance(200, a650.FUTILITY_ALPHA)
+    failing = _hand_result(cell, design, p_pass=0.0, p_cut=cut_limit + 0.10, replicates=200)
+    holding = _hand_result(cell, design, p_pass=0.0, p_cut=0.0, replicates=200)
+    assert reg.calibration_holds(failing) is False
+    assert reg.calibration_holds(holding) is True
+    assert reg.cut_calibration_holds(failing) is False
+    assert reg.pass_calibration_holds(failing) is True
+
+    assert reg.calibration_exit_code([failing]) == 1, (
+        "a CUT-only calibration failure above d = 0.20 must set the exit code to 1"
+    )
+    assert reg.calibration_exit_code([holding]) == 0
+
+
+def test_calibration_exit_code_filters_on_is_calibration_cell() -> None:
+    """#712: the exit-code read uses is_calibration_cell, the union of both halves."""
+    cut_only = reg.Cell(0.65, 0.35, 0.35)
+    pass_only = reg.Cell(0.55, 0.35, 0.20)  # d=0.20, F-P=0.20, F-N=0.35 -> PASS half
+    boundary = reg.Cell(0.55, 0.35, 0.35)  # d=0.20, both contrasts at BOUNDARY
+    design = reg.Design(n_pairs=97)
+    cut_limit = a650.FUTILITY_ALPHA + a650.calibration_tolerance(200, a650.FUTILITY_ALPHA)
+    pass_limit = a650.PASS_ALPHA + a650.calibration_tolerance(200)
+
+    cut_failing = _hand_result(cut_only, design, p_pass=0.0, p_cut=cut_limit + 0.10)
+    pass_failing = _hand_result(pass_only, design, p_pass=pass_limit + 0.10, p_cut=0.0)
+    ok = _hand_result(boundary, design, p_pass=0.0, p_cut=0.0)
+
+    assert reg.is_calibration_cell(cut_only)
+    assert reg.is_calibration_cell(pass_only)
+    assert reg.is_calibration_cell(boundary)
+    assert reg.calibration_exit_code([cut_failing]) == 1
+    assert reg.calibration_exit_code([pass_failing]) == 1
+    assert reg.calibration_exit_code([ok]) == 0
+    assert reg.calibration_exit_code([cut_failing, pass_failing, ok]) == 1

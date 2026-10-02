@@ -544,6 +544,20 @@ def calibration_holds_direct(res: CellResult, alpha: float) -> bool:
     return res.per_look[-1].p_pass <= limit
 
 
+def calibration_exit_code(results: Sequence[CellResult]) -> int:
+    """Exit code from the calibration read: 0 iff every calibration cell holds.
+
+    #712: the read covers every cell where a PASS or a CUT is an error —
+    PASS wherever F-P or F-N sits at or below BOUNDARY, CUT wherever F-P
+    sits at or above BOUNDARY — including CUT-error cells above d = 0.20.
+    Returning only the PASS half of the filter drops those cells and a run
+    whose futility side is broken exits 0.
+    """
+    cal_results = [r for r in results if is_calibration_cell(r.cell)]
+    all_hold = all(calibration_holds(r) for r in cal_results)
+    return 0 if all_hold else 1
+
+
 def _bound(xs: a650.Floats, alpha: float, side: a650.Side) -> a650.Floats:
     """Vectorised one_sided_betting_bound, reusing the #684 grid machinery."""
     replicates, n = xs.shape
@@ -1287,8 +1301,7 @@ def main(
     print(summary)
 
     cal_results = [r for r in results if is_calibration_cell(r.cell)]
-    all_hold = all(calibration_holds(r) for r in cal_results)
-    if not all_hold:
+    if not all(calibration_holds(r) for r in cal_results):
         for r in cal_results:
             if not calibration_holds(r):
                 dsg = r.design
@@ -1304,7 +1317,7 @@ def main(
                     f"pass_check={is_pass_calibration_cell(c)} "
                     f"cut_check={is_cut_calibration_cell(c)}"
                 )
-    return 0 if all_hold else 1
+    return calibration_exit_code(results)
 
 
 if __name__ == "__main__":
