@@ -691,6 +691,181 @@ def test_stage2_trigger_fires_only_when_no_design_reaches_the_target() -> None:
     assert fires[0.90] is True
 
 
+def _results_with_per_cell_rates(
+    *,
+    epoch_budget: int,
+    null_per_pair: float,
+    fn_construction: str,
+    pass_at: dict[tuple[float, float], float],
+    cut_at: dict[tuple[float, float], float],
+) -> list[Any]:
+    """One design family at one budget, with per-(p_P, p_N) rates at d=0.30 and d=0.10."""
+    results: list[Any] = []
+    n_pairs = reg.pairs_for_epoch_budget(epoch_budget, null_per_pair)
+    design = reg.Design(
+        n_pairs=n_pairs, null_per_pair=null_per_pair, fn_construction=fn_construction
+    )
+    for p_p in reg.BASELINES:
+        for p_n in reg.BASELINES:
+            results.append(
+                _hand_result(
+                    reg.Cell(round(p_p + 0.30, 10), p_p, p_n),
+                    design,
+                    p_pass=pass_at[(p_p, p_n)],
+                    p_cut=0.0,
+                )
+            )
+            results.append(
+                _hand_result(
+                    reg.Cell(round(p_p + 0.10, 10), p_p, p_n),
+                    design,
+                    p_pass=0.0,
+                    p_cut=cut_at[(p_p, p_n)],
+                )
+            )
+            for d in (0.00, 0.15, 0.20, 0.25, 0.40):
+                results.append(
+                    _hand_result(
+                        reg.Cell(round(p_p + d, 10), p_p, p_n),
+                        design,
+                        p_pass=0.0,
+                        p_cut=0.0,
+                    )
+                )
+    return results
+
+
+def test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum() -> None:
+    """#708: aggregation rule is the diagonal minimum; the nine-cell minimum is ill-posed.
+
+    Fixture rates at d=0.30 (P(PASS)) and d=0.10 (P(CUT)) are unequal across the
+    nine (p_P, p_N) cells so that four readings disagree:
+
+      diagonal minimum      PASS 0.85, CUT 0.84  -> meets 0.80
+      nine-cell minimum     PASS 0.50, CUT 0.50  -> fails 0.80
+      diagonal maximum      PASS 0.92, CUT 0.88  -> meets 0.80
+      single cell (0.35,0.35) PASS 0.88, CUT 0.86 -> meets 0.80
+
+    The #696 ruling reads the diagonal minimum. This test asserts those numbers
+    and the resulting reached/trigger verdict. A min->max mutant, a
+    diagonal->all-nine mutant, and a diagonal->single-cell mutant each report a
+    different pair and each fails this assertion.
+    """
+    pass_at: dict[tuple[float, float], float] = {
+        (0.30, 0.30): 0.85,
+        (0.35, 0.35): 0.88,
+        (0.40, 0.40): 0.92,
+        (0.30, 0.35): 0.50,
+        (0.30, 0.40): 0.95,
+        (0.35, 0.30): 0.95,
+        (0.35, 0.40): 0.95,
+        (0.40, 0.30): 0.95,
+        (0.40, 0.35): 0.95,
+    }
+    cut_at: dict[tuple[float, float], float] = {
+        (0.30, 0.30): 0.84,
+        (0.35, 0.35): 0.86,
+        (0.40, 0.40): 0.88,
+        (0.30, 0.35): 0.50,
+        (0.30, 0.40): 0.95,
+        (0.35, 0.30): 0.95,
+        (0.35, 0.40): 0.95,
+        (0.40, 0.30): 0.95,
+        (0.40, 0.35): 0.95,
+    }
+    diagonal_pass = min(pass_at[(p, p)] for p in reg.BASELINES)
+    diagonal_cut = min(cut_at[(p, p)] for p in reg.BASELINES)
+    nine_pass = min(pass_at.values())
+    nine_cut = min(cut_at.values())
+    diagonal_pass_max = max(pass_at[(p, p)] for p in reg.BASELINES)
+    single_pass = pass_at[(0.35, 0.35)]
+    single_cut = cut_at[(0.35, 0.35)]
+    assert {diagonal_pass, nine_pass, diagonal_pass_max, single_pass} == {0.85, 0.50, 0.92, 0.88}
+    assert {diagonal_cut, nine_cut, max(cut_at[(p, p)] for p in reg.BASELINES), single_cut} == {
+        0.84,
+        0.50,
+        0.88,
+        0.86,
+    }
+
+    results = _results_with_per_cell_rates(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        pass_at=pass_at,
+        cut_at=cut_at,
+    )
+    rows = reg.target_check_rows(results)
+    row = next(
+        r
+        for r in rows
+        if r.null_per_pair == 1.0 and r.fn_construction == "union" and r.target == 0.80
+    )
+    assert row.p_pass_at_d030 == pytest.approx(diagonal_pass), (
+        "target check must report the diagonal minimum P(PASS) at d=0.30"
+    )
+    assert row.p_cut_at_d010 == pytest.approx(diagonal_cut), (
+        "target check must report the diagonal minimum P(CUT) at d=0.10"
+    )
+    assert row.reached, "diagonal minima clear 0.80, so the family meets the target"
+    assert not row.trigger_fires
+    assert reg.stage2_trigger_fires(rows, 0.80) is False
+    # The nine-cell reading does NOT meet; if the code used it, reached would flip.
+    assert nine_pass < 0.80 and nine_cut < 0.80
+
+
+def test_summary_target_check_text_says_diagonal_not_all_nine() -> None:
+    """#708: the summary names the diagonal aggregation and never 'all nine'."""
+    results = _results_for_budget(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        p_pass_at_0_30=0.85,
+        p_cut_at_0_10=0.85,
+    )
+    summary = reg.summary_md(results, 200, 685)
+    assert "## Target check" in summary
+    assert "diagonal" in summary.lower()
+    assert "all nine" not in summary
+    assert "p_P = p_N" in summary or "p_P = p_N" in summary.replace(" ", "")
+
+
+def test_summary_reports_off_diagonal_cells_as_sensitivity() -> None:
+    """#708: the six off-diagonal cells appear as sensitivity, labelled, never as the target."""
+    pass_at: dict[tuple[float, float], float] = {
+        (0.30, 0.30): 0.85,
+        (0.35, 0.35): 0.88,
+        (0.40, 0.40): 0.92,
+        (0.30, 0.35): 0.50,
+        (0.30, 0.40): 0.60,
+        (0.35, 0.30): 0.70,
+        (0.35, 0.40): 0.75,
+        (0.40, 0.30): 0.80,
+        (0.40, 0.35): 0.77,
+    }
+    cut_at: dict[tuple[float, float], float] = {key: 0.84 for key in pass_at}
+    cut_at[(0.30, 0.35)] = 0.50
+    results = _results_with_per_cell_rates(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        pass_at=pass_at,
+        cut_at=cut_at,
+    )
+    summary = reg.summary_md(results, 200, 685)
+    assert "sensitivity" in summary.lower()
+    assert "## Target check" in summary
+    # Off-diagonal readings are present and are not filed under the target heading alone.
+    sens_idx = summary.lower().find("sensitivity")
+    target_idx = summary.find("## Target check")
+    assert target_idx != -1 and sens_idx != -1
+    # The off-diagonal minimum PASS value 0.50 appears in the sensitivity block.
+    sens_block = summary[sens_idx:]
+    assert "0.5000" in sens_block or "0.50" in sens_block
+    # Never label an off-diagonal reading as the target itself.
+    assert "off-diagonal" in summary.lower() or "sensitivity" in summary.lower()
+
+
 def test_summary_renders_both_halves_and_the_stage2_trigger_from_data() -> None:
     # P(PASS) at d=0.30 clears 0.80 in every baseline cell; P(CUT) at d=0.10 does not.
     failing = _results_for_budget(

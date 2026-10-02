@@ -189,8 +189,83 @@ class TargetCheckRow:
     trigger_fires: bool
 
 
+@dataclass(frozen=True)
+class SensitivityRow:
+    """Off-diagonal reading for one design family at one budget. Sensitivity, never the target."""
+
+    target: float
+    null_per_pair: float
+    fn_construction: str
+    total_epochs: int | None
+    off_diag_min_pass_at_d030: float | None
+    off_diag_min_cut_at_d010: float | None
+
+
 _TARGET_HALF_ONE = "P(PASS) >= target at d = 0.30"
 _TARGET_HALF_TWO = "P(CUT) >= target at d = 0.10"
+
+
+def diagonal_cells() -> tuple[tuple[float, float], ...]:
+    """The cells where both true contrasts equal d: p_P = p_N on this grid."""
+    return tuple((p, p) for p in BASELINES)
+
+
+def off_diagonal_cells() -> tuple[tuple[float, float], ...]:
+    """The six off-diagonal (p_P, p_N) cells. Sensitivity only; never the target."""
+    diag = set(diagonal_cells())
+    return tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES if (p_p, p_n) not in diag)
+
+
+def _cell_rows(
+    results: Sequence[CellResult],
+    *,
+    null_per_pair: float,
+    fn_construction: str,
+    epoch_budget: int,
+    d: float,
+    cells: Sequence[tuple[float, float]],
+) -> tuple[list[float], list[float], str | None]:
+    """Collect (p_pass, p_cut) at effect ``d`` over ``cells``.
+
+    Returns (pass_vals, cut_vals, missing_message). Missing cells yield None
+    for the message; the caller decides whether that is fatal.
+    """
+    pass_vals: list[float] = []
+    cut_vals: list[float] = []
+    missing: str | None = None
+    for p_p, p_n in cells:
+        pass_row = next(
+            (
+                r
+                for r in results
+                if r.design.null_per_pair == null_per_pair
+                and r.design.fn_construction == fn_construction
+                and r.design.total_epochs == epoch_budget
+                and math.isclose(r.cell.d, d, abs_tol=1e-9)
+                and math.isclose(r.cell.p_placebo, p_p, abs_tol=1e-9)
+                and math.isclose(r.cell.p_null, p_n, abs_tol=1e-9)
+            ),
+            None,
+        )
+        cut_row = next(
+            (
+                r
+                for r in results
+                if r.design.null_per_pair == null_per_pair
+                and r.design.fn_construction == fn_construction
+                and r.design.total_epochs == epoch_budget
+                and math.isclose(r.cell.d, d, abs_tol=1e-9)
+                and math.isclose(r.cell.p_placebo, p_p, abs_tol=1e-9)
+                and math.isclose(r.cell.p_null, p_n, abs_tol=1e-9)
+            ),
+            None,
+        )
+        if pass_row is None or cut_row is None:
+            missing = f"missing d={d:.2f} cells for ({p_p}, {p_n})"
+            continue
+        pass_vals.append(pass_row.per_look[-1].p_pass)
+        cut_vals.append(cut_row.per_look[-1].p_cut)
+    return pass_vals, cut_vals, missing
 
 
 def _design_family_meets_target(
@@ -201,66 +276,111 @@ def _design_family_meets_target(
     epoch_budget: int,
     target: float,
 ) -> tuple[bool, float | None, float | None, str]:
-    """Does this design family at this budget meet both halves, across every baseline?
+    """Does this design family at this budget meet both halves on the diagonal?
+
+    #696 ruling (non-negotiable): a design meets the target at effect d when
+    both halves hold in every cell where both true contrasts equal d. On this
+    grid that is the diagonal p_P = p_N (0.30, 0.35, 0.40). The check is the
+    minimum of P(PASS) at d = 0.30 and the minimum of P(CUT) at d = 0.10 over
+    those three cells, each at or above the target. Off-diagonal cells are
+    sensitivity and do not enter this verdict.
 
     Returns (meets, min_p_pass_at_0_30, min_p_cut_at_0_10, missing_half).
-    Both halves must hold in all nine (p_P, p_N) baseline cells.
     """
-    pass_vals: list[float] = []
-    cut_vals: list[float] = []
-    for p_p in BASELINES:
-        for p_n in BASELINES:
-            pass_row = next(
-                (
-                    r
-                    for r in results
-                    if r.design.null_per_pair == null_per_pair
-                    and r.design.fn_construction == fn_construction
-                    and r.design.total_epochs == epoch_budget
-                    and math.isclose(r.cell.d, 0.30, abs_tol=1e-9)
-                    and math.isclose(r.cell.p_placebo, p_p, abs_tol=1e-9)
-                    and math.isclose(r.cell.p_null, p_n, abs_tol=1e-9)
-                ),
-                None,
-            )
-            cut_row = next(
-                (
-                    r
-                    for r in results
-                    if r.design.null_per_pair == null_per_pair
-                    and r.design.fn_construction == fn_construction
-                    and r.design.total_epochs == epoch_budget
-                    and math.isclose(r.cell.d, 0.10, abs_tol=1e-9)
-                    and math.isclose(r.cell.p_placebo, p_p, abs_tol=1e-9)
-                    and math.isclose(r.cell.p_null, p_n, abs_tol=1e-9)
-                ),
-                None,
-            )
-            if pass_row is None or cut_row is None:
-                return False, None, None, f"missing d=0.30/d=0.10 cells for ({p_p}, {p_n})"
-            pass_vals.append(pass_row.per_look[-1].p_pass)
-            cut_vals.append(cut_row.per_look[-1].p_cut)
+    diag = diagonal_cells()
+    pass_vals, _pass_cut_at_030, missing = _cell_rows(
+        results,
+        null_per_pair=null_per_pair,
+        fn_construction=fn_construction,
+        epoch_budget=epoch_budget,
+        d=0.30,
+        cells=diag,
+    )
+    _cut_pass_at_010, cut_vals, cut_missing = _cell_rows(
+        results,
+        null_per_pair=null_per_pair,
+        fn_construction=fn_construction,
+        epoch_budget=epoch_budget,
+        d=0.10,
+        cells=diag,
+    )
+    if missing or cut_missing or not pass_vals or not cut_vals:
+        detail = missing or cut_missing or "missing diagonal cells"
+        return False, None, None, detail
     min_pass = min(pass_vals)
     min_cut = min(cut_vals)
-    missing: list[str] = []
+    missing_halves: list[str] = []
     if min_pass < target:
-        missing.append(_TARGET_HALF_ONE)
+        missing_halves.append(_TARGET_HALF_ONE)
     if min_cut < target:
-        missing.append(_TARGET_HALF_TWO)
-    if missing:
-        return False, min_pass, min_cut, " and ".join(missing)
+        missing_halves.append(_TARGET_HALF_TWO)
+    if missing_halves:
+        return False, min_pass, min_cut, " and ".join(missing_halves)
     return True, min_pass, min_cut, ""
+
+
+def sensitivity_rows(results: Sequence[CellResult], *, target: float) -> tuple[SensitivityRow, ...]:
+    """Off-diagonal minima per design family per declared budget. Sensitivity only.
+
+    The six off-diagonal (p_P, p_N) cells are never the target. These rows
+    report what the nine-cell reading would have seen, beside the target check.
+    """
+    families = sorted(
+        {(r.design.null_per_pair, r.design.fn_construction) for r in results},
+        key=lambda t: (t[1], t[0]),
+    )
+    budgets = sorted({r.design.total_epochs for r in results})
+    off_diag = off_diagonal_cells()
+    rows: list[SensitivityRow] = []
+    for null_pp, fn_con in families:
+        for budget in budgets:
+            pass_vals, _pass_cut, missing = _cell_rows(
+                results,
+                null_per_pair=null_pp,
+                fn_construction=fn_con,
+                epoch_budget=budget,
+                d=0.30,
+                cells=off_diag,
+            )
+            _cut_pass, cut_vals, cut_missing = _cell_rows(
+                results,
+                null_per_pair=null_pp,
+                fn_construction=fn_con,
+                epoch_budget=budget,
+                d=0.10,
+                cells=off_diag,
+            )
+            if missing or cut_missing or not pass_vals or not cut_vals:
+                min_pass: float | None = None
+                min_cut: float | None = None
+            else:
+                min_pass = min(pass_vals)
+                min_cut = min(cut_vals)
+            rows.append(
+                SensitivityRow(
+                    target=target,
+                    null_per_pair=null_pp,
+                    fn_construction=fn_con,
+                    total_epochs=budget,
+                    off_diag_min_pass_at_d030=min_pass,
+                    off_diag_min_cut_at_d010=min_cut,
+                )
+            )
+    return tuple(rows)
 
 
 def target_check_rows(results: Sequence[CellResult]) -> tuple[TargetCheckRow, ...]:
     """Smallest priced configuration per design family per target, from data only.
 
-    Both halves of the #685 target: P(PASS) >= target at d = 0.30 and
-    P(CUT) >= target at d = 0.10, each required in all nine baseline cells.
-    Configurations are the declared epoch budgets, ranked by total_epochs
-    (the cap price). A design family that meets both halves at a budget
-    reports that budget as its smallest priced configuration. The stage-2
-    trigger for a target fires when no design family reaches that target.
+    #696 ruling: both halves of the #685 target — P(PASS) >= target at d = 0.30
+    and P(CUT) >= target at d = 0.10 — are required on the diagonal p_P = p_N
+    cells (0.30, 0.35, 0.40), each at or above the target. The check is the
+    minimum over those three cells. Off-diagonal cells are sensitivity and do
+    not enter the verdict. Configurations are the declared epoch budgets,
+    ranked by total_epochs (the cap price). A design family that meets both
+    halves at a budget reports that budget as its smallest priced
+    configuration. The stage-2 trigger for a target fires when no design
+    family reaches that target on the diagonal at any declared budget.
     """
     families = sorted(
         {(r.design.null_per_pair, r.design.fn_construction) for r in results},
@@ -940,15 +1060,19 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         "",
         "## Target check",
         "",
-        "Both halves of the #685 target, read from the data only. A configuration "
-        "meets the target when P(PASS) >= target at d = 0.30 and P(CUT) >= target "
-        "at d = 0.10, each required in all nine (p_P, p_N) baseline cells. "
-        "Configurations are the declared epoch budgets, ranked by total_epochs "
-        "(the cap price). The smallest priced configuration that meets both halves "
-        "is reported per design family; otherwise the cell reads not reached. "
-        "The stage-2 trigger for a target fires when no design family reaches "
-        "that target: Stage 2 (pairs and optional stopping) is gated on Stage 1 "
-        "leaving the target unmet.",
+        "Both halves of the #685 target, read from the data only, on the "
+        "diagonal p_P = p_N cells (0.30, 0.35, 0.40) where both true contrasts "
+        "equal d. A configuration meets the target when P(PASS) >= target at "
+        "d = 0.30 and P(CUT) >= target at d = 0.10, each required as the "
+        "minimum over those three diagonal cells. The six off-diagonal "
+        "(p_P, p_N) cells are sensitivity and do not enter this verdict; they "
+        "are reported separately below. Configurations are the declared epoch "
+        "budgets, ranked by total_epochs (the cap price). The smallest priced "
+        "configuration that meets both halves on the diagonal is reported per "
+        "design family; otherwise the cell reads not reached. The stage-2 "
+        "trigger for a target fires when no design family reaches that target "
+        "on the diagonal at any declared budget: Stage 2 (pairs and optional "
+        "stopping) is gated on Stage 1 leaving the target unmet.",
         "",
         "| target | null_pp | fn_con | smallest priced configuration | total_epochs "
         "| expected spend | P(PASS) at d=0.30 | P(CUT) at d=0.10 | missing half "
@@ -977,6 +1101,38 @@ def summary_md(results: Sequence[CellResult], replicates: int, seed: int) -> str
         fires = stage2_trigger_fires(checks, target)
         status = "fires" if fires else "does not fire"
         lines.append(f"Stage-2 trigger for target {target:.2f}: {status}.")
+    lines += [
+        "",
+        "## Sensitivity (off-diagonal cells)",
+        "",
+        "The six off-diagonal (p_P, p_N) cells are sensitivity, never the "
+        "target. Each row is the minimum P(PASS) at d = 0.30 and the minimum "
+        "P(CUT) at d = 0.10 over those six cells, at the stated declared "
+        "budget. These numbers describe what a nine-cell aggregate would have "
+        "read; the #696 ruling does not use them to decide whether a design "
+        "meets the target.",
+        "",
+        "| target | null_pp | fn_con | total_epochs "
+        "| off-diag min P(PASS) at d=0.30 | off-diag min P(CUT) at d=0.10 |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for target in POWER_TARGETS:
+        for srow in sensitivity_rows(results, target=target):
+            epochs = "-" if srow.total_epochs is None else str(srow.total_epochs)
+            min_pass = (
+                "-"
+                if srow.off_diag_min_pass_at_d030 is None
+                else f"{srow.off_diag_min_pass_at_d030:.4f}"
+            )
+            min_cut = (
+                "-"
+                if srow.off_diag_min_cut_at_d010 is None
+                else f"{srow.off_diag_min_cut_at_d010:.4f}"
+            )
+            lines.append(
+                f"| {srow.target:.2f} | {srow.null_per_pair:.2f} | {srow.fn_construction} "
+                f"| {epochs} | {min_pass} | {min_cut} |"
+            )
     lines += [
         "",
         "## Price lines",
