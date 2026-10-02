@@ -4,9 +4,12 @@
 failed on the whole ticket. **Generator:** `scripts/mutation_receipt.py --select 695-stage1a`.
 **Machine-readable record:** `docs/assurance/stage1a-regime-685-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685.py` at
-`sha256:49b0576185f11964372036c14a8b0ab6b424c11e0208a32ec73252ccc05ded9b`.
-**Commit at generation:** `dc1546fc9c2d3530bc7e4d0cd8f7a444eea5a341` — informational only; currency is checked against the
-digest above by `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
+`sha256:1a295c27a442116a29bcbbbdb64d44e72f45ab4cba8567ed4157ae881c3ea205`.
+**Commit at generation:** `a3a26ac4f814e08e9a20de975b3ec3fb46bd2954` — informational only; currency is checked against the
+digest above by `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
+
+Regenerated after #712 changed the simulator; the twelve mutants and their
+killing assertions are unchanged and were re-run against the committed tree.
 
 Each case runs in its own git worktree at a fixed commit. Production is never mutated in place.
 `PYTHONPATH` pins every case to its own sources; `scripts/screens/419` joins `src` and `scripts`
