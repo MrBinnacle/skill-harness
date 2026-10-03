@@ -750,6 +750,41 @@ def test_fixed_n_betting_uses_horizon_scaled_bets_not_time_scaled() -> None:
     )
 
 
+def test_fixed_n_betting_run_cell_matches_horizon_scaling_not_anytime_at_n() -> None:
+    """Mutant 2, run_cell level: the written row comes from the horizon-scaled bound."""
+    cell = reg.Cell(0.65, 0.30, 0.30)
+    design = reg.Design(
+        n_pairs=80,
+        null_per_pair=1.0,
+        fn_construction="direct",
+        stopping="fixed-n-betting",
+        pass_alpha=0.0209,
+    )
+    row = reg.run_cell(cell, design, replicates=400, seed=77)
+    # Recompute both constructions on the same draws.
+    full, placebo, null_all, null_draws, fn_mask = reg._draw_streams(
+        cell, design, replicates=400, seed=77
+    )
+    _nu, xs_fn = reg._null_used_and_fn_obs(full, placebo, null_all, null_draws, fn_mask)
+    xs_fp = (full - placebo + 1) / 2.0
+    horizon_pass = reg.fixed_n_rejects(xs_fp, 0.0209, 0.6, upward=True)
+    anytime_at_n = (2 * reg.s685._bound(xs_fp, 0.0209, "lower") - 1) >= reg.BOUNDARY
+    fn_horizon = (
+        reg.fixed_n_rejects(xs_fn, 0.0209, 0.6, upward=True)
+        if xs_fn.shape[1] > 0
+        else np.zeros(xs_fp.shape[0], dtype=np.bool_)
+    )
+    horizon_rate = float(np.mean(horizon_pass & fn_horizon))
+    anytime_rate = float(np.mean(anytime_at_n & fn_horizon))
+    assert horizon_rate != pytest.approx(anytime_rate, abs=1e-9), (
+        "the fixture must separate horizon-scaled from anytime-at-n decisions"
+    )
+    assert row.p_fp_half == pytest.approx(float(np.mean(horizon_pass)), abs=1e-12), (
+        "run_cell must report the horizon-scaled F - P half rate"
+    )
+    assert row.p_joint_pass == pytest.approx(horizon_rate, abs=1e-12)
+
+
 def test_tango_score_equals_mcnemar_at_delta0_zero() -> None:
     """Mutant 3 pins the margin: at delta0 = 0 the Tango z is McNemar's."""
     for b, c, n in ((10, 4, 40), (20, 20, 50), (30, 5, 60), (0, 0, 30)):
@@ -773,6 +808,29 @@ def test_score_tests_use_the_registered_margin_0_20() -> None:
     assert fm_reg != pytest.approx(fm_drop, abs=1e-6), (
         "dropping the margin from the F - N score test must change the statistic"
     )
+
+
+def test_fixed_n_score_run_cell_holds_its_level_at_the_margin_boundary() -> None:
+    """Mutant 3, run_cell level: at d = 0.20 the score test must not over-pass.
+
+    With delta0 = 0 the Tango statistic is McNemar's, which tests d = 0 and
+    rejects far too often when the true d is 0.20. The registered margin keeps
+    P(PASS) near the row's alpha on this cell.
+    """
+    cell = reg.Cell(0.55, 0.35, 0.35)
+    design = reg.Design(
+        n_pairs=200,
+        null_per_pair=1.0,
+        fn_construction="direct",
+        stopping="fixed-n-score",
+        pass_alpha=0.0209,
+    )
+    row = reg.run_cell(cell, design, replicates=600, seed=685)
+    limit = 0.0209 + _a650.calibration_tolerance(600)
+    assert row.p_joint_pass <= limit + 1e-9, (
+        "a margin-dropped score test would over-pass at the 0.20 boundary"
+    )
+    assert row.p_joint_pass < 0.15, "the registered margin keeps this cell near its level"
 
 
 def test_fixed_n_score_applies_the_paired_statistic_to_fp_and_unpaired_to_fn() -> None:
@@ -836,8 +894,8 @@ def test_pass_alpha_label_matches_computation() -> None:
     r_loose = reg.run_cell(cell, loose, replicates=600, seed=31)
     assert r_tight.design.pass_alpha == 0.0105
     assert r_loose.design.pass_alpha == 0.0209
-    assert r_tight.p_joint_pass <= r_loose.p_joint_pass + 1e-12, (
-        "a stricter alpha cannot pass more often"
+    assert r_tight.p_joint_pass < r_loose.p_joint_pass, (
+        f"a stricter alpha must pass less often: {r_tight.p_joint_pass} vs {r_loose.p_joint_pass}"
     )
     cols, rows = _split_tsv(reg.per_look_tsv([r_tight, r_loose]))
     i_alpha = cols.index("pass_alpha")
@@ -847,9 +905,9 @@ def test_pass_alpha_label_matches_computation() -> None:
 
 def test_starting_wealth_changes_anytime_tuned_decisions() -> None:
     """Mutant 7: starting wealth 0.25 must not behave like 1.0."""
-    cell = reg.Cell(0.65, 0.30, 0.30)
+    cell = reg.Cell(0.75, 0.35, 0.35)
     base = reg.Design(
-        n_pairs=60,
+        n_pairs=100,
         null_per_pair=1.0,
         fn_construction="direct",
         stopping="anytime-tuned",
@@ -857,7 +915,7 @@ def test_starting_wealth_changes_anytime_tuned_decisions() -> None:
         starting_wealth=1.0,
     )
     reduced = reg.Design(
-        n_pairs=60,
+        n_pairs=100,
         null_per_pair=1.0,
         fn_construction="direct",
         stopping="anytime-tuned",
@@ -868,10 +926,10 @@ def test_starting_wealth_changes_anytime_tuned_decisions() -> None:
     r25 = reg.run_cell(cell, reduced, replicates=400, seed=41)
     assert r1.design.starting_wealth == 1.0
     assert r25.design.starting_wealth == 0.25
-    assert r25.p_joint_pass <= r1.p_joint_pass + 1e-12, (
-        "a lower starting wealth cannot reach 1/alpha more often"
+    assert r1.p_joint_pass > 0.0, "the fixture must produce some PASS at W0 = 1.0"
+    assert r25.p_joint_pass < r1.p_joint_pass, (
+        f"a lower starting wealth must pass less often: {r25.p_joint_pass} vs {r1.p_joint_pass}"
     )
-    assert r25.p_joint_pass < r1.p_joint_pass or r1.p_joint_pass == 0.0
 
 
 def test_tuned_lambda_is_fixed_before_the_first_pair() -> None:
@@ -931,7 +989,12 @@ def test_cut_direction_is_downward() -> None:
 
 
 def test_stopping_column_on_the_tsv_matches_the_path_that_produced_it(tmp_path: Path) -> None:
-    """Mutant 10: the written stopping label must match the simulation path."""
+    """Mutant 10: the written stopping label must match the simulation path.
+
+    A fixed-n row must also spend the full cap: expected_epochs equals
+    total_epochs. The anytime path stops early on this cell, so it cannot
+    produce that figure.
+    """
     out = tmp_path / "out"
     grid = [
         (
@@ -971,17 +1034,28 @@ def test_stopping_column_on_the_tsv_matches_the_path_that_produced_it(tmp_path: 
     cols, rows = _split_tsv((out / "per_look.tsv").read_text(encoding="utf-8"))
     i_stop = cols.index("stopping")
     i_look = cols.index("look")
+    i_epochs = cols.index("expected_epochs")
+    i_cap = cols.index("total_epochs")
     by_stop = {row[i_stop]: row for row in rows}
     assert set(by_stop) == {"anytime", "fixed-n-score", "fixed-n-betting"}
-    assert by_stop["anytime"][i_look] == "20", "anytime stops at or before the cap"
-    assert by_stop["fixed-n-score"][i_look] == "20"
-    assert by_stop["fixed-n-betting"][i_look] == "20"
+    for stopping in ("fixed-n-score", "fixed-n-betting"):
+        assert by_stop[stopping][i_look] == "20"
+        assert float(by_stop[stopping][i_epochs]) == pytest.approx(
+            float(by_stop[stopping][i_cap]), abs=1e-9
+        ), f"{stopping} must spend the full cap, not stop early"
+    assert float(by_stop["anytime"][i_epochs]) < float(by_stop["anytime"][i_cap]), (
+        "the anytime path must stop early on this cell, which distinguishes it"
+    )
 
 
 def test_headline_reads_n_pairs_from_each_row() -> None:
-    """Mutant 11: the headline must report the row's own pair count."""
+    """Mutant 11: the headline must report the row's own pair count.
+
+    Only the 300-pair configuration meets the target; a stale 100-pair read
+    would misreport the cheapest priced config as 100 pairs.
+    """
     results = []
-    for n_pairs, p_pass in ((100, 0.90), (300, 0.70)):
+    for n_pairs, p_pass in ((100, 0.50), (300, 0.85)):
         design = reg.Design(
             n_pairs=n_pairs,
             null_per_pair=1.0,
@@ -1013,8 +1087,8 @@ def test_headline_reads_n_pairs_from_each_row() -> None:
         if h.stopping == "fixed-n-betting" and math.isclose(h.target, 0.80, abs_tol=1e-9)
     )
     assert row.reached
-    assert row.n_pairs == 100, "the cheaper 100-pair config must be reported, not 300"
-    assert row.total_epochs == 300
+    assert row.n_pairs == 300, "only the 300-pair config meets; the headline must say 300"
+    assert row.total_epochs == 900
 
 
 # ---------------------------------------------------------------------------

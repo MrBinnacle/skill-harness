@@ -244,7 +244,11 @@ _S2_MODULE = "simulate_stage1a_regime_685_stage2"
 _S2_TESTS = "tests/test_simulate_stage1a_regime_685_stage2.py"
 _S2_FIXED_N_ONCE = f"{_S2_TESTS}::test_fixed_n_designs_read_once_at_n"
 _S2_HORIZON = f"{_S2_TESTS}::test_fixed_n_betting_uses_horizon_scaled_bets_not_time_scaled"
+_S2_HORIZON_RUN = (
+    f"{_S2_TESTS}::test_fixed_n_betting_run_cell_matches_horizon_scaling_not_anytime_at_n"
+)
 _S2_MARGIN = f"{_S2_TESTS}::test_score_tests_use_the_registered_margin_0_20"
+_S2_MARGIN_RUN = f"{_S2_TESTS}::test_fixed_n_score_run_cell_holds_its_level_at_the_margin_boundary"
 _S2_MCNEMAR = f"{_S2_TESTS}::test_tango_score_equals_mcnemar_at_delta0_zero"
 _S2_CONTRAST = (
     f"{_S2_TESTS}::test_fixed_n_score_applies_the_paired_statistic_to_fp_and_unpaired_to_fn"
@@ -1053,7 +1057,7 @@ MUTANTS: tuple[Mutant, ...] = (
         "    fp_pass = fixed_n_rejects(xs_fp, alpha, m0, upward=True)",
         "    fp_pass = 2 * s685._bound(xs_fp, alpha, 'lower') - 1 >= BOUNDARY  "
         "# mutant: anytime bound at n",
-        (_S2_HORIZON,),
+        (_S2_HORIZON, _S2_HORIZON_RUN),
     ),
     Mutant(
         "M-S2-3",
@@ -1063,7 +1067,7 @@ MUTANTS: tuple[Mutant, ...] = (
         _S2_MODULE,
         "    delta0 = BOUNDARY",
         "    delta0 = 0.0  # mutant: margin dropped",
-        (_S2_MARGIN, _S2_MCNEMAR),
+        (_S2_MARGIN, _S2_MCNEMAR, _S2_MARGIN_RUN),
     ),
     Mutant(
         "M-S2-4",
@@ -1113,12 +1117,13 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M-S2-8",
         "718-stage2-tuned-bet-lookahead",
-        "the tuned wealth factor uses a lambda clipped by the current pair's outcome",
+        "the tuned wealth factor divides by a term that depends on the current "
+        "pair's outcome, so the bet is not fixed before the first pair",
         _S2,
         _S2_MODULE,
         "            self.log_w += np.log1p(self.lam * (x - self.m0))",
-        "            self.log_w += np.log1p(np.minimum(self.lam, 0.5 / np.maximum(x, 1e-6))"
-        " * (x - self.m0))  # mutant: lookahead lambda",
+        "            self.log_w += np.log1p(self.lam * (x - self.m0) / (1.0 - 0.5 * x))"
+        "  # mutant: lookahead lambda",
         (_S2_LOOKAHEAD,),
     ),
     Mutant(
