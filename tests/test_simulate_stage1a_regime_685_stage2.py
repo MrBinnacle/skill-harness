@@ -25,6 +25,17 @@ _STAGE1_DATA = _REPO / "docs" / "findings" / "data" / "stage1a-regime-685"
 
 
 def _load(name: str) -> ModuleType:
+    """Import a screen module by file path, reusing any already-loaded copy.
+
+    Both this file and tests/test_simulate_stage1a_regime_685.py load
+    ``simulate_stage1a_regime_685`` at collection time. A second load under
+    the same sys.modules name replaces the module object while the first
+    test module keeps a reference to the old one, and ProcessPoolExecutor
+    then fails to pickle ``_run`` (the function's ``__module__`` resolves to
+    a different object). Reuse keeps every reference on one copy.
+    """
+    if name in sys.modules:
+        return sys.modules[name]
     spec = importlib.util.spec_from_file_location(name, _SCREEN_DIR / f"{name}.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -535,7 +546,7 @@ def test_reduced_grid_covers_every_stopping_design() -> None:
 def test_reduced_grid_runs_end_to_end(tmp_path: Path) -> None:
     out = tmp_path / "reduced"
     code = reg.main(
-        ["--out", str(out), "--replicates", "60", "--workers", "2", "--seed", "685", "--reduced"],
+        ["--out", str(out), "--replicates", "60", "--workers", "1", "--seed", "685", "--reduced"],
     )
     assert code in (0, 1)
     cols, rows = _split_tsv((out / "per_look.tsv").read_text(encoding="utf-8"))

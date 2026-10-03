@@ -1607,8 +1607,11 @@ def main(
     if chosen is None:
         chosen = reduced_grid() if args.reduced else stage2_grid()
     jobs = [(cell, design, args.replicates, args.seed) for cell, design in chosen]
-    with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        rows = list(pool.map(_run, jobs))
+    if args.workers <= 1:
+        rows = [_run(job) for job in jobs]
+    else:
+        with ProcessPoolExecutor(max_workers=args.workers) as pool:
+            rows = list(pool.map(_run, jobs))
     (args.out / "per_look.tsv").write_text(per_look_tsv(rows), encoding="utf-8")
     _write_run_meta(args.out, replicates=args.replicates, seed=args.seed)
     summary = summary_md(rows, args.replicates, args.seed)
