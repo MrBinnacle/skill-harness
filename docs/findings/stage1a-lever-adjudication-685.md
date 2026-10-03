@@ -14,7 +14,7 @@ The four levers are:
 3. **F - N construction** (registered union bound vs direct one-sided bound).
 4. **Optional stopping** (anytime-valid vs fixed-n look).
 
-Stage 1 varies levers 2 and 3 at two epoch budgets, under the registered anytime rule. Levers 1 and 4 are Stage 2 (#685, "Two stages, cheapest lever first") and are outside this simulation: the script's docstring says so, and its `Design.stopping` field is fixed at `anytime`.
+Stage 1 varies levers 2 and 3 at two epoch budgets, under the registered anytime rule. Levers 1 and 4 are Stage 2 (#685, "Two stages, cheapest lever first") and are outside this simulation: the script's docstring says so, and its `Design.stopping` field defaults to `anytime`, which no simulation path changes.
 
 ## Pairing statement
 
@@ -137,7 +137,7 @@ Twelve mutants are registered in `scripts/mutation_receipt.py` under obligation 
 
 1. **The draws are independent Bernoulli.** This record contains no dependence model.
 2. **Void epochs are not modelled.** Every draw is a valid epoch.
-3. **Only anytime stopping ran.** Stage 1 is levers 2 and 3; the fixed-n look is lever 4 and belongs to Stage 2 (#685, "Two stages, cheapest lever first"). #685 rebuild requirement 3 defines Stage 1 as levers 2 and 3 "anytime and fixed-n, at caps 97 and 400", and #696 repeats it; the ruling of 2026-10-03 (#696 comment 5970254900) reads the words "and fixed-n" as a drafting error against the ticket's own staging, so the grid here is the full Stage 1 grid. The merged script has no fixed-n stopping rule (its `Design.stopping` field is fixed at `anytime`), and it compares allocations at equal 300- and 1,200-epoch budgets (requirement 2) where requirement 3 names caps of 97 and 400 pairs; the 400-pair design is the Null-per-pair-1.0 row at 1,200 epochs, and a 97-pair cap reads off the per-look rows of the 100-pair design. The stage-2 trigger statement holds for anytime designs only; this record measures no fixed-n design at any budget.
+3. **Only anytime stopping ran.** Stage 1 is levers 2 and 3; the fixed-n look is lever 4 and belongs to Stage 2 (#685, "Two stages, cheapest lever first"). #685 rebuild requirement 3 defines Stage 1 as levers 2 and 3 "anytime and fixed-n, at caps 97 and 400", and #696 repeats it; the ruling of 2026-10-03 (#696 comment 5970254900) reads the words "anytime and fixed-n" as a drafting error against the ticket's own staging, so the grid here is the full Stage 1 grid. The merged script has no fixed-n stopping rule (its `Design.stopping` field defaults to `anytime`, and no simulation path changes it), and it compares allocations at equal 300- and 1,200-epoch budgets (requirement 2) where requirement 3 names caps of 97 and 400 pairs; the 400-pair design is the Null-per-pair-1.0 row at 1,200 epochs, and a 97-pair cap reads off the per-look rows of the 100-pair design. The stage-2 trigger statement holds for anytime designs only; this record measures no fixed-n design at any budget.
 4. **The grid has no uptake axis.** The effect axis is the intention-to-treat difference; no configuration varies how often the card is taken up (#696 comment 5954740080, a lead for the Stage 2 design and not a finding).
 5. **The terminal bounds are summarised by quantiles.** The per-replicate values are not stored.
 6. **The committed data files carry five decimal places.** A fresh run now writes ten (#712). The rebuild re-reads the five-place columns, so a value in `summary.md` can differ from the as-run summary in its last printed digit; none of the figures in this record is affected.
