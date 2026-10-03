@@ -572,7 +572,7 @@ and covers that section only. This page stays the citable surface for every kind
   with the path that produced it, headline reading a stale pair count, CUT
   direction reversed, and exit code forced to zero. The campaign pins
   `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
-  `sha256:dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa`.
+  `sha256:2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d`.
 - **Refuses to claim:** Any mutation score, adequacy of the Stage 2 suite as a
   whole, or that any surviving mutant outside the thirteen named cases is
   safe. It refuses any operating characteristic from the reduced committed
