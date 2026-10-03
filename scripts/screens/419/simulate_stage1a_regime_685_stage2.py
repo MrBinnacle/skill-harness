@@ -1005,9 +1005,10 @@ def headline_rows(results: Sequence[Row]) -> tuple[HeadlineRow, ...]:
 
     The diagonal target is the minimum over the three p_P = p_N cells of
     P(joint PASS) at d = 0.30 and of P(CUT) at d = 0.10, each at or above the
-    target. Rows that fail calibration are excluded unless they are fixed-n-score
-    rows, which are labelled as not holding their level and left out. Configurations
-    are ranked by total_epochs (the cap price), then by expected epochs.
+    target. Rows that fail calibration are excluded. A fixed-n-score row that
+    fails is labelled as not holding its level and does not fail the run.
+    Configurations are ranked by total_epochs (the cap price), then by expected
+    epochs.
     """
     groups = sorted({_group_key(r) for r in results})
     rows: list[HeadlineRow] = []
@@ -1025,7 +1026,7 @@ def headline_rows(results: Sequence[Row]) -> tuple[HeadlineRow, ...]:
             min_cut: float | None = None
             for config in scored:
                 mp, mmiss = _diagonal_minima(
-                    results,
+                    members,
                     stopping=stopping,
                     pass_alpha=pass_alpha,
                     starting_wealth=w0,
@@ -1035,7 +1036,7 @@ def headline_rows(results: Sequence[Row]) -> tuple[HeadlineRow, ...]:
                     d=0.30,
                 )
                 mc, _cmiss = _diagonal_minima(
-                    results,
+                    members,
                     stopping=stopping,
                     pass_alpha=pass_alpha,
                     starting_wealth=w0,
@@ -1204,7 +1205,7 @@ def stage2_grid() -> list[tuple[Cell, Design]]:
 def reduced_grid() -> list[tuple[Cell, Design]]:
     """Reduced grid for the test suite and the committed data run.
 
-    Two pair counts, both null allocations, four effects spanning calibration
+    One pair count, both null allocations, four effects spanning calibration
     and real-effect cells, all nine baseline cells, and every stopping design
     with its declared parameter variants.
     """
@@ -1332,9 +1333,9 @@ def summary_md(rows: Sequence[Row], replicates: int, seed: int) -> str:
         "",
         "The diagonal target is the minimum over the three p_P = p_N cells of",
         "P(joint PASS) at d = 0.30 and of P(CUT) at d = 0.10, each at or above the",
-        "target. Rows that fail calibration are excluded unless they are fixed-n-score",
-        "rows, which are labelled as not holding their level. Configurations are",
-        "ranked by total_epochs (the cap price), then by expected epochs.",
+        "target. Rows that fail calibration are excluded. A fixed-n-score row that",
+        "fails is labelled as not holding its level and does not fail the run.",
+        "Configurations are ranked by total_epochs (the cap price), then by expected epochs.",
         "",
         "| stopping | pass_alpha | starting_wealth | target | smallest priced configuration "
         "| total_epochs | expected spend | cap price | P(PASS) at d=0.30 | P(CUT) at d=0.10 "

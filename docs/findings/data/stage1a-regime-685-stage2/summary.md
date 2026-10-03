@@ -11,9 +11,9 @@ union only on anytime rows.
 
 The diagonal target is the minimum over the three p_P = p_N cells of
 P(joint PASS) at d = 0.30 and of P(CUT) at d = 0.10, each at or above the
-target. Rows that fail calibration are excluded unless they are fixed-n-score
-rows, which are labelled as not holding their level. Configurations are
-ranked by total_epochs (the cap price), then by expected epochs.
+target. Rows that fail calibration are excluded. A fixed-n-score row that
+fails is labelled as not holding its level and does not fail the run.
+Configurations are ranked by total_epochs (the cap price), then by expected epochs.
 
 | stopping | pass_alpha | starting_wealth | target | smallest priced configuration | total_epochs | expected spend | cap price | P(PASS) at d=0.30 | P(CUT) at d=0.10 | missing half | holds level |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

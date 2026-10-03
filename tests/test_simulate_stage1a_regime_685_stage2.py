@@ -417,6 +417,47 @@ def test_headline_excludes_fixed_n_score_rows_that_fail_calibration() -> None:
     assert row.any_row_holds_level is True
 
 
+def test_headline_excludes_a_configuration_with_a_failed_required_diagonal_row() -> None:
+    """A required row that fails calibration cannot supply the headline minimum."""
+    design = reg.Design(
+        n_pairs=100,
+        null_per_pair=1.0,
+        fn_construction="direct",
+        stopping="fixed-n-score",
+        pass_alpha=0.0209,
+    )
+    rows: list[Any] = []
+    for d, p_pass, p_cut in ((0.30, 0.95, 0.0), (0.10, 0.0, 0.95)):
+        for p_p, p_n in ((0.30, 0.30), (0.35, 0.35), (0.40, 0.40)):
+            rows.append(
+                _hand_row(
+                    reg.Cell(round(p_p + d, 10), p_p, p_n),
+                    design,
+                    p_pass=p_pass,
+                    p_cut=p_cut,
+                    holds=not (d == 0.30 and p_p == 0.30),
+                )
+            )
+    headline = reg.headline_rows(rows)
+    row = next(
+        h
+        for h in headline
+        if h.stopping == "fixed-n-score" and math.isclose(h.target, 0.80, abs_tol=1e-9)
+    )
+    assert row.reached is False
+    assert row.missing_half == "missing d=0.30 diagonal cell (0.30, 0.30)"
+
+
+def test_summary_says_score_failures_are_excluded_and_nonfatal() -> None:
+    summary = reg.summary_md([], replicates=200, seed=685)
+    assert "Rows that fail calibration are excluded." in summary
+    assert (
+        "fixed-n-score row that\nfails is labelled as not holding its level and does not "
+        "fail the run." in summary
+    )
+    assert "excluded unless they are fixed-n-score" not in summary
+
+
 # ---------------------------------------------------------------------------
 # Criterion 4: regression — anytime cell at seed 685 matches committed #685
 # ---------------------------------------------------------------------------
