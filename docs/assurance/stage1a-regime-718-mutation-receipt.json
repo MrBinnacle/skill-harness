@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-1/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-1/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "a fixed-n-betting row records an interim look instead of reading once at n",
       "killing_assertions": [
@@ -17,10 +17,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-1/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "0522dc4a78a1a6fa34a5cc9a0326649267912c5504fbf5f036ec93642705f5cd",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-1/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "8fc6a9635af1fc70cb9caa6f9c2ab722d753f120ebad88faf826c40ccbd2ca25",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-1",
       "notes": [],
@@ -34,10 +34,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-2/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-2/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 2,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "fixed-n-betting reads the anytime bound at n in place of its own horizon-scaled fixed-time bound",
       "killing_assertions": [
@@ -47,10 +47,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-2/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e8b1bf16402c1863f9cc0a1779639e573eaa32632056bddf9d86efc689d33579",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-2/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "7da0f9be7ca1710f771f0ec16973bc933c882860e45ef7d9d254b520f68592e5",
         "tests_collected": 2,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-2",
       "notes": [],
@@ -65,10 +65,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-3/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-3/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 3,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "the score tests use delta0 = 0 in place of the registered margin 0.20",
       "killing_assertions": [
@@ -78,10 +78,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-3/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "37c682e6a38ae95335fb284ce65202b304234cdd7ecd98791492aa30d49e27c0",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-3/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "849005f90c32b65cf1de33d62eea097bdad8f73c233afad492b505fad6340187",
         "tests_collected": 3,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-3",
       "notes": [],
@@ -97,10 +97,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-4/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-4/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "the paired Tango statistic is applied to the F - N contrast instead of F - P",
       "killing_assertions": [
@@ -110,10 +110,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-4/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "ffb49ce4aedcd4de252ca51e59c8960377e912bffbafdc77233638e3b47394a6",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-4/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "0d4d428a14d89d31e99313e3c29cc6731d34da097f59c1dec2efe94c549fa25c",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-4",
       "notes": [],
@@ -127,10 +127,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-5/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-5/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "joint PASS reads the F - P half only, dropping the F - N half",
       "killing_assertions": [
@@ -140,10 +140,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-5/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "67de5a50ee35ca9a54f9fd69e2956c93b7fc6143a48d83749696e30aa26c52c8",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-5/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "790cf6ede23168d976c372facbc0675465f678a28095aa7e4e7c023d55133c2d",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-5",
       "notes": [],
@@ -157,10 +157,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-6/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-6/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "the rule is always computed at the registered 0.0209 whatever alpha the row declares",
       "killing_assertions": [
@@ -170,10 +170,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-6/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "79326298d02589c0170f15a372fae1cbc66f038106c8d18ea76ccd0b72121a2e",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-6/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "41890c80b5fc1b1ba5fce6f637297090d9d68076a88f121756bae9592802c680",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-6",
       "notes": [],
@@ -187,10 +187,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-7/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-7/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "anytime-tuned ignores starting_wealth and always starts at W0 = 1.0",
       "killing_assertions": [
@@ -200,10 +200,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-7/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "998d68db98b2e2135a488fc1ff3873f92ba6ad8de2e0ee3d9fa4e7bc932863ba",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-7/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "9cc534589ee3041e64dc4a3f89eed3f666e6cd3946dcdd1188074b1c2765f005",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-7",
       "notes": [],
@@ -217,10 +217,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-8/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-8/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "the tuned wealth factor divides by a term that depends on the current pair's outcome, so the bet is not fixed before the first pair",
       "killing_assertions": [
@@ -230,10 +230,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-8/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "5df8262e45740ec88d039b196411399c7dde61f9bb1bca48b17e7cc076f2d677",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-8/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "e8fdc81173e94033472ead6232d9e2dd3c1e1f8e987f6d3e117584c0cf5f33fe",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-8",
       "notes": [],
@@ -247,10 +247,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-9/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-9/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "the calibration read skips fixed-n rows, so a broken fixed-n level exits 0",
       "killing_assertions": [
@@ -260,10 +260,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-9/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "34418d77143922be2deba865d733e8f5adecc3439e9e4904d5d76424bf01f2e6",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-9/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "aea737c0ae3336f83ad4a6dfdd92e9437528eca7f417eb967b610bcae59eeb3a",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-9",
       "notes": [],
@@ -277,10 +277,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-10/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-10/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 2,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "every stopping label is produced by the anytime path, so the label disagrees with the simulation that ran",
       "killing_assertions": [
@@ -290,10 +290,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-10/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "ce4c8a6cc90b5bff29ddfcfa5dbb230da8cf69c7eba2ac9139a624f5c9d5dc54",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-10/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "4ea0efcf889076b6a7e99981efc7f5c8ee86b96e3f264b8a27681c11e2cb8a4b",
         "tests_collected": 2,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-10",
       "notes": [],
@@ -308,10 +308,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-11/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-11/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "the headline reports a stale 100-pair count instead of each row's own n_pairs",
       "killing_assertions": [
@@ -321,10 +321,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-11/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "cc2e4a533b8f21e52d2b34e2aed2cef1a46314e05c3e0f23dd0485d6cf5d7689",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-11/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "609e1e1331b05a03ae79baca681ab8dd5ca6588716b030658ab4bf193293bcac",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-11",
       "notes": [],
@@ -338,10 +338,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-12/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-12/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "the CUT wealth factor bets upward instead of downward, reversing the futility direction",
       "killing_assertions": [
@@ -351,10 +351,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-12/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "fc04a28d63182ec237ee1e0f28f62644a300430a4f2f817ba6bed34932a69d24",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-12/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "9e4bbb5c6b145ce48dcbebf66eb54d79a984bbb8fa195b0877609659067e2a8b",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-12",
       "notes": [],
@@ -368,10 +368,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-13/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-13/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "description": "the calibration exit code is forced to 0 whatever the read finds",
       "killing_assertions": [
@@ -381,10 +381,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "/tmp/mutation-receipt-tj2vg2o7/M-S2-13/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "29ee1e019036542ef6e6254eb86dbd202d4b6470c4883cd6db288b2a30d7681f",
+        "module_file": "/tmp/mutation-receipt-nmngbcqp/M-S2-13/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "1231561494c21c8c733c0593bbd4c2d5d22f1768f84e97d65caee45c20636263",
         "tests_collected": 1,
-        "worktree_head": "0ce7844dc70fcbf37446a67a97f178add2407ab6"
+        "worktree_head": "1299f3b481e3fa1a34def19cf5da896db1193763"
       },
       "mutant_id": "M-S2-13",
       "notes": [],
@@ -395,18 +395,18 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "0ce7844dc70fcbf37446a67a97f178add2407ab6",
+  "commit_under_test": "1299f3b481e3fa1a34def19cf5da896db1193763",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33"
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa"
   },
   "production_tree_digest_before": {
-    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33"
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa"
   },
   "production_tree_unchanged": true,
   "python": "3.13.15",
   "target_digests": {
-    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "e5e967cbc754472018fbeb1b687e515404beac7a1f0e56856e3699c8d45a2f33"
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "dd6d13ad3c10b17eccc3dd36aa0770304b30f327c5e1531376a7e6d4a0d372aa"
   },
   "target_files": [
     "scripts/screens/419/simulate_stage1a_regime_685_stage2.py"
