@@ -566,6 +566,33 @@ and covers that section only. This page stays the citable surface for every kind
   no card-to-task-family evidence register exists; a keep/cut verdict; or any
   card's readiness for Stage 1 spend.
 
+### [`docs/findings/stage1a-readout-691.md`](findings/stage1a-readout-691.md)
+
+- **Claims:** The #691 screen reads a Stage 1A readout path and prints three
+  sections at zero spend. On the observed S486 margins (Full 50/97, Placebo
+  34/97, Null-A 34/97, manifest_read Full 32, Placebo 28), the anytime-valid
+  interval on Placebo minus Null-A under the stand-in launch order is
+  [−0.3925, 0.3925] at alpha 0.025 each (union bound); it does **not** exclude
+  ±0.20 at n = 97, so placebo inertness is not established at this n. The same
+  rates exclude ±0.20 at n = 263 under evenly-spaced launch order. The direct
+  fixed-n Newcombe comparison is [−0.1322, 0.1322] and does exclude ±0.20 at
+  n = 97. Adherence descriptives: assignment to read Full 32/97, Placebo 28/97;
+  assignment to outcome Full 50/97, Placebo 34/97; read-to-outcome under the
+  stated stand-in joint Full 32/32 among read and 18/65 among unread, Placebo
+  28/28 among read and 6/69 among unread. Within-pair phi under that stand-in
+  is 0.7123 with 95% Fisher-z interval [0.5977, 0.7983]; materially positive,
+  named as an input #685 must model before any sizing is relied on. The script
+  and its n=10 synthetic-fixture test are committed on this branch.
+- **Refuses to claim:** The real S486 per-epoch joint structure; this container
+  holds no copy of the operator's readout, and the stand-in readout under
+  `docs/findings/data/stage1a-readout-691/` carries the observed margins under
+  a stated structure, not the measurement of record. Any causal reading of the
+  adherence split (manifest-read is post-treatment) or of the within-pair
+  correlation. Any claim that #684's independence assumption is false: the
+  stand-in concordance is a choice of this record, not a measurement. The
+  n = 263 exclusion figure beyond the evenly-spaced order convention named in
+  the output.
+
 ---
 
 ## Observation records
