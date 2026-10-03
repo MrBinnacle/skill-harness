@@ -238,6 +238,27 @@ _ANCHOR_CONTROL = "tests/test_check_dependency_anchor.py::TestPassesCoordinatedB
 # the exact-path-only variant of M3 that the #704 verdict found still open.
 _S1A = "scripts/screens/419/simulate_stage1a_regime_685.py"
 _S1A_MODULE = "simulate_stage1a_regime_685"
+# #718: Stage 2 of #685 — stopping design x pairs.
+_S2 = "scripts/screens/419/simulate_stage1a_regime_685_stage2.py"
+_S2_MODULE = "simulate_stage1a_regime_685_stage2"
+_S2_TESTS = "tests/test_simulate_stage1a_regime_685_stage2.py"
+_S2_FIXED_N_ONCE = f"{_S2_TESTS}::test_fixed_n_designs_read_once_at_n"
+_S2_HORIZON = f"{_S2_TESTS}::test_fixed_n_betting_uses_horizon_scaled_bets_not_time_scaled"
+_S2_MARGIN = f"{_S2_TESTS}::test_score_tests_use_the_registered_margin_0_20"
+_S2_MCNEMAR = f"{_S2_TESTS}::test_tango_score_equals_mcnemar_at_delta0_zero"
+_S2_CONTRAST = (
+    f"{_S2_TESTS}::test_fixed_n_score_applies_the_paired_statistic_to_fp_and_unpaired_to_fn"
+)
+_S2_JOINT = f"{_S2_TESTS}::test_joint_pass_requires_both_halves"
+_S2_ALPHA = f"{_S2_TESTS}::test_pass_alpha_label_matches_computation"
+_S2_W0 = f"{_S2_TESTS}::test_starting_wealth_changes_anytime_tuned_decisions"
+_S2_LOOKAHEAD = f"{_S2_TESTS}::test_tuned_lambda_is_fixed_before_the_first_pair"
+_S2_CAL_FIXED = f"{_S2_TESTS}::test_calibration_exit_code_covers_fixed_n_rows"
+_S2_LABEL = f"{_S2_TESTS}::test_stopping_column_on_the_tsv_matches_the_path_that_produced_it"
+_S2_LABEL2 = f"{_S2_TESTS}::test_anytime_stopping_label_agrees_with_the_simulation_path"
+_S2_HEADLINE = f"{_S2_TESTS}::test_headline_reads_n_pairs_from_each_row"
+_S2_CUT = f"{_S2_TESTS}::test_cut_direction_is_downward"
+_S2_EXIT = f"{_S2_TESTS}::test_exit_code_is_not_forced_to_zero"
 _S1A_EXIT_FAIL = (
     "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_calibration_fails"
 )
@@ -1007,6 +1028,171 @@ MUTANTS: tuple[Mutant, ...] = (
         "    return tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES)"
         "  # mutant: nine cells",
         (_S1A_SENS_ROWS_KILL, _S1A_SENS_SENTENCE_KILL),
+    ),
+    # #718: thirteen Stage 2 mutants, each under its own obligation prefix.
+    Mutant(
+        "M-S2-1",
+        "718-stage2-fixed-n-interim-look",
+        "a fixed-n-betting row records an interim look instead of reading once at n",
+        _S2,
+        _S2_MODULE,
+        "        per_look=(look,),\n    )\n\n\ndef _run_fixed_n_score(",
+        "        per_look=(s685.LookRow(look=max(1, design.n_pairs // 2), p_pass=p_joint, "
+        "p_cut=p_cut, p_cant_tell_yet=max(0.0, 1.0 - p_joint - p_cut), se_pass=look.se_pass, "
+        "expected_pairs=float(max(1, design.n_pairs // 2)), "
+        "expected_epochs=float(design.total_epochs)),),\n    )\n\n\ndef _run_fixed_n_score(",
+        (_S2_FIXED_N_ONCE,),
+    ),
+    Mutant(
+        "M-S2-2",
+        "718-stage2-fixed-n-anytime-bound-at-n",
+        "fixed-n-betting reads the anytime bound at n in place of its own "
+        "horizon-scaled fixed-time bound",
+        _S2,
+        _S2_MODULE,
+        "    fp_pass = fixed_n_rejects(xs_fp, alpha, m0, upward=True)",
+        "    fp_pass = 2 * s685._bound(xs_fp, alpha, 'lower') - 1 >= BOUNDARY  "
+        "# mutant: anytime bound at n",
+        (_S2_HORIZON,),
+    ),
+    Mutant(
+        "M-S2-3",
+        "718-stage2-score-test-margin-dropped",
+        "the score tests use delta0 = 0 in place of the registered margin 0.20",
+        _S2,
+        _S2_MODULE,
+        "    delta0 = BOUNDARY",
+        "    delta0 = 0.0  # mutant: margin dropped",
+        (_S2_MARGIN, _S2_MCNEMAR),
+    ),
+    Mutant(
+        "M-S2-4",
+        "718-stage2-statistic-contrast-mismatch",
+        "the paired Tango statistic is applied to the F - N contrast instead of F - P",
+        _S2,
+        _S2_MODULE,
+        "        [tango_score_z(int(bb), int(cc), n, delta0) for bb, cc in zip(b, c, strict=True)]",
+        "        [tango_score_z(int(ff), int(nn), n, delta0) for ff, nn in "
+        "zip(full.sum(axis=1), _null_used.sum(axis=1), strict=True)]  "
+        "# mutant: paired stat on F-N",
+        (_S2_CONTRAST,),
+    ),
+    Mutant(
+        "M-S2-5",
+        "718-stage2-joint-pass-fp-only",
+        "joint PASS reads the F - P half only, dropping the F - N half",
+        _S2,
+        _S2_MODULE,
+        "    passed = fp_pass & fn_pass",
+        "    passed = fp_pass  # mutant: F - N half dropped",
+        (_S2_JOINT,),
+    ),
+    Mutant(
+        "M-S2-6",
+        "718-stage2-alpha-label-computation-mismatch",
+        "the rule is always computed at the registered 0.0209 whatever alpha the row declares",
+        _S2,
+        _S2_MODULE,
+        "    rule_alpha = design.pass_alpha"
+        " if pass_alpha_override is None else pass_alpha_override",
+        "    rule_alpha = PASS_ALPHA  # mutant: declared alpha ignored",
+        (_S2_ALPHA,),
+    ),
+    Mutant(
+        "M-S2-7",
+        "718-stage2-starting-wealth-ignored",
+        "anytime-tuned ignores starting_wealth and always starts at W0 = 1.0",
+        _S2,
+        _S2_MODULE,
+        "    w0 = design.starting_wealth\n"
+        "    alpha = design.pass_alpha if rule_alpha is None else rule_alpha",
+        "    w0 = 1.0  # mutant: starting wealth ignored\n"
+        "    alpha = design.pass_alpha if rule_alpha is None else rule_alpha",
+        (_S2_W0,),
+    ),
+    Mutant(
+        "M-S2-8",
+        "718-stage2-tuned-bet-lookahead",
+        "the tuned wealth factor uses a lambda clipped by the current pair's outcome",
+        _S2,
+        _S2_MODULE,
+        "            self.log_w += np.log1p(self.lam * (x - self.m0))",
+        "            self.log_w += np.log1p(np.minimum(self.lam, 0.5 / np.maximum(x, 1e-6))"
+        " * (x - self.m0))  # mutant: lookahead lambda",
+        (_S2_LOOKAHEAD,),
+    ),
+    Mutant(
+        "M-S2-9",
+        "718-stage2-calibration-skips-fixed-n",
+        "the calibration read skips fixed-n rows, so a broken fixed-n level exits 0",
+        _S2,
+        _S2_MODULE,
+        "    cal = [r for r in rows if is_calibration_cell(r.cell)]\n"
+        "    return 0 if all(r.holds_level or is_nonfatal_calibration_failure(r)"
+        " for r in cal) else 1",
+        "    cal = [\n"
+        "        r\n"
+        "        for r in rows\n"
+        "        if is_calibration_cell(r.cell)\n"
+        '        and r.design.stopping not in ("fixed-n-betting", "fixed-n-score")\n'
+        "    ]  # mutant: fixed-n rows skipped\n"
+        "    return 0 if all(r.holds_level or is_nonfatal_calibration_failure(r)"
+        " for r in cal) else 1",
+        (_S2_CAL_FIXED,),
+    ),
+    Mutant(
+        "M-S2-10",
+        "718-stage2-stopping-label-disagrees",
+        "every stopping label is produced by the anytime path, so the label "
+        "disagrees with the simulation that ran",
+        _S2,
+        _S2_MODULE,
+        '    if sim_design.stopping == "fixed-n-betting":\n'
+        "        return _run_fixed_n_betting(\n"
+        "            cell, design, replicates=replicates, seed=seed, rule_alpha=rule_alpha\n"
+        "        )",
+        '    if sim_design.stopping == "fixed-n-betting":\n'
+        "        return _run_anytime(\n"
+        "            cell, design, replicates=replicates, seed=seed, rule_alpha=rule_alpha\n"
+        "        )  # mutant: label/path disagree",
+        (_S2_LABEL, _S2_LABEL2),
+    ),
+    Mutant(
+        "M-S2-11",
+        "718-stage2-headline-pair-count",
+        "the headline reports a stale 100-pair count instead of each row's own n_pairs",
+        _S2,
+        _S2_MODULE,
+        "                    n_pairs=config.design.n_pairs,\n"
+        "                    null_per_pair=config.design.null_per_pair,\n"
+        "                    fn_construction=config.design.fn_construction,\n"
+        "                    total_epochs=config.design.total_epochs,",
+        "                    n_pairs=100,  # mutant: stale pair count\n"
+        "                    null_per_pair=config.design.null_per_pair,\n"
+        "                    fn_construction=config.design.fn_construction,\n"
+        "                    total_epochs=config.design.total_epochs,",
+        (_S2_HEADLINE,),
+    ),
+    Mutant(
+        "M-S2-12",
+        "718-stage2-cut-direction-reversed",
+        "the CUT wealth factor bets upward instead of downward, reversing the futility direction",
+        _S2,
+        _S2_MODULE,
+        "            self.log_w += np.log1p(self.lam * (self.m0 - x))",
+        "            self.log_w += np.log1p(self.lam * (x - self.m0))  # mutant: CUT reversed",
+        (_S2_CUT,),
+    ),
+    Mutant(
+        "M-S2-13",
+        "718-stage2-exit-code-forced-zero",
+        "the calibration exit code is forced to 0 whatever the read finds",
+        _S2,
+        _S2_MODULE,
+        "    return 0 if all(r.holds_level or is_nonfatal_calibration_failure(r)"
+        " for r in cal) else 1",
+        "    return 0  # mutant: exit code forced to zero",
+        (_S2_EXIT,),
     ),
 )
 
