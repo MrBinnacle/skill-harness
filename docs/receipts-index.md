@@ -462,8 +462,8 @@ and covers that section only. This page stays the citable surface for every kind
 - **Refuses to claim:** Any operating characteristic from the smoke numbers. The 200-replicate
   tables previously attached to this record used fabricated zero outcomes for missing
   Null epochs and omitted the second Null draw in a double-Null design. They
-  are withdrawn. It refuses any claim about a fixed-n design: #685 requirement 3 asks Stage 1 for a
-  fixed-n look beside each anytime design, the script has none, and the stage-2 trigger
+  are withdrawn. It refuses any claim about a fixed-n design: the fixed-n look is lever 4 and
+  belongs to Stage 2 (ruling on #696, comment 5970254900), the script has no fixed-n stopping rule, and the stage-2 trigger
   statement therefore holds for anytime designs only. It refuses any claim about the pair-cap
   lever (Stage 2, not simulated), any matched-pairs advantage from launch-index pairing, any claim about real
   Claude Code epochs, and any decision on the direct-form amendment, the margin or the power
