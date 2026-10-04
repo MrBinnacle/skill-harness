@@ -263,6 +263,9 @@ _S2_LABEL2 = f"{_S2_TESTS}::test_anytime_stopping_label_agrees_with_the_simulati
 _S2_HEADLINE = f"{_S2_TESTS}::test_headline_reads_n_pairs_from_each_row"
 _S2_CUT = f"{_S2_TESTS}::test_cut_direction_is_downward"
 _S2_EXIT = f"{_S2_TESTS}::test_exit_code_is_not_forced_to_zero"
+_S2_RUNNING_MAX = f"{_S2_TESTS}::test_anytime_tuned_rejection_uses_running_maximum"
+_S2_CUT_LEVEL = f"{_S2_TESTS}::test_fixed_n_score_cut_is_decided_at_0_05"
+_S2_JOINT_FN_ALONE = f"{_S2_TESTS}::test_fixed_n_score_joint_pass_requires_both_halves_not_fn_alone"
 _S1A_EXIT_FAIL = (
     "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_calibration_fails"
 )
@@ -1198,6 +1201,40 @@ MUTANTS: tuple[Mutant, ...] = (
         " for r in cal) else 1",
         "    return 0  # mutant: exit code forced to zero",
         (_S2_EXIT,),
+    ),
+    # #718 rework W2: three behaviours of the new designs the first campaign
+    # did not pin. Each mutant is one defect the rework ticket names.
+    Mutant(
+        "M-S2-14",
+        "718-stage2-tuned-rejection-running-max",
+        "the anytime-tuned rejection reads the current wealth instead of its "
+        "running maximum, so a sequence that crosses 1/alpha and then falls "
+        "back below it is not a rejection",
+        _S2,
+        _S2_MODULE,
+        "        return self.running_max >= math.log(1.0 / alpha)",
+        "        return self.log_w >= math.log(1.0 / alpha)  # mutant: current wealth",
+        (_S2_RUNNING_MAX,),
+    ),
+    Mutant(
+        "M-S2-15",
+        "718-stage2-score-cut-level-010",
+        "the fixed-n-score CUT test runs at 0.10 instead of the registered 0.05",
+        _S2,
+        _S2_MODULE,
+        "    z_cut_crit = _normal_quantile(FUTILITY_ALPHA)  # negative; CUT rejects for small z",
+        "    z_cut_crit = _normal_quantile(0.10)  # mutant: CUT at 0.10",
+        (_S2_CUT_LEVEL,),
+    ),
+    Mutant(
+        "M-S2-16",
+        "718-stage2-joint-pass-fn-alone",
+        "the fixed-n-score joint PASS reports its F - N half alone, dropping the F - P half",
+        _S2,
+        _S2_MODULE,
+        "    passed = fp_pass & fn_pass",
+        "    passed = fn_pass  # mutant: F - P half dropped",
+        (_S2_JOINT_FN_ALONE,),
     ),
 )
 

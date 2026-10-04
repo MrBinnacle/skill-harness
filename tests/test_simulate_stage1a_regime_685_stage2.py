@@ -1176,6 +1176,96 @@ def test_exit_code_is_not_forced_to_zero(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 # ---------------------------------------------------------------------------
+# Mutants 14-16: tuned running maximum; score CUT level; joint PASS halves
+# ---------------------------------------------------------------------------
+
+
+def test_anytime_tuned_rejection_uses_running_maximum() -> None:
+    """Mutant 14: rejection reads the running max, not the current wealth.
+
+    A constructed sequence whose wealth crosses 1/alpha and then falls back
+    below it must still be a rejection: the anytime-valid test rejects when
+    the running maximum of the wealth reaches 1/alpha, not when the current
+    wealth does.
+    """
+    w0 = 1.0
+    alpha = 0.5
+    lam = 0.8
+    m0 = 0.6
+    threshold = math.log(1.0 / alpha)
+    wealth = reg.TunedWealth(1, w0, lam, m0, upward=True)
+    assert not wealth.rejects(alpha)[0], "starts below the threshold"
+    # Three favourable outcomes cross the threshold.
+    for _ in range(3):
+        wealth.step(np.array([1.0]))
+    assert float(wealth.log_w[0]) > threshold
+    assert wealth.rejects(alpha)[0], "the running max must reject once it crosses"
+    # A subsequent unfavourable outcome pulls the current wealth back down.
+    wealth.step(np.array([0.0]))
+    assert float(wealth.log_w[0]) < threshold, "the current wealth falls back"
+    # The rejection still stands, because the running max crossed.
+    assert wealth.rejects(alpha)[0], "rejection must survive a wealth drawdown"
+    assert float(wealth.running_max[0]) > threshold
+
+
+def test_fixed_n_score_cut_is_decided_at_0_05() -> None:
+    """Mutant 15: CUT on a fixed-n-score row is decided at 0.05, not 0.10.
+
+    A z between the 0.10 and 0.05 one-sided critical values is not a CUT at
+    the registered 0.05 level. The run_cell-level check puts P(CUT) at the
+    d = 0.20 margin near 0.05; a 0.10 CUT level would put it near 0.10.
+    """
+    crit_05 = reg._normal_quantile(0.05)
+    crit_10 = reg._normal_quantile(0.10)
+    assert reg.FUTILITY_ALPHA == 0.05
+    assert crit_05 < crit_10 < 0.0
+    # A real Tango z in the band between the two critical values.
+    z_between = reg.tango_score_z(4, 0, 40, 0.20)
+    assert crit_05 < z_between < crit_10, "the fixture must land between the critical values"
+    assert z_between > crit_05, "a z between the critical values is not a CUT at 0.05"
+    # run_cell level: at d = 0.20 the true F-P equals the margin, so CUT is
+    # an error at rate 0.05. Under a 0.10 CUT level the rate would be near 0.10.
+    cell = reg.Cell(0.55, 0.35, 0.35)
+    design = reg.Design(
+        n_pairs=200,
+        null_per_pair=1.0,
+        fn_construction="direct",
+        stopping="fixed-n-score",
+        pass_alpha=0.0209,
+    )
+    row = reg.run_cell(cell, design, replicates=1500, seed=685)
+    assert 0.01 < row.p_cut < 0.085, (
+        f"CUT at the margin must stay near 0.05, not 0.10: got {row.p_cut}"
+    )
+
+
+def test_fixed_n_score_joint_pass_requires_both_halves_not_fn_alone() -> None:
+    """Mutant 16: joint PASS on a fixed-n-score row requires both halves.
+
+    An input where F-N passes and F-P does not is not a joint PASS. The
+    fixture puts F-P at 0.05 (below the margin) and F-N at 0.40 (above it),
+    so the F-N half is high and the F-P half is low; joint PASS cannot equal
+    the F-N half alone.
+    """
+    cell = reg.Cell(0.70, 0.65, 0.30)  # F-P = 0.05, F-N = 0.40
+    assert reg.true_fn_diff(cell) == pytest.approx(0.40)
+    design = reg.Design(
+        n_pairs=200,
+        null_per_pair=1.0,
+        fn_construction="direct",
+        stopping="fixed-n-score",
+        pass_alpha=0.0209,
+    )
+    row = reg.run_cell(cell, design, replicates=1500, seed=42)
+    assert row.p_fn_half > 0.5, "the F-N half must clear on this cell"
+    assert row.p_fp_half < 0.05, "the F-P half must stay low when F-P is 0.05"
+    assert row.p_joint_pass <= row.p_fp_half + 1e-12, "joint PASS cannot exceed the F-P half"
+    assert row.p_joint_pass < row.p_fn_half - 0.1, (
+        f"joint PASS is not the F-N half alone: {row.p_joint_pass} vs {row.p_fn_half}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Structural: grid, prices, design fields
 # ---------------------------------------------------------------------------
 
