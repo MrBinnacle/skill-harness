@@ -38,11 +38,13 @@ _EXPECTED_TITLE = f"# {_NEW_NAME} — skill-harness\n"
 _DOMAIN_TEMPLATE_V1_3_1_SHA256 = "593a7042218689f1d24df89df14eaf0a20e19e0d0a7d479a01947ac78f0784b9"
 _DOMAIN_TEMPLATE_REL = "tests/fixtures/domain-docs/setup-matt-pocock-skills-domain-v1.3.1.md"
 
-# Dated-record surfaces: historical wording stays as written, and the PR body
-# lists any remaining hit on them with that reason.
-_DATED_RECORD_FILES = frozenset(
+# Surfaces that are not live instruction pointers. CHANGELOG.md holds dated
+# records and the criterion-5 announcement; the PR evidence body lists every
+# remaining old-name hit with its reason, so it necessarily names the token.
+_NON_LIVE_FILES = frozenset(
     {
         "CHANGELOG.md",
+        ".scratch/issue-722/pr-body.md",
     }
 )
 
@@ -203,7 +205,7 @@ def test_no_live_file_still_names_context_md() -> None:
     ).stdout.splitlines()
     offenders: list[str] = []
     for rel in listed:
-        if rel in _DATED_RECORD_FILES:
+        if rel in _NON_LIVE_FILES:
             continue
         path = _REPO_ROOT / rel
         if not path.is_file():
