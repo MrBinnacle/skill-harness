@@ -184,3 +184,49 @@ def test_domain_doc_is_the_v1_3_1_setup_template() -> None:
     assert digest == _DOMAIN_TEMPLATE_V1_3_1_SHA256, (
         f"docs/agents/domain.md digest {digest} != pinned v1.3.1 template digest"
     )
+
+
+def test_agents_md_names_the_glossary_not_context() -> None:
+    """Criterion 3: live pointers in AGENTS.md name the new glossary."""
+    text = _read("AGENTS.md")
+    assert _NEW_NAME in text, "AGENTS.md must name the new glossary file"
+    assert _OLD_NAME not in text, f"AGENTS.md still names {_OLD_NAME} on a live instruction surface"
+
+
+def test_no_live_file_still_names_context_md() -> None:
+    """Criterion 4: live tracked files carry no hit on the old glossary name."""
+    listed = subprocess.run(
+        ["git", "-C", str(_REPO_ROOT), "ls-files"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    offenders: list[str] = []
+    for rel in listed:
+        if rel in _DATED_RECORD_FILES:
+            continue
+        path = _REPO_ROOT / rel
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if _OLD_NAME in text:
+            offenders.append(rel)
+    assert not offenders, "live files still name the old glossary file:\n" + "\n".join(
+        f"  - {o}" for o in offenders
+    )
+
+
+def test_changelog_announces_the_rename() -> None:
+    """Criterion 5: the release convention records the rename under Unreleased."""
+    text = _read("CHANGELOG.md")
+    match = re.search(r"## \[Unreleased\](.*?)(?=\n## \[)", text, re.DOTALL)
+    assert match is not None, "CHANGELOG.md must carry an [Unreleased] section"
+    unreleased = match.group(1)
+    assert _NEW_NAME in unreleased, "[Unreleased] must announce the new glossary name"
+    assert _OLD_NAME in unreleased, "[Unreleased] must state what it was called before"
+    assert re.search(r"(?i)renam", unreleased), (
+        "[Unreleased] must use rename language, not a silent path swap"
+    )

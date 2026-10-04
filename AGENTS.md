@@ -14,9 +14,9 @@ The five canonical triage roles plus a disposition axis, each label string equal
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, maintained by `/domain-modeling`. See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root, maintained by `/domain-modeling`. See `docs/agents/domain.md`.
 
-`CONTEXT.md` is the vocabulary of record: use its terms in prose and identifiers, respect its Avoid-notes, and when code and glossary disagree, the code is the primary source — fix the glossary, then decide whether the code's term deserves a rename of its own.
+`GLOSSARY.md` is the vocabulary of record: use its terms in prose and identifiers, respect its Avoid-notes, and when code and glossary disagree, the code is the primary source — fix the glossary, then decide whether the code's term deserves a rename of its own.
 
 ## Prose voice — literal-humanist register
 
