@@ -2,7 +2,7 @@
 
 ## What this change contains
 
-Nine files, listed from `git diff --stat origin/main...HEAD` at the head of
+Ten files, listed from `git diff --stat origin/main...HEAD` at the head of
 this branch:
 
 - `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` — a zero-spend
@@ -29,8 +29,10 @@ this branch:
 - `docs/assurance/stage1a-regime-718-mutation-receipt.md` — the prose
   companion, naming the same digest.
 - `docs/receipts-index.md` — the Claims/Refuses entry for the receipt above.
+- `.scratch/issue-718/pr-body.md` — this file. The runner reads it from the
+  head and publishes it as the body of pull request 721.
 
-Output never lands under `.scratch/`. The data directory is under
+Simulation output never lands under `.scratch/`. The data directory is under
 `docs/findings/data/stage1a-regime-685-stage2/`.
 
 The simulator branches on `stopping`. `anytime` delegates to
