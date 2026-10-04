@@ -5,12 +5,12 @@ pairs. **Generator:** `scripts/mutation_receipt.py --select 718-stage2`.
 **Machine-readable record:** `docs/assurance/stage1a-regime-718-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
 `sha256:2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d`.
-**Commit at generation:** `a1d2377772694449a8b62e9c804e00496f43d2dc` —
+**Commit at generation:** `10fb0cc2d1283a4e4fc0472531299035e7191ae5` —
 informational only; currency is checked against the digest above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
 
 Each case runs in its own git worktree at a fixed commit. Production is never
-mutated in place. All thirteen cases resolved
+mutated in place. All sixteen cases resolved
 `simulate_stage1a_regime_685_stage2` inside their own worktree, every clean
 baseline passed first with nonzero collection, every mutant imported, and the
 production digest was identical before and after.
@@ -32,9 +32,12 @@ production digest was identical before and after.
 | M-S2-11 | 718-stage2-headline-pair-count | the headline reports a stale 100-pair count | **KILLED** | `test_headline_reads_n_pairs_from_each_row` |
 | M-S2-12 | 718-stage2-cut-direction-reversed | the CUT wealth factor bets upward instead of downward | **KILLED** | `test_cut_direction_is_downward` |
 | M-S2-13 | 718-stage2-exit-code-forced-zero | the calibration exit code is forced to 0 | **KILLED** | `test_exit_code_is_not_forced_to_zero` |
+| M-S2-14 | 718-stage2-tuned-rejection-running-max | the anytime-tuned rejection reads the current wealth instead of its running maximum | **KILLED** | `test_anytime_tuned_rejection_uses_running_maximum` |
+| M-S2-15 | 718-stage2-score-cut-level-010 | the fixed-n-score CUT test runs at 0.10 instead of 0.05 | **KILLED** | `test_fixed_n_score_cut_is_decided_at_0_05` |
+| M-S2-16 | 718-stage2-joint-pass-fn-alone | the fixed-n-score joint PASS reports its F - N half alone | **KILLED** | `test_fixed_n_score_joint_pass_requires_both_halves_not_fn_alone` |
 
-Thirteen hand-chosen mutants, one per acceptance obligation. **No mutation
-score is reported**, because thirteen named cases cannot support one; each
+Sixteen hand-chosen mutants, one per acceptance obligation. **No mutation
+score is reported**, because sixteen named cases cannot support one; each
 case is an obligation, not a sample.
 
 M-S2-2, M-S2-3, M-S2-6, M-S2-7, M-S2-10 and M-S2-11 first survived an earlier
@@ -47,6 +50,12 @@ margin, a strict pass-rate ordering across declared alphas, a strict
 starting-wealth ordering on a cell that actually passes, a full-cap
 expected-epochs figure that the anytime path cannot produce, and a headline
 fixture where only the 300-pair configuration meets the target.
+
+M-S2-14, M-S2-15 and M-S2-16 were added in the #718 rework (S510). The first
+campaign left three behaviours of the new designs unpinned: the
+anytime-tuned rejection's use of the running maximum, the fixed-n-score CUT
+level of 0.05, and the requirement that joint PASS on a fixed-n-score row
+carry both halves. Each mutant is killed by a test written for it.
 
 ## Companion campaigns
 
@@ -63,13 +72,13 @@ receipts remain current:
 ## What this receipt refuses to claim
 
 It does not claim a mutation score, adequacy of the Stage 2 suite as a whole,
-or that any surviving mutant outside the thirteen named cases is safe. It
+or that any surviving mutant outside the sixteen named cases is safe. It
 does not claim the full-replicate Stage 2 operating characteristics; the
 committed data directory holds the reduced grid at 200 replicates only, and
 the full grid is the next ticket. It refuses any claim about which stopping
 design meets the #685 power target on the full pair grid — the reduced
 committed run reports every diagonal configuration as not reached at 100
-pairs, and the full pair grid has not been simulated. It says thirteen
+pairs, and the full pair grid has not been simulated. It says sixteen
 specific defects are detected, in isolated worktrees, against baselines that
 passed first, and that the production tree was byte-unchanged throughout.
 
