@@ -555,6 +555,37 @@ and covers that section only. This page stays the citable surface for every kind
   campaign's mutant set and was not edited; no registered constant in the
   simulator or in `scripts/screens/419/v5_cue_stage1a.py` changed.
 
+### [`docs/assurance/stage1a-regime-718-mutation-receipt.md`](assurance/stage1a-regime-718-mutation-receipt.md)
+
+- **Claims:** Sixteen mutants against the Stage 2 stopping-design simulator
+  (#718, Stage 2 of #685), each run in its own git worktree at a fixed commit
+  with production never mutated in place, each case recording and asserting
+  both worktree HEADs, the `module.__file__` actually imported, clean and
+  mutant source digests, that the digests differ, that the clean baseline
+  passed first with nonzero collection, that the mutant imports, the named
+  failing assertion, and that the production tree was byte-unchanged
+  afterwards. All sixteen KILLED, one per acceptance obligation: fixed-n
+  interim look, fixed-n anytime bound at n, score-test margin dropped, paired
+  statistic on the wrong contrast, joint PASS reading F - P only, declared
+  alpha ignored in computation, starting wealth ignored, tuned bet
+  look-ahead, calibration skipping fixed-n rows, stopping label disagreeing
+  with the path that produced it, headline reading a stale pair count, CUT
+  direction reversed, exit code forced to zero, tuned rejection reading the
+  current wealth instead of the running maximum, fixed-n-score CUT decided
+  at 0.10 instead of 0.05, and fixed-n-score joint PASS reporting the F - N
+  half alone. The campaign pins
+  `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
+  `sha256:2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d`.
+- **Refuses to claim:** Any mutation score, adequacy of the Stage 2 suite as a
+  whole, or that any surviving mutant outside the sixteen named cases is
+  safe. It refuses any operating characteristic from the reduced committed
+  run at `docs/findings/data/stage1a-regime-685-stage2/` (200 replicates per
+  cell); the full pair grid is the next ticket. It refuses any claim about
+  which stopping design meets the #685 power target on that full grid. The
+  companion Stage 1A receipts under `docs/assurance/stage1a-regime-685-*`,
+  `stage1a-regime-708-*` and `stage1a-regime-712-*` were not regenerated,
+  because the #685 simulator file did not move.
+
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 
 - **Claims:** On 2026-09-23, `git ls-files "skills/*/*/SKILL.md"` returned zero
