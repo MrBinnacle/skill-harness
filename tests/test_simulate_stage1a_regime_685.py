@@ -290,6 +290,84 @@ def test_calibration_holds_for_every_stage1_design_at_boundary(design: Any) -> N
     assert reg.calibration_holds(result)
 
 
+def test_calibration_covers_the_fn_margin_cell_at_d030() -> None:
+    """#708: the F-N margin cell (0.30, 0.40) at d=0.30 is a PASS-calibration cell.
+
+    True F - N = 0.60 - 0.40 = 0.20 = BOUNDARY, so P(PASS) there is an error
+    whenever it exceeds PASS_ALPHA + tolerance. Leaving this cell out of the
+    calibration set is the defect this test pins.
+    """
+    cell = reg.Cell(0.60, 0.30, 0.40)
+    assert cell.d == pytest.approx(0.30)
+    assert reg.true_fn_diff(cell) == pytest.approx(0.20)
+    assert reg.is_pass_calibration_cell(cell), "F-N = 0.20 must make this a PASS-calibration cell"
+    assert reg.is_cut_calibration_cell(cell), (
+        "F-P = 0.30 >= BOUNDARY must make this a CUT-calibration cell"
+    )
+    design = reg.Design(n_pairs=97)
+    failing = _hand_result(cell, design, p_pass=0.50, p_cut=0.0)
+    assert reg.calibration_holds(failing) is False
+    passing = _hand_result(cell, design, p_pass=0.0, p_cut=0.0)
+    assert reg.calibration_holds(passing) is True
+
+
+def test_calibration_set_includes_every_pass_and_cut_error_cell() -> None:
+    """#708: PASS wherever F-P or F-N <= BOUNDARY; CUT wherever F-P >= BOUNDARY."""
+    effects = (0.00, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40)
+    cells = [
+        reg.Cell(round(p_p + d, 10), p_p, p_n)
+        for p_p in reg.BASELINES
+        for p_n in reg.BASELINES
+        for d in effects
+    ]
+    pass_cells = {(c.p_placebo, c.p_null, c.d) for c in cells if reg.is_pass_calibration_cell(c)}
+    expected_pass = {
+        (c.p_placebo, c.p_null, c.d)
+        for c in cells
+        if c.d <= 0.20 + 1e-9 or reg.true_fn_diff(c) <= 0.20 + 1e-9
+    }
+    assert pass_cells == expected_pass
+    assert (0.30, 0.40, 0.30) in pass_cells, (
+        "the F-N margin cell (0.30, 0.40) at d=0.30 must be a PASS-calibration cell"
+    )
+    cut_cells = {(c.p_placebo, c.p_null, c.d) for c in cells if reg.is_cut_calibration_cell(c)}
+    expected_cut = {(c.p_placebo, c.p_null, c.d) for c in cells if c.d >= 0.20 - 1e-9}
+    assert cut_cells == expected_cut
+
+
+def test_cut_calibration_uses_the_futility_nominal_level() -> None:
+    """#708: P(CUT) is compared against FUTILITY_ALPHA + tolerance, not PASS_ALPHA."""
+    cell = reg.Cell(0.75, 0.35, 0.35)  # F-P = 0.40 >= BOUNDARY
+    design = reg.Design(n_pairs=97)
+    assert reg.is_cut_calibration_cell(cell)
+    pass_limit = a650.PASS_ALPHA + a650.calibration_tolerance(200, a650.PASS_ALPHA)
+    cut_limit = a650.FUTILITY_ALPHA + a650.calibration_tolerance(200, a650.FUTILITY_ALPHA)
+    assert pass_limit < cut_limit
+    between_limits = _hand_result(cell, design, p_pass=0.0, p_cut=(pass_limit + cut_limit) / 2)
+    over = _hand_result(cell, design, p_pass=0.0, p_cut=cut_limit + 0.05)
+    under = _hand_result(cell, design, p_pass=0.0, p_cut=0.0)
+    assert reg.cut_calibration_holds(between_limits) is True
+    assert reg.calibration_holds(between_limits) is True
+    assert reg.cut_calibration_holds(over) is False
+    assert reg.cut_calibration_holds(under) is True
+    assert reg.calibration_holds(over) is False
+    assert reg.calibration_holds(under) is True
+
+
+def test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration(
+    tmp_path: Path,
+) -> None:
+    """#708: exit code reflects a PASS-calibration failure in the F-N margin cell."""
+    cell = reg.Cell(0.60, 0.30, 0.40)
+    design = reg.Design(n_pairs=30)
+    code = reg.main(
+        ["--out", str(tmp_path / "out"), "--replicates", "600", "--workers", "1", "--seed", "685"],
+        grid=[(cell, design)],
+        pass_alpha=0.6,
+    )
+    assert code == 1
+
+
 # ---------------------------------------------------------------------------
 # Negative control: calibration fails under loosened rule
 # ---------------------------------------------------------------------------
@@ -691,6 +769,178 @@ def test_stage2_trigger_fires_only_when_no_design_reaches_the_target() -> None:
     assert fires[0.90] is True
 
 
+def _results_with_per_cell_rates(
+    *,
+    epoch_budget: int,
+    null_per_pair: float,
+    fn_construction: str,
+    pass_at: dict[tuple[float, float], float],
+    cut_at: dict[tuple[float, float], float],
+) -> list[Any]:
+    """One design family at one budget, with per-(p_P, p_N) rates at d=0.30 and d=0.10."""
+    results: list[Any] = []
+    n_pairs = reg.pairs_for_epoch_budget(epoch_budget, null_per_pair)
+    design = reg.Design(
+        n_pairs=n_pairs, null_per_pair=null_per_pair, fn_construction=fn_construction
+    )
+    for p_p in reg.BASELINES:
+        for p_n in reg.BASELINES:
+            results.append(
+                _hand_result(
+                    reg.Cell(round(p_p + 0.30, 10), p_p, p_n),
+                    design,
+                    p_pass=pass_at[(p_p, p_n)],
+                    p_cut=0.0,
+                )
+            )
+            results.append(
+                _hand_result(
+                    reg.Cell(round(p_p + 0.10, 10), p_p, p_n),
+                    design,
+                    p_pass=0.0,
+                    p_cut=cut_at[(p_p, p_n)],
+                )
+            )
+            for d in (0.00, 0.15, 0.20, 0.25, 0.40):
+                results.append(
+                    _hand_result(
+                        reg.Cell(round(p_p + d, 10), p_p, p_n),
+                        design,
+                        p_pass=0.0,
+                        p_cut=0.0,
+                    )
+                )
+    return results
+
+
+def test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum() -> None:
+    """#708: aggregation rule is the diagonal minimum; the nine-cell minimum is ill-posed.
+
+    Fixture rates at d=0.30 (P(PASS)) and d=0.10 (P(CUT)) are unequal across the
+    nine (p_P, p_N) cells so that four readings disagree:
+
+      diagonal minimum      PASS 0.85, CUT 0.84  -> meets 0.80
+      nine-cell minimum     PASS 0.50, CUT 0.50  -> fails 0.80
+      diagonal maximum      PASS 0.92, CUT 0.88  -> meets 0.80
+      single cell (0.35,0.35) PASS 0.88, CUT 0.86 -> meets 0.80
+
+    The #696 ruling reads the diagonal minimum. This test asserts those numbers
+    and the resulting reached/trigger verdict. A min->max mutant, a
+    diagonal->all-nine mutant, and a diagonal->single-cell mutant each report a
+    different pair and each fails this assertion.
+    """
+    pass_at: dict[tuple[float, float], float] = {
+        (0.30, 0.30): 0.85,
+        (0.35, 0.35): 0.88,
+        (0.40, 0.40): 0.92,
+        (0.30, 0.35): 0.50,
+        (0.30, 0.40): 0.95,
+        (0.35, 0.30): 0.95,
+        (0.35, 0.40): 0.95,
+        (0.40, 0.30): 0.95,
+        (0.40, 0.35): 0.95,
+    }
+    cut_at: dict[tuple[float, float], float] = {
+        (0.30, 0.30): 0.84,
+        (0.35, 0.35): 0.86,
+        (0.40, 0.40): 0.88,
+        (0.30, 0.35): 0.50,
+        (0.30, 0.40): 0.95,
+        (0.35, 0.30): 0.95,
+        (0.35, 0.40): 0.95,
+        (0.40, 0.30): 0.95,
+        (0.40, 0.35): 0.95,
+    }
+    diagonal_pass = min(pass_at[(p, p)] for p in reg.BASELINES)
+    diagonal_cut = min(cut_at[(p, p)] for p in reg.BASELINES)
+    nine_pass = min(pass_at.values())
+    nine_cut = min(cut_at.values())
+    diagonal_pass_max = max(pass_at[(p, p)] for p in reg.BASELINES)
+    single_pass = pass_at[(0.35, 0.35)]
+    single_cut = cut_at[(0.35, 0.35)]
+    assert {diagonal_pass, nine_pass, diagonal_pass_max, single_pass} == {0.85, 0.50, 0.92, 0.88}
+    assert {diagonal_cut, nine_cut, max(cut_at[(p, p)] for p in reg.BASELINES), single_cut} == {
+        0.84,
+        0.50,
+        0.88,
+        0.86,
+    }
+
+    results = _results_with_per_cell_rates(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        pass_at=pass_at,
+        cut_at=cut_at,
+    )
+    rows = reg.target_check_rows(results)
+    row = next(
+        r
+        for r in rows
+        if r.null_per_pair == 1.0 and r.fn_construction == "union" and r.target == 0.80
+    )
+    assert row.p_pass_at_d030 == pytest.approx(diagonal_pass), (
+        "target check must report the diagonal minimum P(PASS) at d=0.30"
+    )
+    assert row.p_cut_at_d010 == pytest.approx(diagonal_cut), (
+        "target check must report the diagonal minimum P(CUT) at d=0.10"
+    )
+    assert row.reached, "diagonal minima clear 0.80, so the family meets the target"
+    assert not row.trigger_fires
+    assert reg.stage2_trigger_fires(rows, 0.80) is False
+    # The nine-cell reading does NOT meet; if the code used it, reached would flip.
+    assert nine_pass < 0.80 and nine_cut < 0.80
+
+
+def test_summary_target_check_text_says_diagonal_not_all_nine() -> None:
+    """#708: the summary names the diagonal aggregation and never 'all nine'."""
+    results = _results_for_budget(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        p_pass_at_0_30=0.85,
+        p_cut_at_0_10=0.85,
+    )
+    summary = reg.summary_md(results, 200, 685)
+    assert "## Target check" in summary
+    assert "diagonal" in summary.lower()
+    assert "all nine" not in summary
+    assert "p_P = p_N" in summary or "p_P = p_N" in summary.replace(" ", "")
+
+
+def test_summary_reports_off_diagonal_cells_as_sensitivity() -> None:
+    """#708: the six off-diagonal cells appear as sensitivity, labelled, never as the target."""
+    pass_at: dict[tuple[float, float], float] = {
+        (0.30, 0.30): 0.85,
+        (0.35, 0.35): 0.88,
+        (0.40, 0.40): 0.92,
+        (0.30, 0.35): 0.50,
+        (0.30, 0.40): 0.60,
+        (0.35, 0.30): 0.70,
+        (0.35, 0.40): 0.75,
+        (0.40, 0.30): 0.80,
+        (0.40, 0.35): 0.77,
+    }
+    cut_at: dict[tuple[float, float], float] = {key: 0.84 for key in pass_at}
+    cut_at[(0.30, 0.35)] = 0.50
+    results = _results_with_per_cell_rates(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        pass_at=pass_at,
+        cut_at=cut_at,
+    )
+    summary = reg.summary_md(results, 200, 685)
+    sensitivity_heading = "## Sensitivity (off-diagonal cells)"
+    assert sensitivity_heading in summary
+    target_idx = summary.find("## Target check")
+    sens_idx = summary.find(sensitivity_heading)
+    assert target_idx < sens_idx
+    sensitivity_block = summary[sens_idx : summary.find("## Price lines", sens_idx)]
+    assert "never the target" in sensitivity_block
+    assert "| 0.80 | 1.00 | union | 300 | 0.5000 | 0.5000 |" in sensitivity_block
+
+
 def test_summary_renders_both_halves_and_the_stage2_trigger_from_data() -> None:
     # P(PASS) at d=0.30 clears 0.80 in every baseline cell; P(CUT) at d=0.10 does not.
     failing = _results_for_budget(
@@ -711,10 +961,27 @@ def test_summary_renders_both_halves_and_the_stage2_trigger_from_data() -> None:
 
 
 def test_summary_marks_smoke_output_as_schema_evidence() -> None:
-    summary = reg.summary_md([], 20, 685)
-    assert "establish only the output schema" in summary
-    assert "They do not establish operating characteristics" in summary
-    assert "These results establish operating characteristics" not in summary
+    """#708: the smoke sentence appears only at a smoke count; a full run states its model.
+
+    Smoke is decided by comparing the replicate count with the script's
+    REPLICATES default (2,000). Below that default the summary establishes only
+    the output schema. At the default (or above) it states what the simulation
+    does and does not establish under the declared independent-Bernoulli model.
+    """
+    smoke = reg.summary_md([], 20, 685)
+    assert "establish only the output schema" in smoke
+    assert "They do not establish operating characteristics" in smoke
+    assert "These results establish operating characteristics" not in smoke
+
+    full = reg.summary_md([], reg.REPLICATES, 685)
+    assert "establish only the output schema" not in full
+    assert "do not establish operating characteristics" not in full
+    assert "establish the operating characteristics" in full
+    assert "do not establish" in full
+    assert "Claude Code epochs" in full
+
+    just_below = reg.summary_md([], reg.REPLICATES - 1, 685)
+    assert "establish only the output schema" in just_below
 
 
 def test_headline_reads_the_pairs_cap_designs_in_the_results() -> None:
@@ -904,9 +1171,11 @@ def test_union_fn_exact_fallback_is_pinned_to_the_engine() -> None:
 # Committed smoke-run data (acceptance: every data row carries the schema)
 # ---------------------------------------------------------------------------
 
-_SMOKE_DIR = (
+_DATA_DIR = (
     Path(__file__).resolve().parents[1] / "docs" / "findings" / "data" / "stage1a-regime-685"
 )
+# #696 put the full grid in _DATA_DIR; the 20-replicate smoke run moved beside it.
+_SMOKE_DIR = _DATA_DIR / "smoke"
 
 
 def test_committed_smoke_per_look_rows_carry_the_full_schema() -> None:
@@ -976,6 +1245,8 @@ def test_committed_smoke_summary_reports_the_target_check() -> None:
     assert "Replicates per cell: 20." in summary
     assert "P(PASS) >= target at d = 0.30" in summary
     assert "P(CUT) >= target at d = 0.10" in summary
+    assert "These numbers are the off-diagonal minima over those six cells only" in summary
+    assert "These numbers describe what a nine-cell aggregate would have read" not in summary
     assert "establish only the output schema" in summary
     assert "These results establish operating characteristics" not in summary
     for target in ("0.80", "0.90"):
@@ -991,3 +1262,309 @@ def test_committed_smoke_lives_under_docs_findings_data_not_scratch() -> None:
     assert (_SMOKE_DIR / "summary.md").is_file()
     scratch_data = Path(__file__).resolve().parents[1] / ".scratch" / "issue-695" / "data"
     assert not scratch_data.exists(), "smoke output must not land under .scratch/"
+
+
+# ---------------------------------------------------------------------------
+# #696: the committed full grid (756 configurations at 2,000 replicates)
+# ---------------------------------------------------------------------------
+
+
+def test_committed_full_grid_carries_every_configuration_at_2000_replicates() -> None:
+    cols, rows = _split_tsv((_DATA_DIR / "per_look.tsv").read_text(encoding="utf-8"))
+    i = {name: cols.index(name) for name in cols}
+    assert {row[i["replicates"]] for row in rows} == {"2000"}
+    assert {row[i["stopping"]] for row in rows} == {"anytime"}
+    configurations = {
+        tuple(row[i[name]] for name in (*_DESIGN_FIELDS, "p_full", "p_placebo", "p_null"))
+        for row in rows
+    }
+    assert len(configurations) == 756
+    for row in rows:
+        assert float(row[i["se_pass"]]) >= 0.0
+
+
+def test_committed_full_summary_is_what_rebuild_writes_and_calibration_holds(
+    tmp_path: Path,
+) -> None:
+    """#696: the committed headline is derived from the committed data, exit code 0."""
+    out = tmp_path / "out"
+    out.mkdir()
+    for name in ("per_look.tsv", "terminal_states.tsv"):
+        (out / name).write_bytes((_DATA_DIR / name).read_bytes())
+
+    assert reg.main(["--out", str(out), "--rebuild"]) == 0
+
+    committed = (_DATA_DIR / "summary.md").read_text(encoding="utf-8")
+    assert (out / "summary.md").read_text(encoding="utf-8") == committed
+    assert "Replicates per cell: 2000." in committed
+    assert "establish only the output schema" not in committed
+    for target in ("0.80", "0.90"):
+        assert f"Stage-2 trigger for target {target}: fires." in committed
+        best_pass = f"| {target} | 1.00 | direct | not reached | - | - | 0.2335 | 0.4585 |"
+        best_cut = f"| {target} | 0.50 | direct | not reached | - | - | 0.1560 | 0.5070 |"
+        assert best_pass in committed
+        assert best_cut in committed
+
+
+# ---------------------------------------------------------------------------
+# #712: sensitivity sentence names the off-diagonal minimum
+# ---------------------------------------------------------------------------
+
+
+def _off_diag_vs_nine_cell_rates() -> tuple[
+    dict[tuple[float, float], float], dict[tuple[float, float], float]
+]:
+    """Rates where the off-diagonal minimum and the nine-cell minimum disagree.
+
+    Every off-diagonal P(PASS) at d=0.30 sits at or above 0.75; the diagonal
+    cell (0.30, 0.30) sits at 0.40. Off-diagonal minimum = 0.75; nine-cell
+    minimum = 0.40. CUT rates are flat and uninformative.
+    """
+    pass_at: dict[tuple[float, float], float] = {
+        (0.30, 0.30): 0.40,
+        (0.35, 0.35): 0.90,
+        (0.40, 0.40): 0.95,
+        (0.30, 0.35): 0.75,
+        (0.30, 0.40): 0.80,
+        (0.35, 0.30): 0.85,
+        (0.35, 0.40): 0.88,
+        (0.40, 0.30): 0.92,
+        (0.40, 0.35): 0.90,
+    }
+    cut_at = {key: 0.84 for key in pass_at}
+    return pass_at, cut_at
+
+
+def test_summary_sensitivity_sentence_names_the_off_diagonal_minimum() -> None:
+    """#712: the printed sensitivity numbers are off-diagonal minima, not a nine-cell read.
+
+    Fixture: off-diagonal P(PASS) at d=0.30 min is 0.75; nine-cell min is
+    0.40 (the diagonal cell 0.30, 0.30). The summary must say the numbers are
+    the off-diagonal minima. Restoring the previous wording — "These numbers
+    describe what a nine-cell aggregate would have read" — fails this test.
+    """
+    pass_at, cut_at = _off_diag_vs_nine_cell_rates()
+    off_diag = tuple((p_p, p_n) for p_p in reg.BASELINES for p_n in reg.BASELINES if p_p != p_n)
+    off_diag_pass = min(pass_at[k] for k in off_diag)
+    nine_cell_pass = min(pass_at.values())
+    assert off_diag_pass == pytest.approx(0.75)
+    assert nine_cell_pass == pytest.approx(0.40)
+    assert off_diag_pass != nine_cell_pass
+
+    results = _results_with_per_cell_rates(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        pass_at=pass_at,
+        cut_at=cut_at,
+    )
+    summary = reg.summary_md(results, 200, 685)
+    sens_idx = summary.find("## Sensitivity (off-diagonal cells)")
+    assert sens_idx >= 0
+    sensitivity_block = summary[sens_idx : summary.find("## Price lines", sens_idx)]
+
+    assert "nine-cell" not in sensitivity_block, (
+        "the sensitivity sentence must not claim the numbers describe a nine-cell aggregate; "
+        "on this fixture the nine-cell minimum is "
+        f"{nine_cell_pass:.4f} while the off-diagonal minimum is {off_diag_pass:.4f}"
+    )
+    assert "off-diagonal minima" in sensitivity_block, (
+        "the sensitivity sentence must say what the numbers are: the minima over the "
+        "six off-diagonal cells"
+    )
+    assert f"| 0.80 | 1.00 | union | 300 | {off_diag_pass:.4f} |" in sensitivity_block, (
+        "the printed sensitivity row must carry the off-diagonal minimum"
+    )
+    assert f"| 0.80 | 1.00 | union | 300 | {nine_cell_pass:.4f} |" not in sensitivity_block, (
+        "the printed sensitivity row must not carry the nine-cell minimum"
+    )
+
+
+def test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima() -> None:
+    """#712: sensitivity_rows computes the off-diagonal minimum on the disagreeing fixture."""
+    pass_at, cut_at = _off_diag_vs_nine_cell_rates()
+    results = _results_with_per_cell_rates(
+        epoch_budget=300,
+        null_per_pair=1.0,
+        fn_construction="union",
+        pass_at=pass_at,
+        cut_at=cut_at,
+    )
+    rows = reg.sensitivity_rows(results, target=0.80)
+    row = next(r for r in rows if r.null_per_pair == 1.0 and r.fn_construction == "union")
+    assert row.off_diag_min_pass_at_d030 == pytest.approx(0.75)
+    assert row.off_diag_min_pass_at_d030 != pytest.approx(0.40)
+
+
+# ---------------------------------------------------------------------------
+# #712: calibration read covers CUT-error cells above d = 0.20
+# ---------------------------------------------------------------------------
+
+
+def test_calibration_read_includes_cut_error_cells_above_boundary() -> None:
+    """#712: CUT-error cells above d = 0.20 enter the exit code, not only PASS halves.
+
+    Cell (0.65, 0.35, 0.35) has d = 0.30 > BOUNDARY and F-N = 0.30 > BOUNDARY,
+    so it is a CUT-calibration cell and not a PASS-calibration cell. A run
+    whose only calibration failure is P(CUT) above the futility limit on such
+    a cell must exit 1. Returning only the PASS half of ``is_calibration_cell``
+    drops the cell, ``all()`` over an empty set is True, and the exit code
+    becomes 0 — that is the defect this test pins.
+    """
+    cell = reg.Cell(0.65, 0.35, 0.35)
+    assert cell.d == pytest.approx(0.30)
+    assert cell.d > a650.BOUNDARY
+    assert reg.true_fp_diff(cell) > a650.BOUNDARY
+    assert reg.true_fn_diff(cell) > a650.BOUNDARY
+    assert not reg.is_pass_calibration_cell(cell), (
+        "this cell is not a PASS-error cell; the CUT half alone must enter the read"
+    )
+    assert reg.is_cut_calibration_cell(cell)
+    assert reg.is_calibration_cell(cell), (
+        "is_calibration_cell must include CUT-error cells above d = 0.20"
+    )
+
+    design = reg.Design(n_pairs=97)
+    cut_limit = a650.FUTILITY_ALPHA + a650.calibration_tolerance(200, a650.FUTILITY_ALPHA)
+    failing = _hand_result(cell, design, p_pass=0.0, p_cut=cut_limit + 0.10, replicates=200)
+    holding = _hand_result(cell, design, p_pass=0.0, p_cut=0.0, replicates=200)
+    assert reg.calibration_holds(failing) is False
+    assert reg.calibration_holds(holding) is True
+    assert reg.cut_calibration_holds(failing) is False
+    assert reg.pass_calibration_holds(failing) is True
+
+    assert reg.calibration_exit_code([failing]) == 1, (
+        "a CUT-only calibration failure above d = 0.20 must set the exit code to 1"
+    )
+    assert reg.calibration_exit_code([holding]) == 0
+
+
+def test_calibration_exit_code_filters_on_is_calibration_cell() -> None:
+    """#712: the exit-code read uses is_calibration_cell, the union of both halves."""
+    cut_only = reg.Cell(0.65, 0.35, 0.35)
+    pass_only = reg.Cell(0.55, 0.35, 0.20)  # d=0.20, F-P=0.20, F-N=0.35 -> PASS half
+    boundary = reg.Cell(0.55, 0.35, 0.35)  # d=0.20, both contrasts at BOUNDARY
+    design = reg.Design(n_pairs=97)
+    cut_limit = a650.FUTILITY_ALPHA + a650.calibration_tolerance(200, a650.FUTILITY_ALPHA)
+    pass_limit = a650.PASS_ALPHA + a650.calibration_tolerance(200)
+
+    cut_failing = _hand_result(cut_only, design, p_pass=0.0, p_cut=cut_limit + 0.10)
+    pass_failing = _hand_result(pass_only, design, p_pass=pass_limit + 0.10, p_cut=0.0)
+    ok = _hand_result(boundary, design, p_pass=0.0, p_cut=0.0)
+
+    assert reg.is_calibration_cell(cut_only)
+    assert reg.is_calibration_cell(pass_only)
+    assert reg.is_calibration_cell(boundary)
+    assert reg.calibration_exit_code([cut_failing]) == 1
+    assert reg.calibration_exit_code([pass_failing]) == 1
+    assert reg.calibration_exit_code([ok]) == 0
+    assert reg.calibration_exit_code([cut_failing, pass_failing, ok]) == 1
+
+
+# ---------------------------------------------------------------------------
+# #712: rebuild summary.md and the exit code from an output directory
+# ---------------------------------------------------------------------------
+
+
+def _small_run_grid() -> list[tuple[Any, Any]]:
+    """A cheap grid that still exercises calibration, headline and sensitivity paths."""
+    return [
+        (reg.Cell(0.55, 0.35, 0.30), reg.Design(n_pairs=30, null_per_pair=0.5)),
+        (
+            reg.Cell(0.65, 0.25, 0.30),
+            reg.Design(n_pairs=40, null_per_pair=1.0, fn_construction="union"),
+        ),
+        (
+            reg.Cell(0.65, 0.25, 0.30),
+            reg.Design(n_pairs=40, null_per_pair=1.0, fn_construction="direct"),
+        ),
+        (reg.Cell(0.45, 0.30, 0.30), reg.Design(n_pairs=30, null_per_pair=2.0)),
+    ]
+
+
+def test_rebuild_reproduces_summary_and_exit_code_byte_identically(tmp_path: Path) -> None:
+    """#712: --rebuild from a run's output directory reproduces summary.md and the exit code.
+
+    The rebuild must come from the same functions a run uses (summary_md,
+    headline, target_check_rows, sensitivity_rows, calibration_exit_code),
+    reading per_look.tsv and terminal_states.tsv, with no second aggregation.
+    """
+    out = tmp_path / "out"
+    grid = _small_run_grid()
+    run_code = reg.main(
+        ["--out", str(out), "--replicates", "40", "--workers", "1", "--seed", "685"],
+        grid=grid,
+    )
+    written = (out / "summary.md").read_text(encoding="utf-8")
+    assert written, "the run must have written summary.md"
+    assert (out / "per_look.tsv").is_file()
+    assert (out / "terminal_states.tsv").is_file()
+
+    rebuild_code = reg.main(["--out", str(out), "--rebuild"], grid=grid)
+    rebuilt = (out / "summary.md").read_text(encoding="utf-8")
+    assert rebuilt == written, "rebuild summary.md must be byte-identical to the run's"
+    assert rebuild_code == run_code, "rebuild must return the same exit code as the run"
+
+
+def test_rebuild_makes_no_simulation_call(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#712: rebuilding from an output directory never calls run_cell."""
+    out = tmp_path / "out"
+    grid = _small_run_grid()
+    reg.main(
+        ["--out", str(out), "--replicates", "40", "--workers", "1", "--seed", "685"],
+        grid=grid,
+    )
+    written = (out / "summary.md").read_text(encoding="utf-8")
+
+    def _boom(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("rebuild must not call run_cell")
+
+    monkeypatch.setattr(reg, "run_cell", _boom)
+    code = reg.main(["--out", str(out), "--rebuild"], grid=grid)
+    assert (out / "summary.md").read_text(encoding="utf-8") == written
+    assert code in (0, 1)
+
+
+def test_rebuild_reads_headline_calibration_and_sensitivity_from_disk(
+    tmp_path: Path,
+) -> None:
+    """#712: rebuilt summary carries headline, stage-2 trigger, calibration, sensitivity."""
+    out = tmp_path / "out"
+    grid = _small_run_grid()
+    reg.main(
+        ["--out", str(out), "--replicates", "40", "--workers", "1", "--seed", "685"],
+        grid=grid,
+    )
+    written = (out / "summary.md").read_text(encoding="utf-8")
+    reg.main(["--out", str(out), "--rebuild"], grid=grid)
+    rebuilt = (out / "summary.md").read_text(encoding="utf-8")
+    for needle in (
+        "## Headline: smallest d with P(PASS) >= 0.80",
+        "## Headline: smallest d with P(PASS) >= 0.90",
+        "## Target check",
+        "Stage-2 trigger for target 0.80:",
+        "Stage-2 trigger for target 0.90:",
+        "## Sensitivity (off-diagonal cells)",
+        "off-diagonal minima",
+        "Replicates per cell: 40.",
+        "Seed: 685.",
+    ):
+        assert needle in rebuilt, f"rebuilt summary is missing {needle!r}"
+        assert needle in written
+    assert rebuilt == written
+
+
+def test_rebuild_refuses_to_invent_missing_terminal_states(tmp_path: Path) -> None:
+    """#712: absent terminal rows must not be rendered as zero-count observations."""
+    out = tmp_path / "out"
+    out.mkdir()
+    for name in ("per_look.tsv", "terminal_states.tsv"):
+        (out / name).write_text((_SMOKE_DIR / name).read_text(encoding="utf-8"), encoding="utf-8")
+
+    code = reg.main(["--out", str(out), "--rebuild"])
+    summary = (out / "summary.md").read_text(encoding="utf-8")
+    terminal_block = summary[summary.find("## Joint terminal state") :]
+
+    assert code in (0, 1)
+    assert "Terminal-state data are unavailable for one or more cap cells" in terminal_block
+    assert "| n_pairs | null_per_pair | fn_construction |" not in terminal_block

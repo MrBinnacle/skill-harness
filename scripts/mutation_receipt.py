@@ -238,6 +238,34 @@ _ANCHOR_CONTROL = "tests/test_check_dependency_anchor.py::TestPassesCoordinatedB
 # the exact-path-only variant of M3 that the #704 verdict found still open.
 _S1A = "scripts/screens/419/simulate_stage1a_regime_685.py"
 _S1A_MODULE = "simulate_stage1a_regime_685"
+# #718: Stage 2 of #685 — stopping design x pairs.
+_S2 = "scripts/screens/419/simulate_stage1a_regime_685_stage2.py"
+_S2_MODULE = "simulate_stage1a_regime_685_stage2"
+_S2_TESTS = "tests/test_simulate_stage1a_regime_685_stage2.py"
+_S2_FIXED_N_ONCE = f"{_S2_TESTS}::test_fixed_n_designs_read_once_at_n"
+_S2_HORIZON = f"{_S2_TESTS}::test_fixed_n_betting_uses_horizon_scaled_bets_not_time_scaled"
+_S2_HORIZON_RUN = (
+    f"{_S2_TESTS}::test_fixed_n_betting_run_cell_matches_horizon_scaling_not_anytime_at_n"
+)
+_S2_MARGIN = f"{_S2_TESTS}::test_score_tests_use_the_registered_margin_0_20"
+_S2_MARGIN_RUN = f"{_S2_TESTS}::test_fixed_n_score_run_cell_holds_its_level_at_the_margin_boundary"
+_S2_MCNEMAR = f"{_S2_TESTS}::test_tango_score_equals_mcnemar_at_delta0_zero"
+_S2_CONTRAST = (
+    f"{_S2_TESTS}::test_fixed_n_score_applies_the_paired_statistic_to_fp_and_unpaired_to_fn"
+)
+_S2_JOINT = f"{_S2_TESTS}::test_joint_pass_requires_both_halves"
+_S2_ALPHA = f"{_S2_TESTS}::test_pass_alpha_label_matches_computation"
+_S2_W0 = f"{_S2_TESTS}::test_starting_wealth_changes_anytime_tuned_decisions"
+_S2_LOOKAHEAD = f"{_S2_TESTS}::test_tuned_lambda_is_fixed_before_the_first_pair"
+_S2_CAL_FIXED = f"{_S2_TESTS}::test_calibration_exit_code_covers_fixed_n_rows"
+_S2_LABEL = f"{_S2_TESTS}::test_stopping_column_on_the_tsv_matches_the_path_that_produced_it"
+_S2_LABEL2 = f"{_S2_TESTS}::test_anytime_stopping_label_agrees_with_the_simulation_path"
+_S2_HEADLINE = f"{_S2_TESTS}::test_headline_reads_n_pairs_from_each_row"
+_S2_CUT = f"{_S2_TESTS}::test_cut_direction_is_downward"
+_S2_EXIT = f"{_S2_TESTS}::test_exit_code_is_not_forced_to_zero"
+_S2_RUNNING_MAX = f"{_S2_TESTS}::test_anytime_tuned_rejection_uses_running_maximum"
+_S2_CUT_LEVEL = f"{_S2_TESTS}::test_fixed_n_score_cut_is_decided_at_0_05"
+_S2_JOINT_FN_ALONE = f"{_S2_TESTS}::test_fixed_n_score_joint_pass_requires_both_halves_not_fn_alone"
 _S1A_EXIT_FAIL = (
     "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_calibration_fails"
 )
@@ -272,6 +300,28 @@ _S1A_CAL_HOLDS_KILL = (
 )
 _S1A_CAL_HOLDS_CONTROL = (
     "tests/test_simulate_stage1a_regime_685.py::test_main_exits_zero_when_calibration_holds"
+)
+_S1A_DIAG_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum"
+)
+_S1A_DIAG_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_target_check_reports_the_smallest_priced_config_meeting_both_halves"
+)
+_S1A_FN_CAL_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_calibration_covers_the_fn_margin_cell_at_d030"
+)
+_S1A_FN_CAL_SET_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_calibration_set_includes_every_pass_and_cut_error_cell"
+)
+_S1A_FN_CAL_EXIT_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration"
+)
+_S1A_MODEL_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_summary_marks_smoke_output_as_schema_evidence"
 )
 _S1A_HEADLINE_KILL = (
     "tests/test_simulate_stage1a_regime_685.py"
@@ -311,6 +361,39 @@ _S1A_UNION_EXACT_KILL = (
 _S1A_UNION_EXACT_CONTROL = (
     "tests/test_simulate_stage1a_regime_685.py"
     "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-2.0]"
+)
+# #712: the sensitivity sentence, the CUT half of the calibration read, and
+# the --rebuild path. Each mutant is one defect class the #712 ticket names.
+_S1A_SENS_SENTENCE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_summary_sensitivity_sentence_names_the_off_diagonal_minimum"
+)
+_S1A_SENS_SENTENCE_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_summary_reports_off_diagonal_cells_as_sensitivity"
+)
+_S1A_CUT_CAL_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_calibration_read_includes_cut_error_cells_above_boundary"
+)
+_S1A_CUT_CAL_EXIT_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_calibration_exit_code_filters_on_is_calibration_cell"
+)
+_S1A_CUT_CAL_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration"
+)
+_S1A_REBUILD_NO_SIM_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_rebuild_makes_no_simulation_call"
+)
+_S1A_REBUILD_BYTE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_rebuild_reproduces_summary_and_exit_code_byte_identically"
+)
+_S1A_SENS_ROWS_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima"
 )
 
 
@@ -803,15 +886,17 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M-S1A-11",
         "695-stage1a-calibration-look-one",
-        "calibration_holds reads look 1 instead of the cap (the #694 M9 "
+        "pass_calibration_holds reads look 1 instead of the cap (the #694 M9 "
         "survivor), so a loosened rule that fails only at the cap is called "
         "calibrated",
         _S1A,
         _S1A_MODULE,
-        "def calibration_holds(res: CellResult) -> bool:\n"
+        "def pass_calibration_holds(res: CellResult) -> bool:\n"
+        '    """P(PASS) at the cap sits at or under PASS_ALPHA + 3 MC SE."""\n'
         "    limit = a650.PASS_ALPHA + a650.calibration_tolerance(res.replicates)\n"
         "    return res.per_look[-1].p_pass <= limit",
-        "def calibration_holds(res: CellResult) -> bool:\n"
+        "def pass_calibration_holds(res: CellResult) -> bool:\n"
+        '    """P(PASS) at the cap sits at or under PASS_ALPHA + 3 MC SE."""\n'
         "    limit = a650.PASS_ALPHA + a650.calibration_tolerance(res.replicates)\n"
         "    return res.per_look[0].p_pass <= limit  # mutant: look 1, not the cap",
         (_S1A_CAL_HOLDS_KILL, _S1A_CAL_HOLDS_CONTROL),
@@ -827,6 +912,329 @@ MUTANTS: tuple[Mutant, ...] = (
         "                        and r.design.n_pairs == 97\n"
         "                        and r.design.null_per_pair == 1.0  # mutant: stale pair count",
         (_S1A_HEADLINE_KILL, _S1A_HEADLINE_CONTROL),
+    ),
+    # #708: the #696 diagonal aggregation ruling, the broader calibration read,
+    # and the replicate-count model statement. Each mutant is one defect class
+    # the #708 ticket names; the killing assertion is the test written for it.
+    Mutant(
+        "M-S1A-13",
+        "708-stage1a-diagonal-min-to-max",
+        "the diagonal target check takes max instead of min, so a family with "
+        "one strong diagonal cell is reported as meeting the target",
+        _S1A,
+        _S1A_MODULE,
+        "    min_pass = min(pass_vals)\n"
+        "    min_cut = min(cut_vals)\n"
+        "    missing_halves: list[str] = []",
+        "    min_pass = max(pass_vals)\n"
+        "    min_cut = max(cut_vals)  # mutant: max, not min\n"
+        "    missing_halves: list[str] = []",
+        (_S1A_DIAG_KILL, _S1A_DIAG_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-14",
+        "708-stage1a-diagonal-to-all-nine",
+        "the diagonal target check reverts to the nine-cell aggregate, which "
+        "the #696 ruling rejects: the (0.30, 0.40) F-N margin cell caps "
+        "P(PASS) at PASS_ALPHA for every design",
+        _S1A,
+        _S1A_MODULE,
+        "    diag = diagonal_cells()\n    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        "    diag = tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES)\n"
+        "  # mutant: nine cells, not the diagonal\n"
+        "    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        (_S1A_DIAG_KILL, _S1A_DIAG_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-15",
+        "708-stage1a-diagonal-to-single-cell",
+        "the diagonal target check reads only the single cell (0.35, 0.35) "
+        "instead of the three diagonal cells",
+        _S1A,
+        _S1A_MODULE,
+        "    diag = diagonal_cells()\n    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        "    diag = ((0.35, 0.35),)\n  # mutant: single diagonal cell\n"
+        "    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        (_S1A_DIAG_KILL, _S1A_DIAG_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-16",
+        "708-stage1a-pass-calibration-drops-fn",
+        "is_pass_calibration_cell checks only true F-P <= BOUNDARY and drops "
+        "the true F-N half, so the F-N margin cell (0.30, 0.40) at d=0.30 "
+        "leaves the calibration set",
+        _S1A,
+        _S1A_MODULE,
+        "    return true_fp_diff(cell) <= a650.BOUNDARY + 1e-9"
+        " or true_fn_diff(cell) <= a650.BOUNDARY + 1e-9",
+        "    return true_fp_diff(cell) <= a650.BOUNDARY + 1e-9  # mutant: F-N half dropped",
+        (_S1A_FN_CAL_KILL, _S1A_FN_CAL_SET_KILL, _S1A_FN_CAL_EXIT_KILL),
+    ),
+    Mutant(
+        "M-S1A-17",
+        "708-stage1a-model-statement-always-smoke",
+        "summary_md prints the smoke schema sentence whatever the replicate "
+        "count, so a full run is filed as schema evidence",
+        _S1A,
+        _S1A_MODULE,
+        "    if replicates < REPLICATES:\n",
+        "    if True:  # mutant: always smoke, whatever the replicate count\n",
+        (_S1A_MODEL_KILL,),
+    ),
+    # #712: the sensitivity sentence, the CUT half of the calibration read,
+    # and the --rebuild path that must not simulate.
+    Mutant(
+        "M-S1A-18",
+        "712-stage1a-sensitivity-sentence-nine-cell",
+        "the sensitivity sentence is restored to the false claim that the "
+        "numbers describe what a nine-cell aggregate would have read; on the "
+        "#712 fixture the off-diagonal minimum is 0.75 and the nine-cell "
+        "minimum is 0.40, so the sentence and the printed numbers disagree",
+        _S1A,
+        _S1A_MODULE,
+        '        "budget. These numbers are the off-diagonal minima over those six "\n'
+        '        "cells only; the #696 ruling does not use them to decide whether a "\n'
+        '        "design meets the target.",',
+        '        "budget. These numbers describe what a nine-cell aggregate would have "\n'
+        '        "read; the #696 ruling does not use them to decide whether a design "\n'
+        '        "meets the target.",',
+        (_S1A_SENS_SENTENCE_KILL, _S1A_SENS_SENTENCE_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-19",
+        "712-stage1a-calibration-read-drops-cut",
+        "is_calibration_cell returns only the PASS half, so every CUT-error "
+        "cell above d = 0.20 leaves the exit-code filter and a broken "
+        "futility side exits 0",
+        _S1A,
+        _S1A_MODULE,
+        "    return is_pass_calibration_cell(cell) or is_cut_calibration_cell(cell)",
+        "    return is_pass_calibration_cell(cell)  # mutant: CUT half dropped",
+        (_S1A_CUT_CAL_KILL, _S1A_CUT_CAL_EXIT_KILL, _S1A_CUT_CAL_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-20",
+        "712-stage1a-rebuild-disabled",
+        "the --rebuild early return is removed, so rebuilding from an output "
+        "directory runs a second simulation instead of reading the files",
+        _S1A,
+        _S1A_MODULE,
+        "    if args.rebuild:",
+        "    if False:  # mutant: rebuild disabled, falls through to simulation",
+        (_S1A_REBUILD_NO_SIM_KILL, _S1A_REBUILD_BYTE_KILL),
+    ),
+    Mutant(
+        "M-S1A-21",
+        "712-stage1a-off-diag-cells-to-all-nine",
+        "off_diagonal_cells returns the full nine-cell grid, so the sensitivity "
+        "rows and the sentence that names them report nine-cell minima",
+        _S1A,
+        _S1A_MODULE,
+        "    return tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES"
+        " if (p_p, p_n) not in diag)",
+        "    return tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES)"
+        "  # mutant: nine cells",
+        (_S1A_SENS_ROWS_KILL, _S1A_SENS_SENTENCE_KILL),
+    ),
+    # #718: thirteen Stage 2 mutants, each under its own obligation prefix.
+    Mutant(
+        "M-S2-1",
+        "718-stage2-fixed-n-interim-look",
+        "a fixed-n-betting row records an interim look instead of reading once at n",
+        _S2,
+        _S2_MODULE,
+        "        per_look=(look,),\n    )\n\n\ndef _run_fixed_n_score(",
+        "        per_look=(s685.LookRow(look=max(1, design.n_pairs // 2), p_pass=p_joint, "
+        "p_cut=p_cut, p_cant_tell_yet=max(0.0, 1.0 - p_joint - p_cut), se_pass=look.se_pass, "
+        "expected_pairs=float(max(1, design.n_pairs // 2)), "
+        "expected_epochs=float(design.total_epochs)),),\n    )\n\n\ndef _run_fixed_n_score(",
+        (_S2_FIXED_N_ONCE,),
+    ),
+    Mutant(
+        "M-S2-2",
+        "718-stage2-fixed-n-anytime-bound-at-n",
+        "fixed-n-betting reads the anytime bound at n in place of its own "
+        "horizon-scaled fixed-time bound",
+        _S2,
+        _S2_MODULE,
+        "    fp_pass = fixed_n_rejects(xs_fp, alpha, m0, upward=True)",
+        "    fp_pass = 2 * s685._bound(xs_fp, alpha, 'lower') - 1 >= BOUNDARY  "
+        "# mutant: anytime bound at n",
+        (_S2_HORIZON, _S2_HORIZON_RUN),
+    ),
+    Mutant(
+        "M-S2-3",
+        "718-stage2-score-test-margin-dropped",
+        "the score tests use delta0 = 0 in place of the registered margin 0.20",
+        _S2,
+        _S2_MODULE,
+        "    delta0 = BOUNDARY",
+        "    delta0 = 0.0  # mutant: margin dropped",
+        (_S2_MARGIN, _S2_MCNEMAR, _S2_MARGIN_RUN),
+    ),
+    Mutant(
+        "M-S2-4",
+        "718-stage2-statistic-contrast-mismatch",
+        "the paired Tango statistic is applied to the F - N contrast instead of F - P",
+        _S2,
+        _S2_MODULE,
+        "        [tango_score_z(int(bb), int(cc), n, delta0) for bb, cc in zip(b, c, strict=True)]",
+        "        [tango_score_z(int(ff), int(nn), n, delta0) for ff, nn in "
+        "zip(full.sum(axis=1), _null_used.sum(axis=1), strict=True)]  "
+        "# mutant: paired stat on F-N",
+        (_S2_CONTRAST,),
+    ),
+    Mutant(
+        "M-S2-5",
+        "718-stage2-joint-pass-fp-only",
+        "joint PASS reads the F - P half only, dropping the F - N half",
+        _S2,
+        _S2_MODULE,
+        "    passed = fp_pass & fn_pass",
+        "    passed = fp_pass  # mutant: F - N half dropped",
+        (_S2_JOINT,),
+    ),
+    Mutant(
+        "M-S2-6",
+        "718-stage2-alpha-label-computation-mismatch",
+        "the rule is always computed at the registered 0.0209 whatever alpha the row declares",
+        _S2,
+        _S2_MODULE,
+        "    rule_alpha = design.pass_alpha"
+        " if pass_alpha_override is None else pass_alpha_override",
+        "    rule_alpha = PASS_ALPHA  # mutant: declared alpha ignored",
+        (_S2_ALPHA,),
+    ),
+    Mutant(
+        "M-S2-7",
+        "718-stage2-starting-wealth-ignored",
+        "anytime-tuned ignores starting_wealth and always starts at W0 = 1.0",
+        _S2,
+        _S2_MODULE,
+        "    w0 = design.starting_wealth\n"
+        "    alpha = design.pass_alpha if rule_alpha is None else rule_alpha",
+        "    w0 = 1.0  # mutant: starting wealth ignored\n"
+        "    alpha = design.pass_alpha if rule_alpha is None else rule_alpha",
+        (_S2_W0,),
+    ),
+    Mutant(
+        "M-S2-8",
+        "718-stage2-tuned-bet-lookahead",
+        "the tuned wealth factor divides by a term that depends on the current "
+        "pair's outcome, so the bet is not fixed before the first pair",
+        _S2,
+        _S2_MODULE,
+        "            self.log_w += np.log1p(self.lam * (x - self.m0))",
+        "            self.log_w += np.log1p(self.lam * (x - self.m0) / (1.0 - 0.5 * x))"
+        "  # mutant: lookahead lambda",
+        (_S2_LOOKAHEAD,),
+    ),
+    Mutant(
+        "M-S2-9",
+        "718-stage2-calibration-skips-fixed-n",
+        "the calibration read skips fixed-n rows, so a broken fixed-n level exits 0",
+        _S2,
+        _S2_MODULE,
+        "    cal = [r for r in rows if is_calibration_cell(r.cell)]\n"
+        "    return 0 if all(r.holds_level or is_nonfatal_calibration_failure(r)"
+        " for r in cal) else 1",
+        "    cal = [\n"
+        "        r\n"
+        "        for r in rows\n"
+        "        if is_calibration_cell(r.cell)\n"
+        '        and r.design.stopping not in ("fixed-n-betting", "fixed-n-score")\n'
+        "    ]  # mutant: fixed-n rows skipped\n"
+        "    return 0 if all(r.holds_level or is_nonfatal_calibration_failure(r)"
+        " for r in cal) else 1",
+        (_S2_CAL_FIXED,),
+    ),
+    Mutant(
+        "M-S2-10",
+        "718-stage2-stopping-label-disagrees",
+        "every stopping label is produced by the anytime path, so the label "
+        "disagrees with the simulation that ran",
+        _S2,
+        _S2_MODULE,
+        '    if sim_design.stopping == "fixed-n-betting":\n'
+        "        return _run_fixed_n_betting(\n"
+        "            cell, design, replicates=replicates, seed=seed, rule_alpha=rule_alpha\n"
+        "        )",
+        '    if sim_design.stopping == "fixed-n-betting":\n'
+        "        return _run_anytime(\n"
+        "            cell, design, replicates=replicates, seed=seed, rule_alpha=rule_alpha\n"
+        "        )  # mutant: label/path disagree",
+        (_S2_LABEL, _S2_LABEL2),
+    ),
+    Mutant(
+        "M-S2-11",
+        "718-stage2-headline-pair-count",
+        "the headline reports a stale 100-pair count instead of each row's own n_pairs",
+        _S2,
+        _S2_MODULE,
+        "                    n_pairs=config.design.n_pairs,\n"
+        "                    null_per_pair=config.design.null_per_pair,\n"
+        "                    fn_construction=config.design.fn_construction,\n"
+        "                    total_epochs=config.design.total_epochs,",
+        "                    n_pairs=100,  # mutant: stale pair count\n"
+        "                    null_per_pair=config.design.null_per_pair,\n"
+        "                    fn_construction=config.design.fn_construction,\n"
+        "                    total_epochs=config.design.total_epochs,",
+        (_S2_HEADLINE,),
+    ),
+    Mutant(
+        "M-S2-12",
+        "718-stage2-cut-direction-reversed",
+        "the CUT wealth factor bets upward instead of downward, reversing the futility direction",
+        _S2,
+        _S2_MODULE,
+        "            self.log_w += np.log1p(self.lam * (self.m0 - x))",
+        "            self.log_w += np.log1p(self.lam * (x - self.m0))  # mutant: CUT reversed",
+        (_S2_CUT,),
+    ),
+    Mutant(
+        "M-S2-13",
+        "718-stage2-exit-code-forced-zero",
+        "the calibration exit code is forced to 0 whatever the read finds",
+        _S2,
+        _S2_MODULE,
+        "    return 0 if all(r.holds_level or is_nonfatal_calibration_failure(r)"
+        " for r in cal) else 1",
+        "    return 0  # mutant: exit code forced to zero",
+        (_S2_EXIT,),
+    ),
+    # #718 rework W2: three behaviours of the new designs the first campaign
+    # did not pin. Each mutant is one defect the rework ticket names.
+    Mutant(
+        "M-S2-14",
+        "718-stage2-tuned-rejection-running-max",
+        "the anytime-tuned rejection reads the current wealth instead of its "
+        "running maximum, so a sequence that crosses 1/alpha and then falls "
+        "back below it is not a rejection",
+        _S2,
+        _S2_MODULE,
+        "        return self.running_max >= math.log(1.0 / alpha)",
+        "        return self.log_w >= math.log(1.0 / alpha)  # mutant: current wealth",
+        (_S2_RUNNING_MAX,),
+    ),
+    Mutant(
+        "M-S2-15",
+        "718-stage2-score-cut-level-010",
+        "the fixed-n-score CUT test runs at 0.10 instead of the registered 0.05",
+        _S2,
+        _S2_MODULE,
+        "    z_cut_crit = _normal_quantile(FUTILITY_ALPHA)  # negative; CUT rejects for small z",
+        "    z_cut_crit = _normal_quantile(0.10)  # mutant: CUT at 0.10",
+        (_S2_CUT_LEVEL,),
+    ),
+    Mutant(
+        "M-S2-16",
+        "718-stage2-joint-pass-fn-alone",
+        "the fixed-n-score joint PASS reports its F - N half alone, dropping the F - P half",
+        _S2,
+        _S2_MODULE,
+        "    passed = fp_pass & fn_pass",
+        "    passed = fn_pass  # mutant: F - P half dropped",
+        (_S2_JOINT_FN_ALONE,),
     ),
 )
 

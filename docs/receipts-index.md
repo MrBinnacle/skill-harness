@@ -448,20 +448,26 @@ and covers that section only. This page stays the citable surface for every kind
 
 ### [`docs/findings/stage1a-lever-adjudication-685.md`](findings/stage1a-lever-adjudication-685.md)
 
-- **Claims:** The Stage 1 simulation design for null allocation x F-N
-  construction at fixed 300- and 1,200-epoch budgets. It states the model
-  and launch-index pairing. The script
-  records every look and names its design fields in each output row, including E[total epochs],
-  an expected-spend price line beside the cap price, and MC SE on every row. The headline table
-  checks both halves of the #685 target (P(PASS) >= target at d = 0.30 and P(CUT) >= target at
-  d = 0.10) for 0.80 and 0.90 and states whether the stage-2 trigger fires, from data only.
-  A 20-replicate smoke run is committed under `docs/findings/data/stage1a-regime-685/`.
+- **Claims:** The Stage 1 simulation of null allocation x F-N
+  construction at fixed 300- and 1,200-epoch budgets, under the declared independent-Bernoulli
+  model with launch-index pairing: 756 configurations at 2,000 replicates, seed 685, committed
+  under `docs/findings/data/stage1a-regime-685/` with replicate count and MC SE on every row
+  (#696), anytime stopping only. No anytime design family reaches P(PASS) >= target at d = 0.30 together with P(CUT) >= target
+  at d = 0.10 on the p_P = p_N diagonal, for 0.80 or 0.90, at either budget (best halves 0.2335
+  and 0.5070), so the stage-2 trigger fires for both targets. Calibration holds: the largest
+  P(PASS) where a PASS is an error is 0.0080 and the largest P(CUT) where a CUT is an error is
+  0.0360. The committed `summary.md` is what `--rebuild` writes from the committed data, and a
+  test checks that. The 20-replicate smoke run is under
+  `docs/findings/data/stage1a-regime-685/smoke/` and is schema evidence only.
 - **Refuses to claim:** Any operating characteristic from the smoke numbers. The 200-replicate
   tables previously attached to this record used fabricated zero outcomes for missing
   Null epochs and omitted the second Null draw in a double-Null design. They
-  are withdrawn. The corrected 756-cell grid at 2,000 replicates has not run
-  (part (b), #696). It refuses any matched-pairs advantage from launch-index pairing and any
-  claim about real Claude Code epochs. It states no crashed-look rule and no void-epoch rule
+  are withdrawn. It refuses any claim about a fixed-n design: the fixed-n look is lever 4 and
+  belongs to Stage 2 (ruling on #696, comment 5970254900), the script has no fixed-n stopping rule, and the stage-2 trigger
+  statement therefore holds for anytime designs only. It refuses any claim about the pair-cap
+  lever (Stage 2, not simulated), any matched-pairs advantage from launch-index pairing, any claim about real
+  Claude Code epochs, and any decision on the direct-form amendment, the margin or the power
+  target. It states no crashed-look rule and no void-epoch rule
   for the next paid run; skill-harness #697 owns both.
 
 ### [`docs/assurance/stage1a-regime-685-mutation-receipt.md`](assurance/stage1a-regime-685-mutation-receipt.md)
@@ -479,9 +485,106 @@ and covers that section only. This page stays the citable surface for every kind
   rather than folding it into a score.
 - **Refuses to claim:** Any mutation score, adequacy of the Stage 1A suite as a whole, or that
   any surviving mutant outside the twelve named cases is safe. It refuses any operating
-  characteristic from the smoke numbers in `docs/findings/data/stage1a-regime-685/`; the full
-  grid belongs to #696. It refuses any claim about the #694 verdict comment itself, which this
+  characteristic from the smoke numbers in `docs/findings/data/stage1a-regime-685/smoke/`; the
+  full grid belongs to #696. It refuses any claim about the #694 verdict comment itself, which this
   container could not read.
+
+### [`docs/assurance/stage1a-regime-708-mutation-receipt.md`](assurance/stage1a-regime-708-mutation-receipt.md)
+
+- **Claims:** Five mutants against the Stage 1A regime simulator under the #708
+  repair (#696 diagonal aggregation ruling, the broader PASS/CUT calibration
+  read, and the replicate-count model statement), each run in its own git
+  worktree at a fixed commit with production never mutated in place, each case
+  recording and asserting both worktree HEADs, the `module.__file__` actually
+  imported, clean and mutant source digests, that the digests differ, that the
+  clean baseline passed first with nonzero collection, that the mutant imports,
+  the named failing assertion, and that the production tree was
+  byte-unchanged afterwards. All five KILLED. M-S1A-13/14/15 are the three
+  aggregation mutants the #708 ticket names (min→max, diagonal→all nine,
+  diagonal→single cell (0.35, 0.35)); each is killed by
+  `test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum`.
+  M-S1A-16 drops the true F-N half of the PASS-calibration predicate and is
+  killed by the F-N margin-cell tests. M-S1A-17 always prints the smoke
+  model statement and is killed by
+  `test_summary_marks_smoke_output_as_schema_evidence`.
+- **Refuses to claim:** Any mutation score, adequacy of the Stage 1A suite as a
+  whole, or that any surviving mutant outside the five named cases is safe. It
+  refuses any operating characteristic from the #696 full-grid files, which
+  live on the operator's host at `C:/Users/mlpgr/wt-696-out/full` and are not
+  in this repository. It refuses any claim about the #696 issue-comment table
+  itself, which this container could not read. The constant pin in
+  `tests/test_v5_cue_stage1a.py` is outside this campaign's mutant set; the
+  receipt records only that six one-off attribute moves each broke its
+  equalities.
+
+### [`docs/assurance/stage1a-regime-712-mutation-receipt.md`](assurance/stage1a-regime-712-mutation-receipt.md)
+
+- **Claims:** Four mutants against the Stage 1A regime simulator under the
+  #712 repair (the false nine-cell sensitivity sentence, the CUT half of the
+  calibration read dropped from the exit code, the `--rebuild` path that must
+  not simulate, and `off_diagonal_cells` widened to the nine-cell grid), each
+  run in its own git worktree at a fixed commit with production never mutated
+  in place, each case recording and asserting both worktree HEADs, the
+  `module.__file__` actually imported, clean and mutant source digests, that
+  the digests differ, that the clean baseline passed first with nonzero
+  collection, that the mutant imports, the named failing assertion, and that
+  the production tree was byte-unchanged afterwards. All four KILLED. M-S1A-18
+  restores the false sentence and is killed by
+  `test_summary_sensitivity_sentence_names_the_off_diagonal_minimum`, whose
+  fixture puts the off-diagonal minimum at 0.75 and the nine-cell minimum at
+  0.40. M-S1A-19 narrows `is_calibration_cell` to the PASS half and is killed
+  by `test_calibration_read_includes_cut_error_cells_above_boundary` and
+  `test_calibration_exit_code_filters_on_is_calibration_cell`. M-S1A-20
+  removes the `--rebuild` early return and is killed by
+  `test_rebuild_makes_no_simulation_call` and
+  `test_rebuild_reproduces_summary_and_exit_code_byte_identically`. M-S1A-21
+  turns `off_diagonal_cells` into the nine-cell grid and is killed by
+  `test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima`.
+  The companion campaigns
+  `docs/assurance/stage1a-regime-685-mutation-receipt.md` and
+  `docs/assurance/stage1a-regime-708-mutation-receipt.md` were regenerated in
+  the same change because the simulator digest moved; each carries the same
+  digest as this receipt.
+- **Refuses to claim:** Any mutation score, adequacy of the Stage 1A suite as a
+  whole, or that any surviving mutant outside the four named cases is safe. It
+  refuses any operating characteristic from the #696 full-grid files, which
+  live on the operator's host and are not in this repository. It refuses any
+  claim about the #711 verdict comment itself, which this container could not
+  read. The constant pin in `tests/test_v5_cue_stage1a.py`
+  (`test_simulator_constants_pin_to_the_registered_launcher`) is outside this
+  campaign's mutant set and was not edited; no registered constant in the
+  simulator or in `scripts/screens/419/v5_cue_stage1a.py` changed.
+
+### [`docs/assurance/stage1a-regime-718-mutation-receipt.md`](assurance/stage1a-regime-718-mutation-receipt.md)
+
+- **Claims:** Sixteen mutants against the Stage 2 stopping-design simulator
+  (#718, Stage 2 of #685), each run in its own git worktree at a fixed commit
+  with production never mutated in place, each case recording and asserting
+  both worktree HEADs, the `module.__file__` actually imported, clean and
+  mutant source digests, that the digests differ, that the clean baseline
+  passed first with nonzero collection, that the mutant imports, the named
+  failing assertion, and that the production tree was byte-unchanged
+  afterwards. All sixteen KILLED, one per acceptance obligation: fixed-n
+  interim look, fixed-n anytime bound at n, score-test margin dropped, paired
+  statistic on the wrong contrast, joint PASS reading F - P only, declared
+  alpha ignored in computation, starting wealth ignored, tuned bet
+  look-ahead, calibration skipping fixed-n rows, stopping label disagreeing
+  with the path that produced it, headline reading a stale pair count, CUT
+  direction reversed, exit code forced to zero, tuned rejection reading the
+  current wealth instead of the running maximum, fixed-n-score CUT decided
+  at 0.10 instead of 0.05, and fixed-n-score joint PASS reporting the F - N
+  half alone. The campaign pins
+  `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
+  `sha256:2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d`.
+- **Refuses to claim:** Any mutation score, adequacy of the Stage 2 suite as a
+  whole, or that any surviving mutant outside the sixteen named cases is
+  safe. It refuses any operating characteristic from the reduced committed
+  run at `docs/findings/data/stage1a-regime-685-stage2/` (200 replicates per
+  cell); the full pair grid is the next ticket. It refuses any claim about
+  which stopping design meets the #685 power target on that full grid. The
+  companion Stage 1A receipts under `docs/assurance/stage1a-regime-685-*`,
+  `stage1a-regime-708-*` and `stage1a-regime-712-*` were not regenerated,
+  because the #685 simulator file did not move.
 
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 

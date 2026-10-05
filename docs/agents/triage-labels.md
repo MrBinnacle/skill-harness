@@ -18,6 +18,7 @@ A role says who acts next. An issue carrying a role is still live work.
 | `needs-info`               | `needs-info`         | Waiting on reporter for more information |
 | `ready-for-agent`          | `ready-for-agent`    | Fully specified, ready for an AFK agent. Read the BODY before launching: a body that states an outstanding decision is not agent-ready whatever the label says (S393). A `Blocked by #N` line makes the factory skip it. |
 | `ready-for-human`          | `ready-for-human`    | Requires an action only a person can perform: spend authorization, a credential, a login, a dashboard. NOT a technical decision. Operator-lodged S394: *"I don't have enough information or technical subject matter expertise to make the right call"*, and that extends to almost every ticket that carried this label. A decision goes down the ladder; only the money/scope/values residue reaches the operator, as one plain yes/no with the amount in it. |
+| (none)                     | `head-session`       | Fully specified, and built by a head session, never by the factory: the work needs the host, a connector or a credential that no build container can reach. The scheduled launcher reads only `ready-for-agent`, so it skips these. Operator ruling S513, from the steering repository's pending-decisions sweep (row A10). |
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
