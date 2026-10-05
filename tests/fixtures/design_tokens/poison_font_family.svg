@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10">
   <!-- Poison: a serif attribute stack that DESIGN.md does not declare. -->
-  <rect width="10" height="10" fill="#010409"/>
-  <text font-family="Georgia, serif" font-size="21" fill="#e6edf3">no</text>
+  <rect width="10" height="10" fill="#0e100d"/>
+  <text font-family="Georgia, serif" font-size="21" fill="#d8d2c0">no</text>
 </svg>

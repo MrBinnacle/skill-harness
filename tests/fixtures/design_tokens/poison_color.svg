@@ -2,5 +2,5 @@
   <!-- Poison: #ff0000 is not a declared colour. -->
   <style>.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}</style>
   <rect width="10" height="10" fill="#ff0000"/>
-  <text class="mono" font-size="21" fill="#e6edf3">no</text>
+  <text class="mono" font-size="21" fill="#d8d2c0">no</text>
 </svg>
