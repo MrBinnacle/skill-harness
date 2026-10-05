@@ -1,128 +1,200 @@
 # Stage 1A readout: Placebo inertness, adherence, within-pair correlation (#691)
 
-**Date:** 2026-10-02. **Script:** `scripts/screens/419/stage1a_readout_691.py`. **Test:**
-`tests/test_stage1a_readout_691.py`. **Data:** `docs/findings/data/stage1a-readout-691/`
-(`readout.json`, `PROVENANCE.md`). **Model calls:** none. **Network calls:** none. **Spend:**
-none.
+**Date:** 2026-10-05. **Script:** `scripts/screens/419/stage1a_readout_691.py`. **Test:**
+`tests/test_stage1a_readout_691.py`. **Model calls:** none. **Network calls:** none.
+**Spend:** none.
 
 ## Why this record exists
 
-Ticket #691 asks three questions the Stage 1A audit left unmeasured: the formal interval on
-Placebo minus Null-A, the three adherence rates, and the within-pair correlation of Full and
-Placebo correctness. The decision behind the ticket is the next-design adjudication (S493,
-section 6) in the steering research repository. The two unmeasured rows sit in the Stage 1A
-audit RESULTS (S488) post-close addendum in the same repository. This record measures them
-from the S486 readout, through the script named above. No model call, no spend.
+Ticket #691 asks three questions that the Stage 1A audit left unmeasured: the formal
+interval on Placebo minus Null-A, the three adherence rates, and the within-pair correlation
+of Full and Placebo correctness. The decision behind the ticket is the next-design
+adjudication (S493, section 6) in the steering research repository. This record measures
+all three from the S486 Stage 1A logs, through the script named above, run on the host that
+holds the logs.
 
-The real S486 readout lives on the operator's disk at
-`.../eval-runs/S486-stage1a/run.log` and is untracked. This container holds no copy. The
-script accepts the readout path as an argument. The numbers below are the script's output
-against a declared stand-in that carries the observed S486 margins under a stated joint
-structure. `docs/findings/data/stage1a-readout-691/PROVENANCE.md` states that structure in
-full. Re-running the script against the operator's path replaces the stand-in joint with the
-real one; the constructions and the margins do not change.
+An earlier version of this record (PR #710 at `0a8c7c0`) reported numbers from a substitute
+readout, because the build container could not reach the logs. That readout and its
+provenance file are removed. No number below comes from it.
 
-## Observed margins (facts)
+## Inputs
 
-These counts are observed. They appear in ticket #691 and in
-`docs/findings/stage1a-regime-operating-characteristics.md` (#684).
+Both inputs are untracked or live in another repository, so neither is committed here. The
+three launch-order streams are quoted in full under "Script output", so a reader without the
+operator's disk can recompute every figure.
 
-| Arm | n | Correct | manifest_read |
-| --- | --- | --- | --- |
-| Full | 97 | 50 | 32 |
-| Placebo | 97 | 34 | 28 |
-| Null-A | 97 | 34 | — |
+| Input | Location on the operator's host | Read with |
+| --- | --- | --- |
+| S486 Stage 1A run: `run.log` and the per-look `.eval` logs under `run/look-001` to `run/look-097` | steering research repository, `.claude/state/eval-runs/S486-stage1a/` (untracked) | `v5_cue_stage1a._read_rows_by_launch` and `_manifest_reads` |
+| Reused Null-A epochs (looks 1 to 7 hold no Null-A log) | steering research repository, `.claude/state/eval-runs/S475-cue-stage1/readout.json` | `v5_cue_stage1a.load_null_a` |
 
-## Section 1 — Placebo inertness
+The Null-A stream is the seven reused outcomes followed by the 90 new outcomes in launch
+order, the order the run records ("Null-A reused epochs then new epochs in launch order").
+The JSON summary at the tail of `run.log` carries no per-epoch rows. The script reads it
+only to cross-check its own counts and bounds, and it refuses on any disagreement. All
+eleven cross-checks agree. They include the run's recorded `f_minus_n.lb_mu_f`
+(0.3847973934509016) and `f_minus_n.ub_mu_n` (0.46318463383223085), which depend on the
+order of the Full and Null-A streams.
 
-**Construction.** A two-sided anytime-valid interval on μ_P − μ_N at alpha 0.05, from the
-97 Placebo and 97 Null-A raw 0/1 outcomes in launch order. Each arm contributes a one-sided
-`one_sided_betting_bound` from `skill_harness.aggregation.confidence_sequence` at alpha
-0.025 (union bound, 0.025 each). LB(μ_P − μ_N) = LB(μ_P) − UB(μ_N); UB(μ_P − μ_N) =
-UB(μ_P) − LB(μ_N). The comparison is the direct two-sided fixed-n interval: an unpaired
-Newcombe square-and-add of the two marginal Wilson intervals at 95%. Wald is banned in this
-repository (#37); Newcombe is the fixed-n contrast.
+## Command
 
-**Stand-in launch order.** Placebo and Null-A successes sit at epochs 1–34 (identical
-streams), so the observed difference is 0. The interval is therefore symmetric.
-
-**Printed numbers.**
+`<RESEARCH_REPO>` is the steering research repository's working tree on the operator's host.
 
 ```
+PYTHONPATH=src python scripts/screens/419/stage1a_readout_691.py \
+    <RESEARCH_REPO>/.claude/state/eval-runs/S486-stage1a/run.log \
+    --null-readout <RESEARCH_REPO>/.claude/state/eval-runs/S475-cue-stage1/readout.json
+```
+
+Exit code 0. Most of the run time goes to the linear scans for "n to exclude".
+
+## Script output
+
+```
+=== Launch-order streams (epoch 1 to n; 1 = world correct) ===
+P 0000001000100010010110011011011111010000001101100000011000000100101010111010000011000010010000000
+N 0000010000000100011000100100000010000000010011010111010000010000101110110101111110011000101001000
+F 1110111101110010001110001100001111110010010000011101010110011111001000011101000101011000110100011
+null_order: Null-A reused epochs then new epochs in launch order
+void_epochs: none
+
+=== Placebo inertness (Placebo - Null-A) ===
 n_placebo=97 correct_placebo=34
 n_null=97 correct_null=34
-anytime_valid_interval=[-0.3925, 0.3925] (union bound, one_sided_betting_bound at alpha=0.025 each)
-excludes_plus_minus_0.20=false
-inertness_established=false
-n_to_exclude_pm_0.20=263 (same rates, evenly-spaced launch order)
-fixed_n_newcombe_interval=[-0.1322, 0.1322] (direct two-sided fixed-n comparison)
+point_estimate=0.0000
+[alpha reading: 0.025 per one-sided bound: each endpoint at 0.05, the interval at 0.10 by the union bound]
+  anytime_valid_interval=[-0.2818, 0.3601]
+  the interval does not exclude +/-0.20
+  placebo inertness is not established at this n under this reading
+  n_to_exclude_pm_0.20=263 (convention: same rates at evenly-spaced launch indices)
+  n_to_exclude_pm_0.20=488 (convention: real launch order repeated to length n)
+[alpha reading: 0.0125 per one-sided bound: 0.05 in total over the four bounds]
+  anytime_valid_interval=[-0.3042, 0.3825]
+  the interval does not exclude +/-0.20
+  placebo inertness is not established at this n under this reading
+  n_to_exclude_pm_0.20=314 (convention: same rates at evenly-spaced launch indices)
+  n_to_exclude_pm_0.20=570 (convention: real launch order repeated to length n)
+n_to_exclude is a property of the convention, not of the data; no convention is chosen
+fixed_n_newcombe_interval=[-0.1322, 0.1322] (direct two-sided fixed-n comparison, unpaired, 95%)
 fixed_n_excludes_plus_minus_0.20=true
+
+=== Adherence (descriptive only) ===
+assignment_to_read:
+  full: 32/97 = 0.330
+  placebo: 28/97 = 0.289
+assignment_to_outcome:
+  full: 50/97 = 0.515
+  placebo: 34/97 = 0.351
+read_to_outcome:
+  full_correct_among_read: 22/32 = 0.688
+  full_correct_among_unread: 28/65 = 0.431
+  placebo_correct_among_read: 5/28 = 0.179
+  placebo_correct_among_unread: 29/69 = 0.420
+Manifest-read happens after assignment. Splitting outcomes by it conditions on a post-treatment variable. These are adherence descriptives, not a mechanism.
+
+=== Within-pair correlation (Full x Placebo, descriptive) ===
+n_pairs=97 (paired by launch index; void epochs excluded)
+table: both_correct=18 full_only=32 placebo_only=16 neither=31
+phi=0.0205
+phi_95_ci=[-0.1797, 0.2191] (Fisher z)
+materially_positive=false
+the interval includes zero; #684's independence assumption is not contradicted at this n
+
+cross_check full correct: run.log=50, logs agree
+cross_check placebo correct: run.log=34, logs agree
+cross_check full manifest_read: run.log=32, logs agree
+cross_check placebo manifest_read: run.log=28, logs agree
+cross_check null-a n: run.log=97, logs agree
+cross_check null-a correct: run.log=34, logs agree
+cross_check null-a order: run.log='Null-A reused epochs then new epochs in launch order', logs agree
+cross_check pairs: run.log=97 keys, logs agree
+cross_check void_epochs: run.log=0, logs agree
+cross_check f_minus_n.lb_mu_f: run.log=0.3847973934509016, logs agree
+cross_check f_minus_n.ub_mu_n: run.log=0.46318463383223085, logs agree
 ```
 
-**Finding.** The anytime-valid interval [−0.3925, 0.3925] does **not** exclude ±0.20 at
-n = 97. Placebo inertness is **not established** at this n. The same rates (34/97 each)
-would exclude ±0.20 at **n = 263** under the evenly-spaced launch-order convention. The
-direct fixed-n interval [−0.1322, 0.1322] does exclude ±0.20 at n = 97; that contrast is the
-cost of anytime-validity, not a reason to prefer the fixed-n interval under sequential
-stopping.
+## Section 1: Placebo inertness
 
-The n = 263 figure depends on the order convention. The real launch order replaces the
-stand-in order when the script runs against the operator's path. The exclusion statement
-(interval does not exclude ±0.20 at n = 97) holds under any order for these counts: the
-anytime-valid half-width at n = 97 and rate 34/97 is above 0.20 in the orders examined
-(successes-first: 0.3925; evenly-spaced: 0.2987).
+**Construction.** Each arm contributes one-sided `one_sided_betting_bound` values from
+`skill_harness.aggregation.confidence_sequence` on its raw 0/1 outcomes in launch order. A
+union bound combines them: LB(μ_P − μ_N) = LB(μ_P) − UB(μ_N) and UB(μ_P − μ_N) = UB(μ_P) −
+LB(μ_N). The fixed-n comparison is an unpaired Newcombe square-and-add of the two Wilson
+intervals at 95%.
 
-## Section 2 — Adherence, descriptive only
+**Two alpha readings.** The ticket says "two-sided ... at alpha 0.05 ... (union bound, 0.025
+each)". That wording supports two readings, and the bar owner has not chosen between them.
+This record reports both and chooses neither.
 
-**Three rates, with counts.**
+| Reading | Per one-sided bound | Error of the interval | Interval | Excludes ±0.20 |
+| --- | --- | --- | --- | --- |
+| A | 0.025 | each endpoint at 0.05; the interval at 0.10 by the union bound | [−0.2818, 0.3601] | no |
+| B | 0.0125 | 0.05 in total over the four bounds | [−0.3042, 0.3825] | no |
+
+The point estimate is 0.0000 (34/97 against 34/97). Under both readings the interval does
+not exclude ±0.20, so **placebo inertness is not established at n = 97**. The fixed-n
+Newcombe interval [−0.1322, 0.1322] does exclude ±0.20. That difference is the cost of
+anytime validity. It is not a reason to use the fixed-n interval under sequential stopping.
+
+**"n to exclude ±0.20" depends on a convention.** The ticket asks for the n at which the
+same counts would exclude ±0.20. The answer depends on how the same rates are spread over a
+longer stream, because the betting bound depends on order. The script prints two
+conventions under each reading and chooses neither:
+
+| Convention | Reading A | Reading B |
+| --- | --- | --- |
+| Same rates at evenly-spaced launch indices | 263 | 314 |
+| Real launch order repeated to length n | 488 | 570 |
+
+The non-author verifier's recompute found 272 at reading A with a different even spacing.
+These figures are properties of the conventions, not of the data.
+
+**Search method.** Each figure is the smallest n found by a linear scan from 97. Exclusion
+is not monotone in n under the repeated-order convention: the phase of the stream at n moves
+the bounds. At `0a8c7c0` the script used doubling and bisection, which assumes monotonicity.
+On the repeated-order convention at reading A that search returned 535 in this rework's
+first host run; the linear scan returns 488, which matches the verifier's figure.
+
+## Section 2: Adherence, descriptive only
 
 | Rate | Full | Placebo |
 | --- | --- | --- |
 | Assignment to read | 32/97 = 0.330 | 28/97 = 0.289 |
 | Assignment to outcome | 50/97 = 0.515 | 34/97 = 0.351 |
-| Read to outcome, correct among read | 32/32 = 1.000 | 28/28 = 1.000 |
-| Read to outcome, correct among unread | 18/65 = 0.277 | 6/69 = 0.087 |
+| Read to outcome: correct among read | 22/32 = 0.688 | 5/28 = 0.179 |
+| Read to outcome: correct among unread | 28/65 = 0.431 | 29/69 = 0.420 |
 
-The assignment-to-read and assignment-to-outcome rates use observed margins. The
-read-to-outcome sub-rates use the stand-in joint (manifest_read on the first k launch
-indices, correctness on the first m indices, k < m). The 100% among-read rates are an
-artifact of that stand-in. They are not a finding about the real run.
+A read is any tool call whose arguments name the trace file (`release-manifest.json`), as
+`v5_cue_stage1a._manifest_reads` defines it.
 
 Manifest-read happens after assignment. Splitting outcomes by it conditions on a post-treatment variable. These are adherence descriptives, not a mechanism.
 
-## Section 3 — Within-pair correlation, descriptive
+## Section 3: Within-pair correlation, descriptive
 
-**Construction.** The phi coefficient of Full and Placebo correctness across the 97 shared
-launch indices, with a 95% interval via the Fisher z-transform (z = arctanh(phi), SE =
-1/sqrt(n − 3), back-transformed with tanh). #684's simulator draws the arms independently
-and states that pairing confers no matched-pairs advantage under independence. This
-correlation is a check on that assumption. No causal reading.
-
-**Stand-in 2×2 table.**
+**Construction.** Full and Placebo are paired by launch index (the look number), matching
+the run's `pairing_key`. A pair is dropped when either epoch is void. S486 has no void
+epochs, so all 97 pairs stand. The interval on phi uses the Fisher z-transform.
 
 | | Placebo correct | Placebo wrong | Total |
 | --- | --- | --- | --- |
-| Full correct | 34 | 16 | 50 |
-| Full wrong | 0 | 47 | 47 |
+| Full correct | 18 | 32 | 50 |
+| Full wrong | 16 | 31 | 47 |
 | Total | 34 | 63 | 97 |
 
-**Printed numbers.**
+phi = 0.0205, 95% interval [−0.1797, 0.2191]. The interval includes zero, so the correlation
+is not materially positive. #684's simulator draws the arms independently, and this data does
+not contradict that assumption at n = 97. It also does not establish independence: the
+interval admits a correlation up to about 0.22. No causal reading is claimed.
 
-```
-n_pairs=97
-table: both_correct=34 full_only=16 placebo_only=0 neither=47
-phi=0.7123
-phi_95_ci=[0.5977, 0.7983]
-materially_positive=true
-materially positive: name it as an input #685 must model before any sizing is relied on.
-```
+## Limits
 
-**Finding.** Under the stand-in joint, phi = 0.7123 with 95% interval [0.5977, 0.7983].
-The interval excludes zero. The correlation is materially positive. It must be named as an
-input #685 must model before any sizing is relied on. The real run's concordance is
-different; only the real readout can measure it. The stand-in nests Placebo correctness
-inside Full correctness, which is why the table has placebo_only = 0. That nesting is a
-choice of this record, not a measurement.
+1. **The inputs are not in this tree.** The streams are quoted above so that every figure
+   can be recomputed. The `.eval` logs remain the measurement of record.
+2. **No alpha reading and no n convention is chosen.** Those choices belong to the bar
+   owner.
+3. **No causal reading** is claimed for the adherence split or the within-pair correlation.
+4. **The post-treatment sentence is binding.** Manifest-read happens after assignment.
+   Splitting outcomes by it conditions on a post-treatment variable. These are adherence
+   descriptives, not a mechanism.
 
 ## Companion artifacts
 
@@ -131,35 +203,10 @@ choice of this record, not a measurement.
 | Ticket | #691 |
 | Script | `scripts/screens/419/stage1a_readout_691.py` |
 | Test | `tests/test_stage1a_readout_691.py` |
-| Stand-in readout | `docs/findings/data/stage1a-readout-691/readout.json` |
-| Stand-in provenance | `docs/findings/data/stage1a-readout-691/PROVENANCE.md` |
+| Stage 1A readers | `scripts/screens/419/v5_cue_stage1a.py` |
 | #684 operating characteristics | `docs/findings/stage1a-regime-operating-characteristics.md` |
 | #685 lever adjudication | `docs/findings/stage1a-lever-adjudication-685.md` |
 | Engine bound | `src/skill_harness/aggregation/confidence_sequence.py` (`one_sided_betting_bound`) |
-| Stage 1A audit RESULTS (S488) | steering research repository, `docs/audit/t1-stage1a-S488/RESULTS.md` — not in this tree |
-| Next-design adjudication (S493) § 6 | steering research repository, `docs/research/stage1a-next-design-adjudication-S493.md` — not in this tree |
 
-## Model statement
-
-This record reads existing files. It makes no model call and spends nothing. The
-anytime-valid bounds come from the engine's `one_sided_betting_bound`, consumed not
-modified. The fixed-n comparison is the Newcombe square-and-add, not Wald. The phi
-interval is the Fisher z-transform, descriptive.
-
-## Limits
-
-1. **The real per-epoch readout is not in this tree.** The stand-in carries the observed
-   margins under a stated joint. The operator's run against the real path is the
-   measurement of record for the joint-dependent quantities (read-to-outcome sub-rates,
-   within-pair concordance, and the launch-order interval width).
-2. **The n = 263 figure is order-convention-dependent.** It is computed under evenly-spaced
-   launch order at the rates 34/97. The real launch order replaces it.
-3. **No causal reading is claimed** for the adherence split or the within-pair correlation.
-4. **The post-treatment sentence is binding.** Manifest-read happens after assignment.
-   Splitting outcomes by it conditions on a post-treatment variable. These are adherence
-   descriptives, not a mechanism.
-
-*Revisit if:* the engine's `one_sided_betting_bound` changes; then re-run
-`tests/test_stage1a_readout_691.py` and re-quote the interval. *Revisit if:* the operator
-runs the script against the real S486 readout path; then replace the stand-in numbers in
-this record with that run's printed output and update PROVENANCE.md.
+*Revisit if:* the engine's `one_sided_betting_bound` or the `v5_cue_stage1a` readers change;
+then re-run the command above and re-quote its output.

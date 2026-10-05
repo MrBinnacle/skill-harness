@@ -1,54 +1,86 @@
-"""#691: Stage 1A readout screen — Placebo inertness, adherence, within-pair correlation.
+"""#691: Stage 1A readout screen - Placebo inertness, adherence, within-pair correlation.
 
-Reads the S486 Stage 1A readout from a path argument and prints three sections.
-No model call, no spend. The readout path may be a ``.json`` file, a ``run.log``
-whose tail carries a JSON block, or a directory holding either. Per-epoch rows
-with ``arm``, ``epoch``, ``void`` and ``final_world_correct`` are required;
-``manifest_read`` is required on Full and Placebo rows.
+Reads the S486 Stage 1A run from the operator's disk and prints three sections. No model
+call, no spend.
 
-Section 1 — Placebo inertness. A two-sided anytime-valid interval on
-``mu_P - mu_N`` at alpha 0.05, from the raw 0/1 outcomes in launch order, using
-the engine's ``one_sided_betting_bound`` on each arm at alpha 0.025 (union bound).
-A direct two-sided fixed-n Newcombe interval on the same rates is printed as a
-comparison. The screen states whether the anytime-valid interval excludes
-+/-0.20 and, when it does not, the n at which the same rates would exclude it
-under the evenly-spaced launch-order convention.
+Inputs. Two, both required:
 
-Section 2 — Adherence, descriptive only. Three rates: assignment to read,
-assignment to outcome, and read to outcome (correct among read, correct among
-unread, per arm). Manifest-read happens after assignment; splitting outcomes by
-it conditions on a post-treatment variable. These are adherence descriptives,
-not a mechanism.
+- ``RUN``: the Stage 1A run directory (holding ``run.log`` and ``run/look-001`` ...), its
+  ``run.log``, or the log directory holding the ``look-*`` directories itself. Per-epoch
+  outcomes and the ``manifest_read`` flags come from the ``.eval`` logs under ``look-*``,
+  read with the existing Stage 1A readers in ``v5_cue_stage1a`` (``_read_rows_by_launch``,
+  ``_manifest_reads``). The JSON block at the tail of ``run.log`` carries no per-epoch rows;
+  when present it is read only for cross-checks (counts, ``pairs``, ``void_epochs`` and the
+  run's recorded bounds), and any disagreement is a refusal.
+- ``--null-readout``: the S475 readout whose Null-A epochs Stage 1A reused (looks 1 to 7
+  hold no Null-A log), read with ``v5_cue_stage1a.load_null_a``. The Null-A stream is the
+  reused outcomes followed by the new ones in launch order, the order the run records
+  ("Null-A reused epochs then new epochs in launch order"). Omitting it is a usage error.
 
-Section 3 — Within-pair correlation, descriptive. The phi coefficient of Full
-and Placebo correctness across launch indices, with a 95% interval (Fisher
-z-transform). #684's simulator draws the arms independently and states that
-pairing confers no matched-pairs advantage under independence. A materially
-positive observed correlation is named as an input #685 must model before any
-sizing is relied on.
+Every stream is built in launch order (the look number), and void epochs are excluded from
+every count, stream and pair.
 
-Run: PYTHONPATH=src python scripts/screens/419/stage1a_readout_691.py READOUT_PATH
+Section 1 - Placebo inertness. A two-sided anytime-valid interval on ``mu_P - mu_N``: the
+engine's ``one_sided_betting_bound`` on each arm, combined by a union bound,
+LB = LB(mu_P) - UB(mu_N) and UB = UB(mu_P) - LB(mu_N). The ticket's wording ("two-sided at
+alpha 0.05, union bound, 0.025 each") supports two readings, and the bar owner has not chosen
+between them, so both are printed and labelled:
+
+- 0.025 per one-sided bound: each endpoint holds at 0.05; the interval holds at 0.10 by the
+  union bound over its two endpoints.
+- 0.0125 per one-sided bound: 0.05 in total over the four bounds.
+
+Each reading carries its own exclusion statement against +/-0.20. A direct two-sided fixed-n
+interval (unpaired Newcombe square-and-add Wilson, 95%) is printed as a comparison.
+
+"n to exclude +/-0.20" is a property of a convention, not of the data: it depends on how the
+same rates are spread over a longer stream. Two conventions are printed, each named, under each
+alpha reading: the same rates at evenly-spaced launch indices, and the real launch order
+repeated (cycled) to length n. Neither is chosen.
+
+Section 2 - Adherence, descriptive only. Three rates with counts: assignment to read,
+assignment to outcome, and read to outcome (correct among read, correct among unread, per
+arm). Manifest-read happens after assignment; splitting outcomes by it conditions on a
+post-treatment variable. These are adherence descriptives, not a mechanism.
+
+Section 3 - Within-pair correlation, descriptive. The 2x2 table and phi coefficient of Full
+and Placebo correctness across launch indices valid in both arms, with a 95% Fisher-z
+interval. #684's simulator draws the arms independently; a materially positive phi (interval
+above zero) is named as an input #685 must model before any sizing is relied on.
+
+Run: PYTHONPATH=src python scripts/screens/419/stage1a_readout_691.py RUN \
+         --null-readout S475_READOUT.json
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from functools import lru_cache
-from math import atanh, sqrt, tanh
+from math import atanh, isclose, sqrt, tanh
 from pathlib import Path
 from statistics import NormalDist
+from types import ModuleType
 from typing import Any
 
 from skill_harness.aggregation.confidence_sequence import one_sided_betting_bound
 
 ALPHA = 0.05
-ALPHA_ARM = 0.025
 BOUNDARY = 0.20
-ORDER_CONVENTION = "evenly-spaced launch order"
-N_SEARCH_CAP = 2000
+N_SEARCH_CAP = 1000
+ALPHA_READINGS: tuple[tuple[float, str], ...] = (
+    (
+        0.025,
+        "0.025 per one-sided bound: each endpoint at 0.05, the interval at 0.10 by the union bound",
+    ),
+    (0.0125, "0.0125 per one-sided bound: 0.05 in total over the four bounds"),
+)
+CONVENTION_EVEN = "same rates at evenly-spaced launch indices"
+CONVENTION_REPEAT = "real launch order repeated to length n"
 POST_TREATMENT_SENTENCE = (
     "Manifest-read happens after assignment. "
     "Splitting outcomes by it conditions on a post-treatment variable. "
@@ -57,47 +89,85 @@ POST_TREATMENT_SENTENCE = (
 MATERIAL_POSITIVE_NOTE = (
     "materially positive: name it as an input #685 must model before any sizing is relied on."
 )
+NULL_ORDER = "Null-A reused epochs then new epochs in launch order"
+_SCREEN_DIR = Path(__file__).resolve().parent
+
+
+@dataclass(frozen=True)
+class Epoch:
+    """One world-A epoch: arm, launch index, outcome, void flag, and manifest read (or None)."""
+
+    arm: str
+    launch: int
+    correct: bool
+    void: bool
+    manifest_read: bool | None = None
+
 
 # ---------------------------------------------------------------------------
-# Readout loading
+# Reading the run with the existing Stage 1A readers
 # ---------------------------------------------------------------------------
 
 
-def load_readout(path: Path) -> dict[str, Any]:
-    """Load a Stage 1A readout from a .json file, a run.log, or a directory.
+def _stage1a_module() -> ModuleType:
+    """Load the ``v5_cue_stage1a`` screen module, whose readers this screen reuses."""
+    loaded = sys.modules.get("v5_cue_stage1a")
+    if isinstance(loaded, ModuleType):
+        return loaded
+    if str(_SCREEN_DIR) not in sys.path:
+        sys.path.insert(0, str(_SCREEN_DIR))
+    spec = importlib.util.spec_from_file_location(
+        "v5_cue_stage1a", _SCREEN_DIR / "v5_cue_stage1a.py"
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError("cannot load v5_cue_stage1a from the screen directory")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["v5_cue_stage1a"] = module
+    spec.loader.exec_module(module)
+    return module
 
-    A directory prefers ``readout.json`` then ``run.log``. A ``run.log`` yields
-    the last JSON object found in the file (the block at its tail). The parsed
-    object must carry per-epoch ``rows``; counts alone cannot support the
-    launch-order interval, the read-to-outcome split, or the within-pair table.
-    """
-    if path.is_dir():
-        readout_json = path / "readout.json"
-        run_log = path / "run.log"
-        if readout_json.is_file():
-            path = readout_json
-        elif run_log.is_file():
-            path = run_log
-        else:
-            raise ValueError(f"{path}: directory holds neither readout.json nor run.log")
-    text = path.read_text(encoding="utf-8")
-    if path.suffix == ".json":
-        data = json.loads(text)
-    else:
-        data = _json_from_log_tail(text, source=str(path))
-    rows = data.get("rows")
-    if not isinstance(rows, list) or not rows:
-        raise ValueError(
-            f"{path}: readout carries no per-epoch rows; the screen needs "
-            "arm/epoch/void/final_world_correct per launch index"
+
+def resolve_run(path: Path) -> tuple[Path, Path | None]:
+    """Return (log directory holding ``look-*``, ``run.log`` or None) for a run path."""
+    run_dir = path.parent if path.is_file() else path
+    run_log = run_dir / "run.log"
+    for candidate in (run_dir / "run", run_dir):
+        if candidate.is_dir() and any(p.is_dir() for p in candidate.glob("look-*")):
+            return candidate, run_log if run_log.is_file() else None
+    raise ValueError(f"{path}: no look-* directories under the run (expected run/look-001 ...)")
+
+
+def read_epochs(log_dir: Path) -> list[Epoch]:
+    """Read world-A epochs and manifest reads from the ``.eval`` logs under ``look-*``."""
+    s1a = _stage1a_module()
+    rows: list[Any] = s1a._read_rows_by_launch(log_dir)
+    manifest: dict[tuple[str, int], bool] = s1a._manifest_reads(log_dir)
+    return [
+        Epoch(
+            arm=str(row.arm),
+            launch=int(row.epoch),
+            correct=bool(row.final_world_correct),
+            void=bool(row.void),
+            manifest_read=manifest.get((str(row.arm), int(row.epoch))),
         )
-    return data
+        for row in rows
+        if str(row.world) == "a"
+    ]
 
 
-def _json_from_log_tail(text: str, *, source: str) -> dict[str, Any]:
-    """Return the last JSON object in ``text``; raise when none parses."""
+def read_reused_null(path: Path) -> tuple[int, ...]:
+    """The reused Null-A outcomes in epoch order, via ``v5_cue_stage1a.load_null_a``."""
+    null_a = _stage1a_module().load_null_a(path)
+    if null_a.outcomes is None:
+        raise ValueError(f"{path}: reused Null-A readout carries no per-epoch rows")
+    return tuple(int(o) for o in null_a.outcomes)
+
+
+def recorded_summary(run_log: Path) -> dict[str, Any]:
+    """Return the last JSON object in ``run.log`` (the run's own recorded summary)."""
+    text = run_log.read_text(encoding="utf-8")
     decoder = json.JSONDecoder()
-    last_object: dict[str, Any] | None = None
+    last: dict[str, Any] | None = None
     start = text.find("{")
     while start >= 0:
         try:
@@ -106,48 +176,51 @@ def _json_from_log_tail(text: str, *, source: str) -> dict[str, Any]:
             start = text.find("{", start + 1)
             continue
         if isinstance(parsed, dict):
-            last_object = parsed
+            last = parsed
         start = text.find("{", end)
-    if last_object is not None:
-        return last_object
-    raise ValueError(f"{source}: no JSON object found in the log tail")
+    if last is None:
+        raise ValueError(f"{run_log}: no JSON object found in the log")
+    return last
 
 
-def _cell_outcomes(
-    rows: Sequence[dict[str, Any]], arm: str, world: str = "a"
-) -> list[tuple[int, int, bool | None]]:
-    """Return valid (launch_index, correct, manifest_read) rows for one Stage 1A cell."""
-    selected = [
-        row
-        for row in rows
-        if str(row.get("arm", "")).lower() == arm
-        and str(row.get("world", "")).lower() == world
-        and not bool(row.get("void", False))
+# ---------------------------------------------------------------------------
+# Streams
+# ---------------------------------------------------------------------------
+
+
+def _valid(epochs: Sequence[Epoch], arm: str) -> list[Epoch]:
+    """Non-void epochs of one arm, sorted by launch index; duplicates refuse."""
+    selected = sorted((e for e in epochs if e.arm == arm and not e.void), key=lambda e: e.launch)
+    launches = [e.launch for e in selected]
+    if len(launches) != len(set(launches)):
+        raise ValueError(f"duplicate {arm} launch index in the readout")
+    return selected
+
+
+def streams(epochs: Sequence[Epoch], reused_null: Sequence[int]) -> dict[str, list[float]]:
+    """Launch-order 0/1 streams per arm; Null-A is the reused outcomes then the new ones."""
+    out = {arm: [float(e.correct) for e in _valid(epochs, arm)] for arm in ("full", "placebo")}
+    out["null"] = [float(o) for o in reused_null] + [
+        float(e.correct) for e in _valid(epochs, "null")
     ]
-    if not selected:
-        raise ValueError(f"readout has no valid {arm}/{world} epochs")
-    selected.sort(key=lambda row: int(row["epoch"]))
-    epochs = [int(row["epoch"]) for row in selected]
-    if len(epochs) != len(set(epochs)):
-        raise ValueError(f"duplicate {arm}/{world} epoch in readout")
-    out: list[tuple[int, int, bool | None]] = []
-    for row in selected:
-        correct = int(bool(row["final_world_correct"]))
-        manifest = row.get("manifest_read")
-        out.append((int(row["epoch"]), correct, None if manifest is None else bool(manifest)))
+    for arm, xs in out.items():
+        if not xs:
+            raise ValueError(f"readout has no valid {arm} epochs")
     return out
 
 
+def _bits(xs: Sequence[float]) -> str:
+    return "".join(str(int(x)) for x in xs)
+
+
 # ---------------------------------------------------------------------------
-# Section 1 — Placebo inertness
+# Section 1 - Placebo inertness
 # ---------------------------------------------------------------------------
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=4096)
 def _av_interval_cached(
-    placebo_xs: tuple[float, ...],
-    null_xs: tuple[float, ...],
-    alpha_arm: float = ALPHA_ARM,
+    placebo_xs: tuple[float, ...], null_xs: tuple[float, ...], alpha_arm: float
 ) -> tuple[float, float]:
     lb_p = one_sided_betting_bound(placebo_xs, alpha=alpha_arm, side="lower")
     ub_p = one_sided_betting_bound(placebo_xs, alpha=alpha_arm, side="upper")
@@ -156,20 +229,15 @@ def _av_interval_cached(
     return lb_p - ub_n, ub_p - lb_n
 
 
-def _av_interval(
-    placebo_xs: Sequence[float],
-    null_xs: Sequence[float],
-    *,
-    alpha_arm: float = ALPHA_ARM,
+def av_interval(
+    placebo_xs: Sequence[float], null_xs: Sequence[float], *, alpha_arm: float
 ) -> tuple[float, float]:
-    """Two-sided anytime-valid interval on mu_P - mu_N via a union bound.
-
-    Each arm contributes a one-sided ``one_sided_betting_bound`` at ``alpha_arm``.
-    LB(mu_P - mu_N) = LB(mu_P) - UB(mu_N); UB(mu_P - mu_N) = UB(mu_P) - LB(mu_N).
-    With ``alpha_arm = 0.025`` each, the union bound puts each endpoint's error
-    at 0.05.
-    """
+    """Anytime-valid interval on mu_P - mu_N from four one-sided bounds at ``alpha_arm``."""
     return _av_interval_cached(tuple(placebo_xs), tuple(null_xs), alpha_arm)
+
+
+def _excludes(lo: float, hi: float, boundary: float = BOUNDARY) -> bool:
+    return hi < boundary and lo > -boundary
 
 
 def _wilson(x: int, n: int, z: float) -> tuple[float, float]:
@@ -181,12 +249,7 @@ def _wilson(x: int, n: int, z: float) -> tuple[float, float]:
 def newcombe_unpaired(
     k1: int, n1: int, k2: int, n2: int, *, level: float = 0.95
 ) -> tuple[float, float]:
-    """Direct two-sided fixed-n interval on p1 - p2 (Newcombe square-and-add Wilson).
-
-    Unpaired: Placebo and Null-A are separate arms. Wald is banned in this
-    repository; the square-and-add of the two marginal Wilson intervals is the
-    fixed-n comparison the ticket asks for beside the anytime-valid union bound.
-    """
+    """Direct two-sided fixed-n interval on p1 - p2 (Newcombe square-and-add Wilson)."""
     if n1 <= 0 or n2 <= 0:
         raise ValueError(f"arm sample sizes must be positive; got n1={n1}, n2={n2}")
     if not 0 <= k1 <= n1 or not 0 <= k2 <= n2:
@@ -196,9 +259,10 @@ def newcombe_unpaired(
     l1, u1 = _wilson(k1, n1, z)
     l2, u2 = _wilson(k2, n2, z)
     delta = p1 - p2
-    lower = delta - sqrt((p1 - l1) ** 2 + (u2 - p2) ** 2)
-    upper = delta + sqrt((p2 - l2) ** 2 + (u1 - p1) ** 2)
-    return lower, upper
+    return (
+        delta - sqrt((p1 - l1) ** 2 + (u2 - p2) ** 2),
+        delta + sqrt((p2 - l2) ** 2 + (u1 - p1) ** 2),
+    )
 
 
 def evenly_spaced(n: int, k: int) -> list[float]:
@@ -209,9 +273,7 @@ def evenly_spaced(n: int, k: int) -> list[float]:
         return [1.0] * n
     xs = [0.0] * n
     for i in range(k):
-        pos = round((i + 0.5) * n / k)
-        pos = min(n - 1, max(0, pos))
-        xs[pos] = 1.0
+        xs[min(n - 1, max(0, round((i + 0.5) * n / k)))] = 1.0
     placed = sum(xs)
     j = 0
     while placed < k and j < n:
@@ -222,117 +284,93 @@ def evenly_spaced(n: int, k: int) -> list[float]:
     return xs
 
 
-@lru_cache(maxsize=64)
-def n_to_exclude_pm(
-    correct_placebo: int,
-    n_placebo: int,
-    correct_null: int,
-    n_null: int,
-    *,
-    alpha_arm: float = ALPHA_ARM,
-    boundary: float = BOUNDARY,
-    cap: int = N_SEARCH_CAP,
-) -> int | None:
-    """Smallest per-arm n at which the same observed rates exclude +/-boundary.
+def repeated(xs: Sequence[float], n: int) -> list[float]:
+    """The real launch-order stream cycled to length ``n``."""
+    return [xs[i % len(xs)] for i in range(n)]
 
-    Each arm retains its observed rate, scaled to a common candidate n. Order is
-    the evenly-spaced launch-index convention named in the output. Geometric
-    probing finds a bracket in which exclusion holds;
-    a binary search then returns the first n in that bracket. Exclusion is
-    treated as monotone in n under this convention (the interval shrinks as
-    n grows at a fixed rate). Returns None when no n <= cap reaches exclusion.
+
+def _first_excluding_n(excludes: Callable[[int], bool], start: int, cap: int) -> int | None:
+    """Smallest n in [start, cap] with ``excludes(n)``, by a linear scan.
+
+    Exclusion is not monotone in n: under the repeated-order convention the stream's phase
+    at n moves the bounds, so a doubling-and-bisection search can land on a later crossing
+    (535 rather than 488 on the S486 streams at 0.025). Only a scan returns the smallest n.
     """
-    if n_placebo <= 0 or n_null <= 0:
-        raise ValueError(
-            f"arm sample sizes must be positive; got placebo={n_placebo}, null={n_null}"
-        )
-    placebo_rate = correct_placebo / n_placebo
-    null_rate = correct_null / n_null
+    return next((n for n in range(start, cap + 1) if excludes(n)), None)
+
+
+def n_to_exclude_even(
+    placebo_xs: Sequence[float], null_xs: Sequence[float], *, alpha_arm: float
+) -> int | None:
+    """n at which each arm's observed rate, at evenly-spaced indices, excludes +/-0.20."""
+    p_rate, n_rate = sum(placebo_xs) / len(placebo_xs), sum(null_xs) / len(null_xs)
 
     def excludes(n: int) -> bool:
-        placebo_k = round(placebo_rate * n)
-        null_k = round(null_rate * n)
-        lo, hi = _av_interval(
-            evenly_spaced(n, placebo_k),
-            evenly_spaced(n, null_k),
+        lo, hi = av_interval(
+            evenly_spaced(n, round(p_rate * n)),
+            evenly_spaced(n, round(n_rate * n)),
             alpha_arm=alpha_arm,
         )
-        return hi < boundary and lo > -boundary
+        return _excludes(lo, hi)
 
-    start_n = max(n_placebo, n_null)
-    if excludes(start_n):
-        return start_n
-    probe = start_n
-    last_no: int = start_n
-    while probe < cap:
-        probe = min(cap, probe * 2)
-        if excludes(probe):
-            lo_n, hi_n = last_no, probe
-            while hi_n - lo_n > 1:
-                mid = (lo_n + hi_n) // 2
-                if excludes(mid):
-                    hi_n = mid
-                else:
-                    lo_n = mid
-            return hi_n
-        last_no = probe
-    return None
+    return _first_excluding_n(excludes, max(len(placebo_xs), len(null_xs)), N_SEARCH_CAP)
 
 
-def placebo_inertness(
-    placebo_xs: Sequence[float],
-    null_xs: Sequence[float],
-    *,
-    alpha_arm: float = ALPHA_ARM,
-    boundary: float = BOUNDARY,
+def n_to_exclude_repeated(
+    placebo_xs: Sequence[float], null_xs: Sequence[float], *, alpha_arm: float
+) -> int | None:
+    """n at which each arm's real launch order, repeated to length n, excludes +/-0.20."""
+
+    def excludes(n: int) -> bool:
+        lo, hi = av_interval(repeated(placebo_xs, n), repeated(null_xs, n), alpha_arm=alpha_arm)
+        return _excludes(lo, hi)
+
+    return _first_excluding_n(excludes, max(len(placebo_xs), len(null_xs)), N_SEARCH_CAP)
+
+
+def _reading(
+    placebo_xs: Sequence[float], null_xs: Sequence[float], alpha_arm: float, label: str
 ) -> dict[str, Any]:
-    """Compute the Placebo-minus-Null inertness section from raw launch-order outcomes."""
+    lo, hi = av_interval(placebo_xs, null_xs, alpha_arm=alpha_arm)
+    excl = _excludes(lo, hi)
+    return {
+        "alpha_arm": alpha_arm,
+        "label": label,
+        "lo": lo,
+        "hi": hi,
+        "excludes": excl,
+        "n_even": None if excl else n_to_exclude_even(placebo_xs, null_xs, alpha_arm=alpha_arm),
+        "n_repeat": None
+        if excl
+        else n_to_exclude_repeated(placebo_xs, null_xs, alpha_arm=alpha_arm),
+    }
+
+
+def placebo_inertness(placebo_xs: Sequence[float], null_xs: Sequence[float]) -> dict[str, Any]:
+    """Both alpha readings of the anytime-valid interval, plus the fixed-n comparison."""
     if not placebo_xs or not null_xs:
         raise ValueError("placebo and null streams must both be non-empty")
     for label, xs in (("placebo", placebo_xs), ("null", null_xs)):
         for i, x in enumerate(xs):
             if x not in (0.0, 1.0):
                 raise ValueError(f"{label}[{i}]={x!r} is not a raw 0/1 outcome")
-
-    n_p, n_n = len(placebo_xs), len(null_xs)
-    k_p = int(sum(placebo_xs))
-    k_n = int(sum(null_xs))
-    av_lo, av_hi = _av_interval(placebo_xs, null_xs, alpha_arm=alpha_arm)
-    excludes = bool(av_hi < boundary and av_lo > -boundary)
+    k_p, n_p, k_n, n_n = int(sum(placebo_xs)), len(placebo_xs), int(sum(null_xs)), len(null_xs)
     fixed_lo, fixed_hi = newcombe_unpaired(k_p, n_p, k_n, n_n, level=1.0 - ALPHA)
-    fixed_excludes = bool(fixed_hi < boundary and fixed_lo > -boundary)
-    n_excl = None
-    if not excludes:
-        n_excl = n_to_exclude_pm(
-            k_p,
-            n_p,
-            k_n,
-            n_n,
-            alpha_arm=alpha_arm,
-            boundary=boundary,
-        )
     return {
         "n_placebo": n_p,
         "correct_placebo": k_p,
         "n_null": n_n,
         "correct_null": k_n,
-        "alpha": ALPHA,
-        "alpha_arm": alpha_arm,
-        "anytime_valid_lo": av_lo,
-        "anytime_valid_hi": av_hi,
-        "excludes_pm_boundary": excludes,
-        "inertness_established": bool(excludes),
-        "n_to_exclude_pm_boundary": n_excl,
-        "order_convention": ORDER_CONVENTION,
+        "point": k_p / n_p - k_n / n_n,
+        "readings": [_reading(placebo_xs, null_xs, a, lbl) for a, lbl in ALPHA_READINGS],
         "fixed_n_lo": fixed_lo,
         "fixed_n_hi": fixed_hi,
-        "fixed_n_excludes_pm_boundary": fixed_excludes,
-        "boundary": boundary,
+        "fixed_n_excludes": _excludes(fixed_lo, fixed_hi),
     }
 
 
 # ---------------------------------------------------------------------------
-# Section 2 — Adherence, descriptive only
+# Section 2 - Adherence, descriptive only
 # ---------------------------------------------------------------------------
 
 
@@ -340,93 +378,64 @@ def _rate(k: int, n: int) -> str:
     return f"{k}/{n} = {k / n:.3f}" if n else f"{k}/{n} = nan"
 
 
-def adherence(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+def adherence(epochs: Sequence[Epoch]) -> dict[str, Any]:
     """Three descriptive adherence rates from per-epoch read and outcome flags."""
     arms: dict[str, Any] = {}
     for arm in ("full", "placebo"):
-        cells = _cell_outcomes(rows, arm)
-        n = len(cells)
-        correct = sum(c for _, c, _ in cells)
-        reads = [flag for _, _, flag in cells if flag is not None]
-        if len(reads) != n:
+        cells = _valid(epochs, arm)
+        if any(e.manifest_read is None for e in cells):
             raise ValueError(f"{arm}: every valid epoch must carry a manifest_read flag")
-        read_n = sum(1 for flag in reads if flag)
-        unread_n = n - read_n
-        correct_read = sum(c for _, c, flag in cells if flag)
-        correct_unread = sum(c for _, c, flag in cells if not flag)
+        read = [e for e in cells if e.manifest_read]
+        unread = [e for e in cells if not e.manifest_read]
         arms[arm] = {
-            "n": n,
-            "correct": correct,
-            "read_n": read_n,
-            "unread_n": unread_n,
-            "correct_read": correct_read,
-            "correct_unread": correct_unread,
-            "assignment_to_read": _rate(read_n, n),
-            "assignment_to_outcome": _rate(correct, n),
-            "correct_among_read": _rate(correct_read, read_n),
-            "correct_among_unread": _rate(correct_unread, unread_n),
+            "assignment_to_read": _rate(len(read), len(cells)),
+            "assignment_to_outcome": _rate(sum(e.correct for e in cells), len(cells)),
+            "correct_among_read": _rate(sum(e.correct for e in read), len(read)),
+            "correct_among_unread": _rate(sum(e.correct for e in unread), len(unread)),
         }
-    return {
-        "full": arms["full"],
-        "placebo": arms["placebo"],
-        "post_treatment_sentence": POST_TREATMENT_SENTENCE,
-    }
+    return {**arms, "post_treatment_sentence": POST_TREATMENT_SENTENCE}
 
 
 # ---------------------------------------------------------------------------
-# Section 3 — Within-pair correlation
+# Section 3 - Within-pair correlation
 # ---------------------------------------------------------------------------
 
 
 def phi_interval(a: int, b: int, c: int, d: int, *, level: float = 0.95) -> tuple[float, float]:
-    """95% interval on the phi coefficient via the Fisher z-transform.
-
-    phi is the Pearson correlation of the two binary correctness indicators.
-    z = arctanh(phi), SE = 1/sqrt(n-3), back-transformed with tanh. A table
-    with a zero margin or n <= 3 returns (phi, phi) — no interval is claimed.
-    """
+    """Interval on phi via the Fisher z-transform; NaN with a zero margin or n <= 3."""
     n = a + b + c + d
-    if n <= 3:
-        return float("nan"), float("nan")
     denom = sqrt((a + b) * (c + d) * (a + c) * (b + d))
-    if denom == 0.0:
+    if n <= 3 or denom == 0.0:
         return float("nan"), float("nan")
     phi = (a * d - b * c) / denom
     if abs(phi) >= 1.0:
         return phi, phi
-    z = atanh(phi)
-    se = 1.0 / sqrt(n - 3)
     zcrit = NormalDist().inv_cdf(1.0 - (1.0 - level) / 2.0)
-    return tanh(z - zcrit * se), tanh(z + zcrit * se)
+    se = 1.0 / sqrt(n - 3)
+    return tanh(atanh(phi) - zcrit * se), tanh(atanh(phi) + zcrit * se)
 
 
-def within_pair_correlation(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
-    """Phi coefficient of Full x Placebo correctness across shared launch indices."""
-    full_cells = {epoch: correct for epoch, correct, _ in _cell_outcomes(rows, "full")}
-    placebo_cells = {epoch: correct for epoch, correct, _ in _cell_outcomes(rows, "placebo")}
-    shared = sorted(set(full_cells) & set(placebo_cells))
+def within_pair_correlation(epochs: Sequence[Epoch]) -> dict[str, Any]:
+    """2x2 table and phi of Full x Placebo correctness over launch indices valid in both."""
+    full = {e.launch: e.correct for e in _valid(epochs, "full")}
+    placebo = {e.launch: e.correct for e in _valid(epochs, "placebo")}
+    shared = sorted(full.keys() & placebo.keys())
     if not shared:
         raise ValueError("no launch index is valid in both Full and Placebo")
-    a = sum(1 for e in shared if full_cells[e] and placebo_cells[e])
-    b = sum(1 for e in shared if full_cells[e] and not placebo_cells[e])
-    c = sum(1 for e in shared if not full_cells[e] and placebo_cells[e])
-    d = sum(1 for e in shared if not full_cells[e] and not placebo_cells[e])
-    n = a + b + c + d
+    a = sum(1 for k in shared if full[k] and placebo[k])
+    b = sum(1 for k in shared if full[k] and not placebo[k])
+    c = sum(1 for k in shared if not full[k] and placebo[k])
+    d = sum(1 for k in shared if not full[k] and not placebo[k])
     denom = sqrt((a + b) * (c + d) * (a + c) * (b + d))
     phi = (a * d - b * c) / denom if denom else 0.0
     lo, hi = phi_interval(a, b, c, d, level=1.0 - ALPHA)
-    materially_positive = bool(n >= 4 and denom > 0 and lo > 0.0)
     return {
-        "n_pairs": n,
-        "both_correct": a,
-        "full_only": b,
-        "placebo_only": c,
-        "neither": d,
+        "pairs": shared,
+        "table": (a, b, c, d),
         "phi": phi,
         "phi_ci_lo": lo,
         "phi_ci_hi": hi,
-        "materially_positive": materially_positive,
-        "note": MATERIAL_POSITIVE_NOTE if materially_positive else "",
+        "materially_positive": bool(len(shared) >= 4 and denom > 0 and lo > 0.0),
     }
 
 
@@ -435,115 +444,159 @@ def within_pair_correlation(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def build_report(data: dict[str, Any]) -> dict[str, Any]:
-    """Compute all three sections from a parsed readout."""
-    rows = data["rows"]
-    placebo_cells = _cell_outcomes(rows, "placebo")
-    null_cells = _cell_outcomes(rows, "null")
-    placebo_xs = [float(correct) for _, correct, _ in placebo_cells]
-    null_xs = [float(correct) for _, correct, _ in null_cells]
+def build_report(epochs: Sequence[Epoch], reused_null: Sequence[int]) -> dict[str, Any]:
+    """Compute all three sections from world-A epochs and the reused Null-A outcomes."""
+    xs = streams(epochs, reused_null)
     return {
-        "inertness": placebo_inertness(placebo_xs, null_xs),
-        "adherence": adherence(rows),
-        "correlation": within_pair_correlation(rows),
+        "streams": xs,
+        "manifest_read": {
+            arm: sum(bool(e.manifest_read) for e in _valid(epochs, arm))
+            for arm in ("full", "placebo")
+        },
+        "inertness": placebo_inertness(xs["placebo"], xs["null"]),
+        "adherence": adherence(epochs),
+        "correlation": within_pair_correlation(epochs),
+        "void": sorted(f"{e.arm}#{e.launch}" for e in epochs if e.void),
     }
 
 
-def _boundary_tag(boundary: float) -> str:
-    """Render a boundary value without changing the reported threshold."""
-    return f"{boundary:.2f}"
+def _checks(report: dict[str, Any], recorded: dict[str, Any]) -> list[tuple[str, Any, Any]]:
+    xs, arms = report["streams"], recorded["arms"]
+    each_at = float(recorded["f_minus_n"]["each_at"])
+    reads = report["manifest_read"]
+    return [
+        ("full correct", arms["full"]["correct"], int(sum(xs["full"]))),
+        ("placebo correct", arms["placebo"]["correct"], int(sum(xs["placebo"]))),
+        ("full manifest_read", arms["full"]["manifest_read"], reads["full"]),
+        ("placebo manifest_read", arms["placebo"]["manifest_read"], reads["placebo"]),
+        ("null-a n", recorded["null_a"]["n"], len(xs["null"])),
+        ("null-a correct", recorded["null_a"]["correct"], int(sum(xs["null"]))),
+        ("null-a order", recorded["null_a"]["order"], NULL_ORDER),
+        ("pairs", recorded["pairs"], report["correlation"]["pairs"]),
+        ("void_epochs", len(recorded["void_epochs"]), len(report["void"])),
+        (
+            "f_minus_n.lb_mu_f",
+            recorded["f_minus_n"]["lb_mu_f"],
+            one_sided_betting_bound(xs["full"], alpha=each_at, side="lower"),
+        ),
+        (
+            "f_minus_n.ub_mu_n",
+            recorded["f_minus_n"]["ub_mu_n"],
+            one_sided_betting_bound(xs["null"], alpha=each_at, side="upper"),
+        ),
+    ]
+
+
+def cross_check(report: dict[str, Any], recorded: dict[str, Any]) -> list[str]:
+    """Compare the report with the run's recorded summary; raise on any disagreement."""
+    lines = []
+    for name, want, got in _checks(report, recorded):
+        same = isclose(want, got, abs_tol=1e-12) if isinstance(want, float) else want == got
+        if not same:
+            raise ValueError(f"cross-check failed: {name}: run.log has {want!r}, logs give {got!r}")
+        shown = f"{len(want)} keys" if isinstance(want, list) else repr(want)
+        lines.append(f"cross_check {name}: run.log={shown}, logs agree")
+    return lines
+
+
+def _render_inertness(iner: dict[str, Any]) -> list[str]:
+    lines = [
+        "=== Placebo inertness (Placebo - Null-A) ===",
+        f"n_placebo={iner['n_placebo']} correct_placebo={iner['correct_placebo']}",
+        f"n_null={iner['n_null']} correct_null={iner['correct_null']}",
+        f"point_estimate={iner['point']:.4f}",
+    ]
+    for r in iner["readings"]:
+        verdict = "excludes" if r["excludes"] else "does not exclude"
+        lines.append(f"[alpha reading: {r['label']}]")
+        lines.append(f"  anytime_valid_interval=[{r['lo']:.4f}, {r['hi']:.4f}]")
+        lines.append(f"  the interval {verdict} +/-{BOUNDARY:.2f}")
+        if r["excludes"]:
+            continue
+        lines.append("  placebo inertness is not established at this n under this reading")
+        for key, convention in (("n_even", CONVENTION_EVEN), ("n_repeat", CONVENTION_REPEAT)):
+            value = r[key] if r[key] is not None else f"not reached by {N_SEARCH_CAP}"
+            lines.append(f"  n_to_exclude_pm_{BOUNDARY:.2f}={value} (convention: {convention})")
+    lines.append(
+        "n_to_exclude is a property of the convention, not of the data; no convention is chosen"
+    )
+    lines.append(
+        f"fixed_n_newcombe_interval=[{iner['fixed_n_lo']:.4f}, {iner['fixed_n_hi']:.4f}]"
+        " (direct two-sided fixed-n comparison, unpaired, 95%)"
+    )
+    excl = str(iner["fixed_n_excludes"]).lower()
+    lines.append(f"fixed_n_excludes_plus_minus_{BOUNDARY:.2f}={excl}")
+    return lines
+
+
+def _render_adherence(adh: dict[str, Any]) -> list[str]:
+    lines = ["=== Adherence (descriptive only) ===", "assignment_to_read:"]
+    lines += [f"  {arm}: {adh[arm]['assignment_to_read']}" for arm in ("full", "placebo")]
+    lines.append("assignment_to_outcome:")
+    lines += [f"  {arm}: {adh[arm]['assignment_to_outcome']}" for arm in ("full", "placebo")]
+    lines.append("read_to_outcome:")
+    for arm in ("full", "placebo"):
+        lines.append(f"  {arm}_correct_among_read: {adh[arm]['correct_among_read']}")
+        lines.append(f"  {arm}_correct_among_unread: {adh[arm]['correct_among_unread']}")
+    lines.append(adh["post_treatment_sentence"])
+    return lines
+
+
+def _render_correlation(corr: dict[str, Any]) -> list[str]:
+    a, b, c, d = corr["table"]
+    lines = [
+        "=== Within-pair correlation (Full x Placebo, descriptive) ===",
+        f"n_pairs={len(corr['pairs'])} (paired by launch index; void epochs excluded)",
+        f"table: both_correct={a} full_only={b} placebo_only={c} neither={d}",
+        f"phi={corr['phi']:.4f}",
+        f"phi_95_ci=[{corr['phi_ci_lo']:.4f}, {corr['phi_ci_hi']:.4f}] (Fisher z)",
+        f"materially_positive={str(corr['materially_positive']).lower()}",
+    ]
+    if corr["materially_positive"]:
+        lines.append(MATERIAL_POSITIVE_NOTE)
+    else:
+        lines.append(
+            "the interval includes zero; #684's independence assumption is not contradicted"
+            " at this n"
+        )
+    return lines
 
 
 def render(report: dict[str, Any]) -> str:
-    """Render the three sections as plain text."""
-    iner = report["inertness"]
-    adh = report["adherence"]
-    corr = report["correlation"]
-    btag = _boundary_tag(iner["boundary"])
-    lines: list[str] = []
-
-    lines.append("=== Placebo inertness (Placebo - Null-A) ===")
-    lines.append(f"n_placebo={iner['n_placebo']} correct_placebo={iner['correct_placebo']}")
-    lines.append(f"n_null={iner['n_null']} correct_null={iner['correct_null']}")
-    lines.append(
-        f"anytime_valid_interval=[{iner['anytime_valid_lo']:.4f}, {iner['anytime_valid_hi']:.4f}]"
-        f" (union bound, one_sided_betting_bound at alpha={iner['alpha_arm']} each)"
-    )
-    lines.append(f"excludes_plus_minus_{btag}={str(iner['excludes_pm_boundary']).lower()}")
-    if iner["excludes_pm_boundary"]:
-        lines.append("inertness_established=true")
-    else:
-        lines.append("inertness_established=false")
-        lines.append(
-            "placebo inertness is not established at this n; the interval still admits a"
-            f" difference of {iner['boundary']:.2f} in either direction"
-        )
-        n_excl = iner["n_to_exclude_pm_boundary"]
-        if n_excl is None:
-            lines.append(
-                f"n_to_exclude_pm_{btag}=not_reached_below_{N_SEARCH_CAP}"
-                f" (same rates, {iner['order_convention']})"
-            )
-        else:
-            lines.append(
-                f"n_to_exclude_pm_{btag}={n_excl} (same rates, {iner['order_convention']})"
-            )
-    lines.append(
-        f"fixed_n_newcombe_interval=[{iner['fixed_n_lo']:.4f}, {iner['fixed_n_hi']:.4f}]"
-        " (direct two-sided fixed-n comparison)"
-    )
-    lines.append(
-        f"fixed_n_excludes_plus_minus_{btag}={str(iner['fixed_n_excludes_pm_boundary']).lower()}"
-    )
+    """Render the streams and the three sections as plain text."""
+    xs = report["streams"]
+    lines = ["=== Launch-order streams (epoch 1 to n; 1 = world correct) ==="]
+    for tag, arm in (("P", "placebo"), ("N", "null"), ("F", "full")):
+        lines.append(f"{tag} {_bits(xs[arm])}")
+    lines.append(f"null_order: {NULL_ORDER}")
+    lines.append(f"void_epochs: {', '.join(report['void']) or 'none'}")
     lines.append("")
-
-    lines.append("=== Adherence (descriptive only) ===")
-    lines.append("assignment_to_read:")
-    for arm in ("full", "placebo"):
-        rec = adh[arm]
-        lines.append(f"  {arm}: {rec['assignment_to_read']}")
-    lines.append("assignment_to_outcome:")
-    for arm in ("full", "placebo"):
-        rec = adh[arm]
-        lines.append(f"  {arm}: {rec['assignment_to_outcome']}")
-    lines.append("read_to_outcome:")
-    for arm in ("full", "placebo"):
-        rec = adh[arm]
-        lines.append(f"  {arm}_correct_among_read: {rec['correct_among_read']}")
-        lines.append(f"  {arm}_correct_among_unread: {rec['correct_among_unread']}")
-    lines.append(adh["post_treatment_sentence"])
+    lines += _render_inertness(report["inertness"])
     lines.append("")
-
-    lines.append("=== Within-pair correlation (Full x Placebo, descriptive) ===")
-    lines.append(f"n_pairs={corr['n_pairs']}")
-    lines.append(
-        f"table: both_correct={corr['both_correct']} full_only={corr['full_only']}"
-        f" placebo_only={corr['placebo_only']} neither={corr['neither']}"
-    )
-    lines.append(f"phi={corr['phi']:.4f}")
-    lines.append(f"phi_95_ci=[{corr['phi_ci_lo']:.4f}, {corr['phi_ci_hi']:.4f}]")
-    lines.append(f"materially_positive={str(corr['materially_positive']).lower()}")
-    if corr["note"]:
-        lines.append(corr["note"])
-    else:
-        lines.append(
-            "observed correlation is not materially positive; #684's independence"
-            " assumption is not contradicted at this n"
-        )
+    lines += _render_adherence(report["adherence"])
+    lines.append("")
+    lines += _render_correlation(report["correlation"])
     return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
+    parser.add_argument("run", type=Path, help="Stage 1A run directory, its run.log, or log dir")
     parser.add_argument(
-        "readout",
+        "--null-readout",
         type=Path,
-        help="path to a Stage 1A readout .json, run.log, or directory holding one",
+        required=True,
+        help="the S475 readout.json whose Null-A epochs Stage 1A reused (required)",
     )
     args = parser.parse_args(argv)
-    data = load_readout(args.readout)
-    report = build_report(data)
+    log_dir, run_log = resolve_run(args.run)
+    report = build_report(read_epochs(log_dir), read_reused_null(args.null_readout))
     print(render(report))
+    print("")
+    if run_log is None:
+        print("cross_check: skipped (no run.log beside the logs)")
+    else:
+        print("\n".join(cross_check(report, recorded_summary(run_log))))
     return 0
 
 
