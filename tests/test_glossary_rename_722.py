@@ -14,6 +14,7 @@ names it to prove its absence would make its own assertion vacuous.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -25,13 +26,15 @@ _NEW_NAME = "GLOSSARY" + ".md"
 
 # Pinned from the pre-rename glossary file: body after the title line.
 # Only the title line may change; everything the glossary defines stays.
-# Stored as a fixture because every CI checkout uses fetch-depth: 1, so
-# ``git log --follow`` cannot reconstruct the base file there.
+# Stored as a JSON fixture because every CI checkout uses fetch-depth: 1, so
+# ``git log --follow`` cannot reconstruct the base file there. JSON keeps the
+# body off the raw-line grid so cumulative-diff rename detection still pairs
+# the old glossary path with the new one.
 _EXPECTED_BODY_SHA256 = "d8179d5194856d82f9a7ebef77eebbc78730d0b52bc0a24f6ddd6a40ebdd532e"
 _EXPECTED_BODY_LINE_COUNT = 67
 _EXPECTED_TOTAL_LINE_COUNT = 68
 _EXPECTED_TITLE = f"# {_NEW_NAME} — skill-harness\n"
-_BASE_BODY_REL = "tests/fixtures/domain-docs/context-md-body-base.md"
+_BASE_BODY_REL = "tests/fixtures/domain-docs/context-md-body-base.json"
 
 # Criterion 2: docs/agents/domain.md is the v1.3.1 setup template, byte for
 # byte. Source: github.com/mattpocock/skills at tag v1.3.1,
@@ -133,7 +136,12 @@ def test_rename_body_matches_base_fixture() -> None:
     assert glossary.is_file(), f"{_NEW_NAME} must exist at the repo root"
     assert not context.exists(), f"{_OLD_NAME} must not remain at the repo root"
     body = "".join(glossary.read_text(encoding="utf-8").splitlines(keepends=True)[1:])
-    base = _read(_BASE_BODY_REL)
+    payload = json.loads(_read(_BASE_BODY_REL))
+    base = payload["body"]
+    digest = hashlib.sha256(base.encode("utf-8")).hexdigest()
+    assert digest == payload["sha256"] == _EXPECTED_BODY_SHA256, (
+        f"{_BASE_BODY_REL} body digest moved; only the title line may change in #722"
+    )
     assert body == base, (
         f"{_NEW_NAME} body after its title line differs from the base {_OLD_NAME} body "
         f"in {_BASE_BODY_REL}; only the title line may change in #722"
