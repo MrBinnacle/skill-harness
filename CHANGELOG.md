@@ -17,10 +17,10 @@ A program that matched the old value stops matching and reports nothing.
 ### Changed
 
 - **The domain glossary is renamed from `CONTEXT.md` to `GLOSSARY.md`** (#722).
-  The name Pocock v1.3.1 reads is `GLOSSARY.md`; a reader following any live
-  pointer to the glossary now lands on that file. The move is a `git mv`, so
-  history is preserved. The title line names the glossary; the body is
-  byte-identical. `docs/agents/domain.md` is replaced with the v1.3.1
+  Pocock v1.3.1 names the domain glossary `GLOSSARY.md`; a reader following
+  any live pointer now lands on that file. Git recognizes the move as a
+  rename. The title line names the glossary; the body is byte-identical.
+  `docs/agents/domain.md` is replaced with the v1.3.1
   `setup-matt-pocock-skills` template, and `AGENTS.md` names `GLOSSARY.md` on
   both live instruction lines. Existing CHANGELOG entries that name the old
   path stay as written.

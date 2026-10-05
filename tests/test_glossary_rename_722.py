@@ -176,25 +176,14 @@ def test_agents_md_names_the_glossary_not_context() -> None:
 
 def test_no_live_file_still_names_context_md() -> None:
     """Criterion 4: live tracked files carry no hit on the old glossary name."""
-    listed = subprocess.run(
-        ["git", "-C", str(_REPO_ROOT), "ls-files"],
+    result = subprocess.run(
+        ["git", "-C", str(_REPO_ROOT), "grep", "-l", "-F", _OLD_NAME],
         capture_output=True,
         text=True,
-        check=True,
-    ).stdout.splitlines()
-    offenders: list[str] = []
-    for rel in listed:
-        if rel in _DATED_RECORD_FILES:
-            continue
-        path = _REPO_ROOT / rel
-        if not path.is_file():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
-        if _OLD_NAME in text:
-            offenders.append(rel)
+        check=False,
+    )
+    assert result.returncode in (0, 1), result.stderr
+    offenders = [rel for rel in result.stdout.splitlines() if rel not in _DATED_RECORD_FILES]
     assert not offenders, "live files still name the old glossary file:\n" + "\n".join(
         f"  - {o}" for o in offenders
     )
