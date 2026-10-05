@@ -42,9 +42,9 @@ dependencies = [
   "pydantic>=2.6",
   # rich is solo-maintainer (willmcgugan / Textualize). Use for terminal output only.
   "rich>=13.7",
-  # scipy>=1.11: EB-MoM hierarchical fit + BH-FDR fallback (A53, Track E.2).
+  # scipy>=1.18.1: EB-MoM hierarchical fit + BH-FDR fallback (A53, Track E.2).
   # Already present transitively via statsmodels; direct pin per Phase 1.1 supply-chain audit.
-  "scipy>=1.11",
+  "scipy>=1.18.1",
   # numpy is NOT listed here, and src/skill_harness/aggregation/fit.py imports it
   # directly. That is deliberate and it is a gate's ruling, not an oversight:
   # tests/test_assurance_manifest_161.py locks the runtime Requires-Dist set to
@@ -110,7 +110,7 @@ dev = [
   # scipy/statsmodels already runtime deps; re-declared here so `pip install -e ".[dev]"`
   # alone still lands the full test stack. numpy is the explicit numerical base.
   # pytest-randomly drives randomized CI order; its printed seed reproduces failures.
-  "scipy>=1.11",
+  "scipy>=1.18.1",
   "statsmodels>=0.15.0",
   "numpy>=2.5.3",
   "pytest-randomly>=4.1",
