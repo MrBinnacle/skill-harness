@@ -1,9 +1,10 @@
 """#722: the domain glossary is named GLOSSARY.md.
 
-Criterion 1 pins the rename, the title line, and the requirement that content
-otherwise stays unchanged. Criterion 2 pins ``docs/agents/domain.md`` to the
-v1.3.1 ``setup-matt-pocock-skills`` template. Criteria 3-5 pin the live
-instruction surfaces and the CHANGELOG announcement.
+Criterion 1 pins the rename through depth-1-safe content assertions: the new
+glossary exists, the old path is gone, the title line names the glossary, and
+the body after the title matches the pre-rename base fixture. Criterion 2 pins
+``docs/agents/domain.md`` to the v1.3.1 ``setup-matt-pocock-skills`` template.
+Criteria 3-5 pin the live instruction surfaces and the CHANGELOG announcement.
 
 The old filename is never written as a contiguous literal in this module: the
 criterion-4 scan greps every tracked live file for that token, and a test that
@@ -24,10 +25,13 @@ _NEW_NAME = "GLOSSARY" + ".md"
 
 # Pinned from the pre-rename glossary file: body after the title line.
 # Only the title line may change; everything the glossary defines stays.
+# Stored as a fixture because every CI checkout uses fetch-depth: 1, so
+# ``git log --follow`` cannot reconstruct the base file there.
 _EXPECTED_BODY_SHA256 = "d8179d5194856d82f9a7ebef77eebbc78730d0b52bc0a24f6ddd6a40ebdd532e"
 _EXPECTED_BODY_LINE_COUNT = 67
 _EXPECTED_TOTAL_LINE_COUNT = 68
 _EXPECTED_TITLE = f"# {_NEW_NAME} — skill-harness\n"
+_BASE_BODY_REL = "tests/fixtures/domain-docs/context-md-body-base.md"
 
 # Criterion 2: docs/agents/domain.md is the v1.3.1 setup template, byte for
 # byte. Source: github.com/mattpocock/skills at tag v1.3.1,
@@ -116,53 +120,23 @@ def test_glossary_body_keeps_the_glossary_entries() -> None:
     assert _OLD_NAME not in text, f"{_NEW_NAME} must not still name the old {_OLD_NAME} path"
 
 
-def test_git_history_records_a_rename() -> None:
-    """Criterion 1: the move is a rename in git, not a delete-plus-add.
+def test_rename_body_matches_base_fixture() -> None:
+    """Criterion 1: the move is pinable without git history.
 
-    Checks the staged summary first (``git mv`` records a rename as soon as it
-    runs) and then the committed history, so the pin holds both before and
-    after the commit that lands the rename.
+    Every CI checkout uses ``fetch-depth: 1``, so ``git log --follow`` sees no
+    rename there. Assert only what a depth-1 checkout can make: the new
+    glossary exists, the old path does not, and the body after the title line
+    equals the pre-rename base body stored under ``tests/fixtures/domain-docs/``.
     """
-    staged = subprocess.run(
-        ["git", "-C", str(_REPO_ROOT), "diff", "--cached", "--summary"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert staged.returncode == 0, staged.stderr
-    staged_is_rename = bool(
-        re.search(
-            r"rename (CONTEXT|GLOSSARY)\.md\s*(?:=>|->|to)\s*(CONTEXT|GLOSSARY)\.md",
-            staged.stdout,
-        )
-    )
-    committed = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(_REPO_ROOT),
-            "log",
-            "--follow",
-            "--diff-filter=R",
-            "--summary",
-            "--",
-            _NEW_NAME,
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert committed.returncode == 0, committed.stderr
-    committed_is_rename = bool(
-        re.search(
-            r"rename (CONTEXT|GLOSSARY)\.md\s*(?:=>|->|to)\s*(CONTEXT|GLOSSARY)\.md",
-            committed.stdout,
-        )
-    )
-    assert staged_is_rename or committed_is_rename, (
-        f"git neither staged nor committed a {_OLD_NAME} <-> {_NEW_NAME} rename.\n"
-        f"staged summary:\n{staged.stdout}\n"
-        f"committed summary:\n{committed.stdout}"
+    glossary = _REPO_ROOT / _NEW_NAME
+    context = _REPO_ROOT / _OLD_NAME
+    assert glossary.is_file(), f"{_NEW_NAME} must exist at the repo root"
+    assert not context.exists(), f"{_OLD_NAME} must not remain at the repo root"
+    body = "".join(glossary.read_text(encoding="utf-8").splitlines(keepends=True)[1:])
+    base = _read(_BASE_BODY_REL)
+    assert body == base, (
+        f"{_NEW_NAME} body after its title line differs from the base {_OLD_NAME} body "
+        f"in {_BASE_BODY_REL}; only the title line may change in #722"
     )
 
 
