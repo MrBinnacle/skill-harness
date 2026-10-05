@@ -181,10 +181,10 @@ class TestBenchTokensOnly:
             assert key.startswith("bench-"), f"non-bench typography token: {key}"
 
     def test_cant_tell_declared_for_refusal_edge(self, color_meta: dict[str, Any]) -> None:
-        """#308 moved the refusal edge onto bench-cant-tell; the snapshot must name it."""
+        """#308 moved the refusal edge onto bench-cant-tell; S516 recoloured it bone."""
         assert "bench-cant-tell" in color_meta, "bench-cant-tell missing from colorMeta"
         canonical = color_meta["bench-cant-tell"]["canonical"]
-        assert canonical.lower() == "#58a6ff", f"bench-cant-tell canonical is {canonical!r}"
+        assert canonical.lower() == "#d8d2c0", f"bench-cant-tell canonical is {canonical!r}"
 
     def test_site_faces_replace_retired_receipt_faces(self, typo_meta: dict[str, Any]) -> None:
         """Removing receipt-* faces without the bench site faces leaves the type ramp empty."""

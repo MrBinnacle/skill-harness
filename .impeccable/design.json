@@ -4,18 +4,17 @@
   "title": "Design System: skill-harness",
   "extensions": {
     "colorMeta": {
-      "bench-void": { "role": "neutral", "displayName": "Void", "canonical": "#010409" },
-      "bench-surface": { "role": "neutral", "displayName": "Surface", "canonical": "#0d1117" },
-      "bench-hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "#30363d" },
-      "bench-hairline-quiet": { "role": "neutral", "displayName": "Quiet Hairline", "canonical": "#21262d" },
-      "bench-hairline-inverse": { "role": "neutral", "displayName": "Inverse Hairline", "canonical": "#d0d7de" },
-      "bench-ink": { "role": "neutral", "displayName": "Ink", "canonical": "#e6edf3" },
-      "bench-ink-soft": { "role": "neutral", "displayName": "Soft Ink", "canonical": "#c9d1d9" },
-      "bench-muted": { "role": "neutral", "displayName": "Muted", "canonical": "#8b949e" },
-      "bench-muted-deep": { "role": "neutral", "displayName": "Deep Muted", "canonical": "#6e7681" },
-      "bench-prompt": { "role": "primary", "displayName": "Prompt Green", "canonical": "#3fb950" },
-      "bench-flagged": { "role": "secondary", "displayName": "Flagged Amber", "canonical": "#d29922" },
-      "bench-cant-tell": { "role": "secondary", "displayName": "Can't-Tell Blue", "canonical": "#58a6ff" }
+      "bench-void": { "role": "neutral", "displayName": "Void", "canonical": "#0e100d" },
+      "bench-surface": { "role": "neutral", "displayName": "Surface", "canonical": "#171a15" },
+      "bench-hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "#3a3f33" },
+      "bench-hairline-quiet": { "role": "neutral", "displayName": "Quiet Hairline", "canonical": "#282c23" },
+      "bench-hairline-inverse": { "role": "neutral", "displayName": "Inverse Hairline", "canonical": "#d8d2c0" },
+      "bench-ink": { "role": "neutral", "displayName": "Ink", "canonical": "#d8d2c0" },
+      "bench-ink-soft": { "role": "neutral", "displayName": "Soft Ink", "canonical": "#b4b2a0" },
+      "bench-muted": { "role": "neutral", "displayName": "Muted", "canonical": "#8f9480" },
+      "bench-muted-deep": { "role": "neutral", "displayName": "Deep Muted", "canonical": "#83887c" },
+      "bench-olive": { "role": "primary", "displayName": "Olive", "canonical": "#adb78c" },
+      "bench-cant-tell": { "role": "secondary", "displayName": "Can't-Tell", "canonical": "#d8d2c0" }
     },
     "typographyMeta": {
       "bench-command": { "displayName": "Command", "purpose": "The invocation demonstrated on a bench asset." },
@@ -36,7 +35,7 @@
       "refersTo": "refusal-block",
       "description": "The signature component. Renders a refusal as primary content, never as a degraded or missing state.",
       "html": "<p class=\"ds-refusal\">No comparable pool. The instrument declines to report a figure here.</p>",
-      "css": ".ds-refusal { border-left: 4px solid #58a6ff; padding: 0.25rem 0 0.25rem 0.6rem; font-weight: 600; margin: 1rem 0; border-radius: 0; }"
+      "css": ".ds-refusal { border-left: 4px solid #d8d2c0; padding: 0.25rem 0 0.25rem 0.6rem; font-weight: 600; margin: 1rem 0; border-radius: 0; }"
     },
     {
       "name": "Rule Block",
@@ -44,7 +43,7 @@
       "refersTo": "rule-block",
       "description": "A quoted governing rule or clause. Structurally identical to the Refusal Block, differing only in edge colour and weight.",
       "html": "<div class=\"ds-rule\">A missing figure is a typed refusal, never an invented score.</div>",
-      "css": ".ds-rule { border-left: 4px solid #e6edf3; margin: 1rem 0; padding: 0.25rem 0 0.25rem 0.85rem; border-radius: 0; }"
+      "css": ".ds-rule { border-left: 4px solid #8f9480; margin: 1rem 0; padding: 0.25rem 0 0.25rem 0.85rem; border-radius: 0; }"
     },
     {
       "name": "Absent Marker",
@@ -60,7 +59,7 @@
       "refersTo": "data-table",
       "description": "Collapsed 1px-ruled table. The head fill is the only fill in the entire stylesheet.",
       "html": "<table class=\"ds-table\"><caption>Cost beside evidence</caption><thead><tr><th>Clause</th><th>Status</th></tr></thead><tbody><tr><td>C1</td><td><span class=\"ds-figure\">UNMEASURED</span></td></tr></tbody></table>",
-      "css": ".ds-table { border-collapse: collapse; margin: 0.75rem 0 1rem; width: 100%; } .ds-table caption { text-align: left; font-weight: 700; padding-bottom: 0.3rem; } .ds-table th, .ds-table td { border: 1px solid #30363d; padding: 0.35rem 0.5rem; text-align: left; vertical-align: top; } .ds-table thead th { background: #010409; } .ds-figure { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace; font-size: 0.92em; font-variant-numeric: tabular-nums; }"
+      "css": ".ds-table { border-collapse: collapse; margin: 0.75rem 0 1rem; width: 100%; } .ds-table caption { text-align: left; font-weight: 700; padding-bottom: 0.3rem; } .ds-table th, .ds-table td { border: 1px solid #3a3f33; padding: 0.35rem 0.5rem; text-align: left; vertical-align: top; } .ds-table thead th { background: #0e100d; } .ds-figure { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace; font-size: 0.92em; font-variant-numeric: tabular-nums; }"
     },
     {
       "name": "Definition Grid",
@@ -76,7 +75,7 @@
       "refersTo": "site-header",
       "description": "Wordmark plus horizontal nav, separated from content by the heaviest line on the page.",
       "html": "<header class=\"ds-header\"><p class=\"ds-wordmark\">skill-harness: published receipts</p><nav><ul><li><a href=\"#\">Schema</a></li><li><a href=\"#\">Receipts</a></li></ul></nav></header>",
-      "css": ".ds-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1.5rem; border-bottom: 2px solid #e6edf3; padding: 1.5rem 0 0.5rem; } .ds-wordmark { margin: 0; font-weight: 700; letter-spacing: 0.02em; } .ds-header nav ul { display: flex; gap: 1rem; margin: 0; padding: 0; list-style: none; } .ds-header a { color: inherit; text-decoration: underline; } .ds-header a:focus-visible { outline: 2px solid #58a6ff; outline-offset: 0.25rem; }"
+      "css": ".ds-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1.5rem; border-bottom: 2px solid #d8d2c0; padding: 1.5rem 0 0.5rem; } .ds-wordmark { margin: 0; font-weight: 700; letter-spacing: 0.02em; } .ds-header nav ul { display: flex; gap: 1rem; margin: 0; padding: 0; list-style: none; } .ds-header a { color: inherit; text-decoration: underline; } .ds-header a:focus-visible { outline: 2px solid #adb78c; outline-offset: 0.25rem; }"
     },
     {
       "name": "Readout Frame",
@@ -84,7 +83,7 @@
       "refersTo": "readout-frame",
       "description": "The container both banner assets draw: Surface fill, 2px Hairline stroke, radius 0. Inside it two mono lines 48px apart, the wordmark in Deep Muted above one statement in Muted. The light banner differs by one stroke attribute (Inverse Hairline) and keeps the dark interior. No window chrome and no radius: #309 retired both.",
       "html": "<div class=\"ds-readout\"><p class=\"ds-readout-mark\">skill-harness</p><p class=\"ds-readout-statement\">Compares one task with a skill and without it.</p></div>",
-      "css": ".ds-readout { background: #0d1117; border: 2px solid #30363d; border-radius: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace; font-size: 21px; padding: 2.5rem 1rem; } .ds-readout p { margin: 0; line-height: 48px; } .ds-readout-mark { color: #6e7681; } .ds-readout-statement { color: #8b949e; }"
+      "css": ".ds-readout { background: #171a15; border: 2px solid #3a3f33; border-radius: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace; font-size: 21px; padding: 2.5rem 1rem; } .ds-readout p { margin: 0; line-height: 48px; } .ds-readout-mark { color: #83887c; } .ds-readout-statement { color: #8f9480; }"
     }
   ],
   "narrative": {
@@ -98,27 +97,27 @@
       "Numbers appear only where a receipt supplies them."
     ],
     "rules": [
-      { "name": "The Refusal-Is-Louder Rule", "body": "A refusal gets a 4px left edge in Can't-Tell Blue and font-weight 600. A measured figure gets neither. When a refusal and a measurement sit side by side, the refusal is the heavier element on the page. This inverts the usual treatment on purpose and it is the single most important rule in this system.", "section": "colors" },
-      { "name": "The Borrowed-Ground Rule", "body": "The bench neutrals are GitHub Primer's own values. They are used so the assets sit native in the environment that renders them, not as an independent palette choice. Changing the ground means leaving that environment.", "section": "colors" },
+      { "name": "The Refusal-Is-Louder Rule", "body": "A refusal gets a 4px left edge in bench-cant-tell (bone, the brightest mark) and font-weight 600. .rule takes a Muted edge, so a refusal beside a rule is the brighter edge. A measured figure gets neither. When a refusal and a measurement sit side by side, the refusal is the heavier element on the page. This inverts the usual treatment on purpose and it is the single most important rule in this system.", "section": "colors" },
+      { "name": "The Field-Ground Rule", "body": "The neutrals are one green-warm family drawn from the owner's field palette; a cool or blue-grey neutral is a defect.", "section": "colors" },
       { "name": "The Mono-Carries-The-Claim Rule", "body": "Every figure, token, command, identifier and evidence value is monospace. Prose is system sans. If a reader could copy it into a terminal or cite it as a number, it is mono.", "section": "typography" },
       { "name": "The No-Display-Face Rule", "body": "There is no display typeface and none is authorised. Scale and weight carry emphasis. A 52px mono verdict is this system's equivalent of a headline.", "section": "typography" },
       { "name": "The One-Column Rule", "body": "The published site is a single column at every width. Evidence is read top to bottom in the order the generator emitted it. No layout may reorder or parallelise it.", "section": "layout" },
       { "name": "The No-Shadow Rule", "body": "No shadow token exists and none may be added. If an element needs separation, give it a rule or a left edge. This is not a stylistic preference — a shadow implies a floating object, and nothing on an evidence surface floats.", "section": "elevation" }
     ],
     "dos": [
-      "Do give every refusal the 4px Can't-Tell Blue edge and weight 600. The Refusal-Is-Louder Rule is the system's defining commitment.",
+      "Do give every refusal the 4px bench-cant-tell edge and weight 600. The Refusal-Is-Louder Rule is the system's defining commitment.",
       "Do keep .absent italic and unbordered, distinct from .refusal. The two states mean different things.",
       "Do set every figure, token, command and identifier in mono with tabular figures.",
       "Do build separation from 1px rules, the 2px header border and 4px left edges.",
       "Do keep the site one column at every width, and the page dark-locked.",
-      "Do keep Prompt Green to the $ and confirmed success only.",
+      "Do keep Olive to focus and the command line only.",
       "Do mark the current page in the nav and give every link a visible focus ring."
     ],
     "donts": [
       "Don't add a shadow, gradient, blur, glow, grain or opacity layer.",
       "Don't add border-radius anywhere.",
       "Don't dim, collapse, abbreviate or footnote a refusal.",
-      "Don't use any chromatic colour outside the semantic three, on anything.",
+      "Don't use any chromatic colour other than Olive, or Olive on a state.",
       "Don't introduce a web font, a display face, or Inter by name.",
       "Don't render a number that no receipt supplies.",
       "Don't draw a window: no title bar, no traffic-light dots, no fake terminal.",

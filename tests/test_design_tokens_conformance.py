@@ -240,7 +240,7 @@ def declared() -> DeclaredTokens:
 
 
 def test_design_md_frontmatter_declares_all_three_classes(declared: DeclaredTokens) -> None:
-    assert "#0d1117" in declared.colors
+    assert "#171a15" in declared.colors
     assert (
         normalize_font_family(
             'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace'

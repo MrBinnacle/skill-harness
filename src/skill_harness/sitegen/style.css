@@ -19,13 +19,14 @@
  */
 
 :root {
-  --bench-void: #010409;
-  --bench-surface: #0d1117;
-  --bench-hairline: #30363d;
-  --bench-ink: #e6edf3;
-  --bench-ink-soft: #c9d1d9;
-  --bench-muted: #8b949e;
-  --bench-cant-tell: #58a6ff;
+  --bench-void: #0e100d;
+  --bench-surface: #171a15;
+  --bench-hairline: #3a3f33;
+  --bench-ink: #d8d2c0;
+  --bench-ink-soft: #b4b2a0;
+  --bench-muted: #8f9480;
+  --bench-olive: #adb78c;
+  --bench-cant-tell: #d8d2c0;
 }
 
 * {
@@ -122,7 +123,7 @@ a:hover {
 }
 
 a:focus-visible {
-  outline: 2px solid var(--bench-cant-tell);
+  outline: 2px solid var(--bench-olive);
   outline-offset: 0.25rem;
 }
 
@@ -217,7 +218,7 @@ code,
 }
 
 .rule {
-  border-left: 4px solid var(--bench-ink);
+  border-left: 4px solid var(--bench-muted);
   margin: 1rem 0;
   padding: 0.25rem 0 0.25rem 0.85rem;
 }
@@ -243,8 +244,8 @@ table {
 }
 
 /* The outer frame and the head underline carry the table's structure, so they
- * sit on bench-muted (6.15:1 on bench-surface) rather than on the hairline
- * (1.55:1). The interior cell rules stay hairline so the table does not become
+ * sit on bench-muted (5.62:1 on bench-surface) rather than on the hairline
+ * (1.62:1). The interior cell rules stay hairline so the table does not become
  * a grid of heavy boxes. */
 table {
   border: 1px solid var(--bench-muted);
@@ -530,7 +531,7 @@ footer {
  * body weight because a column of bold sentences reads as shouting; the key is
  * the thing a reader scans for, so the key is the element that wears mono.
  *
- * bench-muted measures 6.15:1 on bench-surface, which clears AA body. The row
+ * bench-muted measures 5.62:1 on bench-surface, which clears AA body. The row
  * header is width-capped so a long schema sentence does not squeeze the figure
  * and detail columns off the right edge. */
 .key-gloss {

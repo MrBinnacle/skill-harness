@@ -85,7 +85,7 @@ def test_the_favicon_draws_only_declared_tokens_and_the_scanner_can_still_fail(
     source = _FAVICON.read_text(encoding="utf-8")
     poisoned = tmp_path / "favicon.svg"
     poisoned.write_text(
-        source.replace('fill="#0d1117"', 'fill="#1b2030"').replace(
+        source.replace('fill="#171a15"', 'fill="#1b2030"').replace(
             'font-size="21"', 'font-size="14"'
         ),
         encoding="utf-8",
@@ -97,12 +97,8 @@ def test_the_favicon_draws_only_declared_tokens_and_the_scanner_can_still_fail(
 
 
 def test_the_favicon_carries_no_chroma() -> None:
-    """Direction constraint 3: the semantic three are never a brand colour.
-
-    A favicon sits on the tab whatever the page says, so a coloured icon would
-    spend the instrument's one state signal on identity.
-    """
-    semantic = ("#3fb950", "#d29922", "#58a6ff")
+    """The accent and the retired state colours are never an identity colour on the favicon."""
+    semantic = ("#adb78c", "#3fb950", "#d29922", "#58a6ff")
     text = _FAVICON.read_text(encoding="utf-8").lower()
     for colour in semantic:
         assert colour not in text, f"the favicon draws the claim-state colour {colour}"

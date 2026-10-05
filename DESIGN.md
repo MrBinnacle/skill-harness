@@ -1,24 +1,23 @@
 ---
 name: skill-harness
 description: Compares one task with a skill and without it.
-# Declared system: Test Bench. Every `bench-*` token is declared for every surface.
+# Declared system: Test Bench, on the owner's field palette (2026-10-05).
 # NOTHING IS RETIRING ANY MORE. The three surface tickets each removed the tokens only they
 # drew: #310 the social preview's window chrome, #309 the banner pair's, #308 the paper receipt
 # body and the three off-ramp site sizes. What is declared below is what the tree draws.
 # A new surface uses a `bench-*` token, because there is no other kind left.
 colors:
-  bench-void: "#010409"
-  bench-surface: "#0d1117"
-  bench-hairline: "#30363d"
-  bench-hairline-quiet: "#21262d"
-  bench-hairline-inverse: "#d0d7de"
-  bench-ink: "#e6edf3"
-  bench-ink-soft: "#c9d1d9"
-  bench-muted: "#8b949e"
-  bench-muted-deep: "#6e7681"
-  bench-prompt: "#3fb950"
-  bench-flagged: "#d29922"
-  bench-cant-tell: "#58a6ff"        # the refusal edge on the site (#308)
+  bench-void: "#0e100d"
+  bench-surface: "#171a15"
+  bench-hairline: "#3a3f33"
+  bench-hairline-quiet: "#282c23"
+  bench-hairline-inverse: "#d8d2c0"
+  bench-ink: "#d8d2c0"
+  bench-ink-soft: "#b4b2a0"
+  bench-muted: "#8f9480"
+  bench-muted-deep: "#83887c"
+  bench-olive: "#adb78c"
+  bench-cant-tell: "#d8d2c0"        # the refusal edge (#308); bone, the brightest mark
 typography:
   bench-command:
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace"
@@ -76,7 +75,7 @@ components:
     rounded: "{rounded.none}"
   rule-block:
     textColor: "{colors.bench-ink}"
-    edgeColor: "{colors.bench-ink}"
+    edgeColor: "{colors.bench-muted}"
     padding: "0.25rem 0 0.25rem 0.85rem"
     rounded: "{rounded.none}"
   data-table:
@@ -136,7 +135,7 @@ left edge than a measured figure gets.
 ## The One System
 
 **Declared: the Test Bench governs every public surface of this repository.** Ground is
-Primer dark (`bench-void` behind `bench-surface`), separation is hairlines, claims are system
+the owner's field palette, green-black (`bench-void` behind `bench-surface`), separation is hairlines, claims are system
 mono, radius is zero, and nothing sits behind a measurement. The receipt body's paper system
 (Georgia, cream `#fbfbf9`, navy `#1f4f82`) is **retired**, not kept as an exception. It leaves
 the stylesheet at #308.
@@ -156,8 +155,8 @@ Why retired and not excepted, in the SMEs' own terms:
 
 What the paper system was carrying, and where it goes: the refusal edge. A refusal must stay
 louder than a measurement (a live fact, `style.css:1-7`). On the bench the edge takes
-`bench-cant-tell` `#58a6ff`, the third semantic colour, whose role is "can't-tell, unmeasured,
-or refused state". Ochre `#8a5a00` retires with the paper because it fails contrast on
+`bench-cant-tell` `#d8d2c0`, bone, the brightest mark on the page. Loudness is width, weight
+and lightness, never hue. Ochre `#8a5a00` retires with the paper because it fails contrast on
 `bench-surface` and because it was never one of the three colours that carry claim-state
 meaning. [fact: the semantic three carry claim-state meaning; design-taste-frontend §4.2
 colour-consistency lock leaves no room for a fourth state colour]
@@ -173,28 +172,25 @@ Primer token set under `prefers-color-scheme: light`, not a return of paper.
 
 One palette. Every value is a `bench-*` token.
 
-### Semantic three
+### Accent
 
-These carry claim-state meaning and nothing else. They are never decorative, never an accent,
-never a brand colour.
+**Olive** (`#adb78c`, `bench-olive`): the focus ring, and the `$` prompt and URL on the social
+card. It marks action, never a state.
 
-- **Prompt Green** (`#3fb950`, `bench-prompt`): the `$` on a command line, and confirmed
-  success. Nothing else.
-- **Flagged Amber** (`#d29922`, `bench-flagged`): warning-class state. Carries `→ CUT` on the
-  social preview; carried `→ UNMEASURED` on the banner until S427.
-- **Can't-Tell Blue** (`#58a6ff`, `bench-cant-tell`): can't-tell, unmeasured or refused state.
-  The refusal edge on the site. Declared here for the first time; no surface uses it on the
-  tree today.
+### State
+
+No hue carries a verdict or a state. The word carries it; a refusal adds the 4px
+`bench-cant-tell` edge and weight 600; an absence is italic.
 
 ### Neutrals
 
-- **Void** (`#010409`): the outer field and the table head.
-- **Surface** (`#0d1117`): the page ground and the readout frame.
-- **Hairline** (`#30363d`) and **Quiet Hairline** (`#21262d`): every rule, border and divider.
+- **Void** (`#0e100d`): the outer field and the table head.
+- **Surface** (`#171a15`): the page ground and the readout frame.
+- **Hairline** (`#3a3f33`) and **Quiet Hairline** (`#282c23`): every rule, border and divider.
   Two weights of the same idea.
-- **Inverse Hairline** (`#d0d7de`): the frame stroke where the asset sits on a light README.
-- **Ink** (`#e6edf3`), **Soft Ink** (`#c9d1d9`), **Muted** (`#8b949e`), **Deep Muted**
-  (`#6e7681`): a four-step text ramp, brightest for the claim, dimmest for the label.
+- **Inverse Hairline** (bone `#d8d2c0`): the frame stroke where the asset sits on a light README.
+- **Ink** (`#d8d2c0`), **Soft Ink** (`#b4b2a0`), **Muted** (`#8f9480`), **Deep Muted**
+  (`#83887c`): a four-step text ramp, brightest for the claim, dimmest for the label.
 
 ### Retiring
 
@@ -205,18 +201,16 @@ never a brand colour.
 
 ### Named Rules
 
-**The Refusal-Is-Louder Rule.** A refusal gets a 4px left edge in Can't-Tell Blue and
-`font-weight: 600`. A measured figure gets neither. When a refusal and a measurement sit side
-by side, the refusal is the heavier element on the page. [fact, `style.css:1-7`; unchanged]
+**The Refusal-Is-Louder Rule.** A refusal gets a 4px left edge in `bench-cant-tell` (bone, the
+brightest mark) and `font-weight: 600`. `.rule` takes a Muted edge, so a refusal beside a rule
+is the brighter edge. A measured figure gets neither. [fact, `style.css:1-7`; unchanged]
 
-**The Semantic-Only-Chroma Rule.** No colour outside the semantic three appears on any surface.
-Links carry no chromatic accent; the underline is the affordance, in Ink, and the hover state
-is Soft Ink. [design-taste-frontend §4.2, max one accent, and the accent here is spent on
-state; stitch-design-taste §2]
+**The One-Accent Rule.** One chromatic colour, Olive, appears on any surface, and only on focus
+and the command line. Links carry no accent; the underline is the affordance, in Ink, and the
+hover is Soft Ink.
 
-**The Borrowed-Ground Rule.** The neutrals are GitHub Primer's own values, used so the assets
-sit native in the environment that renders them. Changing the ground means leaving that
-environment. [design-taste-frontend §2.A; primer, "Shared structural neutrals"]
+**The Field-Ground Rule.** The neutrals are one green-warm family drawn from the owner's field
+palette; a cool or blue-grey neutral is a defect.
 
 ## Typography
 
@@ -283,6 +277,9 @@ met]
 **Assets.** Fixed viewBox compositions, `780x176` for banners and `1280x640` for the social
 preview with a 96px safe area. Composition: flat Primer-dark field, wordmark, one statement.
 No verdict legend, no decorative data, no window chrome.
+`assets/social-preview.png` is exported from `assets/social-preview.svg` by
+`scripts/export_social_preview.py`; re-run it after any edit to the SVG and record the new pair
+in `assets/asset-pairs.json` (DC-19 refuses a stale pair).
 [design-taste-frontend §9.F "fake terminal", "decorative status dots", "middle-dot rationed";
 primer social-preview concept]
 
@@ -303,7 +300,7 @@ opacity layering, no grain. Depth is exactly three devices:
 
 1. **1px rules** in Hairline: table borders, `h2` underlines, the footer divider.
 2. **A 2px bottom border** in Ink under the site header: the heaviest line on the page.
-3. **4px left edges**: Ink for `.rule`, Can't-Tell Blue for `.refusal`.
+3. **4px left edges**: Muted for `.rule`, `bench-cant-tell` (bone) for `.refusal`.
 
 On assets, the readout frame is a 2px Hairline stroke over Surface on a Void field. That is a
 border, not a shadow.
@@ -332,7 +329,7 @@ language is rectangles, 1px rules, 4px left edges and a 2px header underline.
 
 ### Refusal Block (the signature component)
 
-- **Shape:** 4px left border in Can't-Tell Blue, no radius.
+- **Shape:** 4px left border in `bench-cant-tell`, no radius.
 - **Padding:** `0.25rem 0 0.25rem 0.6rem`. **Weight:** 600.
 - **Selectors:** `.refusal`, `.refused`.
 - **Behaviour:** identical whether the refusal is a whole verdict or one missing figure;
@@ -340,7 +337,7 @@ language is rectangles, 1px rules, 4px left edges and a 2px header underline.
 
 ### Rule Block
 
-- 4px left border in Ink, no radius, padding `0.25rem 0 0.25rem 0.85rem`. Structurally the
+- 4px left border in Muted, no radius, padding `0.25rem 0 0.25rem 0.85rem`. Structurally the
   refusal block with a different edge; the pair is the whole callout vocabulary.
 
 ### Absent Marker
@@ -362,7 +359,7 @@ language is rectangles, 1px rules, 4px left edges and a 2px header underline.
 
 - Flex row, baseline, wrapping; 2px Ink border beneath; wordmark 700 with
   `letter-spacing: 0.02em`; nav links in Ink, underlined, current page marked; a visible focus
-  ring in Can't-Tell Blue on every link. [redesign-existing-projects, "missing focus ring",
+  ring in Olive on every link. [redesign-existing-projects, "missing focus ring",
   "no indication of current page"]
 
 ### Readout Frame (assets)
@@ -376,12 +373,12 @@ language is rectangles, 1px rules, 4px left edges and a 2px header underline.
 
 ### Do
 
-- Give every refusal the 4px Can't-Tell Blue edge and weight 600.
+- Give every refusal the 4px `bench-cant-tell` edge and weight 600.
 - Keep `.absent` italic and unbordered.
 - Set every figure, token, command and identifier in mono with tabular figures.
 - Build separation from 1px rules, the 2px header border and 4px left edges.
 - Keep the site one column at every width, and the page dark-locked.
-- Keep Prompt Green to the `$` and confirmed success only.
+- Keep Olive to focus and the command line only.
 - Mark the current page in the nav and give every link a visible focus ring.
 
 ### Don't
@@ -389,7 +386,7 @@ language is rectangles, 1px rules, 4px left edges and a 2px header underline.
 - Add a shadow, gradient, blur, glow, grain or opacity layer.
 - Add `border-radius` anywhere.
 - Dim, collapse, abbreviate or footnote a refusal.
-- Use any chromatic colour outside the semantic three, on anything.
+- Use any chromatic colour other than Olive, or Olive on a state.
 - Introduce a web font, a display face, or `Inter` by name.
 - Render a number that no receipt supplies.
 - Draw a window: no title bar, no traffic-light dots, no fake terminal.
@@ -402,8 +399,8 @@ come first; the rest are what the SMEs added. A live repository fact outranks ev
 
 1. Nothing sits behind a measurement: no texture, gradient, glow, blur or grain under a
    figure, a table, a readout or a receipt. [design-taste-frontend §4.4, §9.A; fact]
-2. No colour reads as a verdict or a state outside the semantic three, and no decorative
-   colour appears at all. [design-taste-frontend §4.2; stitch-design-taste §2]
+2. No colour reads as a verdict or a state; the word carries it.
+   [design-taste-frontend §4.2; dataviz validator, normal-vision floor]
 3. No count, star, user number or live figure appears in a static graphic. [fact: owner ruling
    #253 §8; design-taste-frontend §4.9 "fake-precise numbers"]
 4. A refusal is displayed as primary content at full weight, never dimmed, collapsed or
@@ -423,8 +420,8 @@ come first; the rest are what the SMEs added. A live repository fact outranks ev
 11. No em-dash in new visible copy; existing SVG text nodes keep theirs until the owner selects
     a replacement line, because a visible-text change is a new public line and the aria-label
     is byte-pinned. [design-taste-frontend §9.G, bounded by fact]
-12. No mixed grey families: every neutral is a Primer cool grey. [redesign-existing-projects;
-    design-taste-frontend §4.2]
+12. No mixed grey families: every neutral is in the field palette's green-warm family.
+    [redesign-existing-projects; design-taste-frontend §4.2]
 13. No radius anywhere, and no second radius system. [design-taste-frontend §4.4]
 14. No card, panel, pill, badge or floating element builds hierarchy; rules and edges do.
     [design-taste-frontend §4.4; stitch-design-taste §5]
@@ -465,7 +462,7 @@ Measured defects and open questions, recorded so a future pass does not rediscov
    two-line form (Candidate A) from the labelled candidates in the S427 direction brief. The
    social preview's `→ CUT` still awaits the owner's selection on #310.
 
-4. **The light/dark banner pair differs by one stroke attribute** (`#d0d7de` vs `#30363d`);
+4. **The light/dark banner pair differs by one stroke attribute** (`#d8d2c0` vs `#3a3f33`);
    both keep the dark interior, by the file's own comment. The naming does not carry the
    intent. Since #309 the pair is one composition (wordmark, statement; two `<text>`
    nodes; 21px `bench-command` size; radius 0) with two frame strokes. The #309 ticket
