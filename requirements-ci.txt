@@ -77,7 +77,7 @@ pip-audit==2.10.1
 playwright==1.63.0
 pluggy==1.6.0
 pydantic==2.13.5
-pydantic_core==2.46.5
+pydantic_core==2.49.0
 pyee==13.0.1
 pytest-cov==7.1.0
 pytest-randomly==5.0.0
