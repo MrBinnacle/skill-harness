@@ -14,8 +14,9 @@ from __future__ import annotations
 import importlib.util
 import json
 import random
+import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from math import isnan
 from pathlib import Path
 from types import ModuleType
@@ -294,6 +295,47 @@ def test_both_conventions_find_the_first_excluding_n_on_all_zero_streams(
     assert ub(n_even) < 0.20 <= ub(n_even - 1)
 
 
+def _at(n: int, ones: Sequence[int]) -> list[float]:
+    return [1.0 if i in ones else 0.0 for i in range(n)]
+
+
+def test_even_convention_finds_the_first_excluding_n_on_a_nonzero_rate(
+    screen: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Placebo at rate 0.08 (4 of 50), Null-A all zero; the scan starts at n=50.
+
+    The success count is round(0.08 * n), not its floor: across n = 57 to 62 the two differ
+    (at n=59, 4.72 gives 5, not 4), and the floor would exclude at 59.
+    Hand-built evenly-spaced streams: at n=67, round(5.36) = 5 successes at
+    round((i + 0.5) * 67 / 5) = 7, 20, 34, 47, 60; at n=66, round(5.28) = 5 successes at
+    7, 20, 33, 46, 59. The interval excludes +/-0.20 at 67 and not at 66.
+    """
+    from skill_harness.aggregation.confidence_sequence import one_sided_betting_bound
+
+    monkeypatch.setattr(screen, "N_SEARCH_CAP", 80)
+    placebo = [1.0 if i % 25 < 2 else 0.0 for i in range(50)]
+    assert screen.n_to_exclude_even(placebo, [0.0] * 50, alpha_arm=0.025) == 67
+
+    def excludes(n: int, ones: Sequence[int]) -> bool:
+        p, z = _at(n, ones), [0.0] * n
+        hi = one_sided_betting_bound(p, alpha=0.025, side="upper")
+        lo = one_sided_betting_bound(p, alpha=0.025, side="lower") - one_sided_betting_bound(
+            z, alpha=0.025, side="upper"
+        )
+        return bool(hi < 0.20 and lo > -0.20)
+
+    assert screen.evenly_spaced(67, 5) == _at(67, (7, 20, 34, 47, 60))
+    assert excludes(67, (7, 20, 34, 47, 60))
+    assert not excludes(66, (7, 20, 33, 46, 59))
+
+
+def test_evenly_spaced_places_successes_at_the_centred_indices(screen: ModuleType) -> None:
+    """(i + 0.5) * 7 / 3 for i = 0, 1, 2 is 1.17, 3.5, 5.83: indices 1, 4 (half to even), 6."""
+    assert screen.evenly_spaced(7, 3) == [0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0]
+    # 1.5 and 4.5 round half to even: indices 2 and 4.
+    assert screen.evenly_spaced(6, 2) == [0.0, 0.0, 1.0, 0.0, 1.0, 0.0]
+
+
 def test_repeated_cycles_the_real_order(screen: ModuleType) -> None:
     assert screen.repeated([1.0, 0.0, 0.0], 7) == [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
 
@@ -334,12 +376,72 @@ def test_cross_check_agrees_with_a_matching_summary(screen: ModuleType) -> None:
     assert all(line.endswith("logs agree") for line in lines)
 
 
-def test_cross_check_refuses_a_disagreeing_summary(screen: ModuleType) -> None:
+def _set(*path: str, value: Any) -> Callable[[dict[str, Any]], None]:
+    def apply(recorded: dict[str, Any]) -> None:
+        node = recorded
+        for key in path[:-1]:
+            node = node[key]
+        node[path[-1]] = value
+
+    return apply
+
+
+def _shift(*path: str) -> Callable[[dict[str, Any]], None]:
+    def apply(recorded: dict[str, Any]) -> None:
+        recorded[path[0]][path[1]] += 0.01
+
+    return apply
+
+
+# One disagreement per cross-check row: every one of the eleven rows must refuse on its own.
+_DISAGREEMENTS: list[tuple[str, Callable[[dict[str, Any]], None]]] = [
+    ("full correct", _set("arms", "full", "correct", value=6)),
+    ("placebo correct", _set("arms", "placebo", "correct", value=5)),
+    ("full manifest_read", _set("arms", "full", "manifest_read", value=4)),
+    ("placebo manifest_read", _set("arms", "placebo", "manifest_read", value=2)),
+    ("null-a n", _set("null_a", "n", value=11)),
+    ("null-a correct", _set("null_a", "correct", value=5)),
+    ("null-a order", _set("null_a", "order", value="new epochs then reused")),
+    ("pairs", _set("pairs", value=list(range(1, 10)))),
+    ("void_epochs", _set("void_epochs", value=["placebo#11"])),
+    ("f_minus_n.lb_mu_f", _shift("f_minus_n", "lb_mu_f")),
+    ("f_minus_n.ub_mu_n", _shift("f_minus_n", "ub_mu_n")),
+]
+
+
+def test_the_disagreement_table_covers_every_cross_check_row(screen: ModuleType) -> None:
+    report = screen.build_report(_small(screen), SMALL_REUSED)
+    rows = [
+        line.split(":")[0].removeprefix("cross_check ")
+        for line in screen.cross_check(report, _recorded(report))
+    ]
+    assert rows == [name for name, _ in _DISAGREEMENTS]
+
+
+@pytest.mark.parametrize(
+    ("row", "disagree"), _DISAGREEMENTS, ids=[name for name, _ in _DISAGREEMENTS]
+)
+def test_cross_check_refuses_a_disagreeing_summary(
+    screen: ModuleType, row: str, disagree: Callable[[dict[str, Any]], None]
+) -> None:
     report = screen.build_report(_small(screen), SMALL_REUSED)
     recorded = _recorded(report)
-    recorded["null_a"]["correct"] = 5
-    with pytest.raises(ValueError, match="cross-check failed: null-a correct"):
+    disagree(recorded)
+    with pytest.raises(ValueError, match=f"cross-check failed: {re.escape(row)}:"):
         screen.cross_check(report, recorded)
+
+
+def test_recorded_summary_is_the_last_json_object_in_the_log(
+    screen: ModuleType, tmp_path: Path
+) -> None:
+    run_log = tmp_path / "run.log"
+    run_log.write_text(
+        'look 1 interim {"look": 1, "stop": false}\n'
+        "noise { not json\n"
+        'final summary {"look": 2, "arms": {"full": {"correct": 7}}}\ndone\n',
+        encoding="utf-8",
+    )
+    assert screen.recorded_summary(run_log) == {"look": 2, "arms": {"full": {"correct": 7}}}
 
 
 # ---------------------------------------------------------------------------
