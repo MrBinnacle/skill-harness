@@ -16,6 +16,15 @@ A program that matched the old value stops matching and reports nothing.
 
 ### Changed
 
+- **The domain glossary is renamed from `CONTEXT.md` to `GLOSSARY.md`** (#722).
+  Pocock v1.3.1 names the domain glossary `GLOSSARY.md`; a reader following
+  any live pointer now lands on that file. Git recognizes the move as a
+  rename. The title line names the glossary; the body is byte-identical.
+  `docs/agents/domain.md` is replaced with the v1.3.1
+  `setup-matt-pocock-skills` template, and `AGENTS.md` names `GLOSSARY.md` on
+  both live instruction lines. Existing CHANGELOG entries that name the old
+  path stay as written.
+
 - **BREAKING. `report_schema_version` goes from `1.4.0` to `2.0.0`, because the
   `aggregation_method` value `bh_fdr_fallback` is renamed to
   `bounded_pooling_refused`** (#360, #441, in `03ee27d`). The constant lives at

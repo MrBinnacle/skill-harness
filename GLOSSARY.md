@@ -1,4 +1,4 @@
-# CONTEXT.md — skill-harness
+# GLOSSARY.md — skill-harness
 
 Glossary only. Implementation detail lives in the PRD, SERS docs, and code.
 
