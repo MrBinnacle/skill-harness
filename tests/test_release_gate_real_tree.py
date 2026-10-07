@@ -1,4 +1,4 @@
-"""Real-tree release-gate control (#563 question 2).
+"""Real-tree release-gate control (#563 question 2, #735).
 
 Seam: run ``scripts/release_gate.py`` against the repository this file lives
 in, with no ``--root``, so the gate's verdict on the real tree is asserted
@@ -18,17 +18,15 @@ unpinned action reference reddened only advisory jobs. This module is that
 missing test, not a change to branch protection.
 
 Scope, stated so a reader does not over-read the green. G1 to G5 are read off
-the tree and are what this control asserts. G6, G7 and G8 are environment and
-remote properties rather than tree properties, and are neutralised
-deterministically. G6 compares a tag ref to the declared version, so the ref
-variables are dropped and it self-skips. G7 and G8 read ``api.github.com`` and
-fail CLOSED, which is right for a release and wrong for a merge-time control:
-measured against an unreachable API base, the real tree reports nine failures,
-one per assurance issue plus one for the workflow-runs read. A control that
-reddens whenever GitHub is unreachable, or whenever the shared 60-per-hour
-unauthenticated budget is spent, is a control someone mutes. So the assurance
-reads are answered by a local stub, exactly as the seeded-tree module does.
-G7 and G8 keep their own tests there; they are not this module's subject.
+the tree and are what this control asserts. G6 self-skips off a tag ref. G7
+runs: the real tree declares ``0.3.0``, and the ``0.3`` row of
+``ASSURANCE_REQUIREMENTS`` requires issues #167-#174 closed, which the local
+stub answers. G8 self-skips off a tag ref with "not a tag ref, no release
+candidate commit" (#735): there is no release candidate on an ordinary push,
+so G8 does not read the API at all. The stub is still wired to answer the
+``actions/runs?head_sha=`` endpoint, because that is the only endpoint the
+gate is allowed to ask for a run list; the request-set assertion below proves
+the gate asks for nothing on this ref.
 
 What a green here does not prove, stated generally. This control reads the
 gate's verdict from outside and drives a tree that is already clean, so it
@@ -75,41 +73,62 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 GATE = REPO_ROOT / "scripts" / "release_gate.py"
 RED_RECEIPT = REPO_ROOT / "docs" / "assurance" / "release-gate-red-563.md"
 RUNS_PATH = "/actions/workflows/assurance.yml/runs"
+HEAD_SHA_RUNS_PATH = "/actions/runs"
 
 
 def _script_assurance_issues() -> list[int]:
-    """The issue numbers G7 reads, taken from the script rather than copied.
+    """The issue numbers the ``0.3`` row of the requirements table names.
 
     A literal copy here would drift silently: widening the script's range
     would make the stub 404 an issue it never heard of, and G7 fails closed,
     so a required job would redden with ``could not read assurance issue``.
     That reads as a GitHub outage, which is the one failure this module is
-    built never to produce.
+    built never to produce. #735 folded ``ASSURANCE_ISSUES`` into the ``0.3``
+    row of ``ASSURANCE_REQUIREMENTS``, so this parses that row.
     """
     text = GATE.read_text(encoding="utf-8")
-    m = re.search(r"^ASSURANCE_ISSUES = range\((\d+), (\d+)\)", text, re.MULTILINE)
-    assert m, "scripts/release_gate.py no longer declares ASSURANCE_ISSUES as a literal range"
+    m = re.search(
+        r'"0\.3":\s*AssuranceRequirement\(issues=tuple\(range\((\d+), (\d+)\)\)',
+        text,
+        re.MULTILINE,
+    )
+    assert m, (
+        "scripts/release_gate.py no longer declares the 0.3 row of "
+        "ASSURANCE_REQUIREMENTS as AssuranceRequirement(issues=tuple(range(...)))"
+    )
     return list(range(int(m.group(1)), int(m.group(2))))
 
 
 class _Handler(BaseHTTPRequestHandler):
-    """Serves the green G7/G8 answers, and 404s anything else.
+    """Serves the green G7 answer and the head_sha runs answer, 404s anything else.
 
     Unknown paths are refused rather than answered, so a change to which
-    endpoint the gate reads surfaces here instead of being absorbed.
+    endpoint the gate reads surfaces here instead of being absorbed. The
+    workflow-filtered endpoint is answered with a 404 that names #735: the
+    gate must not ask for it on any ref.
     """
 
     issues: ClassVar[list[int]] = []
     seen: ClassVar[list[str]] = []
+    head_sha: ClassVar[str] = "0" * 40
 
     def do_GET(self) -> None:
         type(self).seen.append(self.path)
         body: bytes | None = None
-        if self.path == RUNS_PATH:
-            runs = [{"status": "completed", "conclusion": "success"}]
-            body = json.dumps({"workflow_runs": runs}).encode()
+        path_only = self.path.split("?", 1)[0]
+        if path_only == HEAD_SHA_RUNS_PATH:
+            run = {
+                "status": "completed",
+                "conclusion": "success",
+                "path": ".github/workflows/assurance.yml",
+                "head_sha": type(self).head_sha,
+            }
+            body = json.dumps({"workflow_runs": [run]}).encode()
+        elif path_only == RUNS_PATH:
+            self.send_error(404, "workflow-filtered endpoint removed by #735")
+            return
         for issue in type(self).issues:
-            if self.path == f"/issues/{issue}":
+            if path_only == f"/issues/{issue}":
                 body = json.dumps({"number": issue, "state": "closed"}).encode()
         if body is None:
             self.send_error(404, "unexpected path")
@@ -129,15 +148,15 @@ def _run_gate_on_real_tree(api_url: str) -> subprocess.CompletedProcess[str]:
 
     ``PYTHONIOENCODING`` pins the child's pipe encoding: without it a Windows
     child encodes stdout as cp1252 and the gate's em dashes crash the utf-8
-    decode. The ``GITHUB_REF`` pair is dropped so G6 self-skips on a tag build
-    of this repository, and ``GITHUB_TOKEN`` so no credential reaches the
-    local stub.
+    decode. The ``GITHUB_REF`` pair and ``GITHUB_SHA`` are dropped so G6 and
+    G8 self-skip on an ordinary push, and ``GITHUB_TOKEN`` so no credential
+    reaches the local stub.
     """
     env = os.environ | {
         "RELEASE_GATE_GITHUB_API_URL": api_url,
         "PYTHONIOENCODING": "utf-8",
     }
-    for inherited in ("GITHUB_REF", "GITHUB_REF_NAME", "GITHUB_TOKEN"):
+    for inherited in ("GITHUB_REF", "GITHUB_REF_NAME", "GITHUB_TOKEN", "GITHUB_SHA"):
         env.pop(inherited, None)
     return subprocess.run(
         [sys.executable, str(GATE)],
@@ -174,7 +193,7 @@ def gate_run() -> Iterator[tuple[subprocess.CompletedProcess[str], list[str]]]:
 def test_real_tree_passes_the_release_gate(
     gate_run: tuple[subprocess.CompletedProcess[str], list[str]],
 ) -> None:
-    """The tree this commit produces is releasable on G1 to G5."""
+    """The tree this commit produces is releasable on G1 to G5, with G7 green."""
     result, _ = gate_run
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -214,18 +233,41 @@ def test_no_tag_ref_leaks_into_the_gate_environment(
     assert "G6: not a tag ref" in result.stdout, result.stdout + result.stderr
 
 
+def test_g8_self_skips_off_a_tag_ref_on_the_real_tree(
+    gate_run: tuple[subprocess.CompletedProcess[str], list[str]],
+) -> None:
+    """#735: off a tag ref there is no release candidate, so G8 skips.
+
+    The reason is named in the output, the summary counts the skip, and the
+    stub is never asked for a run list. A green here does not prove G8 would
+    accept a run at the release candidate; the seeded module owns that lane.
+    """
+    result, requested = gate_run
+
+    assert "G8: SKIPPED, not a tag ref, no release candidate commit" in (result.stdout), (
+        result.stdout + result.stderr
+    )
+    assert not any(HEAD_SHA_RUNS_PATH in path for path in requested), (
+        f"G8 queried the runs endpoint off a tag ref on the real tree: {requested}"
+    )
+    assert RUNS_PATH not in requested, (
+        f"the gate asked for the workflow-filtered endpoint: {requested}"
+    )
+
+
 def test_the_assurance_gates_asked_for_exactly_the_issues_the_script_names(
     gate_run: tuple[subprocess.CompletedProcess[str], list[str]],
 ) -> None:
-    """G7 and G8 ran, and the stub answers the paths they actually request.
+    """G7 ran, and the stub answers the paths it actually requests.
 
     The stub 404s anything else and G7 fails closed, so a drift between the
-    script's issue range and what the stub serves would redden a required job
+    script's 0.3 row and what the stub serves would redden a required job
     with a message that reads like a GitHub outage. Asserting the request set
-    turns that into a named mismatch instead.
+    turns that into a named mismatch instead. After #735 the only API reads
+    on this ref are the G7 issue reads; G8 has no release candidate.
     """
     _, requested = gate_run
-    expected = {f"/issues/{issue}" for issue in _script_assurance_issues()} | {RUNS_PATH}
+    expected = {f"/issues/{issue}" for issue in _script_assurance_issues()}
 
     assert set(requested) == expected, (
         "the gate's assurance reads have drifted from what this module's stub serves; "

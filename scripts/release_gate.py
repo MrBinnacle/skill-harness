@@ -38,10 +38,15 @@ Checks (all must pass; failures are listed, not first-fail):
       commit SHA (mutable tag/branch refs are not provenance).
   G6  When running on a tag ref (GITHUB_REF_NAME=vX.Y.Z), the tag matches
       the pyproject version exactly.
-  G7  A 0.3.x release requires every assurance-phase issue (#167-#174)
-      closed on GitHub. Older lines (0.1.x, 0.2.x) self-skip.
-  G8  A 0.3.x release requires a successful ``assurance.yml`` workflow run
-      on record. Older lines self-skip.
+  G7  The version's minor line must have a declared row in
+      ``ASSURANCE_REQUIREMENTS``. A declared row's issue list must all be
+      closed on GitHub. An empty declared list passes by declaration. A
+      missing row is NOT RUN and blocks (#735).
+  G8  The version's minor line must have a declared row, and that row must
+      either require a green assurance run or declare that it does not. When
+      required, a tag ref must carry a successful ``assurance.yml`` run at
+      ``GITHUB_SHA`` itself; off a tag ref G8 self-skips (no release
+      candidate). A missing row is NOT RUN and blocks (#735).
 
 G7 and G8 read the GitHub REST API and fail CLOSED: an unreadable API blocks
 the release rather than passing it. ``RELEASE_GATE_GITHUB_API_URL`` names the
@@ -67,10 +72,38 @@ import tomllib
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import NamedTuple
 
 REPO = Path(__file__).resolve().parent.parent
-ASSURANCE_ISSUES = range(167, 175)
 GITHUB_API_DEFAULT = "https://api.github.com/repos/MrBinnacle/skill-harness"
+
+
+class AssuranceRequirement(NamedTuple):
+    """One minor line's declared assurance requirement (#735).
+
+    ``issues`` is the list G7 requires closed. It may be empty only when the
+    row says so explicitly, in which case G7 passes by declaration.
+    ``g8_required`` is whether G8 requires a green ``assurance.yml`` run at
+    the release candidate's own commit. False passes G8 by declaration.
+    """
+
+    issues: tuple[int, ...]
+    g8_required: bool
+
+
+ASSURANCE_REQUIREMENTS: dict[str, AssuranceRequirement] = {
+    "0.3": AssuranceRequirement(issues=tuple(range(167, 175)), g8_required=True),
+    # Later lines are declared here when their assurance phase is decided.
+    # Absence of a row fails closed: G7 and G8 each report NOT RUN and the
+    # gate blocks. Declaring a row is how a line becomes releasable; this
+    # ticket adds no row beyond 0.3.
+}
+"""Declared assurance requirements keyed by minor line (``"MAJOR.MINOR"``).
+
+The table is a tree property: it lives in this repo, so an undeclared line
+fails on every ref, including ordinary CI. That is intended — a version bump
+to a line with no declared requirement cannot merge.
+"""
 
 
 def _read(root: Path, rel: str) -> str:
@@ -194,7 +227,9 @@ TOTAL_GATES = 8
 
 A gate that does not run must say so. Before #576, G7 and G8 returned in
 silence off the 0.3 minor line, so ``RELEASE GATE: PASS`` covered six of eight
-checks and reported itself as though it covered all eight.
+checks and reported itself as though it covered all eight. #735 made an
+undeclared minor line an error rather than a skip: ``NOT RUN`` gates are
+listed as not run in the coverage claim and each adds an error.
 """
 
 
@@ -211,9 +246,10 @@ def _record_skip(skipped: list[str], gate: str, reason: str) -> None:
     print(f"{gate}: SKIPPED, {reason}.")
 
 
-def _is_zero_three(version: str) -> bool:
-    """True for the 0.3 minor line, which the assurance gates apply to."""
-    return version.split(".")[:2] == ["0", "3"]
+def _minor_line(version: str) -> str:
+    """The ``MAJOR.MINOR`` key the requirements table is keyed by."""
+    parts = version.split(".")
+    return f"{parts[0]}.{parts[1]}" if len(parts) >= 2 else version
 
 
 def _get_json(url: str) -> object:
@@ -233,13 +269,37 @@ def _get_json(url: str) -> object:
         return json.load(response)
 
 
-def gate_assurance_issues_closed(version: str, errors: list[str], skipped: list[str]) -> None:
-    """G7: the 0.3 minor gate requires every assurance phase issue closed."""
-    if not _is_zero_three(version):
-        _record_skip(skipped, "G7", f"version {version} is not on the 0.3 minor line")
-        return
+def _undeclared_line_error(gate: str, line: str) -> str:
+    """The NOT RUN error an undeclared minor line produces (#735)."""
+    return (
+        f"{gate}: NOT RUN, no assurance requirement is declared for the {line} line; "
+        f"add a row to ASSURANCE_REQUIREMENTS before releasing {line}.x."
+    )
 
-    for issue in ASSURANCE_ISSUES:
+
+def gate_assurance_issues_closed(
+    version: str, errors: list[str], skipped: list[str], not_run: list[str]
+) -> None:
+    """G7: the declared minor line's assurance issues must all be closed.
+
+    An undeclared line is NOT RUN and adds an error; it never skips. A row
+    whose issue list is explicitly empty passes by declaration, naming the
+    row. A non-empty list is read from the API and every issue must be
+    closed; an unreadable issue is an error.
+    """
+    line = _minor_line(version)
+    row = ASSURANCE_REQUIREMENTS.get(line)
+    if row is None:
+        not_run.append("G7")
+        errors.append(_undeclared_line_error("G7", line))
+        return
+    if not row.issues:
+        print(
+            f"G7: PASSED by declaration, ASSURANCE_REQUIREMENTS row {line!r} "
+            f"declares no assurance issues for the {line} line."
+        )
+        return
+    for issue in row.issues:
         try:
             document = _get_json(f"{_api_base()}/issues/{issue}")
         except (OSError, urllib.error.HTTPError, ValueError) as exc:
@@ -250,26 +310,63 @@ def gate_assurance_issues_closed(version: str, errors: list[str], skipped: list[
             errors.append(f"G7: assurance issue #{issue} is {state or 'missing a state'}")
 
 
-def gate_assurance_lane_green(version: str, errors: list[str], skipped: list[str]) -> None:
-    """G8: the 0.3 minor gate requires a recorded green assurance lane run."""
-    if not _is_zero_three(version):
-        _record_skip(skipped, "G8", f"version {version} is not on the 0.3 minor line")
-        return
+def gate_assurance_lane_green(
+    version: str, errors: list[str], skipped: list[str], not_run: list[str]
+) -> None:
+    """G8: a required green assurance run at the release candidate's commit.
 
+    Off a tag ref there is no release candidate, so G8 self-skips with that
+    reason and never falls back to any historical green run. On a tag ref,
+    G8 reads ``GITHUB_SHA`` and queries ``actions/runs?head_sha=<sha>``; only
+    a completed successful run whose workflow path is
+    ``.github/workflows/assurance.yml`` at exactly that SHA counts. A missing
+    ``GITHUB_SHA`` on a tag ref is an error, not a skip. An undeclared line
+    is NOT RUN and adds an error. A row whose ``g8_required`` flag is
+    explicitly false passes by declaration, naming the row.
+    """
+    line = _minor_line(version)
+    row = ASSURANCE_REQUIREMENTS.get(line)
+    if row is None:
+        not_run.append("G8")
+        errors.append(_undeclared_line_error("G8", line))
+        return
+    if not row.g8_required:
+        print(
+            f"G8: PASSED by declaration, ASSURANCE_REQUIREMENTS row {line!r} "
+            f"does not require a green assurance run for the {line} line."
+        )
+        return
+    ref_type = os.environ.get("GITHUB_REF", "")
+    if not ref_type.startswith("refs/tags/"):
+        _record_skip(skipped, "G8", "not a tag ref, no release candidate commit")
+        return
+    sha = os.environ.get("GITHUB_SHA", "")
+    if not sha:
+        errors.append(
+            "G8: GITHUB_SHA is unset on a tag ref; the release candidate commit "
+            "cannot be identified"
+        )
+        return
     try:
-        document = _get_json(f"{_api_base()}/actions/workflows/assurance.yml/runs")
+        document = _get_json(f"{_api_base()}/actions/runs?head_sha={sha}")
     except (OSError, urllib.error.HTTPError, ValueError) as exc:
-        errors.append(f"G8: could not read assurance workflow runs: {exc}")
+        errors.append(f"G8: could not read assurance workflow runs at {sha}: {exc}")
         return
     runs = document.get("workflow_runs", []) if isinstance(document, dict) else []
     green = any(
         isinstance(run, dict)
+        and run.get("path") == ".github/workflows/assurance.yml"
+        and run.get("head_sha") == sha
         and run.get("status") == "completed"
         and run.get("conclusion") == "success"
         for run in runs
     )
     if not green:
-        errors.append("G8: no successful assurance.yml workflow run recorded")
+        errors.append(
+            f"G8: no successful assurance.yml workflow run at the release candidate "
+            f"commit {sha}; produce one with 'gh workflow run assurance.yml "
+            f"--ref v{version}'"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -285,18 +382,21 @@ def main(argv: list[str] | None = None) -> int:
 
     errors: list[str] = []
     skipped: list[str] = []
+    not_run: list[str] = []
     version = gate_versions_lockstep(root, errors)
     gate_changelog_rolled(root, version, errors)
     gate_readme_status_banner(root, version, errors)
     gate_readme_pypi_render_safe(root, errors)
     gate_workflows_sha_pinned(root, errors)
     gate_tag_matches(version, errors, skipped)
-    gate_assurance_issues_closed(version, errors, skipped)
-    gate_assurance_lane_green(version, errors, skipped)
-    ran = TOTAL_GATES - len(skipped)
+    gate_assurance_issues_closed(version, errors, skipped, not_run)
+    gate_assurance_lane_green(version, errors, skipped, not_run)
+    ran = TOTAL_GATES - len(skipped) - len(not_run)
     coverage = f"{ran} of {TOTAL_GATES} gates ran"
     if skipped:
         coverage += f"; skipped {', '.join(skipped)}"
+    if not_run:
+        coverage += f"; not run {', '.join(not_run)}"
 
     if errors:
         print(
