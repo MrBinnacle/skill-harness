@@ -34,7 +34,7 @@ repos:
 
   # rev tracks the ruff pin in requirements-ci.txt — keep them in lockstep.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.22
+    rev: v0.16.1
     hooks:
       - id: ruff
         files: ^(src|tests|scripts)/
