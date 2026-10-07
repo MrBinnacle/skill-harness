@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-This section records the 133 commits on `main` since v0.3.0. It rolls to
-`## [0.4.0] - YYYY-MM-DD` at the tag.
+This section records the user-visible changes on `main` since v0.3.0. It rolls
+to `## [0.4.0] - YYYY-MM-DD` at the tag; the version PR (release playbook step
+2) performs that roll. Internal test, CI and docs-only commits are omitted
+unless they change a published surface.
 
 Read the first entry under Changed before you upgrade. One rename in this range
 breaks consumers silently. Nothing raises an error and nothing logs a warning.
@@ -47,6 +49,66 @@ A program that matched the old value stops matching and reports nothing.
   `docs/PRD.md:757` states the rule this follows. Removals, renames, and type
   changes take a major bump, because they break `diff skill` consumers.
 
+- **The runtime dependency floors rise to the values `pyproject.toml` declares
+  at this tag's parent.** An environment that pins any package below its floor
+  no longer satisfies this package's requirements. Measured from
+  `git diff v0.3.0 HEAD -- pyproject.toml`:
+
+  - `anthropic>=1.11.0` (was `>=1.2.0`; the floor passed through 1.5.0 in
+    #548 and landed at 1.11.0 in #727, which re-asserts the post-patch bound
+    for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3).
+  - `openai>=3.15.0,<4` (was `>=2.41,<4`; the lower bound rose in #604. The
+    `<4` cap is unchanged and still records the supply-chain audit's
+    unaudited-major rule).
+  - `click>=8.5.0` (was `>=8.1`; #606).
+  - `scipy>=1.18.1` (was `>=1.11`; #729 is the last of the floor bumps in
+    the EB-MoM numerical stack).
+  - `statsmodels>=0.15.0` (was `>=0.14`; #605).
+
+  `tiktoken`, `pydantic` and `rich` did not move. Dev-extra floors moved with
+  Dependabot and are not runtime requirements.
+
+- **The ablation runner accepts a whole prompt assembly as an arm, not only a
+  clause of one card** (#554, #615, in `9d956e8a`). `RunConfig` carries a
+  declared arm set serialized into `runs.config_json`. An assembly may name a
+  foreign skill body by path. Duplicate assemblies are refused before any
+  spend. Arm samples are written to the append-only `evidence.arm_samples`
+  table (migration 1200), and the A41 reconciler sums them with `samples.usd`.
+
+- **Every external-check refusal reason is persisted** (#555, #626, #629,
+  in `6b6b74a8`). Migration 1100's CHECK constraint listed ten
+  `UnmeasuredSubReason` literals; `external_check_missing` was never added, and
+  `INSERT OR IGNORE` silently dropped the rows. Migration 1300 rebuilds
+  `clause_run_outcomes` with all eleven members, adds a nullable
+  `sought_oracle` column, and recreates the append-only triggers. Historical
+  runs that lost those rows stay lost; new runs record the reason.
+
+- **A renamed published skill no longer loses its `value_class`** (#601, #618,
+  in `d629227e`). The registry key `closure-mode-at-boundaries` still pointed
+  at the pre-rename card name, so `value_class_for("closure-mode")` returned
+  `None` and the skill took the unclassified path instead of
+  `trap-discipline`. The key is now `closure-mode`, and a staleness test
+  fails when any non-retired key stops naming a live skill.
+
+- **A clause whose scoring axis reaches no comment or clarity outcome is
+  refused before sampling, with a clause-specific reason** (#555, #626, in
+  `6996e68d`). The blanket `BLOCKER-1` refusal is replaced by an
+  `external_check_missing` sub-reason that names the axis.
+
+- **The CLI's rich Console reads `COLUMNS` at render time, not at import**
+  (#564, #624, in `ddf1373e`). A module-level `Console()` froze the width for
+  the life of the process, so terminal resize and
+  `CliRunner(env={"COLUMNS": "200"})` were inert.
+
+- **The published receipt pages stop printing machine tokens as values**
+  (#583, in `330eca7b`). A boolean renders `yes` or `no`; a `None` whose
+  schema field names its own null case uses that word (`value_class` renders
+  `unclassified`); everything else uses the `absent` class treatment. The
+  site also gains page types, a shell with a current-page marker, a 404,
+  schema-sourced measurement-table labels, and `--base-url` so the generator
+  stops baking its own host into the output. The landing page sits behind
+  `--landing` (default off) and its one instruction is a command that runs.
+
 - **The ablation results table gains a `gate-2 (registered floor)` column**
   (#546, #558, in `c2fa804`). A clause that previously rendered a green
   `PASSED` now renders `PASSED (scalar only)`, `HARM (registered floor)`,
@@ -64,10 +126,6 @@ A program that matched the old value stops matching and reports nothing.
   tool-call blob. When an arm carries undecided epochs, the command emits a
   `HAZARD_UNDECIDED` refusal and exits 1. A run that previously produced a
   score now produces a typed refusal instead.
-
-- **The minimum `anthropic` version rises from `1.2.0` to `1.5.0`** (#548, in
-  `b1ec720`). An environment that pins `anthropic` below `1.5.0` no longer
-  satisfies this package's requirements.
 
 - **The PyPI package description is replaced** (#497, in `3ba4f69`). It now
   carries the repository's GitHub About text.
@@ -92,15 +150,60 @@ A program that matched the old value stops matching and reports nothing.
   schema rejects a new receipt, which the standard treats as intended
   generational non-comparability.
 
+
+- **SERS 1.6.0.** Separates the verdict from its present validity (#643, #654,
+  in `c879633`, finished in #655/#660, in `282a5064`). A receipt reader must
+  handle three new optional top-level objects that are absent on pre-1.6.0
+  receipts: `verdict_scope` (required on a 1.6.0 KEEP, with `model_id`,
+  `task_family` and `delivery_mechanism`), `currentness` (VALIDATED requires
+  basis `FULL_VALIDATION`; CARRIED_FORWARD requires `verdict_scope.tested_at`
+  and renders a carry-forward disclaimer; STALE names a newer metric version
+  or hash mismatch), and `drift_policy`. Receipts from different
+  `sers_version` values are not comparable.
+
+- **SERS 1.7.0.** Adds the online-FDR ledger facts and the claim-level ladder
+  to the receipt (#644, #686, in `bd3467c`; ladder fields from #647, #671, in
+  `3f8d4a90`). A receipt reader must handle two changes. First, a 1.7.0 KEEP
+  carries a required `multiplicity` object (LORDdep procedure, target FDR
+  0.05, `anytime_valid_p`, wealth before/after, batch order) and a
+  `verdict_scope.control_world_result` that must equal `pass`; a 1.7.0 CUT
+  must not carry `multiplicity` at all. Second, KEEP receipts gain
+  `designer`, `designer_independent`, `family_replication`, `model_replication`
+  and `claim_level` (KEEP / REPLICATED / ROBUST), with the ladder thresholds
+  enforced on write.
+
+- **The claim-level ladder** (#647, #671, in `3f8d4a90`). A family record
+  carries five mechanism fields and registration checks. Receipts record who
+  designed the claim, whether the designer is independent, how many
+  independently designed families replicated, and how many materially distinct
+  families a robust claim needs (three, with at least one independent
+  designer). Render sentences carry the same-designer qualifier.
+
+- **Collection screens record what each run actually delivered** (#664, #672,
+  in `ef69c192`; #667, #698, in `2787c13c`). The delivered-surface extractor
+  marks each subject card visible (with position), truncated (with delivered
+  length) or dropped, never guessing an empty listing. The collection screen
+  gains a seeded random-half arm: the seed and the drawn card names freeze
+  into `runs.config_json`, and a delivery-integrity flag marks a run whose
+  intended card was dropped or truncated from the delivered listing.
+
+
+- **The `[geometry]` extra** (#589, in the rendered-geometry harness).
+  `pip install "skill-harness[geometry]"` pulls `playwright>=1.63.0`, the
+  browser behind `src/skill_harness/sitegen/geometry.py`. The core package
+  never imports playwright; the module raises `BrowserNotInstalledError` with
+  the extra named. Installing the distribution is half the job: the Chromium
+  build is fetched separately with `python -m playwright install chromium`.
+
 - **Drift-check rows AC-2, AC-3 and AC-4.** AC-3 covers the public vacuity
   claims (#543, #565, in `f3f2ba9`). AC-4 covers workflow configuration (#571,
   in `dc7520e`). The drift check reports 20 live contracts at this version.
 
-- **Two storage migrations**, `1100_clause_run_outcomes.sql` and
-  `1101_structural_covariates.sql` (in `e047967`). Both create new tables with
-  append-only triggers and touch no existing table, so a store created under
-  v0.3.0 applies them additively on first open. Nothing in the shipped code
-  writes to `sample_structural_covariates` yet.
+- **Storage migrations** `1100_clause_run_outcomes.sql` and
+  `1101_structural_covariates.sql` (in `e047967`), plus `1200` for arm samples
+  (#615) and `1300` for the `clause_run_outcomes` CHECK rebuild (#629). All
+  create or rebuild tables additively from a v0.3.0 store's point of view;
+  1300 is the one that replaces a table in place.
 
 - **The release gate reports its own coverage** (#576). Every gate that does
   not run prints a named skip line, and both summary lines state how many of
@@ -110,6 +213,21 @@ A program that matched the old value stops matching and reports nothing.
   eight checks and did not say so.
 
 ### Fixed
+
+- **Ingest finds the skill listing where current Claude Code writes it**
+  (#675, #687, in `a9fb533`; #674, in `6505b42`). Current Claude Code puts the
+  Skill-tool listing in a system message, not in the first user message. The
+  extractor and the Stage 1A screens reader searched only the first user
+  message, so a delivered card was recorded as `no_listing` and a look
+  crashed after both samples completed. Both now scan messages in order until
+  the first assistant message and read the listing from the first message of
+  any role that holds Claude Code's header. A listing that first appears at or
+  after the first assistant message is still not attributed to the run.
+
+- **`requirements-ci.txt` pins `urllib3==2.8.0` for
+  CVE-2026-97687/97688/97689** (#701, in `e235bc6`). This is the CI
+  constraints file, not a runtime floor in `pyproject.toml`; the bump closes
+  the advisory on every environment that installs from that pin.
 
 - **The SERS schema held the UNMEASURED sub-reason vocabulary twice and one
   copy was untested** (#578). `$defs/rate_or_refusal` is referenced by ten
@@ -170,6 +288,12 @@ recorded under Changed. The work is covered by a frozen pre-registration
 `397e840`), a confirmatory run that returned REJECTED at R=1000 on the
 committed root (`13f0fbb`) and NOT_REJECTED on a fresh root (`feb318d`), and
 mutation receipts re-run against the code that ships (`36dcc22`, `4348275`).
+
+Stage 1A and Stage 2 regime simulators for #621/#685, the v3a Null
+qualification screen, comparative collection screens, ADR 0002, and the
+On-Irreducibility decline records change research findings and internal
+records, not a PyPI-observable surface. Dependabot bumps of pinned dev and CI
+actions throughout the range follow the same rule.
 
 ## [0.3.0] — 2026-09-06
 
