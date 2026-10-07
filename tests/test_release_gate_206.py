@@ -151,6 +151,7 @@ def _run_gate(
     ref: str | None = None,
     sha: str | None = None,
     script: Path | None = None,
+    filter_runs_by_head_sha: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run the gate against ``root`` with the GitHub answers seeded locally.
 
@@ -159,6 +160,14 @@ def _run_gate(
     ``seen_paths`` receives the request path of every request.
     The stub answers ``/issues/<n>`` and ``/actions/runs?head_sha=<sha>``.
     It 404s the workflow-filtered endpoint; the gate must never ask for it.
+
+    ``filter_runs_by_head_sha`` controls whether the ``/actions/runs``
+    answer is filtered to the queried ``head_sha``. The default matches
+    GitHub's real endpoint. Passing ``False`` returns every seeded run
+    regardless of the query, which is the shape that pins G8's own
+    ``run.get("head_sha") == sha`` clause: a stub that filters first can
+    never show the gate a run at another commit, so deleting the clause
+    would leave the suite green.
     """
 
     class Handler(BaseHTTPRequestHandler):
@@ -174,7 +183,10 @@ def _run_gate(
                     for pair in self.path.split("?", 1)[1].split("&"):
                         if pair.startswith("head_sha="):
                             sha_query = pair.removeprefix("head_sha=")
-                matching = [run for run in workflow_runs if run.get("head_sha") == sha_query]
+                if filter_runs_by_head_sha:
+                    matching = [run for run in workflow_runs if run.get("head_sha") == sha_query]
+                else:
+                    matching = list(workflow_runs)
                 self._respond(200, {"workflow_runs": matching})
                 return
             if path_only == FORBIDDEN_RUNS_PATH:
@@ -476,6 +488,10 @@ def test_g8_fails_when_the_green_run_is_at_another_sha(tmp_path: Path) -> None:
     ``sha_b``. G8 fails and the message names ``sha_a`` and how to produce
     the run. Before #735 G8 accepted any historical success, so this exact
     pair of SHAs was the hole the ticket closes.
+
+    This arm filters the stub answer by the queried ``head_sha``, so the
+    gate never sees the ``sha_b`` run. The companion test below returns the
+    ``sha_b`` run unfiltered and pins G8's own head-equality clause.
     """
     sha_a = "a" * 40
     sha_b = "b" * 40
@@ -494,6 +510,65 @@ def test_g8_fails_when_the_green_run_is_at_another_sha(tmp_path: Path) -> None:
     assert sha_a in g8[0], g8[0]
     assert "gh workflow run assurance.yml --ref v0.3.0" in g8[0], g8[0]
     assert sha_b not in g8[0] or sha_a in g8[0]
+
+
+def test_g8_fails_when_a_green_run_at_another_sha_is_returned_unfiltered(
+    tmp_path: Path,
+) -> None:
+    """R1-F1: G8's ``head_sha == sha`` clause, pinned against an unfiltered stub.
+
+    The stub returns every seeded run regardless of the ``head_sha`` query,
+    which is the only shape that can show G8 a green ``assurance.yml`` run at
+    ``sha_b`` while the release candidate is ``sha_a``. Deleting
+    ``run.get("head_sha") == sha`` from the gate makes this test red: the
+    mutant sees the green run, prints ``RELEASE GATE: PASS (8 of 8 gates
+    ran)``, and exits 0. With the clause present G8 fails and the message
+    names ``sha_a``.
+    """
+    sha_a = "a" * 40
+    sha_b = "b" * 40
+    root = _seed_tree(tmp_path, "0.3.0")
+    result = _run_gate(
+        root,
+        _closed(),
+        [_run_record(sha_b)],
+        ref="refs/tags/v0.3.0",
+        sha=sha_a,
+        filter_runs_by_head_sha=False,
+    )
+
+    assert result.returncode == 1, (
+        "G8 accepted a green assurance run at another SHA when the stub "
+        f"returned it unfiltered.\n{result.stdout}{result.stderr}"
+    )
+    g8 = [f for f in _failures(result) if f.startswith("G8:")]
+    assert len(g8) == 1, _failures(result)
+    assert sha_a in g8[0], g8[0]
+    assert "gh workflow run assurance.yml --ref v0.3.0" in g8[0], g8[0]
+
+
+def test_one_part_version_fails_closed_with_not_run(tmp_path: Path) -> None:
+    """R1-F2: ``_minor_line``'s one-part fallback, pinned by a one-part version.
+
+    A version with no minor component (``"0"``) has no declared row, so G7
+    and G8 each print NOT RUN and the gate blocks. Deleting the fallback
+    branch of ``_minor_line`` makes this test red with an IndexError instead
+    of the NOT RUN lines.
+    """
+    root = _seed_tree(tmp_path, "0")
+    result = _run_gate(root, issue_states={}, workflow_runs=[])
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "RELEASE GATE: BLOCKED" in result.stdout, result.stdout + result.stderr
+    assert "G7: NOT RUN, no assurance requirement is declared for the 0 line" in (result.stdout), (
+        result.stdout + result.stderr
+    )
+    assert "G8: NOT RUN, no assurance requirement is declared for the 0 line" in (result.stdout), (
+        result.stdout + result.stderr
+    )
+    assert "G7: SKIPPED" not in result.stdout
+    assert "G8: SKIPPED" not in result.stdout
+    assert "IndexError" not in result.stderr, result.stderr
 
 
 def test_g8_passes_when_the_green_run_is_at_the_release_candidate_sha(tmp_path: Path) -> None:
