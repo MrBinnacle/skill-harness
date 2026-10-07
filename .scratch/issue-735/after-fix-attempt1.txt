@@ -1,0 +1,15 @@
+.F............................                                           [100%]
+=================================== FAILURES ===================================
+____________ test_declared_empty_requirement_passes_by_declaration _____________
+tests/test_release_gate_206.py:467: in test_declared_empty_requirement_passes_by_declaration
+    assert '"0.9"' in result.stdout, result.stdout + result.stderr
+E   AssertionError: G6: not a tag ref (local run) — tag-match check self-skips.
+E     G7: PASSED by declaration, ASSURANCE_REQUIREMENTS row '0.9' declares no assurance issues for the 0.9 line.
+E     G8: PASSED by declaration, ASSURANCE_REQUIREMENTS row '0.9' does not require a green assurance run for the 0.9 line.
+E     RELEASE GATE: PASS (7 of 8 gates ran; skipped G6), public surfaces in lockstep at version 0.9.0.
+E     
+E   assert '"0.9"' in "G6: not a tag ref (local run) — tag-match check self-skips.\nG7: PASSED by declaration, ASSURANCE_REQUIREMENTS row '0... for the 0.9 line.\nRELEASE GATE: PASS (7 of 8 gates ran; skipped G6), public surfaces in lockstep at version 0.9.0.\n"
+E    +  where "G6: not a tag ref (local run) — tag-match check self-skips.\nG7: PASSED by declaration, ASSURANCE_REQUIREMENTS row '0... for the 0.9 line.\nRELEASE GATE: PASS (7 of 8 gates ran; skipped G6), public surfaces in lockstep at version 0.9.0.\n" = CompletedProcess(args=['/home/agent/venv/bin/python', '/tmp/pytest-of-agent/pytest-3/test_declared_empty_requiremen0/r... line.\nRELEASE GATE: PASS (7 of 8 gates ran; skipped G6), public surfaces in lockstep at version 0.9.0.\n", stderr='').stdout
+=========================== short test summary info ============================
+FAILED tests/test_release_gate_206.py::test_declared_empty_requirement_passes_by_declaration
+1 failed, 29 passed in 56.65s
