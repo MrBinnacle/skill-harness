@@ -49,8 +49,8 @@ def _requirement_name(req: str) -> str:
 def test_unreleased_carries_no_stale_commit_count() -> None:
     """Criterion 2: the 133-commit sentence is dropped, not corrected.
 
-    The count at PR head is ``git rev-list --count v0.3.0..HEAD`` = 213, not
-    133 and not 207. The preferred fix is to drop the sentence; this test
+    The count moves with every commit (``git rev-list --count v0.3.0..HEAD``),
+    so no figure is pinned here. The preferred fix is to drop the sentence; this test
     fails on any residual count, whatever the number.
     """
     unreleased = _unreleased()
@@ -104,7 +104,9 @@ def test_unreleased_records_the_geometry_extra() -> None:
     assert "geometry" in extras, "pyproject.toml declares no [geometry] extra"
     geometry_reqs = list(extras["geometry"])
     assert geometry_reqs, "[geometry] extra is empty"
-    assert "geometry" in unreleased, "[Unreleased] must name the geometry extra"
+    # "[geometry]", not "geometry": the bare word is also satisfied by the
+    # module path sitegen/geometry.py, so a renamed extra would still pass.
+    assert "[geometry]" in unreleased, "[Unreleased] must name the [geometry] extra"
     for req in geometry_reqs:
         name = _requirement_name(req)
         version = _floor_version(req)

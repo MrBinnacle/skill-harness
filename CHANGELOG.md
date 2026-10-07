@@ -133,7 +133,7 @@ A program that matched the old value stops matching and reports nothing.
 ### Added
 
 - **`skill-harness run pi-paired CONFIG [--execute]`**, a paired subject lane
-  for the Pi runtime (`src/skill_harness/cli/main.py:3439`). The default is a
+  for the Pi runtime (`src/skill_harness/cli/main.py:3452`). The default is a
   dry run that performs the pre-spend gate only. `--execute` runs the Full and
   Null epochs and spends money. The subcommand requires a `pi` binary that this
   package does not install. Without it the launcher raises
@@ -197,7 +197,9 @@ A program that matched the old value stops matching and reports nothing.
 
 - **Drift-check rows AC-2, AC-3 and AC-4.** AC-3 covers the public vacuity
   claims (#543, #565, in `f3f2ba9`). AC-4 covers workflow configuration (#571,
-  in `dc7520e`). The drift check reports 20 live contracts at this version.
+  in `dc7520e`). Rows DC-17 (mirror records, #514), DC-18 (Vale version
+  pins, #488) and DC-19 (asset pairs, #592) are also live. The drift check
+  reports 22 live contracts at this version.
 
 - **Storage migrations** `1100_clause_run_outcomes.sql` and
   `1101_structural_covariates.sql` (in `e047967`), plus `1200` for arm samples
