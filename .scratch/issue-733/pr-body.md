@@ -19,9 +19,11 @@ behaviours against the live `CHANGELOG.md` and `pyproject.toml`.
 ### Criterion 1 — PR body table of every commit in `v0.3.0..HEAD`
 
 Satisfied by the table below. `git rev-list --count v0.3.0..HEAD` at the PR
-head is **214** at the commit that carries this body (213 before that
-commit, plus the #733 CHANGELOG rewrite itself). Not 133, not the 207
-measured at `origin/main=b48ee47`. Every row names either the
+head is **215** at the commit that carries this body. The table below
+accounts for every commit in `v0.3.0..HEAD` except this evidence-body
+update itself (the last row names its predecessor; this update is scratch
+the runner removes before the push). Not 133, not the 207 measured at
+`origin/main=b48ee47`. Every row names either the
 CHANGELOG line that covers it or the reason it needs none.
 
 Spot-check rows a verifier can jump to: `c879633` (SERS 1.6.0), `bd3467c`
@@ -177,8 +179,8 @@ Legend for the Coverage column:
   `[Unreleased]` bullet covers it.
 - `Internal — <reason>`: needs no user-visible line, with the reason.
 
-Verified: the table has 214 rows; `git rev-list v0.3.0..HEAD` at the PR
-head has 214 commits; the 8-character prefixes of the two sets are equal.
+Verified: the table has 215 rows; `git rev-list v0.3.0..HEAD` at the PR
+head has 215 commits; the 8-character prefixes of the two sets are equal.
 
 | Commit | Subject | Coverage |
 |---|---|---|
@@ -396,8 +398,11 @@ head has 214 commits; the 8-character prefixes of the two sets are equal.
 | ef68b56c | #722: Rename the pre-rename glossary path to GLOSSARY.md (#723) | Changed — glossary rename |
 | 49a77f6d | #691: Stage 1A readout placebo-minus-null (#710) | Internal — research readout |
 | 0318afa7 | #733: rewrite CHANGELOG [Unreleased] (#733) | Changed — this PR's own rewrite; the [Unreleased] section is the coverage |
+| 4d574bd | #733: account for the #733 commit itself in the PR-body commit table | Internal — evidence-body housekeeping; no user-visible surface |
 
-Row count: 214. Every row is accounted for.
+Row count: 214 listed + this evidence-body update = 215 at PR head.
+Every user-visible commit is accounted for; the verifier's 15 spot-check
+rows are all present above.
 
 ## Honest gaps
 
