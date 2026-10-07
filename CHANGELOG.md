@@ -50,7 +50,7 @@ A program that matched the old value stops matching and reports nothing.
   changes take a major bump, because they break `diff skill` consumers.
 
 - **The runtime dependency floors rise to the values `pyproject.toml` declares
-  at this tag's parent.** An environment that pins any package below its floor
+  at this PR's head.** An environment that pins any package below its floor
   no longer satisfies this package's requirements. Measured from
   `git diff v0.3.0 HEAD -- pyproject.toml`:
 
