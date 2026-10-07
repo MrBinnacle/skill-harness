@@ -608,20 +608,24 @@ def test_g8_fails_when_the_run_at_the_sha_is_another_workflow(tmp_path: Path) ->
 
 
 @pytest.mark.parametrize(
-    ("conclusion", "case"),
-    [("failure", "a completed red run"), ("", "a run with no conclusion")],
-    ids=["red-run", "no-conclusion"],
+    ("status", "conclusion", "case"),
+    [
+        ("completed", "failure", "a completed red run"),
+        ("completed", "", "a run with no conclusion"),
+        ("in_progress", "", "a run still in flight"),
+    ],
+    ids=["red-run", "no-conclusion", "in-flight-run"],
 )
 def test_g8_fails_when_the_run_at_the_sha_is_not_success(
-    tmp_path: Path, conclusion: str, case: str
+    tmp_path: Path, status: str, conclusion: str, case: str
 ) -> None:
-    """Criterion 4: a run at the right SHA with a non-success conclusion fails."""
+    """Criterion 4: only a completed successful run at the right SHA passes."""
     sha_a = "a" * 40
     root = _seed_tree(tmp_path, "0.3.0")
     result = _run_gate(
         root,
         _closed(),
-        [_run_record(sha_a, conclusion=conclusion)],
+        [_run_record(sha_a, status=status, conclusion=conclusion)],
         ref="refs/tags/v0.3.0",
         sha=sha_a,
     )
