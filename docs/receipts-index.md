@@ -1212,17 +1212,22 @@ this entry.
 ### [`docs/assurance/release-gate-red-206.md`](assurance/release-gate-red-206.md)
 
 The deterministic falsification receipt for the `0.3.0` assurance release gate
-(#206).
+(#206, amended #735).
 
 - **Claims:** A release gate run over a seeded tree that declares `0.3.0` exits
-  1 with exactly two failures — assurance issue #169 open, and no successful
-  `assurance.yml` run on record — while checks G1 through G6 pass on that tree;
-  the recorded transcript is compared line-for-line against the gate's live
-  output by `tests/test_release_gate_206.py`.
+  1 with exactly one failure — assurance issue #169 open — while checks G1
+  through G6 pass on that tree and G8 self-skips off a tag ref with "not a tag
+  ref, no release candidate commit"; the recorded transcript is compared
+  line-for-line against the gate's live output by
+  `tests/test_release_gate_206.py`. After #735 the same seeded scenario on an
+  undeclared minor line (for example `0.4.0`) prints NOT RUN for G7 and G8
+  and exits 1, which `tests/test_release_gate_206.py` also pins.
 - **Refuses to claim:** That the local HTTP stand-in for the GitHub API is a
-  live GitHub result; that any real assurance lane run has finished green; that
-  the 0.2.x patch line is in scope for the assurance checks; that the gate is
-  tamper-proof rather than blocked-by-default.
+  live GitHub result; that any real assurance lane run has finished green at a
+  release candidate commit; that the gate is tamper-proof rather than
+  blocked-by-default; that a `0.3.0` release with all declared issues closed
+  is releasable without a tag-ref G8 run — that path is exercised only on a
+  tag ref, where `GITHUB_SHA` names the release candidate.
 
 ### [`docs/assurance/release-gate-red-563.md`](assurance/release-gate-red-563.md)
 
