@@ -39,7 +39,7 @@ dependencies = [
   # anchor against. Re-audit before raising this cap.
   "openai>=3.15.0,<4",
   "click>=8.5.0",
-  "pydantic>=2.6",
+  "pydantic>=2.14.1",
   # rich is solo-maintainer (willmcgugan / Textualize). Use for terminal output only.
   "rich>=13.7",
   # scipy>=1.18.1: EB-MoM hierarchical fit + BH-FDR fallback (A53, Track E.2).
