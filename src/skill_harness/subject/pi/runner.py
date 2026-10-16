@@ -21,10 +21,10 @@ The lifecycle, and the invariant that orders it:
     SPEND ............. the Pi subprocess, once per (epoch, arm)
     POST-SPEND ........ oracle, capture parse, ParsedEvalLog, ingest
 
-Everything checkable without a provider request happens above the SPEND
-line. ``validate_pre_spend`` performs exactly that set and returns; it is
-the whole of the driver's dry-run mode, so the checks are reachable and
-assertable without spending anything.
+The supported apparatus checks happen above the SPEND line.
+``validate_pre_spend`` is the driver's dry-run mode. It does not qualify
+the scientific design or authorize spend. Execution repeats these checks
+against its actual inputs; a prior dry-run report cannot bypass them.
 
 Two structural constraints come from the layers this driver sits between,
 and both shape the spec rather than being worked around:
@@ -150,10 +150,9 @@ class PairedRunSpec:
 class PreSpendValidation:
     """What the pre-spend gate established, and nothing it did not.
 
-    Returned by ``validate_pre_spend`` so the same object serves the dry-run
-    report and the executing path. Holding it is proof the checks ran: the
-    driver cannot reach its subprocess without one, because the epoch runner
-    takes it as a required argument.
+    Returned by ``validate_pre_spend``. It describes the inputs and
+    environment at the time of the check, not a later execution, so the
+    driver computes its own and accepts none from a caller.
     """
 
     parser: Mapping[str, str]
@@ -198,7 +197,7 @@ def _pin_for(
 
 
 def validate_pre_spend(spec: PairedRunSpec) -> PreSpendValidation:
-    """Every check that can be made without a provider request. Fail-closed.
+    """Check parser, runtime and roster without a provider request. Fail-closed.
 
     Ordered cheapest-first so the most common misconfiguration refuses
     before anything is executed at all:
@@ -346,12 +345,7 @@ def _run_one_epoch(
     return sample, report.session_id
 
 
-def run_paired_evaluation(
-    spec: PairedRunSpec,
-    conn: sqlite3.Connection,
-    *,
-    validated: PreSpendValidation | None = None,
-) -> IngestResult:
+def run_paired_evaluation(spec: PairedRunSpec, conn: sqlite3.Connection) -> IngestResult:
     """The one production path for a Pi paired evaluation.
 
     Validates, spends, parses, normalises, and hands the pair to the
@@ -359,16 +353,17 @@ def run_paired_evaluation(
     ``ParsedEvalLog`` objects; everything downstream of
     ``write_paired_evidence`` is unchanged and unconsulted here.
 
-    ``validated`` exists so a caller that has already run the dry-run gate
-    can pass its result rather than repeating the checks. Omitted, the gate
-    runs here. There is no path to the subprocess that skips it.
+    The pre-spend checks always run here, on this spec and this environment,
+    before the first epoch. No earlier result can be passed in: a dry-run
+    report may describe another spec or an environment that has since
+    changed. These are apparatus checks, not scientific qualification or
+    spend authorization.
 
     :raises PiPairedRunError: any apparatus failure, before or after spend.
     :raises PiParseError: a defective capture, raised before the sample
         exists.
     """
-    if validated is None:
-        validated = validate_pre_spend(spec)
+    validated = validate_pre_spend(spec)
 
     full_samples: list[ParsedSample] = []
     null_samples: list[ParsedSample] = []
