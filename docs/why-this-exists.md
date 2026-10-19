@@ -98,7 +98,7 @@ people watching.
 
 ## The instrument is that loop turned inward
 
-`CAN'T-TELL-YET`, and `UNMEASURED` with a typed reason attached, are "I don't actually know"
+`CANT_TELL_YET`, and `UNMEASURED` with a typed reason attached, are "I don't actually know"
 applied to the tool's own output with the same seriousness I had to apply it to myself. It
 would have been easy to ship something that always returns a score. It would also have been
 useless to me, which is the only user I was sure of.

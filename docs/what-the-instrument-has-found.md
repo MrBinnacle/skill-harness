@@ -34,13 +34,13 @@ without it
 A skill can exist to stop one specific wrong move. A model that passes without such a skill has
 shown that the trap did not come up, which is a different finding from the skill being useless. So
 `subsumed` is a CUT only for skills registered `TRANSFORMATIVE_LIFT`, the class whose whole claim
-is lift above the bar. Every other class reclassifies to CAN'T-TELL-YET, on the ground that this is
+is lift above the bar. Every other class reclassifies to `CANT_TELL_YET`, on the ground that this is
 the wrong instrument for that kind of skill rather than a verdict on it.
 
 Two skills from the collection moved that way when the guard landed:
 `append-only-evidence-design` (calibration) and a hardened `git-pull-rebase-trap`
 (trap-discipline). Under the pre-guard rule both returned **CUT (subsumed)**, each at a no-skill
-pass rate of 1.00; the value-class guard reclassified both to CAN'T-TELL-YET
+pass rate of 1.00; the value-class guard reclassified both to `CANT_TELL_YET`
 ([receipts](https://github.com/MrBinnacle/skill-harness/tree/main/docs/sers/receipts/)). The
 pre-guard CUTs stay in the record as dated output, not edited into agreement.
 

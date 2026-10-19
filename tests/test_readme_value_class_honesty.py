@@ -1,7 +1,7 @@
 """README honesty lock for the value-class guard reclassification (#139).
 
 Pins outward-facing text only: the status block must keep the dated pre-guard
-CUT (subsumed) results, state the post-guard CAN'T-TELL-YET reclassification and
+CUT (subsumed) results, state the post-guard CANT_TELL_YET reclassification and
 its reason, and not defend a CUT the code no longer returns. Also locks the
 three-case reproduction the ticket requires (two portfolio skills + positive
 control).
@@ -57,7 +57,7 @@ def test_readme_states_reclassification_to_cant_tell_yet() -> None:
     text = _readme()
     assert re.search(r"value-class guard", text, re.IGNORECASE)
     assert re.search(
-        r"reclassif\w+.*CAN'?T-TELL-YET|CAN'?T-TELL-YET.*reclassif",
+        r"reclassif\w+.*CANT_TELL_YET|CANT_TELL_YET.*reclassif",
         text,
         re.DOTALL | re.IGNORECASE,
     )
@@ -90,11 +90,11 @@ def test_every_cut_subsumed_sits_beside_reclassification_note() -> None:
 
 
 def test_keep_cut_cant_tell_product_claim_is_value_class_qualified() -> None:
-    """Bare present-tense KEEP/CUT/CAN'T-TELL-YET product claims name the guard."""
+    """Bare present-tense KEEP/CUT/CANT_TELL_YET product claims name the guard."""
     text = _readme()
     # Status-block product sentence: three verdicts.
     m = re.search(
-        r"one of three verdicts:.*?(?:KEEP|CUT|CAN'T-TELL-YET).{0,800}",
+        r"one of three verdicts:.*?(?:KEEP|CUT|CANT_TELL_YET).{0,800}",
         text,
         re.DOTALL | re.IGNORECASE,
     )

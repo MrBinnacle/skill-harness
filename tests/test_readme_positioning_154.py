@@ -151,7 +151,7 @@ def test_status_block_facts_unchanged() -> None:
     assert "value-class guard" in text
     assert "append-only-evidence-design" in text
     assert "git-pull-rebase-trap" in text
-    assert "CAN'T-TELL-YET" in text
+    assert "CANT_TELL_YET" in text
     assert "TRANSFORMATIVE_LIFT" in text
 
 
