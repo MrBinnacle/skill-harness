@@ -73,7 +73,7 @@ dependencies = [
 # Supply-chain note: docs/supply-chain/inspect-audit-2026-07-09.md.
 inspect = [
   "inspect-ai>=0.3.245",
-  "inspect-swe>=0.2.65",
+  "inspect-swe>=0.2.71",
 ]
 # Receipts site generator (#186): the SERS draft-2020-12 validator. Opt-in —
 # the core package never imports jsonschema; sitegen pulls it lazily behind
