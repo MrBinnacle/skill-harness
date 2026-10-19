@@ -1,0 +1,9 @@
+# skill-harness pinned compose (generated from the harness pin)
+# Mirrors inspect_ai's auto-compose; image is digest-pinned for admissibility.
+services:
+  default:
+    image: "aisiuk/inspect-tool-support@sha256:fb045da8203aea656785c758f7147b003cfe21f213e9048a38be0a33242a5b3d"
+    command: "tail -f /dev/null"
+    init: true
+    network_mode: none
+    stop_grace_period: 1s

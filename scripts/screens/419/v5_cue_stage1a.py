@@ -1,0 +1,712 @@
+"""#621 Stage 1A (#649, #662): Full-A + Placebo-A + Null-A on the silent-origin cue pair.
+
+Authorised by the operator on the Binnacle Board, gate `cue-stage2`, answered 2026-09-22: "Only
+the $2.66 first stage". Design record: the steering repo's
+docs/research/stage2-lean-design-answer-S475.md, Stage 1A row. All three A cells run: Full-A,
+Placebo-A and Null-A. The Null-A arm reuses epochs from ``--null-readout`` and runs
+``N - n_reused`` new epochs, where N is ``--epochs-per-arm`` (default 16).
+
+Each valid epoch scores 1 when the world ends correct and 0 otherwise; void epochs are excluded
+and reported. The registered stop rule:
+
+  UB(F - P) < 0.20, one-sided at alpha 0.05                           -> CUT_NO_LIFT
+  LB(F - P) >= 0.20 and LB(F - N) >= 0.20, one-sided at --pass-alpha  -> A_PASSES_EARLY
+  anything else                                                       -> UNRESOLVED_CONTINUE
+
+F - P pairs Full and Placebo by launch index, the epoch number, never by completion order:
+runtime can correlate with outcome, and the betting argument needs an order fixed before the
+outcomes are seen. A pair is dropped when either epoch is void. The pair's x = (F - P + 1) / 2
+is bounded by ``one_sided_betting_bound`` and mapped back by d = 2x - 1.
+
+F - N has N Full against N Null epochs (7 reused + N - 7 new), so it is not paired.
+LB(F - N) is the lower bound on the Full rate at pass-alpha/2 minus the upper bound on the
+Null rate at pass-alpha/2 (a union bound), each on the raw 0/1 outcomes in epoch order.
+The Null-A rate is read over the reused epochs followed by the new ones, in launch order.
+
+The pass is the card-level test p = max(p_FN, p_FP) <= pass-alpha against the shifted null
+H0: d <= 0.20, run as both one-sided lower bounds at level pass-alpha clearing 0.20.
+``--pass-alpha`` defaults to the public ledger's LORDdep level for the first card tested,
+0.0209, because the ledger controls false KEEPs. CUT_NO_LIFT is a separate futility boundary
+at alpha 0.05. The launcher mints no verdict and writes no SERS receipt.
+
+Sequential reads: after every completed epoch index i (all three arms at index i valid, or the
+pair dropped per the existing void rule), ``read_stage1a`` is evaluated on the prefix. The
+bounds are ``one_sided_betting_bound``, which is anytime-valid (Waudby-Smith & Ramdas, 2024),
+so a look after every epoch spends no extra level. The run stops at the first look that fires
+either rule, or at N with UNRESOLVED_CONTINUE (reported as CANT_TELL_YET_AT_N_MAX).
+
+``--dry-run`` makes no model call. It prints the operating table for every (correct_F,
+correct_P) in 0..N x 0..N, each bound in the worst order found for it, once at pass-alpha 0.05
+and once at 0.0209, whatever ``--pass-alpha`` says. The price line shows new epochs and cap.
+
+Run: PYTHONPATH=src python scripts/screens/419/v5_cue_stage1a.py --out DIR \
+         --null-readout READOUT.json [--epochs-per-arm N] [--pass-alpha A] [--dry-run]
+"""
+
+from __future__ import annotations
+
+import argparse
+import itertools
+import json
+import random
+import re
+import sys
+import tempfile
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass, replace
+from functools import cache
+from pathlib import Path
+from typing import Any, Literal
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from cue_audit import FIXTURE_ROOT_DEFAULT, TRACE
+from twin_digest import LIVE_IMAGE
+from v4_cells import FULL_DIR_DEFAULT
+from v5_cue_cells import build_cells
+
+from skill_harness.aggregation.confidence_sequence import one_sided_betting_bound
+from skill_harness.subject import HarnessPin
+
+EPOCHS_PER_ARM = 16
+PER_SAMPLE_CAP = 0.30
+REALIZED_EPOCH_COSTS = (0.083, 0.087)
+MODEL = "anthropic/claude-sonnet-5"
+RETRY_UNCAUGHT_ERRORS = 1
+ALPHA = 0.05
+BOUNDARY = 0.20
+LEDGER_PASS_ALPHA = 0.0209
+DRY_RUN_SHUFFLES = 24
+DRY_RUN_SEED = 649
+
+PLACEBO_DESC = (
+    "Use before opening a CSV where a column may hold IDs. "
+    "Quoting does NOT stop a spreadsheet's number parse (silently applied); "
+    "it drops every leading zero. Check the column type first."
+)
+FULL_DESC = (
+    "Use before `git pull` where `pull.rebase` may be `true`. `--no-ff` does NOT stop a "
+    "rebase under `pull.rebase=true` (silently ignored); it rewrites every local commit SHA. "
+    "Check config first."
+)
+CARD_DESCRIPTIONS = {"full": FULL_DESC, "placebo": PLACEBO_DESC}
+
+Outcome = Literal["CUT_NO_LIFT", "A_PASSES_EARLY", "UNRESOLVED_CONTINUE"]
+Side = Literal["lower", "upper"]
+
+
+def stop_rule(*, ub_fp: float, lb_fp: float, lb_fn: float) -> Outcome:
+    """The registered Stage 1A rule. ``ub_fp`` is at alpha 0.05; the two lower bounds are at
+    the pass alpha."""
+    if ub_fp < BOUNDARY:
+        return "CUT_NO_LIFT"
+    if lb_fp >= BOUNDARY and lb_fn >= BOUNDARY:
+        return "A_PASSES_EARLY"
+    return "UNRESOLVED_CONTINUE"
+
+
+def pass_test_name(pass_alpha: float) -> str:
+    return (
+        f"card-level p = max(p_FN, p_FP) <= {pass_alpha} against H0: d <= {BOUNDARY}, "
+        f"tested as both one-sided lower bounds at level {pass_alpha} clearing {BOUNDARY}"
+    )
+
+
+@cache
+def _bound(xs: tuple[float, ...], alpha: float, side: Side) -> float:
+    return one_sided_betting_bound(xs, alpha=alpha, side=side)
+
+
+def fp_bounds(xs: Sequence[float], *, pass_alpha: float) -> tuple[float, float]:
+    """(LB at pass-alpha, UB at 0.05) of F - P on the d scale, from paired x values."""
+    key = tuple(xs)
+    return 2 * _bound(key, pass_alpha, "lower") - 1, 2 * _bound(key, ALPHA, "upper") - 1
+
+
+def pair_by_launch(
+    full: dict[int, int], placebo: dict[int, int]
+) -> tuple[list[int], tuple[float, ...]]:
+    """Pair by epoch number. Returns the pairing keys and x = (F - P + 1) / 2 in key order."""
+    keys = sorted(full.keys() & placebo.keys())
+    return keys, tuple((full[k] - placebo[k] + 1) / 2 for k in keys)
+
+
+def _fewest_ties(correct_f: int, correct_p: int, n: int) -> dict[float, int]:
+    """The F - P pairing with the most disagreements, which gives the widest interval."""
+    wins = min(correct_f, n - correct_p)
+    losses = wins - (correct_f - correct_p)
+    return {1.0: wins, 0.0: losses, 0.5: n - wins - losses}
+
+
+def _search_orders(
+    counts: dict[float, int], shuffles: int, seed: int
+) -> Iterator[tuple[float, ...]]:
+    """Every block order of the counts, then ``shuffles`` seeded shuffles."""
+    for block in itertools.permutations(counts):
+        yield tuple(v for v in block for _ in range(counts[v]))
+    pool = [v for v, k in counts.items() for _ in range(k)]
+    rng = random.Random(seed)  # noqa: S311 - a reproducible order search, not a secret
+    for _ in range(shuffles):
+        rng.shuffle(pool)
+        yield tuple(pool)
+
+
+def _placements(n: int, correct: int) -> Iterator[tuple[float, ...]]:
+    for bits in itertools.product((0.0, 1.0), repeat=n):
+        if sum(bits) == correct:
+            yield bits
+
+
+def worst_fp(
+    correct_f: int, correct_p: int, *, n: int, pass_alpha: float, shuffles: int, seed: int
+) -> tuple[float, float]:
+    """The lowest LB and the highest UB of F - P over the searched orders of the fewest-ties
+    pairing. Not an exhaustive search over every order."""
+    orders = _search_orders(_fewest_ties(correct_f, correct_p, n), shuffles, seed)
+    bounds = [fp_bounds(xs, pass_alpha=pass_alpha) for xs in orders]
+    return min(lo for lo, _ in bounds), max(hi for _, hi in bounds)
+
+
+def worst_fn(
+    correct_f: int,
+    *,
+    n: int,
+    null_correct: int,
+    n_null: int,
+    pass_alpha: float,
+    shuffles: int,
+    seed: int,
+) -> float:
+    """The lowest LB(F - N): Full over the searched orders, Null over every placement."""
+    half = pass_alpha / 2
+    full_orders = _search_orders({1.0: correct_f, 0.0: n - correct_f}, shuffles, seed)
+    lb_f = min(_bound(xs, half, "lower") for xs in full_orders)
+    ub_n = max(_bound(bits, half, "upper") for bits in _placements(n_null, null_correct))
+    return lb_f - ub_n
+
+
+@dataclass(frozen=True)
+class TableCell:
+    correct_f: int
+    correct_p: int
+    ub_fp: float
+    lb_fp: float
+    lb_fn: float
+    outcome: Outcome
+
+
+def operating_table(
+    *,
+    null_correct: int,
+    n_null: int,
+    pass_alpha: float,
+    n: int = EPOCHS_PER_ARM,
+    shuffles: int = DRY_RUN_SHUFFLES,
+    seed: int = DRY_RUN_SEED,
+) -> list[TableCell]:
+    """Every (correct_F, correct_P) outcome, each bound at its own worst case."""
+    search: dict[str, Any] = {"n": n, "pass_alpha": pass_alpha, "shuffles": shuffles, "seed": seed}
+    lb_fn = {
+        cf: worst_fn(cf, null_correct=null_correct, n_null=n_null, **search) for cf in range(n + 1)
+    }
+    cells: list[TableCell] = []
+    for cf, cp in itertools.product(range(n + 1), repeat=2):
+        lb, ub = worst_fp(cf, cp, **search)
+        outcome = stop_rule(ub_fp=ub, lb_fp=lb, lb_fn=lb_fn[cf])
+        cells.append(TableCell(cf, cp, ub, lb, lb_fn[cf], outcome))
+    return cells
+
+
+def render_table(
+    cells: Sequence[TableCell], *, pass_alpha: float, n_null: int, n: int = EPOCHS_PER_ARM
+) -> str:
+    lines = [
+        f"=== OPERATING TABLE at pass-alpha {pass_alpha} (UB(F-P) one-sided at alpha {ALPHA}; "
+        f"boundary {BOUNDARY}) ===",
+        "pass = " + pass_test_name(pass_alpha),
+        "correct_F correct_P  UB(F-P)  LB(F-P)  LB(F-N)  outcome",
+    ]
+    lines += [
+        f"{c.correct_f:9d} {c.correct_p:9d}  {c.ub_fp:7.3f}  {c.lb_fp:7.3f}  {c.lb_fn:7.3f}  "
+        f"{c.outcome}"
+        for c in cells
+    ]
+    lines.append(
+        f"LB(F-N) = LB(mu_F) - UB(mu_N), each one-sided at {pass_alpha / 2}, "
+        f"{n} Full against {n_null} Null-A, worst order:"
+    )
+    seen: dict[int, float] = {c.correct_f: c.lb_fn for c in cells}
+    lines += [f"  correct_F={cf:2d}  LB(F-N)={lb:7.3f}" for cf, lb in sorted(seen.items())]
+    lines += _summary_lines(cells)
+    return "\n".join(lines)
+
+
+def _summary_lines(cells: Sequence[TableCell]) -> list[str]:
+    def listed(pred: Any) -> str:
+        found = [f"({c.correct_f},{c.correct_p})" for c in cells if pred(c)]
+        return " ".join(found) if found else "none"
+
+    fn_min = [c.correct_f for c in cells if c.lb_fn >= BOUNDARY]
+    return [
+        f"cells: {len(cells)}",
+        "CUT_NO_LIFT: " + listed(lambda c: c.outcome == "CUT_NO_LIFT"),
+        "A_PASSES_EARLY: " + listed(lambda c: c.outcome == "A_PASSES_EARLY"),
+        "LB(F-P) >= boundary (the F-P half of the pass): " + listed(lambda c: c.lb_fp >= BOUNDARY),
+        "minimum correct_F with LB(F-N) >= boundary: " + (str(min(fn_min)) if fn_min else "none"),
+    ]
+
+
+@dataclass(frozen=True)
+class NullA:
+    outcomes: tuple[int, ...] | None
+    correct: int
+    n: int
+
+
+def load_null_a(path: Path) -> NullA:
+    """Valid Null-A outcomes in epoch order, or counts only when the read-out has no rows."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    rows = [
+        r
+        for r in data.get("rows", [])
+        if r["arm"] == "null" and r["world"] == "a" and not r["void"]
+    ]
+    summary = data["summary"]["null/a"]
+    if not rows:
+        return NullA(outcomes=None, correct=int(summary["correct"]), n=int(summary["n"]))
+    rows.sort(key=lambda r: int(r["epoch"]))
+    outcomes = tuple(int(bool(r["final_world_correct"])) for r in rows)
+    if len(outcomes) != summary["n"] or sum(outcomes) != summary["correct"]:
+        raise ValueError(f"{path}: Null-A rows disagree with the summary")
+    return NullA(outcomes=outcomes, correct=sum(outcomes), n=len(outcomes))
+
+
+def null_upper(null_a: NullA, alpha: float) -> tuple[float, str]:
+    """UB(mu_N) at ``alpha``: epoch order when read, else the worst placement of the counts."""
+    if null_a.outcomes is not None:
+        return _bound(tuple(map(float, null_a.outcomes)), alpha, "upper"), "Null-A in epoch order"
+    worst = max(_bound(bits, alpha, "upper") for bits in _placements(null_a.n, null_a.correct))
+    return worst, "counts only: Null-A outcomes placed in the worst order for the bound"
+
+
+def stage1a_tasks(
+    compose_dir: Path, *, epochs: int = EPOCHS_PER_ARM
+) -> tuple[HarnessPin, list[Any]]:
+    """Return the pin and the three A tasks: Full, Placebo, Null. Nothing is evaluated."""
+    pin = HarnessPin.capture(
+        agent_version="2.1.197",
+        model=MODEL,
+        sandbox="docker",
+        cwd="/root",
+        sandbox_image=LIVE_IMAGE,
+    )
+    cells = build_cells(
+        fixture_root=FIXTURE_ROOT_DEFAULT,
+        full_dir=FULL_DIR_DEFAULT,
+        pin=pin,
+        epochs=epochs,
+        compose_dir=compose_dir,
+        retry_uncaught_errors=RETRY_UNCAUGHT_ERRORS,
+    )
+    return pin, [cells[("full", "a")], cells[("placebo", "a")], cells[("null", "a")]]
+
+
+def _look_directories(log_dir: Path) -> list[Path]:
+    """Return sequential-look directories, or the legacy single log directory."""
+    look_dirs = sorted(path for path in log_dir.glob("look-*") if path.is_dir())
+    return look_dirs or [log_dir]
+
+
+def _launch_index(path: Path, sample_epoch: int) -> int:
+    """Recover a sequential launch index from a per-look log path."""
+    if path.parent.name.startswith("look-"):
+        return int(path.parent.name.removeprefix("look-"))
+    return sample_epoch
+
+
+def _manifest_reads(log_dir: Path) -> dict[tuple[str, int], bool]:
+    """(arm, epoch) -> whether any tool call named the trace file."""
+    from inspect_ai.log import read_eval_log
+
+    found: dict[tuple[str, int], bool] = {}
+    for look_dir in _look_directories(log_dir):
+        for path in sorted(look_dir.glob("*.eval")):
+            log = read_eval_log(str(path))
+            arm = str((log.eval.metadata or {})["cell_arm"])
+            for sample in log.samples or []:
+                found[(arm, _launch_index(path, int(sample.epoch)))] = any(
+                    TRACE in json.dumps(call.arguments)
+                    for message in sample.messages
+                    for call in getattr(message, "tool_calls", None) or []
+                )
+    return found
+
+
+_LISTING_HEADER = "The following skills are available for use with the Skill tool:"
+_LISTING_BULLET_RE = re.compile(r"^- [^:\n]+: ", re.MULTILINE)
+
+
+def _message_text(message: Any) -> str:
+    """Return text content from the Inspect message shapes used in eval logs."""
+    content = getattr(message, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            part.get("text", "") if isinstance(part, dict) else getattr(part, "text", "")
+            for part in content
+        ]
+        return " ".join(str(part) for part in parts if part)
+    return ""
+
+
+def _listing_position(log_dir: Path) -> dict[tuple[str, int], int]:
+    """Return each card's bullet position in the Skill-tool listing, whatever message carries it.
+
+    Claude Code 2.1.197 delivers the listing in a system-role message, not the first user
+    message (S486). Missing listings or descriptions, cards outside a bullet, duplicate epoch
+    keys, and positions other than one make the readout refuse. The Full and Placebo listing
+    surfaces must match before their contrast can support the pre-registered
+    attribution claim (S477).
+    """
+    from inspect_ai.log import read_eval_log
+
+    positions: dict[tuple[str, int], int] = {}
+    for look_dir in _look_directories(log_dir):
+        for path in sorted(look_dir.glob("*.eval")):
+            log = read_eval_log(str(path))
+            arm = str((log.eval.metadata or {})["cell_arm"])
+            description = CARD_DESCRIPTIONS.get(arm)
+            if description is None:
+                continue
+            for sample in log.samples or []:
+                epoch = _launch_index(path, int(sample.epoch))
+                key = (arm, epoch)
+                if key in positions:
+                    raise ValueError(f"duplicate listing position for {arm} epoch {epoch}")
+                listing = next(
+                    (
+                        text.split(_LISTING_HEADER, 1)[1]
+                        for text in map(_message_text, sample.messages)
+                        if _LISTING_HEADER in text
+                    ),
+                    None,
+                )
+                if listing is None:
+                    raise ValueError(f"{arm} epoch {epoch}: no skill listing in any message")
+                description_offset = listing.find(description)
+                if description_offset < 0:
+                    raise ValueError(
+                        f"{arm} epoch {epoch}: card description missing from the skill listing"
+                    )
+                position = sum(
+                    entry.start() <= description_offset
+                    for entry in _LISTING_BULLET_RE.finditer(listing)
+                )
+                if position == 0:
+                    raise ValueError(
+                        f"{arm} epoch {epoch}: card description is outside a bulleted listing"
+                    )
+                if position != 1:
+                    raise ValueError(
+                        f"{arm} epoch {epoch}: card appears at listing position {position}, "
+                        "expected 1"
+                    )
+                positions[key] = position
+    return positions
+
+
+def _read_rows_by_launch(log_dir: Path) -> list[Any]:
+    """Read rows and retain the outer sequential look as each row's launch index."""
+    from twin_readout import read_rows
+
+    rows: list[Any] = []
+    for look_dir in _look_directories(log_dir):
+        for row in read_rows(look_dir):
+            rows.append(replace(row, epoch=_launch_index(look_dir / "placeholder.eval", row.epoch)))
+    return rows
+
+
+def read_stage1a(
+    log_dir: Path, null_a: NullA, pass_alpha: float, *, n: int = EPOCHS_PER_ARM
+) -> dict[str, Any]:
+    rows = _read_rows_by_launch(log_dir)
+    manifest = _manifest_reads(log_dir)
+    positions = _listing_position(log_dir)
+    expected_positions = {(r.arm, r.epoch) for r in rows if r.arm in CARD_DESCRIPTIONS}
+    missing_positions = expected_positions - positions.keys()
+    if missing_positions:
+        missing = ", ".join(f"{arm} epoch {epoch}" for arm, epoch in sorted(missing_positions))
+        raise ValueError(f"listing position missing for {missing}")
+    arms: dict[str, Any] = {}
+    outcomes: dict[str, dict[int, int]] = {}
+    for arm in ("full", "placebo"):
+        valid = sorted((r for r in rows if r.arm == arm and not r.void), key=lambda r: r.epoch)
+        outcomes[arm] = {r.epoch: int(r.final_world_correct) for r in valid}
+        arms[arm] = {
+            "n": len(valid),
+            "correct": sum(outcomes[arm].values()),
+            "silent_violation": sum(r.silent_violation for r in valid),
+            "no_publish": sum(r.no_publish for r in valid),
+            "manifest_read": sum(manifest[(arm, r.epoch)] for r in valid),
+        }
+    keys, xs = pair_by_launch(outcomes["full"], outcomes["placebo"])
+    lb_fp, ub_fp = fp_bounds(xs, pass_alpha=pass_alpha)
+    full_stream = tuple(float(outcomes["full"][e]) for e in sorted(outcomes["full"]))
+    lb_f = _bound(full_stream, pass_alpha / 2, "lower")
+    # Null-A: combine reused epochs from --null-readout with new epochs from eval logs.
+    # The reused epochs come first in launch order, followed by the new ones.
+    null_rows = sorted(
+        (r for r in rows if r.arm == "null" and r.world == "a"),
+        key=lambda r: r.epoch,
+    )
+    null_new_rows = [r for r in null_rows if not r.void]
+    null_stream: tuple[float | None, ...] | None = None
+    if null_a.outcomes is not None:
+        null_new_by_launch = {r.epoch: float(r.final_world_correct) for r in null_new_rows}
+        if null_rows and max(r.epoch for r in null_rows) <= n - null_a.n:
+            # A legacy one-shot Null task numbers its top-up epochs from one.
+            new_stream = tuple(float(r.final_world_correct) for r in null_new_rows)
+        else:
+            new_stream = tuple(
+                null_new_by_launch.get(launch) for launch in range(null_a.n + 1, n + 1)
+            )
+        null_stream = tuple(float(o) for o in null_a.outcomes) + new_stream
+        null_order = "Null-A reused epochs then new epochs in launch order"
+    elif null_new_rows:
+        null_stream = tuple(float(r.final_world_correct) for r in null_new_rows)
+        null_order = "Null-A new epochs only (no per-epoch order in readout)"
+    else:
+        null_order = "Null-A counts only (no per-epoch order in readout)"
+    observed_null_stream = tuple(value for value in null_stream or () if value is not None)
+    if observed_null_stream:
+        ub_n = _bound(observed_null_stream, pass_alpha / 2, "upper")
+    else:
+        ub_n, null_order = null_upper(null_a, pass_alpha / 2)
+    total_null_n = null_a.n + len(null_new_rows)
+    total_null_correct = null_a.correct + sum(int(r.final_world_correct) for r in null_new_rows)
+    if null_stream is None:
+        sequential_outcome: Outcome = stop_rule(ub_fp=ub_fp, lb_fp=lb_fp, lb_fn=lb_f - ub_n)
+        fired_at: int | None = None
+    else:
+        sequential_outcome, fired_at = sequential_evaluate(
+            outcomes["full"], outcomes["placebo"], null_stream, n=n, pass_alpha=pass_alpha
+        )
+    readout_outcome = (
+        "CANT_TELL_YET_AT_N_MAX"
+        if sequential_outcome == "UNRESOLVED_CONTINUE"
+        else sequential_outcome
+    )
+    return {
+        "arms": arms,
+        "listing_positions": {f"{arm}#{ep}": v for (arm, ep), v in positions.items()},
+        "listing_position_violations": {},
+        "null_a": {
+            "n": total_null_n,
+            "correct": total_null_correct,
+            "order": null_order,
+        },
+        "alpha": ALPHA,
+        "pass_alpha": pass_alpha,
+        "boundary": BOUNDARY,
+        "pass_test": pass_test_name(pass_alpha),
+        "pairing_key": "epoch number (launch index); a pair is dropped when either epoch is void",
+        "pairs": keys,
+        "f_minus_p": {"lb_at_pass_alpha": lb_fp, "ub_at_alpha": ub_fp, "n_pairs": len(keys)},
+        "f_minus_n": {
+            "lb_at_pass_alpha": lb_f - ub_n,
+            "lb_mu_f": lb_f,
+            "ub_mu_n": ub_n,
+            "each_at": pass_alpha / 2,
+            "n_full": len(full_stream),
+            "n_null": total_null_n,
+        },
+        "outcome": readout_outcome,
+        "sequential": {
+            "outcome": sequential_outcome,
+            "fired_at": fired_at,
+            "n_max": n,
+        },
+        "void_epochs": [f"{r.arm}/{r.world}#{r.epoch}" for r in rows if r.void],
+        "total_usd": round(sum(r.usd for r in rows), 4),
+    }
+
+
+def _hard_cap(n: int, n_reused: int) -> float:
+    """Budget cap: new epochs = 3*N - n_reused, cost at PER_SAMPLE_CAP each."""
+    new_epochs = 3 * n - n_reused
+    return new_epochs * PER_SAMPLE_CAP
+
+
+def sequential_evaluate(
+    full_outcomes: dict[int, int],
+    placebo_outcomes: dict[int, int],
+    null_outcomes_combined: tuple[float | None, ...],
+    *,
+    n: int,
+    pass_alpha: float,
+) -> tuple[Outcome, int | None]:
+    """Evaluate the stop rule sequentially after each completed epoch index.
+
+    After every epoch index i (1..n), if Full and Placebo are both valid at i,
+    compute the F-P pair and the F-N bounds on the prefix. Returns the outcome
+    and the epoch index at which the rule first fires, or (UNRESOLVED_CONTINUE, None)
+    if no rule fires by epoch n.
+
+    The bounds are ``one_sided_betting_bound``, which is anytime-valid (Waudby-Smith &
+    Ramdas, 2024), so a look after every epoch spends no extra level.
+    """
+    paired_xs: list[float] = []
+    full_prefix: list[float] = []
+    null_prefix: list[float] = []
+    for i in range(1, n + 1):
+        if i in full_outcomes:
+            full_prefix.append(float(full_outcomes[i]))
+        if i in full_outcomes and i in placebo_outcomes:
+            paired_xs.append((full_outcomes[i] - placebo_outcomes[i] + 1) / 2)
+        # Accumulate Null-A outcomes up to index i.
+        if i <= len(null_outcomes_combined) and null_outcomes_combined[i - 1] is not None:
+            null_prefix.append(null_outcomes_combined[i - 1])
+        if not paired_xs:
+            continue
+        lb_fp, ub_fp = fp_bounds(paired_xs, pass_alpha=pass_alpha)
+        lb_f = _bound(tuple(full_prefix), pass_alpha / 2, "lower") if full_prefix else 0.0
+        ub_n = _bound(tuple(null_prefix), pass_alpha / 2, "upper") if null_prefix else 1.0
+        outcome = stop_rule(ub_fp=ub_fp, lb_fp=lb_fp, lb_fn=lb_f - ub_n)
+        if outcome != "UNRESOLVED_CONTINUE":
+            return outcome, i
+    return "UNRESOLVED_CONTINUE", None
+
+
+def smallest_look(cells: Sequence[TableCell], *, n: int) -> dict[Outcome, int | None]:
+    """For each outcome, the smallest epoch index at which it first appears in the table.
+
+    The table has (n+1)^2 cells for (correct_F, correct_P) in 0..n. The epoch index
+    at which an outcome fires is min(correct_F, correct_P) + 1 (the number of paired
+    epochs needed to reach that (correct_F, correct_P) cell).
+    """
+    result: dict[Outcome, int | None] = {
+        "CUT_NO_LIFT": None,
+        "A_PASSES_EARLY": None,
+        "UNRESOLVED_CONTINUE": None,
+    }
+    for c in cells:
+        look = max(c.correct_f, c.correct_p) + 1
+        if result[c.outcome] is None or look < result[c.outcome]:  # type: ignore[operator]
+            result[c.outcome] = look
+    return result
+
+
+def dry_run(null_a: NullA, *, n: int = EPOCHS_PER_ARM) -> None:
+    print(
+        f"Null-A: {null_a.correct} correct of {null_a.n} valid "
+        f"({'per-epoch order read' if null_a.outcomes is not None else 'counts only'}); "
+        "the table uses counts only."
+    )
+    print(
+        "F-P: launch-index pairs, the fewest-ties pairing in its 6 block orders plus "
+        f"{DRY_RUN_SHUFFLES} shuffles (seed {DRY_RUN_SEED}); not an exhaustive order search. "
+        "F-N: Full in its 2 block orders plus the same shuffles; Null over every placement."
+    )
+    for pass_alpha in (ALPHA, LEDGER_PASS_ALPHA):
+        cells = operating_table(
+            null_correct=null_a.correct,
+            n_null=null_a.n,
+            pass_alpha=pass_alpha,
+            n=n,
+            shuffles=DRY_RUN_SHUFFLES,
+        )
+        print(render_table(cells, pass_alpha=pass_alpha, n_null=null_a.n, n=n))
+        looks = smallest_look(cells, n=n)
+        for outcome_name in ("CUT_NO_LIFT", "A_PASSES_EARLY", "UNRESOLVED_CONTINUE"):
+            look = looks[outcome_name]
+            print(f"  smallest look for {outcome_name}: {look if look is not None else 'never'}")
+    new_epochs = 3 * n - null_a.n
+    cap = _hard_cap(n, null_a.n)
+    print(f"new epochs: {new_epochs} (3*{n} - {null_a.n})")
+    expected = "; ".join(
+        f"${new_epochs * cost:.2f} at ${cost:.3f}/epoch" for cost in REALIZED_EPOCH_COSTS
+    )
+    print(f"expected: {expected}")
+    print(f"cap: ${cap:.2f} (new epochs * ${PER_SAMPLE_CAP})")
+    print("DRY RUN: no model call.")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--null-readout", type=Path, required=True)
+    parser.add_argument("--epochs-per-arm", type=int, default=EPOCHS_PER_ARM)
+    parser.add_argument("--pass-alpha", type=float, default=LEDGER_PASS_ALPHA)
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
+    null_a = load_null_a(args.null_readout)
+    n = args.epochs_per_arm
+    if n < 1:
+        parser.error("--epochs-per-arm must be positive")
+    if n < null_a.n:
+        parser.error(f"--epochs-per-arm ({n}) is below the {null_a.n} valid reused Null-A epochs")
+    hard_cap = _hard_cap(n, null_a.n)
+    if args.dry_run:
+        dry_run(null_a, n=n)
+        return 0
+    if null_a.outcomes is None:
+        parser.error("--null-readout must retain per-epoch Null-A outcomes for sequential reads")
+
+    from v5_cue_stage1 import _model_cost  # imports the [inspect] extra
+
+    cost = _model_cost()
+    # Each look uses fresh one-epoch tasks so a fired boundary prevents later spend.
+    compose_dir = Path(tempfile.mkdtemp(prefix="cue-stage1a-"))
+    pin, tasks = stage1a_tasks(compose_dir, epochs=1)
+    fp_tasks = [tasks[0], tasks[1]]  # Full and Placebo
+    print("pin fingerprint:", pin.fingerprint(), "| image:", pin.sandbox_image)
+    print(
+        f"tasks={[t.name for t in tasks]} epochs/arm={n} model={MODEL} "
+        f"per-sample cost_limit=${PER_SAMPLE_CAP:.3f} total cap=${hard_cap:.2f} "
+        f"retry_uncaught_errors={RETRY_UNCAUGHT_ERRORS} retry_on_error=0 "
+        f"pass-alpha={args.pass_alpha}"
+    )
+
+    import inspect_ai
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    for look in range(1, n + 1):
+        look_dir = args.out / f"look-{look:03d}"
+        logs = inspect_ai.eval(
+            fp_tasks,
+            log_dir=str(look_dir),
+            display="plain",
+            retry_on_error=0,
+            max_sandboxes=2,
+            fail_on_error=False,
+            cost_limit=PER_SAMPLE_CAP,
+            model_cost_config=cost,
+        )
+        for log in logs:
+            print("LOG:", log.location, "STATUS:", log.status, "run_id:", log.eval.run_id)
+        if look > null_a.n:
+            logs = inspect_ai.eval(
+                [tasks[2]],
+                log_dir=str(look_dir),
+                display="plain",
+                retry_on_error=0,
+                max_sandboxes=1,
+                fail_on_error=False,
+                cost_limit=PER_SAMPLE_CAP,
+                model_cost_config=cost,
+            )
+            for log in logs:
+                print("LOG:", log.location, "STATUS:", log.status, "run_id:", log.eval.run_id)
+        interim = read_stage1a(args.out, null_a, args.pass_alpha, n=n)
+        if interim["sequential"]["fired_at"] is not None:
+            break
+    readout = read_stage1a(args.out, null_a, args.pass_alpha, n=n)
+    (args.out / "readout.json").write_text(json.dumps(readout, indent=2), encoding="utf-8")
+    print(json.dumps(readout, indent=2))
+    print("OUTCOME:", readout["outcome"])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,10 @@
+# Same tokens as Dashes.yml, at error. Vale holds ONE level per rule across the whole
+# config, so a section cannot raise Dashes to error on README.md alone; a second rule,
+# switched on only in the [README.md] section of .vale.ini, is how the gate is scoped.
+extends: existence
+message: "Dashes: '%s' is not used here. Recast the sentence, or use a spaced hyphen."
+level: error
+nonword: true
+tokens:
+  - '—'
+  - '–'
