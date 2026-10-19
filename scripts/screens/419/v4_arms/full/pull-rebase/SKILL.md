@@ -72,3 +72,4 @@ Install an adopter-owned guard using [the runtime recipes and required case tabl
 - `git pull --no-ff` as a "safe default" — only safe if you've verified `pull.rebase` is unset or `false`.
 - Running `git pull` to "investigate divergence." Use `git fetch` + `git log HEAD..origin/<branch>` for read-only divergence inspection.
 - Trusting that `--no-ff` documentation describes the full behavior. It describes `git merge --no-ff` behavior; `git pull --no-ff` behaves differently under rebase.
+

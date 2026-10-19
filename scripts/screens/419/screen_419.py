@@ -21,9 +21,7 @@ PER_SAMPLE_CAP = HARD_CAP_USD / K  # sum over K samples <= HARD_CAP_USD by const
 MODEL = "anthropic/claude-sonnet-5"
 OUT = Path(sys.argv[sys.argv.index("--out") + 1])
 COMPOSE = Path(sys.argv[sys.argv.index("--compose") + 1])
-SKILL_DIR = (
-    Path.home() / ".claude/plugins/cache/mrbinnacle-skills/mrbinnacle-engineering/3.0.0/pull-rebase"
-)
+SKILL_DIR = Path(__file__).resolve().parent / "v4_arms" / "full" / "pull-rebase"
 P = PRICE_PER_MTOK["claude-sonnet-5"]
 cost = {
     MODEL: ModelCost(

@@ -20,16 +20,17 @@ repos:
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: end-of-file-fixer
-        # libFuzzer corpus/crash inputs are opaque bytes; do not rewrite them.
-        exclude: ^fuzz/(corpus|crashes|artifacts)/
+        # libFuzzer corpus/crash inputs are opaque bytes, and the #764 Full arm is a verbatim tag
+        # copy pinned by blob id; do not rewrite either.
+        exclude: ^(fuzz/(corpus|crashes|artifacts)|scripts/screens/419/v4_arms/full/pull-rebase)/
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
-        exclude: ^fuzz/(corpus|crashes|artifacts)/
+        exclude: ^(fuzz/(corpus|crashes|artifacts)|scripts/screens/419/v4_arms/full/pull-rebase)/
       - id: mixed-line-ending
         args: [--fix=lf]
         # Same reason as the two hooks above: a corpus/crash unit is bytes, and
         # --fix=lf rewrites the CRLF inside one as readily as in source.
-        exclude: \.(ps1|cmd|bat)$|^fuzz/(corpus|crashes|artifacts)/
+        exclude: \.(ps1|cmd|bat)$|^(fuzz/(corpus|crashes|artifacts)|scripts/screens/419/v4_arms/full/pull-rebase)/
       - id: detect-private-key
 
   # rev tracks the ruff pin in requirements-ci.txt — keep them in lockstep.
