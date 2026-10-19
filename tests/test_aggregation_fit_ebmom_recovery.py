@@ -101,6 +101,8 @@ from skill_harness.aggregation.fit import (
     fit_skill,
 )
 
+pytestmark = pytest.mark.xdist_group("ebmom_measurements")
+
 SEED: int = 20260902
 K_CLAUSES: int = 200
 R_REPLICATES: int = 50
