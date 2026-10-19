@@ -1,0 +1,2190 @@
+"""AblationRunner -- deterministic orchestration engine for ablation sampling (D.2).
+
+This is the core runner that:
+1. For each clause in a skill, renders Full / Ablated_k / Null conditions.
+2. Samples subject-model outputs (via SubjectClient).
+3. Scores them through the oracles directionally (Full beats Ablated_k on primary axis?).
+4. Accumulates the Beta-Binomial posterior and evaluates sequential stopping.
+5. Monitors confounds across all metric axes in-memory.
+6. Enforces budget (pre-call gate + post-call reconciliation in ONE transaction).
+7. Writes append-only verdicts to evidence.db via Track A repositories.
+8. Stamps runs.completed_at exactly ONCE after the last verdict commits.
+
+Non-negotiable invariants (load-bearing; see docs/INVARIANTS.md):
+- Deterministic Python owns ALL control flow. SubjectClient is content worker only.
+- Append-only evidence: no UPDATE on evidence rows except runs.completed_at single-shot.
+- Budget cap check + reservation in ONE writer_transaction(runtime) (A42).
+- Cost written from actual response usage, never projection (A41).
+- primary_clause_id == ablated_clause_id write-side assertion (A46).
+- runs.completed_at written once after the clause loop completes (natural stop per clause).
+- Warmup-or-serialize before fan-out across conditions (A43/COST-4).
+
+Design principles:
+- All model calls mocked at SDK boundary in tests (A32 precedent).
+- No live API calls in tests (--m 'not live').
+- Single-threaded in v0.1 (D11 deferred).
+- Evidence-first dual-write ordering (A25).
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import time
+import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, NoReturn
+
+from skill_harness.ablation.arms import (
+    ArmAssembly,
+    ArmSpec,
+    arm_from_json_dict,
+    arm_to_json_dict,
+    resolve_arm_assemblies,
+)
+from skill_harness.ablation.confound import (
+    N_NULL_FLOOR,
+    ConfoundEvent,
+    NullAccumulator,
+    check_operator_length_tolerance,
+    delta_to_observation,
+    detect_confounds,
+    get_default_tier1_scorers,
+)
+from skill_harness.ablation.operator import AblationOperator
+from skill_harness.ablation.path_c import (
+    PathCResult,
+    RegisteredGate2Thresholds,
+    UnregisteredThresholdsError,
+    decide_clause,
+    registered_thresholds,
+)
+from skill_harness.ablation.reconciler import reconcile_run_cost
+from skill_harness.ablation.render import ConditionRenderer
+from skill_harness.ablation.stopping import (
+    N_INC,
+    N_MAX,
+    N_MIN,
+    BetaBinomialAccumulator,
+    StopDecision,
+    StoppingReason,
+    next_check_at,
+)
+from skill_harness.ablation.subject import (
+    SubjectAdapter,
+    SubjectCallError,
+    SubjectResponse,
+    make_subject_client,
+    project_call_cost,
+    sha256_of_output,
+)
+from skill_harness.ablation.subset_arm import SubsetArmDraw, SubsetArmDrawRecord
+from skill_harness.aggregation.status import UnmeasuredSubReason
+from skill_harness.oracles.tier1.axis_registry import (
+    AxisScoreability,
+    MetricFn,
+    classify_axis,
+    get_external_check_scorers,
+)
+from skill_harness.storage.article_fingerprint import ArticleFingerprint
+from skill_harness.storage.models import (
+    ArmSampleWrite,
+    ClauseRunOutcomeWrite,
+    ConfoundEventWrite,
+    CostLedgerWrite,
+    OracleVerdictWrite,
+    RunBudgetWrite,
+    RunProgressWrite,
+    RunWrite,
+    SampleWrite,
+)
+from skill_harness.storage.repositories.evidence.confound_events import insert_confound_event
+from skill_harness.storage.repositories.evidence.oracle_verdicts import mint_oracle_verdict
+from skill_harness.storage.repositories.evidence.runs import (
+    complete_run,
+    count_arm_samples_by_arm,
+    get_run_by_id,
+    insert_arm_sample,
+    insert_clause_run_outcome,
+    insert_run,
+)
+from skill_harness.storage.repositories.evidence.samples import insert_sample
+from skill_harness.storage.repositories.runtime.cost_ledger import insert_cost_ledger_entry
+from skill_harness.storage.repositories.runtime.run_budget import (
+    get_run_budget_by_id,
+    insert_run_budget,
+    update_run_budget_aborted,
+    update_run_budget_spend,
+)
+from skill_harness.storage.repositories.runtime.run_progress import (
+    get_run_progress_by_id,
+    insert_run_progress,
+    update_run_progress,
+)
+from skill_harness.storage.transaction import writer_transaction
+
+# ---------------------------------------------------------------------------
+# ClauseSpec -- specification for a single clause being tested
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ClauseSpec:
+    """Specification for a single clause in a run.
+
+    Fields
+    ------
+    clause_id : str
+        Primary key from evidence.clauses.
+    clause_text : str
+        The original clause text.
+    clause_index : int
+        Authoring order index (0-based).
+    axis : str
+        The metric axis this clause claims (e.g. 'verbosity').
+    oracle_tier : int
+        1 = Tier-1 mechanical, 2 = Tier-2 judge.
+    metric_id : str | None
+        For Tier-1 clauses, the registered metric ID.
+    """
+
+    clause_id: str
+    clause_text: str
+    clause_index: int
+    axis: str
+    oracle_tier: int
+    metric_id: str | None = None
+    comparator: str = "increase"
+    """Persisted directional claim (schema CHECK: increase|decrease|match). Threaded
+    into ``delta_to_observation`` so a 'decrease' clause verdicts correctly (A2).
+    Defaults to 'increase' (the pre-A2 behavior) for callers that don't set it."""
+
+
+# ---------------------------------------------------------------------------
+# RunConfig -- frozen plan for a run
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RunConfig:
+    """Frozen configuration for an ablation run.
+
+    Written to runs.config_json at run start. Used for:
+    - Idempotency + resume: set-difference of existing tuples vs this plan (A40).
+    - Multiplicity provenance: K x |axes| family size for Track E (A49).
+    - Stopping reason recording (A44) -- KNOWN GAP, see stopping_reasons below.
+    """
+
+    run_id: str
+    skill_id: str
+    clauses: list[dict[str, Any]]
+    """List of clause dicts: {clause_id, clause_text, clause_index, axis, oracle_tier}."""
+
+    subject_model: str
+    user_message: str
+    n_min: int = N_MIN
+    n_inc: int = N_INC
+    n_max: int = N_MAX
+    """n_min/n_inc/n_max (A5, hostile-review): these are recorded as whatever the
+    caller passes RunConfig (today, always the N_MIN/N_INC/N_MAX module constants
+    below, since run_ablation() exposes no override params) -- but the ACTUAL
+    sampling loop (_run_clause / sequential-stop) reads the module constants
+    N_MIN/N_INC/N_MAX directly, never run_config.n_min/n_inc/n_max. There is no
+    live divergence today (no caller can set different values), but a future
+    caller passing a custom RunConfig would get a config_json describing a plan
+    the loop silently ignores. Not fixed here (scope: A3/A4/B*/D* cluster) --
+    wiring the loop to read from config would be a larger, separately-scoped
+    change; flagging so it isn't mistaken for already-correct."""
+    max_usd: float = 5.0
+    family_size: int = 0
+    """K x |axes| — set by runner after building the clause list (A49)."""
+
+    ratification_id: str | None = None
+    """The RAT id whose Gate-2 thresholds this run's Path C decisions consume.
+
+    #368 acceptance: the ratification reference is recorded in the runner's
+    config and therefore in ``runs.config_json``, so a stored run says which
+    registration its clause decisions were made under. ``None`` records that no
+    registered thresholds were available and no Path C decision was made -- a
+    typed absence, not a default.
+    """
+
+    ratification_path: str | None = None
+    """Repository path of that record, for retrieval. Provenance, not a key."""
+
+    stopping_reasons: dict[str, str] = field(default_factory=dict)
+    """Maps clause_id -> stopping_reason.
+
+    KNOWN GAP (A5, hostile-review 2026-07-19): this docstring and the field's own
+    intent (A44) claim stopping_reasons is "recorded at run-end", but it is NOT.
+    runs.config_json is written ONCE, before the clause loop runs (run_ablation
+    inserts the row at the top of the method), and evidence.runs has a
+    column-scoped immutability trigger (runs_immutable_columns, migration 0002)
+    that RAISE(ABORT)s on ANY UPDATE to config_json thereafter -- so there is no
+    way to persist the run-end stopping_reasons dict into this same row without
+    either violating the append-only invariant (never) or a schema change (a new
+    column/table, requires approval per project ASK-FIRST rules; out of scope for
+    this fix pass). The runner still populates a local `stopping_reasons` dict
+    during the loop (see run_ablation) but discards it -- it is never written
+    anywhere. This field is consequently always {} when read back from storage.
+    Left as a flagged, unresolved gap rather than silently "fixed" by writing to
+    a JSON blob that would violate A20.
+    """
+
+    arms: tuple[ArmSpec, ...] = ()
+    """The run's declared named arms (#554). Empty for the per-clause run, whose
+    conditions remain the renderer's full/ablated_k/null trio and whose receipt
+    vocabulary is the two-arm {null, full} set. Non-empty for a declared-arm
+    (composition) run, whose unit of comparison is the named arm and whose
+    assemblies the runner resolves from these specs; the names travel into
+    ``subject_identity.arms`` on the run's receipt."""
+
+    subset_draws: tuple[SubsetArmDrawRecord, ...] = ()
+    """The run's seeded random-subset draws (#667). Empty unless the run
+    declared a subset arm drawn from a subject package. Each record freezes
+    one draw — the arm name, the seed, and the chosen card names — into
+    ``runs.config_json`` at run start, so the stored run preserves the chosen
+    card names and seed for each subset arm. A receipt naming the arm traces
+    back to that record. The full source package is caller input and is not
+    recorded here. Written even when empty, for the same reason ``arms`` and
+    ``ratification_id`` are: absence must read as 'this run drew no subset',
+    not as 'this row predates the field'.
+    """
+
+    def receipt_arm_names(self) -> tuple[str, ...]:
+        """The arm vocabulary a receipt for this run declares (#554).
+
+        A declared-arm run's receipt carries the declared arm names. A per-clause
+        run declares no arms; its receipt carries the two-value vocabulary the
+        SERS schema has always accepted, ``("full", "null")`` — the ablated
+        per-clause conditions were never part of the receipt vocabulary and are
+        not added here.
+        """
+        if self.arms:
+            return tuple(arm.name for arm in self.arms)
+        return ("full", "null")
+
+    def to_json(self) -> str:
+        """Serialize to JSON for storage in runs.config_json."""
+        return json.dumps(
+            {
+                "run_id": self.run_id,
+                "skill_id": self.skill_id,
+                "clauses": self.clauses,
+                "subject_model": self.subject_model,
+                "user_message": self.user_message,
+                "n_min": self.n_min,
+                "n_inc": self.n_inc,
+                "n_max": self.n_max,
+                "max_usd": self.max_usd,
+                "family_size": self.family_size,
+                # #368 acceptance: the ratification reference travels into
+                # runs.config_json, so a stored run names the registration its
+                # Path C clause decisions were made under. Written even when
+                # None, because "no registered thresholds" is a fact about the
+                # run and an absent key would be indistinguishable from an old
+                # row that predates the field.
+                "ratification_id": self.ratification_id,
+                "ratification_path": self.ratification_path,
+                "stopping_reasons": self.stopping_reasons,
+                # #554 acceptance: the declared arms travel into
+                # runs.config_json, so a stored run names the arm set its
+                # receipt must declare. Written even when empty, for the same
+                # reason ratification_id is written when None.
+                "arms": [arm_to_json_dict(a) for a in self.arms],
+                # #667 acceptance: the seeded random-subset draws travel into
+                # runs.config_json, so a stored run names the seed and the
+                # chosen card names its subset arms assembled from. Written
+                # even when empty, for the same reason.
+                "subset_draws": [d.to_json_dict() for d in self.subset_draws],
+            },
+            sort_keys=True,
+        )
+
+    @staticmethod
+    def from_json(json_str: str) -> RunConfig:
+        """Deserialize from JSON."""
+        d = json.loads(json_str)
+        return RunConfig(
+            run_id=d["run_id"],
+            skill_id=d["skill_id"],
+            clauses=d["clauses"],
+            subject_model=d["subject_model"],
+            user_message=d["user_message"],
+            n_min=d.get("n_min", N_MIN),
+            n_inc=d.get("n_inc", N_INC),
+            n_max=d.get("n_max", N_MAX),
+            max_usd=d.get("max_usd", 5.0),
+            family_size=d.get("family_size", 0),
+            ratification_id=d.get("ratification_id"),
+            ratification_path=d.get("ratification_path"),
+            stopping_reasons=d.get("stopping_reasons", {}),
+            arms=tuple(arm_from_json_dict(a) for a in d.get("arms", [])),
+            subset_draws=tuple(
+                SubsetArmDrawRecord.from_json_dict(raw) for raw in d.get("subset_draws", [])
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
+# ClauseResult -- per-clause run outcome
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ClauseResult:
+    """Outcome for a single clause after the sampling loop completes."""
+
+    clause_id: str
+    stopping_reason: StoppingReason
+    stop_decision: StopDecision
+    samples_collected: int
+    length_confounded: bool
+    """True if the operator could not meet tolerance (QUAL-1 — clause excluded)."""
+
+    unmeasured_reason: UnmeasuredSubReason | None = None
+    """Sub-reason when the clause is UNMEASURED before/without sampling (#503).
+
+    Drawn from ``UnmeasuredSubReason`` in ``aggregation/status.py`` — the single
+    source of truth for this vocabulary. The runner assigns a member here, never
+    a free-form string. The write model (``ClauseRunOutcomeWrite``) rejects a
+    value outside the enumeration before it reaches storage.
+
+    The two pre-sampling refusal paths map to named members:
+      - BLOCKER-1 (not Tier-1-measurable) -> ``TIER2_UNCALIBRATED``
+      - QUAL-1 (operator out of tolerance) -> ``LENGTH_CONFOUNDED``
+    ``None`` for clauses that reach the sampling loop (their UNMEASURED
+    sub-reason, if any, is derived at aggregation from the evidence).
+    """
+
+    sought_oracle: str | None = None
+    """The axis whose oracle the clause needed, for ``EXTERNAL_CHECK_MISSING`` (#629).
+
+    Persisted to ``clause_run_outcomes.sought_oracle`` so the record names the
+    checker to register. ``None`` for every other refusal reason and for
+    clauses that reach the sampling loop.
+    """
+
+    verdict_id: str | None = None
+    """UUID of the last verdict written for this clause (CF-E3-1).
+
+    Populated for clauses that reach the sampling loop and write at least one
+    verdict; ``None`` for genuinely verdictless paths (BLOCKER-1 tier2_uncalibrated,
+    QUAL-1 length_confounded). Enables ``freeze <verdict_id>`` to be discovered
+    directly from the ablation report output.
+    """
+
+    path_c: PathCResult | None = None
+    """The registered Gate-2 decision on this clause's realised discordant table.
+
+    #368 Path C. The scalar stopping rule above reports the conditional win rate
+    q; it cannot see how often a direction occurred at all, so it will PASS a
+    clause whose net lift is below the registered delta_min. This field carries
+    the decision that can see it.
+
+    ``None`` whenever Path C could not run, and ``path_c_unavailable_reason``
+    then says why. It is never None to mean "no objection".
+    """
+
+    path_c_unavailable_reason: str | None = None
+    """Why ``path_c`` is None, as a typed refusal rather than a silence.
+
+    Values: 'no_ratification_reference' (the run supplied none, so no registered
+    thresholds exist to decide against), 'unregistered_thresholds' (the record
+    was supplied but does not carry them), or 'no_sampling' (the clause never
+    reached the sampling loop, so there is no table to decide on).
+
+    A reader that finds ``path_c`` None MUST NOT read it as a clause clearing the
+    effect-size floor. It means the floor was not applied.
+    """
+
+
+# ---------------------------------------------------------------------------
+# BudgetAbortedError -- raised internally when budget is exceeded
+# ---------------------------------------------------------------------------
+
+
+class _ScorerCrashError(RuntimeError):
+    """Raised internally when a Tier-1 scorer crashes while scoring the primary axis
+    (A1). Caught in ``_run_clause`` -- never allowed to reach the verdict as a
+    fabricated numeric score."""
+
+
+class BudgetAbortedError(Exception):
+    """Raised when the run is aborted due to budget exhaustion."""
+
+    def __init__(self, run_id: str, usd_spent: float, usd_cap: float) -> None:
+        super().__init__(
+            f"Budget exhausted: run {run_id!r} spent ${usd_spent:.4f} vs cap ${usd_cap:.4f}"
+        )
+        self.run_id = run_id
+        self.usd_spent = usd_spent
+        self.usd_cap = usd_cap
+
+
+class ReceiptArmsMismatchError(ValueError):
+    """Raised when a run's declared arms and a receipt's declared arms disagree (#554).
+
+    The receipt's ``subject_identity.arms`` is the arm vocabulary the receipt
+    claims the run measured. A receipt that names arms the run never declared
+    (or omits declared arms) describes a different experiment; a run handed
+    such a vocabulary is refused before any spend, so the disagreement can
+    never be minted into evidence.
+    """
+
+
+class ArmNeverSampledError(RuntimeError):
+    """Raised when a declared arm finished its run with zero samples (#554 AC6).
+
+    Evidence is the authority: the gate reads ``arm_samples`` counts per
+    declared arm, so any path that leaves a declared arm unsampled — a
+    zero-sample plan, a loop that skips an arm, a silent partial write — fails
+    the run by name instead of reporting an arm set it never measured.
+    """
+
+    def __init__(self, run_id: str, unsampled: Sequence[str]) -> None:
+        super().__init__(
+            f"Run {run_id!r} ended with declared arms never sampled: {unsampled!r}; "
+            "a declared-arm run must sample every declared arm"
+        )
+        self.run_id = run_id
+        self.unsampled = tuple(unsampled)
+
+
+# ---------------------------------------------------------------------------
+# ArmResult -- per-arm run outcome (declared-arm runs, #554)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ArmResult:
+    """Outcome for one declared arm after the declared-arm loop completes.
+
+    ``samples_collected`` is the number of arm_samples rows written for this
+    arm. A declared-arm run returns one ArmResult per declared arm, in declared
+    order; a run that would report an arm with zero samples fails instead
+    (#554 AC6).
+    """
+
+    arm_name: str
+    samples_collected: int
+
+
+def assert_receipt_arms_match(
+    run_config: RunConfig,
+    receipt_arms: Sequence[str] | str,
+) -> None:
+    """Refuse a run config whose declared arms and receipt arms disagree (#554).
+
+    Set equality, both directions, order-insensitive: the receipt's declared
+    arm set must name exactly the arms the run declares. A per-clause run with
+    no declared arms keeps the two-value vocabulary ``("full", "null")``.
+
+    :param run_config: The run's frozen configuration, carrying the declared arms.
+    :param receipt_arms: The arm vocabulary the receipt declares (a single name
+        or a sequence, as ``subject_identity.arms`` accepts both shapes).
+    :raises ReceiptArmsMismatchError: empty or duplicate receipt arm list, or
+        the two declared sets differ.
+    """
+    supplied = [receipt_arms] if isinstance(receipt_arms, str) else list(receipt_arms)
+    if not supplied:
+        raise ReceiptArmsMismatchError(
+            "the receipt declares no arms; a receipt for this run must declare "
+            f"its arm vocabulary {sorted(run_config.receipt_arm_names())}"
+        )
+    if len(supplied) != len(set(supplied)):
+        raise ReceiptArmsMismatchError(
+            f"the receipt's arm list has duplicates: {supplied!r}; a declared "
+            "arm set names each arm once"
+        )
+    declared = sorted(run_config.receipt_arm_names())
+    receipt = sorted(supplied)
+    if declared != receipt:
+        raise ReceiptArmsMismatchError(
+            f"declared arms and receipt arms disagree: the run declares "
+            f"{declared}, the receipt declares {receipt}; a receipt describing "
+            "different arms describes a different experiment"
+        )
+
+
+# ---------------------------------------------------------------------------
+# AblationRunner
+# ---------------------------------------------------------------------------
+
+
+class AblationRunner:
+    """Deterministic orchestration engine for clause-level ablation sampling.
+
+    Parameters
+    ----------
+    evidence_conn : sqlite3.Connection
+        Open evidence DB connection (synchronous=FULL, via open_evidence()).
+    runtime_conn : sqlite3.Connection
+        Open runtime DB connection (via open_runtime()).
+    subject_client : SubjectAdapter | None
+        Subject model client. If None, one is created via make_subject_client using
+        the subject_model parameter from run_ablation (defaults to claude-sonnet-4-6).
+        Accepts any SubjectAdapter: AnthropicSubjectClient, OpenAISubjectClient, or
+        SubjectClient (backward-compatible alias for AnthropicSubjectClient).
+    operator : AblationOperator | None
+        Ablation operator (injected for testing).
+    renderer : ConditionRenderer | None
+        Condition renderer (injected for testing).
+    scorers : dict[str, MetricFn] | None
+        Tier-1 metric scoring functions (injected for testing).
+    max_retries : int
+        Number of retries for transient API errors (default 3).
+    retry_delay_s : float
+        Base delay in seconds for retry backoff (default 1.0).
+    null_floor : int
+        Minimum Null samples per axis before confound detection activates and a
+        verdict can be admissible (A47). Defaults to ``N_NULL_FLOOR`` (30). Lowered
+        ONLY in tests for speed/determinism — production runs use the default.
+    subject_model : str
+        Subject model ID used when subject_client is None (to construct via factory).
+        Defaults to ``claude-sonnet-4-6``.
+    """
+
+    def __init__(
+        self,
+        evidence_conn: sqlite3.Connection,
+        runtime_conn: sqlite3.Connection,
+        subject_client: SubjectAdapter | None = None,
+        operator: AblationOperator | None = None,
+        renderer: ConditionRenderer | None = None,
+        scorers: dict[str, MetricFn] | None = None,
+        max_retries: int = 3,
+        retry_delay_s: float = 1.0,
+        null_floor: int = N_NULL_FLOOR,
+        subject_model: str = "claude-sonnet-4-6",
+    ) -> None:
+        self._evidence = evidence_conn
+        self._runtime = runtime_conn
+        # Use injected client or construct via factory (dispatches on model prefix).
+        # SubjectClient (backward-compat alias) is also accepted since isinstance
+        # check is not performed here — duck-typing via SubjectAdapter Protocol.
+        self._subject: SubjectAdapter = (
+            subject_client if subject_client is not None else make_subject_client(subject_model)
+        )
+        # Store the model ID for use in sample/cost writes.
+        # Concrete clients expose _model; fall back to the subject_model constructor arg.
+        self._subject_model_id: str = getattr(self._subject, "_model", subject_model)
+        self._operator: AblationOperator = operator if operator is not None else AblationOperator()
+        self._renderer: ConditionRenderer = (
+            renderer if renderer is not None else ConditionRenderer(operator=self._operator)
+        )
+        self._scorers: dict[str, MetricFn] = (
+            scorers if scorers is not None else get_default_tier1_scorers()
+        )
+        self._external_scorers: dict[str, MetricFn] = get_external_check_scorers()
+        self._max_retries = max_retries
+        self._retry_delay_s = retry_delay_s
+        # #368 Path C: resolved per run_ablation() call. Declared here so the
+        # types are explicit and a clause decision cannot read an attribute the
+        # runner never set.
+        self._path_c_thresholds: RegisteredGate2Thresholds | None = None
+        self._path_c_unavailable_reason: str | None = "no_ratification_reference"
+        self._null_floor = null_floor
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def run_ablation(
+        self,
+        skill_id: str,
+        clauses: list[ClauseSpec],
+        user_message: str,
+        max_usd: float = 5.0,
+        subject_model: str = "claude-sonnet-4-6",
+        run_id: str | None = None,
+        ratification_path: Path | str | None = None,
+    ) -> list[ClauseResult]:
+        """Execute a full ablation run for all clauses in a skill.
+
+        :param skill_id: Evidence.skills primary key.
+        :param clauses: Ordered list of ClauseSpec objects to ablate.
+        :param user_message: Task prompt sent to the subject model.
+        :param max_usd: Per-run budget cap in USD (A12, A42).
+        :param subject_model: Model ID for subject calls.
+        :param run_id: Optional run ID (generated if None).
+        :param ratification_path: Optional RATIFIED record supplying the Gate-2
+            thresholds for Path C (#368). When None, no Path C decision is made
+            and every ClauseResult records why, rather than reading as clear.
+        :returns: List of ClauseResult (one per clause).
+        :raises BudgetAbortedError: If the budget cap is exceeded.
+        """
+        if run_id is None:
+            run_id = str(uuid.uuid4())
+
+        # Build run config + family size (A49 multiplicity provenance)
+        clause_dicts = [
+            {
+                "clause_id": c.clause_id,
+                "clause_text": c.clause_text,
+                "clause_index": c.clause_index,
+                "axis": c.axis,
+                "oracle_tier": c.oracle_tier,
+                "metric_id": c.metric_id,
+            }
+            for c in clauses
+        ]
+        axes = {c.axis for c in clauses}
+        family_size = len(clauses) * len(axes)  # K x |axes| (A49)
+
+        # #368 Path C: resolve the registered Gate-2 thresholds ONCE, before any
+        # spend. A record that does not carry them is refused here rather than
+        # part-way through a paid run, and the refusal is recorded on every
+        # clause result instead of leaving the decision silently unmade.
+        self._path_c_thresholds = None
+        self._path_c_unavailable_reason = "no_ratification_reference"
+        if ratification_path is not None:
+            try:
+                self._path_c_thresholds = registered_thresholds(ratification_path)
+                self._path_c_unavailable_reason = None
+            except UnregisteredThresholdsError:
+                self._path_c_unavailable_reason = "unregistered_thresholds"
+
+        run_config = RunConfig(
+            run_id=run_id,
+            skill_id=skill_id,
+            clauses=clause_dicts,
+            subject_model=subject_model,
+            user_message=user_message,
+            max_usd=max_usd,
+            family_size=family_size,
+            ratification_id=(
+                self._path_c_thresholds.ratification_id if self._path_c_thresholds else None
+            ),
+            ratification_path=(str(ratification_path) if ratification_path is not None else None),
+        )
+
+        # Compute total samples_planned: per clause = N_MAX x 3 conditions (pessimistic)
+        samples_planned = len(clauses) * N_MAX * 3
+
+        now = self._now()
+
+        # Initialize run in evidence.db (insert_run) + runtime.db (run_budget, run_progress)
+        # Evidence-first ordering (A25)
+        with writer_transaction(self._evidence):
+            insert_run(
+                self._evidence,
+                RunWrite(
+                    run_id=run_id,
+                    skill_id=skill_id,
+                    run_kind="ablation",
+                    config_json=run_config.to_json(),
+                    started_at=now,
+                    completed_at=None,
+                ),
+            )
+
+        with writer_transaction(self._runtime):
+            insert_run_budget(
+                self._runtime,
+                RunBudgetWrite(
+                    run_id=run_id,
+                    hard_cap_usd=max_usd,
+                    tokens_spent_in=0,
+                    tokens_spent_out=0,
+                    cache_write_in=0,
+                    cache_read_in=0,
+                    usd_spent=0.0,
+                    dry_run=0,
+                    aborted_at=None,
+                    last_updated=now,
+                ),
+            )
+            insert_run_progress(
+                self._runtime,
+                RunProgressWrite(
+                    run_id=run_id,
+                    state="running",
+                    samples_planned=samples_planned,
+                    samples_collected=0,
+                    last_heartbeat=now,
+                    error=None,
+                ),
+            )
+
+        # Build clause_to_axis_map for confound classification (A11)
+        clause_to_axis_map = {c.clause_id: c.axis for c in clauses}
+
+        # Null accumulator for sigma(Null) estimation (A47)
+        null_acc = NullAccumulator(scorers=self._scorers, null_floor=self._null_floor)
+
+        # Track collected samples (shared mutable state for update_run_progress)
+        samples_collected: int = 0
+        clause_results: list[ClauseResult] = []
+        # A5 (hostile-review, KNOWN GAP): populated below per clause but never
+        # persisted anywhere -- runs.config_json is immutable after the initial
+        # insert above (runs_immutable_columns trigger, A20), so there is no
+        # write path back into RunConfig.stopping_reasons at run-end despite the
+        # field's own docstring claiming otherwise. See RunConfig.stopping_reasons
+        # for the full explanation. Not fixed here (would need a schema change).
+        stopping_reasons: dict[str, str] = {}
+
+        try:
+            # A43/COST-4: warmup shared prefix BEFORE fan-out
+            # Use Full condition of first clause for warmup
+            if clauses:
+                clause_texts = [c.clause_text for c in clauses]
+                warmup_conditions = self._renderer.render_conditions(
+                    clause_texts, target_clause_index=0
+                )
+                warmup_blocks = warmup_conditions["full"]["system_blocks"]
+                self._warmup_or_serialize(run_id, warmup_blocks, user_message)
+
+            # Process each clause
+            for clause_spec in clauses:
+                result = self._run_clause(
+                    run_id=run_id,
+                    clause_spec=clause_spec,
+                    all_clauses=clauses,
+                    user_message=user_message,
+                    clause_to_axis_map=clause_to_axis_map,
+                    null_acc=null_acc,
+                    samples_collected_ref=[samples_collected],
+                    max_usd=max_usd,
+                )
+                samples_collected = result[0]
+                clause_result = result[1]
+                clause_results.append(clause_result)
+                stopping_reasons[clause_spec.clause_id] = clause_result.stopping_reason.value
+                # #503: persist the refusal sub-reason (only refused clauses
+                # write a row; a measured clause keeps no reason).
+                self._persist_refusal_sub_reason(run_id, clause_result)
+
+                # Update run progress after each clause
+                with writer_transaction(self._runtime):
+                    update_run_progress(
+                        self._runtime,
+                        run_id,
+                        state="running",
+                        samples_collected=samples_collected,
+                        last_heartbeat=self._now(),
+                    )
+
+        except BudgetAbortedError as exc:
+            # Mark run as aborted in runtime
+            self._handle_budget_abort(exc, run_id, samples_collected)
+
+        # Stamp completed_at exactly ONCE (A20 carve-out, single-shot per REL-1 spec).
+        # "Completed" means the clause loop reached its natural stopping condition for each
+        # clause — early stop (PASSED/FAILED) or N_MAX exhaustion (UNDERPOWERED_NMAX).
+        # It does NOT require samples_collected == samples_planned; that ceiling is never
+        # reached under early stopping (which is the common case).
+        completed_ts = self._now()
+        with writer_transaction(self._evidence):
+            complete_run(self._evidence, run_id, completed_ts)
+
+        # Set terminal state in runtime (LAST runtime write, crash-vs-complete discriminator)
+        with writer_transaction(self._runtime):
+            update_run_progress(
+                self._runtime,
+                run_id,
+                state="completed",
+                samples_collected=samples_collected,
+                last_heartbeat=completed_ts,
+            )
+
+        # Post-run: reconcile cost (A41)
+        reconcile_run_cost(
+            evidence_conn=self._evidence,
+            runtime_conn=self._runtime,
+            run_id=run_id,
+            model_id=subject_model,
+            skill_id=skill_id,
+        )
+
+        return clause_results
+
+    def resume_ablation(
+        self,
+        run_id: str,
+        clauses: list[ClauseSpec],
+        user_message: str,
+        max_usd: float = 5.0,
+        subject_model: str = "claude-sonnet-4-6",
+    ) -> list[ClauseResult]:
+        """Resume an incomplete run (A40 idempotency + resume).
+
+        Resume = set-difference of existing (run_id, clause_id, condition, sample_index)
+        tuples vs the frozen plan in runs.config_json. Issues calls only for missing slots.
+
+        :param run_id: The run to resume.
+        :param clauses: Clause specs (same as original run).
+        :param user_message: Task prompt (same as original run).
+        :param max_usd: Budget cap.
+        :param subject_model: Subject model ID.
+        :returns: List of ClauseResult.
+        :raises ValueError: If the run does not exist or is already complete.
+        """
+        # Verify run exists and is resumable
+        existing = self._get_existing_samples(run_id)
+        progress = get_run_progress_by_id(self._runtime, run_id)
+        if progress is None:
+            raise ValueError(f"Run {run_id!r} does not exist in runtime.run_progress")
+        if progress["state"] == "completed":
+            raise ValueError(f"Run {run_id!r} is already completed")
+
+        # F-2 (S55 hostile review): derive skill_id from the run's own persisted
+        # evidence.runs row rather than widening this method's public signature.
+        # evidence.runs.skill_id is NOT NULL (schema) and immutable after insert
+        # (A20), so a resumable run (verified to exist above) always has one.
+        run_row = get_run_by_id(self._evidence, run_id)
+        skill_id = run_row["skill_id"] if run_row is not None else None
+
+        # MAJOR-2: re-derive samples_collected + usd_spent from EVIDENCE (authoritative),
+        # not from runtime progress, so a crash between the evidence commit and the runtime
+        # budget update cannot let the A42 hard cap be overspent after resume. Reconcile the
+        # runtime budget row to the evidence sum BEFORE re-entering the sampling loop.
+        samples_collected = self._evidence_samples_collected(run_id)
+        evidence_usd = self._evidence_usd_spent(run_id)
+        budget = get_run_budget_by_id(self._runtime, run_id)
+        if budget is not None and evidence_usd > budget["usd_spent"]:
+            with writer_transaction(self._runtime):
+                update_run_budget_spend(
+                    self._runtime,
+                    run_id,
+                    tokens_spent_in=budget["tokens_spent_in"],
+                    tokens_spent_out=budget["tokens_spent_out"],
+                    cache_write_in=budget["cache_write_in"],
+                    cache_read_in=budget["cache_read_in"],
+                    usd_spent=evidence_usd,
+                    last_updated=self._now(),
+                )
+
+        # Build the expected plan
+        clause_to_axis_map = {c.clause_id: c.axis for c in clauses}
+        null_acc = NullAccumulator(scorers=self._scorers, null_floor=self._null_floor)
+        clause_results: list[ClauseResult] = []
+
+        # A4: resume_ablation must abort the same way run_ablation does on a budget
+        # exhaustion mid-loop -- without this handler, BudgetAbortedError propagated
+        # uncaught and left run_progress.state stuck on whatever it was before resume
+        # (never transitioning to 'aborted_budget'), so a resumed-then-budget-killed
+        # run was indistinguishable from a crash.
+        try:
+            for clause_spec in clauses:
+                result = self._run_clause(
+                    run_id=run_id,
+                    clause_spec=clause_spec,
+                    all_clauses=clauses,
+                    user_message=user_message,
+                    clause_to_axis_map=clause_to_axis_map,
+                    null_acc=null_acc,
+                    samples_collected_ref=[samples_collected],
+                    max_usd=max_usd,
+                    existing_samples=existing,
+                )
+                samples_collected = result[0]
+                clause_results.append(result[1])
+                # #503: persist the refusal sub-reason (resume path mirrors run).
+                self._persist_refusal_sub_reason(run_id, result[1])
+
+                with writer_transaction(self._runtime):
+                    update_run_progress(
+                        self._runtime,
+                        run_id,
+                        state="running",
+                        samples_collected=samples_collected,
+                        last_heartbeat=self._now(),
+                    )
+        except BudgetAbortedError as exc:
+            self._handle_budget_abort(exc, run_id, samples_collected)
+
+        # Stamp completed_at
+        completed_ts = self._now()
+        with writer_transaction(self._evidence):
+            complete_run(self._evidence, run_id, completed_ts)
+
+        with writer_transaction(self._runtime):
+            update_run_progress(
+                self._runtime,
+                run_id,
+                state="completed",
+                samples_collected=samples_collected,
+                last_heartbeat=completed_ts,
+            )
+
+        reconcile_run_cost(
+            evidence_conn=self._evidence,
+            runtime_conn=self._runtime,
+            run_id=run_id,
+            model_id=subject_model,
+            skill_id=skill_id,
+        )
+
+        return clause_results
+
+    # ------------------------------------------------------------------
+    # Declared-arm runs (#554): composition studies sample named arms.
+    # ------------------------------------------------------------------
+
+    def run_arms(
+        self,
+        skill_id: str,
+        arms: tuple[ArmSpec, ...] | list[ArmSpec],
+        user_message: str,
+        samples_per_arm: int = N_MIN,
+        max_usd: float = 5.0,
+        subject_model: str = "claude-sonnet-4-6",
+        run_id: str | None = None,
+        receipt_arms: Sequence[str] | str | None = None,
+        subset_draws: Sequence[SubsetArmDraw | SubsetArmDrawRecord] | None = None,
+    ) -> list[ArmResult]:
+        """Execute a declared-arm run: sample every named arm (#554).
+
+        The unit of comparison is the named arm: a whole prompt assembly (base
+        system + the skill bodies the arm includes), resolved from the declared
+        specs before anything is written. Every declared arm is sampled, each
+        into ``evidence.arm_samples`` (migration 1200); the declared set is
+        frozen into ``runs.config_json`` so the run names the arm vocabulary
+        its receipt must carry.
+
+        Scope boundary: this is the sampling and evidence path only. Confound
+        monitoring, sequential stopping and verdict writes are per-clause-loop
+        machinery; a declared-arm run's contrasts (e.g. a 2x2 factorial's
+        interaction) are scored downstream, which is a separate ticket.
+
+        :param skill_id: Evidence.skills primary key (the subject skill).
+        :param arms: Declared arms, each resolving to a distinct assembly.
+        :param user_message: Task prompt sent to the subject model.
+        :param samples_per_arm: Samples issued per declared arm.
+        :param max_usd: Per-run budget cap in USD (A42).
+        :param subject_model: Model ID for subject calls.
+        :param run_id: Optional run ID (generated if None).
+        :param receipt_arms: The arm vocabulary the run's receipt will declare
+            (a single name or a sequence). Supplied by a pre-registered study
+            design; the run is refused before any spend when it disagrees with
+            the declared arms (#554).
+        :param subset_draws: The seeded random-subset draws (#667) behind this
+            run's subset arms — ``SubsetArmDraw`` values from
+            ``draw_subset_arm`` or their durable records. Frozen into
+            ``runs.config_json`` so the run record carries the seed and the
+            chosen card names. Each draw's arm must be among the declared arms;
+            anything else is refused before any run row is written.
+        :returns: One ArmResult per declared arm, in declared order.
+        :raises ArmSpecError: The declared set is malformed (empty, ill-formed
+            or duplicate names, unreadable body path, duplicate assemblies).
+            Refused before any run row is written, so nothing is spent.
+        :raises ReceiptArmsMismatchError: The receipt's declared arm
+            vocabulary disagrees with the config's declared arms. Refused
+            before any run row is written.
+        :raises ValueError: A subset draw names an arm this run does not
+            declare. Refused before any run row is written.
+        :raises BudgetAbortedError: If the budget cap is exceeded (A42).
+        """
+        if run_id is None:
+            run_id = str(uuid.uuid4())
+
+        arm_specs = tuple(arms)
+
+        subset_records: tuple[SubsetArmDrawRecord, ...] = ()
+        if subset_draws is not None:
+            subset_records = tuple(
+                draw.record if isinstance(draw, SubsetArmDraw) else draw for draw in subset_draws
+            )
+            declared_names = {spec.name for spec in arm_specs}
+            undeclared = [r.arm_name for r in subset_records if r.arm_name not in declared_names]
+            if undeclared:
+                raise ValueError(
+                    f"subset draws name arms the run does not declare: {undeclared!r}; "
+                    "a draw's record must describe a declared arm of this run"
+                )
+            seen_subset_arm_names: set[str] = set()
+            duplicate_subset_arm_names: list[str] = []
+            for record in subset_records:
+                if record.arm_name in seen_subset_arm_names:
+                    duplicate_subset_arm_names.append(record.arm_name)
+                else:
+                    seen_subset_arm_names.add(record.arm_name)
+            if duplicate_subset_arm_names:
+                raise ValueError(
+                    f"subset draws repeat declared arms: {duplicate_subset_arm_names!r}; "
+                    "a receipt arm must trace to exactly one draw"
+                )
+
+        run_config = RunConfig(
+            run_id=run_id,
+            skill_id=skill_id,
+            clauses=[],
+            subject_model=subject_model,
+            user_message=user_message,
+            max_usd=max_usd,
+            family_size=len(arm_specs),
+            arms=arm_specs,
+            subset_draws=subset_records,
+        )
+
+        # Refuse a disagreeing receipt vocabulary before any write or spend:
+        # the receipt describes the experiment, and a receipt naming different
+        # arms describes a different experiment (#554).
+        if receipt_arms is not None:
+            assert_receipt_arms_match(run_config, receipt_arms)
+
+        # Resolve before any row is written: a malformed declaration is
+        # refused with zero spend (A42 discipline applied to declarations).
+        assemblies: dict[str, ArmAssembly] = resolve_arm_assemblies(arm_specs, self._renderer)
+
+        samples_planned = len(arm_specs) * samples_per_arm
+        now = self._now()
+
+        # Evidence-first ordering (A25), mirroring run_ablation.
+        with writer_transaction(self._evidence):
+            insert_run(
+                self._evidence,
+                RunWrite(
+                    run_id=run_id,
+                    skill_id=skill_id,
+                    run_kind="ablation",
+                    config_json=run_config.to_json(),
+                    started_at=now,
+                    completed_at=None,
+                ),
+            )
+
+        with writer_transaction(self._runtime):
+            insert_run_budget(
+                self._runtime,
+                RunBudgetWrite(
+                    run_id=run_id,
+                    hard_cap_usd=max_usd,
+                    tokens_spent_in=0,
+                    tokens_spent_out=0,
+                    cache_write_in=0,
+                    cache_read_in=0,
+                    usd_spent=0.0,
+                    dry_run=0,
+                    aborted_at=None,
+                    last_updated=now,
+                ),
+            )
+            insert_run_progress(
+                self._runtime,
+                RunProgressWrite(
+                    run_id=run_id,
+                    state="running",
+                    samples_planned=samples_planned,
+                    samples_collected=0,
+                    last_heartbeat=now,
+                    error=None,
+                ),
+            )
+
+        samples_collected = 0
+
+        try:
+            # A43/COST-4: warmup before fan-out. Arm assemblies share only the
+            # base system block, so the warm primes the first declared arm's
+            # prefix; warmup failure is non-fatal and its cost is budgeted.
+            first_arm = arm_specs[0]
+            self._warmup_or_serialize(
+                run_id, assemblies[first_arm.name].system_blocks, user_message
+            )
+
+            for arm_spec in arm_specs:
+                assembly = assemblies[arm_spec.name]
+                for sample_index in range(samples_per_arm):
+                    # Budget gate (A42): one call per sample.
+                    projected_cost = project_call_cost(
+                        model=self._subject_model_id,
+                        estimated_input_tokens=512,
+                        estimated_output_tokens=512,
+                    )
+                    self._check_budget(run_id, max_usd, projected_cost)
+
+                    resp = self._call_subject_with_retry(assembly.system_blocks, user_message)
+                    sample_now = self._now()
+                    self._write_arm_sample_evidence(
+                        run_id=run_id,
+                        arm=arm_spec.name,
+                        sample_index=sample_index,
+                        resp=resp,
+                        sampled_at=sample_now,
+                        sample_id=str(uuid.uuid4()),
+                        model_id=self._subject_model_id,
+                    )
+                    self._write_cost_ledger(run_id, resp, sample_now, self._subject_model_id)
+                    self._update_budget_spend(run_id, resp)
+                    samples_collected += 1
+
+                with writer_transaction(self._runtime):
+                    update_run_progress(
+                        self._runtime,
+                        run_id,
+                        state="running",
+                        samples_collected=samples_collected,
+                        last_heartbeat=self._now(),
+                    )
+
+        except BudgetAbortedError as exc:
+            self._handle_budget_abort(exc, run_id, samples_collected)
+
+        # Completeness gate (#554 AC6): every declared arm must hold at least
+        # one arm_samples row. Evidence is the authority, so the gate reads
+        # counts back from the table rather than trusting the loop; an arm
+        # declared but never sampled fails the run by name instead of
+        # reporting an arm set it never measured.
+        counts = count_arm_samples_by_arm(self._evidence, run_id)
+        unsampled = [arm.name for arm in arm_specs if counts.get(arm.name, 0) == 0]
+        if unsampled:
+            failure_ts = self._now()
+            with writer_transaction(self._runtime):
+                update_run_progress(
+                    self._runtime,
+                    run_id,
+                    state="failed",
+                    samples_collected=samples_collected,
+                    last_heartbeat=failure_ts,
+                    error="declared_arm_never_sampled: " + ", ".join(unsampled),
+                )
+            raise ArmNeverSampledError(run_id, unsampled)
+
+        # Stamp completed_at exactly ONCE (A20 carve-out), as run_ablation does.
+        completed_ts = self._now()
+        with writer_transaction(self._evidence):
+            complete_run(self._evidence, run_id, completed_ts)
+
+        with writer_transaction(self._runtime):
+            update_run_progress(
+                self._runtime,
+                run_id,
+                state="completed",
+                samples_collected=samples_collected,
+                last_heartbeat=completed_ts,
+            )
+
+        # Post-run: reconcile cost (A41). Evidence sum includes arm_samples.usd.
+        reconcile_run_cost(
+            evidence_conn=self._evidence,
+            runtime_conn=self._runtime,
+            run_id=run_id,
+            model_id=subject_model,
+            skill_id=skill_id,
+        )
+
+        return [
+            ArmResult(arm_name=arm.name, samples_collected=samples_per_arm) for arm in arm_specs
+        ]
+
+    def _write_arm_sample_evidence(
+        self,
+        run_id: str,
+        arm: str,
+        sample_index: int,
+        resp: SubjectResponse,
+        sampled_at: str,
+        sample_id: str,
+        model_id: str,
+    ) -> None:
+        """Write one arm_samples row inside a writer_transaction (A25 evidence-first)."""
+        sha = sha256_of_output(resp.output_text)
+        sample = ArmSampleWrite(
+            sample_id=sample_id,
+            run_id=run_id,
+            arm=arm,
+            sample_index=sample_index,
+            subject_model=model_id,
+            subject_seed=None,
+            output_text=resp.output_text,
+            output_sha256=sha,
+            sampled_at=sampled_at,
+            input_tokens=resp.input_tokens,
+            cache_read_input_tokens=resp.cache_read_input_tokens,
+            cache_creation_input_tokens=resp.cache_creation_input_tokens,
+            output_tokens=resp.output_tokens,
+            usd=resp.usd,
+        )
+        with writer_transaction(self._evidence):
+            insert_arm_sample(self._evidence, sample)
+
+    # ------------------------------------------------------------------
+    # #503 — persist a pre-sampling refusal's sub-reason to evidence storage.
+    # Only refused clauses (unmeasured_reason is not None) write a row; a
+    # measured clause keeps no reason (scope boundary: no back-fill).
+    # ------------------------------------------------------------------
+
+    def _persist_refusal_sub_reason(self, run_id: str, result: ClauseResult) -> None:
+        if result.unmeasured_reason is None:
+            return
+        # The runner always assigns an UnmeasuredSubReason member here; the
+        # write model validates membership against the live enumeration, so a
+        # non-member raises before reaching the DB.
+        with writer_transaction(self._evidence):
+            insert_clause_run_outcome(
+                self._evidence,
+                ClauseRunOutcomeWrite(
+                    run_id=run_id,
+                    clause_id=result.clause_id,
+                    unmeasured_sub_reason=result.unmeasured_reason,
+                    written_at=self._now(),
+                    sought_oracle=result.sought_oracle,
+                ),
+            )
+
+    # ------------------------------------------------------------------
+    # Core clause loop
+    # ------------------------------------------------------------------
+
+    def _run_clause(
+        self,
+        run_id: str,
+        clause_spec: ClauseSpec,
+        all_clauses: list[ClauseSpec],
+        user_message: str,
+        clause_to_axis_map: dict[str, str],
+        null_acc: NullAccumulator,
+        samples_collected_ref: list[int],
+        max_usd: float,
+        existing_samples: set[tuple[str, str, str, int]] | None = None,
+    ) -> tuple[int, ClauseResult]:
+        """Execute sampling loop for a single clause.
+
+        :returns: (updated_samples_collected, ClauseResult)
+        """
+        clause_id = clause_spec.clause_id
+        clause_text = clause_spec.clause_text
+        clause_idx = clause_spec.clause_index
+        all_clause_texts = [c.clause_text for c in all_clauses]
+
+        # BLOCKER-1: gate Tier-2 / no-Tier-1-scorer clauses to UNMEASURED BEFORE sampling.
+        # No samples issued, no acc.add, no admissible verdict — a clause that cannot be
+        # measured on its own axis must never enter the pass rule on a fallback axis.
+        # #555: the refusal now names the specific reason why the clause is unmeasurable,
+        # rather than blanket-refusing all non-Tier-1 clauses as TIER2_UNCALIBRATED.
+        refusal_reason = self._clause_refusal_reason(clause_spec)
+        if refusal_reason is not None:
+            return (
+                samples_collected_ref[0],
+                ClauseResult(
+                    clause_id=clause_id,
+                    stopping_reason=StoppingReason.UNDERPOWERED_NMAX,
+                    stop_decision=BetaBinomialAccumulator().check_stop(),
+                    samples_collected=0,
+                    length_confounded=False,
+                    unmeasured_reason=refusal_reason,
+                    sought_oracle=(
+                        clause_spec.axis
+                        if refusal_reason is UnmeasuredSubReason.EXTERNAL_CHECK_MISSING
+                        else None
+                    ),
+                    path_c_unavailable_reason="no_sampling",
+                ),
+            )
+
+        # Render conditions
+        conditions = self._renderer.render_conditions(all_clause_texts, clause_idx)
+        full_blocks = conditions["full"]["system_blocks"]
+        ablated_key = f"ablated_{clause_idx}"
+        ablated_blocks = conditions[ablated_key]["system_blocks"]
+        null_blocks = conditions["null"]["system_blocks"]
+
+        # QUAL-1: check operator length tolerance BEFORE sampling
+        placeholder_text = self._operator.render(clause_text)
+        within_tolerance, _, _, _ = check_operator_length_tolerance(clause_text, placeholder_text)
+        if not within_tolerance:
+            # Operator could not meet tolerance -- flag clause as length-confounded
+            # Do not emit clean verbosity evidence for this clause (QUAL-1)
+            return (
+                samples_collected_ref[0],
+                ClauseResult(
+                    clause_id=clause_id,
+                    stopping_reason=StoppingReason.UNDERPOWERED_NMAX,
+                    stop_decision=BetaBinomialAccumulator().check_stop(),
+                    samples_collected=0,
+                    length_confounded=True,
+                    unmeasured_reason=UnmeasuredSubReason.LENGTH_CONFOUNDED,
+                    path_c_unavailable_reason="no_sampling",
+                ),
+            )
+
+        # QUAL-2 assertion: filler unit tokens pinned as module constant
+        from skill_harness.ablation.operator import FILLER_UNIT_TOKENS
+
+        assert FILLER_UNIT_TOKENS > 0, (
+            f"FILLER_UNIT_TOKENS must be > 0 (QUAL-2); got {FILLER_UNIT_TOKENS!r}"
+        )
+
+        # Sequential stop accumulator
+        acc = BetaBinomialAccumulator()
+
+        samples_collected = samples_collected_ref[0]
+        sample_index_full = 0
+        sample_index_ablated = 0
+        sample_index_null = 0
+
+        # Resume: skip existing samples
+        if existing_samples is None:
+            existing_samples = set()
+
+        # SCHEMA-3 / BLOCKER-2.2: comparison sample_indexes that already have a verdict.
+        # On resume we re-build the posterior from prior verdicts but never APPEND a
+        # duplicate verdict for an already-recorded comparison.
+        existing_verdict_indexes = self._existing_verdict_keys(run_id, clause_id)
+        # C2 (Evidence model): snapshot the pre-existing verdict indexes at loop entry.
+        # Only verdicts that existed BEFORE this iteration started have persisted
+        # admissibility_state that must be read (not recomputed). Verdicts written in
+        # THIS iteration use the freshly computed admissibility_state (write-time snapshot).
+        pre_existing_verdict_indexes = frozenset(existing_verdict_indexes)
+
+        # Collect Null samples (needed for confound sigma estimation)
+        # We collect Null samples interleaved with Full/Ablated_k pairs.
+        # Each comparison unit: 1 Full + 1 Ablated_k + optionally 1 Null
+
+        next_stop_at = N_MIN  # First admissible-sample count at which to check stop
+
+        stop_decision: StopDecision | None = None
+        stopping_reason: StoppingReason | None = None
+        last_verdict_id: str | None = None  # CF-E3-1: track last written verdict UUID
+
+        # Hard cap on comparisons ISSUED (not just admissible adds). Inadmissible
+        # comparisons (below Null floor / confounded) do not advance acc.n, so the
+        # stopping posterior alone cannot bound the loop — comparisons_issued does.
+        # Bounds total API cost at N_MAX comparisons per clause (A44: no batches past N_MAX).
+        comparisons_issued = sample_index_full  # > 0 on resume (already-issued count)
+
+        while acc.n < N_MAX and comparisons_issued < N_MAX:
+            # Admissible-sample target before the next stop check.
+            target = min(next_stop_at, N_MAX)
+
+            while acc.n < target and comparisons_issued < N_MAX:
+                # REL-1: initialize sample ids to "" at the top of each comparison so a
+                # control-flow gap can never leave them unbound (no latent UnboundLocalError).
+                full_sample_id = ""
+                abl_sample_id = ""
+
+                # The comparison is keyed by the Full sample_index (one Full vs one Ablated).
+                comparison_index = sample_index_full
+                comparisons_issued += 1
+
+                # I2: Skip the budget gate when ALL three condition samples for this
+                # comparison are already collected. A zero-spend resume that issues no
+                # new API calls must not be aborted by a pre-call budget check.
+                full_key_check = (run_id, clause_id, "full", sample_index_full)
+                abl_key_check = (run_id, clause_id, "ablated", sample_index_ablated)
+                null_key_check = (run_id, clause_id, "null", sample_index_null)
+                all_samples_exist = (
+                    full_key_check in existing_samples
+                    and abl_key_check in existing_samples
+                    and null_key_check in existing_samples
+                )
+
+                if not all_samples_exist:
+                    # Budget gate (A42): check BEFORE issuing any API call
+                    projected_cost = project_call_cost(
+                        model=self._subject_model_id,
+                        estimated_input_tokens=512,  # conservative estimate
+                        estimated_output_tokens=512,
+                    )
+                    self._check_budget(run_id, max_usd, projected_cost * 3)  # 3 calls per iteration
+
+                # Issue Full call (if not already collected for this index)
+                full_key = (run_id, clause_id, "full", sample_index_full)
+                if full_key not in existing_samples:
+                    full_resp = self._call_subject_with_retry(full_blocks, user_message)
+                    full_sample_id = str(uuid.uuid4())
+                    full_now = self._now()
+                    self._write_sample_evidence(
+                        run_id,
+                        clause_id,
+                        "full",
+                        sample_index_full,
+                        full_resp,
+                        full_now,
+                        full_sample_id,
+                        self._subject_model_id,
+                    )
+                    self._write_cost_ledger(run_id, full_resp, full_now, self._subject_model_id)
+                    self._update_budget_spend(run_id, full_resp)
+                    samples_collected += 1
+                    sample_index_full += 1
+                    full_output = full_resp.output_text
+                else:
+                    # Load real (sample_id, output) from evidence (BLOCKER-2.1)
+                    full_sample_id, full_output = self._load_sample(
+                        run_id, clause_id, "full", sample_index_full
+                    )
+                    sample_index_full += 1
+
+                # Issue Ablated_k call
+                abl_key = (run_id, clause_id, "ablated", sample_index_ablated)
+                if abl_key not in existing_samples:
+                    abl_resp = self._call_subject_with_retry(ablated_blocks, user_message)
+                    abl_sample_id = str(uuid.uuid4())
+                    abl_now = self._now()
+                    self._write_sample_evidence(
+                        run_id,
+                        clause_id,
+                        "ablated",
+                        sample_index_ablated,
+                        abl_resp,
+                        abl_now,
+                        abl_sample_id,
+                        self._subject_model_id,
+                    )
+                    self._write_cost_ledger(run_id, abl_resp, abl_now, self._subject_model_id)
+                    self._update_budget_spend(run_id, abl_resp)
+                    samples_collected += 1
+                    sample_index_ablated += 1
+                    ablated_output = abl_resp.output_text
+                else:
+                    abl_sample_id, ablated_output = self._load_sample(
+                        run_id, clause_id, "ablated", sample_index_ablated
+                    )
+                    sample_index_ablated += 1
+
+                # Issue Null call (for sigma(Null) estimation, A47)
+                null_key = (run_id, clause_id, "null", sample_index_null)
+                if null_key not in existing_samples:
+                    null_resp = self._call_subject_with_retry(null_blocks, user_message)
+                    null_sample_id = str(uuid.uuid4())
+                    null_now = self._now()
+                    self._write_sample_evidence(
+                        run_id,
+                        clause_id,
+                        "null",
+                        sample_index_null,
+                        null_resp,
+                        null_now,
+                        null_sample_id,
+                        self._subject_model_id,
+                    )
+                    self._write_cost_ledger(run_id, null_resp, null_now, self._subject_model_id)
+                    self._update_budget_spend(run_id, null_resp)
+                    samples_collected += 1
+                    sample_index_null += 1
+                    null_output = null_resp.output_text
+                else:
+                    _null_sample_id, null_output = self._load_sample(
+                        run_id, clause_id, "null", sample_index_null
+                    )
+                    sample_index_null += 1
+
+                null_acc.add(null_output)
+
+                # Score Full vs Ablated_k on the primary axis (Tier-1 directional).
+                # Reached only for Tier-1-measurable clauses (gated at method entry).
+                # A1: a scorer crash must never become a fabricated 0.0 score inside
+                # the verdict path -- catch it and mark the comparison inadmissible
+                # (below) instead of feeding a real delta/observation off of it.
+                scorer_crashed = False
+                try:
+                    primary_full_score = self._score_primary_axis(full_output, clause_spec)
+                    primary_abl_score = self._score_primary_axis(ablated_output, clause_spec)
+                except _ScorerCrashError:
+                    scorer_crashed = True
+                    primary_full_score = primary_abl_score = 0.0
+
+                if scorer_crashed:
+                    # No genuine delta is knowable -- 0.5 (Tie) is the least-misleading
+                    # placeholder the {0.0, 0.5, 1.0} schema allows; admissibility below
+                    # excludes it from the posterior regardless (A1).
+                    primary_delta = 0.0
+                    observation = 0.5
+                else:
+                    primary_delta = primary_full_score - primary_abl_score
+                    observation = delta_to_observation(primary_delta, clause_spec.comparator)
+
+                # Confound monitoring (A47) across all axes for this comparison
+                null_sigmas = null_acc.sigmas()
+                confound_events_out = detect_confounds(
+                    full_text=full_output,
+                    ablated_text=ablated_output,
+                    null_sigmas=null_sigmas,
+                    primary_clause_id=clause_id,
+                    clause_to_axis_map=clause_to_axis_map,
+                    scorers=self._scorers,
+                )
+
+                # A46: write-side assertion. F-4 (S55 hostile review): bare `assert`
+                # is stripped under `python -O`, silently turning this into a no-op
+                # and letting a directionality violation reach the verdict write.
+                # Explicit `if ...: raise` preserves the check regardless of -O.
+                if not all(e.primary_clause_id == clause_id for e in confound_events_out):
+                    raise RuntimeError(
+                        "A46 violation: confound event primary_clause_id must "
+                        f"== ablated_clause_id={clause_id!r}"
+                    )
+
+                # A1: confound-path/primary-path scorer consistency. The confound path
+                # (detect_confounds) uses the SAME scorer registry and suppresses
+                # per-axis exceptions by omitting the axis from full/ablated scores --
+                # so a crashing primary-axis scorer must never still surface as a
+                # confound event for its own axis (that would mean the two paths saw
+                # different scorer behavior for the same axis/text, a real bug).
+                # F-4: explicit raise, not a bare assert (same -O rationale as above).
+                if scorer_crashed and any(
+                    ce.axis == clause_spec.axis for ce in confound_events_out
+                ):
+                    raise RuntimeError(
+                        "A1 invariant violated: primary-axis scorer crashed but the "
+                        f"confound path still produced an event for axis "
+                        f"{clause_spec.axis!r} -- confound-path/primary-path scorer "
+                        "consistency broken"
+                    )
+
+                # Root-insight: snapshot admissibility at write time from real state.
+                # - scorer crash on the primary axis  -> inadmissible (reason scorer_error, A1)
+                # - confound_flagged for THIS clause   -> inadmissible (reason confounded)
+                # - Null accumulator below floor       -> inadmissible (reason underpowered)
+                # - otherwise                          -> admissible
+                this_clause_confounded = any(
+                    ce.delta_kind == "confound_flagged" and ce.primary_clause_id == clause_id
+                    for ce in confound_events_out
+                )
+                null_floor_met = self._null_floor_met_for_axis(null_acc, clause_spec.axis)
+                admissibility_state, inadmissibility_reason = self._snapshot_admissibility(
+                    confounded=this_clause_confounded,
+                    null_floor_met=null_floor_met,
+                    scorer_crashed=scorer_crashed,
+                )
+
+                # SCHEMA-3 / BLOCKER-2.2: write a verdict only if one doesn't already exist
+                # for this comparison index (resume must not double-write verdicts).
+                if comparison_index not in existing_verdict_indexes:
+                    last_verdict_id = self._write_verdict_and_confounds(
+                        run_id=run_id,
+                        clause_id=clause_id,
+                        clause_spec=clause_spec,
+                        observation=observation,
+                        full_sample_id=full_sample_id,
+                        abl_sample_id=abl_sample_id,
+                        admissibility_state=admissibility_state,
+                        inadmissibility_reason=inadmissibility_reason,
+                        confound_events=confound_events_out,
+                    )  # CF-E3-1: capture last verdict_id written
+                    existing_verdict_indexes.add(comparison_index)
+
+                # MAJOR-1 / C2 (Evidence model): only admissible observations move the
+                # stopping posterior. For comparison indexes that had a persisted verdict
+                # BEFORE this resume iteration started, use the PERSISTED admissibility_state
+                # and observation — never freshly recomputed values — so the posterior
+                # matches the written audit trail (see docs/INVARIANTS.md #3: admissibility
+                # recorded at write time, never recomputed at read time).
+                # CF-E3-1: also carry the persisted verdict_id so resumed runs populate
+                # ClauseResult.verdict_id (otherwise stays None when all verdicts are
+                # pre-existing and the write-branch is never entered).
+                if comparison_index in pre_existing_verdict_indexes:
+                    persisted = self._load_persisted_verdict(run_id, clause_id, comparison_index)
+                    if persisted is not None:
+                        acc_observation, acc_admissibility, persisted_verdict_id = persisted
+                        last_verdict_id = persisted_verdict_id  # CF-E3-1: track from DB
+                    else:
+                        acc_observation, acc_admissibility = observation, admissibility_state
+                else:
+                    acc_observation, acc_admissibility = observation, admissibility_state
+
+                if acc_admissibility == "admissible":
+                    acc.add(acc_observation)
+
+            # Check stop after reaching target
+            stop_decision = acc.check_stop()
+            if stop_decision.should_stop:
+                stopping_reason = stop_decision.stopping_reason
+                break
+
+            # Compute next check point
+            next_stop_at = next_check_at(acc.n)
+            if next_stop_at > N_MAX:
+                break
+
+        # If loop exited without stop decision (shouldn't happen but guard)
+        if stop_decision is None:
+            acc_check = acc.check_stop()
+            stop_decision = acc_check
+            stopping_reason = acc_check.stopping_reason or StoppingReason.UNDERPOWERED_NMAX
+
+        if stopping_reason is None:
+            stopping_reason = StoppingReason.UNDERPOWERED_NMAX
+
+        samples_collected_ref[0] = samples_collected
+
+        path_c_result, path_c_reason = self._decide_path_c(stop_decision)
+
+        return (
+            samples_collected,
+            ClauseResult(
+                clause_id=clause_id,
+                stopping_reason=stopping_reason,
+                stop_decision=stop_decision,
+                samples_collected=acc.n,
+                length_confounded=False,
+                verdict_id=last_verdict_id,  # CF-E3-1: UUID of last written verdict
+                path_c=path_c_result,
+                path_c_unavailable_reason=path_c_reason,
+            ),
+        )
+
+    def _decide_path_c(self, stop_decision: StopDecision) -> tuple[PathCResult | None, str | None]:
+        """Apply the registered Gate-2 rule to a clause's realised table (#368).
+
+        Returns ``(None, reason)`` whenever no registered thresholds are
+        available. The reason is carried rather than dropped, because a missing
+        Path C decision and a Path C decision of BENEFIT are not the same thing
+        and must never render the same way.
+
+        :param stop_decision: The clause's final stop decision.
+        :returns: (PathCResult or None, unavailable-reason or None).
+        """
+        if self._path_c_thresholds is None:
+            return None, self._path_c_unavailable_reason
+        return decide_clause(stop_decision, self._path_c_thresholds), None
+
+    # ------------------------------------------------------------------
+    # Budget management (A42)
+    # ------------------------------------------------------------------
+
+    def _handle_budget_abort(
+        self, exc: BudgetAbortedError, run_id: str, samples_collected: int
+    ) -> NoReturn:
+        """Mark a run aborted-by-budget in runtime and re-raise ``exc`` (A42, A4).
+
+        F-9 (S55 hostile review): extracted from the verbatim-duplicate
+        ``except BudgetAbortedError`` handlers in ``run_ablation`` and
+        ``resume_ablation`` -- both must transition ``run_progress.state`` to
+        ``'aborted_budget'`` the same way (A4: resume previously skipped this
+        entirely, leaving the progress row stuck).
+
+        #221: the extraction left a bare ``raise`` here, which re-raised whatever was
+        in flight in the caller and so imposed a calling convention -- only valid
+        inside an active ``except`` block -- that nothing enforced and ``mypy
+        --strict`` could not see. Taking the exception explicitly makes the contract
+        checkable at the call site.
+        """
+        abort_ts = self._now()
+        with writer_transaction(self._runtime):
+            update_run_budget_aborted(self._runtime, run_id, abort_ts, abort_ts)
+            update_run_progress(
+                self._runtime,
+                run_id,
+                state="aborted_budget",
+                samples_collected=samples_collected,
+                last_heartbeat=abort_ts,
+                error="budget_exhausted",
+            )
+        raise exc
+
+    def _check_budget(self, run_id: str, max_usd: float, projected_cost: float) -> None:
+        """Pre-call budget gate (A42).
+
+        REL-7: this is a pre-call READ of the current spend, not a transactional
+        reservation. The check (here) and the post-call spend update
+        (``_update_budget_spend``) are two SEPARATE ``BEGIN IMMEDIATE`` transactions.
+        Correctness in v0.1 rests on **single-threaded serialization** of the runner,
+        not on holding a reservation across the API call (a true reservation would
+        require an in-transaction debit, which v0.1 does not do). The single-writer
+        discipline (A26) makes interleaving impossible until multi-process sampling
+        (D11), which would reintroduce the race A42 is scoped to.
+
+        :raises BudgetAbortedError: If projected cost would exceed the cap.
+        """
+        with writer_transaction(self._runtime):
+            budget = get_run_budget_by_id(self._runtime, run_id)
+            if budget is None:
+                return  # No budget row -- allow (shouldn't happen in normal flow)
+
+            current_spend = budget["usd_spent"]
+            if current_spend + projected_cost > max_usd:
+                raise BudgetAbortedError(run_id, current_spend, max_usd)
+
+    def _update_budget_spend(self, run_id: str, resp: SubjectResponse) -> None:
+        """Reconcile budget after a call (A42 post-call write)."""
+        with writer_transaction(self._runtime):
+            budget = get_run_budget_by_id(self._runtime, run_id)
+            if budget is None:
+                return
+            update_run_budget_spend(
+                self._runtime,
+                run_id,
+                tokens_spent_in=budget["tokens_spent_in"] + resp.input_tokens,
+                tokens_spent_out=budget["tokens_spent_out"] + resp.output_tokens,
+                cache_write_in=budget["cache_write_in"] + resp.cache_creation_input_tokens,
+                cache_read_in=budget["cache_read_in"] + resp.cache_read_input_tokens,
+                usd_spent=budget["usd_spent"] + resp.usd,
+                last_updated=self._now(),
+            )
+
+    # ------------------------------------------------------------------
+    # Evidence writes
+    # ------------------------------------------------------------------
+
+    def _write_sample_evidence(
+        self,
+        run_id: str,
+        clause_id: str,
+        condition: str,
+        sample_index: int,
+        resp: SubjectResponse,
+        sampled_at: str,
+        sample_id: str,
+        model_id: str,
+    ) -> None:
+        """Write a sample row to evidence.db inside a writer_transaction (A25 evidence-first)."""
+        sha = sha256_of_output(resp.output_text)
+        sample = SampleWrite(
+            sample_id=sample_id,
+            run_id=run_id,
+            clause_id=clause_id,
+            condition=condition,
+            subject_model=model_id,
+            subject_seed=None,
+            output_text=resp.output_text,
+            output_sha256=sha,
+            sampled_at=sampled_at,
+            sample_index=sample_index,
+            input_tokens=resp.input_tokens,
+            cache_read_input_tokens=resp.cache_read_input_tokens,
+            cache_creation_input_tokens=resp.cache_creation_input_tokens,
+            output_tokens=resp.output_tokens,
+            usd=resp.usd,
+        )
+        with writer_transaction(self._evidence):
+            insert_sample(self._evidence, sample)
+
+    def _write_cost_ledger(
+        self,
+        run_id: str,
+        resp: SubjectResponse,
+        ts: str,
+        model_id: str,
+    ) -> None:
+        """Write a cost ledger entry to runtime.db (A41 projection)."""
+        entry = CostLedgerWrite(
+            ts=ts,
+            run_id=run_id,
+            skill_id=None,
+            model_id=model_id,
+            call_kind="subject",
+            input_tok=resp.input_tokens,
+            cache_write_tok=resp.cache_creation_input_tokens,
+            cache_read_tok=resp.cache_read_input_tokens,
+            output_tok=resp.output_tokens,
+            usd=resp.usd,
+        )
+        with writer_transaction(self._runtime):
+            insert_cost_ledger_entry(self._runtime, entry)
+
+    def _write_verdict_and_confounds(
+        self,
+        run_id: str,
+        clause_id: str,
+        clause_spec: ClauseSpec,
+        observation: float,
+        full_sample_id: str,
+        abl_sample_id: str,
+        admissibility_state: str,
+        inadmissibility_reason: str | None,
+        confound_events: list[ConfoundEvent],
+    ) -> str:
+        """Write verdict + confound events to evidence.db (A25 evidence-first).
+
+        A46: primary_clause_id == ablated_clause_id -- enforced by caller assertion.
+        A49: verdict carries (run_id, clause_id, axis, comparison).
+        Evidence admissibility is a write-time snapshot supplied by the caller (root insight) —
+        never a hardcoded constant, never recomputed at read time.
+
+        BLOCKER-2.1: ``full_sample_id``/``abl_sample_id`` MUST be real sample ids (the
+        NOT NULL FK columns reference samples.sample_id with foreign_keys=ON). A blank id
+        is a caller bug — fail loudly rather than substitute verdict_id.
+
+        :returns: The ``verdict_id`` UUID string for the written verdict (CF-E3-1).
+            Callers thread this into ``ClauseResult.verdict_id`` so the ablation report
+            renders the UUID and ``freeze <verdict_id>`` is discoverable.
+        """
+        now = self._now()
+        verdict_id = str(uuid.uuid4())
+
+        if not full_sample_id or not abl_sample_id:
+            raise RuntimeError(
+                "BLOCKER-2.1: verdict requires real sample ids for the FK columns; "
+                f"got full_sample_id={full_sample_id!r}, abl_sample_id={abl_sample_id!r}"
+            )
+
+        # #75/#81: every new mint goes through the guarded entrypoint.
+        pin = ArticleFingerprint(model_snapshot=self._subject_model_id)
+
+        verdict = OracleVerdictWrite(
+            verdict_id=verdict_id,
+            run_id=run_id,
+            clause_id=clause_id,
+            axis=clause_spec.axis,
+            comparison="full_vs_ablated",
+            sample_a_id=full_sample_id,
+            sample_b_id=abl_sample_id,
+            observation=observation,
+            oracle_tier=clause_spec.oracle_tier,
+            metric_id=clause_spec.metric_id,
+            metric_version=None,
+            judge_id=None,
+            calibration_event_id=None,
+            position_swap_agreement=None,
+            admissibility_state=admissibility_state,
+            inadmissibility_reason=inadmissibility_reason,
+            written_at=now,
+        )
+
+        with writer_transaction(self._evidence):
+            # A46: write-side assertion before insert
+            for ce in confound_events:
+                assert ce.primary_clause_id == clause_id, (
+                    f"A46 violation: confound primary_clause_id={ce.primary_clause_id!r} "
+                    f"!= ablated_clause_id={clause_id!r}"
+                )
+
+            mint_oracle_verdict(self._evidence, verdict, pin=pin)
+
+            # Write confound events in the same transaction (A45: two-table, A47: threshold)
+
+            confound_ev_id_base = str(uuid.uuid4())
+            for i, ce in enumerate(confound_events):
+                cev = ConfoundEventWrite(
+                    confound_event_id=f"{confound_ev_id_base}-{i}",
+                    run_id=run_id,
+                    primary_clause_id=ce.primary_clause_id,
+                    affected_clause_id=ce.affected_clause_id,
+                    axis=ce.axis,
+                    delta=ce.delta,
+                    null_sigma=ce.null_sigma,
+                    k_threshold=ce.k_threshold,
+                    delta_kind=ce.delta_kind,
+                    detected_at=now,
+                )
+                insert_confound_event(self._evidence, cev)
+
+        return verdict_id  # CF-E3-1: caller threads into ClauseResult.verdict_id
+
+    # ------------------------------------------------------------------
+    # Oracle scoring
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _snapshot_admissibility(
+        *, confounded: bool, null_floor_met: bool, scorer_crashed: bool = False
+    ) -> tuple[str, str | None]:
+        """Compute the write-time evidence-admissibility snapshot for a comparison.
+
+        Root insight: ``admissibility_state`` is a real write-time snapshot of the
+        comparison's state, NOT a hardcoded constant. Never recomputed at read time
+        (see docs/INVARIANTS.md #3 — locked invariant).
+
+        - scorer crashed on the primary axis (A1)               -> ('inadmissible', 'scorer_error')
+        - confounded (this clause's own axis confound_flagged) -> ('inadmissible', 'confounded')
+        - Null accumulator below floor (N_null < 30, A47)       -> ('inadmissible', 'underpowered')
+        - otherwise                                             -> ('admissible', None)
+
+        scorer_crashed is checked first: a crash means the comparison could not be
+        scored at all, which takes priority over (and is orthogonal to) whatever the
+        confound/null-floor state happens to be.
+
+        :returns: (admissibility_state, inadmissibility_reason)
+        """
+        if scorer_crashed:
+            return "inadmissible", "scorer_error"
+        if confounded:
+            return "inadmissible", "confounded"
+        if not null_floor_met:
+            return "inadmissible", "underpowered"
+        return "admissible", None
+
+    @staticmethod
+    def _null_floor_met_for_axis(null_acc: NullAccumulator, axis: str) -> bool:
+        """Return True iff the Null accumulator has enough samples for this axis (A47).
+
+        Confound detection on ``axis`` is only meaningful when sigma(Null) for that axis
+        is estimated from >= the configured floor (default N_NULL_FLOOR=30). Below the
+        floor, the comparison is UNMEASURED(underpowered) — evidence admissibility reflects that
+        (MAJOR-3). Uses the accumulator's own floor so a test-lowered floor stays
+        consistent between sigma estimation and the evidence-admissibility snapshot.
+        """
+        return null_acc.axis_n(axis) >= null_acc.null_floor
+
+    def _is_tier1_measurable(self, clause_spec: ClauseSpec) -> bool:
+        """Return True iff the clause can be measured by a registered Tier-1 scorer.
+
+        A clause is Tier-1-measurable when BOTH hold:
+        - ``oracle_tier == 1`` (a mechanical metric is declared), AND
+        - ``clause_spec.axis`` resolves to a registered scorer in ``self._scorers``.
+
+        BLOCKER-1: any clause failing this gate must NOT be scored on a fallback
+        (wrong) axis. It is UNMEASURED — no admissible verdict, never aggregated.
+        Per docs/INVARIANTS.md #3: "Tier-2 inadmissible without a calibrated (judge_id, axis)
+        record" and "no admissible evidence => UNMEASURED never PASSED".
+
+        Matching is raw exact membership, deliberately (#117). It must stay
+        identical to ``_score_primary_axis``'s ``self._scorers.get(axis)``: a gate
+        that normalised the axis at all would admit clauses that lookup then
+        misses, converting a safe UNMEASURED into an uncaught RuntimeError.
+        ``axis_registry.classify_axis`` applies the same no-normalisation rule.
+
+        #555: this method only covers Tier-1 axes. External-check axes are
+        measured via ``_is_external_check`` and scored via ``_score_external_axis``.
+        """
+        return clause_spec.oracle_tier == 1 and clause_spec.axis in self._scorers
+
+    def _is_external_check(self, clause_spec: ClauseSpec) -> bool:
+        """Return True iff the clause can be measured by a registered external checker.
+
+        A clause is externally checkable when its axis resolves to a registered
+        external-check scorer in ``self._external_scorers``. The oracle is a
+        deterministic program, not an LLM judge.
+
+        #555: external-check axes are a separate registry from Tier-1 axes.
+        The runner scores them via ``_score_external_axis`` without routing
+        through the judge.
+        """
+        return clause_spec.axis in self._external_scorers
+
+    def _clause_refusal_reason(self, clause_spec: ClauseSpec) -> UnmeasuredSubReason | None:
+        """Determine why a clause cannot be measured, or None if it can.
+
+        Replaces the blanket TIER2_UNCALIBRATED refusal with a specific reason:
+        - TIER2_UNCALIBRATED: oracle_tier != 1 but axis is in Tier-1 registry
+        - MECHANICAL_VACUOUS: axis not in any registry (Tier-1 or external-check)
+        - EXTERNAL_CHECK_MISSING: axis in external-check registry but no checker;
+          the refusal record carries the sought axis in ``sought_oracle`` (#629)
+        - None: clause is measurable (Tier-1 or external-check)
+
+        #555: the receipt names the missing oracle so the caller knows what
+        to register, rather than hiding the reason behind a generic refusal.
+        """
+        if self._is_tier1_measurable(clause_spec):
+            return None
+        if self._is_external_check(clause_spec):
+            return None
+        # Axis not measurable by any registered scorer. Determine why.
+        scoreability = classify_axis(clause_spec.axis)
+        if scoreability is AxisScoreability.UNSCOREABLE:
+            return UnmeasuredSubReason.MECHANICAL_VACUOUS
+        if scoreability is AxisScoreability.EXTERNAL_CHECK:
+            # Axis is in external-check registry but no scorer registered
+            return UnmeasuredSubReason.EXTERNAL_CHECK_MISSING
+        # Tier-1 axis but oracle_tier != 1
+        return UnmeasuredSubReason.TIER2_UNCALIBRATED
+
+    def _score_primary_axis(self, text: str, clause_spec: ClauseSpec) -> float:
+        """Score text on the clause's primary axis (Tier-1 only in v0.1).
+
+        Callers MUST gate on ``_is_tier1_measurable`` first — this method assumes a
+        registered scorer exists for ``clause_spec.axis``. There is NO wrong-axis
+        fallback (BLOCKER-1): an unscored clause is UNMEASURED, not silently scored
+        on verbosity.
+
+        :param text: Subject model output.
+        :param clause_spec: Clause specification with axis name.
+        :returns: Metric score (float).
+        :raises _ScorerCrashError: If the scorer itself raises (A1). A crash must
+            never be silently converted into a real 0.0 score inside the verdict
+            path -- the caller catches this and marks the comparison inadmissible
+            rather than let a crash masquerade as a genuine Loss.
+        """
+        scorer = self._scorers.get(clause_spec.axis)
+        if scorer is None:
+            # Defensive: callers gate on _is_tier1_measurable so this should not happen.
+            raise RuntimeError(
+                f"_score_primary_axis called for unscored axis {clause_spec.axis!r}; "
+                "caller must gate on _is_tier1_measurable() first (BLOCKER-1)"
+            )
+        try:
+            return float(scorer(text))
+        except Exception as exc:
+            raise _ScorerCrashError(
+                f"Tier-1 scorer for axis {clause_spec.axis!r} raised while scoring "
+                f"the primary axis (A1): {exc!r}"
+            ) from exc
+
+    # ------------------------------------------------------------------
+    # Subject model call with retry (A40 per-call policy)
+    # ------------------------------------------------------------------
+
+    def _call_subject_with_retry(
+        self,
+        system_blocks: list[dict[str, Any]],
+        user_message: str,
+    ) -> SubjectResponse:
+        """Call subject model with retry-backoff for transient errors (A40).
+
+        Policy:
+        - Transient (429/500/network): retry up to max_retries with backoff.
+        - Permanent (400): raise immediately (caller should skip-and-record).
+        - Budget abort: re-raise without retry.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                return self._subject.call(system_blocks=system_blocks, user_message=user_message)
+            except SubjectCallError as exc:
+                if not exc.transient:
+                    raise  # Permanent error -- skip-and-record (caller handles)
+                last_exc = exc
+                if attempt < self._max_retries:
+                    delay = self._retry_delay_s * (2**attempt)
+                    time.sleep(delay)
+
+        # Exhausted retries
+        raise SubjectCallError(
+            f"Subject model call failed after {self._max_retries} retries",
+            transient=False,
+        ) from last_exc
+
+    # ------------------------------------------------------------------
+    # Warmup (A43/COST-4)
+    # ------------------------------------------------------------------
+
+    def _warmup_or_serialize(
+        self,
+        run_id: str,
+        system_blocks: list[dict[str, Any]],
+        user_message: str,
+    ) -> None:
+        """Send warmup call to write shared prefix to prompt cache (A43/COST-4).
+
+        This must complete before fan-out across conditions. The warmup's OUTPUT
+        is discarded (not used as a sample) but its cost is real
+        (subject.py:warmup_shared_prefix docstring) and is counted against the
+        A42 budget cap via _update_budget_spend (A3 hostile-review fix) -- before
+        this fix the entire SubjectResponse was discarded, so run_budget.usd_spent
+        silently under-counted true spend by the warmup's cost on every run.
+
+        NOTE (A3 scope): this updates runtime.run_budget.usd_spent only. It does
+        NOT write a runtime.cost_ledger entry or an evidence.samples row. The A41
+        reconciler (reconcile_run_cost) treats evidence.samples.usd as the sole
+        source of truth and back-fills cost_ledger to MATCH that sum -- a
+        cost_ledger-only warmup entry with no evidence.samples counterpart would
+        be reconciled back OUT (net effect zero, not a fix). Representing warmup
+        cost in the evidence-authoritative ledger/reconciler model would require
+        either a schema change or a redefinition of reconcile_run_cost's
+        arithmetic, both out of this fix's scope (flagged, not resolved here).
+        """
+        import contextlib
+
+        with contextlib.suppress(SubjectCallError):
+            resp = self._subject.warmup_shared_prefix(system_blocks, user_message)
+            # Warmup failure is non-fatal -- cache write discipline is best-effort.
+            self._update_budget_spend(run_id, resp)
+
+    # ------------------------------------------------------------------
+    # Idempotency helpers (A40)
+    # ------------------------------------------------------------------
+
+    def _get_existing_samples(self, run_id: str) -> set[tuple[str, str, str, int]]:
+        """Return set of (run_id, clause_id, condition, sample_index) already committed."""
+        cur = self._evidence.execute(
+            "SELECT run_id, clause_id, condition, sample_index FROM samples WHERE run_id = ?",
+            (run_id,),
+        )
+        return {(row[0], row[1], row[2], row[3]) for row in cur.fetchall()}
+
+    def _evidence_samples_collected(self, run_id: str) -> int:
+        """COUNT(*) of samples already in evidence for a run (MAJOR-2 authoritative source)."""
+        cur = self._evidence.execute(
+            "SELECT COUNT(*) FROM samples WHERE run_id = ?",
+            (run_id,),
+        )
+        row = cur.fetchone()
+        return int(row[0]) if row else 0
+
+    def _evidence_usd_spent(self, run_id: str) -> float:
+        """SUM(usd) of samples already in evidence for a run (MAJOR-2 authoritative spend).
+
+        Evidence is the authoritative ledger (synchronous=FULL). A crash between the
+        evidence sample-commit and the runtime budget-spend update can leave runtime
+        under-counting; re-deriving from evidence closes the A42 over-spend gap.
+        """
+        cur = self._evidence.execute(
+            "SELECT COALESCE(SUM(usd), 0.0) FROM samples WHERE run_id = ? AND usd IS NOT NULL",
+            (run_id,),
+        )
+        row = cur.fetchone()
+        return float(row[0]) if row else 0.0
+
+    def _load_sample(
+        self, run_id: str, clause_id: str, condition: str, sample_index: int
+    ) -> tuple[str, str]:
+        """Load (sample_id, output_text) of an existing sample (for resume scoring).
+
+        BLOCKER-2.1: returns the REAL sample_id so the verdict write can reference it
+        via the NOT NULL FK columns. Never substitute verdict_id for a sample id.
+
+        :returns: (sample_id, output_text). Empty strings if the sample is missing
+            (a defensive case — the caller only loads samples it knows exist).
+        """
+        cur = self._evidence.execute(
+            "SELECT sample_id, output_text FROM samples "
+            "WHERE run_id=? AND clause_id=? AND condition=? AND sample_index=?",
+            (run_id, clause_id, condition, sample_index),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return "", ""
+        return row[0], row[1]
+
+    def _load_persisted_verdict(
+        self, run_id: str, clause_id: str, comparison_index: int
+    ) -> tuple[float, str, str] | None:
+        """Load persisted (observation, admissibility_state, verdict_id) for a comparison.
+
+        C2 fix: on resume, comparison indexes that already have a verdict must have
+        their posterior contribution rebuilt from the PERSISTED observation and
+        admissibility_state — never recomputed from fresh confound/null-floor state
+        (see docs/INVARIANTS.md #3: evidence admissibility is recorded at write
+        time and never recomputed).
+
+        CF-E3-1: also returns verdict_id so the resume path can populate
+        ClauseResult.verdict_id with the last written verdict UUID.
+
+        Joins oracle_verdicts -> samples via sample_a_id to map Full sample_index ->
+        verdict. Returns (observation, admissibility_state, verdict_id) or None if
+        not found.
+        """
+        cur = self._evidence.execute(
+            """
+            SELECT v.observation, v.admissibility_state, v.verdict_id
+            FROM oracle_verdicts v
+            JOIN samples s ON s.sample_id = v.sample_a_id
+            WHERE v.run_id = ? AND v.clause_id = ? AND s.condition = 'full'
+              AND s.sample_index = ?
+            LIMIT 1
+            """,
+            (run_id, clause_id, comparison_index),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        return float(row[0]), str(row[1]), str(row[2])
+
+    def _existing_verdict_keys(self, run_id: str, clause_id: str) -> set[int]:
+        """Return the set of comparison sample_indexes already recorded as verdicts.
+
+        SCHEMA-3 / BLOCKER-2.2: a verdict's comparison is keyed by the Full sample's
+        ``sample_index`` (one Full vs one Ablated per comparison index). On resume we
+        must not append a SECOND verdict for a comparison whose verdict already exists.
+
+        We resolve this by joining the verdict's ``sample_a_id`` (the Full sample) back
+        to ``samples.sample_index`` for full-condition rows of this clause+run.
+
+        :returns: Set of Full-condition sample_index values that already have a verdict.
+        """
+        cur = self._evidence.execute(
+            """
+            SELECT s.sample_index
+            FROM oracle_verdicts v
+            JOIN samples s ON s.sample_id = v.sample_a_id
+            WHERE v.run_id = ? AND v.clause_id = ? AND s.condition = 'full'
+            """,
+            (run_id, clause_id),
+        )
+        return {row[0] for row in cur.fetchall()}
+
+    # ------------------------------------------------------------------
+    # Utilities
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _now() -> str:
+        """Return current UTC timestamp as ISO 8601 string."""
+        return datetime.now(UTC).isoformat()
