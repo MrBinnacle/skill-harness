@@ -65,13 +65,13 @@ them. They are separate so that **the runtime does not get to define what counts
 evidence.**
 
 A screen returns one of three verdicts: **KEEP**, **CUT** with a named reason (`subsumed`, meaning
-the model was already doing it; `no_lift`; or `harmful`), or **CAN'T-TELL-YET**. Which verdict a
+the model was already doing it; `no_lift`; or `harmful`), or **`CANT_TELL_YET`**. Which verdict a
 skill is eligible for depends on its registered value class, not the numbers alone, and the
 **value-class guard** enforces that: `subsumed` is a CUT only for skills registered
 `TRANSFORMATIVE_LIFT`, the class whose whole claim is lift above the bar.
 `append-only-evidence-design` and a hardened `git-pull-rebase-trap` both returned **CUT (subsumed)**
 under the pre-guard rule, each at a no-skill pass rate of 1.00; the guard reclassified both to
-CAN'T-TELL-YET, and the pre-guard results stay in the record as dated output.
+`CANT_TELL_YET`, and the pre-guard results stay in the record as dated output.
 
 ## 3. What does it refuse to claim?
 
