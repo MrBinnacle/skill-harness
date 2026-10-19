@@ -1,0 +1,44 @@
+-- #395 — d4_check_state on screen_runs.
+--
+-- A screen_runs row written without D4 inputs used to be byte-identical to one
+-- that was checked and found clean (admissible / NULL reason). That is a false
+-- affirmative claim that the check passed. Criterion 2 of #395 requires the
+-- two to be distinguishable in the store.
+--
+-- Placement is a column, not a companion table and not the free-text
+-- inadmissibility_reason field:
+--
+--   * D4 status is known at write time (apply_manifest knows whether the entry
+--     supplied the two inputs and what the check returned). Discipline 6 of
+--     append-only-evidence-design: status that is a property of one row at
+--     write time CAN be a column, because it never needs to change.
+--   * same-field placement is blocked: write_screen_evidence refuses an
+--     admissible row carrying an inadmissibility_reason (the column means WHY
+--     THIS IS INADMISSIBLE).
+--   * a companion assertion table reintroduces the defect one level up: "no
+--     row for run R" is ambiguous between not-run, writer-failed, and
+--     pre-table. A NOT NULL column on a row that must exist has no absence.
+--
+-- Vocabulary (coded state, not free text — CDISC SDTMIG / FHIR Observation
+-- status / Codd A-mark vs I-mark):
+--
+--   unknown_legacy  pre-migration row; SQLite supplies the default at read
+--                   time and never rewrites existing rows. DEFAULT is this
+--                   value, not not_applicable: a default of not_applicable
+--                   would retroactively assert every pre-migration row was
+--                   never D4-checked, including rows #401 genuinely checked
+--                   and found clean.
+--   not_applicable  entry carried neither operative_rule nor prompt_text;
+--                   the check did not run (ticket's "d4: not_checked").
+--   ran_clean       check ran; no normalised verbatim match.
+--   ran_flagged     check ran; leak found; row is inadmissible.
+--
+-- Triggers on screen_runs are NOT modified. ADD COLUMN does not fire the
+-- BEFORE UPDATE trigger, so append-only enforcement survives the migration.
+-- A writer that omits the column silently gets unknown_legacy (SQLite default);
+-- the required control is a test asserting no post-migration write carries
+-- that value — see tests/test_screen_ingest.py.
+
+ALTER TABLE screen_runs ADD COLUMN d4_check_state TEXT NOT NULL
+  DEFAULT 'unknown_legacy'
+  CHECK (d4_check_state IN ('unknown_legacy','not_applicable','ran_clean','ran_flagged'));
