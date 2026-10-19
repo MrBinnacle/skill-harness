@@ -101,7 +101,8 @@ transportability and the acceptable evidence price still require scientific or o
 ## Verification and authority
 
 Acceptance pass, same date. `run_paired_evaluation` no longer takes a `validated` argument.
-The argument had been kept but ignored, which kept a dead parameter in the public API. No
+The argument had been live: when a caller supplied it, the runner skipped
+`validate_pre_spend` on its own spec, which is the bypass described above. No
 caller in this or the sibling repositories passes it, and `runner.py` has shipped in no tag
 (added in `9dc7a4e`, after v0.3.0). The direct cached-validation tests went with it.
 `test_cli_rechecks_the_runtime_at_execution` stays: it changes the runtime after the dry-run
