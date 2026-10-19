@@ -1,0 +1,57 @@
+# Linux assurance container: the test baseline plus the container-only tools
+# (mutmut, atheris) that docs/assurance/mutation-report.md and fuzz-report.md
+# document as "container-side" but which had no executable definition in the
+# tree. Host/Windows stays out of scope for those tools by design.
+#
+# Build (from the repository root; .dockerignore keeps .private/.sandcastle out):
+#   docker build -f Dockerfile.assurance -t skill-harness:assurance .
+#
+# Test baseline (the default command):
+#   docker run --rm skill-harness:assurance
+#
+# Mutation / fuzz sessions:
+#   docker run --rm -it skill-harness:assurance bash
+#   python scripts/run_mutation.py aggregation && python -m mutmut results
+#   python fuzz/<target>.py  (see docs/assurance/fuzz-report.md)
+#
+# Python 3.13 matches CI's primary cell; requirements-ci.txt is the constraint
+# set so the in-container dep closure matches the CI matrix, and
+# requirements-assurance-container.txt adds the Linux-only tools at the pins
+# reviewed on #161.
+#
+# BUILD-CONTEXT WARNING: the image copies WORKING-TREE bytes, not git blobs.
+# _oracle_implementation_hash (subject/ingest.py) is a SHA-256 over that
+# module's raw bytes, so a working tree whose line endings differ from the
+# committed blobs (a Windows checkout, or a file round-tripped by a tool that
+# rewrote its endings) changes the oracle identity inside the image and fails
+# tests/test_sers_conformance.py against the checked-in receipt. Build from a
+# tree where `git diff --quiet` holds AND the tracked files carry their
+# committed bytes; on Windows, restore any suspect file with git before
+# building.
+FROM python:3.13-slim
+
+# git: mutmut and setuptools-scm-style tooling expect it; build-essential:
+# fallback for any sdist in the closure.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Dependency layer first so source edits do not re-resolve the closure.
+COPY pyproject.toml requirements-ci.txt requirements-assurance-container.txt README.md ./
+COPY src ./src
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m pip install --no-cache-dir -c requirements-ci.txt -e ".[dev]" \
+    && python -m pip install --no-cache-dir -r requirements-assurance-container.txt
+
+# The rest of the tree (tests, scripts, docs the tests read).
+COPY . .
+
+# Tier-1 oracle collection asserts this at collection time.
+ENV PYTHONHASHSEED=0
+
+# The default command is the TEST BASELINE lane (same marker expression as the
+# factory gate). The assurance lane (hour-plus fuzz, deep search) is opt-in:
+#   docker run --rm skill-harness:assurance pytest -q -m assurance --tb=short
+CMD ["pytest", "-q", "-m", "not live and not assurance", "--tb=short"]

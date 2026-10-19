@@ -1,0 +1,1950 @@
+"""Drift check — declarative contract table guarding locked public contracts.
+
+Why this exists (#43, landed by #53): locked numeric contracts, registered
+vocabulary, and public claim sentences had no mechanical guard against silent
+drift — cross-site equality of the pass-rule thresholds was assumed, never
+enforced. This script is that guard, the third instance of the house pattern
+(scripts/release_gate.py = enumerated checks with listed failures;
+the structural-bans CI job = token bans).
+
+Contract rows are DATA (the tables below): adding a contract is a table row,
+not new code. The live rows are the table itself; a green run prints every one
+of them, so read the run or the table rather than a number in this paragraph.
+This sentence carried a count until #545, and the count was wrong both before
+and after that change. Provenance of the older rows (DC-1..DC-6 from #43/#53; DC-7
+and DC-8 activated by the PR landing skill_harness/oc; DC-11 activated by
+the PR landing the Gate-2 cross-checks; DC-9 and DC-10 activated by the PR
+landing the frontier-assembly cost layer (#56); DC-12 activated by the PR
+landing the ratification-ledger machinery (#57) — all per the #43 same-PR
+extension rule; AC-1 from the #160 assurance close-out, ratified verbatim in
+docs/ASSURANCE.md § "Proposed drift-check candidates" and landed by #248);
+one registered PLANNED row (DC-13) prints as PLANNED
+until the PR landing its surface activates it (activation happens in that
+same PR, never later). New rows enter only via a ratified decision or a
+locked INVARIANTS entry.
+
+AC-2 landed by #545 and carries the HARNESS side of the schedule agreement only;
+the production side is DC-1 and DC-2, and the row's own comment says why it does
+not restate them. AC-3 landed by #543 through the delegation kind below: its
+invariant was already enforced by the pre-commit public-copy scanner, so the row
+buys legibility and a red demonstration rather than new enforcement, and the row's
+own comment says so. The last ratified assurance candidate, AC-4, is NOT here yet
+and docs/ASSURANCE.md names what already guards it (#248, #544).
+
+DC-12's reader is deliberately independent of the src parser
+(skill_harness/ratification.py feeds the spend-time gate): the two parsers
+are a differential pair — a parse bug in one is observable against the
+other — so neither imports the other's logic, matching this script's
+expectation-never-imported-from-the-surface rule.
+
+Registered EXPECTATIONS live in this table; current STATE is read from the
+tree. The expectation is deliberately never imported from the surface being
+checked — drift would be unobservable otherwise.
+
+Output convention (F7, ratified on #43): a green run prints every covered
+contract ID + one-line summary, then the coverage boundary line, then the
+PLANNED rows, then the token-ban allowlist (even when empty). Failures are ALL
+listed (never first-fail), exit 1. Output is pure ASCII (Windows console
+safety).
+
+Run locally: ``python scripts/drift_check.py [--root <repo-root>]``.
+Exit code 0 = no drift; 1 = at least one contract violated (each listed).
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+from types import ModuleType
+
+
+class WordListManifestError(Exception):
+    """The vendored words_to_avoid manifest is missing, unparseable, or shaped
+    wrong. Raised by ``read_word_list_manifest`` and reported as a DC-16
+    failure -- an unreadable expectation is a refusal to report, never a pass."""
+
+
+class WordListSelectionError(Exception):
+    """``git ls-files`` could not name the tracked set. Raised by
+    ``iter_word_list_files`` and reported as a DC-16 failure.
+
+    The check REFUSES here rather than falling back to a filesystem walk. A
+    walk over a tree git cannot describe scans a different set of files under
+    the same row name, and a scan that returns nothing because git errored
+    would print as a clean run. Both are worse than a red row that names the
+    reason (#471)."""
+
+
+# ---------------------------------------------------------------------------
+# Check vocabulary — the small set of check kinds rows are assembled from
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ValueSite:
+    """A code constant pinned by regex: every match's groups must equal
+    ``expected``; zero matches is drift too (a rename hides the constant)."""
+
+    path: str
+    pattern: str
+    expected: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RegisteredText:
+    """A registered claim sentence / doc quote: the whitespace-normalized file
+    must contain the normalized registered copy verbatim."""
+
+    path: str
+    text: str
+
+
+@dataclass(frozen=True)
+class TokenBan:
+    """A banned token (structural-bans pattern). ``exemptions`` are the
+    structural definition-site/scanner self-exclusions (E1b pattern) — NOT
+    allowlist entries; the allowlist is a separate, printed surface.
+    ``scan_repo_level`` adds the root-level ``*.md`` files + ``pyproject.toml``
+    to the scan (the repo-wide rows keep it on; a package-scoped row like
+    DC-11 turns it off so the scan matches its registered scope exactly)."""
+
+    term: str
+    roots: tuple[str, ...]
+    suffixes: frozenset[str]
+    exemptions: frozenset[str]
+    scan_repo_level: bool = True
+
+
+@dataclass(frozen=True)
+class ImportScanBan:
+    """An import-direction ban: no import statement in any ``.py`` file under
+    ``package_root`` may reference a forbidden module name. Only import lines
+    are scanned (conservative: a forbidden token anywhere on an import line
+    fails). An empty or missing package is drift too - the ban must have a
+    surface to guard."""
+
+    package_root: str
+    forbidden: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RatLedgerContract:
+    """DC-12 (#47): internal consistency of every ratification record under
+    ``ledger_dir`` matching ``RAT-*.md``. Zero records is OK by design —
+    records land later as docs-only operator row-picks — but the registered
+    surface itself (the dir + its README) going missing is drift (DC-8
+    empty-package precedent). Per record: (a) ``hard_cap_usd`` <= the $35
+    ceiling AND >= the record's own ``worst_case_cost_usd``; (b) a
+    self-certified record carries the verbatim disclosure line."""
+
+    ledger_dir: str
+    cap_ceiling_usd: float
+    disclosure_line: str
+
+
+@dataclass(frozen=True)
+class EstimandContract:
+    """The registry enum must hold EXACTLY the registered values, and every
+    machine-readable ``estimand:`` field in docs must use a registered value
+    (or the honest pre-registry ``n/a`` marker) — no other token admitted."""
+
+    registry_path: str
+    registered_values: frozenset[str]
+    doc_allowed_prefixes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CacheAwareContract:
+    """DC-15 (#436): a RAT record quoting ``cache_aware_cost_usd`` must also
+    quote ``worst_case_cost_usd`` and ``cache_read_share``; share must parse
+    as a float in ``[0.0, 1.0]``; the cache-aware figure must not exceed the
+    worst case. Token-class re-derivation through the projector is out of
+    scope until the RAT front-matter schema carries those inputs."""
+
+    ledger_dir: str
+    cache_aware_field: str
+    worst_case_field: str
+    share_field: str
+
+
+@dataclass(frozen=True)
+class MirrorRecordContract:
+    """DC-17 (#514): mirror records of ratified Notion pages live under
+    ``ledger_dir`` matching ``MIRROR-*.md``. Each addition carries a
+    ``landed_as:`` field naming the SERS schema key or source symbol
+    implementing it, or the literal ``UNLANDED`` with a ticket number.
+
+    The check fails when a landed symbol does not exist under ``docs/sers/``
+    or ``src/skill_harness/``, when an UNLANDED row names a closed ticket, or
+    when that ticket's state cannot be read at all. Zero records is drift: the
+    mirror surface going missing means the subsumption carrier is gone."""
+
+    ledger_dir: str
+    search_roots: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WordListBan:
+    """DC-16 (#462): the collection's ``words_to_avoid`` list, vendored into
+    ``manifest_path``, refused in every markdown file this repository TRACKS.
+
+    The manifest carries the words AND a digest of them. The check recomputes
+    that digest from the array it just read, so editing the array without
+    editing the digest is drift caught here, per-commit and hermetic. The
+    OTHER direction -- the collection editing its list while this copy stands
+    still -- needs a cross-repository read, so it runs on a schedule in
+    ``scripts/words_to_avoid_drift_check.py`` instead.
+
+    Matching is whole-word and case-insensitive, with a hyphen counting as a
+    word character: ``earn`` must not fire on "learn", and ``unlock`` must not
+    fire on "unlocked". ``excluded_paths`` are repo-relative posix paths,
+    each stated with its reason in the row below."""
+
+    manifest_path: str
+    excluded_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AssetPairsContract:
+    """DC-19 (#592): every source-export pair recorded in a JSON manifest must
+    agree on sha256. The manifest records both halves of each pair; either half
+    drifting from its recorded hash is refused. This is what stops a copy check
+    from being defeated by editing a text-bearing source and shipping a stale
+    export.
+
+    The manifest path is repo-relative and resolved against the checked root.
+    Each pair carries source, export, source_sha256 and export_sha256 fields.
+    """
+
+    manifest_path: str
+
+
+@dataclass(frozen=True)
+class DelegatedGuard:
+    """A guard predicate this table does NOT own, named by path and symbol.
+
+    Every other kind in this vocabulary compares a file against a literal
+    written in the table. This one does not, and the difference is the point:
+    the rules AC-3 and AC-4 register are already implemented, already enforced,
+    and already have a caller. Restating them here would put one meaning in two
+    places, which is the failure scripts/words_to_avoid_drift_check.py names in
+    its own import comment: two guards over one subject that canonicalize
+    differently invent drift that is not there.
+
+    The callee owns the WORDING of a violation it finds, which is the wording
+    its other caller already prints, so an operator reads one sentence for one
+    defect no matter which entry point found it.
+
+    ``module_rel`` is repo-relative and is resolved against THIS SCRIPT's
+    repository, never against ``--root``. The guard's code is this tree's code;
+    the tree under test is ``--root``. Resolving against ``--root`` would let a
+    checked tree supply the guard that checks it.
+
+    ``symbol`` must name a callable with the house gate signature,
+    ``(root: Path, errors: list[str]) -> None``, appending one string per
+    violation. That is release_gate.py's shape for all eight of its gates, so
+    the convention is the repository's, not this kind's invention.
+
+    ``requires`` is the vacuity control, and it is why this is a check function
+    rather than two inlined lines. Both delegates build their surface set by
+    globbing. A tree with no ``docs`` directory makes its delegate return zero
+    violations, which prints as a clean row. Every listed path must exist under
+    ``--root`` or the row REFUSES and says which path was missing. Same rule as
+    WordListSelectionError above: an expectation with no surface is a refusal
+    to report, never a pass.
+    """
+
+    module_rel: str
+    symbol: str
+    requires: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LiveRow:
+    dc_id: str
+    summary: str
+    value_sites: tuple[ValueSite, ...] = ()
+    registered_texts: tuple[RegisteredText, ...] = ()
+    live_pointers: tuple[str, ...] = ()
+    token_bans: tuple[TokenBan, ...] = ()
+    delegated_guards: tuple[DelegatedGuard, ...] = ()
+    estimand_contract: EstimandContract | None = None
+    import_ban: ImportScanBan | None = None
+    rat_ledger: RatLedgerContract | None = None
+    cache_aware_contract: CacheAwareContract | None = None
+    word_list_ban: WordListBan | None = None
+    mirror_record: MirrorRecordContract | None = None
+    asset_pairs: AssetPairsContract | None = None
+
+
+@dataclass(frozen=True)
+class PlannedRow:
+    dc_id: str
+    summary: str
+    activates: str
+
+
+# ---------------------------------------------------------------------------
+# The contract table (ratified on #43; DC-12 amendment from #47, DC-13 from #41,
+# AC-1 from the #160 close-out candidates ratified in docs/ASSURANCE.md)
+# ---------------------------------------------------------------------------
+
+_BAN_SCAN_ROOTS = ("src", "tests", "docs", "scripts", "examples")
+_BAN_SCAN_SUFFIXES = frozenset({".py", ".md", ".txt", ".toml", ".yaml", ".yml"})
+# Structural E1b self-exclusions: the registry definition site, the pytest
+# scan, this script's own table, and this script's tests all carry the banned
+# token by necessity. NOT allowlist entries — TOKEN_BAN_ALLOWLIST stays empty.
+_BAN_STRUCTURAL_EXEMPTIONS = frozenset(
+    {
+        "src/skill_harness/semantics.py",
+        "tests/test_semantics.py",
+        "scripts/drift_check.py",
+        "tests/test_drift_check.py",
+    }
+)
+
+TOKEN_BAN_ALLOWLIST: frozenset[str] = frozenset()
+"""EMPTY by ratified decision (#43): no speculative carve-outs — an unused
+allowlist is an invisible coverage hole. Grows only by dated amendment (the
+first legitimate QUOTE of a banned term in an append-only record adds that
+file here, in that PR, with a dated note). Printed even when empty."""
+
+# DC-11 scope: the registered row bans method tokens IN oc/ (#37 item 4 bans
+# the exact conditional McNemar test and Wald intervals by name), so the scan
+# roots are exactly the package. crosschecks.py is the E1b definition site:
+# its docstrings must NAME the banned methods and quote the banning
+# literature verbatim (FLL 2013) — a structural exemption, printed, never an
+# allowlist entry.
+_OC_BAN_ROOTS = ("src/skill_harness/oc",)
+_OC_BAN_EXEMPTIONS = frozenset({"src/skill_harness/oc/crosschecks.py"})
+
+# DC-16 scope (#462, corrected by #471): every markdown file this repository
+# TRACKS, which is what the operator's 2026-09-06 ruling binds -- one voice
+# across all repositories, every line of prose under the same rules. The
+# ruling binds the prose this repository publishes, and the tracked set is
+# exactly the prose a commit here can change.
+#
+# The selection was a filesystem walk until #471. The walk pruned directory
+# NAMES (.private, .git, the caches, .venv, node_modules, build, dist,
+# htmlcov, site) and consulted neither .gitignore nor the index, so it reached
+# whatever a working clone happened to hold. Measured on a working clone at
+# origin/main: 264 failures, 261 of them under a gitignored .sandcastle/
+# worktree and 3 in a gitignored CLAUDE.md, none of them prose any commit here
+# publishes. The same run was green in CI, which clones only tracked content.
+# A gate that is red by default on a developer machine over files its reader
+# cannot act on is a gate that gets muted, which is the cost the digest half
+# of this same contract already wrote down
+# (MrBinnacle/skills@main:assets/tokens.json, copy.words_to_avoid_digest).
+#
+# The pruned-directory list is gone rather than extended. Every name on it was
+# a hand-maintained guess at "generated, vendored, or not ours", and git
+# already answers that question exactly.
+_WORD_LIST_MANIFEST = "assets/words_to_avoid.json"
+_ASSET_PAIRS_MANIFEST_PATH = "assets/asset-pairs.json"
+
+# Individual files, each with the reason it is out of scope. Kept minimal the
+# way _PUBLIC_COPY_EXCLUDED is: tests/test_drift_check.py proves every entry
+# hides a real hit, so an entry that stops carrying one has to go.
+_WORD_LIST_EXCLUDED_PATHS = (
+    # A dated record of what shipped. Its entries describe releases made
+    # before the 2026-09-06 ruling, in the wording used at the time; a
+    # changelog rewritten after the fact stops being a record of the release.
+    "CHANGELOG.md",
+    # The three immutable historical records that carry a listed word. The
+    # house convention is dated amendment blocks, never edits
+    # (docs/ratifications/README.md, quoting docs/findings/v0.2-preregistration.md),
+    # and tests/test_structural_bans.py already exempts these same files from
+    # the public-copy scan on the same grounds: they preserve the wording used
+    # when the plan and the gate were registered, and rewriting that wording
+    # retroactively falsifies the record. Two of the hits are the registered
+    # decision statement itself -- "which skills ... earn their slot" is the
+    # question v0.2 was pre-registered to answer.
+    "docs/PLAN.md",
+    "docs/findings/v0.2-preregistration.md",
+    "docs/findings/v0.2-reaim-gate.md",
+    # Mirror record of a ratified Notion page: the verdict block is a verbatim
+    # quote and carries a listed word ("robust"). The record is append-only
+    # by the same house convention, so the wording is immutable.
+    "docs/ratifications/MIRROR-0001-on-irreducibility.md",
+    # The superseded v1 pre-registration, added to the repository by #534 as the
+    # record of what was registered on 2026-09-05 and then superseded by v2. It
+    # carries "robust" at line 103, in its statistical sense, inside the
+    # paragraph that refuses the median as a replacement estimator. Excluded on
+    # exactly the MIRROR-0001 ground above: a sealed record's wording is
+    # immutable, and rewording a registered document after its result is known
+    # is the failure this repository exists to refuse. The LIVE amendment,
+    # -v2.md, is deliberately NOT excluded: it governs, it can be amended by a
+    # dated block, and the ban must still reach it.
+    "docs/assurance/ebmom-peel-preregistration-amendment.md",
+)
+
+LIVE_ROWS: tuple[LiveRow, ...] = (
+    LiveRow(
+        dc_id="DC-1",
+        summary="pass-rule thresholds 0.60/0.95/0.05 (fit/stopping/status + doc quotes)",
+        value_sites=(
+            ValueSite(
+                "src/skill_harness/aggregation/fit.py",
+                r"^WIN_RATE_THRESHOLD: float = ([0-9.]+)$",
+                ("0.60",),
+            ),
+            ValueSite(
+                "src/skill_harness/ablation/stopping.py",
+                r"^WIN_RATE_THRESHOLD: Final\[float\] = ([0-9.]+)$",
+                ("0.60",),
+            ),
+            ValueSite(
+                "src/skill_harness/ablation/stopping.py",
+                r"^PASS_PROB_THRESHOLD: Final\[float\] = ([0-9.]+)$",
+                ("0.95",),
+            ),
+            ValueSite(
+                "src/skill_harness/ablation/stopping.py",
+                r"^FAIL_PROB_THRESHOLD: Final\[float\] = ([0-9.]+)$",
+                ("0.05",),
+            ),
+            ValueSite(
+                "src/skill_harness/aggregation/status.py",
+                r"^PASS_PROB_THRESHOLD: float = ([0-9.]+)$",
+                ("0.95",),
+            ),
+            ValueSite(
+                "src/skill_harness/aggregation/status.py",
+                r"^FAIL_PROB_THRESHOLD: float = ([0-9.]+)$",
+                ("0.05",),
+            ),
+        ),
+        registered_texts=(
+            RegisteredText("docs/INVARIANTS.md", "P(win_rate > 0.60) >= 0.95"),
+            RegisteredText("docs/INVARIANTS.md", "P(win_rate > 0.60) <= 0.05"),
+            RegisteredText("docs/INVARIANTS.md", "0.60/0.95/0.05"),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-2",
+        summary="sampling schedule N_MIN=8 / N_INC=4 / N_MAX=40 (stopping/status + PRD quotes)",
+        value_sites=(
+            ValueSite(
+                "src/skill_harness/ablation/stopping.py",
+                r"^N_MIN: Final\[int\] = (\d+)$",
+                ("8",),
+            ),
+            ValueSite(
+                "src/skill_harness/ablation/stopping.py",
+                r"^N_INC: Final\[int\] = (\d+)$",
+                ("4",),
+            ),
+            ValueSite(
+                "src/skill_harness/ablation/stopping.py",
+                r"^N_MAX: Final\[int\] = (\d+)$",
+                ("40",),
+            ),
+            ValueSite(
+                "src/skill_harness/aggregation/status.py",
+                r"^N_MIN: int = (\d+)$",
+                ("8",),
+            ),
+        ),
+        registered_texts=(
+            RegisteredText("docs/PRD.md", "`N_min = 8` per condition pair"),
+            RegisteredText("docs/PRD.md", "`N_inc = 4`"),
+            RegisteredText("docs/PRD.md", "`N_max = 40`"),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-3",
+        summary='"per-protocol" token ban, repo-wide, allowlist EMPTY (E9(R1) rule, #36)',
+        token_bans=(
+            TokenBan(
+                term="per-protocol",
+                roots=_BAN_SCAN_ROOTS,
+                suffixes=_BAN_SCAN_SUFFIXES,
+                exemptions=_BAN_STRUCTURAL_EXEMPTIONS,
+            ),
+        ),
+        value_sites=(
+            # Cross-site: the registry's own ban constants must state the same
+            # registered term and the same empty allowlist this table states.
+            ValueSite(
+                "src/skill_harness/semantics.py",
+                r'^BANNED_DECISION_TERMS: tuple\[str, \.\.\.\] = \("([^"]+)",\)$',
+                ("per-protocol",),
+            ),
+            ValueSite(
+                "src/skill_harness/semantics.py",
+                r"^BANNED_TERM_ALLOWLIST: frozenset\[str\] = (frozenset\(\))$",
+                ("frozenset()",),
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-4",
+        summary="estimand names: registry enum == the registered pair; no other token in docs",
+        estimand_contract=EstimandContract(
+            registry_path="src/skill_harness/semantics.py",
+            registered_values=frozenset({"treatment-policy", "hypothetical"}),
+            doc_allowed_prefixes=("treatment-policy", "hypothetical", "n/a"),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-5",
+        summary="launch-trigger sentence registered verbatim at both sites",
+        # Updated 2026-09-13 under the S447 README ruling. The sentence stood
+        # twice on the front page; the empirical record moved to
+        # docs/what-the-instrument-has-found.md, so the second registration
+        # follows the content instead of being dropped. Two sites still carry
+        # the claim, and a rewording at either one still fails this row.
+        registered_texts=(
+            RegisteredText(
+                "README.md",
+                "A sized benefit run launches only on the first task whose "
+                "no-skill screen returns a pass rate below 1",
+            ),
+            RegisteredText(
+                "docs/what-the-instrument-has-found.md",
+                "a sized benefit run launches only when a screen returns a sub-1 pass rate",
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-6",
+        summary="spend-gating sentence registered (README + INVARIANTS) + enforcement pointer live",
+        # #469: the sentence registered here until 2026-09-07 was "Every `run` subcommand
+        # is dry-run by default; `--execute` is required to spend". It was false for two
+        # of the three `run` subcommands, and registering it meant this contract held the
+        # false version in place: DC-6 reddened on a correction and stayed green on the
+        # error. The registered copy is now the scoped claim, which is what the invariant
+        # was always about -- spending takes an explicit opt-in, on the commands that can
+        # spend. tests/test_readme_run_dry_run_469.py reads the click commands and fails
+        # if the subcommand flag sets stop matching this wording.
+        registered_texts=(
+            # Updated 2026-09-09 in the same change that landed `run pi-paired`
+            # (the #43 same-PR rule): the README's spend sentence now names BOTH
+            # spending subcommands; the registered copy tracks it. The mutation
+            # test in tests/test_drift_check.py mutates the shared substring
+            # "subcommand that spends" and stays valid under this wording.
+            RegisteredText(
+                "README.md",
+                "`run ablation` and `run pi-paired` are the subcommands that spend",
+            ),
+            RegisteredText(
+                "docs/INVARIANTS.md",
+                "Every command that writes to the evidence store or makes an LLM API call "
+                "defaults to\ndry-run, and `--execute` is required before it does either",
+            ),
+        ),
+        live_pointers=("src/skill_harness/cli/main.py",),
+    ),
+    LiveRow(
+        dc_id="DC-7",
+        summary=(
+            "oc grid constants GRID_N_MIN=6/GRID_N_MAX=40 == doc quotes + #40-provenance comment"
+        ),
+        value_sites=(
+            ValueSite(
+                "src/skill_harness/oc/conventions.py",
+                r"^GRID_N_MIN: Final\[int\] = (\d+)$",
+                ("6",),
+            ),
+            ValueSite(
+                "src/skill_harness/oc/conventions.py",
+                r"^GRID_N_MAX: Final\[int\] = (\d+)$",
+                ("40",),
+            ),
+        ),
+        registered_texts=(
+            # The #40-provenance comment at the definition site (one line each
+            # so whitespace normalization keeps the contains-check exact).
+            RegisteredText(
+                "src/skill_harness/oc/conventions.py",
+                "Provenance: ratified decision #40 fixes the full integer grid n = 6-40;",
+            ),
+            RegisteredText(
+                "src/skill_harness/oc/conventions.py",
+                "ceiling is fixed by ratified decision, not by the legacy rule (#42",
+            ),
+            # The locked INVARIANTS entry (doc quotes).
+            RegisteredText(
+                "docs/INVARIANTS.md",
+                "The `skill_harness.oc` engine enumerates the full integer grid `n = 6-40`",
+            ),
+            RegisteredText(
+                "docs/INVARIANTS.md",
+                "`GRID_N_MIN = 6` / `GRID_N_MAX = 40`",
+            ),
+            RegisteredText(
+                "docs/INVARIANTS.md",
+                "presentation highlight, never a grid bound",
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-8",
+        summary="oc import-direction ban: no ablation/subject/stopping imports inside oc/",
+        import_ban=ImportScanBan(
+            package_root="src/skill_harness/oc",
+            forbidden=("ablation", "subject", "stopping"),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-9",
+        summary=(
+            "'PAIR_COST' token ban in src/skill_harness/ (costs live from PRICE_PER_MTOK, #40)"
+        ),
+        token_bans=(
+            TokenBan(
+                term="PAIR_COST",
+                roots=("src/skill_harness",),
+                suffixes=frozenset({".py"}),
+                exemptions=frozenset(),
+                scan_repo_level=False,
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-10",
+        summary=(
+            "budget values: $35 per-evaluation cap + $100 DAILY_CAP_HARD_CEILING_USD == doc quotes"
+        ),
+        value_sites=(
+            ValueSite(
+                "src/skill_harness/oracles/calibration/cost_projection.py",
+                r"^EVALUATION_HARD_CAP_USD: float = ([0-9.]+)$",
+                ("35.0",),
+            ),
+            ValueSite(
+                "src/skill_harness/oracles/calibration/cost_projection.py",
+                r"^DAILY_CAP_HARD_CEILING_USD: float = ([0-9.]+)$",
+                ("100.0",),
+            ),
+        ),
+        registered_texts=(
+            RegisteredText("docs/INVARIANTS.md", "$35 per skill-task evaluation"),
+            RegisteredText("docs/INVARIANTS.md", "`DAILY_CAP_HARD_CEILING_USD = 100.0`"),
+            RegisteredText(
+                "docs/PLAN.md",
+                "Hard ceiling on `--daily-cap` ($100) prevents operator bypass",
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-11",
+        summary=(
+            "banned-methods tokens in oc/: 'exact conditional'/'exact_conditional'/'wald' "
+            "(mid-p only + Newcombe/Tango only, #37 item 4)"
+        ),
+        token_bans=(
+            TokenBan(
+                term="exact conditional",
+                roots=_OC_BAN_ROOTS,
+                suffixes=frozenset({".py"}),
+                exemptions=_OC_BAN_EXEMPTIONS,
+                scan_repo_level=False,
+            ),
+            TokenBan(
+                term="exact_conditional",
+                roots=_OC_BAN_ROOTS,
+                suffixes=frozenset({".py"}),
+                exemptions=_OC_BAN_EXEMPTIONS,
+                scan_repo_level=False,
+            ),
+            TokenBan(
+                term="wald",
+                roots=_OC_BAN_ROOTS,
+                suffixes=frozenset({".py"}),
+                exemptions=_OC_BAN_EXEMPTIONS,
+                scan_repo_level=False,
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-12",
+        summary=(
+            "RAT ledger internal consistency: hard_cap <= $35 and >= worst-case cost; "
+            "self-certified records carry the disclosure line (#47)"
+        ),
+        rat_ledger=RatLedgerContract(
+            ledger_dir="docs/ratifications",
+            cap_ceiling_usd=35.0,
+            disclosure_line="internally derived, not externally deliberated",
+        ),
+    ),
+    LiveRow(
+        dc_id="AC-1",
+        summary=(
+            "calibrated-interval primacy: production CS method id fixed, and the rendered "
+            "per-clause report leads with the anytime-valid CS ahead of the legacy posterior "
+            "interval"
+        ),
+        value_sites=(
+            # Replacement leg: the production method id itself.
+            ValueSite(
+                "src/skill_harness/aggregation/confidence_sequence.py",
+                r'^INTERVAL_METHOD_V1: str = "([^"]+)"$',
+                ("predictable_plugin_betting_cs_v1",),
+            ),
+            # Demotion leg: the order a reader actually sees. The per-clause
+            # table declares the anytime-valid CS column BEFORE the posterior
+            # CrI column (#187); swapping or renaming either column demotes the
+            # calibrated interval on the public surface, so the pattern spans
+            # both declarations in order and matches nothing once they move.
+            # The JSON wire format cannot carry this leg: to_json_bytes emits
+            # sort_keys=True, so the key order in _clause_to_dict is invisible
+            # to every consumer and pinning it would guard nothing.
+            ValueSite(
+                "src/skill_harness/cli/main.py",
+                r'clause_table\.add_column\("(CS 95% \(anytime-valid\))"[^\n]*\n\s*'
+                r'clause_table\.add_column\("(posterior CrI 95%)"',
+                ("CS 95% (anytime-valid)", "posterior CrI 95%"),
+            ),
+        ),
+        registered_texts=(
+            # The report schema's own statement of the same ranking: the legacy
+            # interval is compatibility-only, the CS is the preferred one (one
+            # line, so whitespace normalization keeps the contains-check exact).
+            RegisteredText(
+                "src/skill_harness/aggregation/report.py",
+                "Retained for compatibility; prefer sequential_confidence_sequence_95",
+            ),
+            RegisteredText(
+                "docs/assurance/calibration-report.md",
+                "predictable_plugin_betting_cs_v1",
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="AC-2",
+        summary=(
+            "assurance-harness agreement: every harness site restating the sampling "
+            "schedule N_MIN=8 / N_INC=4 / N_MAX=40, and the two-arm gate constants "
+            "delta=0.1 / prob_threshold=0.95 that live ONLY in the harnesses, states the "
+            "registered values (ablation pass rule: DC-1, DC-2) (#545)"
+        ),
+        # This row carries the HARNESS side only, and the omission is the
+        # design rather than a gap.
+        #
+        # DC-1 already pins WIN_RATE_THRESHOLD and PASS_PROB_THRESHOLD in
+        # src/skill_harness/ablation/stopping.py, and DC-2 already pins N_MIN,
+        # N_INC and N_MAX in the same file, with the same regexes and the same
+        # expected values. Restating them here would buy nothing and cost two
+        # things. It would put one meaning in two places, which the script's
+        # own single-source rule refuses. And it would make every red
+        # demonstration on the production side un-attributable: mutating N_MAX
+        # would turn DC-2 and AC-2 red together, so a test that only checked
+        # the tree went red would prove nothing about this row.
+        #
+        # WHAT THIS ROW DOES NOT DO, measured rather than reasoned.
+        #
+        # #545 asks for a row that reddens when "a production module whose
+        # values move without the harness moving". This row does not do that,
+        # and no row of this shape can. Every check here compares a file
+        # against a literal written in this table, never against another file.
+        # Move N_MAX from 40 to 60 in the production module and DC-2 reddens
+        # alone: the harness prose still says 40, this table still expects 40,
+        # they agree, AC-2 stays green. That was run, not deduced.
+        #
+        # Restating the production sites here would not close it either. The
+        # author would update both expectations and the harness prose would
+        # still never be forced to move.
+        #
+        # Closing it needs a check kind this script does not have, one that
+        # reads a value from a producing file and compares a consuming file
+        # against it. See #559.
+        #
+        # What this row DOES cover is real and is covered by nothing else: the
+        # two-arm gate constants below exist only in these two harnesses, and
+        # the registered sentences hold each harness to the schedule it claims
+        # to run.
+        value_sites=(
+            # These are the TWO-ARM GATE's constants, not the ablation pass
+            # rule's. two_arm.py:18 states that delta and prob_threshold are
+            # "the caller's PRE-REGISTERED constants, frozen" and the module
+            # holds no default for either, so each harness is their only site.
+            # Nothing else in the tree can be compared against, which makes
+            # this row their only possible guard.
+            #
+            # prob_threshold carries the same digits as the ablation
+            # PASS_PROB_THRESHOLD and is a different quantity. Conflating them
+            # is the error this row refuses two comments below, so the names
+            # here say which constant is which.
+            #
+            # The sampling schedule needs no code leg: both harnesses IMPORT
+            # N_MIN and N_MAX from the production module, so those cannot
+            # drift in code. They restate the schedule in PROSE, which is what
+            # the registered sentences below guard.
+            ValueSite(
+                "tests/test_aggregation_aa.py",
+                r"^PROB_THRESHOLD = ([\d.]+)$",
+                ("0.95",),
+            ),
+            ValueSite(
+                "tests/test_aggregation_calibration.py",
+                r"^PROB_THRESHOLD = ([\d.]+)$",
+                ("0.95",),
+            ),
+            ValueSite(
+                "tests/test_aggregation_aa.py",
+                r"^DELTA = ([\d.]+)$",
+                ("0.1",),
+            ),
+            ValueSite(
+                "tests/test_aggregation_calibration.py",
+                r"^DELTA = ([\d.]+)$",
+                ("0.1",),
+            ),
+        ),
+        registered_texts=(
+            # The two harness docstrings that state the schedule in prose. A
+            # re-tune that moves the production constants and leaves these
+            # sentences behind makes each harness describe a schedule it no
+            # longer runs, which is the drift a reader of the test file would
+            # never see.
+            RegisteredText(
+                "tests/test_aggregation_aa.py",
+                "with ``N_MIN=8``, ``N_INC=4``, ``N_MAX=40``.",
+            ),
+            RegisteredText(
+                "tests/test_aggregation_calibration.py",
+                "(``N_MIN=8``, ``N_INC=4``, ``N_MAX=40``).",
+            ),
+            RegisteredText(
+                "tests/test_aggregation_aa.py",
+                "``delta=0.1``, ``prob_threshold=0.95``",
+            ),
+        ),
+        # Deliberately NOT registered here, and the reason is worth stating.
+        #
+        # tests/test_aggregation_cs_calibration.py is named in #545 as a
+        # harness site and carries no pinned leg. It imports every schedule and
+        # threshold constant it uses from tests/test_aggregation_calibration.py,
+        # so none of them can drift there independently.
+        #
+        # It does state literals of its own, at line 37, where it asserts the
+        # contents of CS_P_GRID. Those are the rates the calibration sweeps,
+        # two of which happen to be 0.60 and 0.95. They are grid points, not
+        # decision constants, so they fall under the same refusal as the two
+        # values named below.
+        #
+        # NOMINAL_COVERAGE = 0.95 in the calibration harness is not registered
+        # either. It is the nominal coverage of an interval, not the posterior
+        # pass-probability threshold. The two carry the same digits today and
+        # are different quantities; pinning one as the other would make this
+        # row go red for a change that is not drift, and green for one that is.
+        #
+        # CS_P_GRID contains 0.60 and 0.95 as grid points. A grid point is a
+        # value the calibration sweeps, not a decision constant, for the same
+        # reason.
+    ),
+    LiveRow(
+        dc_id="AC-3",
+        summary=(
+            "public vacuity claims: a kind-precision aggregate never appears without its own "
+            "generation's class split, and a detector recall figure never appears without "
+            "either the word UNMEASURED or both registered intervals with their sample and "
+            "skill denominators (#543). Scope is the public-copy surface set the pre-commit "
+            "scanner already defines: README.md, docs markdown, the pyproject description, "
+            "asset SVG text nodes and the sitegen templates. The row inherits the pre-commit "
+            "scanner's own seven-file _PUBLIC_COPY_EXCLUDED list, the immutable-record docs "
+            "that list itself exempts from public-copy scanning. NOT docs/calibration/*.json "
+            "as prose: those are immutable receipts, and the two figures the registry holds "
+            "are pinned as VALUES below instead"
+        ),
+        # WHAT THIS ROW IS, stated so nobody overstates it later.
+        #
+        # It is NOT new enforcement. The invariant is enforced today, by the
+        # public-copy scanner .pre-commit-config.yaml runs as
+        # `python tests/test_structural_bans.py` and by
+        # test_no_banned_copy_on_public_surfaces inside the required Test job.
+        #
+        # What the row buys is legibility plus a red demonstration for
+        # enforcement that had neither. tests/test_structural_bans.py's _main
+        # hardcodes REPO_ROOT and takes no --root, so that enforcement cannot
+        # be pointed at a synthetic tree: its only control is "the real tree is
+        # clean", which cannot tell a working guard from one returning an empty
+        # list. This script takes --root, so tests/test_drift_check.py can
+        # poison a tmp tree and watch AC-3 redden.
+        #
+        # WHY IT DELEGATES rather than restating the rules. The nine regexes,
+        # their context windows and the ten-pattern receipt conjunction have
+        # one home already. A second copy here would canonicalize differently
+        # and invent drift that is not there.
+        #
+        # WHY THE NARROW PREDICATE. vacuity_claim_violations_for_repo runs the
+        # three vacuity blocks alone. _public_copy_violations also runs the
+        # evidence-admissibility and earn-family rules, so a row built on it
+        # would print "earn/earned family at line 12" under a summary that says
+        # AC-3: red for a reason its own name denies.
+        delegated_guards=(
+            DelegatedGuard(
+                module_rel="tests/test_structural_bans.py",
+                symbol="vacuity_claim_violations_for_repo",
+                # The five surfaces the summary above names, one required path
+                # each. README.md and docs cover the first two; pyproject.toml
+                # and assets are the pyproject description and the SVG text
+                # nodes; src/skill_harness/sitegen is the one template root
+                # this repository actually populates (_site_template_files
+                # also globs templates/ and site/templates/, neither of which
+                # exists here, so requiring either would refuse on a root that
+                # was never meant to carry it). A tree missing any one of the
+                # five reddens this row instead of scanning nothing and
+                # printing OK.
+                requires=(
+                    "README.md",
+                    "docs",
+                    "pyproject.toml",
+                    "assets",
+                    "src/skill_harness/sitegen",
+                ),
+            ),
+        ),
+        # The registry is covered HERE, by reading named fields, not by
+        # prose-scanning JSON. Measured: running the public-copy rules over
+        # docs/calibration/*.json flags five lines in two immutable receipts,
+        # and they fail on the split regexes' sentence-boundary limit rather
+        # than on content. The two available repairs are rewriting a sealed
+        # record, which vacuity-flag-calibration-2026-08-08.json's
+        # generation_lock field forbids, or widening the proximity regex for
+        # every surface in order to accommodate two files it should not read.
+        #
+        # #543's revisit clause anticipated this: "if the calibration registry
+        # gains a machine-readable form; then the row reads figures from it
+        # instead of matching prose". It already has one. These two legs are
+        # that field read.
+        value_sites=(
+            ValueSite(
+                "docs/calibration/vacuity-flag-calibration-2026-08-08.json",
+                r'^\s*"kind_precision": \{\n'
+                r'\s*"aggregate": ([0-9.]+),\n'
+                r'\s*"not_a_directive_correct": (\d+),\n'
+                r'\s*"not_a_directive_n": (\d+),\n'
+                r'\s*"weak_directive_correct": (\d+),\n'
+                r'\s*"weak_directive_n": (\d+),',
+                ("0.835", "77", "77", "4", "20"),
+            ),
+            ValueSite(
+                "docs/calibration/vacuity-flag-calibration-2026-08-08.json",
+                r'^\s*"recall": "([A-Z]+)",$',
+                ("UNMEASURED",),
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="AC-4",
+        summary=(
+            "workflow configuration: every file under .github/workflows pins each action "
+            "reference to a full 40-hex commit SHA, declares a workflow-level permissions "
+            "baseline carrying no write grant, and uses no pull_request_target trigger "
+            "(#544). Scope is both suffixes GitHub runs, .yml and .yaml. Each leg calls "
+            "the predicate that already owns it rather than restating the rule: the SHA "
+            "pin is release_gate.py's G5, the permissions baseline and the trigger ban "
+            "are the two predicates in the #172 supply-chain module"
+        ),
+        # WHAT THIS ROW IS, stated so nobody overstates it later. Same shape as
+        # AC-3's note above, and for the same reason.
+        #
+        # It is NOT the moment these three legs started being enforced. All
+        # three are asserted today by
+        # test_workflow_audit_covers_every_workflow_and_records_required_checks
+        # in tests/test_assurance_supply_chain_172.py, which runs inside the
+        # required Test job, and the SHA pin additionally by the release gate's
+        # G5.
+        #
+        # What the row buys is three things, each measurable.
+        #
+        # First, the contract table now prints the workflow configuration
+        # contract. This script's coverage-boundary line says coverage is
+        # EXACTLY the list it prints, so a guard absent from the list was real
+        # enforcement that the one listing this repository publishes did not
+        # name.
+        #
+        # Second, gate_workflows_sha_pinned moves behind a required check.
+        # Measured on 2026-09-14: branch protection on main requires seven
+        # contexts, and "Release gate (surface lockstep)" is not among them, so
+        # a G5 failure could stand on a pull request with the merge button
+        # still available. The same function now runs inside this script, and
+        # tests/test_drift_check.py::test_real_tree_is_green_and_exits_zero
+        # asserts this script exits 0 from inside the required Test job. The
+        # rule was already blocking through the #172 module's own copy; what
+        # changes is that release_gate.py's copy is too, which is what makes
+        # its widened .yaml glob reach a merge at all. #563
+        # carries the wider problem that the drift check, the structural bans
+        # and the release gate all run as jobs that cannot block a merge.
+        #
+        # Third, a red demonstration per leg. The #172 module reads a module
+        # level ROOT and cannot be pointed at a synthetic tree, so its only
+        # control is "the real tree is clean", which cannot tell a working
+        # predicate from one returning an empty list. This script takes --root,
+        # so tests/test_drift_check.py poisons a tmp tree and watches AC-4
+        # redden on each leg separately.
+        #
+        # WHY THREE GUARDS RATHER THAN ONE. Each leg is a separate defect with
+        # a separate repair, and a single predicate emitting all three would
+        # make a mutation of one leg indistinguishable from a mutation of
+        # another in the failure output.
+        delegated_guards=(
+            DelegatedGuard(
+                # The SHA-pin leg. #544 asked for reuse "so the two cannot
+                # drift apart", on the understanding that one other copy
+                # existed. Two did, and they had already drifted on scope:
+                # this gate globbed *.yml while the #172 module globbed
+                # *.y*ml. That was repaired in the commit before this one.
+                # This row calling the gate is what keeps a third copy from
+                # being written here.
+                module_rel="scripts/release_gate.py",
+                symbol="gate_workflows_sha_pinned",
+                requires=(".github/workflows",),
+            ),
+            DelegatedGuard(
+                module_rel="tests/test_assurance_supply_chain_172.py",
+                symbol="workflow_permissions_baseline_violations",
+                requires=(".github/workflows",),
+            ),
+            DelegatedGuard(
+                module_rel="tests/test_assurance_supply_chain_172.py",
+                symbol="workflow_trigger_violations",
+                requires=(".github/workflows",),
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-14",
+        summary=(
+            "outcome_type values: pass_fail + invariant in ratification.py parse == "
+            "sers.schema.json outcome_type enum == README prose (#424)"
+        ),
+        value_sites=(
+            ValueSite(
+                "src/skill_harness/ratification.py",
+                r"^    _OUTCOME_TYPES = frozenset\(\{([^}]+)\}\)$",
+                ('"pass_fail", "invariant"',),
+            ),
+            ValueSite(
+                "docs/sers/sers.schema.json",
+                r'"outcome_type":\s*\{[^}]*"enum":\s*\[([^\]]+)\]',
+                ('"pass_fail", "invariant", null',),
+            ),
+        ),
+        registered_texts=(
+            RegisteredText(
+                "docs/sers/README.md",
+                "Scoring-oracle kind the record authorises",
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-15",
+        summary=(
+            "cache-aware record consistency: cache_aware_cost_usd quotes "
+            "worst_case_cost_usd + cache_read_share; cache-aware <= worst (#436)"
+        ),
+        cache_aware_contract=CacheAwareContract(
+            ledger_dir="docs/ratifications",
+            cache_aware_field="cache_aware_cost_usd",
+            worst_case_field="worst_case_cost_usd",
+            share_field="cache_read_share",
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-16",
+        summary=(
+            "words_to_avoid: the collection's 15-word list, vendored with its digest, "
+            "refused in every markdown file this repository tracks (#462, #471)"
+        ),
+        word_list_ban=WordListBan(
+            manifest_path=_WORD_LIST_MANIFEST,
+            excluded_paths=_WORD_LIST_EXCLUDED_PATHS,
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-17",
+        summary=(
+            "mirror records: each MIRROR-*.md addition has a landed_as symbol "
+            "in docs/sers/ or src/skill_harness/, or UNLANDED with an open ticket (#514)"
+        ),
+        mirror_record=MirrorRecordContract(
+            ledger_dir="docs/ratifications",
+            search_roots=("docs/sers", "src/skill_harness"),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-18",
+        summary=(
+            "Vale version pins: every release URL and cache key in ci.yml cites "
+            "3.9.1, and test_vale_doctrine_agreement.py names the workflow as its "
+            "source of truth (#488)"
+        ),
+        value_sites=(
+            # Linux tar.gz URLs — vale job and test job. ValueSite checks ALL
+            # matches, so one site covers both occurrences.
+            ValueSite(
+                ".github/workflows/ci.yml",
+                r'curl -SfL "https://github.com/errata-ai/vale/releases/download/v([\d.]+)/vale_([\d.]+)_Linux_64-bit.tar.gz"',
+                ("3.9.1", "3.9.1"),
+            ),
+            # Windows zip URL in the test job — a silent independent pin.
+            ValueSite(
+                ".github/workflows/ci.yml",
+                r'curl -SfL "https://github.com/errata-ai/vale/releases/download/v([\d.]+)/vale_([\d.]+)_Windows_64-bit.zip"',
+                ("3.9.1", "3.9.1"),
+            ),
+            # Cache keys in both jobs. A key that lags the URL restores the
+            # wrong binary on a hit and never re-fetches.
+            ValueSite(
+                ".github/workflows/ci.yml",
+                r"key: vale-\$\{\{ runner\.os \}\}-([\d.]+)",
+                ("3.9.1",),
+            ),
+        ),
+        registered_texts=(
+            # The test file names the workflow as its version source.
+            RegisteredText(
+                "tests/test_vale_doctrine_agreement.py",
+                "pinned to the same version the CI workflow installs",
+            ),
+        ),
+    ),
+    LiveRow(
+        dc_id="DC-19",
+        summary=(
+            "asset pairs: every source-export pair in assets/asset-pairs.json "
+            "matches its recorded sha256 -- a stale export or an edited source "
+            "without re-export is refused (#592)"
+        ),
+        asset_pairs=AssetPairsContract(
+            manifest_path=_ASSET_PAIRS_MANIFEST_PATH,
+        ),
+    ),
+)
+
+PLANNED_ROWS: tuple[PlannedRow, ...] = (
+    PlannedRow(
+        "DC-13",
+        "OBS ledger contract: front-matter parse + classification-state and "
+        "prose-count consistency (#41)",
+        "activation owed - the surface landed in PR #60 before this script "
+        "existed, so the #43 same-PR rule could not fire; the next PR touching "
+        "docs/observations/ activates it (see #53 PR record)",
+    ),
+)
+
+COVERAGE_BOUNDARY_LINE = (
+    "Coverage boundary: coverage is EXACTLY the list above; no other doc claim is checked."
+)
+
+
+# ---------------------------------------------------------------------------
+# Check engine
+# ---------------------------------------------------------------------------
+
+
+def _normalized(text: str) -> str:
+    """Collapse whitespace and strip blockquote markers so registered copies
+    match across line wraps and `> ` quoting."""
+    lines = [line.lstrip().removeprefix(">").lstrip() for line in text.splitlines()]
+    return re.sub(r"\s+", " ", " ".join(lines)).strip()
+
+
+def _read(root: Path, rel: str) -> str | None:
+    path = root / rel
+    if not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _check_value_site(root: Path, site: ValueSite) -> list[str]:
+    text = _read(root, site.path)
+    if text is None:
+        return [f"{site.path}: file missing (value site unreachable)"]
+    matches = [m.groups() for m in re.finditer(site.pattern, text, re.MULTILINE)]
+    if not matches:
+        return [
+            f"{site.path}: pattern {site.pattern!r} matched nothing - "
+            "the pinned constant is gone or renamed"
+        ]
+    return [
+        f"{site.path}: expected {'/'.join(site.expected)} but found {'/'.join(found)}"
+        for found in matches
+        if tuple(found) != site.expected
+    ]
+
+
+def _check_registered_text(root: Path, reg: RegisteredText) -> list[str]:
+    text = _read(root, reg.path)
+    if text is None:
+        return [f"{reg.path}: file missing (registered text unreachable)"]
+    if _normalized(reg.text) not in _normalized(text):
+        return [f"{reg.path}: registered copy not found: {reg.text!r}"]
+    return []
+
+
+def _check_pointer(root: Path, rel: str) -> list[str]:
+    if not (root / rel).is_file():
+        return [f"enforcement pointer dead: {rel} does not exist"]
+    return []
+
+
+def _iter_ban_files(root: Path, ban: TokenBan) -> list[Path]:
+    files: list[Path] = []
+    for sub in ban.roots:
+        base = root / sub
+        if not base.is_dir():
+            continue
+        files.extend(
+            p
+            for p in base.rglob("*")
+            if p.is_file() and p.suffix in ban.suffixes and "__pycache__" not in p.parts
+        )
+    if ban.scan_repo_level:
+        files.extend(p for p in root.glob("*.md"))
+        pyproject = root / "pyproject.toml"
+        if pyproject.is_file():
+            files.append(pyproject)
+    return files
+
+
+def _check_token_ban(root: Path, ban: TokenBan) -> list[str]:
+    pattern = re.compile(re.escape(ban.term), re.IGNORECASE)
+    exempt = ban.exemptions | TOKEN_BAN_ALLOWLIST
+    failures: list[str] = []
+    for path in _iter_ban_files(root, ban):
+        rel = path.relative_to(root).as_posix()
+        if rel in exempt:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if pattern.search(line):
+                failures.append(f"banned term {ban.term!r} at {rel}:{lineno}")
+    return failures
+
+
+def canonical_word_list_digest(words: list[str]) -> str:
+    """The canonical digest of a words_to_avoid array.
+
+    ``sha256`` over ``json.dumps(words, separators=(",",":")).encode()``. The
+    collection computes it the same way over the same array, which is what
+    makes the two comparable. Recomputed from the array on both sides rather
+    than read from a published field: a published digest would be a second
+    source of truth, and a second source of truth cannot catch itself lying."""
+    return hashlib.sha256(json.dumps(words, separators=(",", ":")).encode()).hexdigest()
+
+
+def read_word_list_manifest(path: Path) -> tuple[list[str], str]:
+    """Return ``(words, recorded_digest)`` from a vendored manifest.
+
+    Raises ``WordListManifestError`` when the file is missing, unparseable, or
+    shaped wrong. ``scripts/words_to_avoid_drift_check.py`` reads the same
+    manifest through this function, so both guards agree on what the file is."""
+    if not path.is_file():
+        raise WordListManifestError(f"{path}: vendored word list missing")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise WordListManifestError(f"{path}: unparseable JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise WordListManifestError(f"{path}: top level is not an object")
+    words = payload.get("words")
+    if not isinstance(words, list) or not all(isinstance(word, str) for word in words):
+        raise WordListManifestError(f"{path}: 'words' is not an array of strings")
+    if not words:
+        raise WordListManifestError(f"{path}: 'words' is empty (the ban has nothing to refuse)")
+    recorded = payload.get("sha256")
+    if not isinstance(recorded, str):
+        raise WordListManifestError(f"{path}: 'sha256' is absent or not a string")
+    return [str(word) for word in words], recorded
+
+
+def word_list_pattern(words: list[str]) -> re.Pattern[str]:
+    """Whole-word, case-insensitive, hyphen-aware.
+
+    A hyphen counts as a word character on both sides, so ``earn`` does not
+    fire on "learn" or "re-earn-ish", and ``unlock`` does not fire on
+    "unlocked". Python's ``\\b`` treats a hyphen as a boundary, which would
+    make ``earn`` fire inside "load-bearing"; the explicit look-arounds are
+    what keep the two rules from matching each other's words."""
+    alternatives = "|".join(re.escape(word) for word in sorted(words, key=len, reverse=True))
+    return re.compile(rf"(?<![\w-])(?:{alternatives})(?![\w-])", re.IGNORECASE)
+
+
+WORD_LIST_SELECTION_COMMAND: tuple[str, ...] = ("git", "ls-files", "-z", "--", "*.md")
+"""How DC-16 names the files it scans. Printed on every run (F7): a check whose
+scope came from somewhere else would be a different check under the same row
+name, so the selection is stated rather than described."""
+
+
+def tracked_markdown_paths(root: Path) -> list[str]:
+    """The repo-relative posix paths of every markdown file git tracks under
+    ``root``.
+
+    ``git ls-files`` reads the index. It makes no network call and needs no
+    remote, so the check stays hermetic and stays valid in the per-commit
+    gate. ``-z`` gives NUL-separated output, which also turns off git's
+    ``core.quotePath`` escaping, so a path with a space or a non-ASCII
+    character arrives verbatim.
+
+    Raises ``WordListSelectionError`` when git is absent, when ``root`` is not
+    a repository, or when the command fails for any other reason."""
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, no shell, no user input
+            list(WORD_LIST_SELECTION_COMMAND),
+            cwd=str(root),
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise WordListSelectionError(
+            f"cannot select the scanned set: {' '.join(WORD_LIST_SELECTION_COMMAND)} "
+            f"could not be run in {root}: {exc}"
+        ) from exc
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip() or "(no stderr)"
+        raise WordListSelectionError(
+            f"cannot select the scanned set: {' '.join(WORD_LIST_SELECTION_COMMAND)} "
+            f"exited {result.returncode} in {root}: {detail}"
+        )
+    listing = result.stdout.decode("utf-8", errors="replace")
+    return [rel for rel in listing.split("\0") if rel]
+
+
+def iter_word_list_files(root: Path, ban: WordListBan) -> list[Path]:
+    """Every markdown file this repository tracks, minus the named exclusions.
+
+    Sorted, so the failure list is stable across platforms. A tracked path git
+    lists but the working tree does not hold (a checkout mid-operation, a
+    sparse checkout) is dropped here rather than read: the row reports drift in
+    prose, and a file that is not on disk carries none."""
+    excluded = {rel.lower() for rel in ban.excluded_paths}
+    found = [
+        root / rel
+        for rel in tracked_markdown_paths(root)
+        if rel.lower() not in excluded and (root / rel).is_file()
+    ]
+    return sorted(found)
+
+
+def _check_word_list_ban(root: Path, ban: WordListBan) -> list[str]:
+    manifest = root / ban.manifest_path
+    try:
+        words, recorded = read_word_list_manifest(manifest)
+    except WordListManifestError as exc:
+        return [str(exc)]
+
+    failures: list[str] = []
+    recomputed = canonical_word_list_digest(words)
+    if recomputed != recorded:
+        failures.append(
+            f"{ban.manifest_path}: recorded sha256 {recorded} does not match "
+            f"{recomputed} recomputed from 'words' - the list was edited without "
+            "its digest, or the digest without its list"
+        )
+
+    pattern = word_list_pattern(words)
+    try:
+        scanned = iter_word_list_files(root, ban)
+    except WordListSelectionError as exc:
+        # A refusal, not a pass. An empty scan and a scan that never ran print
+        # identically unless the second one says so.
+        failures.append(str(exc))
+        return failures
+    for path in scanned:
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for match in pattern.finditer(line):
+                failures.append(f"words_to_avoid: {match.group(0)!r} at {rel}:{lineno}")
+    return failures
+
+
+def _check_import_ban(root: Path, ban: ImportScanBan) -> list[str]:
+    base = root / ban.package_root
+    files = sorted(base.rglob("*.py")) if base.is_dir() else []
+    files = [p for p in files if "__pycache__" not in p.parts]
+    if not files:
+        return [f"{ban.package_root}: no .py files found (import-direction ban unreachable)"]
+    import_line = re.compile(r"^\s*(?:from|import)\s")
+    failures: list[str] = []
+    for path in files:
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if import_line.match(line) and any(tok in line for tok in ban.forbidden):
+                failures.append(f"forbidden import direction at {rel}:{lineno}: {line.strip()!r}")
+    return failures
+
+
+def _check_estimand_contract(root: Path, contract: EstimandContract) -> list[str]:
+    failures: list[str] = []
+    text = _read(root, contract.registry_path)
+    if text is None:
+        return [f"{contract.registry_path}: registry file missing"]
+    block_match = re.search(
+        r"^class Estimand\(StrEnum\):(.*?)(?=^class |\Z)", text, re.MULTILINE | re.DOTALL
+    )
+    if block_match is None:
+        return [f"{contract.registry_path}: class Estimand(StrEnum) not found"]
+    members = re.findall(r'^    [A-Z_]+ = "([^"]+)"$', block_match.group(1), re.MULTILINE)
+    if set(members) != contract.registered_values or len(members) != len(
+        contract.registered_values
+    ):
+        failures.append(
+            f"{contract.registry_path}: Estimand members {sorted(members)} != "
+            f"registered pair {sorted(contract.registered_values)}"
+        )
+    doc_files = (
+        [p for p in (root / "docs").rglob("*.md") if p.is_file()]
+        if (root / "docs").is_dir()
+        else []
+    )
+    readme = root / "README.md"
+    if readme.is_file():
+        doc_files.append(readme)
+    for path in doc_files:
+        rel = path.relative_to(root).as_posix()
+        content = path.read_text(encoding="utf-8", errors="replace")
+        for lineno, line in enumerate(content.splitlines(), start=1):
+            for m in re.finditer(r"estimand:\s*`?([^\n`]*)", line):
+                value = m.group(1).strip()
+                if value and not value.startswith(contract.doc_allowed_prefixes):
+                    failures.append(f"unregistered estimand token at {rel}:{lineno}: {value!r}")
+    return failures
+
+
+_RAT_FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
+_RAT_FIELD = re.compile(r"^([a-z_]+):\s*(.+?)\s*$", re.MULTILINE)
+
+
+def _check_rat_ledger(root: Path, contract: RatLedgerContract) -> list[str]:
+    base = root / contract.ledger_dir
+    if not base.is_dir():
+        return [f"{contract.ledger_dir}: ledger dir missing (registered surface gone)"]
+    failures: list[str] = []
+    if not (base / "README.md").is_file():
+        failures.append(f"{contract.ledger_dir}/README.md missing (ledger conventions gone)")
+    for path in sorted(base.glob("RAT-*.md")):
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        block = _RAT_FRONTMATTER.match(text)
+        if block is None:
+            failures.append(f"{rel}: no leading front-matter block")
+            continue
+        fields = dict(_RAT_FIELD.findall(block.group(1)))
+        try:
+            hard_cap = float(fields["hard_cap_usd"])
+            worst_case = float(fields["worst_case_cost_usd"])
+        except (KeyError, ValueError) as exc:
+            failures.append(f"{rel}: cap fields unreadable ({exc!r})")
+            continue
+        if hard_cap > contract.cap_ceiling_usd:
+            failures.append(
+                f"{rel}: hard_cap_usd {hard_cap} exceeds the "
+                f"${contract.cap_ceiling_usd:.2f} ceiling"
+            )
+        if hard_cap < worst_case:
+            failures.append(
+                f"{rel}: hard_cap_usd {hard_cap} below the record's own "
+                f"worst-case cost {worst_case}"
+            )
+        if fields.get("sme_status") == "self-certified" and contract.disclosure_line not in text:
+            failures.append(f"{rel}: self-certified record missing the disclosure line")
+    return failures
+
+
+def _check_cache_aware(root: Path, contract: CacheAwareContract) -> list[str]:
+    """DC-15 (#436): a RAT record quoting cache_aware_cost_usd must also
+    quote worst_case_cost_usd and cache_read_share; share in [0, 1];
+    cache_aware <= worst.
+
+    Full re-derivation through the projector needs token-class counts and a
+    model id on the record; those fields are not in the RAT front-matter
+    schema this ticket settles. Presence of the three quoted figures, a
+    parseable share in range, and cache_aware <= worst_case are the
+    checkable subset: the author must have produced the figures through
+    the projector, and the gate refuses a record that cannot be.
+    """
+    base = root / contract.ledger_dir
+    if not base.is_dir():
+        return []
+    failures: list[str] = []
+    for path in sorted(base.glob("RAT-*.md")):
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        block = _RAT_FRONTMATTER.match(text)
+        if block is None:
+            continue
+        fields = dict(_RAT_FIELD.findall(block.group(1)))
+        if contract.cache_aware_field not in fields:
+            continue
+        # cache-aware figure present — worst case and share are mandatory
+        if contract.worst_case_field not in fields:
+            failures.append(
+                f"{rel}: {contract.cache_aware_field} present but "
+                f"{contract.worst_case_field} missing"
+            )
+            continue
+        if contract.share_field not in fields:
+            failures.append(
+                f"{rel}: {contract.cache_aware_field} present but {contract.share_field} missing"
+            )
+            continue
+        try:
+            cache_aware = float(fields[contract.cache_aware_field])
+            worst_case = float(fields[contract.worst_case_field])
+            share = float(fields[contract.share_field])
+        except ValueError as exc:
+            failures.append(f"{rel}: cache-aware fields unreadable ({exc!r})")
+            continue
+        if not (0.0 <= share <= 1.0):
+            failures.append(f"{rel}: {contract.share_field} {share} outside [0.0, 1.0]")
+            continue
+        if cache_aware > worst_case:
+            failures.append(
+                f"{rel}: {contract.cache_aware_field} {cache_aware} exceeds "
+                f"{contract.worst_case_field} {worst_case}"
+            )
+    return failures
+
+
+_MIRROR_FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
+_MIRROR_LANDED_AS = re.compile(r"landed_as:\s*(.+?)\s*`", re.MULTILINE)
+_UNLANDED_RE = re.compile(r"^UNLANDED\s+#(\d+)$")
+_MIRROR_TICKET_API = "https://api.github.com/repos/MrBinnacle/skill-harness/issues"
+# Per-process cache so six UNLANDED rows naming the same ticket make one GET.
+_TICKET_STATE_CACHE: dict[str, bool | None] = {}
+# Injected seam for the closed-ticket control. See _ticket_state_override.
+_TICKET_STATE_SEAM_ENV = "SKILL_HARNESS_TICKET_STATES"
+
+
+class _Sentinel:
+    """A distinguishable non-value, so 'not in the seam' and 'in the seam and
+    unreadable' stay two findings rather than one."""
+
+    __slots__ = ("_name",)
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return self._name
+
+
+_ABSENT = _Sentinel("_ABSENT")
+_UNREADABLE = _Sentinel("_UNREADABLE")
+
+
+def _check_mirror_records(root: Path, contract: MirrorRecordContract) -> list[str]:
+    """DC-17 (#514): each MIRROR-*.md addition carries a landed_as: field
+    naming the implementing symbol or UNLANDED with a ticket number.
+
+    Fails when:
+    - The ledger dir or its README is missing (registered surface gone).
+    - A landed symbol does not exist under the search roots.
+    - An UNLANDED row names a closed ticket, or its state cannot be read.
+    - The glob matches zero files (a check that scans nothing passes trivially).
+    - A MIRROR file has zero landed_as entries (same trivial-pass hole).
+    """
+    base = root / contract.ledger_dir
+    if not base.is_dir():
+        return [f"{contract.ledger_dir}: ledger dir missing (registered surface gone)"]
+    failures: list[str] = []
+    if not (base / "README.md").is_file():
+        failures.append(f"{contract.ledger_dir}/README.md missing (ledger conventions gone)")
+    mirror_files = sorted(base.glob("MIRROR-*.md"))
+    if not mirror_files:
+        failures.append(
+            f"{contract.ledger_dir}: no MIRROR-*.md files found "
+            "(a check that scans nothing passes trivially)"
+        )
+        return failures
+    for path in mirror_files:
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        block = _MIRROR_FRONTMATTER.match(text)
+        if block is None:
+            failures.append(f"{rel}: no leading front-matter block")
+            continue
+        matches = list(_MIRROR_LANDED_AS.finditer(text))
+        if not matches:
+            failures.append(
+                f"{rel}: no landed_as: entries (a check that scans nothing passes trivially)"
+            )
+            continue
+        for m in matches:
+            landed = m.group(1).strip()
+            unlanded_match = _UNLANDED_RE.match(landed)
+            if unlanded_match:
+                ticket_num = unlanded_match.group(1)
+                is_closed = _check_ticket_closed(ticket_num)
+                if is_closed is True:
+                    failures.append(f"{rel}: UNLANDED #{ticket_num} names a closed ticket")
+                elif is_closed is None:
+                    failures.append(
+                        f"{rel}: UNLANDED #{ticket_num} ticket state unreadable "
+                        "(the closed-ticket control could not run)"
+                    )
+            elif not _symbol_exists(root, landed, contract.search_roots):
+                failures.append(
+                    f"{rel}: landed_as {landed!r} does not exist under "
+                    f"{' or '.join(contract.search_roots)}"
+                )
+    return failures
+
+
+def _ticket_state_override(ticket_num: str) -> bool | _Sentinel:
+    """Read one ticket's state from the injected seam, or return ``_ABSENT``.
+
+    The seam exists so the closed-ticket CONTROL can be proven without a
+    network call. A control that reaches api.github.com proves the network
+    worked, not that a closed ticket blocks: PR #518 went red on exactly one
+    of four Test cells because the lookup failed there and nowhere else,
+    which reads as flakiness and invites a re-run.
+
+    ``SKILL_HARNESS_TICKET_STATES`` holds a JSON object mapping ticket number
+    to ``"open"``, ``"closed"`` or ``"unreadable"``. The key ``"*"`` sets the
+    state for every ticket the table does not name, so one variable can take
+    a whole test run off the network rather than each case listing the
+    tickets its fixture happens to carry. A malformed value is itself
+    unreadable rather than absent, so a typo in the seam cannot silently
+    restore the live lookup under a test that believes it is isolated.
+    """
+    raw = os.environ.get(_TICKET_STATE_SEAM_ENV)
+    if not raw:
+        return _ABSENT
+    try:
+        table = json.loads(raw)
+    except ValueError:
+        return _UNREADABLE
+    if not isinstance(table, dict):
+        return _UNREADABLE
+    if ticket_num in table:
+        value = table[ticket_num]
+    elif "*" in table:
+        value = table["*"]
+    else:
+        return _ABSENT
+    if value == "closed":
+        return True
+    if value == "open":
+        return False
+    return _UNREADABLE
+
+
+def _check_ticket_closed(ticket_num: str) -> bool | None:
+    """True if the issue is closed, False if open, None if unread.
+
+    Uses the public GitHub issues API (same pattern as release_gate G7/G8),
+    not ``gh``: unauthenticated ``gh`` cannot read issue state, which left the
+    closed-ticket control dead on every green CI run. GITHUB_TOKEN is attached
+    when present, and the drift-check job now receives it, so the lookup does
+    not spend the 60-per-hour unauthenticated budget a shared runner shares
+    with every other job on that IP.
+
+    ``None`` means the state could not be read. It is NOT a pass: the caller
+    treats it as a failure. "Could not read" and "no problem found" are
+    different findings and this function no longer collapses them.
+    """
+    override = _ticket_state_override(ticket_num)
+    if override is _UNREADABLE:
+        return None
+    if not isinstance(override, _Sentinel):
+        return override
+    if ticket_num in _TICKET_STATE_CACHE:
+        return _TICKET_STATE_CACHE[ticket_num]
+    state: bool | None
+    try:
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "skill-harness-drift-check",
+        }
+        token = os.environ.get("GITHUB_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        request = urllib.request.Request(  # noqa: S310 - fixed API origin
+            f"{_MIRROR_TICKET_API}/{ticket_num}",
+            headers=headers,
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
+            data = json.load(response)
+        raw = data.get("state") if isinstance(data, dict) else None
+        state = None if not isinstance(raw, str) else raw.lower() == "closed"
+    except (OSError, urllib.error.URLError, urllib.error.HTTPError, ValueError, TypeError):
+        state = None
+    _TICKET_STATE_CACHE[ticket_num] = state
+    return state
+
+
+def _symbol_exists(root: Path, symbol: str, search_roots: tuple[str, ...]) -> bool:
+    """Check if a symbol string exists as content in any file under the search roots."""
+    for search_root in search_roots:
+        base = root / search_root
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if symbol in text:
+                return True
+    return False
+
+
+def _check_asset_pairs(root: Path, contract: AssetPairsContract) -> list[str]:
+    """DC-19 (#592): every source-export pair in the manifest must match its
+    recorded sha256. Either half drifting from its hash is refused.
+
+    The manifest records the sha256 of both halves of each pair. This is what
+    stops a copy check from being defeated by editing a text-bearing source and
+    shipping a stale export.
+    """
+    path = root / contract.manifest_path
+    if not path.is_file():
+        return [f"{contract.manifest_path}: asset-pairs manifest missing"]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return [f"{contract.manifest_path}: unparseable JSON: {exc}"]
+    if not isinstance(payload, dict):
+        return [f"{contract.manifest_path}: top level is not an object"]
+    pairs = payload.get("pairs")
+    if not isinstance(pairs, list):
+        return [f"{contract.manifest_path}: 'pairs' is not an array"]
+    if not pairs:
+        return [
+            f"{contract.manifest_path}: 'pairs' is empty "
+            "(a freshness check over zero pairs is vacuous)"
+        ]
+    failures: list[str] = []
+    for position, pair in enumerate(pairs, start=1):
+        if not isinstance(pair, dict):
+            failures.append(f"{contract.manifest_path}: pairs[{position}] is not an object")
+            continue
+        checked: dict[str, tuple[str, str, str]] = {}
+        for half in ("source", "export"):
+            name = pair.get(half)
+            recorded = pair.get(f"{half}_sha256")
+            if not isinstance(name, str) or not name:
+                failures.append(f"{contract.manifest_path}: pairs[{position}] names no {half}")
+                continue
+            if not isinstance(recorded, str) or not recorded:
+                failures.append(
+                    f"{contract.manifest_path}: pairs[{position}] {half} {name!r} "
+                    f"records no {half}_sha256, an unrecorded half cannot drift visibly"
+                )
+                continue
+            file_path = root / name
+            if not file_path.is_file():
+                failures.append(
+                    f"{contract.manifest_path}: pairs[{position}] {half} {name!r} "
+                    "does not exist under the checked root"
+                )
+                continue
+            actual = hashlib.sha256(file_path.read_bytes()).hexdigest()
+            checked[half] = (name, recorded, actual)
+        if set(checked) != {"source", "export"}:
+            continue
+        pair_hashes = "; ".join(
+            f"{half} {name}: recorded hash {recorded[:16]}..., file on disk {actual[:16]}..."
+            for half, (name, recorded, actual) in checked.items()
+        )
+        for half, (_, recorded, actual) in checked.items():
+            if actual != recorded:
+                failures.append(
+                    f"asset pair {position} has a mismatched {half}: {pair_hashes}, "
+                    "one half of a pair was changed without the other, or without "
+                    "re-recording both"
+                )
+    return failures
+
+
+def _load_guard_module(module_rel: str) -> ModuleType:
+    """Import a guard module from THIS script's repository, by file path.
+
+    ``scripts`` and ``tests`` carry no ``__init__.py`` and are not packages
+    (the same note scripts/words_to_avoid_drift_check.py carries), so this is
+    the loader tests/test_words_to_avoid_ban.py already uses to reach this
+    script. The direction here is the reverse and the mechanism is identical.
+
+    The module is registered in ``sys.modules`` BEFORE ``exec_module``:
+    @dataclass resolves a field annotation by looking its defining module up in
+    sys.modules, and a module that is not there yet resolves to None, which
+    surfaces as an AttributeError inside dataclasses at import time that reads
+    like a bug in the guard and is not one.
+    """
+    name = "drift_check_guard_" + re.sub(r"\W", "_", module_rel)
+    path = Path(__file__).resolve().parent.parent / module_rel
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"no loader for {module_rel}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _check_delegated_guard(root: Path, guard: DelegatedGuard) -> list[str]:
+    """Run one delegated predicate against ``root``, or refuse and say why.
+
+    Four refusals, all of them the table's own wording: a missing surface, an
+    unloadable module, a symbol that is absent or not callable, and a
+    predicate that raises instead of returning. Each is a failure string,
+    never an exception and never a silent pass. A guard this row cannot reach
+    is indistinguishable, from the output, from a guard that found nothing,
+    and the second reading is the one that ships drift.
+
+    The fourth refusal wraps the call itself. A file the predicate cannot
+    decode or parse (a non-UTF-8 doc, a malformed SVG) is unreachable in the
+    same sense as an unloadable module, and letting it raise would abort the
+    whole drift check with a traceback, printing no rows at all, instead of
+    reddening this one row and leaving the rest of the report intact.
+    """
+    for rel in guard.requires:
+        if not (root / rel).exists():
+            return [
+                f"delegated guard {guard.symbol} has no surface to scan: "
+                f"{rel} does not exist under the checked root"
+            ]
+    try:
+        module = _load_guard_module(guard.module_rel)
+    except Exception as exc:  # an unloadable guard is a refusal, never a pass
+        return [f"delegated guard module {guard.module_rel} did not load: {exc!r}"]
+    predicate = getattr(module, guard.symbol, None)
+    if not callable(predicate):
+        return [
+            f"delegated guard {guard.module_rel}:{guard.symbol} is absent or not callable "
+            "(the row names a predicate that no longer exists)"
+        ]
+    failures: list[str] = []
+    try:
+        predicate(root, failures)
+    except Exception as exc:  # a raising predicate is a refusal, never a crash
+        return [f"delegated guard {guard.symbol} raised {exc!r}"]
+    return failures
+
+
+def _run_row(root: Path, row: LiveRow) -> list[str]:
+    failures: list[str] = []
+    for site in row.value_sites:
+        failures.extend(_check_value_site(root, site))
+    for reg in row.registered_texts:
+        failures.extend(_check_registered_text(root, reg))
+    for pointer in row.live_pointers:
+        failures.extend(_check_pointer(root, pointer))
+    for ban in row.token_bans:
+        failures.extend(_check_token_ban(root, ban))
+    for guard in row.delegated_guards:
+        failures.extend(_check_delegated_guard(root, guard))
+    if row.estimand_contract is not None:
+        failures.extend(_check_estimand_contract(root, row.estimand_contract))
+    if row.import_ban is not None:
+        failures.extend(_check_import_ban(root, row.import_ban))
+    if row.rat_ledger is not None:
+        failures.extend(_check_rat_ledger(root, row.rat_ledger))
+    if row.cache_aware_contract is not None:
+        failures.extend(_check_cache_aware(root, row.cache_aware_contract))
+    if row.word_list_ban is not None:
+        failures.extend(_check_word_list_ban(root, row.word_list_ban))
+    if row.mirror_record is not None:
+        failures.extend(_check_mirror_records(root, row.mirror_record))
+    if row.asset_pairs is not None:
+        failures.extend(_check_asset_pairs(root, row.asset_pairs))
+    return failures
+
+
+# ---------------------------------------------------------------------------
+# Report (F7 output convention) + entry point
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Report:
+    failures_by_row: dict[str, list[str]] = field(default_factory=dict)
+
+    @property
+    def total_failures(self) -> int:
+        return sum(len(v) for v in self.failures_by_row.values())
+
+
+def run_drift_check(root: Path) -> Report:
+    report = Report()
+    for row in LIVE_ROWS:
+        report.failures_by_row[row.dc_id] = _run_row(root, row)
+    return report
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=Path(__file__).resolve().parent.parent,
+        help="repo root to check (default: this script's repo)",
+    )
+    args = parser.parse_args(argv)
+    root: Path = args.root.resolve()
+
+    report = run_drift_check(root)
+
+    print(f"Drift check over {len(LIVE_ROWS)} live contract(s):")
+    for row in LIVE_ROWS:
+        failures = report.failures_by_row[row.dc_id]
+        if failures:
+            print(f"  FAIL     {row.dc_id}  {row.summary}")
+            for failure in failures:
+                print(f"           FAIL {row.dc_id}: {failure}")
+        else:
+            print(f"  OK       {row.dc_id}  {row.summary}")
+    print(COVERAGE_BOUNDARY_LINE)
+    print("PLANNED (registered, not yet checked):")
+    for planned in PLANNED_ROWS:
+        print(f"  PLANNED  {planned.dc_id}  {planned.summary} [activates: {planned.activates}]")
+    if TOKEN_BAN_ALLOWLIST:
+        entries = ", ".join(sorted(TOKEN_BAN_ALLOWLIST))
+        print(f"Token-ban allowlist (grows only by dated amendment): {entries}")
+    else:
+        print("Token-ban allowlist (grows only by dated amendment): EMPTY")
+    # F7 visibility: structural exemptions are carve-outs too — print them so
+    # the ban's true coverage is never overstated by the EMPTY allowlist line.
+    # Union across every live token ban (DC-3 repo-wide + DC-11 oc-scoped).
+    all_exemptions: set[str] = set()
+    for row in LIVE_ROWS:
+        for ban in row.token_bans:
+            all_exemptions |= ban.exemptions
+    print("Structural scan exemptions (definition sites + scan machinery, not allowlist entries):")
+    for rel in sorted(all_exemptions):
+        print(f"  EXEMPT   {rel}")
+
+    # Same F7 reason: DC-16 claims a scope, so the scope is printed rather
+    # than left to the table -- BOTH halves of it. The selection line names
+    # the command that chose the files (#471: a walk and a tracked-set read
+    # are different checks, and a reader cannot tell them apart from a row
+    # summary), and the exclusion lines name what the selection then dropped.
+    for row in LIVE_ROWS:
+        word_ban = row.word_list_ban
+        if word_ban is None:
+            continue
+        selection = " ".join(WORD_LIST_SELECTION_COMMAND)
+        print(f"{row.dc_id} markdown scan selection: {selection} (the tracked set)")
+        print(f"{row.dc_id} markdown scan exclusions (immutable records, tracked but not scanned):")
+        for rel in word_ban.excluded_paths:
+            print(f"  EXCLUDE  {rel}")
+
+    if report.total_failures:
+        print(f"DRIFT CHECK: BLOCKED - {report.total_failures} contract violation(s) listed above.")
+        return 1
+    print(f"DRIFT CHECK: PASS - all {len(LIVE_ROWS)} live contracts hold.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
