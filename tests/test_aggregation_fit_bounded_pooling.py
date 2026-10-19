@@ -373,9 +373,6 @@ def _exact_binomial_rejects(false_count: int, clusters: int) -> tuple[bool, floa
     return p_value < KILL_LEVEL, p_value
 
 
-# #760: the three tests that request `tie_heavy_null_refused_cells` share one xdist
-# worker, so the module fixture is built once instead of once per worker that drew
-# one of them (two ~120s setups on windows-latest in job 118154982104).
 _SHARES_REFUSED_CELLS = pytest.mark.xdist_group("bounded_pooling_refused_cells")
 
 

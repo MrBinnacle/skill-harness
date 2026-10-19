@@ -101,13 +101,10 @@ from skill_harness.aggregation.fit import (
     fit_skill,
 )
 
+pytestmark = pytest.mark.xdist_group("ebmom_measurements")
+
 SEED: int = 20260902
 K_CLAUSES: int = 200
-# #760: one xdist worker owns this module. Every test requests the module-scoped
-# `measurements` fixture, and under `-n 4` each worker that drew a test rebuilt it:
-# three ~460s setups on windows-latest in job 118154982104.
-pytestmark = pytest.mark.xdist_group("ebmom_recovery")
-
 R_REPLICATES: int = 50
 CONC_REL_TOL: float = 0.25
 MEAN_ABS_TOL: float = 0.03
