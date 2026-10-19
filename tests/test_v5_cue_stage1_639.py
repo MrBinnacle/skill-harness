@@ -22,14 +22,17 @@ def _load(name: str) -> ModuleType:
     return module
 
 
-def _fixture_present() -> bool:
+def _steering_inputs_present() -> bool:
     cue_audit = _load("cue_audit")
-    return bool((cue_audit.FIXTURE_ROOT_DEFAULT / "fixture_shas.json").is_file())
+    v4_cells = _load("v4_cells")
+    fixture = cue_audit.FIXTURE_ROOT_DEFAULT / "fixture_shas.json"
+    full_card = v4_cells.FULL_DIR_DEFAULT / "SKILL.md"
+    return bool(fixture.is_file() and full_card.is_file())
 
 
 @pytest.mark.skipif(
-    not _fixture_present(),
-    reason="the v5-cue fixture is private and lives only on the steering host",
+    not _steering_inputs_present(),
+    reason="the v5-cue fixture and the pinned 3.0.0 Full card live only on the steering host",
 )
 def test_dry_run_builds_the_two_null_tasks_and_calls_no_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -64,8 +67,8 @@ def test_dry_run_builds_the_two_null_tasks_and_calls_no_model(
 
 
 @pytest.mark.skipif(
-    not _fixture_present(),
-    reason="the v5-cue fixture is private and lives only on the steering host",
+    not _steering_inputs_present(),
+    reason="the v5-cue fixture and the pinned 3.0.0 Full card live only on the steering host",
 )
 def test_stage1_tasks_are_null_in_both_worlds_at_eight_epochs(tmp_path: Path) -> None:
     pytest.importorskip("inspect_ai")
