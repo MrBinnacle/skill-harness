@@ -54,9 +54,10 @@ A program that matched the old value stops matching and reports nothing.
   no longer satisfies this package's requirements. Measured from
   `git diff v0.3.0 HEAD -- pyproject.toml`:
 
-  - `anthropic>=1.11.0` (was `>=1.2.0`; the floor passed through 1.5.0 in
-    #548 and landed at 1.11.0 in #727, which re-asserts the post-patch bound
-    for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3).
+  - `anthropic>=1.15.0` (was `>=1.2.0`; the floor passed through 1.5.0 in
+    #548 and 1.11.0 in #727, which re-asserts the post-patch bound for
+    GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3, and landed at 1.15.0 in
+    #749).
   - `openai>=3.15.0,<4` (was `>=2.41,<4`; the lower bound rose in #604. The
     `<4` cap is unchanged and still records the supply-chain audit's
     unaudited-major rule).

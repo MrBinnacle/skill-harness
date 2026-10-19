@@ -73,8 +73,8 @@ def test_unreleased_records_every_changed_runtime_floor() -> None:
     """Criterion 3: each runtime floor in [Unreleased] matches pyproject.
 
     The acceptance text names anthropic>=1.8.0, but that figure was measured
-    at origin/main=b48ee47. PR-head pyproject.toml declares anthropic>=1.11.0
-    (bumped again in #727). The governing rule is the value as declared at the
+    at origin/main=b48ee47. PR-head pyproject.toml declares anthropic>=1.15.0
+    (bumped again in #727 and #749). The governing rule is the value as declared at the
     PR head, which is what this test reads.
     """
     unreleased = _unreleased()
@@ -160,7 +160,7 @@ def _changed_runtime_floors() -> list[str]:
     """Runtime requirements whose declared floor moved since v0.3.0.
 
     Measured from ``git diff v0.3.0 HEAD -- pyproject.toml``:
-    anthropic 1.2.0 -> 1.11.0, openai 2.41 -> 3.15.0, click 8.1 -> 8.5.0,
+    anthropic 1.2.0 -> 1.15.0, openai 2.41 -> 3.15.0, click 8.1 -> 8.5.0,
     scipy 1.11 -> 1.18.1, statsmodels 0.14 -> 0.15.0. tiktoken, pydantic and
     rich did not move. The test asserts against pyproject at run time rather
     than these literals, so a future floor bump without a CHANGELOG line fails
@@ -168,7 +168,7 @@ def _changed_runtime_floors() -> list[str]:
     set #733 is allowed to record.
     """
     floors = [
-        "anthropic>=1.11.0",
+        "anthropic>=1.15.0",
         "openai>=3.15.0,<4",
         "click>=8.5.0",
         "scipy>=1.18.1",
