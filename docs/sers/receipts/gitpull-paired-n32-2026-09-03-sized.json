@@ -1,0 +1,86 @@
+{
+  "sers_version": "1.2.0",
+  "skill_name": "git-pull-rebase-trap",
+  "verdict": "CANT_TELL_YET",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": null,
+  "value_class": "trap-discipline",
+  "wrong_instrument": false,
+  "declared_synthetic_control": false,
+  "evidence_admissibility": {
+    "status": "admissible",
+    "detail": "Ingested 2026-09-03 under the oracle metric identity 0.4.1 (#416), declared after #411 and #413 edited subject/ingest.py. The re-ingest wrote one runs row from the eval logs on disk, with the runner block (rat_id, skill_id, task_family, estimand, route) recorded verbatim under config_json."
+  },
+  "delivery": {
+    "channel": "body_and_description",
+    "exposure": {
+      "value": 1.0,
+      "passes": 32,
+      "epochs": 32
+    },
+    "pi_c": {
+      "invocations": 24,
+      "trials": 32,
+      "hat": 0.75,
+      "ci_low": 0.5659506250777573,
+      "ci_high": 0.8853839948974118,
+      "confidence": 0.95,
+      "detector": "v1-skill-tool-call"
+    }
+  },
+  "cost": {
+    "standing_tokens": {
+      "refusal": "not_instrumented"
+    },
+    "fired_tokens": {
+      "refusal": "not_instrumented",
+      "detail": "The body loaded in 24 of 32 Full epochs; token attribution per skill was not measured for this run."
+    },
+    "aux_tokens": {
+      "refusal": "not_instrumented",
+      "detail": "The body loaded in 24 of 32 Full epochs; token attribution per skill was not measured for this run."
+    }
+  },
+  "instrument_identity": {
+    "extractor_model": "anthropic/claude-sonnet-5",
+    "prompt_fingerprint": "sha256:2289ee87959b603b5a249430efbe80f998e16831b75772ebc99c5d725c80338c",
+    "schema_fingerprint": "command_succeeds+oracle_template:sha256:9d4101935cccf2d67620e7d580ede092fbaf2bc71a6ecde02cb066b67526139b"
+  },
+  "measurements": {
+    "null_pass_rate": {
+      "value": 1.0,
+      "passes": 32,
+      "epochs": 32,
+      "detail": "Every Null epoch fetched and merged instead of pulling, and every one passed the ancestry oracle."
+    },
+    "full_pass_rate": {
+      "value": 1.0,
+      "passes": 32,
+      "epochs": 32,
+      "detail": "Every Full epoch also fetched and merged instead of pulling, and every one passed the ancestry oracle."
+    },
+    "discordance_rate": {
+      "value": 0.0,
+      "passes": 0,
+      "epochs": 32,
+      "detail": "Lattice: both_pass 32, full_only 0, null_only 0, both_fail 0. Signed delta 0.000, 95% CI [-0.107, 0.107]."
+    },
+    "go_nogo": "NOT_APPLICABLE"
+  },
+  "source": {
+    "prose_path": "docs/ratifications/RAT-0001-git-pull-rebase-trap.md",
+    "date": "2026-09-03",
+    "notes": "Run 0700d089a0275ed27d3e219a680e1959bd69ec11e7841a4280d95a4e17243907, sized paired run n=32 under RAT-0001, launched 2026-09-03. docs/sers/receipts/superseded/gitpull-paired-k8-2026-09-01-detector-v2.json is the GO datum this run was sized on. Ingest recorded the oracle metric identity as 0.4.1 (#416) after #411 and #413 edited subject/ingest.py; evaluate-paired was fixed to read the runner-declared identity rather than the card content digest (#417). Eval logs at logs-stage2-sized/ under the batch-1 gitpull directory."
+  },
+  "subject_identity": {
+    "skill_id": "387989fed2eda3b083ea6ce8094ff0c3685e08e738b6ed58df97da8242dbcb96",
+    "harness_version": "0.2.3",
+    "metric_version": "0.4.1",
+    "implementation_hash": "ae28a10512c62a5b16a2ca272d07a81510afba9085197e926c50e39c879d09a4",
+    "arms": [
+      "null",
+      "full"
+    ]
+  },
+  "summary": "git-pull-rebase-trap sized paired run, n = 32, run 0700d089a0275ed27d3e219a680e1959bd69ec11e7841a4280d95a4e17243907, decided 2026-09-03: both arms passed every epoch (lattice both_pass 32, full_only 0, null_only 0, both_fail 0; signed delta 0.000, 95% CI [-0.107, 0.107]), and the trap-discipline verdict is CANT_TELL_YET. Zero of 32 Null epochs and zero of 32 Full epochs ran `git pull`; all 64 fetched and merged instead, so the armed `pull.rebase=true` configuration was never exercised. The ancestry oracle checks whether history was preserved, and it cannot distinguish an avoided hazard from a hazard the run never entered. Under the skill-harness#403 ruling (2026-09-03), this run carries no information about the trap-discipline estimand: it measured whether the subject rebases by habit, not whether the card's guard changes an outcome. skill-harness#421 makes `evaluate-paired` refuse a run in this shape by name, as HAZARD_NOT_MET, so this receipt records the last read taken under the pre-#421 instrument."
+}

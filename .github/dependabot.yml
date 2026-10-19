@@ -1,0 +1,60 @@
+version: 2
+
+updates:
+  # Python dependencies (pyproject.toml)
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - python
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    groups:
+      anthropic-stack:
+        patterns:
+          - "anthropic"
+          - "httpx"
+          - "httpcore"
+          - "anyio"
+          - "h11"
+      pydantic-stack:
+        patterns:
+          - "pydantic"
+          - "pydantic-core"
+          - "annotated-types"
+          - "typing-extensions"
+      dev-tooling:
+        dependency-type: development
+        patterns:
+          - "pytest*"
+          - "ruff"
+          - "mypy"
+          - "mypy_extensions"
+          - "hypothesis"
+          - "coverage"
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "ci(deps)"
+      include: scope
+    groups:
+      actions:
+        patterns: ["*"]

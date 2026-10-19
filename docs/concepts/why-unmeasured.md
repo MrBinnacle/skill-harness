@@ -1,0 +1,209 @@
+# Why UNMEASURED is not a failure
+
+When you run `skill-harness run evaluate-skill` and see `unmeasured: 17`, the natural
+reading is that 17 checks went wrong. That reading is incorrect. UNMEASURED is a
+recorded state, not a failure. It maps to the `CANT_TELL_YET` verdict and means the
+test that would discriminate between "this clause changes the output" and "this clause is
+decoration" was not run, because the necessary instrument does not exist in this version
+of the framework. Producing a number anyway — by handing the question to an LLM judge
+and asking for an estimated score — would be lying about what was measured.
+
+The distinction the field habitually erases is between "we cannot prove it works" and
+"it does not work." UNMEASURED preserves that distinction. A framework that collapses
+it into a score is making a claim it cannot support.
+
+## UNMEASURED sub-reasons
+
+Each UNMEASURED clause carries a `sub_reason` that names the specific reason no
+admissible evidence was produced. The sub-reasons are:
+
+### `no_data`
+
+No `oracle_verdicts` rows exist for this clause in the evidence database, and the
+clause's axis *is* mechanically scoreable — an unscoreable axis returns
+`mechanical_vacuous` first (see below), because `no_data` would falsely imply that
+more sampling could resolve it. This is the aggregate-layer representation of a
+scoreable clause that was never reached by the runner. See `tier2_uncalibrated`
+for the runner-layer cause.
+
+Example: a skill's clauses land on registered axes, but the run that would sample
+this clause was never started — or ended before this clause's first sample was
+made and stored. Zero verdict rows exist. The fix is to run (or resume) the
+evaluation; the instrument exists, the evidence does not yet.
+
+### `inadmissible`
+
+Verdict rows exist, but all of them are marked inadmissible. A verdict is inadmissible
+when the Tier-2 judge that produced it either lacks a calibration record for the
+relevant axis, or its calibration record fails the thresholds (position-swap agreement
+< 0.7, position consistency < 0.8). The judge is an instrument; without a
+calibration audit, its output is not admissible as evidence.
+
+Example: a Tier-2 judge is invoked for an uncalibrated axis. The harness writes the
+verdict rows with `admissibility_state = 'inadmissible'`. They are retained for audit
+but excluded from aggregation. The clause has data, but no admissible data.
+
+### `underpowered`
+
+Admissible verdict rows exist, but the sample count is below `N_min = 8`
+(`aggregation/status.py`). A posterior computed from fewer than 8 samples cannot be
+trusted to meet the `P(win_rate > 0.60) >= 0.95` pass criterion.
+
+Example: a run is interrupted after 3 samples per clause. The harness stores what it
+has. On aggregation, the underpowered clauses return `UNMEASURED(underpowered)`. The
+fix is to resume the run and collect more samples, not to lower the threshold.
+
+### `falsifying_case_missing`
+
+The clause is marked non-vacuous (`vacuity_flag = 'none'`) but has no frozen
+falsifying case in the regression suite. A clause is not "tested" until at least one
+falsifying case exists at the current `metric_library` version.
+
+Example: the extractor produces a clause with a valid `falsifying_case` schema (the
+input population and expected directional pair are specified), but no one has run the
+ablation to the point of a definitive result and frozen a failing verdict. The clause
+exists in the inventory but has never been through the full test cycle.
+
+### `budget_exhausted`
+
+The per-run budget cap (`--max-usd`) was reached before the clause accumulated enough
+samples to reach a definitive verdict. The harness stops cleanly and reports what it
+has.
+
+Example: a run with `--max-usd 1.00` exhausts its budget mid-clause. The runner
+writes the samples it collected, marks the run `completed_at`, and returns
+`UNMEASURED(budget_exhausted)` for any clause that did not reach `N_min`.
+
+### `falsifying_case_stale`
+
+A frozen falsifying case exists, but it was frozen against a prior version of the
+metric library. The current `metric_library` version has changed since the case was
+frozen. The stale case is retained for audit but excluded from the current measurement.
+
+Example: a scorer for `citation_presence_per_flag` is updated with a bug fix that
+changes its output on existing test inputs. All frozen cases produced by the prior
+scorer version are now stale. The clause returns `UNMEASURED(falsifying_case_stale)`
+until new cases are frozen against the updated scorer version.
+
+### `fdr_correction_failed`
+
+The raw (uncorrected) posterior crossed the pass threshold, but the skill-level
+BH-FDR correction rejected this clause (`bh_fdr_pass = False`). Distinct from
+`underpowered`: the sample count and the raw posterior are both fine — what failed
+<!-- vale Taste.Generic-ness = NO -->
+is the multiple-testing correction, not the sample size.
+<!-- vale Taste.Generic-ness = YES -->
+Testing many clauses at
+once inflates the chance that at least one crosses the threshold by luck; this
+sub-reason names a clause that did not survive the correction that keeps the
+family of results honest.
+
+Example: a skill with 40 clauses runs to completion. One clause's raw posterior
+reads `P(win_rate > 0.60) = 0.96`, but across 40 simultaneous tests the BH-FDR
+gate rejects it. Reporting "not enough evidence yet" would be a false explanation
+— there is enough evidence, and it does not survive correction.
+
+### `mechanical_vacuous`
+
+No registered scorer, Tier-1 or external-check, can see this clause's axis, so no amount of
+further sampling could ever produce a mechanical measurement. This is Rule 0 —
+checked before everything else, including `no_data` — because when no instrument
+exists, "no data yet" is a false explanation: it implies more sampling would
+resolve the clause, and it would not.
+
+Scoreability is exact membership in the axis registry
+(`oracles/tier1/axis_registry.py`) — never fuzzy, never case-insensitive, never a
+Tier-2 judge. And it is recomputed from the current registry on every aggregation
+read, never frozen onto the clause: registering a scorer for the axis resolves it
+on the next read, with no re-extraction.
+
+This is orthogonal to the write-time `vacuity_flag`: a clause can be constructibly
+testable — carrying a structurally complete falsifying case — and still be
+mechanically unscoreable today.
+
+Example: a skill with 17 domain-specific axes (e.g., `legal_disclaimer_presence`)
+runs against a harness that has only five registered Tier-1 scorers (`verbosity`,
+`hedge_index`, `structure_score`, `compliance_proxy`,
+`citation_presence_per_flag`). None of the 17 match. Every one of those clauses
+returns `UNMEASURED(mechanical_vacuous)` — not `no_data` — naming the missing
+instrument rather than implying missing effort.
+
+### `tier2_uncalibrated`
+
+The runner's BLOCKER-1 gate refused the clause before sampling. The clause's axis
+has a registered Tier-1 scorer, but its `oracle_tier` is not 1. No samples and no
+verdicts exist, because the gate runs first. An axis with no registered scorer
+gets `mechanical_vacuous` or `external_check_missing` instead.
+
+Distinct from `mechanical_vacuous`, and the difference is which property failed.
+`mechanical_vacuous` is a statement about the axis registry, recomputed at
+aggregation. A Tier-2 clause whose axis **is** registered fails this gate on its
+tier, not on its axis, so `mechanical_vacuous` would name the wrong cause.
+
+Example: a clause on `citation_presence_per_flag` carries `oracle_tier = 2`,
+awaiting a calibrated judge. The axis has a registered Tier-1 scorer, so
+`mechanical_vacuous` is false. The runner still refuses the clause, because the
+clause asked for a judge that is not calibrated on that axis yet. The sub-reason
+names the uncalibrated judge rather than a missing instrument.
+
+### `external_check_missing`
+
+The runner refused the clause before sampling because no registered oracle can
+measure this clause's axis. The axis is listed in the external-check registry,
+which means a deterministic program could check it, but no checker for it is
+registered. The sub-reason names the oracle that was sought: an external checker
+for the axis of the refused clause.
+
+Distinct from `mechanical_vacuous`, which means the axis is in no registry at
+all. Distinct from `tier2_uncalibrated`, which means the axis has a Tier-1 scorer
+and the clause asked for a judge instead.
+
+Example: a clause on `protected_comment_deletion` asks whether an edit deleted a
+comment of a protected class. That axis is in the external-check registry, but
+this harness ships no checker for it. The runner refuses the clause with
+`external_check_missing`. The fix is to register a checker for
+`protected_comment_deletion`.
+
+### `length_confounded`
+
+The runner's QUAL-1 gate refused the clause before sampling. The operator could
+not meet the length tolerance for the clause text, so an ablation of that clause
+cannot separate the clause's effect from a length artefact. No samples and no
+verdicts exist, because the gate runs first.
+
+No other sub-reason names an operator-tolerance refusal. Reporting this clause as
+`underpowered` would be a false explanation, because more sampling does not fix a
+confound. Reporting it as `no_data` would be worse, because it implies the run
+could have produced data and did not.
+
+Example: removing one clause from a skill shortens the prompt by 38 percent. The
+ablated arm is now materially shorter than the full arm. Any difference the
+oracle records could be the clause or could be the length. The runner refuses the
+clause rather than attributing the difference to the clause.
+
+### `HAZARD_NOT_MET`
+
+The Null arm entered a registered trap hazard too rarely for the outcome to
+measure the skill's effect. The receipt records the observed
+`hazard_entry_null` count. An outcome oracle cannot distinguish a model that
+avoided the hazard from a model that handled it safely, so the result is not a
+measurement of the trap-discipline skill.
+
+## Contrast with the field's pattern
+
+The standard pattern in LLM evaluation is to produce a number regardless of whether
+the instrument exists to measure the claimed axis. A pairwise preference judge asked
+to evaluate `citation_presence_per_flag` will return a preference — it cannot refuse.
+A G-Eval scalar scorer asked to rate "does this output correctly classify severity for
+each flag" will return a number between 0 and 10. Those numbers feel like evidence.
+They are not evidence that the clause changes the output; they are evidence that the
+output looks plausible to the judge with this rubric.
+
+Skill Harness is built around the refusal to conflate those two questions. The
+recorded `UNMEASURED` state is the concrete artifact of that refusal — a result that says
+"the instrument for this measurement does not exist in this version of the framework,
+and we will not pretend otherwise."
+
+This is not a permanent condition. UNMEASURED is resolved by either registering a
+Tier-1 mechanical scorer for the axis, or calibrating a Tier-2 judge for it. Both are
+legitimate paths. Reporting a fabricated score is not.

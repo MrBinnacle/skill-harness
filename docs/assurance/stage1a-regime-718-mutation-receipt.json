@@ -1,0 +1,504 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-1/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "a fixed-n-betting row records an interim look instead of reading once at n",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_designs_read_once_at_n"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-1/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "a3dfa16860daa0285f0ffdf7a2ae57ac98c7a9aab5af59fcefa2446b8748c17b",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-1",
+      "notes": [],
+      "obligation": "718-stage2-fixed-n-interim-look",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_designs_read_once_at_n"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-2/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 2,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "fixed-n-betting reads the anytime bound at n in place of its own horizon-scaled fixed-time bound",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_betting_run_cell_matches_horizon_scaling_not_anytime_at_n"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-2/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "a7225db5e0b68b3a21d18aa1245b1fa7ce941f11d141163c979d281acd3de8d1",
+        "tests_collected": 2,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-2",
+      "notes": [],
+      "obligation": "718-stage2-fixed-n-anytime-bound-at-n",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_betting_uses_horizon_scaled_bets_not_time_scaled",
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_betting_run_cell_matches_horizon_scaling_not_anytime_at_n"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-3/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 3,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "the score tests use delta0 = 0 in place of the registered margin 0.20",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_run_cell_holds_its_level_at_the_margin_boundary"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-3/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "d0693b5950415ccc655aa91b9cdfc2d482bb012aa88e2f1804d32a415295e0e8",
+        "tests_collected": 3,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-3",
+      "notes": [],
+      "obligation": "718-stage2-score-test-margin-dropped",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_score_tests_use_the_registered_margin_0_20",
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_tango_score_equals_mcnemar_at_delta0_zero",
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_run_cell_holds_its_level_at_the_margin_boundary"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-4/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "the paired Tango statistic is applied to the F - N contrast instead of F - P",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_applies_the_paired_statistic_to_fp_and_unpaired_to_fn"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-4/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "474a710a0c9b59b9e8975b200fad1773c22a0a8ec2890fba3793fecbecab24d7",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-4",
+      "notes": [],
+      "obligation": "718-stage2-statistic-contrast-mismatch",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_applies_the_paired_statistic_to_fp_and_unpaired_to_fn"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-5/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "joint PASS reads the F - P half only, dropping the F - N half",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_joint_pass_requires_both_halves"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-5/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "f86d54d72a97fdd9e02f1137a41215605be61546ad17c90e1e9a1dbbbce874c5",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-5",
+      "notes": [],
+      "obligation": "718-stage2-joint-pass-fp-only",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_joint_pass_requires_both_halves"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-6/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "the rule is always computed at the registered 0.0209 whatever alpha the row declares",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_pass_alpha_label_matches_computation"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-6/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "8f9029249341bc4213f2a7b4a07c3a630e5b555b9f00c5b34314928dc0e8c080",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-6",
+      "notes": [],
+      "obligation": "718-stage2-alpha-label-computation-mismatch",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_pass_alpha_label_matches_computation"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-7/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "anytime-tuned ignores starting_wealth and always starts at W0 = 1.0",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_starting_wealth_changes_anytime_tuned_decisions"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-7/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "11b519c98f5d36a34aa2bb5b1b72483f3034ece1ac6fd45e1164ca3b5c664c5b",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-7",
+      "notes": [],
+      "obligation": "718-stage2-starting-wealth-ignored",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_starting_wealth_changes_anytime_tuned_decisions"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-8/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "the tuned wealth factor divides by a term that depends on the current pair's outcome, so the bet is not fixed before the first pair",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_tuned_lambda_is_fixed_before_the_first_pair"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-8/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "c7ea229577bd2427b0c35a4c7a4a8360636a3d7eac058e0105ad6946eaca09bb",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-8",
+      "notes": [],
+      "obligation": "718-stage2-tuned-bet-lookahead",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_tuned_lambda_is_fixed_before_the_first_pair"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-9/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "the calibration read skips fixed-n rows, so a broken fixed-n level exits 0",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_calibration_exit_code_covers_fixed_n_rows"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-9/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "cbe3f1efe8714f202f25a58b9ed5bd0c21885e31f4e85d4d71cd5fd5bb18551d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-9",
+      "notes": [],
+      "obligation": "718-stage2-calibration-skips-fixed-n",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_calibration_exit_code_covers_fixed_n_rows"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-10/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 2,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "every stopping label is produced by the anytime path, so the label disagrees with the simulation that ran",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_stopping_column_on_the_tsv_matches_the_path_that_produced_it"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-10/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "945d008cec9cb72f2eda563ed34ac3747c8b40ffbd39d0441c7d256acddc02b4",
+        "tests_collected": 2,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-10",
+      "notes": [],
+      "obligation": "718-stage2-stopping-label-disagrees",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_stopping_column_on_the_tsv_matches_the_path_that_produced_it",
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_anytime_stopping_label_agrees_with_the_simulation_path"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-11/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "the headline reports a stale 100-pair count instead of each row's own n_pairs",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_headline_reads_n_pairs_from_each_row"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-11/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "960e037e8f52dd117ed05906d2b6306306bd31507daae36b6c96f99b8c13bf38",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-11",
+      "notes": [],
+      "obligation": "718-stage2-headline-pair-count",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_headline_reads_n_pairs_from_each_row"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-12/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "the CUT wealth factor bets upward instead of downward, reversing the futility direction",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_cut_direction_is_downward"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-12/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "31278a038ece7dd2a2a49c18b6690ea296237cb6b3fa78a0222082208a842013",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-12",
+      "notes": [],
+      "obligation": "718-stage2-cut-direction-reversed",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_cut_direction_is_downward"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-13/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "the calibration exit code is forced to 0 whatever the read finds",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_exit_code_is_not_forced_to_zero"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-13/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "9bb306ff30ebfe7aaa171c0761fce6f5638a82be1e251888fd3d90c646c61396",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-13",
+      "notes": [],
+      "obligation": "718-stage2-exit-code-forced-zero",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_exit_code_is_not_forced_to_zero"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-14/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "the anytime-tuned rejection reads the current wealth instead of its running maximum, so a sequence that crosses 1/alpha and then falls back below it is not a rejection",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_anytime_tuned_rejection_uses_running_maximum"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-14/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "5195704b1650d5c20fd02649c34d40b39a51376c8770d2853e40b92d887b3bcc",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-14",
+      "notes": [],
+      "obligation": "718-stage2-tuned-rejection-running-max",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_anytime_tuned_rejection_uses_running_maximum"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-15/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "the fixed-n-score CUT test runs at 0.10 instead of the registered 0.05",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_cut_is_decided_at_0_05"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-15/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "f6c08bf4906c12e4dd25f908d08a39eb26c8976114912dcfe48d45312a616aba",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-15",
+      "notes": [],
+      "obligation": "718-stage2-score-cut-level-010",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_cut_is_decided_at_0_05"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-16/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "description": "the fixed-n-score joint PASS reports its F - N half alone, dropping the F - P half",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_joint_pass_requires_both_halves_not_fn_alone"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-adjbvwhw/M-S2-16/scripts/screens/419/simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "5465b22e0598e2607250e999bb71bd7c74fa569b5eaebab3025b35af9c0d8132",
+        "tests_collected": 1,
+        "worktree_head": "10fb0cc2d1283a4e4fc0472531299035e7191ae5"
+      },
+      "mutant_id": "M-S2-16",
+      "notes": [],
+      "obligation": "718-stage2-joint-pass-fn-alone",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_joint_pass_requires_both_halves_not_fn_alone"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "10fb0cc2d1283a4e4fc0472531299035e7191ae5",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d"
+  },
+  "production_tree_digest_before": {
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.15",
+  "target_digests": {
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d"
+  },
+  "target_files": [
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py"
+  ]
+}

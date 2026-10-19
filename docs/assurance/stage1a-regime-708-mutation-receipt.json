@@ -1,0 +1,177 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-x0rg_8j7/M-S1A-13/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "0ec2266d2330d9c2cceec4799df78aae18cb7e1a"
+      },
+      "description": "the diagonal target check takes max instead of min, so a family with one strong diagonal cell is reported as meeting the target",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-x0rg_8j7/M-S1A-13/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "e3101243ca219cea9c83cfbf6283d82b81f312700918e0b1c106ec65f9a5b38c",
+        "tests_collected": 2,
+        "worktree_head": "0ec2266d2330d9c2cceec4799df78aae18cb7e1a"
+      },
+      "mutant_id": "M-S1A-13",
+      "notes": [],
+      "obligation": "708-stage1a-diagonal-min-to-max",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum",
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_reports_the_smallest_priced_config_meeting_both_halves"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-x0rg_8j7/M-S1A-14/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "0ec2266d2330d9c2cceec4799df78aae18cb7e1a"
+      },
+      "description": "the diagonal target check reverts to the nine-cell aggregate, which the #696 ruling rejects: the (0.30, 0.40) F-N margin cell caps P(PASS) at PASS_ALPHA for every design",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-x0rg_8j7/M-S1A-14/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "e3fa807aa1d0b29da3f1c3151d42853e9b181dc81152a97e9af86ca5c14761ca",
+        "tests_collected": 2,
+        "worktree_head": "0ec2266d2330d9c2cceec4799df78aae18cb7e1a"
+      },
+      "mutant_id": "M-S1A-14",
+      "notes": [],
+      "obligation": "708-stage1a-diagonal-to-all-nine",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum",
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_reports_the_smallest_priced_config_meeting_both_halves"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-x0rg_8j7/M-S1A-15/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "0ec2266d2330d9c2cceec4799df78aae18cb7e1a"
+      },
+      "description": "the diagonal target check reads only the single cell (0.35, 0.35) instead of the three diagonal cells",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-x0rg_8j7/M-S1A-15/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "35ae65ca34ca76267dd45638e461136b008c855e9f52daa65afb76cf035c8037",
+        "tests_collected": 2,
+        "worktree_head": "0ec2266d2330d9c2cceec4799df78aae18cb7e1a"
+      },
+      "mutant_id": "M-S1A-15",
+      "notes": [],
+      "obligation": "708-stage1a-diagonal-to-single-cell",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum",
+        "tests/test_simulate_stage1a_regime_685.py::test_target_check_reports_the_smallest_priced_config_meeting_both_halves"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-x0rg_8j7/M-S1A-16/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 3,
+        "worktree_head": "0ec2266d2330d9c2cceec4799df78aae18cb7e1a"
+      },
+      "description": "is_pass_calibration_cell checks only true F-P <= BOUNDARY and drops the true F-N half, so the F-N margin cell (0.30, 0.40) at d=0.30 leaves the calibration set",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_calibration_covers_the_fn_margin_cell_at_d030",
+        "tests/test_simulate_stage1a_regime_685.py::test_calibration_set_includes_every_pass_and_cut_error_cell",
+        "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-x0rg_8j7/M-S1A-16/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "3ab63c224cecee25994bbcb7ba637acb4fcb387da196dc67199c6dec8ecfb696",
+        "tests_collected": 3,
+        "worktree_head": "0ec2266d2330d9c2cceec4799df78aae18cb7e1a"
+      },
+      "mutant_id": "M-S1A-16",
+      "notes": [],
+      "obligation": "708-stage1a-pass-calibration-drops-fn",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_calibration_covers_the_fn_margin_cell_at_d030",
+        "tests/test_simulate_stage1a_regime_685.py::test_calibration_set_includes_every_pass_and_cut_error_cell",
+        "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-x0rg_8j7/M-S1A-17/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 1,
+        "worktree_head": "0ec2266d2330d9c2cceec4799df78aae18cb7e1a"
+      },
+      "description": "summary_md prints the smoke schema sentence whatever the replicate count, so a full run is filed as schema evidence",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_summary_marks_smoke_output_as_schema_evidence"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-x0rg_8j7/M-S1A-17/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "b2f211090297925e3c944a5ec70d455c01290629b900714ab9a1c8164546a3d2",
+        "tests_collected": 1,
+        "worktree_head": "0ec2266d2330d9c2cceec4799df78aae18cb7e1a"
+      },
+      "mutant_id": "M-S1A-17",
+      "notes": [],
+      "obligation": "708-stage1a-model-statement-always-smoke",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_summary_marks_smoke_output_as_schema_evidence"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "0ec2266d2330d9c2cceec4799df78aae18cb7e1a",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee"
+  },
+  "production_tree_digest_before": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.15",
+  "target_digests": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee"
+  },
+  "target_files": [
+    "scripts/screens/419/simulate_stage1a_regime_685.py"
+  ]
+}

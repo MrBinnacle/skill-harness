@@ -1,0 +1,53 @@
+# words_to_avoid drift check - catches the vendored word list going stale
+# against the collection that owns it.
+#
+# The operator's 2026-09-06 ruling puts every line of prose in every
+# repository under one set of rules, and MrBinnacle/skills owns the list of
+# words those rules refuse. scripts/drift_check.py DC-16 enforces the list on
+# every commit here, reading a vendored copy in assets/words_to_avoid.json so
+# that per-commit gate stays hermetic.
+#
+# The drift this workflow watches for is introduced in the OTHER repository:
+# the owner edits copy.words_to_avoid, and this repository's copy goes stale
+# with no commit here to notice. No pull request diff can ever contain that
+# edit, so no merge gate can catch it - and making the check a required gate
+# would put a live cross-repository HTTP call on the merge path while still
+# missing the one drift direction that actually happens. A schedule catches
+# it; a merge gate cannot.
+#
+# The `push` trigger on assets/words_to_avoid.json covers the other,
+# PR-visible direction: a commit that edits the vendored list without a
+# matching change upstream. That direction a pull request CAN cause, so it is
+# checked as soon as it lands on main rather than waiting for the next
+# scheduled run.
+#
+# scripts/words_to_avoid_drift_check.py is deliberately NOT added to ci.yml:
+# that file's drift-check job (scripts/drift_check.py) is hermetic by design.
+# Same split, and same reason, as repo-description-sync.yml.
+name: words_to_avoid drift
+
+on:
+  schedule:
+    - cron: "37 6 * * *"
+  push:
+    branches: [main]
+    paths:
+      - assets/words_to_avoid.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  words-to-avoid-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Run words_to_avoid drift check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/words_to_avoid_drift_check.py

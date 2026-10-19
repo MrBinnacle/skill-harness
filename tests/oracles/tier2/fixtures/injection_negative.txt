@@ -1,0 +1,38 @@
+# Injection-negative fixture — each line must NOT be flagged by detect_meta_tokens()
+# These are legitimate uses of "instructions", <output>-like text, or system-related words
+
+# Legitimate use of "instructions"
+The user's instructions were unclear and ambiguous
+Following the instructions provided in the manual
+The cooking instructions say to bake at 350 degrees
+The assembly instructions require a Phillips screwdriver
+The safety instructions must be followed at all times
+
+# Words near "instructions" but not matching the pattern
+These are my instructions for you to follow
+Previous instructions may have been incomplete
+Prior instructions from management were contradictory
+I have prior instructions but not "prior instructions" as a phrase to ignore
+
+# <output> in markdown/code context
+The response included an output tag in markdown code
+Use output_a and output_b as delimiters in prompts
+See the close tag in HTML examples
+The output_a section contains the first response
+
+# HTML/XML examples that are not injections
+The response used output_item tags for formatting
+The system_info element is different from the system element
+The system_message element is a different tag
+
+# New instructions in non-injection contexts
+These new instructions are helpful guidelines (note: no colon after "instructions")
+I received updated instructions about the project timeline
+Following revised instructions from the product team
+The updated instructions document is attached
+
+# Partial matches that should not fire
+"system" as a word: the operating system is Windows
+maybe ignore something (no "instructions" after ignore)
+prior to this, instructions were different (phrase does not match pattern)
+we need instructions here (no "prior" or "previous" before it)

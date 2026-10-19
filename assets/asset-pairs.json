@@ -1,0 +1,10 @@
+{
+  "pairs": [
+    {
+      "source": "assets/social-preview.svg",
+      "export": "assets/social-preview.png",
+      "source_sha256": "227ace003abf0d0709345adca5178fba9601e1564e6a6c7e1109febc2a8bceb9",
+      "export_sha256": "9f94e92886fb4a4448ecfbfd24960c0eeff2425ac2eee34006c3a44c57fda84e"
+    }
+  ]
+}

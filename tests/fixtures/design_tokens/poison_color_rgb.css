@@ -1,0 +1,6 @@
+/* Poison: rgba() is never a declared form. Everything else is declared. */
+body {
+  background: #0d1117;
+  color: rgba(255, 0, 0, 0.5);
+  font-size: 1rem;
+}

@@ -1,0 +1,117 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-khlhcq4k\\M-H1\\src\\skill_harness\\subject\\paired_launch.py",
+        "source_digest": "6b04484e151e017c0b000f3326df7309a9eb93025a14b25294db1477fd41bd3a",
+        "tests_collected": 31,
+        "worktree_head": "57aed6bd82691cb751b3ea7be03bb0102788003e"
+      },
+      "description": "stop segmenting a chained command: the whole tool-call string is matched as one command again, which is the pre-#438 instrument",
+      "killing_assertions": [
+        "tests/test_paired_launch.py::TestSimpleCommands::test_splits_a_chain_on_every_unquoted_operator",
+        "tests/test_paired_launch.py::TestHazardCommandCases::test_case[cd",
+        "tests/test_paired_launch.py::TestHazardCommandCases::test_case[cd",
+        "tests/test_paired_launch.py::TestHazardCommandCases::test_a_match_wins_over_an_unreadable_sibling_command",
+        "tests/test_paired_launch.py::TestHazardCommandCases::test_a_config_write_beside_the_pull_is_counted_as_an_entry"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-khlhcq4k\\M-H1\\src\\skill_harness\\subject\\paired_launch.py",
+        "source_digest": "ed267109bdc089ad2db1150d75bf277887c2081fcff208aabe283b790c5f33e5",
+        "tests_collected": 31,
+        "worktree_head": "57aed6bd82691cb751b3ea7be03bb0102788003e"
+      },
+      "mutant_id": "M-H1",
+      "notes": [],
+      "obligation": "438-simple-command-segmentation",
+      "selection": [
+        "tests/test_paired_launch.py::TestSimpleCommands",
+        "tests/test_paired_launch.py::TestHazardCommandCases"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-khlhcq4k\\M-H2\\src\\skill_harness\\subject\\paired_launch.py",
+        "source_digest": "6b04484e151e017c0b000f3326df7309a9eb93025a14b25294db1477fd41bd3a",
+        "tests_collected": 21,
+        "worktree_head": "57aed6bd82691cb751b3ea7be03bb0102788003e"
+      },
+      "description": "score an unsegmentable command as an avoidance: a heredoc or an unterminated quote silently reads as the trap having been avoided",
+      "killing_assertions": [
+        "tests/test_paired_launch.py::TestHazardCommandCases::test_case[echo",
+        "tests/test_paired_launch.py::TestHazardCommandCases::test_case[cat"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-khlhcq4k\\M-H2\\src\\skill_harness\\subject\\paired_launch.py",
+        "source_digest": "34727bb19191227ff7ac60ffe93b4482c5cd1d44796ee1db86a7e99a46b16614",
+        "tests_collected": 21,
+        "worktree_head": "57aed6bd82691cb751b3ea7be03bb0102788003e"
+      },
+      "mutant_id": "M-H2",
+      "notes": [],
+      "obligation": "438-undecided-whole-string",
+      "selection": [
+        "tests/test_paired_launch.py::TestHazardCommandCases::test_case"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-khlhcq4k\\M-H3\\src\\skill_harness\\subject\\paired_launch.py",
+        "source_digest": "6b04484e151e017c0b000f3326df7309a9eb93025a14b25294db1477fd41bd3a",
+        "tests_collected": 22,
+        "worktree_head": "57aed6bd82691cb751b3ea7be03bb0102788003e"
+      },
+      "description": "score a command with an unreadable SEGMENT as an avoidance, keeping the whole-string refusal so the loss is invisible in the common case",
+      "killing_assertions": [
+        "tests/test_paired_launch.py::TestHazardCommandCases::test_case[echo"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-khlhcq4k\\M-H3\\src\\skill_harness\\subject\\paired_launch.py",
+        "source_digest": "6a248814b4370b7461b59b4bd913c8949d1a295d40e16da5c453eabdc179303e",
+        "tests_collected": 22,
+        "worktree_head": "57aed6bd82691cb751b3ea7be03bb0102788003e"
+      },
+      "mutant_id": "M-H3",
+      "notes": [],
+      "obligation": "438-undecided-per-segment",
+      "selection": [
+        "tests/test_paired_launch.py::TestHazardCommandCases::test_case",
+        "tests/test_paired_launch.py::TestHazardUndecidedCounts::test_an_unreadable_epoch_is_undecided_not_avoided"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "57aed6bd82691cb751b3ea7be03bb0102788003e",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "src/skill_harness/subject/paired_launch.py": "6b04484e151e017c0b000f3326df7309a9eb93025a14b25294db1477fd41bd3a"
+  },
+  "production_tree_digest_before": {
+    "src/skill_harness/subject/paired_launch.py": "6b04484e151e017c0b000f3326df7309a9eb93025a14b25294db1477fd41bd3a"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.1",
+  "target_digests": {
+    "src/skill_harness/subject/paired_launch.py": "6b04484e151e017c0b000f3326df7309a9eb93025a14b25294db1477fd41bd3a"
+  },
+  "target_files": [
+    "src/skill_harness/subject/paired_launch.py"
+  ]
+}

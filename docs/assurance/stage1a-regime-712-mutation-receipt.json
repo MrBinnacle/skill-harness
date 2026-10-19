@@ -1,0 +1,148 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-uzvurkof/M-S1A-18/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "f09c1ac1695f4e8ceff128b795eecf64391f117b"
+      },
+      "description": "the sensitivity sentence is restored to the false claim that the numbers describe what a nine-cell aggregate would have read; on the #712 fixture the off-diagonal minimum is 0.75 and the nine-cell minimum is 0.40, so the sentence and the printed numbers disagree",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_summary_sensitivity_sentence_names_the_off_diagonal_minimum"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-uzvurkof/M-S1A-18/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "498ee91ccf98590ec4a3fff9838c1f46acbd546d4c8c5ae0cc1a8cbbefe0d54b",
+        "tests_collected": 2,
+        "worktree_head": "f09c1ac1695f4e8ceff128b795eecf64391f117b"
+      },
+      "mutant_id": "M-S1A-18",
+      "notes": [],
+      "obligation": "712-stage1a-sensitivity-sentence-nine-cell",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_summary_sensitivity_sentence_names_the_off_diagonal_minimum",
+        "tests/test_simulate_stage1a_regime_685.py::test_summary_reports_off_diagonal_cells_as_sensitivity"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-uzvurkof/M-S1A-19/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 3,
+        "worktree_head": "f09c1ac1695f4e8ceff128b795eecf64391f117b"
+      },
+      "description": "is_calibration_cell returns only the PASS half, so every CUT-error cell above d = 0.20 leaves the exit-code filter and a broken futility side exits 0",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_calibration_read_includes_cut_error_cells_above_boundary",
+        "tests/test_simulate_stage1a_regime_685.py::test_calibration_exit_code_filters_on_is_calibration_cell"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-uzvurkof/M-S1A-19/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "8e3c1f9803993bc99eb05357562df46f5eabaa304ba85021c2692877983fd33f",
+        "tests_collected": 3,
+        "worktree_head": "f09c1ac1695f4e8ceff128b795eecf64391f117b"
+      },
+      "mutant_id": "M-S1A-19",
+      "notes": [],
+      "obligation": "712-stage1a-calibration-read-drops-cut",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_calibration_read_includes_cut_error_cells_above_boundary",
+        "tests/test_simulate_stage1a_regime_685.py::test_calibration_exit_code_filters_on_is_calibration_cell",
+        "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-uzvurkof/M-S1A-20/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "f09c1ac1695f4e8ceff128b795eecf64391f117b"
+      },
+      "description": "the --rebuild early return is removed, so rebuilding from an output directory runs a second simulation instead of reading the files",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_makes_no_simulation_call",
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_reproduces_summary_and_exit_code_byte_identically"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-uzvurkof/M-S1A-20/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "38a9759c6440dc0c4a62d124291dd80145eb1accd80b222c8b6f9cf633c93978",
+        "tests_collected": 2,
+        "worktree_head": "f09c1ac1695f4e8ceff128b795eecf64391f117b"
+      },
+      "mutant_id": "M-S1A-20",
+      "notes": [],
+      "obligation": "712-stage1a-rebuild-disabled",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_makes_no_simulation_call",
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_reproduces_summary_and_exit_code_byte_identically"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-uzvurkof/M-S1A-21/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "f09c1ac1695f4e8ceff128b795eecf64391f117b"
+      },
+      "description": "off_diagonal_cells returns the full nine-cell grid, so the sensitivity rows and the sentence that names them report nine-cell minima",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima",
+        "tests/test_simulate_stage1a_regime_685.py::test_summary_sensitivity_sentence_names_the_off_diagonal_minimum"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-uzvurkof/M-S1A-21/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "a1ed7d74daac33c5dbdb6b3cc2900a4072a2d8952ef4a96139ced61ec25e193f",
+        "tests_collected": 2,
+        "worktree_head": "f09c1ac1695f4e8ceff128b795eecf64391f117b"
+      },
+      "mutant_id": "M-S1A-21",
+      "notes": [],
+      "obligation": "712-stage1a-off-diag-cells-to-all-nine",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima",
+        "tests/test_simulate_stage1a_regime_685.py::test_summary_sensitivity_sentence_names_the_off_diagonal_minimum"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "f09c1ac1695f4e8ceff128b795eecf64391f117b",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee"
+  },
+  "production_tree_digest_before": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.15",
+  "target_digests": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee"
+  },
+  "target_files": [
+    "scripts/screens/419/simulate_stage1a_regime_685.py"
+  ]
+}

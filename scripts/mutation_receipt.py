@@ -1,0 +1,1522 @@
+"""Mechanized mutation receipt generator, per the #341 standard. ASCII only.
+
+Every case runs in its OWN git worktree checked out at a fixed commit. The
+production tree is never mutated in place, so a failed restore cannot leave a
+mutant behind or make a clean run report a mutant's numbers. That failure mode
+is not hypothetical: an earlier hand-run pass restored production through a
+path the interpreter could not see, and a "clean" comparison silently reported
+the mutant's result.
+
+For each mutant the receipt asserts, and records:
+
+  repository HEAD of both worktrees
+  module.__file__ actually imported in each
+  digest of the clean source file
+  digest of the mutant source file
+  the two digests differ
+  the clean baseline PASSES the targeted selection first
+  the targeted test collected a nonzero number of tests
+  the named assertion FAILS under the mutant
+  the production tree is unchanged after the receipt is generated
+
+Each mutant names its own target file, module and test selection. That is not
+speculative generality: the generator this file is ported from hard-pinned a
+single module path at import time, which is exactly why it could not be reused
+and had to be copied. Add cases to MUTANTS.
+
+The generator EXITS NON-ZERO when a case is invalid -- a stillborn mutant, a
+no-op edit, a missing anchor, a red baseline, or a module resolved outside its
+own worktree. An invalid case is not a result, and a receipt that contains one
+attests to nothing. A SURVIVED case is a legitimate result and exits zero: a
+preserved survivor is a finding, not a failure.
+
+WHAT PINS A RECEIPT IS FILE CONTENT, NOT A COMMIT. ``commit_under_test`` is a
+convenience pointer and is deliberately NOT the currency check: a rebase
+rewrites it, and every commit that lands after generation moves HEAD past it,
+so a receipt keyed on it goes stale for reasons that cannot have affected what
+it measured. The authoritative pin is ``target_digests`` -- the SHA-256 of each
+mutated file. Those change if and only if the code under test changed.
+``tests/test_mutation_receipt.py`` enforces currency against them, so a receipt
+whose subject has moved fails loudly, and one merely carried across a rebase
+does not.
+
+Usage:
+    python scripts/mutation_receipt.py --out docs/assurance/<name>.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass, field
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+
+
+@dataclass(frozen=True)
+class Mutant:
+    mutant_id: str
+    obligation: str
+    description: str
+    target: str  # repository-relative path of the file to mutate
+    module: str  # importable module for the isolation and compile assertions
+    old: str
+    new: str
+    selection: tuple[str, ...]  # pytest node ids run as one selection
+
+
+_ENGINE = "src/skill_harness/aggregation/engine.py"
+_ENGINE_MODULE = "skill_harness.aggregation.engine"
+_PI_LAUNCHER = "src/skill_harness/subject/pi/launcher.py"
+_PI_LAUNCHER_MODULE = "skill_harness.subject.pi.launcher"
+_PI_PARSER = "src/skill_harness/subject/pi/parser.py"
+_PI_PARSER_MODULE = "skill_harness.subject.pi.parser"
+_PI_RUNNER = "src/skill_harness/subject/pi/runner.py"
+_PI_RUNNER_MODULE = "skill_harness.subject.pi.runner"
+_PI_RUNNER_IDENTITY = (
+    "tests/test_subject_pi_runner.py::test_parser_identity_mismatch_blocks_spend",
+    "tests/test_subject_pi_runner.py::test_valid_pair_runs_and_reaches_ingest",
+)
+_PI_RUNNER_NONZERO = (
+    "tests/test_subject_pi_runner.py::test_nonzero_epoch_refuses_before_evidence",
+)
+_PI_RUNNER_CONTAINER = (
+    "tests/test_subject_pi_runner.py::test_runtime_version_is_measured_across_the_container_boundary",
+    "tests/test_subject_pi_runner.py::test_container_version_mismatch_refuses_before_any_epoch",
+)
+_PI_SYMMETRY_DETECTOR = "tests/test_subject_pi.py::test_pair_symmetry_checks"
+_PI_IDENTITY_DETECTORS = (
+    "tests/test_subject_pi.py::test_verify_parser_identity_refuses_mismatch",
+    "tests/test_subject_pi.py::test_verify_parser_identity_accepts_live",
+)
+_PI_MIDEPOCH_DETECTOR = "tests/test_subject_pi.py::test_parse_refuses_mid_epoch_model_change"
+_CONFOUND_DETECTOR = (
+    "tests/test_confound_status_e2e.py::TestConfoundStatusE2E"
+    "::test_confound_events_produce_confounded_status"
+)
+_UNDERPOWERED_DETECTOR = (
+    "tests/test_confound_status_e2e.py::TestConfoundStatusE2E"
+    "::test_underpowered_discard_does_not_read_as_confounded"
+)
+_INGEST = "src/skill_harness/subject/ingest.py"
+_INGEST_MODULE = "skill_harness.subject.ingest"
+_PAIRED_DETECTOR = (
+    "tests/test_paired_arm_epoch_adversarial.py::test_nan_score_is_refused_or_fails_closed"
+)
+_HELPER_DETECTOR = "tests/test_subject_ingest.py::test_score_to_float_refuses_non_finite_scores"
+_MODEL_DETECTOR = (
+    "tests/test_subject_ingest.py::test_parsed_sample_refuses_non_finite_score_at_the_model_layer"
+)
+# #387 (the #384 ruling): the two refusal predicates at the paired ingest seam.
+_UNEXPOSED_FULL_DETECTOR = "tests/test_subject_ingest.py::test_full_arm_unexposed_refuses"
+_UNEXPOSED_FULL_SEAM_DETECTOR = "tests/test_subject_ingest.py::test_unexposed_full_epoch_refuses"
+_NULL_EXPOSED_DETECTOR = "tests/test_subject_ingest.py::test_null_arm_exposed_refuses"
+_NULL_EXPOSED_SEAM_DETECTOR = "tests/test_subject_ingest.py::test_null_epoch_exposed_refuses"
+# #389: ratification binding and count-mismatch refusal at the paired Gate-2 read.
+_PAIRED_GATE2 = "src/skill_harness/cli/paired_gate2.py"
+_PAIRED_GATE2_MODULE = "skill_harness.cli.paired_gate2"
+_DRAFT_REFUSED = "tests/test_cli_paired_gate2.py::TestUnratifiedDesign::test_draft_record_refused"
+_COUNT_MISMATCH = "tests/test_cli_paired_gate2.py::TestCountMismatch::test_pilot_k8_vs_design_n32"
+# #441: mutant 1 of section 7 of the superseding pre-registration
+# (docs/assurance/ebmom-peel-preregistration-amendment-v2.md), FROZEN 2026-09-05.
+_FIT = "src/skill_harness/aggregation/fit.py"
+_FIT_MODULE = "skill_harness.aggregation.fit"
+_FORM_B_KILL = (
+    "tests/test_aggregation_fit_bounded_pooling.py"
+    "::test_mutant_1_tie_heavy_null_refused_false_fail_rate"
+)
+# Carried in the same selection so the receipt shows, by name, which assertions
+# moved and which did not. The control must reject under BOTH the clean tree and
+# the mutant -- if it ever went green, the kill above would be passing on an
+# empty cell rather than on a pooled one. The refusal guard must likewise stay
+# green: a mutant that made the regime ADMITTED would empty the refused cell and
+# look like a kill for the wrong reason.
+_FORM_B_CONTROL = (
+    "tests/test_aggregation_fit_bounded_pooling.py"
+    "::test_control_unpooled_refused_path_rejects_on_the_same_worlds"
+)
+_FORM_B_REFUSAL_GUARD = (
+    "tests/test_aggregation_fit_bounded_pooling.py::test_the_regime_reaches_the_refused_path_at_all"
+)
+# #442: mutant 4 of the same section. Its obligation is per-mutant rather than
+# per-section because both mutants target fit.py, so any change to fit.py moves
+# BOTH receipts' digests and each has to be regenerable on its own. `--select`
+# matches on a prefix, so `v2-section-7` still selects the whole section for the
+# collecting receipt #444 owns.
+_CLASS2_KILL = (
+    "tests/test_aggregation_fit_admitted_bootstrap.py"
+    "::test_mutant_4_low_heterogeneity_admitted_false_fail_rate"
+)
+# Carried in the same selection so the receipt shows, by name, which assertions
+# moved and which did not. The control must reject under BOTH trees: it scores
+# the plug-in explicitly, so if it ever went green the kill above would be
+# passing on a cell the plug-in no longer fills. The admission guard must
+# likewise stay green -- a mutant that made these four worlds REFUSED would
+# empty the admitted cell and look like a kill for the wrong reason.
+_CLASS2_CONTROL = (
+    "tests/test_aggregation_fit_admitted_bootstrap.py"
+    "::test_control_plugin_admitted_path_rejects_on_the_same_worlds"
+)
+_CLASS2_ADMISSION_GUARD = (
+    "tests/test_aggregation_fit_admitted_bootstrap.py"
+    "::test_the_four_named_worlds_reach_the_admitted_path"
+)
+
+# #443: mutants 2 and 3 of the same section. Both target the acceptance-matrix
+# harness rather than fit.py, so their obligations are separate again: a change
+# to scripts/ebmom_acceptance_matrix.py moves both digests and each has to be
+# regenerable on its own.
+_MATRIX = "scripts/ebmom_acceptance_matrix.py"
+_MATRIX_MODULE = "ebmom_acceptance_matrix"
+_SPLIT_KILL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_mutant_2_low_heterogeneity_refused_cell_carries_its_own_G"
+)
+# The control requires the POOLED cell to be unchanged: pooling loses the path
+# and never the decisions, so it stays green under the mutant. If the mutant had
+# emptied the fixture rather than pooling it, the kill would go red for a reason
+# that has nothing to do with the split and this control would go red with it.
+# The guard requires the two fixture worlds to reach different paths.
+_SPLIT_CONTROL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_control_the_pooled_tally_keeps_every_decision_either_way"
+)
+_SPLIT_PATH_GUARD = (
+    "tests/test_ebmom_acceptance_matrix_v2.py::test_the_fixture_worlds_reach_both_paths"
+)
+_SELECTION_KILL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_mutant_3_two_correlated_false_decisions_do_not_reject"
+)
+# The control requires the RETIRED all-decision test to reject on the same
+# fixture. If it ever went green the kill above would be passing because the
+# fixture cannot fire, not because the selection absorbs the correlation. The
+# guard pins the fixture's shape: one world, two decisions.
+_SELECTION_CONTROL = (
+    "tests/test_ebmom_acceptance_matrix_v2.py"
+    "::test_control_the_all_decision_test_rejects_on_the_same_fixture"
+)
+_SELECTION_SHAPE_GUARD = (
+    "tests/test_ebmom_acceptance_matrix_v2.py::test_the_fixture_is_one_world_carrying_two_decisions"
+)
+
+_PAIRED_LAUNCH = "src/skill_harness/subject/paired_launch.py"
+_PAIRED_LAUNCH_MODULE = "skill_harness.subject.paired_launch"
+_SEGMENTATION_DETECTORS = (
+    "tests/test_paired_launch.py::TestSimpleCommands",
+    "tests/test_paired_launch.py::TestHazardCommandCases",
+)
+_UNDECIDED_DETECTOR = "tests/test_paired_launch.py::TestHazardCommandCases::test_case"
+_UNDECIDED_COUNT_DETECTOR = (
+    "tests/test_paired_launch.py::TestHazardUndecidedCounts"
+    "::test_an_unreadable_epoch_is_undecided_not_avoided"
+)
+
+# #557: the exact-pin comparison in the dependency-anchor pre-flight check.
+# The mutant disables the comparison that produces refusals; the #549 fixture
+# must then turn red.  The control is a permitted (coordinated) bump that
+# stays green under the mutant, excluding an empty-cell kill.  The module lives
+# in scripts/ (not a package); _env adds scripts/ to PYTHONPATH so the
+# isolation and compile assertions can import it.
+_ANCHOR_CHECK = "scripts/check_dependency_anchor.py"
+_ANCHOR_CHECK_MODULE = "check_dependency_anchor"
+_ANCHOR_KILL = "tests/test_check_dependency_anchor.py::TestReproducesIssue549::test_reproduces"
+_ANCHOR_CONTROL = "tests/test_check_dependency_anchor.py::TestPassesCoordinatedBump::test_passes"
+
+# #695: the Stage 1A regime simulator (#685 part a). The screen scripts live
+# under scripts/screens/419 and are loaded by file path in tests; the receipt
+# generator imports them by bare name, which is why _env adds that directory.
+# Each mutant below restores a defect the #694 verdict listed as survived, or
+# the exact-path-only variant of M3 that the #704 verdict found still open.
+_S1A = "scripts/screens/419/simulate_stage1a_regime_685.py"
+_S1A_MODULE = "simulate_stage1a_regime_685"
+# #718: Stage 2 of #685 — stopping design x pairs.
+_S2 = "scripts/screens/419/simulate_stage1a_regime_685_stage2.py"
+_S2_MODULE = "simulate_stage1a_regime_685_stage2"
+_S2_TESTS = "tests/test_simulate_stage1a_regime_685_stage2.py"
+_S2_FIXED_N_ONCE = f"{_S2_TESTS}::test_fixed_n_designs_read_once_at_n"
+_S2_HORIZON = f"{_S2_TESTS}::test_fixed_n_betting_uses_horizon_scaled_bets_not_time_scaled"
+_S2_HORIZON_RUN = (
+    f"{_S2_TESTS}::test_fixed_n_betting_run_cell_matches_horizon_scaling_not_anytime_at_n"
+)
+_S2_MARGIN = f"{_S2_TESTS}::test_score_tests_use_the_registered_margin_0_20"
+_S2_MARGIN_RUN = f"{_S2_TESTS}::test_fixed_n_score_run_cell_holds_its_level_at_the_margin_boundary"
+_S2_MCNEMAR = f"{_S2_TESTS}::test_tango_score_equals_mcnemar_at_delta0_zero"
+_S2_CONTRAST = (
+    f"{_S2_TESTS}::test_fixed_n_score_applies_the_paired_statistic_to_fp_and_unpaired_to_fn"
+)
+_S2_JOINT = f"{_S2_TESTS}::test_joint_pass_requires_both_halves"
+_S2_ALPHA = f"{_S2_TESTS}::test_pass_alpha_label_matches_computation"
+_S2_W0 = f"{_S2_TESTS}::test_starting_wealth_changes_anytime_tuned_decisions"
+_S2_LOOKAHEAD = f"{_S2_TESTS}::test_tuned_lambda_is_fixed_before_the_first_pair"
+_S2_CAL_FIXED = f"{_S2_TESTS}::test_calibration_exit_code_covers_fixed_n_rows"
+_S2_LABEL = f"{_S2_TESTS}::test_stopping_column_on_the_tsv_matches_the_path_that_produced_it"
+_S2_LABEL2 = f"{_S2_TESTS}::test_anytime_stopping_label_agrees_with_the_simulation_path"
+_S2_HEADLINE = f"{_S2_TESTS}::test_headline_reads_n_pairs_from_each_row"
+_S2_CUT = f"{_S2_TESTS}::test_cut_direction_is_downward"
+_S2_EXIT = f"{_S2_TESTS}::test_exit_code_is_not_forced_to_zero"
+_S2_RUNNING_MAX = f"{_S2_TESTS}::test_anytime_tuned_rejection_uses_running_maximum"
+_S2_CUT_LEVEL = f"{_S2_TESTS}::test_fixed_n_score_cut_is_decided_at_0_05"
+_S2_JOINT_FN_ALONE = f"{_S2_TESTS}::test_fixed_n_score_joint_pass_requires_both_halves_not_fn_alone"
+_S1A_EXIT_FAIL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_calibration_fails"
+)
+_S1A_EXIT_HOLDS = (
+    "tests/test_simulate_stage1a_regime_685.py::test_main_exits_zero_when_calibration_holds"
+)
+_S1A_FP_ALPHA_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_exact_fp_fallback_uses_the_registered_pass_alpha"
+)
+_S1A_FP_ALPHA_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-1.0]"
+)
+_S1A_PRICE_HI_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_price_constants_are_the_registered_rates"
+)
+_S1A_PRICE_HI_CONTROL = "tests/test_simulate_stage1a_regime_685.py::test_price_function"
+_S1A_PRICE_CAP_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_cap_price_string_carries_the_cap_rate"
+)
+_S1A_PRICE_CAP_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_price_constants_are_the_registered_rates"
+)
+_S1A_ROLE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_role_labels_d_equal_to_0_15_as_no_lift"
+)
+_S1A_ROLE_CONTROL = "tests/test_simulate_stage1a_regime_685.py::test_design_fields_at_baseline"
+_S1A_CAL_HOLDS_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_calibration_holds_reads_the_cap_look_not_look_one"
+)
+_S1A_CAL_HOLDS_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_main_exits_zero_when_calibration_holds"
+)
+_S1A_DIAG_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_target_check_uses_the_diagonal_minimum_not_the_nine_cell_minimum"
+)
+_S1A_DIAG_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_target_check_reports_the_smallest_priced_config_meeting_both_halves"
+)
+_S1A_FN_CAL_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_calibration_covers_the_fn_margin_cell_at_d030"
+)
+_S1A_FN_CAL_SET_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_calibration_set_includes_every_pass_and_cut_error_cell"
+)
+_S1A_FN_CAL_EXIT_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration"
+)
+_S1A_MODEL_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_summary_marks_smoke_output_as_schema_evidence"
+)
+_S1A_HEADLINE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_headline_reads_the_pairs_cap_designs_in_the_results"
+)
+_S1A_HEADLINE_CONTROL = "tests/test_simulate_stage1a_regime_685.py::test_null_mask_1_to_1"
+_S1A_FN_EXACT_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_direct_fn_exact_fallback_is_pinned_to_the_engine"
+)
+_S1A_FN_EXACT_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[direct-1.0]"
+)
+_S1A_ONLINE_SCALE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[direct-1.0]"
+)
+_S1A_ONLINE_SCALE_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-1.0]"
+)
+_S1A_TERMINAL_SCALE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_direct_terminal_bounds_equal_the_engine_bounds"
+)
+_S1A_EQUAL_EPOCHS_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_stage1_grid_holds_each_epoch_budget_constant_across_null_allocations"
+)
+_S1A_EQUAL_EPOCHS_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_stage1_grid_has_expected_structure"
+)
+_S1A_UNION_EXACT_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_union_fn_exact_fallback_is_pinned_to_the_engine"
+)
+_S1A_UNION_EXACT_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-2.0]"
+)
+# #712: the sensitivity sentence, the CUT half of the calibration read, and
+# the --rebuild path. Each mutant is one defect class the #712 ticket names.
+_S1A_SENS_SENTENCE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_summary_sensitivity_sentence_names_the_off_diagonal_minimum"
+)
+_S1A_SENS_SENTENCE_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_summary_reports_off_diagonal_cells_as_sensitivity"
+)
+_S1A_CUT_CAL_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_calibration_read_includes_cut_error_cells_above_boundary"
+)
+_S1A_CUT_CAL_EXIT_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_calibration_exit_code_filters_on_is_calibration_cell"
+)
+_S1A_CUT_CAL_CONTROL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_main_exits_non_zero_when_the_fn_margin_cell_fails_pass_calibration"
+)
+_S1A_REBUILD_NO_SIM_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py::test_rebuild_makes_no_simulation_call"
+)
+_S1A_REBUILD_BYTE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_rebuild_reproduces_summary_and_exit_code_byte_identically"
+)
+_S1A_SENS_ROWS_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima"
+)
+
+
+# #368 Path C: the ablation lane's discordant route.
+_STOPPING = "src/skill_harness/ablation/stopping.py"
+_STOPPING_MODULE = "skill_harness.ablation.stopping"
+_PATH_C = "src/skill_harness/ablation/path_c.py"
+_PATH_C_MODULE = "skill_harness.ablation.path_c"
+_TIE_VERDICT_DETECTOR = (
+    "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity"
+    "::test_stopping_decision_agreement"
+)
+_TIE_MEAN_DETECTOR = (
+    "tests/test_halfupdate_tie_sensitivity.py::TestHalfUpdateTieSensitivity"
+    "::test_production_accumulator_no_longer_dilutes"
+)
+_EVIDENCE_BAR_DETECTOR = (
+    "tests/ablation/test_stopping.py::TestBetaBinomialAccumulator"
+    "::test_ties_cannot_buy_a_clause_past_the_evidence_bar"
+)
+_EFFECT_FLOOR_DETECTOR = (
+    "tests/test_ablation_path_c.py::TestDecideClause"
+    "::test_ties_reach_the_decision_rather_than_being_discarded"
+)
+_TIE_HEAVY_DETECTOR = (
+    "tests/test_ablation_path_c.py::TestDecideClause"
+    "::test_tie_heavy_win_is_held_below_the_effect_floor"
+)
+_UNREGISTERED_DETECTOR = (
+    "tests/test_ablation_path_c.py::TestRegisteredThresholds"
+    "::test_missing_threshold_refuses_rather_than_defaulting"
+)
+
+MUTANTS: tuple[Mutant, ...] = (
+    Mutant(
+        "M-N1",
+        "363-model-layer",
+        "remove the model-layer constraint: ParsedSample.score_value accepts NaN again",
+        _INGEST,
+        _INGEST_MODULE,
+        "    score_value: Annotated[float, Field(allow_inf_nan=False)]  # 1.0 pass | 0.0 fail",
+        "    score_value: float  # 1.0 pass | 0.0 fail",
+        (_PAIRED_DETECTOR, _MODEL_DETECTOR),
+    ),
+    Mutant(
+        "M-N2",
+        "363-parse-path",
+        "disable the parse-path finite guard in _score_to_float",
+        _INGEST,
+        _INGEST_MODULE,
+        "        if not math.isfinite(score):",
+        "        if False:",
+        (_HELPER_DETECTOR,),
+    ),
+    Mutant(
+        "M-N3",
+        "363-parse-path",
+        "narrow the parse-path guard to NaN only, letting an infinite score through",
+        _INGEST,
+        _INGEST_MODULE,
+        "        if not math.isfinite(score):",
+        "        if math.isnan(score):",
+        (_HELPER_DETECTOR,),
+    ),
+    Mutant(
+        "M-C1",
+        "366-reason-read",
+        "stop reading the persisted inadmissibility_reason, so CONFOUNDED is unreachable again",
+        _ENGINE,
+        _ENGINE_MODULE,
+        '                if reason == "confounded":',
+        "                if False:",
+        (_CONFOUND_DETECTOR,),
+    ),
+    Mutant(
+        "M-C2",
+        "366-flag-condition",
+        "invert the survivor gate: fire CONFOUNDED only when admissible work DID survive",
+        _ENGINE,
+        _ENGINE_MODULE,
+        "        all_confounded_flag = total > 0 and admissible_count == 0 and confounded > 0",
+        "        all_confounded_flag = total > 0 and admissible_count > 0 and confounded > 0",
+        (_CONFOUND_DETECTOR,),
+    ),
+    Mutant(
+        "M-C3",
+        "366-reason-read",
+        "count every inadmissible verdict except scorer_error as confounded, so an "
+        "underpowered clause reports as confounded",
+        _ENGINE,
+        _ENGINE_MODULE,
+        '                if reason == "confounded":',
+        '                if reason != "scorer_error":',
+        (_UNDERPOWERED_DETECTOR, _CONFOUND_DETECTOR),
+    ),
+    Mutant(
+        "M-X1",
+        "387-unexposed-full",
+        "remove refusal predicate (a): a Full-arm epoch with exposure not detected writes",
+        _INGEST,
+        _INGEST_MODULE,
+        "    unexposed = sorted(s.epoch for s in full.samples if s.exposed_skill is not True)",
+        "    unexposed = sorted(s.epoch for s in full.samples if False)",
+        (_UNEXPOSED_FULL_DETECTOR, _UNEXPOSED_FULL_SEAM_DETECTOR),
+    ),
+    Mutant(
+        "M-X2",
+        "387-null-contamination",
+        "narrow refusal predicate (b) back to invocation only: a Null-arm epoch with "
+        "exposure detected writes",
+        _INGEST,
+        _INGEST_MODULE,
+        "    null_contaminated_exposed = sorted("
+        "s.epoch for s in null.samples if s.exposed_skill is True)",
+        "    null_contaminated_exposed = sorted(s.epoch for s in null.samples if False)",
+        (_NULL_EXPOSED_DETECTOR, _NULL_EXPOSED_SEAM_DETECTOR),
+    ),
+    Mutant(
+        "M-H1",
+        "438-simple-command-segmentation",
+        "stop segmenting a chained command: the whole tool-call string is matched as one "
+        "command again, which is the pre-#438 instrument",
+        _PAIRED_LAUNCH,
+        _PAIRED_LAUNCH_MODULE,
+        "    return tuple(stripped for stripped in (segment.strip() for segment in segments)"
+        " if stripped)",
+        "    return (command.strip(),) if command.strip() else ()  # mutant: no segmentation",
+        _SEGMENTATION_DETECTORS,
+    ),
+    Mutant(
+        "M-H2",
+        "438-undecided-whole-string",
+        "score an unsegmentable command as an avoidance: a heredoc or an unterminated quote "
+        "silently reads as the trap having been avoided",
+        _PAIRED_LAUNCH,
+        _PAIRED_LAUNCH_MODULE,
+        "    if segments is None:\n        return HazardVerdict.UNDECIDED",
+        "    if segments is None:\n        return HazardVerdict.AVOIDED  # mutant",
+        (_UNDECIDED_DETECTOR,),
+    ),
+    Mutant(
+        "M-H3",
+        "438-undecided-per-segment",
+        "score a command with an unreadable SEGMENT as an avoidance, keeping the "
+        "whole-string refusal so the loss is invisible in the common case",
+        _PAIRED_LAUNCH,
+        _PAIRED_LAUNCH_MODULE,
+        "    return HazardVerdict.UNDECIDED if undecided else HazardVerdict.AVOIDED",
+        "    return HazardVerdict.AVOIDED  # mutant: per-segment undecided dropped",
+        (_UNDECIDED_DETECTOR, _UNDECIDED_COUNT_DETECTOR),
+    ),
+    Mutant(
+        "M-R1",
+        "389-ratification-binding",
+        "remove the RATIFIED status check: a DRAFT record is accepted and the command "
+        "proceeds to read the design",
+        _PAIRED_GATE2,
+        _PAIRED_GATE2_MODULE,
+        '    if record.status != "RATIFIED":',
+        "    if False:  # mutant: DRAFT accepted",
+        (_DRAFT_REFUSED,),
+    ),
+    Mutant(
+        "M-R2",
+        "389-count-mismatch",
+        "remove the pair-count check: k=8 pairs are read against an n=32 design without refusal",
+        _PAIRED_GATE2,
+        _PAIRED_GATE2_MODULE,
+        "    if total_pairs != design.n_pairs:",
+        "    if False:  # mutant: count mismatch accepted",
+        (_COUNT_MISMATCH,),
+    ),
+    Mutant(
+        "M-V1",
+        "v2-section-7-mutant-1",
+        "mutant 1: pooling removed on the refused path, reverting to the unpooled "
+        "posterior the pre-registration retired",
+        _FIT,
+        _FIT_MODULE,
+        "        c_bound = _bounded_pooling_concentration(mu, v_bound)",
+        "        c_bound = None  # mutant: pooling removed on the refused path",
+        (_FORM_B_KILL, _FORM_B_CONTROL, _FORM_B_REFUSAL_GUARD),
+    ),
+    Mutant(
+        "M-V4",
+        "v2-section-7-mutant-4",
+        "mutant 4: the admission-conditioned bootstrap removed from the admitted "
+        "path, restoring the plug-in posterior the mechanism replaced",
+        _FIT,
+        _FIT_MODULE,
+        "    posteriors = _build_shrunken_posteriors(\n"
+        "        clauses, alpha_hat, beta_hat, tail_probabilities=tail_probabilities\n"
+        "    )",
+        "    posteriors = _build_shrunken_posteriors(clauses, alpha_hat, beta_hat)"
+        "  # mutant: plug-in restored",
+        (_CLASS2_KILL, _CLASS2_CONTROL, _CLASS2_ADMISSION_GUARD),
+    ),
+    Mutant(
+        "M-V2",
+        "v2-section-7-mutant-2",
+        "mutant 2: the per-path split removed, so every decision is tallied on one "
+        "lane and the refused-path cell cannot be reported at all",
+        _MATRIX,
+        _MATRIX_MODULE,
+        "        lane = path",
+        '        lane = "admitted"  # mutant: per-path split removed, rows pooled',
+        (_SPLIT_KILL, _SPLIT_CONTROL, _SPLIT_PATH_GUARD),
+    ),
+    Mutant(
+        "M-V3",
+        "v2-section-7-mutant-3",
+        "mutant 3: the one-decision-per-world selection replaced by all decisions, "
+        "restoring the test that treats clause decisions as independent",
+        _MATRIX,
+        _MATRIX_MODULE,
+        "        trials, trial_false = clusters, sum(1 for value in selected if value == 1)",
+        "        trials, trial_false = decisions, false_total  # mutant: all decisions",
+        (_SELECTION_KILL, _SELECTION_CONTROL, _SELECTION_SHAPE_GUARD),
+    ),
+    # #368 Path C: the discordant accumulator and the registered Gate-2 route.
+    Mutant(
+        "M-T1",
+        "368-discordant-posterior",
+        "restore the half-update posterior: ties are credited to both sides again, "
+        "which is the WRONG_NUMBER defect #347 measured",
+        _STOPPING,
+        _STOPPING_MODULE,
+        "        return 1.0 + float(self._x_f), 1.0 + float(self._x_n)",
+        "        return 1.0 + self.w, 1.0 + (float(self.n) - self.w)",
+        (_TIE_VERDICT_DETECTOR, _TIE_MEAN_DETECTOR),
+    ),
+    Mutant(
+        "M-T2",
+        "368-evidence-bar",
+        "point the N_MIN evidence gate at the TOTAL comparison count, so ties buy a "
+        "clause past the bar on too few directional comparisons",
+        _STOPPING,
+        _STOPPING_MODULE,
+        "        if self.n_discordant < N_MIN:",
+        "        if self.n < N_MIN:",
+        (_EVIDENCE_BAR_DETECTOR,),
+    ),
+    Mutant(
+        "M-T3",
+        "368-effect-floor",
+        "size the Gate-2 design by the DISCORDANT count, discarding the tie cell and "
+        "collapsing Path C to a plain drop-ties recompute with no effect-size floor",
+        _PATH_C,
+        _PATH_C_MODULE,
+        "    n_pairs = max(decision.n_samples, 1)",
+        "    n_pairs = max(decision.n_discordant, 1)",
+        (_EFFECT_FLOOR_DETECTOR, _TIE_HEAVY_DETECTOR),
+    ),
+    Mutant(
+        "M-T4",
+        "368-thresholds-by-reference",
+        "accept a record that omits a Gate-2 threshold, so an unregistered decision "
+        "is made under a defaulted value while looking registered",
+        _PATH_C,
+        _PATH_C_MODULE,
+        "    if missing:",
+        "    if False:  # mutant: missing threshold defaulted rather than refused",
+        (_UNREGISTERED_DETECTOR,),
+    ),
+    Mutant(
+        "M-P1",
+        "pi-roster-symmetry",
+        "empty the cross-arm baseline check: a Full roster whose baseline differs "
+        "from the Null roster launches as if the arms shared it",
+        _PI_LAUNCHER,
+        _PI_LAUNCHER_MODULE,
+        "    if full[:-1] != null:",
+        "    if False:  # mutant: cross-arm baseline asymmetry no longer refuses",
+        (_PI_SYMMETRY_DETECTOR,),
+    ),
+    Mutant(
+        "M-P2",
+        "pi-parser-identity",
+        "skip the declared-vs-live parser identity comparison, so an undeclared "
+        "evidence pipeline spends and ingests as the declared one",
+        _PI_LAUNCHER,
+        _PI_LAUNCHER_MODULE,
+        "    if declared is not None:",
+        "    if False:  # mutant: parser identity mismatch no longer refuses",
+        (_PI_IDENTITY_DETECTORS),
+    ),
+    Mutant(
+        "M-P3",
+        "pi-mid-epoch-identity",
+        "drop the second-model_change count guard, so a mid-epoch model change "
+        "event passes as ordinary metadata when the subject string happens to match",
+        _PI_PARSER,
+        _PI_PARSER_MODULE,
+        "        if i > 0:\n"
+        "            raise MidEpochIdentityChangeError(\n"
+        '                f"session carries {len(model_changes)} model_change entries; "\n'
+        '                "a mid-epoch change is an apparatus error, not metadata"\n'
+        "            )",
+        "        if False:  # mutant: the count guard no longer refuses\n"
+        "            raise MidEpochIdentityChangeError(\n"
+        '                f"session carries {len(model_changes)} model_change entries; "\n'
+        '                "a mid-epoch change is an apparatus error, not metadata"\n'
+        "            )",
+        (_PI_MIDEPOCH_DETECTOR,),
+    ),
+    # --- Pi driver wiring (runner.py): the controls exist in helpers; these
+    # cases prove the DRIVER calls them. A control nobody calls is dead code
+    # with a docstring, which is what the driver commit exists to close.
+    Mutant(
+        "M-R6",
+        "mr-driver-identity-gate",
+        "the driver stops comparing the declared parser identity: an undeclared "
+        "evidence pipeline passes the pre-spend gate and reaches spend",
+        _PI_RUNNER,
+        _PI_RUNNER_MODULE,
+        "    parser = verify_parser_identity(spec.declared_parser_identity)",
+        "    parser = verify_parser_identity(None)  # mutant: declared identity never compared",
+        _PI_RUNNER_IDENTITY,
+    ),
+    Mutant(
+        "M-R7",
+        "mr-driver-nonzero-epoch",
+        "the nonzero-returncode refusal no longer fires: a crashed epoch is "
+        "parsed and ingested as if it had run",
+        _PI_RUNNER,
+        _PI_RUNNER_MODULE,
+        "    if launch.returncode != 0:",
+        "    if False:  # mutant: a crashed epoch no longer refuses",
+        _PI_RUNNER_NONZERO,
+    ),
+    Mutant(
+        "M-R4",
+        "mr-container-version-probe",
+        "the version probe stops wrapping the container prefix: the pin names "
+        "the host binary's version while the epoch runs the container's copy",
+        _PI_LAUNCHER,
+        _PI_LAUNCHER_MODULE,
+        "    argv: list[str] = []\n"
+        "    if container is not None:\n"
+        "        argv.extend(container.argv_prefix)\n"
+        '    argv.extend([pi_bin, "--version"])',
+        "    argv: list[str] = []\n"
+        "    if False:  # mutant: the probe measures the host, not the container\n"
+        "        argv.extend(container.argv_prefix)\n"
+        '    argv.extend([pi_bin, "--version"])',
+        _PI_RUNNER_CONTAINER,
+    ),
+    Mutant(
+        "M-R5",
+        "mr-driver-container-wiring",
+        "the driver stops passing its container to the version probe: the "
+        "helper stays correct and the measured version still names the host",
+        _PI_RUNNER,
+        _PI_RUNNER_MODULE,
+        "    runtime_version = measure_pi_version(spec.pi_bin, container=spec.container)",
+        "    runtime_version = measure_pi_version(spec.pi_bin)  # mutant: container dropped",
+        _PI_RUNNER_CONTAINER,
+    ),
+    Mutant(
+        "M-A1",
+        "557-anchor-pin",
+        "disable the exact-pin comparison: check_exact_pin_constraint never "
+        "returns a blocking == pin, so a follower bump above an == anchor passes "
+        "as the #549 scenario did",
+        _ANCHOR_CHECK,
+        _ANCHOR_CHECK_MODULE,
+        "            if proposed > pinned:",
+        "            if False:  # mutant: exact-pin comparison disabled",
+        (_ANCHOR_KILL, _ANCHOR_CONTROL),
+    ),
+    # #695: Stage 1A regime simulator (#685 part a). Every mutant below is a
+    # defect the #694 verdict listed as survived, the exact-path-only variant
+    # of M3 the #704 verdict found open, or a rebuild requirement the verdict
+    # already killed and this campaign re-pins by name. Each selection carries
+    # the named killing assertion and, where one exists, a control that stays
+    # green under the mutant so the kill cannot pass on an emptied cell.
+    Mutant(
+        "M-S1A-1",
+        "695-stage1a-exit",
+        "the exit-on-calibration-failure path returns 0 anyway, so a run whose "
+        "boundary cells over-pass publishes its tables as if calibration held",
+        _S1A,
+        _S1A_MODULE,
+        "    return 0 if all_hold else 1",
+        "    return 0  # mutant: calibration failure ignored",
+        (_S1A_EXIT_FAIL, _S1A_EXIT_HOLDS),
+    ),
+    Mutant(
+        "M-S1A-2",
+        "695-stage1a-direct-online-scale",
+        "the direct F-N grid shortcut compares the raw one-sided bound against "
+        "the d-scale boundary instead of 2*bound - 1 (the #694 R1 defect)",
+        _S1A,
+        _S1A_MODULE,
+        "                fn_sure_yes = 2 * lb_fn_br.lo[r] - 1 >= a650.BOUNDARY",
+        "                fn_sure_yes = lb_fn_br.lo[r] >= a650.BOUNDARY  # mutant: unscaled",
+        (_S1A_ONLINE_SCALE_KILL, _S1A_ONLINE_SCALE_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-3",
+        "695-stage1a-direct-terminal-scale",
+        "the direct F-N terminal bound drops the 2*bound - 1 scale",
+        _S1A,
+        _S1A_MODULE,
+        '    lb_fn = 2 * _bound(xs_fn, pass_alpha, "lower") - 1',
+        '    lb_fn = _bound(xs_fn, pass_alpha, "lower") - 1  # mutant: unscaled',
+        (_S1A_TERMINAL_SCALE_KILL,),
+    ),
+    Mutant(
+        "M-S1A-4",
+        "695-stage1a-equal-epoch-grid",
+        "the grid compares null allocations at a fixed pair cap again, so "
+        "allocations are no longer compared at equal total epochs",
+        _S1A,
+        _S1A_MODULE,
+        "                                n_pairs=pairs_for_epoch_budget(epoch_budget, null_pp),",
+        "                                n_pairs=PAIRS_CAP,  # mutant: unequal total epochs",
+        (_S1A_EQUAL_EPOCHS_KILL, _S1A_EQUAL_EPOCHS_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-5",
+        "695-stage1a-fp-exact-alpha",
+        "the exact F-P fallback swaps pass_alpha for FUTILITY_ALPHA (the #694 "
+        "M1b survivor), so the fallback tests at the wrong level",
+        _S1A,
+        _S1A_MODULE,
+        '                fp_clears = 2 * _exact(xs_fp, pass_alpha, "lower") - 1 >= a650.BOUNDARY',
+        '                fp_clears = 2 * _exact(xs_fp, a650.FUTILITY_ALPHA, "lower") - 1'
+        " >= a650.BOUNDARY  # mutant: alpha swapped",
+        (_S1A_FP_ALPHA_KILL, _S1A_FP_ALPHA_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-6",
+        "695-stage1a-fn-exact-alpha",
+        "the direct F-N exact fallback evaluates the bound at alpha/2 instead "
+        "of pass_alpha (the exact-path defect the #704 verdict left open; the "
+        "pure always-true form is observationally equivalent on this grid)",
+        _S1A,
+        _S1A_MODULE,
+        '                    fn_clears = 2 * _exact(xs_fn, pass_alpha, "lower") - 1'
+        " >= a650.BOUNDARY",
+        '                    fn_clears = 2 * _exact(xs_fn, half, "lower") - 1'
+        " >= a650.BOUNDARY  # mutant: alpha/2 in the exact path",
+        (_S1A_FN_EXACT_KILL, _S1A_FN_EXACT_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-7",
+        "695-stage1a-union-fn-exact-always-true",
+        "the union F-N exact fallback is forced true (the #694 M2b survivor)",
+        _S1A,
+        _S1A_MODULE,
+        "                    fn_clears = (\n"
+        '                        _exact(xs_f, half, "lower") - _exact(xs_n, half, "upper")'
+        " >= a650.BOUNDARY\n"
+        "                    )",
+        "                    fn_clears = True  # mutant: union exact F-N forced",
+        (_S1A_UNION_EXACT_KILL, _S1A_UNION_EXACT_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-8",
+        "695-stage1a-price-hi",
+        "the list high price rate is shifted from $0.087 to $0.078 (the #694 M5 survivor)",
+        _S1A,
+        _S1A_MODULE,
+        "_PRICE_HI = 0.087",
+        "_PRICE_HI = 0.078  # mutant: list high rate shifted",
+        (_S1A_PRICE_HI_KILL, _S1A_PRICE_HI_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-9",
+        "695-stage1a-price-cap",
+        "the cap price rate is shifted from $0.30 to $0.03 (the #694 M6 survivor)",
+        _S1A,
+        _S1A_MODULE,
+        "_PRICE_CAP = 0.30",
+        "_PRICE_CAP = 0.03  # mutant: cap rate shifted",
+        (_S1A_PRICE_CAP_KILL, _S1A_PRICE_CAP_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-10",
+        "695-stage1a-role-boundary",
+        "role() uses d < 0.15 instead of d <= 0.15 (the #694 M8 survivor), so "
+        "d = 0.15 is relabelled from no-lift to a real effect",
+        _S1A,
+        _S1A_MODULE,
+        "    if d <= 0.15:",
+        "    if d < 0.15:  # mutant: d = 0.15 relabelled",
+        (_S1A_ROLE_KILL, _S1A_ROLE_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-11",
+        "695-stage1a-calibration-look-one",
+        "pass_calibration_holds reads look 1 instead of the cap (the #694 M9 "
+        "survivor), so a loosened rule that fails only at the cap is called "
+        "calibrated",
+        _S1A,
+        _S1A_MODULE,
+        "def pass_calibration_holds(res: CellResult) -> bool:\n"
+        '    """P(PASS) at the cap sits at or under PASS_ALPHA + 3 MC SE."""\n'
+        "    limit = a650.PASS_ALPHA + a650.calibration_tolerance(res.replicates)\n"
+        "    return res.per_look[-1].p_pass <= limit",
+        "def pass_calibration_holds(res: CellResult) -> bool:\n"
+        '    """P(PASS) at the cap sits at or under PASS_ALPHA + 3 MC SE."""\n'
+        "    limit = a650.PASS_ALPHA + a650.calibration_tolerance(res.replicates)\n"
+        "    return res.per_look[0].p_pass <= limit  # mutant: look 1, not the cap",
+        (_S1A_CAL_HOLDS_KILL, _S1A_CAL_HOLDS_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-12",
+        "695-stage1a-headline-pairs",
+        "headline filters on a stale 97-pair count instead of PAIRS_CAP (the #694 M10 survivor)",
+        _S1A,
+        _S1A_MODULE,
+        "                        and r.design.n_pairs == PAIRS_CAP\n"
+        "                        and r.design.null_per_pair == 1.0",
+        "                        and r.design.n_pairs == 97\n"
+        "                        and r.design.null_per_pair == 1.0  # mutant: stale pair count",
+        (_S1A_HEADLINE_KILL, _S1A_HEADLINE_CONTROL),
+    ),
+    # #708: the #696 diagonal aggregation ruling, the broader calibration read,
+    # and the replicate-count model statement. Each mutant is one defect class
+    # the #708 ticket names; the killing assertion is the test written for it.
+    Mutant(
+        "M-S1A-13",
+        "708-stage1a-diagonal-min-to-max",
+        "the diagonal target check takes max instead of min, so a family with "
+        "one strong diagonal cell is reported as meeting the target",
+        _S1A,
+        _S1A_MODULE,
+        "    min_pass = min(pass_vals)\n"
+        "    min_cut = min(cut_vals)\n"
+        "    missing_halves: list[str] = []",
+        "    min_pass = max(pass_vals)\n"
+        "    min_cut = max(cut_vals)  # mutant: max, not min\n"
+        "    missing_halves: list[str] = []",
+        (_S1A_DIAG_KILL, _S1A_DIAG_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-14",
+        "708-stage1a-diagonal-to-all-nine",
+        "the diagonal target check reverts to the nine-cell aggregate, which "
+        "the #696 ruling rejects: the (0.30, 0.40) F-N margin cell caps "
+        "P(PASS) at PASS_ALPHA for every design",
+        _S1A,
+        _S1A_MODULE,
+        "    diag = diagonal_cells()\n    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        "    diag = tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES)\n"
+        "  # mutant: nine cells, not the diagonal\n"
+        "    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        (_S1A_DIAG_KILL, _S1A_DIAG_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-15",
+        "708-stage1a-diagonal-to-single-cell",
+        "the diagonal target check reads only the single cell (0.35, 0.35) "
+        "instead of the three diagonal cells",
+        _S1A,
+        _S1A_MODULE,
+        "    diag = diagonal_cells()\n    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        "    diag = ((0.35, 0.35),)\n  # mutant: single diagonal cell\n"
+        "    pass_vals, _pass_cut_at_030, missing = _cell_rows(",
+        (_S1A_DIAG_KILL, _S1A_DIAG_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-16",
+        "708-stage1a-pass-calibration-drops-fn",
+        "is_pass_calibration_cell checks only true F-P <= BOUNDARY and drops "
+        "the true F-N half, so the F-N margin cell (0.30, 0.40) at d=0.30 "
+        "leaves the calibration set",
+        _S1A,
+        _S1A_MODULE,
+        "    return true_fp_diff(cell) <= a650.BOUNDARY + 1e-9"
+        " or true_fn_diff(cell) <= a650.BOUNDARY + 1e-9",
+        "    return true_fp_diff(cell) <= a650.BOUNDARY + 1e-9  # mutant: F-N half dropped",
+        (_S1A_FN_CAL_KILL, _S1A_FN_CAL_SET_KILL, _S1A_FN_CAL_EXIT_KILL),
+    ),
+    Mutant(
+        "M-S1A-17",
+        "708-stage1a-model-statement-always-smoke",
+        "summary_md prints the smoke schema sentence whatever the replicate "
+        "count, so a full run is filed as schema evidence",
+        _S1A,
+        _S1A_MODULE,
+        "    if replicates < REPLICATES:\n",
+        "    if True:  # mutant: always smoke, whatever the replicate count\n",
+        (_S1A_MODEL_KILL,),
+    ),
+    # #712: the sensitivity sentence, the CUT half of the calibration read,
+    # and the --rebuild path that must not simulate.
+    Mutant(
+        "M-S1A-18",
+        "712-stage1a-sensitivity-sentence-nine-cell",
+        "the sensitivity sentence is restored to the false claim that the "
+        "numbers describe what a nine-cell aggregate would have read; on the "
+        "#712 fixture the off-diagonal minimum is 0.75 and the nine-cell "
+        "minimum is 0.40, so the sentence and the printed numbers disagree",
+        _S1A,
+        _S1A_MODULE,
+        '        "budget. These numbers are the off-diagonal minima over those six "\n'
+        '        "cells only; the #696 ruling does not use them to decide whether a "\n'
+        '        "design meets the target.",',
+        '        "budget. These numbers describe what a nine-cell aggregate would have "\n'
+        '        "read; the #696 ruling does not use them to decide whether a design "\n'
+        '        "meets the target.",',
+        (_S1A_SENS_SENTENCE_KILL, _S1A_SENS_SENTENCE_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-19",
+        "712-stage1a-calibration-read-drops-cut",
+        "is_calibration_cell returns only the PASS half, so every CUT-error "
+        "cell above d = 0.20 leaves the exit-code filter and a broken "
+        "futility side exits 0",
+        _S1A,
+        _S1A_MODULE,
+        "    return is_pass_calibration_cell(cell) or is_cut_calibration_cell(cell)",
+        "    return is_pass_calibration_cell(cell)  # mutant: CUT half dropped",
+        (_S1A_CUT_CAL_KILL, _S1A_CUT_CAL_EXIT_KILL, _S1A_CUT_CAL_CONTROL),
+    ),
+    Mutant(
+        "M-S1A-20",
+        "712-stage1a-rebuild-disabled",
+        "the --rebuild early return is removed, so rebuilding from an output "
+        "directory runs a second simulation instead of reading the files",
+        _S1A,
+        _S1A_MODULE,
+        "    if args.rebuild:",
+        "    if False:  # mutant: rebuild disabled, falls through to simulation",
+        (_S1A_REBUILD_NO_SIM_KILL, _S1A_REBUILD_BYTE_KILL),
+    ),
+    Mutant(
+        "M-S1A-21",
+        "712-stage1a-off-diag-cells-to-all-nine",
+        "off_diagonal_cells returns the full nine-cell grid, so the sensitivity "
+        "rows and the sentence that names them report nine-cell minima",
+        _S1A,
+        _S1A_MODULE,
+        "    return tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES"
+        " if (p_p, p_n) not in diag)",
+        "    return tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES)"
+        "  # mutant: nine cells",
+        (_S1A_SENS_ROWS_KILL, _S1A_SENS_SENTENCE_KILL),
+    ),
+    # #718: thirteen Stage 2 mutants, each under its own obligation prefix.
+    Mutant(
+        "M-S2-1",
+        "718-stage2-fixed-n-interim-look",
+        "a fixed-n-betting row records an interim look instead of reading once at n",
+        _S2,
+        _S2_MODULE,
+        "        per_look=(look,),\n    )\n\n\ndef _run_fixed_n_score(",
+        "        per_look=(s685.LookRow(look=max(1, design.n_pairs // 2), p_pass=p_joint, "
+        "p_cut=p_cut, p_cant_tell_yet=max(0.0, 1.0 - p_joint - p_cut), se_pass=look.se_pass, "
+        "expected_pairs=float(max(1, design.n_pairs // 2)), "
+        "expected_epochs=float(design.total_epochs)),),\n    )\n\n\ndef _run_fixed_n_score(",
+        (_S2_FIXED_N_ONCE,),
+    ),
+    Mutant(
+        "M-S2-2",
+        "718-stage2-fixed-n-anytime-bound-at-n",
+        "fixed-n-betting reads the anytime bound at n in place of its own "
+        "horizon-scaled fixed-time bound",
+        _S2,
+        _S2_MODULE,
+        "    fp_pass = fixed_n_rejects(xs_fp, alpha, m0, upward=True)",
+        "    fp_pass = 2 * s685._bound(xs_fp, alpha, 'lower') - 1 >= BOUNDARY  "
+        "# mutant: anytime bound at n",
+        (_S2_HORIZON, _S2_HORIZON_RUN),
+    ),
+    Mutant(
+        "M-S2-3",
+        "718-stage2-score-test-margin-dropped",
+        "the score tests use delta0 = 0 in place of the registered margin 0.20",
+        _S2,
+        _S2_MODULE,
+        "    delta0 = BOUNDARY",
+        "    delta0 = 0.0  # mutant: margin dropped",
+        (_S2_MARGIN, _S2_MCNEMAR, _S2_MARGIN_RUN),
+    ),
+    Mutant(
+        "M-S2-4",
+        "718-stage2-statistic-contrast-mismatch",
+        "the paired Tango statistic is applied to the F - N contrast instead of F - P",
+        _S2,
+        _S2_MODULE,
+        "        [tango_score_z(int(bb), int(cc), n, delta0) for bb, cc in zip(b, c, strict=True)]",
+        "        [tango_score_z(int(ff), int(nn), n, delta0) for ff, nn in "
+        "zip(full.sum(axis=1), _null_used.sum(axis=1), strict=True)]  "
+        "# mutant: paired stat on F-N",
+        (_S2_CONTRAST,),
+    ),
+    Mutant(
+        "M-S2-5",
+        "718-stage2-joint-pass-fp-only",
+        "joint PASS reads the F - P half only, dropping the F - N half",
+        _S2,
+        _S2_MODULE,
+        "    passed = fp_pass & fn_pass",
+        "    passed = fp_pass  # mutant: F - N half dropped",
+        (_S2_JOINT,),
+    ),
+    Mutant(
+        "M-S2-6",
+        "718-stage2-alpha-label-computation-mismatch",
+        "the rule is always computed at the registered 0.0209 whatever alpha the row declares",
+        _S2,
+        _S2_MODULE,
+        "    rule_alpha = design.pass_alpha"
+        " if pass_alpha_override is None else pass_alpha_override",
+        "    rule_alpha = PASS_ALPHA  # mutant: declared alpha ignored",
+        (_S2_ALPHA,),
+    ),
+    Mutant(
+        "M-S2-7",
+        "718-stage2-starting-wealth-ignored",
+        "anytime-tuned ignores starting_wealth and always starts at W0 = 1.0",
+        _S2,
+        _S2_MODULE,
+        "    w0 = design.starting_wealth\n"
+        "    alpha = design.pass_alpha if rule_alpha is None else rule_alpha",
+        "    w0 = 1.0  # mutant: starting wealth ignored\n"
+        "    alpha = design.pass_alpha if rule_alpha is None else rule_alpha",
+        (_S2_W0,),
+    ),
+    Mutant(
+        "M-S2-8",
+        "718-stage2-tuned-bet-lookahead",
+        "the tuned wealth factor divides by a term that depends on the current "
+        "pair's outcome, so the bet is not fixed before the first pair",
+        _S2,
+        _S2_MODULE,
+        "            self.log_w += np.log1p(self.lam * (x - self.m0))",
+        "            self.log_w += np.log1p(self.lam * (x - self.m0) / (1.0 - 0.5 * x))"
+        "  # mutant: lookahead lambda",
+        (_S2_LOOKAHEAD,),
+    ),
+    Mutant(
+        "M-S2-9",
+        "718-stage2-calibration-skips-fixed-n",
+        "the calibration read skips fixed-n rows, so a broken fixed-n level exits 0",
+        _S2,
+        _S2_MODULE,
+        "    cal = [r for r in rows if is_calibration_cell(r.cell)]\n"
+        "    return 0 if all(r.holds_level or is_nonfatal_calibration_failure(r)"
+        " for r in cal) else 1",
+        "    cal = [\n"
+        "        r\n"
+        "        for r in rows\n"
+        "        if is_calibration_cell(r.cell)\n"
+        '        and r.design.stopping not in ("fixed-n-betting", "fixed-n-score")\n'
+        "    ]  # mutant: fixed-n rows skipped\n"
+        "    return 0 if all(r.holds_level or is_nonfatal_calibration_failure(r)"
+        " for r in cal) else 1",
+        (_S2_CAL_FIXED,),
+    ),
+    Mutant(
+        "M-S2-10",
+        "718-stage2-stopping-label-disagrees",
+        "every stopping label is produced by the anytime path, so the label "
+        "disagrees with the simulation that ran",
+        _S2,
+        _S2_MODULE,
+        '    if sim_design.stopping == "fixed-n-betting":\n'
+        "        return _run_fixed_n_betting(\n"
+        "            cell, design, replicates=replicates, seed=seed, rule_alpha=rule_alpha\n"
+        "        )",
+        '    if sim_design.stopping == "fixed-n-betting":\n'
+        "        return _run_anytime(\n"
+        "            cell, design, replicates=replicates, seed=seed, rule_alpha=rule_alpha\n"
+        "        )  # mutant: label/path disagree",
+        (_S2_LABEL, _S2_LABEL2),
+    ),
+    Mutant(
+        "M-S2-11",
+        "718-stage2-headline-pair-count",
+        "the headline reports a stale 100-pair count instead of each row's own n_pairs",
+        _S2,
+        _S2_MODULE,
+        "                    n_pairs=config.design.n_pairs,\n"
+        "                    null_per_pair=config.design.null_per_pair,\n"
+        "                    fn_construction=config.design.fn_construction,\n"
+        "                    total_epochs=config.design.total_epochs,",
+        "                    n_pairs=100,  # mutant: stale pair count\n"
+        "                    null_per_pair=config.design.null_per_pair,\n"
+        "                    fn_construction=config.design.fn_construction,\n"
+        "                    total_epochs=config.design.total_epochs,",
+        (_S2_HEADLINE,),
+    ),
+    Mutant(
+        "M-S2-12",
+        "718-stage2-cut-direction-reversed",
+        "the CUT wealth factor bets upward instead of downward, reversing the futility direction",
+        _S2,
+        _S2_MODULE,
+        "            self.log_w += np.log1p(self.lam * (self.m0 - x))",
+        "            self.log_w += np.log1p(self.lam * (x - self.m0))  # mutant: CUT reversed",
+        (_S2_CUT,),
+    ),
+    Mutant(
+        "M-S2-13",
+        "718-stage2-exit-code-forced-zero",
+        "the calibration exit code is forced to 0 whatever the read finds",
+        _S2,
+        _S2_MODULE,
+        "    return 0 if all(r.holds_level or is_nonfatal_calibration_failure(r)"
+        " for r in cal) else 1",
+        "    return 0  # mutant: exit code forced to zero",
+        (_S2_EXIT,),
+    ),
+    # #718 rework W2: three behaviours of the new designs the first campaign
+    # did not pin. Each mutant is one defect the rework ticket names.
+    Mutant(
+        "M-S2-14",
+        "718-stage2-tuned-rejection-running-max",
+        "the anytime-tuned rejection reads the current wealth instead of its "
+        "running maximum, so a sequence that crosses 1/alpha and then falls "
+        "back below it is not a rejection",
+        _S2,
+        _S2_MODULE,
+        "        return self.running_max >= math.log(1.0 / alpha)",
+        "        return self.log_w >= math.log(1.0 / alpha)  # mutant: current wealth",
+        (_S2_RUNNING_MAX,),
+    ),
+    Mutant(
+        "M-S2-15",
+        "718-stage2-score-cut-level-010",
+        "the fixed-n-score CUT test runs at 0.10 instead of the registered 0.05",
+        _S2,
+        _S2_MODULE,
+        "    z_cut_crit = _normal_quantile(FUTILITY_ALPHA)  # negative; CUT rejects for small z",
+        "    z_cut_crit = _normal_quantile(0.10)  # mutant: CUT at 0.10",
+        (_S2_CUT_LEVEL,),
+    ),
+    Mutant(
+        "M-S2-16",
+        "718-stage2-joint-pass-fn-alone",
+        "the fixed-n-score joint PASS reports its F - N half alone, dropping the F - P half",
+        _S2,
+        _S2_MODULE,
+        "    passed = fp_pass & fn_pass",
+        "    passed = fn_pass  # mutant: F - P half dropped",
+        (_S2_JOINT_FN_ALONE,),
+    ),
+)
+
+
+# A case with one of these verdicts produced no measurement. It is not a result
+# that a reader can weigh, so the generator refuses rather than writing a receipt
+# that looks complete. SURVIVED is absent deliberately: a preserved survivor is a
+# finding, and folding it into an exit code would create pressure to delete it.
+INVALID_VERDICTS: frozenset[str] = frozenset(
+    {"ANCHOR_ABSENT", "INVALID_BASELINE", "INVALID_ISOLATION", "NO_OP", "STILLBORN", "UNKNOWN"}
+)
+
+
+def _digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _git(*args: str, cwd: Path) -> str:
+    """Run one git command and return its stripped stdout."""
+    proc = subprocess.run(  # noqa: S603 -- argv is literal, built in this file
+        ["git", *args],  # noqa: S607
+        cwd=cwd,
+        capture_output=True,
+        check=True,
+    )
+    return proc.stdout.decode("utf-8", "replace").strip()
+
+
+def _env(root: Path | None = None) -> dict[str, str]:
+    """Environment for a subprocess, pinned to a worktree's own sources.
+
+    Without PYTHONPATH the editable install resolves skill_harness to the MAIN
+    repository, so a worktree would run its own tests against production code
+    from somewhere else and every mutant would appear to survive. Each case
+    asserts module.__file__ actually resolves inside its worktree, so a silent
+    reversion to the editable install invalidates the receipt instead of
+    quietly passing.
+    """
+    env = {**os.environ, "PYTHONHASHSEED": "0", "PYTHONUTF8": "1"}
+    if root is not None:
+        # scripts/ joins src/ because #443's mutants target the acceptance-matrix
+        # harness, which lives there and is not a package. scripts/screens/419
+        # joins them because #695's Stage 1A simulator lives there and is loaded
+        # by bare module name in the isolation assertion. Without both entries
+        # the compile and isolation assertions cannot import the mutated module
+        # at all, and the case would be recorded as INVALID_ISOLATION rather
+        # than measured.
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(root / "src"), str(root / "scripts"), str(root / "scripts" / "screens" / "419")]
+        )
+    return env
+
+
+def _run_pytest(root: Path, selection: tuple[str, ...]) -> tuple[int, str]:
+    proc = subprocess.run(  # noqa: S603 -- argv is literal, built in this file
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            *selection,
+            "-p",
+            "no:randomly",
+            "-q",
+            "--tb=line",
+        ],
+        cwd=root,
+        capture_output=True,
+        env=_env(root),
+        check=False,
+    )
+    return proc.returncode, proc.stdout.decode("utf-8", "replace")
+
+
+def _module_file(root: Path, module: str) -> str:
+    proc = subprocess.run(  # noqa: S603 -- module names come from MUTANTS in this file
+        [sys.executable, "-c", f"import {module} as m; print(m.__file__)"],
+        cwd=root,
+        capture_output=True,
+        env=_env(root),
+        check=False,
+    )
+    return proc.stdout.decode("utf-8", "replace").strip()
+
+
+def _collected(output: str) -> int:
+    counts = [int(n) for n in re.findall(r"(\d+) (?:passed|failed)", output)]
+    return sum(counts)
+
+
+@dataclass
+class CaseResult:
+    mutant_id: str
+    obligation: str
+    description: str
+    selection: tuple[str, ...]
+    verdict: str
+    clean: dict[str, object] = field(default_factory=dict)
+    mutant: dict[str, object] = field(default_factory=dict)
+    killing_assertions: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+def run_case(mutant: Mutant, commit: str, workroot: Path) -> CaseResult:
+    result = CaseResult(
+        mutant.mutant_id, mutant.obligation, mutant.description, mutant.selection, "UNKNOWN"
+    )
+    tree = workroot / mutant.mutant_id
+    subprocess.run(  # noqa: S603
+        ["git", "worktree", "add", "--detach", str(tree), commit],  # noqa: S607
+        cwd=REPO,
+        capture_output=True,
+        check=True,
+    )
+    try:
+        target = tree / mutant.target
+        head = _git("rev-parse", "HEAD", cwd=tree)
+
+        clean_digest = _digest(target)
+        clean_module = _module_file(tree, mutant.module)
+        code, out = _run_pytest(tree, mutant.selection)
+        result.clean = {
+            "worktree_head": head,
+            "module_file": clean_module,
+            "source_digest": clean_digest,
+            "exit_code": code,
+            "tests_collected": _collected(out),
+            "baseline_passes": code == 0,
+        }
+        if not clean_module.startswith(str(tree)):
+            result.verdict = "INVALID_ISOLATION"
+            result.notes.append(
+                f"module resolved to {clean_module!r}, outside the worktree {str(tree)!r}; "
+                "the case would have tested another tree's code"
+            )
+            return result
+        if code != 0 or _collected(out) == 0:
+            result.verdict = "INVALID_BASELINE"
+            result.notes.append(
+                "clean baseline did not pass with nonzero collection; no kill can be "
+                "attributed against it"
+            )
+            return result
+
+        source = target.read_text(encoding="utf-8")
+        if mutant.old not in source:
+            result.verdict = "ANCHOR_ABSENT"
+            return result
+        target.write_bytes(source.replace(mutant.old, mutant.new, 1).encode("utf-8"))
+
+        mutant_digest = _digest(target)
+        compiles = subprocess.run(  # noqa: S603 -- module name is literal, from MUTANTS
+            [sys.executable, "-c", f"import {mutant.module}"],
+            cwd=tree,
+            capture_output=True,
+            env=_env(tree),
+            check=False,
+        )
+        code, out = _run_pytest(tree, mutant.selection)
+        failed = re.findall(r"^FAILED (\S+)", out, re.M)
+        result.mutant = {
+            "worktree_head": head,
+            "module_file": _module_file(tree, mutant.module),
+            "source_digest": mutant_digest,
+            "digests_differ": mutant_digest != clean_digest,
+            "compiles": compiles.returncode == 0,
+            "exit_code": code,
+            "tests_collected": _collected(out),
+        }
+        result.killing_assertions = failed
+
+        if compiles.returncode != 0:
+            result.verdict = "STILLBORN"
+            result.notes.append("mutant does not import; a stillborn mutant is not a kill")
+        elif mutant_digest == clean_digest:
+            result.verdict = "NO_OP"
+            result.notes.append("mutation did not change the file")
+        elif failed:
+            result.verdict = "KILLED"
+        else:
+            result.verdict = "SURVIVED"
+        return result
+    finally:
+        subprocess.run(  # noqa: S603
+            ["git", "worktree", "remove", "--force", str(tree)],  # noqa: S607
+            cwd=REPO,
+            capture_output=True,
+            check=False,
+        )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", default="-")
+    parser.add_argument(
+        "--select",
+        default="",
+        help=(
+            "only run mutants whose obligation starts with this prefix. One receipt "
+            "should attest to one repair; MUTANTS accumulates across repairs."
+        ),
+    )
+    args = parser.parse_args(argv)
+
+    selected = tuple(m for m in MUTANTS if m.obligation.startswith(args.select))
+    if not selected:
+        print(f"REFUSE: --select {args.select!r} matched no mutants", file=sys.stderr)
+        return 1
+
+    dirty = _git("status", "--porcelain", cwd=REPO)
+    if dirty:
+        print(
+            "REFUSE: production tree is dirty. The receipt must attest to a committed "
+            "tree, or its digests name nothing a reader can fetch.\n" + dirty,
+            file=sys.stderr,
+        )
+        return 1
+
+    commit = _git("rev-parse", "HEAD", cwd=REPO)
+    targets = sorted({m.target for m in selected})
+    digests_before = {t: _digest(REPO / t) for t in targets}
+
+    workroot = Path(tempfile.mkdtemp(prefix="mutation-receipt-"))
+    try:
+        cases = [run_case(m, commit, workroot) for m in selected]
+    finally:
+        shutil.rmtree(workroot, ignore_errors=True)
+
+    digests_after = {t: _digest(REPO / t) for t in targets}
+    still_clean = _git("status", "--porcelain", cwd=REPO)
+
+    report = {
+        "commit_under_test": commit,
+        "commit_under_test_is_informational": (
+            "A rebase rewrites this and later commits move HEAD past it. The"
+            " authoritative pin is target_digests; currency is checked against those."
+        ),
+        "target_files": targets,
+        "target_digests": digests_after,
+        "production_tree_digest_before": digests_before,
+        "production_tree_digest_after": digests_after,
+        "production_tree_unchanged": digests_before == digests_after and still_clean == "",
+        "python": sys.version.split()[0],
+        "cases": [
+            {
+                "mutant_id": c.mutant_id,
+                "obligation": c.obligation,
+                "description": c.description,
+                "selection": list(c.selection),
+                "verdict": c.verdict,
+                "clean": c.clean,
+                "mutant": c.mutant,
+                "killing_assertions": c.killing_assertions,
+                "notes": c.notes,
+            }
+            for c in cases
+        ],
+    }
+    payload = json.dumps(report, indent=2, sort_keys=True)
+    if args.out == "-":
+        print(payload)
+    else:
+        Path(args.out).write_text(payload + "\n", encoding="utf-8", newline="\n")
+        print(f"wrote {args.out}")
+
+    for c in cases:
+        print(
+            f"{c.mutant_id} [{c.obligation}] {c.verdict}: {'; '.join(c.killing_assertions) or '-'}"
+        )
+    if not report["production_tree_unchanged"]:
+        print("REFUSE: production tree changed during receipt generation", file=sys.stderr)
+        return 1
+    invalid = [c for c in cases if c.verdict in INVALID_VERDICTS]
+    if invalid:
+        print(
+            "REFUSE: "
+            + ", ".join(f"{c.mutant_id} {c.verdict}" for c in invalid)
+            + ". An invalid case measured nothing, so this receipt attests to nothing.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

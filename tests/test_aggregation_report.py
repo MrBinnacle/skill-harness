@@ -1,0 +1,511 @@
+"""Tests for aggregation/report.py — SkillReport serialization (A60).
+
+Coverage:
+- to_json_dict produces all required top-level keys
+- report_schema_version = "2.0.0" (major bump at the #360 merge: the
+  aggregation_method enum value bh_fdr_fallback was renamed, and a rename is
+  not additive; was "1.4.0" for the #187 anytime-valid CS fields, "1.3.0" in
+  B5 is_prior_only, "1.2.0" in M3, "1.1.0" in C1 per A60)
+- to_json_bytes is byte-stable for identical input
+- to_json_bytes is UTF-8 with trailing newline
+- Nested structures serialise correctly (tuples → lists, etc.)
+- Round-trip: to_json_dict → skill_report_from_dict reconstructs equal fields
+"""
+
+from __future__ import annotations
+
+import json
+
+from skill_harness.aggregation.report import (
+    REPORT_SCHEMA_VERSION,
+    ClauseReport,
+    ContributionSummary,
+    SkillReport,
+    VectorSummary,
+    skill_report_from_dict,
+    to_json_bytes,
+    to_json_dict,
+)
+
+# ---------------------------------------------------------------------------
+# Fixture: minimal valid SkillReport
+# ---------------------------------------------------------------------------
+
+
+def make_clause_report(
+    clause_id: str = "c1",
+    status: str = "PASSED",
+    sub_reason: str | None = None,
+    p: float = 0.97,
+    n: int = 12,
+    w: float = 9.0,
+    subject_model: str | None = "claude-sonnet-4-6",
+    user_message_sha256: str | None = "a" * 64,
+) -> ClauseReport:
+    ci = (0.55, 0.90)
+    return ClauseReport(
+        clause_id=clause_id,
+        status=status,
+        sub_reason=sub_reason,
+        posterior_mean=0.75,
+        credible_interval_95=ci,
+        p_win_gt_threshold=p,
+        frozen_case_count_at_current_metric_version=1,
+        metric_id_per_axis={"verbosity": "metric_v1"},
+        metric_version_per_axis={"verbosity": "1.0.0"},
+        ablation_operator_hash="abc123",
+        run_ids_aggregated=("run-001",),
+        n_verdicts=n,
+        w_observation_sum=w,
+        subject_model=subject_model,
+        user_message_sha256=user_message_sha256,
+        posterior_credible_interval_95=ci,
+        sequential_confidence_sequence_95=(0.50, 0.92),
+        interval_method="predictable_plugin_betting_cs_v1",
+        interval_status="VALID",
+    )
+
+
+def make_skill_report(
+    skill_id: str = "skill-abc",
+    clause_reports: tuple[ClauseReport, ...] | None = None,
+) -> SkillReport:
+    if clause_reports is None:
+        clause_reports = (make_clause_report(),)
+    vector = VectorSummary(
+        passed=1,
+        failed=0,
+        confounded=0,
+        unmeasured=0,
+        unmeasured_breakdown={},
+        coverage=1.0,
+    )
+    contribution = ContributionSummary(
+        full_vs_null_delta=0.25,
+        label="single-clause LOO; lower-bound under redundancy",
+    )
+    return SkillReport(
+        report_schema_version=REPORT_SCHEMA_VERSION,
+        skill_id=skill_id,
+        generated_at_utc="2026-06-06T12:00:00.000Z",
+        harness_version="0.1.0a0",
+        aggregation_method="ebmom_hierarchical",
+        aggregation_provenance={
+            "alpha_hat": 3.5,
+            "beta_hat": 2.1,
+            "sample_mean": 0.625,
+            "sample_var": 0.012,
+            "k_clauses": 10,
+            "family_size_used": 10,
+        },
+        clauses=clause_reports,
+        vector=vector,
+        coverage=1.0,
+        contribution=contribution,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Schema version
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaVersion:
+    def test_report_schema_version_constant(self) -> None:
+        # 1.1.0 bumped in C1 fix-loop per A60 (A55 axes)
+        # 1.2.0 bumped in M3 pre-tag fix (coverage_warnings)
+        # 1.3.0 bumped in B5 hostile-review fix (is_prior_only)
+        # 1.4.0 bumped in #187 (anytime-valid CS fields)
+        # 2.0.0 bumped at the #360 merge (bh_fdr_fallback renamed; #441)
+        assert REPORT_SCHEMA_VERSION == "2.0.0"
+
+    def test_schema_version_in_dict(self) -> None:
+        report = make_skill_report()
+        d = to_json_dict(report)
+        assert d["report_schema_version"] == "2.0.0"
+
+    def test_schema_version_in_bytes(self) -> None:
+        report = make_skill_report()
+        data = json.loads(to_json_bytes(report))
+        assert data["report_schema_version"] == "2.0.0"
+
+
+# ---------------------------------------------------------------------------
+# Required top-level keys
+# ---------------------------------------------------------------------------
+
+
+REQUIRED_TOP_LEVEL_KEYS = {
+    "report_schema_version",
+    "skill_id",
+    "generated_at_utc",
+    "harness_version",
+    "aggregation_method",
+    "aggregation_provenance",
+    "clauses",
+    "vector",
+    "coverage",
+    "contribution",
+}
+
+
+class TestRequiredKeys:
+    def test_all_required_keys_present(self) -> None:
+        report = make_skill_report()
+        d = to_json_dict(report)
+        missing = REQUIRED_TOP_LEVEL_KEYS - set(d.keys())
+        assert not missing, f"Missing keys: {missing}"
+
+    def test_clause_required_keys(self) -> None:
+        report = make_skill_report()
+        d = to_json_dict(report)
+        clause_keys = {
+            "clause_id",
+            "status",
+            "sub_reason",
+            "posterior_mean",
+            "credible_interval_95",
+            "posterior_credible_interval_95",
+            "sequential_confidence_sequence_95",
+            "interval_method",
+            "interval_status",
+            "p_win_gt_threshold",
+            "frozen_case_count_at_current_metric_version",
+            "metric_id_per_axis",
+            "metric_version_per_axis",
+            "ablation_operator_hash",
+            "run_ids_aggregated",
+            "n_verdicts",
+            "w_observation_sum",
+            # A55 comparability axes added in schema 1.1.0 (C1 fix-loop)
+            "subject_model",
+            "user_message_sha256",
+        }
+        clauses = d["clauses"]
+        assert isinstance(clauses, list)
+        for clause_dict in clauses:
+            missing = clause_keys - set(clause_dict.keys())
+            assert not missing, f"Missing clause keys: {missing}"
+
+    def test_vector_required_keys(self) -> None:
+        report = make_skill_report()
+        d = to_json_dict(report)
+        vector_keys = {
+            "passed",
+            "failed",
+            "confounded",
+            "unmeasured",
+            "unmeasured_breakdown",
+            "coverage",
+        }
+        vec = d["vector"]
+        assert isinstance(vec, dict)
+        missing = vector_keys - set(vec.keys())
+        assert not missing
+
+    def test_contribution_required_keys(self) -> None:
+        report = make_skill_report()
+        d = to_json_dict(report)
+        contrib_keys = {"full_vs_null_delta", "label"}
+        contrib = d["contribution"]
+        assert isinstance(contrib, dict)
+        missing = contrib_keys - set(contrib.keys())
+        assert not missing
+
+
+# ---------------------------------------------------------------------------
+# Byte stability
+# ---------------------------------------------------------------------------
+
+
+class TestByteStability:
+    def test_byte_stable_identical_input(self) -> None:
+        """Same input → identical bytes."""
+        report = make_skill_report()
+        b1 = to_json_bytes(report)
+        b2 = to_json_bytes(report)
+        assert b1 == b2
+
+    def test_byte_stable_same_content_different_instances(self) -> None:
+        """Two independently-constructed identical reports → identical bytes."""
+        r1 = make_skill_report()
+        r2 = make_skill_report()
+        assert to_json_bytes(r1) == to_json_bytes(r2)
+
+    def test_different_skill_id_different_bytes(self) -> None:
+        r1 = make_skill_report(skill_id="skill-a")
+        r2 = make_skill_report(skill_id="skill-b")
+        assert to_json_bytes(r1) != to_json_bytes(r2)
+
+    def test_trailing_newline(self) -> None:
+        report = make_skill_report()
+        b = to_json_bytes(report)
+        assert b.endswith(b"\n")
+
+    def test_valid_utf8(self) -> None:
+        report = make_skill_report()
+        b = to_json_bytes(report)
+        decoded = b.decode("utf-8")  # should not raise
+        assert len(decoded) > 0
+
+    def test_sorted_keys(self) -> None:
+        """JSON output uses sorted keys (byte-stable contract)."""
+        report = make_skill_report()
+        b = to_json_bytes(report)
+        d = json.loads(b)
+        keys = list(d.keys())
+        assert keys == sorted(keys)
+
+    def test_compact_separators(self) -> None:
+        """Output uses compact separators (no space after : or ,)."""
+        report = make_skill_report()
+        b = to_json_bytes(report)
+        text = b.decode("utf-8")
+        # No ": " or ", " in compact JSON (outside string values)
+        # Crude but effective: check the raw structure
+        assert '": ' not in text.split('"skill_id"')[0] or True  # OK if in values
+        # More robust: re-parse and re-encode with same settings
+        reparsed = json.dumps(json.loads(b), sort_keys=True, separators=(",", ":")).encode("utf-8")
+        assert b == reparsed + b"\n"
+
+
+# ---------------------------------------------------------------------------
+# Serialisation correctness
+# ---------------------------------------------------------------------------
+
+
+class TestSerialisationCorrectness:
+    def test_tuples_serialised_as_lists(self) -> None:
+        """credible_interval_95 (tuple) → list in JSON."""
+        report = make_skill_report()
+        d = to_json_dict(report)
+        clause = d["clauses"][0]  # type: ignore[index]
+        ci = clause["credible_interval_95"]
+        assert isinstance(ci, list)
+        assert len(ci) == 2
+
+    def test_run_ids_aggregated_serialised_as_list(self) -> None:
+        report = make_skill_report()
+        d = to_json_dict(report)
+        clause = d["clauses"][0]  # type: ignore[index]
+        assert isinstance(clause["run_ids_aggregated"], list)
+
+    def test_sub_reason_none_serialised(self) -> None:
+        """PASSED clause with sub_reason=None → null in JSON."""
+        report = make_skill_report()
+        d = to_json_dict(report)
+        clause = d["clauses"][0]  # type: ignore[index]
+        assert clause["status"] == "PASSED"
+        assert clause["sub_reason"] is None
+
+    def test_unmeasured_with_sub_reason(self) -> None:
+        """UNMEASURED clause with sub_reason → serialised correctly."""
+        cr = make_clause_report(
+            status="UNMEASURED",
+            sub_reason="no_data",
+            p=0.5,
+        )
+        report = make_skill_report(clause_reports=(cr,))
+        d = to_json_dict(report)
+        clause = d["clauses"][0]  # type: ignore[index]
+        assert clause["status"] == "UNMEASURED"
+        assert clause["sub_reason"] == "no_data"
+
+    def test_full_vs_null_delta_none(self) -> None:
+        """ContributionSummary with delta=None → null in JSON."""
+        vector = VectorSummary(
+            passed=0,
+            failed=0,
+            confounded=0,
+            unmeasured=1,
+            unmeasured_breakdown={"no_data": 1},
+            coverage=0.0,
+        )
+        report = SkillReport(
+            report_schema_version=REPORT_SCHEMA_VERSION,
+            skill_id="s",
+            generated_at_utc="2026-06-06T00:00:00Z",
+            harness_version="0.1.0",
+            aggregation_method="unpooled",
+            aggregation_provenance={"k_clauses": 1, "reason": "k_below_10", "family_size_used": 1},
+            clauses=(make_clause_report(status="UNMEASURED", sub_reason="no_data"),),
+            vector=vector,
+            coverage=0.0,
+            contribution=ContributionSummary(full_vs_null_delta=None),
+        )
+        d = to_json_dict(report)
+        assert d["contribution"]["full_vs_null_delta"] is None  # type: ignore[index]
+
+
+# ---------------------------------------------------------------------------
+# Round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestRoundTrip:
+    def test_round_trip_preserves_skill_id(self) -> None:
+        report = make_skill_report(skill_id="round-trip-test")
+        reconstructed = skill_report_from_dict(to_json_dict(report))
+        assert reconstructed.skill_id == report.skill_id
+
+    def test_round_trip_preserves_clause_count(self) -> None:
+        clauses = (
+            make_clause_report("c1"),
+            make_clause_report("c2", status="FAILED", p=0.02),
+        )
+        report = make_skill_report(clause_reports=clauses)
+        reconstructed = skill_report_from_dict(to_json_dict(report))
+        assert len(reconstructed.clauses) == 2
+
+    def test_round_trip_preserves_vector(self) -> None:
+        report = make_skill_report()
+        reconstructed = skill_report_from_dict(to_json_dict(report))
+        assert reconstructed.vector.passed == report.vector.passed
+        assert reconstructed.vector.coverage == report.vector.coverage
+
+
+# ---------------------------------------------------------------------------
+# I1 · NaN-in-JSON fix — strict RFC 8259 roundtrip for BH-FDR fallback report
+#   RED on current code: NaN literal in JSON stream → strict parser rejects.
+#   GREEN after fix: None → null in JSON → strict parser accepts.
+# ---------------------------------------------------------------------------
+
+
+def make_bh_fdr_fallback_report() -> SkillReport:
+    """SkillReport with aggregation_provenance from BH-FDR fallback (var_below_threshold).
+
+    Before fix: attempted dict contains alpha_hat=NaN → to_json_bytes emits literal NaN.
+    After fix: alpha_hat=None → to_json_bytes emits null → RFC 8259 compliant.
+    """
+    vector = VectorSummary(
+        passed=0,
+        failed=0,
+        confounded=0,
+        unmeasured=10,
+        unmeasured_breakdown={"no_data": 10},
+        coverage=0.0,
+    )
+    contribution = ContributionSummary(full_vs_null_delta=None)
+    # Provenance as produced by fit_skill on 10 identical clauses (var_below_threshold)
+    # After fix: alpha_hat and beta_hat are None, not float("nan")
+    return SkillReport(
+        report_schema_version=REPORT_SCHEMA_VERSION,
+        skill_id="skill-bh-fdr",
+        generated_at_utc="2026-06-07T00:00:00.000Z",
+        harness_version="0.1.0a0",
+        aggregation_method="bh_fdr_fallback",
+        aggregation_provenance={
+            "q": 0.05,
+            "k_clauses": 10,
+            "fallback_reason": "var_below_threshold",
+            "attempted": {
+                "alpha_hat": None,  # None after fix (was float("nan") before)
+                "beta_hat": None,  # None after fix (was float("nan") before)
+                "sample_mean": 0.5,
+                "sample_var": 0.0,
+            },
+            "family_size_used": 10,
+        },
+        clauses=tuple(
+            make_clause_report(f"c{i}", status="UNMEASURED", sub_reason="no_data")
+            for i in range(10)
+        ),
+        vector=vector,
+        coverage=0.0,
+        contribution=contribution,
+    )
+
+
+def _strict_parse_constant(x: str) -> object:
+    """Reject NaN/Infinity literals — RFC 8259 does not allow them."""
+    raise ValueError(f"Non-standard JSON constant encountered: {x!r}")
+
+
+class TestI1NanInJsonFix:
+    def test_bh_fdr_fallback_report_strict_json_roundtrip(self) -> None:
+        """I1: to_json_bytes on a BH-FDR fallback report must produce strict RFC 8259 JSON.
+
+        Before fix: NaN literal in stream → json.loads with parse_constant raises ValueError.
+        After fix: null in stream → strict parse succeeds.
+        """
+        report = make_bh_fdr_fallback_report()
+        raw = to_json_bytes(report)
+        # Strict parse: parse_constant fires on NaN/Infinity literals
+        parsed = json.loads(raw, parse_constant=_strict_parse_constant)
+        prov = parsed["aggregation_provenance"]
+        assert prov["attempted"]["alpha_hat"] is None
+        assert prov["attempted"]["beta_hat"] is None
+        assert prov["attempted"]["sample_mean"] == 0.5
+
+    def test_allow_nan_false_raises_on_nan_float(self) -> None:
+        """I1 guard: to_json_bytes must raise ValueError if a NaN slips through.
+
+        Verifies that allow_nan=False is set in json.dumps — future regressions
+        surface loudly at write time rather than emitting invalid JSON silently.
+        """
+        # Build a report with NaN in provenance (simulating a pre-fix regression)
+        vector = VectorSummary(
+            passed=0,
+            failed=0,
+            confounded=0,
+            unmeasured=1,
+            unmeasured_breakdown={},
+            coverage=0.0,
+        )
+        bad_report = SkillReport(
+            report_schema_version=REPORT_SCHEMA_VERSION,
+            skill_id="bad",
+            generated_at_utc="2026-06-07T00:00:00Z",
+            harness_version="0.1.0a0",
+            aggregation_method="bh_fdr_fallback",
+            aggregation_provenance={"attempted": {"alpha_hat": float("nan")}},
+            clauses=(),
+            vector=vector,
+            coverage=0.0,
+            contribution=ContributionSummary(full_vs_null_delta=None),
+        )
+        # With allow_nan=False, json.dumps must raise ValueError on NaN
+        import pytest as _pytest
+
+        with _pytest.raises(ValueError):
+            to_json_bytes(bad_report)
+
+
+# ---------------------------------------------------------------------------
+# Schema 1.4.0 — anytime-valid CS fields (#187)
+# ---------------------------------------------------------------------------
+
+
+class TestSchema140CSFields:
+    def test_cs_fields_round_trip(self) -> None:
+        report = make_skill_report()
+        d = to_json_dict(report)
+        clause = d["clauses"][0]  # type: ignore[index]
+        assert clause["posterior_credible_interval_95"] == [0.55, 0.90]
+        assert clause["sequential_confidence_sequence_95"] == [0.50, 0.92]
+        assert clause["interval_method"] == "predictable_plugin_betting_cs_v1"
+        assert clause["interval_status"] == "VALID"
+        restored = skill_report_from_dict(d)
+        c0 = restored.clauses[0]
+        assert c0.posterior_credible_interval_95 == (0.55, 0.90)
+        assert c0.sequential_confidence_sequence_95 == (0.50, 0.92)
+        assert c0.interval_method == "predictable_plugin_betting_cs_v1"
+        assert c0.interval_status == "VALID"
+
+    def test_null_cs_serialises(self) -> None:
+        cr = make_clause_report()
+        # Rebuild with null CS (incomparable / prior path)
+        from dataclasses import replace
+
+        cr2 = replace(
+            cr,
+            sequential_confidence_sequence_95=None,
+            interval_status="UNMEASURED_INCOMPARABLE_POOL",
+        )
+        report = make_skill_report(clause_reports=(cr2,))
+        d = to_json_dict(report)
+        clause = d["clauses"][0]  # type: ignore[index]
+        assert clause["sequential_confidence_sequence_95"] is None
+        assert clause["interval_status"] == "UNMEASURED_INCOMPARABLE_POOL"
+        restored = skill_report_from_dict(d)
+        assert restored.clauses[0].sequential_confidence_sequence_95 is None

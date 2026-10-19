@@ -1,0 +1,34 @@
+{
+  "sers_version": "1.0.0",
+  "skill_name": "append-only-evidence-design",
+  "verdict": "CANT_TELL_YET",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": null,
+  "value_class": "calibration",
+  "wrong_instrument": true,
+  "declared_synthetic_control": false,
+  "evidence_admissibility": {
+    "status": "admissible",
+    "detail": "Live end-to-end screen store-backed; evidence admissibility applied at write time. Historical pre-guard disposition was CUT(subsumed); this receipt is the post-guard reclassification."
+  },
+  "cost": {
+    "standing_tokens": { "refusal": "not_instrumented" },
+    "fired_tokens": { "refusal": "not_instrumented" },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": "anthropic/claude-sonnet-5",
+    "prompt_fingerprint": "claude-code-2.1.197",
+    "schema_fingerprint": "2f76c933"
+  },
+  "measurements": {
+    "p0": { "value": 1.0, "passes": 3, "epochs": 3, "detail": "Bare-arm / Null screen ceiling under the live end-to-end run." },
+    "go_nogo": "NOT_APPLICABLE"
+  },
+  "source": {
+    "prose_path": "README.md",
+    "date": "2026-07-20",
+    "notes": "Value-class guard reclassification. Pre-guard live screen returned CUT(subsumed) at p0=1.00; skill is registered calibration, so above-bar p0 is wrong-instrument CANT_TELL_YET. Screen counts also in docs/observations/OBS-0005-append-only-evidence-design.md (batch-1) and the 2026-07-20 live re-screen."
+  },
+  "summary": "append-only-evidence-design reclassified to CANT_TELL_YET (wrong instrument): Null p0=1.00 is above the transformative bar, but value_class=calibration means the transformative-lift instrument cannot see this skill's value. CUT(subsumed) withheld."
+}

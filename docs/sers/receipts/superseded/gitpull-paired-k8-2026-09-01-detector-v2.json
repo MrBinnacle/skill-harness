@@ -1,0 +1,80 @@
+{
+  "sers_version": "1.2.0",
+  "skill_name": "git-pull-rebase-trap",
+  "verdict": "CANT_TELL_YET",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": "underpowered",
+  "value_class": "trap-discipline",
+  "wrong_instrument": false,
+  "declared_synthetic_control": false,
+  "evidence_admissibility": {
+    "status": "admissible",
+    "detail": "Re-ingested under detector v2 (#387) on 2026-09-02 as run 0cc7fce87e70. The write succeeded: one runs row, 8 samples per arm, one pin (5324feef...) identical across both arms, 8 full_vs_null verdicts. Zero Skill tool invocations with full description exposure is ADMISSIBLE under the #384 ruling (exposure is the treatment; pi_c is a stratifier, not a gate). The v1 detector refused this same pair on 2026-09-01; that refusal was an instrument defect, not a property of the evidence."
+  },
+  "delivery": {
+    "channel": "description_only",
+    "pi_c": {
+      "invocations": 0,
+      "trials": 8,
+      "hat": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.36941664755281917,
+      "confidence": 0.95,
+      "detector": "v1-skill-tool-call"
+    },
+    "exposure": {
+      "value": 1.0,
+      "passes": 8,
+      "epochs": 8
+    }
+  },
+  "cost": {
+    "standing_tokens": {
+      "refusal": "not_instrumented",
+      "detail": "Per-skill description tax in the listing was not measured in this run."
+    },
+    "fired_tokens": {
+      "refusal": "not_applicable",
+      "detail": "Zero detected invocations; the body never loaded."
+    },
+    "aux_tokens": {
+      "refusal": "not_applicable"
+    }
+  },
+  "instrument_identity": {
+    "extractor_model": "openrouter/anthropic/claude-sonnet-4.5",
+    "prompt_fingerprint": "sha256:2289ee87959b603b5a249430efbe80f998e16831b75772ebc99c5d725c80338c",
+    "schema_fingerprint": "command_succeeds+oracle_template:sha256:9d4101935cccf2d67620e7d580ede092fbaf2bc71a6ecde02cb066b67526139b"
+  },
+  "measurements": {
+    "null_pass_rate": {
+      "value": 0.0,
+      "passes": 0,
+      "epochs": 8,
+      "detail": "Bare-arm pass rate on the de-leaked prompt; every Null epoch rebased and failed the ancestry oracle."
+    },
+    "discordance_rate": {
+      "value": 0.75,
+      "passes": 6,
+      "epochs": 8,
+      "detail": "x=6 discordant of 8 paired epochs; Jeffreys 95% interval [0.408, 0.944]. Direction withheld per the registered micro-run template."
+    },
+    "go_nogo": "GO"
+  },
+  "source": {
+    "prose_path": "docs/findings/pi-c-detector-blind-to-description-channel.md",
+    "date": "2026-09-01",
+    "notes": "Paired k=8, one pin both arms (5324feef...), de-leaked prompt, subject via OpenRouter because the host holds no Anthropic key (registration names the direct API; deviation declared before launch). Logs at .private/microrun/batch1/gitpull/logs-stage1-paired/. Paired cells: full_only=6, null_only=0, both_pass=0, both_fail=2. GATE-2 READ NOT PERFORMED ON THIS RUN: the #389 paired-lane command binds to a RATIFIED design record and docs/ratifications/ holds no RAT-*.md, so the read refuses before it reaches a count comparison. The design predicts COUNT_MISMATCH here (k=8 pairs against the Amendment 4 recommended n=32), and that refusal is proven against a fixture by tests/test_cli_paired_gate2.py::TestCountMismatch::test_pilot_k8_vs_design_n32, not against this run_id. Ratification is the operator's (issue 391). Until it exists this receipt claims underpowered against the registered design on its own arithmetic, not on a Gate-2 verdict."
+  },
+  "subject_identity": {
+    "skill_id": "387989fed2eda3b083ea6ce8094ff0c3685e08e738b6ed58df97da8242dbcb96",
+    "harness_version": "0.2.3",
+    "metric_version": "0.3.0",
+    "implementation_hash": "abf32c6e64273d4301a32011817809dc59bf44e5581d40cbaa016c23dee816e9",
+    "arms": [
+      "null",
+      "full"
+    ]
+  },
+  "summary": "git-pull-rebase-trap paired k=8 (2026-09-01), re-ingested under detector v2: ADMISSIBLE. The Full arm's description was present in 8 of 8 epochs and the Null arm's in 0 of 8; Skill tool invocations were 0 of 8 (pi_c = 0.00, 95% CI [0.000, 0.369]). Discordance x = 6 of 8 cleared the pre-stated GO gate and the Null arm passed 0 of 8. The value arrived through the description channel, so delivery is description_only. The verdict stays CANT_TELL_YET with sub-reason underpowered: k = 8 is a Stage-1 micro-run and a GO datum for the sized run, not a KEEP. Direction is withheld per the registered micro-run template. This supersedes the 2026-09-01 receipt, which recorded the same measurements as inadmissible because detector v1 could not see the description channel."
+}

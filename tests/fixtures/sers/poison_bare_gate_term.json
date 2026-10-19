@@ -1,0 +1,21 @@
+{
+  "sers_version": "1.0.0",
+  "skill_name": "poison-bare-gate-term",
+  "verdict": "CANT_TELL_YET",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": null,
+  "value_class": "calibration",
+  "admissibility": { "status": "admissible" },
+  "cost": {
+    "standing_tokens": { "refusal": "not_applicable" },
+    "fired_tokens": { "refusal": "not_applicable" },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "instrument_identity": {
+    "extractor_model": "test-model",
+    "prompt_fingerprint": "a",
+    "schema_fingerprint": "b"
+  },
+  "source": { "prose_path": "README.md" },
+  "summary": "Poison: bare admissibility key instead of qualified evidence_admissibility."
+}

@@ -1,0 +1,111 @@
+# Finding: aggregation 95% CI coverage under sequential stopping
+
+**Severity:** `WRONG_NUMBER`  
+**Ticket:** #164 (coverage calibration by simulation); closed by #187  
+**Status:** closed — public report surface leads with the anytime-valid confidence sequence (`sequential_confidence_sequence_95`); legacy posterior interval retained as Bayesian-only (`posterior_credible_interval_95` / `credible_interval_95`). Sequential CS calibration suite green under the dense #187 grid.  
+**Harness:** `tests/test_aggregation_calibration.py` (legacy posterior characterization) + `tests/test_aggregation_cs_calibration.py` (production CS)  
+**Report:** `docs/assurance/calibration-report.md`  
+**Master seed (legacy):** `164_2026_08_09` · **Master seed (CS):** `187_2026_08_09`
+
+---
+
+## Summary
+
+Under the production sequential stopper (`BetaBinomialAccumulator` /
+`check_stop`, `N_MIN=8`, `N_INC=4`, `N_MAX=40`) the unpooled Beta(1+w, 1+n−w)
+equal-tailed 95% credible interval produced by `fit_skill` (K=1 path; the same
+interval `engine.aggregate_skill` surfaces) does **not** attain nominal
+frequentist coverage at every planted clause win-rate on the registered grid.
+
+| Grid label | Planted `p` | Seed | Coverage count `X` / 500 | Rate | Band `[465, 484]` | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| `null` | 0.50 | `16420260809` | **470** | 0.940 | inside | OK |
+| `small` | 0.65 | `16420260810` | **441** | 0.882 | **below** | **MISS** |
+| `large` | 0.85 | `16420260811` | **491** | 0.982 | **above** | **MISS** |
+
+Tolerance arithmetic (central 95% mass of `Binomial(N=500, π=0.95)`):
+
+```text
+lo = binom.ppf(0.025, n=500, p=0.95) = 465
+hi = binom.ppf(0.975, n=500, p=0.95) = 484
+E[X] = 475
+```
+
+## Direction and evidence strength (the two misses are not equivalent)
+
+The spec's severity vocabulary is fixed at four levels ranked by damage
+(WRONG_NUMBER > CORRUPTION > CRASH > HYGIENE) and the work order maps any
+coverage miss to WRONG_NUMBER; the vocabulary carries no direction qualifier.
+This section is that qualifier, so triage can rank the two grid points by
+damage rather than reading them as equivalent:
+
+- **`small` (p=0.65) — under-coverage, the dangerous direction.** X=441
+  sits 24 counts below the band edge; exact one-sided tail
+  P(X ≤ 441 | Binomial(500, 0.95)) ≈ 1.5e-9. Intervals here are effectively
+  narrower than their nominal label — false precision, the direction that
+  misleads a reader into trusting a pinned rate.
+- **`large` (p=0.85) — over-coverage, the conservative direction.** X=491
+  sits 7 counts above the band edge; exact one-sided tail
+  P(X ≥ 491) ≈ 1.7e-4 — decisive at this seed, though five orders of
+  magnitude weaker than the `small` shortfall, and measured on a single
+  master seed. The interval is wider than nominal here — a real breach of
+  the pre-registered two-sided band, but the deviation errs toward caution,
+  not false confidence.
+
+---
+
+## Why this is a finding, not a retune
+
+Standing rule (assurance-pass / #164): **coverage misses are findings, never a
+reason to adjust locked aggregation math** (Beta prior, equal-tailed `ppf`
+interval, stopper thresholds in `docs/INVARIANTS.md` §1, `N_MIN`/`N_INC`/`N_MAX`).
+
+Optional stopping is known to bias stopped sums as estimators of the underlying
+rate; equal-tailed Bayesian credible intervals are not exact frequentist CIs at
+every `(n, p)` even under fixed-n. The calibration harness makes the joint
+failure mode measurable and pins it with seeds.
+
+**Mechanism status: hypothesis, not established.** The direction pattern —
+under-coverage at p=0.65 (where 65% of arms run to `N_MAX`, mean n ≈ 33) and
+over-coverage at p=0.85 (where 98% stop early "passed" at mean n ≈ 15, and the
+equal-tailed Beta interval at small n is wide) — is *consistent* with the joint
+effect of stopping-induced selection and small-n interval width, but this run
+does not decompose the two: no fixed-n counterfactual at the matched
+n-distribution was simulated, so how much each contributes is not measured.
+A reader deciding what to change (stopper cadence vs interval construction)
+should not read a settled causal story off this document; it isn't one.
+
+---
+
+## Detection wiring
+
+- `tests/test_aggregation_calibration.py::test_coverage_within_binomial_tolerance_per_grid_point`
+  — parametrized over the legacy posterior grid (characterization retained).
+- Grid points `small` and `large` are marked
+  `@pytest.mark.xfail(strict=True, reason="finding: … this file …")` on the
+  **legacy posterior only** — never on the production CS.
+- Grid point `null` remains a hard assert (currently inside band).
+- #164 landing did not change production aggregation math. #187 closed this
+  finding by adding `predictable_plugin_betting_cs_v1`
+  (`src/skill_harness/aggregation/confidence_sequence.py`) beside the
+  posterior interval and leading the public report surface with the CS;
+  locked stopper constants and the posterior decision rule remain unchanged.
+- Production CS dense grid: `tests/test_aggregation_cs_calibration.py`
+  (`pytest -m calibration`).
+
+---
+
+## Reproduction
+
+```bash
+# Legacy posterior characterization (#164 pins; small/large strict-xfail)
+PYTHONHASHSEED=0 python -m pytest tests/test_aggregation_calibration.py -q
+
+# Production CS dense grid (#187; no xfail)
+PYTHONHASHSEED=0 python -m pytest tests/test_aggregation_cs_calibration.py -q -m calibration
+```
+
+Expected legacy: `null` passes; `small` and `large` xfail (strict). If an xfail
+unexpectedly passes, pytest fails strict-xfail — re-measure and update this
+finding before touching thresholds. Expected CS: all dense-grid cells green
+(coverage count ≥ lower tolerance; overcoverage OK).

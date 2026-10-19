@@ -1,0 +1,394 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-1/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "the exit-on-calibration-failure path returns 0 anyway, so a run whose boundary cells over-pass publishes its tables as if calibration held",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_calibration_fails"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-1/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "dc1b8ccc07f3615b486a4e122b955aeba6f1673e877897c22c3d3e120bdf4bb0",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-1",
+      "notes": [],
+      "obligation": "695-stage1a-exit",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_main_exits_non_zero_when_calibration_fails",
+        "tests/test_simulate_stage1a_regime_685.py::test_main_exits_zero_when_calibration_holds"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-2/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "the direct F-N grid shortcut compares the raw one-sided bound against the d-scale boundary instead of 2*bound - 1 (the #694 R1 defect)",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_equals_the_engine_bound_for_each_stage1_design[direct-1.0]"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-2/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "9247a64e65f8a3e4e91fc9779b49b37531c5753e16f4efdf7f62c533216ad38e",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-2",
+      "notes": [],
+      "obligation": "695-stage1a-direct-online-scale",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_equals_the_engine_bound_for_each_stage1_design[direct-1.0]",
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-1.0]"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-3/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 1,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "the direct F-N terminal bound drops the 2*bound - 1 scale",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_direct_terminal_bounds_equal_the_engine_bounds"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-3/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "7774b8569d4ff2ce6dc463a89d87806f3b65f072a88c9e0b33e8fcd9e1882210",
+        "tests_collected": 1,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-3",
+      "notes": [],
+      "obligation": "695-stage1a-direct-terminal-scale",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_direct_terminal_bounds_equal_the_engine_bounds"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-4/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "the grid compares null allocations at a fixed pair cap again, so allocations are no longer compared at equal total epochs",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_stage1_grid_holds_each_epoch_budget_constant_across_null_allocations",
+        "tests/test_simulate_stage1a_regime_685.py::test_stage1_grid_has_expected_structure"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-4/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "dcb0105591a5aaf7c28f028253212efcb3479312c97065cfaca62987994b785e",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-4",
+      "notes": [],
+      "obligation": "695-stage1a-equal-epoch-grid",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_stage1_grid_holds_each_epoch_budget_constant_across_null_allocations",
+        "tests/test_simulate_stage1a_regime_685.py::test_stage1_grid_has_expected_structure"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-5/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "the exact F-P fallback swaps pass_alpha for FUTILITY_ALPHA (the #694 M1b survivor), so the fallback tests at the wrong level",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_exact_fp_fallback_uses_the_registered_pass_alpha"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-5/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "cb5cc5cbaaf1d3a31aee38af92f47abe116c35ef4c10e54a225a21c6c0a19605",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-5",
+      "notes": [],
+      "obligation": "695-stage1a-fp-exact-alpha",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_exact_fp_fallback_uses_the_registered_pass_alpha",
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-1.0]"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-6/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "the direct F-N exact fallback evaluates the bound at alpha/2 instead of pass_alpha (the exact-path defect the #704 verdict left open; the pure always-true form is observationally equivalent on this grid)",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_direct_fn_exact_fallback_is_pinned_to_the_engine"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-6/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "c7b1b7feda2d912f67bd1c17979cddc4eac5c0d0f922e00e08f477347bed567b",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-6",
+      "notes": [],
+      "obligation": "695-stage1a-fn-exact-alpha",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_direct_fn_exact_fallback_is_pinned_to_the_engine",
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_equals_the_engine_bound_for_each_stage1_design[direct-1.0]"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-7/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "the union F-N exact fallback is forced true (the #694 M2b survivor)",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_union_fn_exact_fallback_is_pinned_to_the_engine",
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-2.0]"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-7/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "2881618bf204c66bfdb50bd2f0aa49ae305f8a9e07f55a9d5b4cd76d306d4baa",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-7",
+      "notes": [],
+      "obligation": "695-stage1a-union-fn-exact-always-true",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_union_fn_exact_fallback_is_pinned_to_the_engine",
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_equals_the_engine_bound_for_each_stage1_design[union-2.0]"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-8/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "the list high price rate is shifted from $0.087 to $0.078 (the #694 M5 survivor)",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_price_constants_are_the_registered_rates"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-8/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "c783580e9eef97f9b2dc2bd64734f987e7c59db54f7e8a75b0a76f52f2278c2f",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-8",
+      "notes": [],
+      "obligation": "695-stage1a-price-hi",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_price_constants_are_the_registered_rates",
+        "tests/test_simulate_stage1a_regime_685.py::test_price_function"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-9/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "the cap price rate is shifted from $0.30 to $0.03 (the #694 M6 survivor)",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_cap_price_string_carries_the_cap_rate",
+        "tests/test_simulate_stage1a_regime_685.py::test_price_constants_are_the_registered_rates"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-9/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "e425fcdd4c3827fec55449d2194cd207603f0d65dc1983f91e2ab3d022398bd2",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-9",
+      "notes": [],
+      "obligation": "695-stage1a-price-cap",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_cap_price_string_carries_the_cap_rate",
+        "tests/test_simulate_stage1a_regime_685.py::test_price_constants_are_the_registered_rates"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-10/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "role() uses d < 0.15 instead of d <= 0.15 (the #694 M8 survivor), so d = 0.15 is relabelled from no-lift to a real effect",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_role_labels_d_equal_to_0_15_as_no_lift"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-10/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "f290ced04e99d9d9af39bd0797425103ca12faebf7629e4d22f9ba11a1ec1eae",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-10",
+      "notes": [],
+      "obligation": "695-stage1a-role-boundary",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_role_labels_d_equal_to_0_15_as_no_lift",
+        "tests/test_simulate_stage1a_regime_685.py::test_design_fields_at_baseline"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-11/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "pass_calibration_holds reads look 1 instead of the cap (the #694 M9 survivor), so a loosened rule that fails only at the cap is called calibrated",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_calibration_holds_reads_the_cap_look_not_look_one"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-11/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "83f9f391ef3912d827b77a39b35aba45c17db1a6e83c047f76ff462614842031",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-11",
+      "notes": [],
+      "obligation": "695-stage1a-calibration-look-one",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_calibration_holds_reads_the_cap_look_not_look_one",
+        "tests/test_simulate_stage1a_regime_685.py::test_main_exits_zero_when_calibration_holds"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-12/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "description": "headline filters on a stale 97-pair count instead of PAIRS_CAP (the #694 M10 survivor)",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_headline_reads_the_pairs_cap_designs_in_the_results"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-fwb5or1z/M-S1A-12/scripts/screens/419/simulate_stage1a_regime_685.py",
+        "source_digest": "8b94af87dc72218bbcc96241791ea49f7509724e5078609cbf728b06d7477cd0",
+        "tests_collected": 2,
+        "worktree_head": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38"
+      },
+      "mutant_id": "M-S1A-12",
+      "notes": [],
+      "obligation": "695-stage1a-headline-pairs",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_headline_reads_the_pairs_cap_designs_in_the_results",
+        "tests/test_simulate_stage1a_regime_685.py::test_null_mask_1_to_1"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "66ea37bf69ebdbdb4960fc2652555b69b5aa5a38",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee"
+  },
+  "production_tree_digest_before": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.15",
+  "target_digests": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee"
+  },
+  "target_files": [
+    "scripts/screens/419/simulate_stage1a_regime_685.py"
+  ]
+}

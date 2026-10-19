@@ -1,0 +1,112 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-9immq63e/M-N1/src/skill_harness/subject/ingest.py",
+        "source_digest": "d3064dd5c232d878b5c98a940bf3f7348c23747572f87f68e8cb14bbc31dea48",
+        "tests_collected": 2,
+        "worktree_head": "8b6aa47771f7c5c81257d492f68baac25f3e32fe"
+      },
+      "description": "remove the model-layer constraint: ParsedSample.score_value accepts NaN again",
+      "killing_assertions": [
+        "tests/test_paired_arm_epoch_adversarial.py::test_nan_score_is_refused_or_fails_closed",
+        "tests/test_subject_ingest.py::test_parsed_sample_refuses_non_finite_score_at_the_model_layer"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-9immq63e/M-N1/src/skill_harness/subject/ingest.py",
+        "source_digest": "558ff184815e86d2f67a0273d7a11aed758a8102503d346968501d3637796e99",
+        "tests_collected": 2,
+        "worktree_head": "8b6aa47771f7c5c81257d492f68baac25f3e32fe"
+      },
+      "mutant_id": "M-N1",
+      "notes": [],
+      "obligation": "363-model-layer",
+      "selection": [
+        "tests/test_paired_arm_epoch_adversarial.py::test_nan_score_is_refused_or_fails_closed",
+        "tests/test_subject_ingest.py::test_parsed_sample_refuses_non_finite_score_at_the_model_layer"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-9immq63e/M-N2/src/skill_harness/subject/ingest.py",
+        "source_digest": "d3064dd5c232d878b5c98a940bf3f7348c23747572f87f68e8cb14bbc31dea48",
+        "tests_collected": 1,
+        "worktree_head": "8b6aa47771f7c5c81257d492f68baac25f3e32fe"
+      },
+      "description": "disable the parse-path finite guard in _score_to_float",
+      "killing_assertions": [
+        "tests/test_subject_ingest.py::test_score_to_float_refuses_non_finite_scores"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-9immq63e/M-N2/src/skill_harness/subject/ingest.py",
+        "source_digest": "689c74f75da2d4fc515a89df12569ef464d721a50074ac5aa419068b54d2c8e9",
+        "tests_collected": 1,
+        "worktree_head": "8b6aa47771f7c5c81257d492f68baac25f3e32fe"
+      },
+      "mutant_id": "M-N2",
+      "notes": [],
+      "obligation": "363-parse-path",
+      "selection": [
+        "tests/test_subject_ingest.py::test_score_to_float_refuses_non_finite_scores"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "/tmp/mutation-receipt-9immq63e/M-N3/src/skill_harness/subject/ingest.py",
+        "source_digest": "d3064dd5c232d878b5c98a940bf3f7348c23747572f87f68e8cb14bbc31dea48",
+        "tests_collected": 1,
+        "worktree_head": "8b6aa47771f7c5c81257d492f68baac25f3e32fe"
+      },
+      "description": "narrow the parse-path guard to NaN only, letting an infinite score through",
+      "killing_assertions": [
+        "tests/test_subject_ingest.py::test_score_to_float_refuses_non_finite_scores"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "/tmp/mutation-receipt-9immq63e/M-N3/src/skill_harness/subject/ingest.py",
+        "source_digest": "507dc5c66a58d8ec83cffdba3c6c523ebdd1182a2451b3b487322a19f670832c",
+        "tests_collected": 1,
+        "worktree_head": "8b6aa47771f7c5c81257d492f68baac25f3e32fe"
+      },
+      "mutant_id": "M-N3",
+      "notes": [],
+      "obligation": "363-parse-path",
+      "selection": [
+        "tests/test_subject_ingest.py::test_score_to_float_refuses_non_finite_scores"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "8b6aa47771f7c5c81257d492f68baac25f3e32fe",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "src/skill_harness/subject/ingest.py": "d3064dd5c232d878b5c98a940bf3f7348c23747572f87f68e8cb14bbc31dea48"
+  },
+  "production_tree_digest_before": {
+    "src/skill_harness/subject/ingest.py": "d3064dd5c232d878b5c98a940bf3f7348c23747572f87f68e8cb14bbc31dea48"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.15",
+  "target_digests": {
+    "src/skill_harness/subject/ingest.py": "d3064dd5c232d878b5c98a940bf3f7348c23747572f87f68e8cb14bbc31dea48"
+  },
+  "target_files": [
+    "src/skill_harness/subject/ingest.py"
+  ]
+}

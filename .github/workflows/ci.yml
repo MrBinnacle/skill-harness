@@ -1,0 +1,645 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # Integration branches are gated too. A pull request into a long-lived
+    # agent/** branch runs the same gate a main-targeted one does, so defects
+    # stay attributable to the change that introduced them instead of surfacing
+    # together when the branch finally merges (#492).
+    branches: [main, 'agent/**']
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # GATED BY PROTECTED LINT (#557): not a branch-protection context itself, but
+  # lint fails when this gate refuses. A skipped matrix job reads as successful
+  # to branch protection, so the protected lint context must carry the refusal.
+  dependency-anchor:
+    name: Pre-flight dependency anchor check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+      # #557: this isolated gate must run before a matrix cell resolves the
+      # changed constraints. A pydantic-core bump above pydantic's exact pin
+      # otherwise fails in every cell's Install step before a same-job check
+      # can execute.
+      - name: Install anchor-check dependency
+        run: python -m pip install -c requirements-ci.txt packaging
+      - name: Pre-flight dependency anchor check
+        shell: bash
+        run: |
+          git fetch origin main:refs/remotes/origin/main --depth=1
+          git diff origin/main -- requirements-ci.txt > "$RUNNER_TEMP/dep-anchor.diff"
+          python scripts/check_dependency_anchor.py --requirements requirements-ci.txt --diff "$RUNNER_TEMP/dep-anchor.diff"
+
+  lint:
+    needs: dependency-anchor
+    if: always()
+    name: Lint + format
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # A failed dependency-anchor would otherwise skip the matrix. GitHub
+      # accepts a skipped required context, so make the protected lint context
+      # red before it resolves or installs the broken constraints.
+      - name: Refuse a failed dependency anchor
+        if: needs.dependency-anchor.result != 'success'
+        run: exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements-ci.txt -e ".[dev]"
+      - name: ruff check
+        run: ruff check src tests scripts
+      - name: ruff format --check
+        run: ruff format --check src tests scripts
+
+  typecheck:
+    name: mypy --strict
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements-ci.txt -e ".[dev]"
+      - name: mypy
+        # Full strict scope (src + tests) restored 2026-07-10 — repo issue #2
+        # burn-down; the tests/ override relaxation of 2026-07-09 is removed.
+        run: mypy --strict src/ tests/ scripts/drift_check.py scripts/release_gate.py scripts/check_dependency_anchor.py
+
+  test:
+    needs: dependency-anchor
+    name: Test (${{ matrix.os }} · py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    # 10 -> 15 (#56): the slow-marked full-grid frontier test pushed the
+    # windows py3.13 cell to 9m20s against the old 10-minute ceiling (40s of
+    # headroom); #57/#58 add more tests. Headroom, not license - if a cell
+    # ever needs >15, measure which tests dominate (see #510) and thin those,
+    # never bump blindly. The `slow` marker is advisory only: local deselection
+    # via -m 'not slow' (pyproject.toml). No CI job selects or deselects on it,
+    # so it is not a CI routing remedy and must not be called a lane here.
+    #
+    # 15 -> 25: NOT blind, and NOT suite growth. The SAME suite ran windows
+    # py3.13 in 12m23s on one PR and 15m08s on another the same day - a ~23%
+    # runner-variance swing that straddles the ceiling and kills passing runs.
+    # The kill presents as conclusion "cancelled", indistinguishable from a
+    # duplicate-run cancel until you read the job annotation ("exceeded the
+    # maximum execution time"); it has now been misdiagnosed that way once.
+    # Deleting coverage to absorb runner variance is the wrong trade. The
+    # measure-then-thin clause above still governs genuine suite growth -
+    # measure which it is before bumping again.
+    # Observed windows range at this pin: 10m10s - 15m08s. The sibling
+    # calibration job, which runs shorter cells, already sits at 40.
+    timeout-minutes: 25
+    # PYTHONHASHSEED=0 required by tests/oracles/tier1 autouse fixture for
+    # A33 mechanical-validity bit-equality discipline.
+    #
+    # SKILL_HARNESS_REQUIRE_VALE=1: this job installs Vale in a step below, so a
+    # missing binary here is a regressed install and must fail rather than skip.
+    # Jobs that do not install Vale leave this unset and skip those tests. It
+    # belongs in THIS block: a second `env:` key on the same job is not a merge,
+    # it silently replaces the first, so the variable would never have been set.
+    #
+    # COVERAGE_CORE=sysmon (#510): coverage.py collects through CPython's sys.monitoring
+    # API instead of its settrace callback. Measured on this branch's dominant fixture,
+    # tests/test_aggregation_fit_ebmom_recovery.py, with pytest -p no:randomly:
+    # 664s with the default core, 152s with sysmon, 142s with coverage off entirely.
+    # Instrumentation cost 522s and sysmon recovers 512 of them. The reported coverage is
+    # IDENTICAL across both coverage arms -- 10298 statements, 8825 missed, 14% -- which is
+    # what #510's third acceptance criterion requires, and is why the cell keeps --cov
+    # rather than dropping it. Requires Python 3.12+; the matrix is 3.12 and 3.13.
+    # Re-measure before enabling branch coverage: these runs are statement-only, and there
+    # is no [tool.coverage] table or .coveragerc in the repository.
+    #
+    # COLUMNS=200 (#561) pins the default width for deterministic Rich tables.
+    # #564 constructs the Console at render time, so a test's
+    # CliRunner(env={"COLUMNS": "220"}) or 260 override now applies to that invocation.
+    # The job setting remains the baseline for tests that do not declare their own width.
+    env:
+      PYTHONHASHSEED: "0"
+      SKILL_HARNESS_REQUIRE_VALE: "1"
+      COVERAGE_CORE: "sysmon"
+      COLUMNS: "200"
+      # #589: the ONE cell that runs the rendered-geometry browser measurement. Every
+      # other cell skips those tests, and tests/test_ci_geometry_cell_589.py fails
+      # unless exactly one cell is designated here, because a skip nobody counts is a
+      # dead control.
+      #
+      # windows-latest on 3.13, which REVERSES the choice in
+      # docs/design/rendered-geometry-harness-S464.md. That document picked
+      # ubuntu-latest on 3.13 because that cell already uploads the coverage artifact
+      # and is therefore a convenient host for the JSON report. Artifact convenience is
+      # not the governing reason. Every measurement behind this harness was taken on
+      # Windows Chromium 153, and the stylesheet's font stack (-apple-system,
+      # BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif) resolves to a different
+      # face on Linux, where no reading has ever been taken. The ink walk could
+      # legitimately report overflow on Ubuntu that nobody has measured, and that red
+      # would be a platform difference wearing a defect's clothes. Designate the
+      # platform the numbers came from.
+      #
+      # The steps below key off this value instead of repeating the condition, so the
+      # designation has exactly one site in this file.
+      SKILL_HARNESS_GEOMETRY_CELL: ${{ (matrix.os == 'windows-latest' && matrix.python-version == '3.13') && '1' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements-ci.txt -e ".[dev]"
+      - name: Install the geometry extra
+        if: env.SKILL_HARNESS_GEOMETRY_CELL == '1'
+        # Only the designated cell installs playwright. The other three stop at
+        # `.[dev]` above, which is the property that keeps `pip install -e ".[dev]"`
+        # browser-free for a contributor as well as for CI.
+        run: python -m pip install -c requirements-ci.txt -e ".[dev,geometry]"
+      - name: Install Chromium
+        if: env.SKILL_HARNESS_GEOMETRY_CELL == '1'
+        # Its own step, so a failed browser download is attributable on sight instead
+        # of reading as a dependency-resolution failure. The distribution and the
+        # browser binary are two installs and they fail for unrelated reasons.
+        run: python -m playwright install chromium
+      - name: Cache Vale binary
+        id: cache-vale
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # runner.temp is OS-native; actions/cache resolves it on Windows.
+          # /tmp/vale-bin is not a Windows path the cache action can restore.
+          path: ${{ runner.temp }}/vale-bin
+          key: vale-${{ runner.os }}-3.9.1
+      - name: Install Vale
+        if: steps.cache-vale.outputs.cache-hit != 'true'
+        # Pinned to 3.9.1 — keep in sync with the vale job and with
+        # tests/test_vale_doctrine_agreement.py (enforced by DC-18).
+        #
+        # -S (not -s): a failed curl now prints its reason instead of
+        # feeding tar empty input, which previously produced a
+        # misleading "not in gzip format" on every network error.
+        #
+        # GITHUB_TOKEN: avoids the 60-per-hour unauthenticated rate
+        # limit on shared runners — the same token the drift-check job
+        # already takes.
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          case "${{ runner.os }}" in
+            Linux)
+              mkdir -p "${RUNNER_TEMP}/vale-bin"
+              curl -SfL "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz" \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                | tar xz -C "${RUNNER_TEMP}/vale-bin" vale
+              chmod +x "${RUNNER_TEMP}/vale-bin/vale"
+              ;;
+            Windows)
+              # Two Windows traps restored from the pre-cache install (both
+              # observed on runners rather than anticipated):
+              # 1. RUNNER_TEMP is a Windows path (D:\a\_temp). Hand it to
+              #    Windows Python via cygpath -w; never to GNU tar.
+              # 2. vale.zip lands in the workspace cwd as a relative path so
+              #    Windows Python can open it; an MSYS /tmp/... path is not a
+              #    path Windows Python can read.
+              # chmod +x is Linux-only: the Windows artifact is vale.exe.
+              curl -SfL "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Windows_64-bit.zip" \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -o vale.zip
+              python -c "import zipfile,sys,os; d=os.path.join(sys.argv[1],'vale-bin'); os.makedirs(d,exist_ok=True); zipfile.ZipFile('vale.zip').extract('vale.exe', d)" "$(cygpath -w "$RUNNER_TEMP")"
+              rm -f vale.zip
+              ;;
+            *)
+              echo "Unsupported runner OS: ${{ runner.os }}"
+              exit 1
+              ;;
+          esac
+      - name: Install Vale to system path
+        # Separate step so a failure here is distinguishable from a test
+        # failure at the check list — the original defect (#488).
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Linux)
+              cp "${RUNNER_TEMP}/vale-bin/vale" /usr/local/bin/vale
+              VALE_DIR=/usr/local/bin
+              ;;
+            Windows)
+              mkdir -p "$HOME/bin"
+              python -c "import shutil,sys,os; shutil.copy(os.path.join(sys.argv[1],'vale-bin','vale.exe'), sys.argv[2])" "$(cygpath -w "$RUNNER_TEMP")" "$(cygpath -w "$HOME/bin/vale.exe")"
+              VALE_DIR="$HOME/bin"
+              cygpath -w "$VALE_DIR" >> "$GITHUB_PATH"
+              ;;
+          esac
+          PATH="$VALE_DIR:$PATH" vale --version
+      - name: pytest
+        # `-m "not live and not calibration and not assurance"` mirrors local gate; live
+        # tests require ANTHROPIC_API_KEY (not provisioned in CI). Dense CS calibration
+        # (#187) runs in the dedicated calibration job below — do not fold it into this
+        # 15m cell. The assurance lane (#168) runs on a schedule in assurance.yml for the
+        # same reason: #170 alone specifies >=1h of fuzz, which no PR cell can absorb.
+        #
+        # --durations (#509): an overrun used to die with GitHub's "exceeded the maximum
+        # execution time" and nothing else, so every overrun read as capacity and the
+        # ceiling above was raised twice on that reading. The slowest 25 phases over 1s
+        # now print with their node ids; faulthandler_timeout in pyproject.toml names
+        # the running test when a single phase hangs. tests/test_ci_test_cell_attribution_509.py
+        # reads this line and fails if either goes.
+        #
+        # -n 4 (#561): pytest-xdist splits the suite across four worker processes.
+        # Four is the processor count read off the runner rather than taken from
+        # documentation: python -c "import os; print(os.cpu_count())" printed 4 on
+        # windows-latest in runs 34881350571 and 34881353876. That is the cell this
+        # ticket measured. ubuntu-latest was not probed, so the number is written as a
+        # measurement of windows-latest and an assumption about the rest of the matrix.
+        # A literal is used rather than `auto` so a change in the runner image lands
+        # here as a deliberate edit.
+        #
+        # Measured on the windows-latest py3.12 cell, which is the critical path. One
+        # CI run per arm, pytest's own reported wall clock:
+        #   1191.71s  no -n, with --cov      run 34878186948, main at ab29e6a
+        #    486.85s  -n 4,  with --cov      run 34881212524
+        #   1104.16s  no -n, without --cov   run 34881353876
+        #    515.90s  -n 4,  without --cov   run 34881350571
+        # Pass, skip and xfail counts are identical in all four arms and identical to
+        # the main run the first arm came from: 3037 passed, 14 skipped, 2 xfailed.
+        # The reported coverage is IDENTICAL across the two --cov arms, 11589
+        # statements, 860 missed, 93%, which is the property #510 required of sysmon.
+        # pytest-cov combines its per-worker data correctly here.
+        #
+        # What these numbers do NOT establish, stated because one run per arm is one
+        # sample and this cell's variance is why the ceiling above sits at 25. Two more
+        # -n 4 with --cov samples exist: 628.25s in run 34884572303, and 729.58s in run
+        # 34890125765, which is the first run on main after this change merged. Three
+        # serial with --cov samples on main span 1093.63s to 1331.62s. The speedup is
+        # therefore a range of roughly 1.5x to 2.7x, not the 2.45x the fastest pair on
+        # its own suggests. The floor is the fastest serial sample over the slowest
+        # parallel one, 1093.63 / 729.58 = 1.50. The ceiling is the slowest serial over
+        # the fastest parallel, 1331.62 / 486.85 = 2.74.
+        #
+        # WITHDRAWN: this comment previously gave that range as 1.7x to 2.7x. The floor
+        # was computed when 628.25s was the slowest parallel sample on record, giving
+        # 1093.63 / 628.25 = 1.74. The 729.58s sample post-dates it and moves the floor
+        # to 1.50. The ceiling is unchanged. A single run on main was enough to fall
+        # outside the stated range, so read this range as the samples to date and not
+        # as a bound.
+        #
+        # The without-cov arm under -n 4 came back SLOWER than the
+        # with-cov arm by 29s, which is a negative instrumentation cost and so is
+        # variance rather than a finding. Do not project any of this to a larger -n.
+        #
+        # Seed reproducibility under -n (#561 item 3), measured on CI in run
+        # 34882784013. A deterministic failure and an order-dependent failure were
+        # injected, then one seed was run three times on one runner: twice under -n 4
+        # and once serially. All three produced the same failure set. The printed seed
+        # still reproduces a failure under xdist, so the --randomly-seed line above is
+        # not decoration.
+        # The reproduction is luck rather than a guarantee, and the difference matters.
+        # Measured locally with a per-worker execution log, five -n 4 runs at one seed
+        # produced five DIFFERENT worker assignments, while two serial runs at the same
+        # seed were byte-identical. The seed fixes the collection order; it does not fix
+        # which worker runs a test or what ran before it in that process. A failure
+        # intrinsic to one test reproduces from the seed. A failure that depends on what
+        # ran earlier in the same process may not.
+        run: pytest -q -n 4 --randomly-seed=$(python -c "import secrets; print(secrets.randbits(32))") -m "not live and not calibration and not assurance" --cov=src/skill_harness --cov-report=term-missing --durations=25 --durations-min=1.0
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-report
+          path: .coverage
+          if-no-files-found: ignore
+
+  # NON-required (#563): not a branch-protection context. Nothing else runs the
+  # calibration marker at merge time, so a red here is advisory.
+  calibration:
+    name: Calibration CS grid (${{ matrix.os }} · py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    # Dense #187 grid is ~10× the #164 grid. Own job so the matrix cell's 15m
+    # cap is never raised. Budget windows at 2× linux (~30m); headroom to 40.
+    timeout-minutes: 40
+    env:
+      PYTHONHASHSEED: "0"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements-ci.txt -e ".[dev]"
+      - name: pytest calibration
+        run: pytest -q -m calibration --tb=short
+
+  # NON-required (#563): not a branch-protection context. A real failure still
+  # blocks a merge through test_no_banned_copy_on_public_surfaces in the required
+  # Test job, which scans the real tree.
+  structural-bans:
+    name: Structural bans (raw sqlite3.connect / oracle_verdicts / timestamp ORDER BY)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      # S5: pinned — see depersonalization-gate.yml's identical step for the
+      # rationale (any future release runs immediately in this job otherwise).
+      - run: python -m pip install pre-commit==4.6.0
+      - name: sqlite3.connect() ban (A23 Sec.3 PRAGMA/FK discipline, PRD.md #17a)
+        run: pre-commit run ban-raw-sqlite-connect --all-files
+      - name: oracle_verdicts raw-access allowlist (A29, PRD.md #17)
+        run: pre-commit run ban-raw-oracle-verdicts --all-files
+      - name: timestamp-final ORDER BY ban (deterministic tie-break on append-only tables)
+        run: pre-commit run ban-timestamp-final-order-by --all-files
+      - name: public-surface copy bans
+        run: pre-commit run ban-public-surface-copy --all-files
+
+  # NON-required (#563): not a branch-protection context, and kept that way because
+  # DC-17 calls api.github.com, which would make GitHub's availability a merge
+  # dependency. A real failure still blocks a merge through
+  # test_real_tree_is_green_and_exits_zero in the required Test job.
+  drift-check:
+    name: Drift check (locked contracts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      # Declarative contract table (#43/#53): pass-rule thresholds, sampling
+      # schedule, token bans, estimand vocabulary, registered claim sentences.
+      # Green output prints exactly what is covered — never more (F7).
+      # DC-17 reads issue state from api.github.com and now FAILS CLOSED when
+      # it cannot: "could not read" and "no problem found" are different
+      # findings. Unauthenticated, that lookup shares a 60-per-hour budget with
+      # every other job on the runner's IP, which is how PR #518 went red on
+      # exactly one of four cells. The token raises the budget and is the same
+      # one the release-gate job below already takes.
+      - name: Run drift check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/drift_check.py
+
+  # NON-required (#563): not a branch-protection context. A real failure still
+  # blocks a merge through tests/test_release_gate_real_tree.py (#569) in the
+  # required Test job.
+  release-gate:
+    name: Release gate (surface lockstep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      # Same gate publish.yml runs before building a release artifact:
+      # version lockstep, rolled CHANGELOG, README banner + PyPI render
+      # safety, workflow SHA pins. Running it on every push/PR means a
+      # stale surface is caught at review time, not tag time.
+      - name: Run release gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/release_gate.py
+
+  # NON-required (#172): additive supply-chain check. Branch-protection changes
+  # are deliberately outside this ticket; pip-audit's exit status gates this job.
+  dependency-audit:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      - name: Install the constrained CI environment
+        run: python -m pip install -c requirements-ci.txt -e ".[dev]" pip-audit
+      - name: Audit installed dependencies
+        run: python -m pip_audit --local
+
+  # NON-required (#184): deliberately omitted from all-green / branch-protection
+  # required-check names. Fails the job on dead links in public prose; does not
+  # block merge by required-status configuration.
+  #
+  # The job name stays "Link check (docs)" although #288 widened its coverage to
+  # the generated site. Renaming a check is a branch-protection edit, and #288
+  # ruled that edit out of scope.
+  linkcheck:
+    name: Link check (docs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      # The same install pages.yml runs before building the published site. The
+      # site generator validates every receipt through jsonschema, which is a
+      # dev extra, so a bare `-e .` cannot build the site at all.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements-ci.txt -e ".[dev]"
+      # #288: the site's links were unchecked. They are template output rather
+      # than hand-written prose, so the argument for skipping them was that they
+      # cannot rot -- an argument, not a check. This builds the same artifact
+      # pages.yml publishes and hands it to the same link checker.
+      #
+      # The marker is deliberately not a bare commit sha. This build is never
+      # deployed, and pages.yml's verify step greps the published page for its
+      # own marker; a colliding value here would be a marker that matches a page
+      # this job never published.
+      - name: Build the receipts site
+        run: |
+          python -m skill_harness.sitegen \
+            --output site \
+            --marker "linkcheck-${{ github.sha }}-${{ github.run_id }}"
+      - name: Link check README + docs + generated site
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          # Remap same-repo blob/tree/main URLs onto the checked-out tree so a
+          # PR that adds both a doc and a README link to it is not failed for
+          # a main-branch 404 before merge. External URLs still hit the network.
+          #
+          # The third remap is the same rule for the site's own origin. Every
+          # page emits an absolute canonical and og:url for itself, so without
+          # it lychee fetches the published address of a page this PR is adding
+          # and gets the 404 that adding it is meant to fix. Measured on #584:
+          # the only failing link was the new 404 page's own canonical URL. A
+          # gate that fails any PR introducing a page is a gate that blocks its
+          # own inputs.
+          #
+          # The pattern requires at least one character after the slash, so the
+          # bare site root is left to the network. That URL is published today
+          # and a 404 on it is a real failure worth catching.
+          args: >-
+            --verbose
+            --no-progress
+            --accept 200,206,429
+            --remap 'https://github.com/MrBinnacle/skill-harness/blob/main/(.*) file://${{ github.workspace }}/$1'
+            --remap 'https://github.com/MrBinnacle/skill-harness/tree/main/(.*) file://${{ github.workspace }}/$1'
+            --remap 'https://mrbinnacle.github.io/skill-harness/(.+) file://${{ github.workspace }}/site/$1'
+            README.md
+            "docs/**/*.md"
+            "site/**/*.html"
+          fail: true
+
+  # NON-required (#563): not a branch-protection context. A red here is advisory.
+  vale:
+    name: Vale (prose lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Promoted by ticket #108 (the cross-repo Taste-promotion ticket): five of the six Taste rows are
+    # ERROR level now (see .vale.ini per-row overrides), and this job gates on them --
+    # it is in all-green.needs and _REQUIRED_JOB_IDS below. Generic-ness stays warning
+    # (two hits sit in an ADR this pass's canonical-document guard would not let it
+    # touch; see .vale.ini for the full reason), so it reports without failing the job.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache Vale binary
+        id: cache-vale
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/vale-bin
+          key: vale-${{ runner.os }}-3.9.1
+      - name: Install Vale
+        if: steps.cache-vale.outputs.cache-hit != 'true'
+        # Pinned to 3.9.1 — keep in sync with the test job and with
+        # tests/test_vale_doctrine_agreement.py (enforced by DC-18).
+        #
+        # -S (not -s): a failed curl now prints its reason instead of
+        # feeding tar empty input, which previously produced a
+        # misleading "not in gzip format" on every network error.
+        #
+        # GITHUB_TOKEN: avoids the 60-per-hour unauthenticated rate
+        # limit on shared runners — the same token the drift-check job
+        # already takes.
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/vale-bin"
+          curl -SfL "https://github.com/errata-ai/vale/releases/download/v3.9.1/vale_3.9.1_Linux_64-bit.tar.gz" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            | tar xz -C "${RUNNER_TEMP}/vale-bin" vale
+          chmod +x "${RUNNER_TEMP}/vale-bin/vale"
+      - name: Install Vale to system path
+        # Separate step so a failure here is distinguishable from a prose
+        # finding at the check list — the original defect (#488).
+        run: |
+          cp "${RUNNER_TEMP}/vale-bin/vale" /usr/local/bin/vale
+          vale --version
+      - name: Run Vale on fixtures
+        # Poison/fail fixtures are DESIGNED to trigger a finding; a nonzero exit here
+        # is proof the rule fires, not a build defect, so this step never gates.
+        continue-on-error: true
+        run: |
+          vale --config .vale.ini fixtures/vale/
+      - name: Run Vale on prose (report, all rows)
+        # Warning-level rows (currently Generic-ness) are visible here without gating.
+        # The error-level gate is the step below.
+        continue-on-error: true
+        run: |
+          vale --config .vale.ini --glob='*.md' README.md docs/
+      - name: Run Vale on prose (gate, error-level rows only)
+        # --glob='*.md' is load-bearing, and it is here because a screenshot reddened
+        # this gate. Vale walks EVERY file under docs/ regardless of type, and
+        # .vale.ini applies the Taste style under a `[*]` section, so the first PNG
+        # committed under docs/ produced thirteen Dressing errors -- each one a glyph
+        # Vale found by decoding image bytes as text. The prose was never at fault.
+        #
+        # An empty BasedOnStyles under an extension glob in .vale.ini does NOT fix
+        # this; it was tried and the thirteen errors survived. The flag is Vale's
+        # documented mechanism and it is the one that works.
+        #
+        # This narrows the walk from 146 files to 96. The 50 dropped are .py and .log
+        # files under docs/ that contributed no findings and were never this job's
+        # subject: it lints prose, and prose here means markdown. Any image, archive
+        # or PDF added under docs/ would have reddened this gate the same way, so the
+        # trap was latent rather than specific to one file.
+        run: |
+          vale --config .vale.ini --minAlertLevel=error --glob='*.md' README.md docs/
+
+  # NON-required (#563): this job is not itself a branch-protection context. Branch
+  # protection on main requires exactly: Lint + format, mypy --strict, the four
+  # Test cells, and residue-check. Every other job in this file is advisory at
+  # merge time. Revisit this comment whenever branch protection is edited.
+  all-green:
+    name: All checks green
+    needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate, vale]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Verify all dependent jobs succeeded
+        run: |
+          if [[ "${{ needs.lint.result }}" != "success" ]] || \
+             [[ "${{ needs.typecheck.result }}" != "success" ]] || \
+             [[ "${{ needs.test.result }}" != "success" ]] || \
+             [[ "${{ needs.calibration.result }}" != "success" ]] || \
+             [[ "${{ needs.structural-bans.result }}" != "success" ]] || \
+             [[ "${{ needs.drift-check.result }}" != "success" ]] || \
+             [[ "${{ needs.release-gate.result }}" != "success" ]] || \
+             [[ "${{ needs.vale.result }}" != "success" ]]; then
+            echo "One or more CI jobs failed. Not every job here is a required check; see the comment above this job."
+            exit 1
+          fi
+          echo "All checks passed."

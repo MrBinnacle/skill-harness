@@ -1,0 +1,16 @@
+{
+  "sers_version": "1.0.0",
+  "skill_name": "poison-missing-instrument",
+  "verdict": "CANT_TELL_YET",
+  "cut_sub_reason": null,
+  "unmeasured_sub_reason": "no_data",
+  "value_class": null,
+  "evidence_admissibility": { "status": "not_applicable" },
+  "cost": {
+    "standing_tokens": { "refusal": "not_applicable" },
+    "fired_tokens": { "refusal": "not_applicable" },
+    "aux_tokens": { "refusal": "not_applicable" }
+  },
+  "source": { "prose_path": "README.md" },
+  "summary": "Poison: instrument_identity omitted entirely."
+}

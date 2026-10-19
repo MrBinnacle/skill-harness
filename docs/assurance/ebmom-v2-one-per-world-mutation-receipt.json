@@ -1,0 +1,52 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-0t4vlvff\\M-V3\\scripts\\ebmom_acceptance_matrix.py",
+        "source_digest": "84ee23c6a71a2ec18215486e9578f1dbfda0d64cf1afbf2220c39f5fad72105c",
+        "tests_collected": 3,
+        "worktree_head": "16da76bbdebdad1d37f0c1794ae4330fe9fc6166"
+      },
+      "description": "mutant 3: the one-decision-per-world selection replaced by all decisions, restoring the test that treats clause decisions as independent",
+      "killing_assertions": [
+        "tests/test_ebmom_acceptance_matrix_v2.py::test_mutant_3_two_correlated_false_decisions_do_not_reject"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-0t4vlvff\\M-V3\\scripts\\ebmom_acceptance_matrix.py",
+        "source_digest": "e258937bbb22d14f635027dfa5b6da515bcc15514546530061d5b4b150c1a03c",
+        "tests_collected": 3,
+        "worktree_head": "16da76bbdebdad1d37f0c1794ae4330fe9fc6166"
+      },
+      "mutant_id": "M-V3",
+      "notes": [],
+      "obligation": "v2-section-7-mutant-3",
+      "selection": [
+        "tests/test_ebmom_acceptance_matrix_v2.py::test_mutant_3_two_correlated_false_decisions_do_not_reject",
+        "tests/test_ebmom_acceptance_matrix_v2.py::test_control_the_all_decision_test_rejects_on_the_same_fixture",
+        "tests/test_ebmom_acceptance_matrix_v2.py::test_the_fixture_is_one_world_carrying_two_decisions"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "16da76bbdebdad1d37f0c1794ae4330fe9fc6166",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "scripts/ebmom_acceptance_matrix.py": "84ee23c6a71a2ec18215486e9578f1dbfda0d64cf1afbf2220c39f5fad72105c"
+  },
+  "production_tree_digest_before": {
+    "scripts/ebmom_acceptance_matrix.py": "84ee23c6a71a2ec18215486e9578f1dbfda0d64cf1afbf2220c39f5fad72105c"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.1",
+  "target_digests": {
+    "scripts/ebmom_acceptance_matrix.py": "84ee23c6a71a2ec18215486e9578f1dbfda0d64cf1afbf2220c39f5fad72105c"
+  },
+  "target_files": [
+    "scripts/ebmom_acceptance_matrix.py"
+  ]
+}

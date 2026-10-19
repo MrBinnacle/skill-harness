@@ -1,0 +1,210 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-A1\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866",
+        "tests_collected": 1,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "description": "revert the finite-K correction: /(k-1) becomes /k",
+      "killing_assertions": [
+        "tests/test_aggregation_differential.py::TestFitSkillDifferential::test_1000_seeded_inputs_match_reference"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-A1\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "b9eac409f58c2794db77ef8e07e5a9f2eaf27a3c2a47bfd91e9205c72a2f33c6",
+        "tests_collected": 1,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "mutant_id": "M-A1",
+      "notes": [],
+      "obligation": "A",
+      "selection": "tests/test_aggregation_differential.py::TestFitSkillDifferential",
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-A2\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866",
+        "tests_collected": 1,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "description": "wrong peel denominator: (n-1)*n becomes n*n",
+      "killing_assertions": [
+        "tests/test_aggregation_differential.py::TestFitSkillDifferential::test_1000_seeded_inputs_match_reference"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-A2\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "c199fd6d7520fe21faf07e215144960809c76ffa6f76ad1ce32c2442f949e39a",
+        "tests_collected": 1,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "mutant_id": "M-A2",
+      "notes": [],
+      "obligation": "A",
+      "selection": "tests/test_aggregation_differential.py::TestFitSkillDifferential",
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-A3\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866",
+        "tests_collected": 1,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "description": "tie-blind peel: ignore sum_sq and use the Bernoulli form",
+      "killing_assertions": [],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-A3\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "36f1030dc42a3e0d511f3d1c7a09b6d600c8b1d82b000df2f377b4d70f6f0b61",
+        "tests_collected": 1,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "mutant_id": "M-A3",
+      "notes": [],
+      "obligation": "A",
+      "selection": "tests/test_aggregation_differential.py::TestFitSkillDifferential",
+      "verdict": "SURVIVED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-B1\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866",
+        "tests_collected": 14,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "description": "remove the gate: always admit",
+      "killing_assertions": [
+        "tests/test_aggregation_fit.py::TestFitSkillEbmom::test_marginal_heterogeneity_is_refused_not_fitted"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-B1\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "1e9ed8e741ae15eb30df510b87bf9244e269f3bd05f854375cb33ef8af6654c1",
+        "tests_collected": 14,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "mutant_id": "M-B1",
+      "notes": [],
+      "obligation": "B",
+      "selection": "tests/test_aggregation_fit.py::TestFitSkillEbmom",
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-B2\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866",
+        "tests_collected": 14,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "description": "seed from a constant rather than from the data",
+      "killing_assertions": [
+        "tests/test_aggregation_fit.py::TestFitSkillEbmom::test_seed_covers_sum_sq_not_just_w_and_n"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-B2\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "49229bdc8f96f5a42fd3c97ac64faec7f60f4f1401291bd70a7bd744118bcd6e",
+        "tests_collected": 14,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "mutant_id": "M-B2",
+      "notes": [],
+      "obligation": "B",
+      "selection": "tests/test_aggregation_fit.py::TestFitSkillEbmom",
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-B3\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866",
+        "tests_collected": 14,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "description": "drop the +1 finite-bootstrap correction",
+      "killing_assertions": [
+        "tests/test_aggregation_fit.py::TestFitSkillEbmom::test_marginal_heterogeneity_is_refused_not_fitted"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-B3\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "d8dae8a4dc7e0e5b69792571e058eb5e4db7843cbac627f82d4da80033849669",
+        "tests_collected": 14,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "mutant_id": "M-B3",
+      "notes": [],
+      "obligation": "B",
+      "selection": "tests/test_aggregation_fit.py::TestFitSkillEbmom",
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-B4\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866",
+        "tests_collected": 14,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "description": "hold each clause's tie count fixed at its observed value: the superseded null's tie treatment, which conditions on a statistic that is part of the encoded-mean hypothesis",
+      "killing_assertions": [
+        "tests/test_aggregation_fit.py::TestFitSkillEbmom::test_tie_propensity_heterogeneity_is_admitted"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\ebmom-mutation-m46mqbs2\\M-B4\\src\\skill_harness\\aggregation\\fit.py",
+        "source_digest": "9774bf520148aad7dcab84568cb8ffa7b8be6eb54d93e224bb88493c61cd9580",
+        "tests_collected": 14,
+        "worktree_head": "142fb7da552f0305af70af7c56147b721d883995"
+      },
+      "mutant_id": "M-B4",
+      "notes": [],
+      "obligation": "B",
+      "selection": "tests/test_aggregation_fit.py::TestFitSkillEbmom",
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "142fb7da552f0305af70af7c56147b721d883995",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866",
+  "production_tree_digest_before": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866",
+  "production_tree_unchanged": true,
+  "python": "3.13.1",
+  "target_digests": {
+    "src/skill_harness/aggregation/fit.py": "51884574aa8ee18438426a58287af9d18720a41a1b788c1ff9a168cbd51da866"
+  },
+  "target_files": [
+    "src/skill_harness/aggregation/fit.py"
+  ]
+}

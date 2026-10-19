@@ -1,0 +1,6 @@
+/* Poison: Inter is not a declared face. Everything else is declared. */
+body {
+  color: #e6edf3;
+  font-family: Inter, sans-serif;
+  font-size: 1rem;
+}

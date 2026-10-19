@@ -1,0 +1,801 @@
+"""Store-to-Gate-2 bridge for frozen matched task-family evidence (#246)."""
+
+from __future__ import annotations
+
+import dataclasses
+import inspect
+import sqlite3
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from skill_harness.aggregation import (
+    ExcludedObservationReason,
+    MatchedRefusalReason,
+    RefusedPairReason,
+    aggregate_matched_gate2,
+)
+from skill_harness.aggregation.verdict import CutSubReason, KeepCutVerdict
+from skill_harness.oc import Gate2Decision, Gate2Design, MMESpec, gate2_decide
+from skill_harness.storage.migrations import open_evidence
+from skill_harness.task_frontier import (
+    Arm,
+    Observation,
+    TaskFamilyManifest,
+    admit,
+    audit_observation,
+    load_manifest,
+)
+
+
+def _manifest_data(n_pairs: int) -> dict[str, Any]:
+    return {
+        "task_family_id": "synthetic-e1-family",
+        "task_family_version": "1",
+        "frozen_hashes": {
+            "generator": "gen-sha-e1",
+            "fixture": "fix-sha-e1",
+            "oracle": "ora-sha-e1",
+            "harness": "har-sha-e1",
+            "code": "cod-sha-e1",
+        },
+        "phase_partition": {
+            "calibration": [],
+            "confirmation": [],
+            "matched": [f"lineage-{index}" for index in range(n_pairs)],
+        },
+        "confirmation_attempt_budget": 0,
+    }
+
+
+def _store_table(
+    conn: sqlite3.Connection,
+    *,
+    both_pass: int,
+    full_only: int,
+    null_only: int,
+    both_fail: int,
+) -> TaskFamilyManifest:
+    outcomes = (
+        [(True, True)] * both_pass
+        + [(True, False)] * full_only
+        + [(False, True)] * null_only
+        + [(False, False)] * both_fail
+    )
+    manifest = load_manifest(_manifest_data(len(outcomes)))
+    for index, (full_passed, null_passed) in enumerate(outcomes):
+        lineage = f"lineage-{index}"
+        instance = f"instance-{index}"
+        for arm, passed in ((Arm.FULL, full_passed), (Arm.NULL, null_passed)):
+            admission = admit(
+                conn,
+                manifest,
+                Observation(
+                    observation_id=f"obs-{index:02d}-{arm.value}",
+                    semantic_lineage_id=lineage,
+                    instance_id=instance,
+                    arm=arm,
+                    passed=passed,
+                    generator_fingerprint="gen-sha-e1",
+                    oracle_fingerprint="ora-sha-e1",
+                    observed_at="2026-08-16T12:00:00+00:00",
+                ),
+            )
+            assert admission.admissible is True
+    return manifest
+
+
+def _design(n_pairs: int) -> Gate2Design:
+    return Gate2Design(
+        n_pairs=n_pairs,
+        gamma=0.90,
+        mme=MMESpec(delta_min=0.20, q_min=0.70),
+    )
+
+
+def _insert_matched_row(
+    conn: sqlite3.Connection,
+    manifest: TaskFamilyManifest,
+    *,
+    observation_id: str,
+    lineage: str,
+    instance: str,
+    arm: Arm,
+    passed: bool,
+    admissibility_state: str = "admissible",
+    inadmissibility_reason: str | None = None,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO task_frontier_matched_obs (
+            observation_id, task_family_id, task_family_version,
+            semantic_lineage_id, phase, instance_id, arm, passed,
+            generator_fingerprint, oracle_fingerprint, admissibility_state,
+            inadmissibility_reason, observed_at, ingested_at
+        ) VALUES (?, ?, ?, ?, 'matched', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            observation_id,
+            manifest.task_family_id,
+            manifest.task_family_version,
+            lineage,
+            instance,
+            arm.value,
+            int(passed),
+            "gen-sha-e1",
+            "ora-sha-e1",
+            admissibility_state,
+            inadmissibility_reason,
+            "2026-08-16T12:00:00+00:00",
+            "2026-08-16T12:00:01Z",
+        ),
+    )
+
+
+def test_empty_store_returns_typed_no_evidence_refusal(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    """`no-evidence` belongs to the empty read, and to nothing else.
+
+    Its contrast is
+    `test_inadmissible_only_returns_typed_inadmissible_refusal_with_observation_ledger`:
+    same absence of a decision, different cause, different reason. The empty
+    ledger asserted below is what makes this fixture the empty-read case.
+    """
+    manifest = load_manifest(_manifest_data(1))
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.NO_EVIDENCE
+    assert result.ledger.excluded_observations == ()
+    assert result.ledger.refused_pairs == ()
+
+
+def test_duplicate_arm_returns_typed_refusal_with_complete_pair_ledger(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = load_manifest(_manifest_data(1))
+    for observation_id, arm in (
+        ("obs-full-a", Arm.FULL),
+        ("obs-full-b", Arm.FULL),
+        ("obs-null", Arm.NULL),
+    ):
+        _insert_matched_row(
+            evidence_db,
+            manifest,
+            observation_id=observation_id,
+            lineage="lineage-0",
+            instance="instance-0",
+            arm=arm,
+            passed=True,
+        )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.DUPLICATE_ARM
+    assert result.ledger.excluded_observations == ()
+    assert len(result.ledger.refused_pairs) == 1
+    refused = result.ledger.refused_pairs[0]
+    assert refused.reason is RefusedPairReason.DUPLICATE_ARM
+    assert refused.observation_ids == ("obs-full-a", "obs-full-b", "obs-null")
+
+
+def test_missing_arm_returns_typed_refusal_with_pair_ledger(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = load_manifest(_manifest_data(1))
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-full",
+        lineage="lineage-0",
+        instance="instance-0",
+        arm=Arm.FULL,
+        passed=True,
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.MISSING_ARM
+    assert result.ledger.excluded_observations == ()
+    assert len(result.ledger.refused_pairs) == 1
+    refused = result.ledger.refused_pairs[0]
+    assert refused.reason is RefusedPairReason.MISSING_ARM
+    assert refused.observation_ids == ("obs-full",)
+
+
+def test_inadmissible_only_returns_typed_inadmissible_refusal_with_observation_ledger(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    """Rows that were stored and rejected are not the same fact as no rows.
+
+    `no-evidence` says the collection never happened, so the fix is to collect;
+    this family collected and every row failed admission, so the fix is not to
+    collect again. `docs/concepts/why-unmeasured.md` draws exactly that line
+    between `no_data` and `inadmissible` and calls the collapsed form a false
+    explanation, and `tests/test_aggregation_status.py` pins it at the clause
+    layer. This is the same distinction one unit up.
+    """
+    manifest = load_manifest(_manifest_data(1))
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-inadmissible",
+        lineage="lineage-0",
+        instance="instance-0",
+        arm=Arm.FULL,
+        passed=True,
+        admissibility_state="inadmissible",
+        inadmissibility_reason="synthetic-fingerprint-drift",
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.INADMISSIBLE
+    assert result.ledger.refused_pairs == ()
+    assert len(result.ledger.excluded_observations) == 1
+    excluded = result.ledger.excluded_observations[0]
+    assert excluded.observation_id == "obs-inadmissible"
+    assert excluded.reason is ExcludedObservationReason.INADMISSIBLE
+    assert excluded.stored_reason == "synthetic-fingerprint-drift"
+
+
+def test_surviving_pair_count_mismatch_returns_typed_refusal_without_exception(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = _store_table(
+        evidence_db,
+        both_pass=0,
+        full_only=1,
+        null_only=0,
+        both_fail=0,
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(2), value_class=None)
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.COUNT_MISMATCH
+    assert result.observation_ids.full_only == (("obs-00-full", "obs-00-null"),)
+    assert result.ledger.excluded_observations == ()
+    assert result.ledger.refused_pairs == ()
+
+
+def test_more_surviving_pairs_than_the_design_refuses_instead_of_raising(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    """The over-count direction must refuse too, and it is a separate branch.
+
+    ``effect_from_matched_gate2`` raises on either direction of a count
+    disagreement, so the bridge's guard is the only thing standing between an
+    over-supplied store and a ValueError out of the estimator. Narrowing that
+    guard to ``complete_pair_count < design.n_pairs`` left every other test in
+    this file green while this call raised, which is the exception #247 exists
+    to replace.
+    """
+    manifest = _store_table(
+        evidence_db,
+        both_pass=1,
+        full_only=1,
+        null_only=0,
+        both_fail=0,
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.COUNT_MISMATCH
+    assert len(result.observation_ids.both_pass) + len(result.observation_ids.full_only) == 2
+    assert result.ledger.excluded_observations == ()
+    assert result.ledger.refused_pairs == ()
+
+
+def test_decided_result_ledgers_inadmissible_observation_and_incomplete_pair(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = load_manifest(_manifest_data(3))
+    for observation_id, lineage, instance, arm, state, stored_reason in (
+        ("obs-valid-full", "lineage-0", "instance-0", Arm.FULL, "admissible", None),
+        ("obs-valid-null", "lineage-0", "instance-0", Arm.NULL, "admissible", None),
+        (
+            "obs-inadmissible",
+            "lineage-1",
+            "instance-1",
+            Arm.FULL,
+            "inadmissible",
+            "synthetic-oracle-drift",
+        ),
+        ("obs-incomplete", "lineage-2", "instance-2", Arm.NULL, "admissible", None),
+    ):
+        _insert_matched_row(
+            evidence_db,
+            manifest,
+            observation_id=observation_id,
+            lineage=lineage,
+            instance=instance,
+            arm=arm,
+            passed=True,
+            admissibility_state=state,
+            inadmissibility_reason=stored_reason,
+        )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
+
+    assert result.decision is Gate2Decision.UNRESOLVED
+    assert result.refusal is None
+    assert result.observation_ids.both_pass == (("obs-valid-full", "obs-valid-null"),)
+    assert tuple(item.observation_id for item in result.ledger.excluded_observations) == (
+        "obs-inadmissible",
+    )
+    assert tuple(item.stored_reason for item in result.ledger.excluded_observations) == (
+        "synthetic-oracle-drift",
+    )
+    assert len(result.ledger.refused_pairs) == 1
+    assert result.ledger.refused_pairs[0].reason is RefusedPairReason.MISSING_ARM
+    assert result.ledger.refused_pairs[0].observation_ids == ("obs-incomplete",)
+
+
+def test_admissible_rows_reach_a_decision_only_through_the_registered_feed(
+    evidence_db: sqlite3.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stub the estimator feed empty; no admissible row may arrive anyway.
+
+    The bridge reads admissible rows through ``matched_evidence()`` and reads
+    `task_frontier_matched_obs` directly ONLY for the inadmissible tail that
+    feed cannot return. Nothing checked that split: widening the raw query to
+    every row and deleting the feed call produced byte-identical results, and
+    the whole suite stayed green - so the module docstring's claim that no
+    admissible row reaches a Gate-2 decision around the registered feed rested
+    on nothing, and the feed could become a dead call in a later refactor
+    without a red test.
+
+    The claim has no externally observable consequence to assert - both reads
+    return the same rows from the same table - so this drives the seam instead,
+    the way `tests/task_frontier/test_tracer.py` drives the phase firewall. With
+    the feed returning nothing, four complete pairs are in the store and none
+    may reach the decision. If one does, it came from the raw read.
+    """
+    import skill_harness.aggregation.matched_bridge as bridge
+
+    manifest = _store_table(
+        evidence_db,
+        both_pass=1,
+        full_only=1,
+        null_only=1,
+        both_fail=1,
+    )
+    monkeypatch.setattr(bridge, "matched_evidence", lambda conn, manifest: ())
+
+    result = aggregate_matched_gate2(evidence_db, manifest, _design(4), value_class=None)
+
+    assert result.decision is None
+    assert result.refusal is not None
+    assert result.refusal.reason is MatchedRefusalReason.NO_EVIDENCE
+    assert result.observation_ids.both_pass == ()
+    assert result.observation_ids.full_only == ()
+    assert result.observation_ids.null_only == ()
+    assert result.observation_ids.both_fail == ()
+    # The supplementary read is scoped to the inadmissible tail, and there is
+    # none here: it must not have picked the eight admissible rows up either.
+    assert result.ledger.excluded_observations == ()
+    assert result.ledger.refused_pairs == ()
+
+
+def test_an_id_held_by_two_partitions_refuses_the_read_instead_of_pairing_the_walled_off_row(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    """A calibration row must not enter the effect path through the by-id read.
+
+    The exclusion query names ids in the matched partition; `audit_observation`
+    then resolves each one, and it searches all three partitions in name order
+    and answers with the first hit. So an id held by both the calibration and
+    the matched table resolves to the CALIBRATION row. Without the phase check
+    the bridge filed that row under the matched id: it arrived stamped
+    `admissible`, was paired against a matched row, and reached a Gate-2
+    decision while the ledger stayed empty - rung-selection data inside the
+    effect estimate, which is the row-leakage class INVARIANTS #7 walls off.
+
+    `admit` refuses to write an id that already exists in another partition, so
+    only a writer that goes around `admit` can build this store. This test is
+    that writer. The read refuses rather than picking a partition, on the same
+    ground `admit` refuses the write.
+    """
+    manifest = load_manifest(_manifest_data(1))
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-collides",
+        lineage="lineage-0",
+        instance="instance-0",
+        arm=Arm.FULL,
+        passed=True,
+        admissibility_state="inadmissible",
+        inadmissibility_reason="synthetic-fingerprint-drift",
+    )
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-matched-null",
+        lineage="lineage-0",
+        instance="instance-0",
+        arm=Arm.NULL,
+        passed=False,
+    )
+    evidence_db.execute(
+        """
+        INSERT INTO task_frontier_calibration_obs (
+            observation_id, task_family_id, task_family_version,
+            semantic_lineage_id, phase, instance_id, arm, passed,
+            generator_fingerprint, oracle_fingerprint, admissibility_state,
+            inadmissibility_reason, observed_at, ingested_at
+        ) VALUES (
+            'obs-collides', 'synthetic-e1-family', '1', 'lineage-calibration',
+            'calibration', 'instance-0', 'full', 1, 'gen-sha-e1', 'ora-sha-e1',
+            'admissible', NULL, '2026-08-16T12:00:00+00:00', '2026-08-16T12:00:01Z'
+        )
+        """
+    )
+
+    with pytest.raises(ValueError, match="stored in two partitions"):
+        aggregate_matched_gate2(evidence_db, manifest, _design(1), value_class=None)
+
+
+@pytest.mark.parametrize("refused", [False, True])
+def test_shuffled_insertion_order_produces_identical_result_objects(
+    tmp_path: Path,
+    refused: bool,
+) -> None:
+    """Shuffle the physical rows and compare the whole result, ledger included.
+
+    Every ordered field this call produces must carry at least TWO entries whose
+    id order differs from their insertion order, or the comparison cannot fail.
+    A single excluded observation and a single refused pair are order-invariant
+    whatever the bridge does with them: a one-element tuple has one arrangement.
+    An earlier form of this test carried one excluded observation in one
+    parameter case and none in the other, and stayed green when the bridge's
+    ordering guarantee was deleted outright — two stores holding the same rows
+    in opposite physical order then returned different
+    ``ledger.excluded_observations`` and this assertion did not see it.
+
+    So the fixture below pins two inadmissible observations and two
+    incomplete pairs in BOTH parameter cases, inserted in the reverse of their
+    id order, and the counts are asserted before the equality is: a later
+    refactor that collapses the ledger back to one entry per kind fails here
+    rather than quietly making the equality vacuous again.
+
+    The two lonely rows carry ASCENDING lineages against ascending ids
+    (``obs-lonely-a`` on ``lineage-3``, ``obs-lonely-z`` on ``lineage-4``) and
+    that pairing is load-bearing. Under the reverse assignment, walking the
+    pairing keys backwards happens to walk them in ascending key order, and
+    replacing ``sorted(pairs)`` with ``reversed(list(pairs))`` left the whole
+    file green. Keep id order and key order agreeing here, or the key-order
+    assertion below stops discriminating.
+    """
+    manifest = load_manifest(_manifest_data(6))
+    rows: list[tuple[str, str, str, Arm, str, str | None]] = [
+        ("obs-pair-z-full", "lineage-0", "instance-0", Arm.FULL, "admissible", None),
+        ("obs-pair-a-null", "lineage-0", "instance-0", Arm.NULL, "admissible", None),
+        # Inserted z-then-a so insertion order is the reverse of id order in one
+        # store and matches it in the other. Only an id-ordered ledger agrees.
+        ("obs-drop-z", "lineage-1", "instance-1", Arm.FULL, "inadmissible", "synthetic-drift-z"),
+        ("obs-drop-a", "lineage-2", "instance-2", Arm.NULL, "inadmissible", "synthetic-drift-a"),
+        ("obs-lonely-z", "lineage-4", "instance-4", Arm.FULL, "admissible", None),
+        ("obs-lonely-a", "lineage-3", "instance-3", Arm.NULL, "admissible", None),
+    ]
+    if refused:
+        rows.append(("obs-dup-z", "lineage-5", "instance-5", Arm.FULL, "admissible", None))
+        rows.append(("obs-dup-a", "lineage-5", "instance-5", Arm.FULL, "admissible", None))
+
+    results = []
+    table_orders = []
+    for db_index, ordered_rows in enumerate((rows, list(reversed(rows)))):
+        conn = open_evidence(tmp_path / f"determinism-{db_index}.db")
+        try:
+            for observation_id, lineage, instance, arm, state, stored_reason in ordered_rows:
+                _insert_matched_row(
+                    conn,
+                    manifest,
+                    observation_id=observation_id,
+                    lineage=lineage,
+                    instance=instance,
+                    arm=arm,
+                    passed=True,
+                    admissibility_state=state,
+                    inadmissibility_reason=stored_reason,
+                )
+            results.append(aggregate_matched_gate2(conn, manifest, _design(1), value_class=None))
+            table_orders.append(
+                tuple(
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT observation_id FROM task_frontier_matched_obs ORDER BY rowid"
+                    ).fetchall()
+                )
+            )
+        finally:
+            conn.close()
+
+    assert table_orders[0] == tuple(reversed(table_orders[1]))
+    # The equality below is only load-bearing while both ordered ledger fields
+    # hold more than one entry in every parameter case.
+    for result in results:
+        assert len(result.ledger.excluded_observations) == 2
+        assert len(result.ledger.refused_pairs) == (3 if refused else 2)
+        # Insertion-order independence is not the whole guarantee, and the
+        # equality below cannot see the rest of it. Every read on this path is
+        # SQL-ordered, so an order that is deterministic but NOT observation_id
+        # order agrees between the two stores and survives: reversing the
+        # exclusion query to `ORDER BY observation_id DESC`, or replacing
+        # `sorted(pairs)` with `reversed(list(pairs))`, both left this test
+        # green. The registered guarantee is observation_id order - a unique
+        # key, never a timestamp (E3) - so assert that order directly.
+        excluded_ids = [item.observation_id for item in result.ledger.excluded_observations]
+        assert excluded_ids == sorted(excluded_ids), excluded_ids
+        refused_keys = [pair.pairing_key for pair in result.ledger.refused_pairs]
+        assert refused_keys == sorted(refused_keys), refused_keys
+    assert results[0] == results[1]
+    assert (results[0].decision is None) is refused
+
+
+def test_mixed_exclusions_reproduce_direct_gate2_from_surviving_pairs(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = _store_table(
+        evidence_db,
+        both_pass=0,
+        full_only=5,
+        null_only=1,
+        both_fail=2,
+    )
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-extra-inadmissible",
+        lineage="lineage-8",
+        instance="instance-8",
+        arm=Arm.FULL,
+        passed=False,
+        admissibility_state="inadmissible",
+        inadmissibility_reason="synthetic-generator-drift",
+    )
+    _insert_matched_row(
+        evidence_db,
+        manifest,
+        observation_id="obs-extra-incomplete",
+        lineage="lineage-9",
+        instance="instance-9",
+        arm=Arm.NULL,
+        passed=True,
+    )
+    design = _design(8)
+
+    result = aggregate_matched_gate2(evidence_db, manifest, design, value_class=None)
+
+    assert result.refusal is None
+    assert result.ledger.excluded_observations
+    assert result.ledger.refused_pairs
+    full_only = len(result.observation_ids.full_only)
+    null_only = len(result.observation_ids.null_only)
+    assert (full_only, null_only) == (5, 1)
+    assert result.decision is gate2_decide(design, full_only, null_only)
+
+
+@pytest.mark.parametrize(
+    ("both_pass", "full_only", "null_only", "both_fail"),
+    [
+        (0, 8, 0, 0),
+        (0, 3, 0, 5),
+        (0, 0, 0, 8),
+    ],
+)
+@pytest.mark.parametrize(
+    "gamma,delta_min,q_min",
+    [
+        (0.90, 0.20, 0.70),
+        (0.95, 0.10, 0.80),
+    ],
+)
+def test_bridge_decision_reproduces_direct_gate2_for_registered_e1_shapes(
+    evidence_db: sqlite3.Connection,
+    both_pass: int,
+    full_only: int,
+    null_only: int,
+    both_fail: int,
+    gamma: float,
+    delta_min: float,
+    q_min: float,
+) -> None:
+    manifest = _store_table(
+        evidence_db,
+        both_pass=both_pass,
+        full_only=full_only,
+        null_only=null_only,
+        both_fail=both_fail,
+    )
+    design = Gate2Design(
+        n_pairs=8,
+        gamma=gamma,
+        mme=MMESpec(delta_min=delta_min, q_min=q_min),
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, design, value_class=None)
+
+    assert result.decision is gate2_decide(design, full_only, null_only)
+
+
+@pytest.mark.parametrize(
+    (
+        "both_pass",
+        "full_only",
+        "null_only",
+        "both_fail",
+        "expected",
+        "expected_verdict",
+        "expected_cut_reason",
+    ),
+    [
+        (4, 8, 0, 4, Gate2Decision.BENEFIT, KeepCutVerdict.KEEP, None),
+        (4, 0, 8, 4, Gate2Decision.HARM, KeepCutVerdict.CUT, CutSubReason.HARMFUL),
+        (6, 2, 2, 6, Gate2Decision.EQUIVALENT, KeepCutVerdict.CANT_TELL_YET, None),
+        (5, 5, 1, 5, Gate2Decision.UNRESOLVED, KeepCutVerdict.CANT_TELL_YET, None),
+    ],
+)
+def test_every_terminal_decision_is_reached_through_the_store_bridge_path(
+    evidence_db: sqlite3.Connection,
+    both_pass: int,
+    full_only: int,
+    null_only: int,
+    both_fail: int,
+    expected: Gate2Decision,
+    expected_verdict: KeepCutVerdict,
+    expected_cut_reason: CutSubReason | None,
+) -> None:
+    manifest = _store_table(
+        evidence_db,
+        both_pass=both_pass,
+        full_only=full_only,
+        null_only=null_only,
+        both_fail=both_fail,
+    )
+    design = Gate2Design(
+        n_pairs=16,
+        gamma=0.90,
+        mme=MMESpec(delta_min=0.20, q_min=0.70),
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, design, value_class=None)
+
+    assert result.decision is expected
+    assert result.verdict.verdict is expected_verdict
+    assert result.verdict.cut_sub_reason is expected_cut_reason
+
+
+def test_result_is_immutable_and_binds_effect_identity_and_ids_to_each_cell(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    manifest = _store_table(
+        evidence_db,
+        both_pass=1,
+        full_only=1,
+        null_only=1,
+        both_fail=1,
+    )
+    design = Gate2Design(
+        n_pairs=4,
+        gamma=0.90,
+        mme=MMESpec(delta_min=0.20, q_min=0.70),
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, design, value_class=None)
+
+    assert result.effect is not None
+    assert result.effect.decision is result.decision
+    assert result.task_family_id == "synthetic-e1-family"
+    assert result.task_family_version == "1"
+    assert result.observation_ids.both_pass == (("obs-00-full", "obs-00-null"),)
+    assert result.observation_ids.full_only == (("obs-01-full", "obs-01-null"),)
+    assert result.observation_ids.null_only == (("obs-02-full", "obs-02-null"),)
+    assert result.observation_ids.both_fail == (("obs-03-full", "obs-03-null"),)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        result.task_family_id = "changed"  # type: ignore[misc]
+
+
+def test_result_ids_alone_reproduce_the_four_cell_table_and_decision(
+    evidence_db: sqlite3.Connection,
+) -> None:
+    """Rebuild the table from the ids themselves, not from how many there are.
+
+    Counting each cell's tuples only re-reads a length the same call produced: a
+    bridge that files a concordant pair in the wrong concordant cell keeps every
+    count intact and survives it (swap the both_pass and both_fail cell indices
+    and this test stayed green). So each id is read back out of the store through
+    the by-id audit seam and the cell is re-derived from the two stored ``passed``
+    booleans.
+    """
+    manifest = _store_table(
+        evidence_db,
+        both_pass=5,
+        full_only=5,
+        null_only=1,
+        both_fail=5,
+    )
+    design = Gate2Design(
+        n_pairs=16,
+        gamma=0.90,
+        mme=MMESpec(delta_min=0.20, q_min=0.70),
+    )
+
+    result = aggregate_matched_gate2(evidence_db, manifest, design, value_class=None)
+    ids = result.observation_ids
+    cell_of_outcome = {(True, True): 0, (True, False): 1, (False, True): 2, (False, False): 3}
+    rebuilt_table = [0, 0, 0, 0]
+    for filed_cell, cell in enumerate((ids.both_pass, ids.full_only, ids.null_only, ids.both_fail)):
+        for full_id, null_id in cell:
+            full = audit_observation(evidence_db, full_id)
+            null = audit_observation(evidence_db, null_id)
+            assert full is not None and null is not None
+            assert (full.arm, null.arm) == (Arm.FULL, Arm.NULL)
+            stored_cell = cell_of_outcome[(full.passed, null.passed)]
+            assert stored_cell == filed_cell, (
+                f"{full_id}/{null_id} passed=({full.passed}, {null.passed}) belongs in cell "
+                f"{stored_cell}, filed in {filed_cell}"
+            )
+            rebuilt_table[stored_cell] += 1
+
+    assert tuple(rebuilt_table) == (5, 5, 1, 5)
+    assert sum(rebuilt_table) == design.n_pairs
+    assert gate2_decide(design, rebuilt_table[1], rebuilt_table[2]) is result.decision
+
+
+def test_bridge_has_one_public_entry_point_with_only_registered_inputs() -> None:
+    """Pin the entry point the bridge DEFINES, not how it spells its imports.
+
+    The set is scoped by ``__module__`` on purpose. A namespace query alone
+    (``vars(bridge)`` filtered on the leading underscore) also matches every
+    function the module imported — ``matched_evidence``, ``effect_from_matched_gate2``,
+    ``matched_gate2_verdict``, ``dataclass`` — none of which is an entry point the
+    bridge exposes; Python has no module-private import. Under that query the
+    criterion is satisfiable by renaming the imports to ``_matched_evidence`` and
+    friends, which changes no interface and was how this assertion was first made
+    to pass. Scoping to functions defined here cannot be satisfied that way: it
+    goes red when the module grows a second public function and stays green
+    however the imports are spelled.
+    """
+    import skill_harness.aggregation.matched_bridge as bridge
+
+    signature = inspect.signature(aggregate_matched_gate2)
+    assert list(signature.parameters) == [
+        "conn",
+        "manifest",
+        "design",
+        "value_class",
+    ]
+    # `value_class` is keyword-only and has no default, and both halves are load-bearing
+    # (falsification-plan item 9). The verdict layer withholds CUT for an unset class
+    # exactly as it does for a non-transformative one, so a default would let a caller
+    # skip the decision while the call still read as correct. Keyword-only stops it being
+    # supplied by position and going unread at the call site.
+    value_class_parameter = signature.parameters["value_class"]
+    assert value_class_parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert value_class_parameter.default is inspect.Parameter.empty
+    defined_public_callables = {
+        name
+        for name, value in vars(bridge).items()
+        if not name.startswith("_")
+        and inspect.isfunction(value)
+        and value.__module__ == bridge.__name__
+    }
+    assert defined_public_callables == {"aggregate_matched_gate2"}
+    # The seam callers reach through the package is the seam these tests drive.
+    assert bridge.aggregate_matched_gate2 is aggregate_matched_gate2

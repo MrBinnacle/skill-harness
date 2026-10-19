@@ -1,0 +1,301 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skill-harness"
+version = "0.3.0"
+description = "How do you KNOW if a 'skill' is any good - deterministically? This runs controlled skill-vs-no-skill experiments. It doesn't just ask, “Did the skill work?” It asks “Did we actually give the skill to the model, did the comparison remain fair, what changed, what did it cost, and do we have enough evidence to say that confidently?”"
+readme = "README.md"
+keywords = [
+  "claude-code",
+  "agent-skills",
+  "skill-evaluation",
+  "llm-evaluation",
+  "eval-harness",
+  "ai-agents",
+  "prompt-evaluation",
+  "evals",
+  "ab-testing",
+]
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "MrBinnacle" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+  # anthropic >=1.11.0 enforces post-patch for GHSA-q5f5-3gjm-7mfm + GHSA-w828-4qhx-vxx3
+  # (Memory Tool CVEs, 2026-03-31; patched in 0.87.0). Memory Tool surface is not used.
+  "anthropic>=1.11.0",
+  # T3 tracer adapter; supply-chain audit at docs/supply-chain/openai-audit-2026-06-08.md.
+  # Capped <3 (S4): the audit anchored 2.41.0 as known-good but never reviewed
+  # a 3.x major; an open-ended lower bound would let a future 3.x resolve here
+  # unaudited, which is exactly the drift the audit's own floor was meant to
+  # anchor against. Re-audit before raising this cap.
+  "openai>=3.15.0,<4",
+  "click>=8.5.0",
+  "pydantic>=2.6",
+  # rich is solo-maintainer (willmcgugan / Textualize). Use for terminal output only.
+  "rich>=13.7",
+  # scipy>=1.18.1: EB-MoM hierarchical fit + BH-FDR fallback (A53, Track E.2).
+  # Already present transitively via statsmodels; direct pin per Phase 1.1 supply-chain audit.
+  "scipy>=1.18.1",
+  # numpy is NOT listed here, and src/skill_harness/aggregation/fit.py imports it
+  # directly. That is deliberate and it is a gate's ruling, not an oversight:
+  # tests/test_assurance_manifest_161.py locks the runtime Requires-Dist set to
+  # the pre-#161 names and admits zero additions, and #442 is not the ticket that
+  # reopens a ratified dependency manifest. numpy resolves into every environment
+  # regardless, as an install-time requirement of the scipy pinned above, and it
+  # is already declared in the dev extra. The residual exposure is real and
+  # small: if scipy ever stopped requiring numpy, this package would import a
+  # module its own metadata does not name. Raise that with the manifest, not
+  # here.
+  # tiktoken: offline tokenizer for Verbosity metric (A35). Version-pinned to cl100k_base
+  # encoding which is stable across 0.x series; DO NOT upgrade without re-running
+  # bit-equality corpus and updating IMPLEMENTATION_HASH in verbosity.py.
+  # RUNTIME dep (imported by oracles/tier1/verbosity.py) — was mis-filed under dev
+  # extras, which broke every non-dev install at the first Tier-1 code path.
+  "tiktoken>=0.7,<1.0",
+  # statsmodels: OLS for AlpacaEval-2 length regression (A35 observation-time half).
+  # RUNTIME dep (imported by calibration/length_regression.py) — same dev-extras mis-file.
+  "statsmodels>=0.15.0",
+]
+
+[project.optional-dependencies]
+# Agentic subject layer (v0.2): Inspect runs the sandboxed Claude Code subject;
+# skill-harness keeps pairing/admissibility/evidence. Opt-in — the core package
+# (audit, evidence store, aggregation) has no agent-execution surface without it.
+# Supply-chain note: docs/supply-chain/inspect-audit-2026-07-09.md.
+inspect = [
+  "inspect-ai>=0.3.245",
+  "inspect-swe>=0.2.65",
+]
+# Receipts site generator (#186): the SERS draft-2020-12 validator. Opt-in —
+# the core package never imports jsonschema; sitegen pulls it lazily behind
+# this extra's typed install hint (src/skill_harness/sitegen/__init__.py).
+# Supply-chain note: python-jsonschema org reference implementation.
+sitegen = [
+  "jsonschema>=4.26.0",
+]
+# Rendered-geometry harness (#589): the real browser behind
+# src/skill_harness/sitegen/geometry.py. Opt-in — the core package never imports
+# playwright, and geometry.py pulls it lazily behind this extra's typed install hint
+# (BrowserNotInstalledError), so `pip install -e ".[dev]"` stays browser-free and no
+# CI cell but the designated one downloads a browser. Installing the distribution is
+# half the job: the Chromium build is fetched separately with
+# `python -m playwright install chromium`.
+# Supply-chain note: microsoft/playwright-python, the vendor's own Python binding.
+geometry = [
+  "playwright>=1.63.0",
+]
+dev = [
+  "pytest>=7.4",
+  "pytest-cov>=4.1",
+  "pytest-xdist>=3.5",
+  "ruff>=0.5",
+  "mypy>=2.3.1",
+  "hypothesis>=6.168.3",
+  # C.1 — Tier-1 mechanical-validity gate (A33)
+  # pytest-socket blocks network calls in offline Tier-1 tests; module-level autouse fixture.
+  "pytest-socket>=0.8.1",
+  # CONTRIBUTING.md's setup says `pre-commit install` right after `pip install -e ".[dev]"`;
+  # ship the tool that command needs.
+  "pre-commit>=4.6.2",
+  # #161 — test-time numerical-reference + hygiene surface (assurance-pass manifest).
+  # scipy/statsmodels already runtime deps; re-declared here so `pip install -e ".[dev]"`
+  # alone still lands the full test stack. numpy is the explicit numerical base.
+  # pytest-randomly drives randomized CI order; its printed seed reproduces failures.
+  "scipy>=1.18.1",
+  "statsmodels>=0.15.0",
+  "numpy>=2.5.3",
+  "pytest-randomly>=4.1",
+  # #182 — SERS conformance harness (draft 2020-12 validator).
+  # Owner-approved 2026-08-09; python-jsonschema org reference implementation.
+  # Re-declared from [sitegen] here (mirroring scipy/statsmodels) so
+  # `pip install -e ".[dev]"` alone lands the full test stack; the
+  # operator-facing extra is [sitegen]. Also pulled transitively by inspect-ai
+  # (jsonschema>3.1.1). Where jsonschema comes from is recorded once, in
+  # [project.optional-dependencies.sitegen].
+  "jsonschema>=4.26.0",
+]
+
+[project.scripts]
+skill-harness = "skill_harness.cli.main:cli"
+
+[project.urls]
+Homepage = "https://github.com/MrBinnacle/skill-harness"
+Repository = "https://github.com/MrBinnacle/skill-harness"
+Issues = "https://github.com/MrBinnacle/skill-harness/issues"
+Changelog = "https://github.com/MrBinnacle/skill-harness/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/MrBinnacle/skill-harness/tree/main/docs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skill_harness"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+# #509: when one test phase runs past this many seconds, faulthandler dumps every
+# thread's stack to stderr, naming the running test's file and function. It does not
+# fail the test, so it cannot manufacture a red cell; it exists so a 25-minute CI
+# overrun names its cause instead of dying anonymously. 900s sits inside the Test
+# cell's ceiling (tests/test_ci_test_cell_attribution_509.py asserts that ordering)
+# and above the slowest legitimate module fixture measured under coverage (#510).
+faulthandler_timeout = 900
+addopts = [
+  "-ra",
+  "--strict-markers",
+  "--strict-config",
+  # #589: send every test carrying the same xdist_group name to one worker, and
+  # distribute everything else exactly as the default `load` does. The rendered-geometry
+  # fixtures build a site and launch Chromium once per session, so without this each of
+  # the four workers that reaches them repeats that work. It is a COST setting and never
+  # a correctness one: each worker builds under its own tmp_path_factory root and binds
+  # its own port-0 ephemeral port, so reverting this line makes the suite slower and
+  # leaves it correct. It is inert without `-n` and a no-op for every ungrouped test.
+  # tests/test_ci_geometry_cell_589.py reads this line and fails if it goes.
+  "--dist",
+  "loadgroup",
+]
+markers = [
+  "slow: long-running tests (deselect with -m 'not slow')",
+  "live: hits the live Anthropic API (deselect with -m 'not live', as CI does)",
+  # C.1 A33 — no_network: Tier-1 mechanical tests run offline (pytest-socket enforced).
+  # Autouse fixture in tests/oracles/tier1/conftest.py covers ALL tests in that package.
+  # PYTHONHASHSEED=0 REQUIRED for Tier-1 bit-equality discipline (A33).
+  # Run Tier-1 tests with: PYTHONHASHSEED=0 pytest tests/oracles/tier1/
+  # If PYTHONHASHSEED is not set, tests/oracles/tier1/conftest.py raises AssertionError.
+  "no_network: test must run fully offline (pytest-socket blocks sockets)",
+  # #187 dense CS coverage grid — own CI job (do not fold into the 15m matrix cell).
+  "calibration: dense sequential coverage calibration (deselect with -m 'not calibration')",
+  # #168 assurance lane — deep stateful/fuzz runs. Own CI job with its own timeout;
+  # do not fold into the 25m test matrix cell (#170 alone specifies >=1h of fuzz).
+  "assurance: long-running assurance search (deselect with -m 'not assurance')",
+]
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "scripts"]
+extend-exclude = [
+  "fuzz/corpus",
+  "fuzz/crashes",
+  "fuzz/artifacts",
+  "prototypes",
+  # Vendored verbatim copies of the measured class-2 prototype (S414). They must stay
+  # byte-identical to what produced amendment v2's numbers; lint would rewrite them.
+  "docs/assurance/reference",
+]
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W",   # pycodestyle / pyflakes
+  "I",             # isort
+  "UP",            # pyupgrade
+  "B",             # bugbear
+  "PL",            # pylint
+  "SIM",           # simplify
+  "RUF",           # ruff-specific
+  "S",             # bandit (security)
+]
+ignore = [
+  "S101",  # assert is fine in tests
+  "PLC0415",  # Local imports deliberately isolate optional deps and test seams.
+  "PLR0911",  # Explicit early returns keep validation and dispatch readable.
+  "PLR0912",  # Domain state machines are clearer as explicit branches.
+  "PLR0913",  # Public domain APIs carry independently meaningful parameters.
+  "PLR0915",  # Orchestrators remain linear to keep transactional flow visible.
+  "PLR0917",  # Public domain APIs carry independently meaningful parameters.
+  "PLR2004",  # Named protocol and fixture values are clearer inline at assertions.
+  # PLE0704 is NOT ignored repo-wide and now has ZERO sites (#221). It once had one,
+  # suppressed at the line in ablation/runner.py; that helper was changed to take the
+  # exception and re-raise it explicitly, so the suppression was deleted rather than
+  # moved. Any new hit is a real one -- do not silence an error-class rule globally.
+  "PLW0603",  # Module caches require explicit global assignment at narrow seams.
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+  "S",
+  "B017",  # Broad exception assertions intentionally cover validator and adapter boundaries.
+  "B905",  # Test-only zips compare fixtures whose equal lengths are asserted separately.
+  "PLR0402",  # Module aliasing is deliberate where tests monkeypatch the module boundary.
+  "PLR1714",  # Separate comparisons preserve distinct identity and exit-code assertions.
+  "PLR5501",  # Nested fixture branches mirror the scenario structure under test.
+  "PLW0108",  # Zero-argument lambdas are concise factories for monkeypatched dependencies.
+]
+"fuzz/**" = ["S", "SIM105"]
+
+[tool.mypy]
+# Analysis target 3.12: numpy >=2.5 stubs use PEP 695 `type` statements, which mypy
+# rejects at parse time under python_version = 3.11 (stub-ecosystem floor moved).
+# Runtime floor is 3.12 (requires-python + the CI test matrix): the pinned numerical
+# stack (numpy 2.5.x / scipy 1.18.x) ships no cp311 wheels, so 3.11 was unsupportable.
+python_version = "3.12"
+# src-layout resolution. CI installs the package (-e ".[dev]") so `skill_harness`
+# resolves there without this, but the pre-commit mypy hook runs in an isolated
+# venv whose additional_dependencies list cannot contain this package itself --
+# so every test file importing skill_harness failed the hook with import-not-found
+# while passing an installed-env `mypy --strict` run. Adding the search path fixes
+# the hook without changing what CI checks.
+mypy_path = "src"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+files = ["src", "tests", "scripts/drift_check.py", "scripts/release_gate.py", "scripts/check_dependency_anchor.py"]
+
+# statsmodels ships no py.typed marker or stubs; ignore missing imports (C.4 length regression)
+[[tool.mypy.overrides]]
+module = ["statsmodels", "statsmodels.*"]
+ignore_missing_imports = true
+
+# inspect_ai / inspect_swe are the OPTIONAL [inspect] extra (agentic subject layer);
+# not installed in the default dev/CI environment, imports are lazy behind a typed error.
+# follow_imports=skip keeps the modules Any even when the extra IS installed locally,
+# so mypy verdicts (incl. which type:ignore comments are used) match CI deterministically.
+# playwright is the OPTIONAL [geometry] extra (rendered-geometry harness, #589);
+# not installed in the default dev/CI environment, and imported lazily behind a typed
+# error so a core install imports skill_harness.sitegen.geometry fine. Unlike jsonschema
+# it DOES ship py.typed, so ignore_missing_imports alone would give real types where the
+# extra is installed and Any where it is not -- two different verdicts for one file.
+# follow_imports=skip keeps it Any in both, which is why the inspect_ai override above
+# carries the same line: the pre-commit hook's isolated venv and CI must agree.
+[[tool.mypy.overrides]]
+module = ["playwright", "playwright.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["inspect_ai", "inspect_ai.*", "inspect_swe", "inspect_swe.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+# PyYAML and jsonschema ship no stubs. mypy therefore reduces both to Any in
+# either environment: absent (import-not-found) or installed without a py.typed
+# marker (import-untyped). ignore_missing_imports suppresses both diagnostics, so
+# the verdict, including which type:ignore comments count as used, is the same in
+# CI and locally.
+# Submodules are listed explicitly. `jsonschema` alone does not match
+# `jsonschema.exceptions`, and the partial rule left three import sites carrying
+# an ignore comment that the other three had to drop.
+# Both are imported lazily behind their optional extras' install hints: yaml
+# behind [inspect] (subject/inspect_adapter.py), jsonschema behind [sitegen]
+# (sitegen/__init__.py). A core install imports neither at module top level,
+# so `import skill_harness.sitegen` and the inspect adapter both succeed
+# without the extras; the typed error names the extra to install. jsonschema
+# reaches this environment through [sitegen], through [dev] (re-declared there
+# for the test stack), and transitively through inspect-ai (jsonschema>3.1.1)
+# — never through [project.dependencies].
+# Stub packages are deliberately not added: this repo declares no types-* deps,
+# and adding one would be a supply-chain decision.
+[[tool.mypy.overrides]]
+module = ["yaml", "yaml.*", "jsonschema", "jsonschema.*"]
+ignore_missing_imports = true

@@ -1,0 +1,1065 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+This section records the user-visible changes on `main` since v0.3.0. It rolls
+to `## [0.4.0] - YYYY-MM-DD` at the tag; the version PR (release playbook step
+2) performs that roll. Internal test, CI and docs-only commits are omitted
+unless they change a published surface.
+
+Read the first entry under Changed before you upgrade. One rename in this range
+breaks consumers silently. Nothing raises an error and nothing logs a warning.
+A program that matched the old value stops matching and reports nothing.
+
+### Changed
+
+- **The domain glossary is renamed from `CONTEXT.md` to `GLOSSARY.md`** (#722).
+  Pocock v1.3.1 names the domain glossary `GLOSSARY.md`; a reader following
+  any live pointer now lands on that file. Git recognizes the move as a
+  rename. The title line names the glossary; the body is byte-identical.
+  `docs/agents/domain.md` is replaced with the v1.3.1
+  `setup-matt-pocock-skills` template, and `AGENTS.md` names `GLOSSARY.md` on
+  both live instruction lines. Existing CHANGELOG entries that name the old
+  path stay as written.
+
+- **BREAKING. `report_schema_version` goes from `1.4.0` to `2.0.0`, because the
+  `aggregation_method` value `bh_fdr_fallback` is renamed to
+  `bounded_pooling_refused`** (#360, #441, in `03ee27d`). The constant lives at
+  `src/skill_harness/aggregation/report.py:44`. The new value is written at
+  `src/skill_harness/aggregation/fit.py:759`. There is no alias on the write
+  path and none on the read path. The old string survives only in comments at
+  `fit.py:255` and `report.py:17`.
+
+  What breaks. Any consumer that compares against the literal
+  `"bh_fdr_fallback"` stops matching. The comparison returns false rather than
+  raising, so the consumer reports nothing instead of failing. Code that
+  branches on the value takes the wrong branch. Code that filters on it returns
+  an empty result.
+
+  What to do. Match `"bounded_pooling_refused"`. If you must read both
+  generations, branch on `report_schema_version` rather than accepting either
+  string, because the two values report different outcomes. The fit is refused
+  and pooled at the admission bound, rather than falling back to BH-FDR.
+
+  `docs/PRD.md:757` states the rule this follows. Removals, renames, and type
+  changes take a major bump, because they break `diff skill` consumers.
+
+- **The runtime dependency floors rise to the values `pyproject.toml` declares
+  at this PR's head.** An environment that pins any package below its floor
+  no longer satisfies this package's requirements. Measured from
+  `git diff v0.3.0 HEAD -- pyproject.toml`:
+
+  - `anthropic>=1.11.0` (was `>=1.2.0`; the floor passed through 1.5.0 in
+    #548 and landed at 1.11.0 in #727, which re-asserts the post-patch bound
+    for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3).
+  - `openai>=3.15.0,<4` (was `>=2.41,<4`; the lower bound rose in #604. The
+    `<4` cap is unchanged and still records the supply-chain audit's
+    unaudited-major rule).
+  - `click>=8.5.0` (was `>=8.1`; #606).
+  - `scipy>=1.18.1` (was `>=1.11`; #729 is the last of the floor bumps in
+    the EB-MoM numerical stack).
+  - `statsmodels>=0.15.0` (was `>=0.14`; #605).
+
+  `tiktoken`, `pydantic` and `rich` did not move. Dev-extra floors moved with
+  Dependabot and are not runtime requirements.
+
+- **The ablation runner accepts a whole prompt assembly as an arm, not only a
+  clause of one card** (#554, #615, in `9d956e8a`). `RunConfig` carries a
+  declared arm set serialized into `runs.config_json`. An assembly may name a
+  foreign skill body by path. Duplicate assemblies are refused before any
+  spend. Arm samples are written to the append-only `evidence.arm_samples`
+  table (migration 1200), and the A41 reconciler sums them with `samples.usd`.
+
+- **Every external-check refusal reason is persisted** (#555, #626, #629,
+  in `6b6b74a8`). Migration 1100's CHECK constraint listed ten
+  `UnmeasuredSubReason` literals; `external_check_missing` was never added, and
+  `INSERT OR IGNORE` silently dropped the rows. Migration 1300 rebuilds
+  `clause_run_outcomes` with all eleven members, adds a nullable
+  `sought_oracle` column, and recreates the append-only triggers. Historical
+  runs that lost those rows stay lost; new runs record the reason.
+
+- **A renamed published skill no longer loses its `value_class`** (#601, #618,
+  in `d629227e`). The registry key `closure-mode-at-boundaries` still pointed
+  at the pre-rename card name, so `value_class_for("closure-mode")` returned
+  `None` and the skill took the unclassified path instead of
+  `trap-discipline`. The key is now `closure-mode`, and a staleness test
+  fails when any non-retired key stops naming a live skill.
+
+- **A clause whose scoring axis reaches no comment or clarity outcome is
+  refused before sampling, with a clause-specific reason** (#555, #626, in
+  `6996e68d`). The blanket `BLOCKER-1` refusal is replaced by an
+  `external_check_missing` sub-reason that names the axis.
+
+- **The CLI's rich Console reads `COLUMNS` at render time, not at import**
+  (#564, #624, in `ddf1373e`). A module-level `Console()` froze the width for
+  the life of the process, so terminal resize and
+  `CliRunner(env={"COLUMNS": "200"})` were inert.
+
+- **The published receipt pages stop printing machine tokens as values**
+  (#583, in `330eca7b`). A boolean renders `yes` or `no`; a `None` whose
+  schema field names its own null case uses that word (`value_class` renders
+  `unclassified`); everything else uses the `absent` class treatment. The
+  site also gains page types, a shell with a current-page marker, a 404,
+  schema-sourced measurement-table labels, and `--base-url` so the generator
+  stops baking its own host into the output. The landing page sits behind
+  `--landing` (default off) and its one instruction is a command that runs.
+
+- **The ablation results table gains a `gate-2 (registered floor)` column**
+  (#546, #558, in `c2fa804`). A clause that previously rendered a green
+  `PASSED` now renders `PASSED (scalar only)`, `HARM (registered floor)`,
+  `EQUIVALENT (registered floor)`, or `UNRESOLVED (registered floor)`. The
+  verdict words did not change meaning. The report now shows which decision
+  produced them. Anyone who parses this table by column position must re-read
+  it.
+
+- **Tie-bearing ablation clause decisions route through the Gate-2 discordant
+  rule** (#368, #493, in `0274dd1`). A clause whose decision turned on a tie
+  can receive a different verdict than it did under 0.3.0.
+
+- **`paired-gate2` refuses a run that carries undecided epochs** (#438, #491,
+  in `1a5027a`). A hazard entry is counted per simple command rather than per
+  tool-call blob. When an arm carries undecided epochs, the command emits a
+  `HAZARD_UNDECIDED` refusal and exits 1. A run that previously produced a
+  score now produces a typed refusal instead.
+
+- **The PyPI package description is replaced** (#497, in `3ba4f69`). It now
+  carries the repository's GitHub About text.
+
+### Added
+
+- **`skill-harness run pi-paired CONFIG [--execute]`**, a paired subject lane
+  for the Pi runtime (`src/skill_harness/cli/main.py:3452`). The default is a
+  dry run that performs the pre-spend gate only. `--execute` runs the Full and
+  Null epochs and spends money. The subcommand requires a `pi` binary that this
+  package does not install. Without it the launcher raises
+  `PiExecutableNotFoundError`
+  (`src/skill_harness/subject/pi/launcher.py:164`). The runtime version is
+  measured from the binary that ran and is never assumed. No sized Pi
+  measurement has been run, so no Pi skill effect is admissible yet.
+
+- **SERS 1.4.0 and SERS 1.5.0.** 1.4.0 splits the subject and extractor model
+  roles and adds `subject_identity.subject_model`, required only under the
+  1.4.0 conditional (#487, in `c398cca`). 1.5.0 adds four optional top-level
+  keys from the On-Irreducibility additions (#526, #547, in `cfb5cec`). Both
+  are additive for existing receipts. A consumer holding an older copy of the
+  schema rejects a new receipt, which the standard treats as intended
+  generational non-comparability.
+
+
+- **SERS 1.6.0.** Separates the verdict from its present validity (#643, #654,
+  in `c879633`, finished in #655/#660, in `282a5064`). A receipt reader must
+  handle three new optional top-level objects that are absent on pre-1.6.0
+  receipts: `verdict_scope` (required on a 1.6.0 KEEP, with `model_id`,
+  `task_family` and `delivery_mechanism`), `currentness` (VALIDATED requires
+  basis `FULL_VALIDATION`; CARRIED_FORWARD requires `verdict_scope.tested_at`
+  and renders a carry-forward disclaimer; STALE names a newer metric version
+  or hash mismatch), and `drift_policy`. Receipts from different
+  `sers_version` values are not comparable.
+
+- **SERS 1.7.0.** Adds the online-FDR ledger facts and the claim-level ladder
+  to the receipt (#644, #686, in `bd3467c`; ladder fields from #647, #671, in
+  `3f8d4a90`). A receipt reader must handle two changes. First, a 1.7.0 KEEP
+  carries a required `multiplicity` object (LORDdep procedure, target FDR
+  0.05, `anytime_valid_p`, wealth before/after, batch order) and a
+  `verdict_scope.control_world_result` that must equal `pass`; a 1.7.0 CUT
+  must not carry `multiplicity` at all. Second, KEEP receipts gain
+  `designer`, `designer_independent`, `family_replication`, `model_replication`
+  and `claim_level` (KEEP / REPLICATED / ROBUST), with the ladder thresholds
+  enforced on write.
+
+- **The claim-level ladder** (#647, #671, in `3f8d4a90`). A family record
+  carries five mechanism fields and registration checks. Receipts record who
+  designed the claim, whether the designer is independent, how many
+  independently designed families replicated, and how many materially distinct
+  families a robust claim needs (three, with at least one independent
+  designer). Render sentences carry the same-designer qualifier.
+
+- **Collection screens record what each run actually delivered** (#664, #672,
+  in `ef69c192`; #667, #698, in `2787c13c`). The delivered-surface extractor
+  marks each subject card visible (with position), truncated (with delivered
+  length) or dropped, never guessing an empty listing. The collection screen
+  gains a seeded random-half arm: the seed and the drawn card names freeze
+  into `runs.config_json`, and a delivery-integrity flag marks a run whose
+  intended card was dropped or truncated from the delivered listing.
+
+
+- **The `[geometry]` extra** (#589, in the rendered-geometry harness).
+  `pip install "skill-harness[geometry]"` pulls `playwright>=1.63.0`, the
+  browser behind `src/skill_harness/sitegen/geometry.py`. The core package
+  never imports playwright; the module raises `BrowserNotInstalledError` with
+  the extra named. Installing the distribution is half the job: the Chromium
+  build is fetched separately with `python -m playwright install chromium`.
+
+- **Drift-check rows AC-2, AC-3 and AC-4.** AC-3 covers the public vacuity
+  claims (#543, #565, in `f3f2ba9`). AC-4 covers workflow configuration (#571,
+  in `dc7520e`). Rows DC-17 (mirror records, #514), DC-18 (Vale version
+  pins, #488) and DC-19 (asset pairs, #592) are also live. The drift check
+  reports 22 live contracts at this version.
+
+- **Storage migrations** `1100_clause_run_outcomes.sql` and
+  `1101_structural_covariates.sql` (in `e047967`), plus `1200` for arm samples
+  (#615) and `1300` for the `clause_run_outcomes` CHECK rebuild (#629). All
+  create or rebuild tables additively from a v0.3.0 store's point of view;
+  1300 is the one that replaces a table in place.
+
+- **The release gate reports its own coverage** (#576). Every gate that does
+  not run prints a named skip line, and both summary lines state how many of
+  the eight gates ran. At 0.3.0 the gate prints `7 of 8 gates ran; skipped G6`.
+  Off the 0.3 minor line it prints `5 of 8 gates ran; skipped G6, G7, G8`. G7
+  and G8 previously returned in silence, so `RELEASE GATE: PASS` covered six of
+  eight checks and did not say so.
+
+### Fixed
+
+- **Ingest finds the skill listing where current Claude Code writes it**
+  (#675, #687, in `a9fb533`; #674, in `6505b42`). Current Claude Code puts the
+  Skill-tool listing in a system message, not in the first user message. The
+  extractor and the Stage 1A screens reader searched only the first user
+  message, so a delivered card was recorded as `no_listing` and a look
+  crashed after both samples completed. Both now scan messages in order until
+  the first assistant message and read the listing from the first message of
+  any role that holds Claude Code's header. A listing that first appears at or
+  after the first assistant message is still not attributed to the run.
+
+- **`requirements-ci.txt` pins `urllib3==2.8.0` for
+  CVE-2026-97687/97688/97689** (#701, in `e235bc6`). This is the CI
+  constraints file, not a runtime floor in `pyproject.toml`; the bump closes
+  the advisory on every environment that installs from that pin.
+
+- **The SERS schema held the UNMEASURED sub-reason vocabulary twice and one
+  copy was untested** (#578). `$defs/rate_or_refusal` is referenced by ten
+  measurement fields and was short `tier2_uncalibrated` and
+  `length_confounded`, so a receipt recording either of the runner's
+  pre-sampling refusals could not be written. Both copies are now asserted
+  equal to `UnmeasuredSubReason`.
+- `ExtractedClause.axis` is persisted unnormalised, so a padded axis splits one
+  axis into two (#504, in `8d5e0d6`).
+- `unmeasured_reason` is never persisted, and its vocabulary is disjoint from
+  `UnmeasuredSubReason` (#503, in `710ef78`).
+- An absent dump column is a difference, not agreement (#360, in `1f5a73e`).
+- Two mutants share the id `M-R1` and two share `M-R2`, and nothing asserts
+  that a mutant id is unique (#536, in `af0788f`).
+- The lint gate does not cover `scripts/`, and a syntax error reached a commit
+  through the gap (#535, in `bef52e1`).
+- `pre-commit run --all-files` cannot pass on `main`, because ruff fails on
+  `prototypes/`, which CI never lints (#483, in `fe5b3c1`).
+- `test_mint_path_allowlist` filters on the absolute path, so it is vacuous in
+  a build worktree (#482, in `7284342`).
+- Receipt pages render no `subject_identity`, so the 1.4.0 `subject_model` is
+  invisible to a reader (#490, in `eebaad8`).
+- `DC-16` selects the tracked set, not a filesystem walk (#471, #473, in
+  `b06272a`).
+- The six UNLANDED mirror rows point at an open ticket and no longer pin its
+  number (#521, in `658f769`).
+- The G7 and G8 GitHub reads authenticate with `GITHUB_TOKEN` (#496, in
+  `cf250bd`). Unauthenticated reads share a 60-per-hour budget per IP, which
+  shared CI runners exhaust.
+- The dry-run claim is scoped to the subcommand that spends (#472, in
+  `8dab4d3`).
+- The frozen class-2 reference is runnable, its copies are pinned, and the R40
+  receipt is frozen (#458, in `6225c66`).
+- numpy stays out of the runtime manifest (#161, #442, in `52ee261`).
+- Two tests reported the environment as a code failure. One now skips with the
+  privilege named, and the other scans where the build actually runs (#484, in
+  `db3a688`).
+- The design snapshot describes the banner `main` draws, not the window it
+  retired (#481, in `466e629`), and no longer declares the paper surface that
+  #308 retired (#485, in `8a4d064`).
+- **README "Measuring for real" snippet now shows what `run ablation --execute`
+  actually requires** (#460). `--execute` also needs `--ratification`,
+  `--task-family`, and `--estimand`; the ratification preflight refuses before
+  any model call and before the API-key check, which the prior wording did not
+  say.
+- **CHANGELOG 0.3.0 entry for #424 corrected.** The ticket did not stay open on
+  the negative control; it closed 2026-09-04 once the control was re-seeded to
+  satisfy the #403 ruling's qualified-fixture precondition (#432). The 0.3.0
+  section otherwise unchanged.
+
+### Internal
+
+The bulk of this range is a rebuild of the empirical-Bayes method-of-moments
+peel in `src/skill_harness/aggregation`, 65 commits that change `fit.py` by 904
+lines. The rebuild carries one externally visible consequence, the rename
+recorded under Changed. The work is covered by a frozen pre-registration
+(`b477983`), a superseding v2 frozen on mechanism class 2 (`e11e4e2`,
+`397e840`), a confirmatory run that returned REJECTED at R=1000 on the
+committed root (`13f0fbb`) and NOT_REJECTED on a fresh root (`feb318d`), and
+mutation receipts re-run against the code that ships (`36dcc22`, `4348275`).
+
+Stage 1A and Stage 2 regime simulators for #621/#685, the v3a Null
+qualification screen, comparative collection screens, ADR 0002, and the
+On-Irreducibility decline records change research findings and internal
+records, not a PyPI-observable surface. Dependabot bumps of pinned dev and CI
+actions throughout the range follow the same rule.
+
+## [0.3.0] — 2026-09-06
+
+The first release since 2026-08-15. It carries 194 commits from `main`. The
+reason to cut it is the first entry under Fixed: the package PyPI serves as
+0.2.3 exits 1 on a cp1252 Windows console when it runs the README's own
+documented command. The fix has been on `main` since 2026-08-31.
+
+The minor bump, not a patch, records two facts. The SERS receipt schema moved
+from 1.0.0 to 1.3.0 in this range, which is a wire-format change for anything
+that reads receipts. And `scripts/release_gate.py` defines the 0.3 line as
+"the assurance phase is closed and its lane has run green" (G7, G8); both
+checks pass at this version, so the number says what the gate says. No commit
+in the range carries a `BREAKING CHANGE:` marker.
+
+### Fixed
+- **Windows: the CLI no longer crashes on a cp1252 console** (#321, fix in
+  #322). The CLI entry point reconfigures `stdout` and `stderr` to UTF-8 before
+  any output. v0.2.3 raised `UnicodeEncodeError` on the right-arrow glyph in
+  the offline audit table and exited 1 mid-output with a traceback. Measured
+  2026-09-06 from two clean virtual environments on the same console: the PyPI
+  0.2.3 build fails, a build from `main` exits 0.
+- **A core install can import `skill_harness.sitegen`** (#415, fix in #425).
+  `jsonschema` was imported at module top level but was not a runtime
+  dependency, so `import skill_harness.sitegen` failed on a plain
+  `pip install skill-harness`. It now loads lazily behind the new `[sitegen]`
+  extra and the error names the extra to install.
+- **`screen profile --skills-root` enumerates a category-nested skills tree**
+  (#101, fix in #380). It scanned one level only, so a collection grouped by
+  category enumerated zero cards and silently blanked the description-cost
+  column. It now descends one extra level where the direct child has no
+  `SKILL.md`.
+- **Screen verdicts refuse rows measured under a different harness pin**
+  (#382, fix in #398). Admissible screens captured under another pin had
+  contributed to `p0` with no staleness signal. `StalePinError` names both
+  fingerprints; `screen verdict --fresh-pin` triggers the check.
+- **Aggregation refuses malformed evidence instead of computing on it:** wins
+  above observations (#232), empty fit observations (#231), a non-finite score
+  at the model layer (#375). `CONFOUNDED` is reachable again by reading the
+  persisted reason (#376); the wrong-instrument withhold no longer promises a
+  lane that does not exist (#404); walled-off partitions stay out of the
+  exclusion read and inadmissible evidence is named inadmissible, not absent
+  (#247).
+- **Verdict wording:** `budget_exhausted` is reported as itself, not as
+  underpowered; `_is_unmeasured` answers `UNMEASURED`, not `CANT_TELL_YET`
+  (#259). The `evaluate-paired` command checks the runner-declared oracle
+  identity, not the card digest (#417), and the oracle metric identity is
+  0.4.1 after the module move (#416).
+- **Cost:** an unpriced model is refused rather than charged at Sonnet 4.6
+  rates (#339); the provider-prefixed `subject_model` the store records is
+  priced (#332); `claude-sonnet-5` is in the price table, with a drift guard
+  (#301).
+- **Vacuity render guard:** kept on the kind-precision publishing path (#236);
+  reads the aggregate as a number rather than as digits inside one, and loops
+  the citable registry (#237). The percent-claim detector was reverted from the
+  render backstop after its baseline was executed rather than chosen (#238).
+- The generation-1 calibration receipt's off-by-one denominator (#320); the
+  guard reports a source line rather than an offset into a blob (#259); a
+  supersession path for `screen_runs` (#410); the backfill manifest is
+  re-runnable so a grown manifest reaches the live store (#434); the CI
+  `all-green` job no longer depends on a job it had dropped (#319).
+
+### Added
+- **SERS 1.1.0, 1.2.0 and 1.3.0.** 1.1.0 adds the `subject_identity` block
+  (`skill_id`, `harness_version`, oracle `metric_version` and
+  `implementation_hash`, arms) with an omit-`skill_id` poison fixture (#300).
+  1.2.0 adds the additive `delivery` block recording which of a skill's two
+  products carried the value: `channel`, `exposure`, `pi_c` (#392). 1.3.0 adds
+  the split-oracle outcome variable and its decision rule (#424; the one
+  negative control that first reached CANT_TELL_YET instead of CUT(harmful)
+  was traced to a seed that violated the #403 ruling's qualified-fixture
+  precondition, not to the ruling or to Gate-2 — re-seeded on the Full arm
+  against a qualified Null in #432, and the ticket closed 2026-09-04). Older
+  receipts validate unchanged; the `sers_version` enum lists all four.
+- **`[sitegen]` extra** for the receipts site generator, the only home of the
+  `jsonschema` dependency (#425). The receipts site moved onto the declared
+  bench design system and the paper receipt body retired (#318); linkcheck now
+  covers the generated site, not only the prose (#290).
+- **Gate-2 matched-evidence bridge:** matched observation ids bind to the
+  result (#246), ledger exclusions on decisions with typed matched refusals
+  (#247), E2 evidence binding and a compiled pre-spend binding (#263), a
+  paired-lane Path C Gate-2 read under a ratified design (#396), and a
+  cache-aware pair projector with the cache-read share declared rather than
+  observed (#445).
+- **Detector v2:** exposure is the treatment at paired ingest and `pi_c` a
+  recorded stratifier (#393, ruling in #384). The 2026-09-01
+  `git-pull-rebase-trap` pair was re-ingested under it and its receipt
+  superseded (#397).
+- **Paired-run apparatus:** a pre-spend launch gate for the sized paired run
+  (#411); skill frontmatter normalised at the harness boundary with corpus
+  coverage reported (#413); the hazard writer connected to the reader through
+  a two-arm block model with a round-trip control (#429); three deterministic
+  checks so the assumptions RAT-0001 Amendment 2 exposed cannot reach a signed
+  record (#427). RAT-0001 itself: drafted, ratified, amended twice, run once,
+  decided `UNRESOLVED` (#406 to #418).
+- **Citable calibration registry** with preserved supersession notes; an
+  ambiguous calibration receipt raises (#235).
+- **Executable evaluator contracts** (#294).
+- **Assurance phase closed** (#174): close-out figures, residual risks and
+  drift contracts recorded; a Linux assurance container definition (#371); the
+  ten registered detectors exist and run (#353 to #369), including null-world
+  FDR calibration of the BH-FDR fallback (#359) and EB-MoM recovery against a
+  known hyperprior (#361).
+- **Screens:** the OBS-0007 gitpull screen joins the backfill manifest and
+  voided screens render as `VOIDED` in prior measurements (#433); the D4 reason
+  records what was compared and a half-specified manifest entry is refused
+  (#401, #426).
+- **Docs of record:** `CONTEXT.md` domain glossary wired as the vocabulary of
+  record; a one-page architecture map measured 2026-08-31 (#372); an ADR for
+  the architecture-admission rule and its three applications (#296); the
+  `why-this-exists.md` commit-count claim is derived at check time (#439) and
+  checked on a schedule rather than as a CI gate (#446).
+- **Repo description sync check** verifies the live GitHub repository "About"
+  text against `pyproject.toml`'s `[project].description`, byte for byte.
+  `tests/test_structural_bans.py` already pinned the `pyproject.toml` side of
+  this pair to a fixed literal, but nothing read the live public surface, so
+  the claimed lockstep was one-sided. `scripts/repo_description_check.py`
+  closes the other half: exit 0 on a match, exit 1 on drift (both strings
+  printed in full), exit 2 when the live description cannot be read at all -
+  a refusal, never a silent pass. Runs on a daily schedule and on any push to
+  `pyproject.toml` (`.github/workflows/repo-description-sync.yml`), not as a
+  per-PR gate: the drift it watches for is introduced out-of-band through the
+  GitHub web UI, so no pull request can cause it. Deliberately kept out of
+  `scripts/drift_check.py`, which is hermetic by design.
+- **Release gate blocks the 0.3 line until the assurance phase is closed and
+  its lane has run green** (#206). `scripts/release_gate.py` gained two checks
+  that apply only when the tree declares a `0.3.x` version: G7 requires every
+  assurance-phase issue (#167-#174) closed on GitHub, G8 requires a successful
+  `assurance.yml` workflow run on record. Both read the GitHub REST API and
+  fail closed — an API the gate cannot read blocks the release instead of
+  passing it. The 0.1.x and 0.2.x lines self-skip both checks, so a patch
+  release is unaffected. The gate now also takes `--root <repo-root>`, matching
+  `scripts/drift_check.py`, so its checks can be exercised against a seeded
+  tree; the version checked is always the version that tree declares.
+  Falsification receipt: `docs/assurance/release-gate-red-206.md`.
+
+### Changed
+- **README states the spend rule per command.** It said every command that can
+  spend is dry-run by default. `skill init` calls the extractor model in both modes
+  and `--execute` gates only persistence; a stranger test on 2026-09-06 ran it without
+  `--execute` and observed a live request. The README now says so, and its quoted
+  audit output is the verbatim 0.3.0 output rather than an abridged paraphrase.
+- **Dependency floors.** `anthropic>=1.2.0` (was `>=0.87`); `openai>=2.41,<4`
+  (was `<3`); dev: `mypy>=2.3.1`, `pytest-socket>=0.8.1`. Dependabot bumps of
+  pinned dev and CI actions throughout the range.
+- The README body was rewritten from the record, the unsupported row count
+  corrected and pinned (#316); the origin question is stated in the ratified
+  framing on both public surfaces (#323); `pyproject.toml`'s description
+  changed with it and the live GitHub About text is checked against it daily.
+- Repository style surfaces for maintainers: `DESIGN.md` declares one system
+  with a token-conformance test (#312); six Vale prose rules with fixtures and
+  a warning-level CI job (#317); the literal-humanist prose register is the
+  repo voice in `AGENTS.md`.
+
+## [0.2.3] — 2026-08-15
+
+### Changed
+- **Extractor vacuity flag and falsifying case are independently observable**
+  (#136, build half of #128). Removed the `falsifying_case_iff_testable` model
+  validator and the prompt instruction that coupled the two fields, so a corpus
+  can express disagreement (flagged-but-constructible detector false positives,
+  and non-flagged clauses without a case). `FalsifyingCaseSchema` strictness is
+  unchanged. `scripts/corpus_coverage.py` now reports the case-presence x
+  `vacuity_flag==none` cross-tab, states whether constructible coverage is
+  independent of vacuity on the input or equal by construction (off-diagonal
+  empty), and surfaces detector false positives rather than discarding them.
+  Instantiated coverage remains a separate figure. Re-extraction of the live
+  6-skill corpus is post-merge (API key required).
+
+### Added
+- **`skill_harness.oracles.tier1.axis_registry` — single source of truth for the
+  Tier-1 axis names, and a fail-closed classifier for proposed axes** (#117,
+  parent #102). The axis names existed twice — as `AXIS_*` constants in
+  `ablation/confound.py` and as hand-typed prose in the extractor system prompt
+  — and the copies had already drifted (the prompt omitted an axis present in
+  `oracles/tier1/`). `TIER1_AXES` is now the only place the names are written
+  down: `get_tier1_scorers()` zips its scorer tuple against `TIER1_AXIS_NAMES`
+  (`strict=True`, so a scorer added without its registry entry errors), and the
+  extractor renders its axis catalog from the registry at import time rather
+  than listing names in the prompt string. A test parses the names back out of
+  the finished prompt and asserts equality with the registry, so the two cannot
+  separate again. `classify_axis(axis)` is the containment boundary the model's
+  proposals pass through: total over `str`, never raises, and returns
+  `AxisScoreability.UNSCOREABLE` for anything not registered. Matching is plain
+  exact comparison with **no** normalisation — not even a whitespace strip —
+  because `AblationRunner._is_tier1_measurable`, `_score_primary_axis` and
+  `detect_confounds` all compare the axis raw; a gate that normalised would
+  admit clauses the scorer lookup then missed, converting a safe UNMEASURED into
+  an uncaught `RuntimeError` mid-run (caught in review, regression-tested in
+  `tests/ablation/test_runner.py`). Normalising once at the extractor boundary is
+  the correct fix and is a named follow-up, not done here.
+  `oracles/tier1/end_state_categorical.py` is reconciled as a documented
+  exclusion: `score_end_state` is not a `(text) -> float` metric, so it cannot
+  enter ablation's Full-vs-Ablated text-delta path.
+- **Guarded new-mint entrypoint for oracle verdicts** (#81, follow-up to #75).
+  `mint_oracle_verdict(conn, verdict, *, pin: ArticleFingerprint)` is the single
+  structural gate for newly-minted rows — pin columns are taken from the
+  fingerprint so a bare write cannot slip past. `subject.ingest` and
+  `ablation.runner` route through it. Raw `insert_oracle_verdict` remains open
+  for historical / reconciler / no-retrofit inserts (#41). The dormant
+  `dual_write.write_verdict_with_cost_entry` path is documented as
+  historical/reconciler-only (not a new-mint site).
+- **`skill_harness.task_frontier` — the calibration/confirmation/matched phase
+  firewall, tracer bullet** (#90, spec #89, spine #84 unit 2). A task family
+  now flows end to end, thinly: a frozen `TaskFamilyManifest` loads and
+  exposes a phase→semantic-lineage partition; `admit()` reads a lineage's
+  phase out of that freeze and stamps it on the record **at write time**; the
+  record lands in a phase-partitioned append-only store; and it reads back
+  under the phase it was admitted to. Migration `0700_task_frontier` adds
+  three physically separate tables (`task_frontier_{calibration,confirmation,
+  matched}_obs`), each CHECK-pinned to its own phase literal and carrying the
+  usual `append_only_violation` UPDATE/DELETE triggers — so repartitioning an
+  already-written record aborts. Spec #89 rejected the single-table
+  `WHERE phase = 'matched'` alternative: under a read-time filter the
+  split-sample firewall survives only while every caller remembers the
+  predicate. The public surface is `load_manifest` / `admit` /
+  `matched_evidence` / `audit_observation`, with **no bulk** accessor for the
+  walled-off phases, no call taking a phase as an argument, and no way to
+  enumerate a phase's lineages — pinned by a test so a convenience accessor
+  cannot quietly reopen the leak path. This removes the row-leakage bug class
+  (defense in depth); it is not a claim that misuse is impossible.
+  Scope note — this is the tracer only, no spend and no real skill measured:
+  `load_manifest` carries a **subset** of spec #89's manifest shape and
+  *refuses* unrecognised keys rather than dropping them (so a manifest cannot
+  appear to register a `hard_budget` that nothing read); spec #89's fourth
+  call `calibration_rung` is **not built**; and the matched-phase feed into
+  `oc/gate2` (#91), total manifest validation (#92), confirmation-attempt
+  accounting (#93) and the synthetic no-leak proof (#94) are tracked
+  follow-ups, named as not-yet-built rather than implied. One #92 guard landed
+  early with its prove-it-bites test — a semantic lineage claimed by two phases
+  is refused at load, because accepting it would breach the firewall inside the
+  tracer itself.
+- **Mandatory model pin on new verdict mints + drift fingerprint** (#75,
+  Honest Live Board S1). Every newly-minted `oracle_verdicts` row carries an
+  `ArticleFingerprint`: primary `model_snapshot` (or response-fingerprint
+  fallback with `requalify_on_drift`), plus a `drift_fingerprint` token so a
+  later fleet-model change is detectable (precondition for the board's
+  day-one stale badge). Migration `0600_model_snapshot` adds the four columns
+  as nullable — pre-registry / historical rows are not retrofitted (#41
+  no-retrofit). Enforcement is at the mint paths (`subject.ingest`,
+  `ablation.runner`) via `ArticleFingerprint`; bare repository inserts of
+  historical-shaped writes remain valid.
+- **`skill_harness.ratification` + the mechanical preflight gate on
+  `--execute`** (#57, PR-2 continuation; binding ratified on #47 —
+  operator-picked mechanical, stronger than recommended; historical-
+  classification obligation from the #41 amendment). Un-ratified spend is now
+  mechanically impossible: `run ablation --execute` refuses unless the
+  invocation references a `docs/ratifications/RAT-NNNN-<skill-slug>.md`
+  record with status RATIFIED, a `hard_cap_usd` exactly equal to the passed
+  `--max-usd` (compared as integer cents; #47 fixes caps to cent-rounded
+  values), and scope matching the invocation's skill id + new `--task-family`
+  + `--estimand` options. Dry-run stays ungated. Refusal lanes are typed
+  (record-missing / record-invalid / status-not-ratified / cap-mismatch /
+  scope-mismatch) and the gate fires before any DB connection, client
+  construction, or API-key check. Record validity is also enforced at parse
+  time: cap within the registered $35 ceiling, cap >= the record's own
+  worst-case cost, cent-quantized cap, gate-matched cost provenance
+  (`project_pair_usd` for Gate-2, `project_trial_usd` for Gate-1 — the #56
+  review carry-in), registered estimand only (`n/a` refused on forward-
+  looking records), and the verbatim disclosure line on self-certified
+  records. New `docs/ratifications/` ledger (README conventions + TEMPLATE
+  carrying the eleven-field checklist and signing order: SME first, operator
+  LAST pre-spend). The OBS front-matter schema (#41 ratified field list)
+  ships alongside so the parse fixtures double as the RAT/OBS schema contract
+  tests; `docs/observations/` itself is deliberately untouched (DC-13 stays
+  PLANNED). New `docs/INVARIANTS.md` §6 locks the binding. Drift row
+  **DC-12** (ledger internal consistency) is activated live with its own
+  deliberately independent reader — the src parser and the drift reader form
+  a differential pair.
+- **`skill_harness.oc.frontier` — frontier assembly with live cost
+  projection under the $35 cap** (#56, PR-2 continuation; grid and budget
+  ratified on #40, error semantics on #37, architecture on #42). Pure
+  functions from registered knobs to the deliberation artifact:
+  `assemble_frontier` enumerates the FULL integer grid n = 6–40 (every row,
+  never a shortlist — the function takes no grid parameter at all), with the
+  12–24 band as a presentation-highlight flag only (`BAND_N_LO`/`BAND_N_HI`
+  registered in `oc.conventions`). Every row carries the attained
+  family-wise error columns (#37 item 5: the Gate-2 null false-direction
+  bounds PAIR — d-grid max + certified Bernstein upper bound — with
+  conformance judged on the CERTIFIED bound), grid-min power over the
+  registered H1 alternative points (points outside H1 are refused, never
+  silently filtered), curtailed-E[N] expectation columns, the config-level
+  Gate-1 block (attained zone-edge pair + P(UNRESOLVED)-vs-p0 profile), and
+  the worst-case FIXED-N cost `n × usd_per_pair` tested against the
+  registered hard cap pre-spend (#40(b): curtailment savings display as
+  expectation, never enter the cap). Over-cap rows assemble and render
+  visible-but-infeasible (#40(d)); `ratifiable` is the registered
+  conjunction (feasible ∧ power floor ∧ candidate α). The grid is enforced
+  at THIS layer (`frontier_row` refuses n outside 6–40) — the math layer
+  stays unbounded per #42/#55. Costs enter `oc` only as registered knobs:
+  the live PRICE_PER_MTOK → USD projections land in
+  `cost_projection.project_pair_usd` / `project_trial_usd` (worst-case: full
+  input rate, no cache discount; unknown model raises rather than
+  default-prices), and `EVALUATION_HARD_CAP_USD = 35.0` is registered next
+  to the daily ceiling. `CANDIDATE_FALSE_DIRECTION_TARGET = 0.05` is carried
+  as a registered CANDIDATE knob default — finalized only at row-pick, never
+  ratified here. New `docs/INVARIANTS.md` §5 locks the budget ceilings.
+  Drift rows **DC-9** (per-pair dollar-constant token ban in
+  `src/skill_harness/`) and **DC-10** (budget values == doc quotes)
+  activated live in this PR per the #43 same-PR rule — 11 live contracts, 2
+  PLANNED. The full-grid assembly test is `slow`-marked (~2 min of exact
+  enumeration, measured before authoring); CI's `-m "not live"` selection
+  runs it.
+- **`skill_harness.oc` — Gate-2 four-outcome lattice machinery** (#55, PR-2
+  continuation; rule forms ratified on #37, dual MME on #40, architecture on
+  #42). Three-sided paired decision rule {BENEFIT/HARM/EQUIVALENT}+UNRESOLVED
+  in the Goeman-partition form: the reference-prior Dirichlet over the four
+  paired cells (tie cells pooled) partitions the net lift δ = p_f − p_n at
+  the registered margin δ_min into three disjoint regions whose posterior
+  masses sum to 1 — γ stays the only confidence knob, and the zero-discordant
+  case is the #37-defined UNRESOLVED branch. New exact primitive
+  `dirichlet_delta_tail` (rational polygon integration of the integer-
+  parameter Dirichlet density — stdlib-exact, no quadrature, no simulation).
+  Dual-MME registration `MMESpec` (δ_min AND q_min) with the conforming-
+  region predicate H1 = {(d,q): δ ≥ δ_min ∧ q ≥ q_min} for #56's frontier
+  power target. Exact OC at any true (d, q) in two deliberately different
+  walks — trinomial convolution vs per-pair (x_f, x_n) lattice-DP curtailment
+  (#37 item 6, default-on; the scalar half-update state is ratified-
+  insufficient per #42) — pinned decision-identical differentially.
+  `gate2_worst_false_direction` reports the null false-direction rate as a
+  d-grid maximum PLUS the certified Bernstein-coefficient upper bound rather
+  than conflating a grid max with a supremum. Frequentist cross-checks per
+  #37 item 4: mid-p McNemar (exact conditional banned by name, FLL 2013),
+  Newcombe 1998 paired interval (method 10, anchored to the published Altman
+  2000 worked example), Tango 1998 score interval by deterministic bisection
+  inversion (anchored to a published clinical literal). Gate-2 floor items
+  from the banked prototype suite (trinomial sum-to-one, harm/benefit
+  symmetry, v3 curtailment identity) land as tests with independent
+  exact-fraction reference literals (order-swapped integration route);
+  boundary rows n=6 and n=40 covered. Drift-check row **DC-11** activated
+  live in this PR per the #43 same-PR extension rule (banned-methods tokens
+  scoped to oc/, with the printed E1b definition-site exemption for
+  `crosschecks.py`) — 9 live contracts, 4 PLANNED; `TokenBan` rows gain
+  per-row scoping (`roots` + `scan_repo_level`) and `LiveRow` carries a
+  tuple of token bans. Frontier assembly + live cost projection stays #56
+  (ZERO cost constants in this change, #42 convention 3).
+- **`skill_harness.oc` — pure-math OC engine, Gate-1 machinery** (#54, PR-2
+  opener of the instrument upgrade; architecture ratified on #42, rule forms
+  on #37, grid on #40). New top-level package importing NOTHING from the
+  ablation or subject layers (the legacy `sizing.py`/`stopping.py` stay
+  untouched as characterized legacy artifacts — parallel machinery, not a
+  refactor). Gate-1 two-point indifference-zone rule (QUALIFIES tests
+  p0 ≤ θ_lo, REJECTED tests p0 ≥ θ_hi, declared don't-care zone between; the
+  one-point rule is refused at construction), Lee-Liu-style predictive-
+  probability extension governor (one-step beta-binomial PP against a
+  registered floor, bounded by an outer batch cap, fully inside the exact OC
+  characterization), exact binomial OC enumeration reporting ATTAINED (never
+  nominal) zone-edge errors, and deterministic curtailment default-on —
+  determination against the full design tree so the decision-identity holds
+  under extension, pinned differentially by test (per-trial DP vs batch
+  convolution). Grid constants `GRID_N_MIN=6`/`GRID_N_MAX=40` are `oc`'s own
+  registered conventions with the #40-provenance comment, deliberately not
+  imported from legacy stopping constants; new locked INVARIANTS §4 entry.
+  The banked prototype suite (#42 convention 4) lands as the Gate-1 test
+  floor with independent exact-fraction reference literals; boundary rows
+  n=6 and n=40 covered. Drift-check rows **DC-7** (grid constants + doc
+  quotes + provenance comment) and **DC-8** (import-direction ban, new
+  `ImportScanBan` check kind) activated live in this PR per the #43 same-PR
+  extension rule — 8 live contracts, 5 PLANNED. Gate-2 four-outcome lattice
+  DP is #55; frontier assembly + live cost projection is #56 (costs never
+  enter below the frontier-assembly layer, #42 convention 3).
+- **Drift-check CI — declarative contract table** (#53, PR-1 of the instrument
+  upgrade; contract list ratified on #43). New `scripts/drift_check.py` in the
+  release-gate pattern: contract rows are DATA, so adding a locked contract is
+  a table row, not new code. Six live rows — DC-1 pass-rule thresholds
+  0.60/0.95/0.05 (cross-site equality across `aggregation/fit.py`,
+  `ablation/stopping.py`, `aggregation/status.py` + `INVARIANTS.md` quotes,
+  previously assumed, never enforced) · DC-2 sampling schedule N_MIN=8 /
+  N_INC=4 / N_MAX=40 · DC-3 the banned decision term, repo-wide with an EMPTY
+  allowlist (the CI enforcement of record the registry module pre-announced) ·
+  DC-4 estimand vocabulary (registry enum == the registered pair; no other
+  token in docs) · DC-5 the README launch-trigger sentence, both sites,
+  registered verbatim · DC-6 the spend-gating sentence + enforcement-pointer
+  liveness. Seven registered PLANNED rows (DC-7..DC-13) print as PLANNED until
+  the PR landing each surface activates them; DC-13's line records that its
+  surface (docs/observations/, PR #60) landed before this script existed and
+  activation is owed. Green output prints every covered contract, the coverage
+  boundary line, the PLANNED rows, and the allowlist even when empty; failures
+  are all listed, never first-fail. New `drift-check` job wired into the CI
+  all-green set.
+- **π_c invocation detection + zero-invocation refusal at subject ingest**
+  (#52, PR-1 of the instrument upgrade; feasibility record #46). Every parsed
+  sample now carries `invoked_skill` — the v1 detector
+  (`detect_skill_invocation`, `v1-skill-tool-call`) fires iff the parsed
+  message stream contains a Skill tool-call naming the skill under test; the
+  SKILL.md-read branch is dead code under the `inspect_swe.claude_code` solver
+  and stays excluded. Every paired write reports π̂_c over the Full arm with a
+  mandatory exact Clopper-Pearson interval (`IngestResult.pi_c`, mirrored into
+  the run's `config_json`), so a "skill had no effect" result can never hide
+  "skill was never invoked". A treated arm with ZERO detected invocations
+  refuses the write (`ZeroInvocationError`) and surfaces as an INSTRUMENTATION
+  FINDING, never a null effect; a detected invocation in the Null arm refuses
+  as control-arm contamination (structurally impossible per #46 — 0/22 Null
+  epochs fired, now a regression fixture). Ingestion stays exclusively on the
+  `read_eval_log` reader API (eval logs are zstd-compressed zip entries — raw
+  archive handling stays banned). `ORACLE_METRIC_VERSION` bumped to `0.3.0`
+  (pairing semantics gained the refusal rules).
+- **Estimand registry + decision-semantics vocabulary** (#51, PR-1 of the
+  instrument upgrade; resolution record #36). New `skill_harness.semantics`
+  module: the two named estimands (`treatment-policy` = agentic paired subject
+  layer, production default; `hypothetical` = ablation forced-injection,
+  diagnostic — ICH E9(R1) vocabulary), the 4-class delivery-mechanism taxonomy
+  (`model-pull` / `hand-invoked` / `hook-nudged` / `hook-blocked`) registered as
+  part of the treatment, per-mechanism π_c handling (detector lanes vs
+  structural π_c ≡ 1), and `RegisteredScope` — the
+  (skill × task family × estimand × delivery mechanism) claim boundary every
+  verdict now carries (`VerdictResult.scope`). Hand-invoked treatment-policy
+  registrations are the frozen-task design and refuse to register without a
+  declared Null-arm semantic. Verdict render surfaces (`screen verdict`,
+  `screen profile`) gained an enum-backed estimand column; verdicts without a
+  registered scope render `n/a (pre-registry observation)` — historical records
+  are never retrofitted. The E9(R1)-superseded analysis-population term
+  (`skill_harness.semantics.BANNED_DECISION_TERMS`) is banned repo-wide with an
+  EMPTY allowlist (pytest scan now; drift-check CI row DC-3 to follow).
+- **Paired-path (`full_vs_null`) freeze branch — A′** (S86 frozen-case design
+  council, operator-ratified). `freeze` now accepts a WINNING paired verdict
+  (`observation = 1.0`) under a metric registered as binary
+  (`PAIRED_FREEZE_BINARY_METRIC_IDS`: `subject:file_contains`,
+  `subject:command_succeeds`) and stores the Null-arm sample as the falsifying
+  case — closing the structural gap where a clean paired winner produced
+  nothing freezable and A57 Rule 6 made KEEP unreachable (live-confirmed by
+  the r3 positive control: 8/8 vs 0/8, p_win 0.9899 → CANT_TELL_YET).
+  The ablation path (`full_vs_ablated`) eligibility is byte-unchanged. No
+  schema change. Normative caveat added to the PRD `freeze` section: a paired
+  frozen case is the Null half of the winning evidence re-encoded, not
+  independent falsification.
+
+### Removed
+- **`skill_harness.ablation.confound.AXIS_VERBOSITY`, `AXIS_HEDGE_INDEX`,
+  `AXIS_STRUCTURE_SCORE`, `AXIS_COMPLIANCE_PROXY`,
+  `AXIS_CITATION_PRESENCE_PER_FLAG`, and `MetricFn`** (#117). Breaking for any
+  importer; acceptable pre-1.0, and no in-tree caller survived (`test_confound.py`
+  moved its `MetricFn` import). The axis names now live only in
+  `oracles.tier1.axis_registry.TIER1_AXES` / `TIER1_AXIS_NAMES`, and `MetricFn`
+  is importable from that module. `get_default_tier1_scorers()` is unchanged and
+  is still the ablation-layer way to resolve the default scorer set.
+
+### Fixed
+- **Paired both-PASS-tie freeze hazard.** Previously a paired verdict with
+  `observation = 0.5` was freezable via the FAILING-side rule, but on the
+  paired path `0.5` also covers both-PASS ties — freezing one stored a
+  PASSING Null sample as a falsifying case. Paired ties and losses
+  (`0.5`/`0.0`) now refuse explicitly; graded (non-binary-registered) metrics
+  refuse rather than minting a possibly-passing artifact.
+
+## [0.2.2] — 2026-07-26
+
+Surface-consistency fix release, cut same-day as 0.2.1. The 0.2.1 wheel and
+its frozen PyPI description shipped with internally inconsistent surfaces
+(details under Fixed); the PyPI description cannot be corrected without a new
+upload, so this release exists to make every public surface tell one current
+story — and to install the release gate that blocks this class of drift from
+recurring. No functional changes to measurement, storage, or verdicts, and no
+change to the measured record: still zero measured KEEPs, paired path still
+unfired.
+
+### Added
+- **Release gate (`scripts/release_gate.py`)** — enforced surface-lockstep
+  check run on every CI push/PR AND as the first job of `publish.yml` (the
+  build and PyPI-upload jobs depend on it, so a stale tag is blocked before
+  an artifact exists — blocked by default, not impossible). Checks: pyproject
+  version == `__version__` (G1), CHANGELOG rolled for the current version
+  (G2), README status banner current (G3), README PyPI-render-safe — no
+  relative link/image targets (G4), every workflow action SHA-pinned (G5),
+  tag name matches the version (G6). v0.2.1 was tagged with G1–G4 all stale;
+  the gate is the process fix, this release's other entries are the instance
+  fixes. The v0.2.2 cut itself is the gate's first live exercise.
+
+### Fixed
+- **Shipped `__version__` drift (G1's motivating instance).** The 0.2.1 wheel
+  carried `skill_harness.__version__ == "0.2.0"` while
+  `skill-harness --version` (importlib.metadata) correctly said 0.2.1 — the
+  installed library disagreed with its own CLI. `__init__.py` also still
+  carried the retired v0.1 "clause-ablation differential testing" one-liner;
+  docstring now matches the shipped keep/cut positioning.
+- **README stale on PyPI's frozen description and GitHub.** Status banner
+  said v0.2.0; the 60-second start led with pip-from-git although
+  `pip install skill-harness` now exists; the banner image and every
+  docs/examples/LICENSE/CONTRIBUTING link were relative paths, which 404 or
+  vanish when PyPI renders the README as the project description. Install
+  path now leads with PyPI, all link/image targets are absolute, and the
+  comparison table's maturity cell no longer hardcodes a version.
+- **SECURITY.md pinned itself to `0.2.0`.** The supported-versions statement
+  now says pre-1.0 / `main`-only without naming a literal version — removing
+  a drift surface instead of gating it.
+- **`publish.yml` actions were tag-pinned against repo convention.** Every
+  other workflow SHA-pins actions; the publish pipeline — the one with PyPI
+  OIDC credentials — rode mutable refs (`@v4`, `@release/v1`) and carried a
+  stale comment claiming a SHA pin was intended. All five actions now pinned
+  to full commit SHAs (gate G5 blocks regressions repo-wide), workflow-level
+  `permissions: contents: read` added, and the gate job fronts the pipeline.
+
+## [0.2.1] — 2026-07-26
+
+First release distributed on PyPI (`pip install skill-harness`, trusted
+publishing via OIDC). No change to the measured record: still zero measured
+KEEPs; the paired Full-vs-Null path remains coded but unfired.
+
+### Added
+- **PyPI trusted publishing** — OIDC release workflow (`publish.yml`);
+  installs no longer require pip-from-GitHub.
+- **Per-sample `setup` hook on `build_paired_tasks`** (`skill_harness.subject.inspect_adapter`):
+  an optional `setup: str | None` carrying bash-script *contents* run in the sandbox before the
+  agent starts (Inspect `Sample.setup`) — the delivery mechanism for anything the bytes-only
+  `files` path cannot express (e.g. the +x bit on a planted stub CLI). The SAME script goes to
+  both arms, so cross-arm environment equality is preserved by construction, and it is serialized
+  into the `.eval` log so ingest provenance (`source_eval_sha256`) covers it. Guarded like the
+  existing `files_as_data_uris` footgun: NUL bytes rejected, and a path-shaped value (naming an
+  existing file) is refused outright — contents only, never a path.
+
+### Fixed
+- **`skill audit` now works fully offline on a cold cache.** The Tier-1 verbosity
+  module loaded tiktoken's `cl100k_base` encoding at import time, and `skill audit`
+  imports that module just to enumerate axis names — so the "fully offline, no cost"
+  command crashed on air-gapped machines with a network fetch to
+  `openaipublic.blob.core.windows.net`. The encoding now loads lazily on first
+  tokenization; audit never touches the network, and only paid measurement paths
+  fetch (pre-seed `TIKTOKEN_CACHE_DIR` for air-gapped measurement runs).
+- **Launch-surface fact corrections from a pre-launch readiness review.** README/
+  CHANGELOG/docstring claims brought back in line with the repo's own registered
+  record: the paired Full-vs-Null path is described as shaken down via the
+  pre-registered k=8 NO-GO apparatus run (≈$6.17), not "never fired /
+  cost-free-validated"; "~26 screen verdicts" corrected to the registered
+  denominator (26/26 Null epochs across 6 screened tasks) in README, CHANGELOG
+  0.2.0 entry, and `screen_backfill.py`; the audit sample's summary line corrected
+  from "3 pass" to the tool's real "2 pass" output; pyproject's description now
+  names the shipped verdict trio (KEEP / CUT / CAN'T-TELL-YET); the stale
+  "extractor has no OpenRouter fallback" claim in the ai-slop-sentinel case study
+  updated to record the 2026-06-09 fix; the FAQ's "one screen" 14/14 phrasing
+  corrected to "two screens and a paired run" with the data-skepticism aside marked
+  as an unpublished observation; four scorers → five in `why-unmeasured.md`;
+  `docs/INVARIANTS.md` replaces dead `CLAUDE.md` references in the PR template and
+  issue chooser; unpublished internal paths in case studies and concepts docs
+  marked as private provenance markers per `docs/PLAN.md`'s convention; SECURITY.md
+  Dependabot/pre-commit claim and dead profile-email fallback channel corrected;
+  `inspect-swe` maintainer-org provenance corrected in the supply-chain audit;
+  CONTRIBUTING's Python target (3.11 → 3.12), stale "8 passed" count, and verify
+  commands (now `PYTHONHASHSEED=0 pytest -q -m "not live"`, mirroring CI) fixed;
+  `live` marker text no longer claims deselect-by-default.
+- **Non-deterministic ordering in `calibration_events` audit queries.**
+  `list_calibration_events_for_judge_axis` (and its sibling
+  `select_calibration_events_by_state`) ordered by `validated_at DESC` with no
+  secondary key. On an append-only audit table, same-`validated_at` events then
+  tie-break on SQLite's hidden rowid (physical insertion order) — not stable
+  across a DB restore/repack, so the "newest calibration" could silently flip
+  between runs, breaking audit reproducibility. Both queries now carry a
+  deterministic `, calibration_event_id DESC` tie-break. NOTE: the tie-break is
+  deterministic but not chronological — production ids are random UUIDv4 — and
+  the repository docstrings now say so.
+- **Placebo regression test on the by-state tie-break query.** The originally
+  shipped RED test for `select_calibration_events_by_state` passed even
+  WITHOUT the fix: that query is unindexed (full scan + temp-B-tree sort, tied
+  rows emitted in insertion order), so the descending-id insert that makes the
+  indexed judge/axis test a genuine RED made the by-state test collude with
+  the pre-fix order. The test now inserts in ascending-id order (per query
+  plan), and the RED-TEST DESIGN NOTE's inverted rowid explanation — which
+  caused the placebo — is corrected. Verified empirically: both tests now fail
+  without the tie-break and pass with it.
+- **Same rowid-tie-break defect fixed across every timestamp-ordered query.**
+  The `calibration_events` fix covered 2 of ~27 structurally identical
+  timestamp-only `ORDER BY`s on append-only/audit tables (`oracle_verdicts`
+  in `audit/`, `runs`, `samples`, `frozen_cases`, `confound_events`,
+  `metric_versions`, `judges`, `skills`, plus runtime `cost_ledger`,
+  `run_budget`, `skill_imports_staging`). All now carry a deterministic
+  unique-key tie-break matching the timestamp's sort direction, and a new
+  structural ban (E3: pytest mirror + `ban-timestamp-final-order-by`
+  pre-commit hook, wired into the F-8 drift cross-check and the CI
+  structural-bans job) blocks reintroducing a timestamp-final `ORDER BY`
+  in `src/`.
+
+### Changed
+- **Local pre-commit hooks now mirror CI verdicts.** `mirrors-mypy` bumped
+  v1.10.0 → v2.3.0 (the requirements-ci.txt pin), its default
+  `--ignore-missing-imports` overridden (it flipped CI-required `type: ignore`
+  comments to "unused"), and hook deps extended with the runtime stack
+  (openai/scipy/statsmodels/tiktoken/pytest-socket); ruff hook bumped to the CI
+  pin v0.15.22. `pre-commit run mypy --all-files` previously failed with 10
+  errors on a fresh clone; now green.
+- Packaging metadata: `pre-commit` added to the `dev` extras (CONTRIBUTING's
+  setup uses it), and `Changelog`/`Documentation` project URLs added for PyPI.
+
+## [0.2.0] — 2026-07-21
+
+### Added
+- **Operator-facing keep/cut verdict layer** (`skill_harness.aggregation.verdict`):
+  maps a measured outcome to the decision an operator actually has — KEEP / CUT /
+  CAN'T-TELL-YET — under the pre-registration's locked transformative bar
+  (Null ≤ ~0.3 & Full ≥ ~0.8). `screen_verdict(p0)` (Stage-0 screen path, the
+  dominant path) and `paired_verdict(ClauseStatus)` (paired path, prospective);
+  `CUT(harmful)` defined but deferred (needs a signed-delta CI).
+- **Stage-0 Null-only screen store** (migration `0501`, `screen_runs` /
+  `screen_trials`): an additive, append-only store firewalled from the paired
+  evidence model (pre-reg: "screen data never enters verdicts"), keyed by skill
+  name. `p0` (the bare-arm pass rate) is DERIVED from admissible trials, never
+  stored. Voided screens are ingested but marked inadmissible (with a cited
+  reason) and excluded from `p0`. `skill_harness.subject.screen_ingest` writes it;
+  `skill-harness screen verdict` / `screen backfill` surface it.
+- **Batch-1 screen backfill** (`skill_harness.subject.screen_backfill`): a curated,
+  cited manifest that makes the batch-1 Stage-0 screens store-auditable — deriving
+  each keep/cut verdict from append-only evidence instead of prose. All backfilled
+  screens ceiling (p0=1) → CUT(subsumed); `llm-judge-calibration` is deferred
+  (its canonical 3/3 needs per-trial cross-log assembly over a credit-exhaustion
+  incident).
+
+### Changed
+- **README moved onto the keep/cut vocabulary.** The status/maturity block now leads
+  with the three operator verdicts (KEEP / CUT · subsumed | no-lift / CAN'T-TELL-YET),
+  shows the two live end-to-end receipts (`append-only-evidence-design` and a hardened
+  `git-pull-rebase-trap`, both **CUT (subsumed)** at a bare-arm pass rate of 1.00), and
+  states the honest maturity plainly: **zero measured KEEPs in the program to date**, and
+  store-backed coverage is partial (a handful of the program's screen verdicts — a record
+  resting on 26/26 Null epochs across 6 screened tasks — the rest prose-backed pending
+  backfill). Replaces the earlier "v0.1 measures style-level effects" framing.
+- **Paired KEEP path annotated as coded-but-never-fired, with a named firing trigger.**
+  `aggregation.verdict` (Path B docstring) now records that the paired Full-vs-Null mapping
+  launches only on the first task whose Null screen returns a pass rate below 1, and that
+  no such task has appeared yet (every screened skill ceilings at 1). The mapping is coded
+  and $0-validated (7/7 oracle-discrimination cases) but unexercised on live paired data.
+
+## [0.2.0a0] — 2026-07-20
+
+### Added
+- v0.2 subject layer (`skill_harness.subject`, optional `[inspect]` extra):
+  `HarnessPin.capture()` — the subject-harness configuration captured from the live
+  environment as an admissibility field (refuses `version="auto"`), and
+  `build_paired_tasks()` — the Full-vs-Null contrast as two Inspect tasks identical
+  except for the skill under test (`inspect_swe.claude_code(skills=…)`), with
+  `file_contains` / `command_succeeds` outcome oracles resolved against the agent's
+  pinned cwd. Supply-chain review: `docs/supply-chain/inspect-audit-2026-07-09.md`.
+- `skill-harness skill audit <SKILL.md>` — fully offline preflight (no API key, no DB,
+  no cost): structural lint against Anthropic's published authoring spec plus an
+  evaluability report stating which axes a paid run could mechanically measure and
+  which claims would return UNMEASURED. `--strict` exits 1 on warnings for CI.
+
+### Fixed
+- **Installed copies of v0.1 were broken** (worked only from a source checkout);
+  caught by a fresh-venv install test:
+  - `hedge_index` loaded its wordlist from `tests/…` (not shipped in the wheel) —
+    now package data at `src/skill_harness/oracles/tier1/fixtures/`.
+  - SQL migrations resolved from the repo root — now package data at
+    `src/skill_harness/storage/migrations_sql/`; installed copies can bootstrap DBs.
+  - `tiktoken` and `statsmodels` were imported at runtime but declared only in dev
+    extras — now runtime dependencies.
+- `examples/README.md` still claimed the extractor had no OpenRouter fallback
+  (stale since `b5b9fe6`).
+- Repaired all references left dangling by the 2026-07-08 privacy scrub
+  (COUNCIL_FINDINGS.md, root CLAUDE.md) across CONTRIBUTING, CODEOWNERS, PR/issue
+  templates, CHANGELOG, PRD, PLAN, release notes, and the case study.
+- **Hostile-review hardening pass** on the unreleased v0.2 subject, aggregation,
+  and Tier-1 oracle layers: 39 confirmed findings fixed across the
+  ablation / aggregation / calibration / extractor / CLI / storage paths —
+  direction-aware ablation wins, BH-FDR gate consumption, scorer-crash
+  inadmissibility, resume cost attribution, sentinel-verdict exclusion from
+  statistics, and single-source pricing/tokenizer. The four remaining
+  test-quality findings are tracked, not silently dropped.
+- Citation oracle no longer arm-differentially deflates hyperlink references:
+  lowercase prose is no longer miscounted as a flag emission (flag matching is
+  now case-sensitive), and an external `http(s)` markdown-link target is
+  preserved as a citation rather than stripped away with its link text.
+
+### Changed
+- README rewritten for its actual audience (Claude Code users with a skills folder):
+  value proposition first, two-command keyless quickstart, honest pre-alpha status,
+  fact-checked comparison table (skill-eval-harness, promptfoo, Inspect).
+- `PRD.md`, `PLAN.md`, `RELEASE-NOTES-v0.1.md` moved under `docs/`.
+- `docs/findings/v0.2-reaim-gate.md` amended after the 2026-07-09 competitive sweep:
+  adds "Harness pin" and "Differentiation vs field" pre-registration fields and a
+  correction block recording that the original lock predated the sweep.
+
+### Security
+- Untrusted skill names and model output are escaped with `rich.markup.escape`
+  and asserted NUL/control-free before terminal rendering, so bracketed text
+  cannot inject Rich markup into CLI output.
+- CI workflow actions are pinned by commit SHA, and structural enforcement bans
+  (e.g. raw `sqlite3.connect`) are wired as tests rather than left as convention.
+
+## [0.1.0] — Released 2026-06-08
+
+> **Release-hygiene note (added 2026-07-19):** the `v0.1.0` tag ships `pyproject.toml`
+> version string `0.1.0a0` (pre-alpha) rather than `0.1.0` — the version bump was
+> missed at tag time. Acknowledged gap; a corrected version string ships with the
+> next actual release rather than being rewritten retroactively into this historical tag.
+
+v0.1 delivers a complete deterministic evaluation framework for clause-level
+ablation testing of LLM skills. Five build tracks (A–E), two-database
+append-only evidence model, Tier-1 mechanical oracle library, Tier-2 pairwise
+judge module, full CLI surface, and JSON report wire format v1.2.0.
+
+**v0.1 thesis-validation evidence**: live ablation re-run on ai-slop-sentinel
+produced 1 FAILED clause (`f9771fd8b5a9cff80999c80ca1f31d7a56d31f1dc1647f33b39113b26931dba7`;
+axis `citation_presence_per_flag`; `p_win_gt_threshold=0.005`; `n=30`;
+runs `073dd0da` + `19e85593` + `c3481f27`). The harness surfaced a
+well-intentioned discipline clause that empirically fails to deliver on its
+claimed axis — the central claim of the evidentiary framework, demonstrated
+rather than asserted. Methodology precedent: Chandra et al. arXiv:2602.19141.
+
+### Added (Tracks A–E, doc-lock, council)
+- Five build tracks completed:
+  - **Track A** — Two-DB partition, append-only triggers, SHA-256 migration ledger
+  - **Track B** — Clause extractor, vacuity classifier, rendering-index reorder
+  - **Track C** — Tier-1 scorer registry (5 scorers) + Tier-2 pairwise judge module
+  - **Track D** — Ablation runner: sequential stopping, cost caps, dry-run default, confound monitoring
+  - **Track E** — EB-MoM hierarchical pooling, JSON wire format, six CLI commands
+- 47 PRD v1.1 amendments from 7 council fires; full provenance in the internal council findings log (not published).
+- 9-seat pre-tag launch council fire; 2 BLOCKERs (OPERATOR-DX-1 + M3 coverage_warnings)
+  cleared in fix-sprint `3f6b0a9`.
+- Live ablation re-run on ai-slop-sentinel: 1 FAILED clause empirically demonstrated
+  (`f9771fd...`; `p_win_gt_threshold=0.005`; n=30; runs `073dd0da` + `19e85593` + `c3481f27`).
+  See `docs/path-b-verified-2026-06-08.md`.
+- `coverage_warnings` field on `VectorSummary` / §16 vector wire format (additive; schema
+  bumped to `1.2.0` for `run evaluate-skill` report).
+- `pythonhashseed` sub-key in `aggregation_provenance` for all three aggregation methods (PRD §16.1).
+- `skill-harness calibrate` documented in README Quick Start and PRD §18 CLI surface.
+
+### Fixed
+- Windows cp1252 crash on UNMEASURED render: replaced non-ASCII glyphs (`⚠`, `≠`, `->`) with ASCII equivalents in `cli/main.py`.
+- `skill clauses` command now emits a descriptive placeholder rather than crashing with `ClickException("not implemented")`.
+- `--daily-cap` help string now documents per-runtime.db scope; parallel worktrees with separate DBs do not share the cap.
+
+### Changed
+- PRD §16.1 wire-format version documentation updated: `run evaluate-skill` ships `"1.2.0"`; `diff skill` ships `"1.0.0"` (independent schemas, documented separately).
+
+### Known v0.1.x Carry-Forwards
+- **SCHEMA-7** — `mechanical_validity_test_passed` validity-flag bypass migration deferred; council-approved local-trust scope for v0.1.
+- **EVR-3/EVR-7** — Oracle surface limit (5 Tier-1 scorers); documented in RELEASE-NOTES. FAILED verdict confirms discrimination is real when scorer matches.
+- `tie_count`/`win_count`/`loss_count` absent from per-clause wire format — v0.2 carry-forward.
+- Coverage Law Reading B (tested/non-vacuous) deferred to v0.2 per A62.
+
+## [0.1.0a0] — 2026-06-03
+
+Initial scaffold. Pre-alpha — schema realized and trigger-enforced, CLI surface stubbed, per-track build pending.
+
+### Added
+- Project structure: `src/skill_harness/` Python package, `tests/`, `migrations/`
+- Two-database SQLite architecture:
+  - `evidence.db` — append-only via `BEFORE UPDATE`/`BEFORE DELETE` triggers on 9 evidence tables
+  - `runtime.db` — mutable state (run progress, calibration pointers, cost ledger)
+- SHA-256 migration ledger with tamper-evidence (`MigrationTamperedError` on mutated migration files)
+- CLI entry point with 6 PRD §18 commands stubbed
+- 8 smoke tests including append-only trigger verification + `runs.completed_at` single-shot mutation
+- Comprehensive architectural decision record in the internal council findings log (not published) (17 adopted decisions, 16 PRD amendments queued for v1.1)
+- Implementation plan at `docs/PLAN.md` (5 build tracks A–E with exit criteria)
+- Supply-chain audit run via `supply-chain-risk-auditor` — PROCEED-WITH-MITIGATIONS (output directory `.supply-chain-risk-auditor/` is local-only and gitignored, not a tracked artifact)
+- Standard repo docs: `README.md`, `LICENSE` (MIT), `CONTRIBUTING.md`, `SECURITY.md`
+- CI workflow: ruff + mypy --strict + pytest matrix on Ubuntu + Windows x Python 3.11/3.12/3.13
+- CodeQL security scanning (push, PR, weekly)
+- Dependabot config (pip + github-actions, grouped updates)
+- Pre-commit hooks (ruff, mypy, gitleaks, standard hygiene)
+- CODE_OF_CONDUCT.md (Contributor Covenant 2.1)
+- `.github/` infrastructure: CODEOWNERS, PR template, issue templates (bug + feature + config)
+- `.editorconfig` for cross-editor consistency
+
+### Security
+- `anthropic` pin tightened from `>=0.39` to `>=0.87` to enforce post-patch for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool CVEs, 2026-03-31)
+
+[Unreleased]: https://github.com/MrBinnacle/skill-harness/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.3...v0.3.0
+[0.2.3]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.2...v0.2.3
+[0.2.2]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.0a0...v0.2.0
+[0.2.0a0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.2.0a0
+[0.1.0]: https://github.com/MrBinnacle/skill-harness/releases/tag/v0.1.0
+
+Note: `[0.1.0a0]` above intentionally has no link — no `v0.1.0a0` tag exists on the
+remote (`git ls-remote --tags origin`, checked 2026-07-19; only `v0.1.0` is a real
+ref). The pre-alpha scaffold predates this project's tagging discipline.

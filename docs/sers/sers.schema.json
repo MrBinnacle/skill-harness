@@ -1,0 +1,1039 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/MrBinnacle/skill-harness/main/docs/sers/sers.schema.json",
+  "title": "Skill Efficacy Reporting Standard (SERS)",
+  "description": "Machine-readable receipt for a skill efficacy verdict. A missing number is a typed refusal, never an invented score. The evidence admissibility gate uses that qualified term only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sers_version",
+    "skill_name",
+    "verdict",
+    "cut_sub_reason",
+    "unmeasured_sub_reason",
+    "value_class",
+    "evidence_admissibility",
+    "cost",
+    "instrument_identity",
+    "source",
+    "summary"
+  ],
+  "properties": {
+    "sers_version": {
+      "type": "string",
+      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0"],
+      "description": "SERS vocabulary generation. Receipts from different sers_version values are not comparable."
+    },
+    "skill_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Skill identifier (store/card skill_name when known)."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["KEEP", "CUT", "CANT_TELL_YET"],
+      "description": "Operator-facing keep/cut outcome. KEEP = measurably worth its slot; CUT = remove (see cut_sub_reason); CANT_TELL_YET = evidence does not support a keep/cut call."
+    },
+    "cut_sub_reason": {
+      "type": ["string", "null"],
+      "enum": ["subsumed", "no_lift", "harmful", null],
+      "description": "Qualifies CUT. Required non-null iff verdict is CUT; must be null otherwise. subsumed = model already does the task without the skill; no_lift = measured where help was needed and the skill did not deliver; harmful = skill made outcomes measurably worse."
+    },
+    "unmeasured_sub_reason": {
+      "type": ["string", "null"],
+      "enum": [
+        "no_data",
+        "inadmissible",
+        "underpowered",
+        "falsifying_case_missing",
+        "budget_exhausted",
+        "falsifying_case_stale",
+        "fdr_correction_failed",
+        "mechanical_vacuous",
+        "tier2_uncalibrated",
+        "external_check_missing",
+        "length_confounded",
+        "HAZARD_NOT_MET",
+        null
+      ],
+      "description": "Qualifies an UNMEASURED / cannot-score path when applicable. Mirrors UnmeasuredSubReason exactly. null when the receipt is not an unmeasured refusal path (e.g. a measured KEEP or CUT)."
+    },
+    "value_class": {
+      "type": ["string", "null"],
+      "enum": ["transformative-lift", "trap-discipline", "calibration", null],
+      "description": "Skill value kind. Screen-path CUT(subsumed) is valid only for transformative-lift; other classes route above-bar p0 to CANT_TELL_YET (wrong instrument). null = unclassified."
+    },
+    "outcome_type": {
+      "type": ["string", "null"],
+      "enum": ["pass_fail", "invariant", null],
+      "description": "The scoring-oracle kind the record authorises. pass_fail = legacy conjunction oracle; invariant = split invariant + completion oracle. Required for trap-discipline; null on pass_fail records."
+    },
+    "wrong_instrument": {
+      "type": "boolean",
+      "description": "True when a CUT was withheld because value_class is not transformative-lift (wrong instrument for the lift estimand)."
+    },
+    "declared_synthetic_control": {
+      "type": "boolean",
+      "description": "True when the skill/effect is a declared synthetic positive control (effect real by construction). Must never be silently omitted when true."
+    },
+    "evidence_admissibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Evidence admissibility gate outcome for the evidence backing this receipt. Uses the qualified term only.",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["admissible", "inadmissible", "mixed", "not_applicable"],
+          "description": "admissible = all cited evidence cleared the evidence admissibility gate; inadmissible = evidence present but gated out of aggregation; mixed = both; not_applicable = no store-backed evidence (prose-only / mechanical)."
+        },
+        "detail": {
+          "type": "string",
+          "description": "Optional human-readable note on the evidence admissibility ruling."
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cost triple: standing / fired / aux tokens. Each leg is a measured non-negative integer or a typed refusal — never an invented score.",
+      "required": ["standing_tokens", "fired_tokens", "aux_tokens"],
+      "properties": {
+        "standing_tokens": { "$ref": "#/$defs/token_figure" },
+        "fired_tokens": { "$ref": "#/$defs/token_figure" },
+        "aux_tokens": { "$ref": "#/$defs/token_figure" }
+      }
+    },
+    "instrument_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Generation stamp for every figure on this receipt. Figures from different instrument identities are visibly non-comparable.",
+      "required": ["extractor_model", "prompt_fingerprint", "schema_fingerprint"],
+      "properties": {
+        "extractor_model": {
+          "description": "Extractor model pin: the model that READ the run artifacts and produced the figures. From sers_version 1.4.0 this names the extraction stage only, never the subject under test — the subject is subject_identity.subject_model. Where no model-based extraction stage ran (a deterministic oracle scored the epochs), record a typed refusal rather than repeating the subject pin. On receipts at 1.3.0 and earlier this field was documented as 'extractor (or subject)': it carries one pin for two roles and which role it names is not machine-readable. Read those receipts through source.prose_path.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["refusal"],
+              "properties": {
+                "refusal": {
+                  "type": "string",
+                  "enum": ["not_applicable", "not_instrumented"]
+                },
+                "detail": { "type": "string" }
+              }
+            }
+          ]
+        },
+        "prompt_fingerprint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Fingerprint (typically SHA-256 hex) of the exact system/prompt bytes used."
+        },
+        "schema_fingerprint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Fingerprint (typically SHA-256 hex) of the tool/schema (or harness pin) used."
+        }
+      }
+    },
+    "measurements": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional numeric figures. Each present key is either a measured value or a typed refusal.",
+      "properties": {
+        "p0": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Null-arm (no-skill) pass rate from a Stage-0 screen."
+        },
+        "full_pass_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Full-arm pass rate from a paired run."
+        },
+        "null_pass_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Null-arm pass rate from a paired run (may equal p0 when only a screen ran)."
+        },
+        "p_win": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Posterior P(rate above threshold) from the paired fit."
+        },
+        "discordance_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Paired per-epoch discordance rate d-hat (and optional CI in detail)."
+        },
+        "go_nogo": {
+          "type": "string",
+          "enum": ["GO", "NO_GO", "NOT_APPLICABLE"],
+          "description": "Pre-stated GO/NO-GO apparatus gate when one was registered."
+        },
+        "hazard_entry_null": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Null-arm hazard-entry rate: the fraction of Null epochs where the hazard pattern was entered."
+        },
+        "hazard_entry_full": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Full-arm hazard-entry rate: the fraction of Full epochs where the hazard pattern was entered."
+        },
+        "null_completion_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Null-arm completion rate: the fraction of Null epochs where the completion oracle scored pass."
+        },
+        "full_completion_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Full-arm completion rate: the fraction of Full epochs where the completion oracle scored pass."
+        },
+        "silent_violation_rate": {
+          "$ref": "#/$defs/rate_or_refusal",
+          "description": "Silent violation rate: the fraction of epochs where completion held but invariant failed (C=1, I=0)."
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Pointer to the prose source this hand-encoded receipt encodes.",
+      "required": ["prose_path"],
+      "properties": {
+        "prose_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative path to the prose source of record."
+        },
+        "date": {
+          "type": "string",
+          "description": "ISO date of the underlying result when known."
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One-paragraph operator-facing summary. Must not invent numbers absent from measurements/cost."
+    },
+    "subject_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Provenance block identifying the subject under test. Required from sers_version 1.1.0 onward; absent on 1.0.0 hand-encoded receipts.",
+      "required": ["skill_id", "harness_version", "metric_version", "implementation_hash", "arms"],
+      "properties": {
+        "skill_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hex of the exact SKILL.md bytes measured."
+        },
+        "harness_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Harness version used to produce this receipt."
+        },
+        "metric_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Oracle metric version (e.g. '0.3.0')."
+        },
+        "implementation_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hex of the oracle module source at ingest time."
+        },
+        "subject_model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Subject model pin: the model that EXECUTED the epochs, and whose behaviour with and without the skill was compared. Together with skill_id it identifies what was measured. Required from sers_version 1.4.0; absent on 1.3.0 and earlier receipts, where no field recorded it and it cannot be recovered from the receipt alone."
+        },
+        "arms": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9_-]*$",
+              "not": {
+                "pattern": "[^a-z0-9_-]"
+              }
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9_-]*$",
+                "not": {
+                  "pattern": "[^a-z0-9_-]"
+                }
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ],
+          "description": "Which arms ran: the run's declared arm names. 'null' and 'full' are the two-value vocabulary of the per-clause instrument; a declared-arm (composition) run names its own arms (e.g. the four cells of a factorial, composed as factor_level fragments joined by '__'). A single arm is a string; several arms are an array of unique names."
+        }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Value-delivery attribution: which of the skill's two products (description or body) carried the measured value. Required from sers_version 1.2.0 onward; absent on 1.0.0 and 1.1.0 receipts.",
+      "required": ["channel", "exposure", "pi_c"],
+      "properties": {
+        "exposure": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["value"],
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "passes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "epochs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["refusal"],
+              "properties": {
+                "refusal": {
+                  "type": "string",
+                  "enum": ["not_instrumented", "not_applicable"]
+                },
+                "detail": { "type": "string" }
+              }
+            }
+          ],
+          "description": "Exposure rate in the treated arm: the fraction of epochs where the skill's description was present in the agent's context (the treatment under #384). Distinct from pi_c (invocation / body load). 'value' is the rate; 'passes' and 'epochs' are optional counts."
+        },
+        "pi_c": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["invocations", "trials", "hat", "ci_low", "ci_high", "confidence", "detector"],
+              "properties": {
+                "invocations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "trials": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "hat": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "ci_low": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "ci_high": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "confidence": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "exclusiveMaximum": 1
+                },
+                "detector": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["refusal"],
+              "properties": {
+                "refusal": {
+                  "type": "string",
+                  "enum": ["not_instrumented", "not_applicable"]
+                },
+                "detail": { "type": "string" }
+              }
+            }
+          ],
+          "description": "Invocation rate over the treated (Full) arm with Clopper-Pearson interval. 'hat' is the point estimate; 'ci_low' and 'ci_high' bound the interval. 'detector' names the versioned detector that produced the invocations count."
+        },
+        "channel": {
+          "type": "string",
+          "enum": ["description_only", "body_and_description", "not_instrumented"],
+          "description": "Which of the skill's two products carried the measured value. 'description_only' = the standing description line was read but the body was never loaded (pi_c = 0 with full exposure); 'body_and_description' = invocations are present so the body was read; 'not_instrumented' = receipts minted before detector v2."
+        }
+      }
+    },
+    "implementation_family": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Implementation family the skill belongs to and what alternatives were considered. Author-typed; nothing in the codebase computes it."
+    },
+    "claim_scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Scope of the behavioral claim and the set of disturbances under which it holds. Author-typed; nothing in the codebase enumerates disturbances."
+    },
+    "retest_triggers": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What triggers a retest of the result. Author-typed."
+    },
+    "expiry_state": {
+      "type": "string",
+      "enum": ["current", "stale", "no_current_metric_version"],
+      "description": "Expiry state of the result, read from the frozen_cases_with_currency VIEW. 'current' = metric version and implementation hash match the current metric version; 'stale' = a newer version exists or the hash mismatches; 'no_current_metric_version' = no audited valid metric version exists."
+    },
+    "designer": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The seat or person who designed the task family. Recorded for the claim ladder: REPLICATED records designer and designer_independent; ROBUST requires at least one family designed by an independent seat."
+    },
+    "designer_independent": {
+      "type": "boolean",
+      "description": "True when the designer of this family is independent from the card's author. At REPLICATED, recorded for disclosure. At ROBUST, at least one of the three families must have designer_independent=true."
+    },
+    "family_replication": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of materially distinct task families that cleared the preregistered KEEP rule. 1 = KEEP (scoped sentence only); 2+ = REPLICATED (program policy)."
+    },
+    "model_replication": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of distinct model families the result has been replicated on. Recorded separately from family_replication; model generalization is its own ladder rung."
+    },
+    "claim_level": {
+      "type": ["string", "null"],
+      "enum": ["KEEP", "REPLICATED", "ROBUST", null],
+      "description": "Ledger claim ladder above KEEP. KEEP = one admissible registration; REPLICATED = 2+ independently designed families; ROBUST = 3+ materially distinct families with at least one independent designer. null = not yet classified."
+    },
+    "multiplicity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Online-FDR ledger facts for a 1.7.0 KEEP receipt. The SERS validation gate checks the cross-field p-value inequalities that JSON Schema cannot express.",
+      "required": ["ledger_hypothesis_id", "hypothesis_index", "discovery_type", "procedure", "target_fdr", "test_level", "anytime_valid_p", "p_fn", "p_fp", "initial_wealth", "payout", "wealth_before", "wealth_after", "shared_control_family_id", "batch_order"],
+      "properties": {
+        "ledger_hypothesis_id": { "type": "string", "minLength": 1 },
+        "hypothesis_index": { "type": "integer", "minimum": 1 },
+        "discovery_type": { "const": "KEEP" },
+        "procedure": { "const": "LORDdep" },
+        "target_fdr": { "const": 0.05 },
+        "test_level": { "type": "number", "minimum": 0, "maximum": 1 },
+        "anytime_valid_p": { "type": "number", "minimum": 0, "maximum": 1 },
+        "p_fn": { "type": "number", "minimum": 0, "maximum": 1 },
+        "p_fp": { "type": "number", "minimum": 0, "maximum": 1 },
+        "initial_wealth": { "const": 0.025 },
+        "payout": { "const": 0.025 },
+        "wealth_before": { "type": "number", "minimum": 0 },
+        "wealth_after": { "type": "number", "minimum": 0 },
+        "shared_control_family_id": { "type": "string", "minLength": 1 },
+        "batch_order": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "verdict_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Registration and provenance block: what was tested, on which model, under which registration. Absent on pre-1.6.0 receipts. A receipt with verdict KEEP must carry model_id, task_family and delivery_mechanism.",
+      "properties": {
+        "model_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Subject model pin from the harness fingerprint (HarnessPin.model)."
+        },
+        "harness_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Harness version from the harness fingerprint (HarnessPin or equivalent)."
+        },
+        "fixture_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Fixture SHA set from fixture_shas.json for the task family."
+        },
+        "task_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Registered task identifier."
+        },
+        "tested_at": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ISO datetime of the original full validation run."
+        },
+        "task_family": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Registered task family from the run's RegisteredScope (semantics.py)."
+        },
+        "estimand": {
+          "type": "string",
+          "enum": ["treatment-policy", "hypothetical"],
+          "description": "Registered estimand from the run's RegisteredScope (semantics.py)."
+        },
+        "delivery_mechanism": {
+          "type": "string",
+          "enum": ["model-pull", "hand-invoked", "hook-nudged", "hook-blocked"],
+          "description": "Registered delivery mechanism from the run's RegisteredScope (semantics.py)."
+        },
+        "n_per_arm": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["refusal"],
+              "properties": {
+                "refusal": { "type": "string", "enum": ["not_instrumented", "not_applicable"] },
+                "detail": { "type": "string" }
+              }
+            }
+          ],
+          "description": "Number of epochs per arm in the original validation run."
+        },
+        "margin_pp": {
+          "oneOf": [
+            { "type": "number" },
+            { "$ref": "#/$defs/scope_audit_refusal" }
+          ],
+          "description": "Pre-registered margin in percentage points for the confidence sequence, or a typed refusal."
+        },
+        "cs_lower_bound": {
+          "oneOf": [
+            { "type": "number" },
+            { "$ref": "#/$defs/scope_audit_refusal" }
+          ],
+          "description": "Lower bound of the confidence sequence from the original validation, or a typed refusal."
+        },
+        "control_world_result": {
+          "type": ["string", "null"],
+          "description": "Result on the control world (e.g. 'pass', 'fail', 'not_applicable')."
+        },
+        "placebo_ref": {
+          "type": ["string", "null"],
+          "description": "Reference to the placebo or synthetic control used."
+        },
+        "fixture_id": {
+          "type": ["string", "null"],
+          "description": "Identifier of the fixture set used in the run."
+        }
+      }
+    },
+    "currentness": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Separates the verdict from its present validity. A missing currentness at render time reads as STALE / NONE, never as validated.",
+      "required": ["state", "basis"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["VALIDATED", "CARRIED_FORWARD", "STALE"],
+          "description": "Whether the verdict is currently supported: VALIDATED = full re-validation passed; CARRIED_FORWARD = sentinel/canary passed but no full re-run; STALE = sentinel or canary failed, model changed, or max_age elapsed."
+        },
+        "basis": {
+          "type": "string",
+          "enum": ["FULL_VALIDATION", "SENTINEL_PASS", "NONE"],
+          "description": "How the currentness was established: FULL_VALIDATION = a full paired run; SENTINEL_PASS = sentinel and canary checks passed; NONE = no check performed or checks failed."
+        },
+        "last_checked_at": {
+          "type": "string",
+          "description": "ISO datetime of the last currentness check."
+        },
+        "next_check_due": {
+          "type": "string",
+          "description": "ISO datetime when the next currentness check is due."
+        },
+        "max_age_days": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum age in days before a verdict is considered STALE."
+        }
+      }
+    },
+    "drift_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Pre-registered policy for the surveillance procedure (sentinel + canary launcher). The procedure itself is a separate ticket.",
+      "properties": {
+        "null_trigger_pp": {
+          "type": "number",
+          "description": "Null-arm pass-rate change in percentage points that triggers a full re-run."
+        },
+        "canary_n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of canary card + Null sentinel pairs in the surveillance window."
+        },
+        "full_rerun_on_null_trigger": {
+          "type": "boolean",
+          "description": "Whether a null-trigger fires a full re-run."
+        },
+        "full_rerun_on_canary_failure": {
+          "type": "boolean",
+          "description": "Whether a canary failure fires a full re-run."
+        },
+        "full_rerun_on_model_change": {
+          "type": "boolean",
+          "description": "Whether a model change without a passed sentinel fires a full re-run."
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "verdict": { "const": "CUT" } },
+        "required": ["verdict"]
+      },
+      "then": {
+        "properties": {
+          "cut_sub_reason": {
+            "type": "string",
+            "enum": ["subsumed", "no_lift", "harmful"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "verdict": { "enum": ["KEEP", "CANT_TELL_YET"] } },
+        "required": ["verdict"]
+      },
+      "then": {
+        "properties": {
+          "cut_sub_reason": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.1.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.2.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.3.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.4.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"],
+        "properties": {
+          "subject_identity": {
+            "required": ["subject_model"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.5.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"],
+        "properties": {
+          "subject_identity": {
+            "required": ["subject_model"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "delivery": {
+            "properties": { "channel": { "const": "description_only" } },
+            "required": ["channel"]
+          }
+        },
+        "required": ["delivery"]
+      },
+      "then": {
+        "properties": {
+          "delivery": {
+            "properties": {
+              "pi_c": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": { "hat": { "const": 0 } },
+                    "required": ["hat"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": { "refusal": { "type": "string" } },
+                    "required": ["refusal"]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "delivery": {
+            "properties": { "channel": { "const": "body_and_description" } },
+            "required": ["channel"]
+          }
+        },
+        "required": ["delivery"]
+      },
+      "then": {
+        "properties": {
+          "delivery": {
+            "properties": {
+              "pi_c": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": { "invocations": { "type": "integer", "minimum": 1 } },
+                    "required": ["invocations"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": { "refusal": { "type": "string" } },
+                    "required": ["refusal"]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.6.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"],
+        "properties": {
+          "subject_identity": {
+            "required": ["subject_model"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "sers_version": { "const": "1.7.0" } },
+        "required": ["sers_version"]
+      },
+      "then": {
+        "required": ["subject_identity", "delivery"],
+        "properties": {
+          "subject_identity": {
+            "required": ["subject_model"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sers_version": { "const": "1.7.0" },
+          "verdict": { "const": "KEEP" }
+        },
+        "required": ["sers_version", "verdict"]
+      },
+      "then": {
+        "required": ["multiplicity", "verdict_scope"],
+        "properties": {
+          "verdict_scope": {
+            "required": ["model_id", "task_family", "delivery_mechanism", "control_world_result"],
+            "properties": {
+              "control_world_result": { "const": "pass" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sers_version": { "const": "1.7.0" },
+          "verdict": { "enum": ["CUT", "CANT_TELL_YET"] }
+        },
+        "required": ["sers_version", "verdict"]
+      },
+      "then": {
+        "not": { "required": ["multiplicity"] }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sers_version": { "const": "1.6.0" },
+          "verdict": { "const": "KEEP" }
+        },
+        "required": ["sers_version", "verdict"]
+      },
+      "then": {
+        "required": ["verdict_scope"],
+        "properties": {
+          "verdict_scope": {
+            "required": ["model_id", "task_family", "delivery_mechanism"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "currentness": {
+            "properties": { "state": { "const": "CARRIED_FORWARD" } },
+            "required": ["state"]
+          }
+        },
+        "required": ["currentness"]
+      },
+      "then": {
+        "required": ["verdict_scope"],
+        "properties": {
+          "verdict_scope": {
+            "required": ["tested_at"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "currentness": {
+            "properties": { "state": { "const": "VALIDATED" } },
+            "required": ["state"]
+          }
+        },
+        "required": ["currentness"]
+      },
+      "then": {
+        "properties": {
+          "currentness": {
+            "properties": {
+              "basis": { "enum": ["FULL_VALIDATION"] }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "unmeasured_sub_reason": { "const": "HAZARD_NOT_MET" } },
+        "required": ["unmeasured_sub_reason"]
+      },
+      "then": {
+        "required": ["verdict_scope", "measurements"],
+        "properties": {
+          "verdict": { "const": "CANT_TELL_YET" },
+          "cut_sub_reason": { "type": "null" },
+          "verdict_scope": { "required": ["model_id"] },
+          "measurements": {
+            "required": ["hazard_entry_null"],
+            "properties": {
+              "hazard_entry_null": {
+                "type": "object",
+                "required": ["value", "passes", "epochs"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "claim_level": { "const": "KEEP" } },
+        "required": ["claim_level"]
+      },
+      "then": {
+        "required": ["verdict", "family_replication", "model_replication"],
+        "properties": {
+          "verdict": { "const": "KEEP" },
+          "family_replication": { "const": 1 },
+          "model_replication": { "const": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "claim_level": { "const": "REPLICATED" } },
+        "required": ["claim_level"]
+      },
+      "then": {
+        "required": [
+          "verdict",
+          "designer",
+          "designer_independent",
+          "family_replication",
+          "model_replication"
+        ],
+        "properties": {
+          "verdict": { "const": "KEEP" },
+          "family_replication": { "type": "integer", "minimum": 2 },
+          "model_replication": { "const": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "claim_level": { "const": "ROBUST" } },
+        "required": ["claim_level"]
+      },
+      "then": {
+        "required": [
+          "verdict",
+          "designer",
+          "designer_independent",
+          "family_replication",
+          "model_replication"
+        ],
+        "properties": {
+          "verdict": { "const": "KEEP" },
+          "designer_independent": { "const": true },
+          "family_replication": { "type": "integer", "minimum": 3 },
+          "model_replication": { "const": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "token_figure": {
+      "description": "A non-negative token count, or a typed refusal. Missing number = typed refusal, never an invented score.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tokens"],
+          "properties": {
+            "tokens": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["refusal"],
+          "properties": {
+            "refusal": {
+              "type": "string",
+              "enum": ["unmeasured", "not_applicable", "not_instrumented"]
+            },
+            "detail": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "rate_or_refusal": {
+      "description": "A rate in [0, 1] with optional counts, or a typed refusal drawn from UnmeasuredSubReason (plus not_applicable for non-paths).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "passes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "epochs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "detail": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["refusal"],
+          "properties": {
+            "refusal": {
+              "type": "string",
+              "enum": [
+                "no_data",
+                "inadmissible",
+                "underpowered",
+                "falsifying_case_missing",
+                "budget_exhausted",
+                "falsifying_case_stale",
+                "fdr_correction_failed",
+                "mechanical_vacuous",
+                "tier2_uncalibrated",
+                "external_check_missing",
+                "length_confounded",
+                "HAZARD_NOT_MET",
+                "not_applicable"
+              ]
+            },
+            "detail": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "scope_audit_refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["refusal"],
+      "properties": {
+        "refusal": {
+          "type": "string",
+          "enum": ["not_instrumented", "not_applicable"]
+        },
+        "detail": { "type": "string" }
+      }
+    }
+  }
+}

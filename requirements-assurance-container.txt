@@ -1,0 +1,9 @@
+# Linux-container-only tools (weak/absent Windows support).
+#
+# mutmut (mutation testing) and atheris (coverage-guided fuzzing) are never
+# installed host-side or in the default CI matrix. Install only inside the
+# Linux assurance container used by the assurance-pass workflow.
+#
+# Pins match the supply-chain review receipts posted on issue #161.
+mutmut==3.7.0
+atheris==3.1.0
