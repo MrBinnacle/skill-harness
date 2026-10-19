@@ -19,3 +19,7 @@
 # tests/test_fuzz_170.py::test_corpus_units_match_their_libfuzzer_names.
 fuzz/corpus/** -text
 fuzz/crashes/** -text
+
+# The Full arm of the #419 screens is the pull-rebase tree at tag v3.0.0 of MrBinnacle/skills,
+# kept verbatim: those files carry CRLF, and their git blob ids are the pin (#764).
+scripts/screens/419/v4_arms/full/pull-rebase/** -text

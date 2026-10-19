@@ -30,13 +30,12 @@ from twin_digest import LIVE_IMAGE
 from v4_cells import (
     ARMS,
     FULL_DIR_DEFAULT,
-    FULL_REFERENCE,
     PLACEBO_DIR,
     SETUP,
     WORLDS,
     Arm,
     World,
-    card_text,
+    check_full_tree,
     consequence_oracle,
     project_files,
 )
@@ -61,13 +60,9 @@ def build_cells(
 
     ``retry_uncaught_errors`` goes to every arm alike (see ``build_paired_tasks``).
 
-    :raises ValueError: the Full card is not the reviewed copy in ``v4_arms/full``.
+    :raises ValueError: ``full_dir`` is not the pinned v3.0.0 tree (``check_full_tree``).
     """
-    if card_text(full_dir / "SKILL.md") != card_text(FULL_REFERENCE):
-        raise ValueError(
-            f"{full_dir / 'SKILL.md'} differs from the reviewed copy {FULL_REFERENCE}; "
-            "the placebo was matched to that copy"
-        )
+    check_full_tree(full_dir)
     from inspect_ai import task_with  # the [inspect] extra; CI installs only [dev]
 
     shas = json.loads((fixture_root / "fixture_shas.json").read_text(encoding="utf-8"))

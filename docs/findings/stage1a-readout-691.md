@@ -210,3 +210,49 @@ interval admits a correlation up to about 0.22. No causal reading is claimed.
 
 *Revisit if:* the engine's `one_sided_betting_bound` or the `v5_cue_stage1a` readers change;
 then re-run the command above and re-quote its output.
+
+## Amendment 1, 2026-10-19: the Full arm's sibling files are not recorded (#764)
+
+This block is dated and appended under the amendment rule. Nothing above it is changed.
+
+**What happened.** From 2026-09-22 (`d0ff304`), the #419 screen launchers read the Full arm
+from `FULL_DIR_DEFAULT`. That constant named the plugin-cache directory
+`mrbinnacle-engineering/3.0.0/pull-rebase` on the operator's host. `build_paired_tasks` copies
+the whole directory into the sandbox, so the Stage 1A Full arm received `SKILL.md` and every
+file beside it. The launcher checked `SKILL.md` alone against the reviewed copy in
+`scripts/screens/419/v4_arms/full/pull-rebase/`. No record lists the other files or their
+bytes. The `3.0.0` cache directory no longer exists on the host, which now holds `3.0.1`
+only.
+
+**What can be recovered.** Tag `v3.0.0` of `MrBinnacle/skills` holds five files under
+`skills/engineering/pull-rebase/`: `SKILL.md`, `EVIDENCE.md`, `gotchas.md`,
+`preventive-recipes.md` and `evals/evals.json`. Its `SKILL.md` differs from the reviewed copy
+in two ways only: CRLF line endings, and one extra blank line at the end of the file. The
+launcher's check (`card_text`) converted CRLF to LF and stripped trailing newlines before it
+compared, so it treated the two as equal. A cache directory label does not identify bytes, though.
+The host's `3.0.1` cache directory does not match tag `v3.0.1` (the #765 adjudication), so
+the `3.0.0` directory need not have matched tag `v3.0.0`. Tag `v3.0.0` is therefore the
+closest recoverable stand-in for the Stage 1A sibling files. It is not proven identical to
+them.
+
+**Finding.** The `SKILL.md` that the Stage 1A Full arm read is established by the launcher's
+check. The other files that arm could read are not established. Every number in this record
+is unchanged, because each one is computed from the `.eval` logs. What changes is the
+description of the Full arm: the reviewed `pull-rebase` `SKILL.md`, plus sibling files whose
+content is unrecorded.
+
+**Whether it matters is measurable and not yet measured.** The adherence section counts
+tool calls that name `release-manifest.json`. It does not count calls that name a sibling
+file. A count of Full-arm tool calls whose arguments name `EVIDENCE.md`, `gotchas.md`,
+`preventive-recipes.md` or `evals/` in the S486 logs would show how many Full epochs could
+have been steered by unrecorded text. A count of zero would make the gap moot for this run.
+
+**What changes from now on.** From the #764 change, the tag `v3.0.0` tree is vendored at
+`scripts/screens/419/v4_arms/full/pull-rebase/` byte for byte. `FULL_DIR_DEFAULT` points
+there, and the launchers refuse any Full directory whose files differ from the tag's git
+blob ids (`v4_cells.FULL_TREE_BLOBS`). A later run therefore delivers a known tree. It is
+not the Stage 1A tree, for the reason given above, and a result that pools a later run with
+Stage 1A must say so.
+
+*Revisit if:* a receipt turns up that records the `3.0.0` cache directory's content at the
+Stage 1A launch. Then compare it with the vendored tree and amend this block.

@@ -394,12 +394,9 @@ def test_cells_are_every_arm_in_every_world() -> None:
 )
 def test_six_cells_install_the_trace_in_world_a_cue_only(tmp_path: Path) -> None:
     pytest.importorskip("inspect_ai")
-    full_dir = tmp_path / "pull-rebase"
-    full_dir.mkdir()
-    shutil.copy(cue_cells.FULL_REFERENCE, full_dir / "SKILL.md")
     built = cue_cells.build_cells(
         fixture_root=cue_audit.FIXTURE_ROOT_DEFAULT,
-        full_dir=full_dir,
+        full_dir=cue_cells.FULL_DIR_DEFAULT,
         pin=make_pin(),
         epochs=1,
         compose_dir=tmp_path / "compose",

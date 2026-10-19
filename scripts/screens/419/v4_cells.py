@@ -14,6 +14,7 @@ Builds all six tasks and prints them. It never calls eval.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import itertools
 import json
 import sys
@@ -35,10 +36,17 @@ CELLS: tuple[tuple[Arm, World], ...] = tuple(itertools.product(ARMS, WORLDS))
 
 HERE = Path(__file__).resolve().parent
 PLACEBO_DIR = HERE / "v5_arms" / "placebo" / "parse-csv"
-FULL_REFERENCE = HERE / "v4_arms" / "full" / "pull-rebase" / "SKILL.md"
-FULL_DIR_DEFAULT = (
-    Path.home() / ".claude/plugins/cache/mrbinnacle-skills/mrbinnacle-engineering/3.0.0/pull-rebase"
-)
+FULL_DIR_DEFAULT = HERE / "v4_arms" / "full" / "pull-rebase"
+FULL_REFERENCE = FULL_DIR_DEFAULT / "SKILL.md"
+# The git blob ids of skills/engineering/pull-rebase/ at tag v3.0.0 of MrBinnacle/skills. The arm
+# installs the whole directory, so the whole tree is pinned, not only SKILL.md (#764).
+FULL_TREE_BLOBS = {
+    "EVIDENCE.md": "94a21c159797fd56ac7fcf1dae18e9f4d6a192a4",
+    "SKILL.md": "58e1c498d5d348439fce9f640e6fd114e6fd6a87",
+    "evals/evals.json": "ca385d6df409c9a1b24600f59735f65bcfb24c39",
+    "gotchas.md": "8adc163f5876e7ee23ab0196aef32cf02f7e57c4",
+    "preventive-recipes.md": "cdc790ba07f6409b715da8602eb2fe72b69072b2",
+}
 FIXTURE_ROOT_DEFAULT = Path(
     "C:/Users/mlpgr/2026_Projects/skill-harness/.private/microrun/batch1/gitpull/v4"
 )
@@ -59,9 +67,31 @@ def project_files(project: Path) -> dict[str, bytes]:
     }
 
 
-def card_text(path: Path) -> str:
-    """A card's text with line endings normalised: the install is CRLF, the repo copy LF."""
-    return path.read_bytes().replace(b"\r\n", b"\n").decode("utf-8").rstrip("\n")
+def blob_id(data: bytes) -> str:
+    """The id ``git hash-object`` gives ``data``."""
+    return hashlib.sha1(b"blob %d\0" % len(data) + data, usedforsecurity=False).hexdigest()
+
+
+def tree_blobs(root: Path) -> dict[str, str]:
+    """Every file under ``root``, keyed by its relative path, valued by its git blob id."""
+    return {
+        p.relative_to(root).as_posix(): blob_id(p.read_bytes())
+        for p in sorted(root.rglob("*"))
+        if p.is_file()
+    }
+
+
+def check_full_tree(full_dir: Path) -> None:
+    """:raises ValueError: ``full_dir`` is not the pinned v3.0.0 tree, byte for byte."""
+    found = tree_blobs(full_dir)
+    changed = sorted(
+        k for k in found.keys() | FULL_TREE_BLOBS.keys() if found.get(k) != FULL_TREE_BLOBS.get(k)
+    )
+    if changed:
+        raise ValueError(
+            f"{full_dir} differs from tag v3.0.0 in: {', '.join(changed)}; "
+            "the Full arm is pinned to that tree"
+        )
 
 
 def consequence_oracle(shas: dict[str, str]) -> str:
@@ -84,13 +114,9 @@ def build_cells(
 ) -> dict[tuple[Arm, World], Any]:
     """Build one Inspect task per cell. Nothing is evaluated.
 
-    :raises ValueError: the Full card is not the reviewed copy in ``v4_arms/full``.
+    :raises ValueError: ``full_dir`` is not the pinned v3.0.0 tree (``check_full_tree``).
     """
-    if card_text(full_dir / "SKILL.md") != card_text(FULL_REFERENCE):
-        raise ValueError(
-            f"{full_dir / 'SKILL.md'} differs from the reviewed copy {FULL_REFERENCE}; "
-            "the placebo was matched to that copy"
-        )
+    check_full_tree(full_dir)
     from inspect_ai import task_with  # the [inspect] extra; CI installs only [dev]
 
     shas = json.loads((fixture_root / "fixture_shas.json").read_text(encoding="utf-8"))

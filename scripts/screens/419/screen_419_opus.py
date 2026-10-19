@@ -25,9 +25,7 @@ PER_SAMPLE_CAP = HARD_CAP_USD / K  # sum over K samples <= HARD_CAP_USD by const
 MODEL = "anthropic/claude-opus-5"
 OUT = Path(sys.argv[sys.argv.index("--out") + 1])
 COMPOSE = Path(sys.argv[sys.argv.index("--compose") + 1])
-SKILL_DIR = (
-    Path.home() / ".claude/plugins/cache/mrbinnacle-skills/mrbinnacle-engineering/3.0.0/pull-rebase"
-)
+SKILL_DIR = Path(__file__).resolve().parent / "v4_arms" / "full" / "pull-rebase"
 # PRICE_PER_MTOK has no claude-opus-5 row yet; these are the Anthropic list prices per MTok on
 # 2026-09-21 (input, output, cache write at 1.25x, cache read at 0.1x).
 OPUS5 = {"input": 5.00, "output": 25.00, "cache_write": 6.25, "cache_read": 0.50}

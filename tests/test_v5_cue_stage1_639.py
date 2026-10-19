@@ -27,14 +27,6 @@ def _fixture_present() -> bool:
     return bool((cue_audit.FIXTURE_ROOT_DEFAULT / "fixture_shas.json").is_file())
 
 
-def _require_full_card() -> None:
-    # The fixture marks the steering host, where the Full arm next runs for real, so a
-    # missing card there is a blocker to surface, not a reason to skip (#764).
-    full_card = _load("v4_cells").FULL_DIR_DEFAULT / "SKILL.md"
-    if not full_card.is_file():
-        pytest.fail(f"the Full arm's card is missing on the steering host: {full_card}")
-
-
 @pytest.mark.skipif(
     not _fixture_present(), reason="the v5-cue fixture lives only on the steering host"
 )
@@ -42,7 +34,6 @@ def test_dry_run_builds_the_two_null_tasks_and_calls_no_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     inspect_ai = pytest.importorskip("inspect_ai")
-    _require_full_card()
     stage1 = _load("v5_cue_stage1")
 
     def refuse(*args: Any, **kwargs: Any) -> None:
@@ -76,7 +67,6 @@ def test_dry_run_builds_the_two_null_tasks_and_calls_no_model(
 )
 def test_stage1_tasks_are_null_in_both_worlds_at_eight_epochs(tmp_path: Path) -> None:
     pytest.importorskip("inspect_ai")
-    _require_full_card()
     stage1 = _load("v5_cue_stage1")
     _, tasks = stage1.stage1_tasks(tmp_path / "compose")
     assert [t.name for t in tasks] == ["v5cue-null-world-a-cue", "v5cue-null-world-b"]

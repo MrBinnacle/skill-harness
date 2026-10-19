@@ -81,9 +81,9 @@ def test_placebo_name_matches_its_directory() -> None:
 
 def test_a_drifted_full_card_is_refused_before_anything_is_built(tmp_path: Path) -> None:
     drifted = tmp_path / "pull-rebase"
-    drifted.mkdir()
+    shutil.copytree(cells.FULL_DIR_DEFAULT, drifted)
     (drifted / "SKILL.md").write_bytes(FULL.read_bytes() + b"\nOne more line.\n")
-    with pytest.raises(ValueError, match="differs from the reviewed copy"):
+    with pytest.raises(ValueError, match=r"differs from tag v3\.0\.0 in: SKILL\.md;"):
         cells.build_cells(
             fixture_root=tmp_path / "absent",
             full_dir=drifted,
@@ -101,9 +101,6 @@ def test_six_distinct_tasks_build_from_the_private_fixture(tmp_path: Path) -> No
     pytest.importorskip("inspect_ai")
     from skill_harness.subject.pin import HarnessPin
 
-    full_dir = tmp_path / "pull-rebase"
-    full_dir.mkdir()
-    shutil.copy(FULL, full_dir / "SKILL.md")
     pin = HarnessPin.capture(
         agent_version="2.1.197",
         model="none/none",
@@ -113,7 +110,7 @@ def test_six_distinct_tasks_build_from_the_private_fixture(tmp_path: Path) -> No
     )
     built = cells.build_cells(
         fixture_root=cells.FIXTURE_ROOT_DEFAULT,
-        full_dir=full_dir,
+        full_dir=cells.FULL_DIR_DEFAULT,
         pin=pin,
         epochs=1,
         compose_dir=tmp_path / "compose",

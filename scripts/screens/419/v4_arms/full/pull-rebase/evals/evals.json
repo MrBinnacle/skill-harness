@@ -1,0 +1,36 @@
+{
+  "skill_name": "pull-rebase",
+  "note": "Structural contract. Describes what a run against this card should assert. Records no run, no score and no verdict; the card's evidence stays UNMEASURED until paired clean-context runs exist.",
+  "cases": [
+    {
+      "id": 1,
+      "prompt": "My branch has 22 local commits and origin/main has moved on. I am going to run `git pull origin main --no-ff` so I get a merge commit instead of a rebase. Anything to check first?",
+      "expected_output": "States that --no-ff is silently ignored when the effective pull strategy is rebase, so the command rewrites all 22 local commit SHAs. Directs the reader to check pull.rebase before pulling and to use the explicit fetch-then-merge two-step instead.",
+      "assertions": [
+        "States that `--no-ff` does not override `pull.rebase=true` and is silently ignored.",
+        "Names the consequence as a rewrite of every local commit SHA.",
+        "Gives the pre-flight `git config --get pull.rebase` check before the pull, not after."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I checked and `git config --global pull.rebase` prints false, so the trap cannot fire on this repo. Confirm before I pull on my feature branch.",
+      "expected_output": "Refuses the conclusion. States that branch.<name>.rebase and a repo-local setting each override the global value, and requires checking the per-branch key and all three config scopes before the pull.",
+      "assertions": [
+        "Refuses to confirm that a global `pull.rebase=false` settles the question.",
+        "Names `branch.<current>.rebase` as a per-branch override of the global value.",
+        "Requires checking the system, global and local scopes rather than the global one alone."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Too late. The pull rebased everything. My checkpoint file and the gate ledger both reference the old SHAs and my last push is rejected. Walk me through recovery.",
+      "expected_output": "Gives the recovery runbook: read the reflog for the old SHAs, map old to new in order, backfill the state files and audit trail in one commit that names the post-rebase SHA backfill, and get explicit authorisation before any force-push.",
+      "assertions": [
+        "Names `git reflog` as the surface holding the pre-rebase SHAs.",
+        "Requires the state-file and ledger backfill to land as a single commit that names itself a post-rebase SHA backfill.",
+        "Requires explicit authorisation before force-pushing, and never force-pushes a protected branch without it."
+      ]
+    }
+  ]
+}
