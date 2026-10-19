@@ -65,9 +65,12 @@ A program that matched the old value stops matching and reports nothing.
   - `scipy>=1.18.1` (was `>=1.11`; #729 is the last of the floor bumps in
     the EB-MoM numerical stack).
   - `statsmodels>=0.15.0` (was `>=0.14`; #605).
+  - `pydantic>=2.14.1` (was `>=2.6`; #750).
+  - `tiktoken>=0.14.0,<1.0` (was `>=0.7,<1.0`; #751. The `<1.0` cap is
+    unchanged).
 
-  `tiktoken`, `pydantic` and `rich` did not move. Dev-extra floors moved with
-  Dependabot and are not runtime requirements.
+  `rich` did not move. Dev-extra floors moved with Dependabot and are not
+  runtime requirements.
 
 - **The ablation runner accepts a whole prompt assembly as an arm, not only a
   clause of one card** (#554, #615, in `9d956e8a`). `RunConfig` carries a
