@@ -5,11 +5,21 @@
 `launcher.py`. **Generator:** `scripts/mutation_receipt.py --select mr-`.
 **Machine-readable record:** `docs/assurance/pi-driver-wiring-mutation-receipt.json`.
 **Pinned by content, not by commit:** `src/skill_harness/subject/pi/runner.py`
-at `sha256:8fcda34f8f60c4915d7d8f1fd155920ea29865162684b3c338ae4cdeeea451dc` and
+at `sha256:74e9fefc2ac56316764f9b3627dda7dab0ed8be67eac150c8bd10b0a06b8d645` and
 `src/skill_harness/subject/pi/launcher.py` at
 `sha256:e2c59a26358834052978e07f58ebb66f69dd98105a74f33ed9331e27730bad7e`.
-**Commit at generation:** `66e5c16` — informational only; currency is checked
+**Commit at generation:** `67c324e` — informational only; currency is checked
 against the digests above by `tests/test_mutation_receipt.py`.
+
+**Fourth generation, 2026-10-15.** `67c324e` removed the `validated` keyword
+from `run_paired_evaluation`, so the driver always runs its pre-spend checks
+on the spec it executes. That edit changed the runner digest from
+`8fcda34f8f60` to `74e9fefc2ac5`. The receipt was regenerated from the clean
+committed tree, and that digest equals the SHA-256 of the blob git stores.
+All four cases are again KILLED by the same nodes. The JSON now carries the
+generator's current ids, `M-R6` and `M-R7`. This document and the receipts
+index keep the original ids `M-R1` and `M-R2` for the same two mutants (the
+#536 rename note in `docs/receipts-index.md`).
 
 **A superseded generation attested a digest no other machine could
 reproduce.** The second generation pinned the runner at `d9d583a16539`, which

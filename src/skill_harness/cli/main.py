@@ -3478,10 +3478,12 @@ def run_pi_paired(config: Path, execute: bool, evidence_db: Path, runtime_db: Pa
     pin. It launches no epoch and writes nothing, so the controls that
     protect a sized run can be exercised for free before one is authorised.
 
-    With --execute the same gate runs first, then the epochs, then the
-    existing paired write path. A gate failure refuses before the first
-    subprocess starts; an epoch that exits nonzero, or a capture that does
-    not parse, refuses before any evidence is assembled.
+    With --execute the driver repeats the apparatus checks against the
+    execution inputs, then runs the epochs and the existing paired write
+    path. These checks neither qualify the scientific design nor authorize
+    spend. A check failure refuses before the first epoch; an epoch that
+    exits nonzero, or a capture that does not parse, refuses before evidence
+    is assembled.
     """
     from skill_harness.subject.pi.launcher import PiLaunchError
     from skill_harness.subject.pi.roster import PiRosterError
@@ -3506,7 +3508,10 @@ def run_pi_paired(config: Path, execute: bool, evidence_db: Path, runtime_db: Pa
         _console().print("[yellow]No epoch was launched. Nothing was spent.[/]")
         raise SystemExit(3) from exc
 
-    _console().print("[green]Pre-spend gate passed.[/]")
+    _console().print("[green]Apparatus checks passed.[/]")
+    _console().print("This is not scientific qualification or spend authorization.")
+    _console().print("Contrast: Full = baseline + skill; Null = baseline.")
+    _console().print("Measures skill availability, not the effect of a production hook.")
     for name in validated.checks:
         _console().print(f"  ok  {name}")
     _console().print(f"  runtime version : {validated.runtime_version}")
@@ -3530,8 +3535,8 @@ def run_pi_paired(config: Path, execute: bool, evidence_db: Path, runtime_db: Pa
 
     with StorageContext(evidence_db, runtime_db) as ctx:
         try:
-            result = run_paired_evaluation(spec, ctx.evidence_conn, validated=validated)
-        except (PiPairedRunError, PiLaunchError) as exc:
+            result = run_paired_evaluation(spec, ctx.evidence_conn)
+        except (PiPairedRunError, PiLaunchError, PiRosterError) as exc:
             _console().print(f"[red]REFUSAL (apparatus)[/]: {exc}")
             _console().print("[yellow]No evidence was written for this pair.[/]")
             raise SystemExit(4) from exc

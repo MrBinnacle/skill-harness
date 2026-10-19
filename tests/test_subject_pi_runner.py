@@ -25,11 +25,14 @@ import json
 import sqlite3
 import subprocess
 from collections.abc import Iterator
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 import pytest
+from click.testing import CliRunner
 
+from skill_harness.cli.main import cli
 from skill_harness.storage.migrations import open_evidence
 from skill_harness.subject.ingest import (
     NullArmContaminationError,
@@ -569,3 +572,45 @@ def test_validate_pre_spend_launches_no_epoch(
     assert [e.name for e in validated.full_roster] == ["baseline-skill", "rebase-trap"]
     assert [e.name for e in validated.null_roster] == ["baseline-skill"]
     assert validated.treatment.name == "rebase-trap"
+
+
+@pytest.mark.parametrize("execute", [False, True], ids=["dry-run", "execute-after-drift"])
+def test_cli_rechecks_the_runtime_at_execution(
+    tmp_path: Path,
+    skills: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    execute: bool,
+) -> None:
+    """The runtime changes after the dry-run report: execution must measure it again."""
+    fake = _fake_for(tmp_path, skills)
+
+    def runtime_changes(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        result = fake(argv, **kwargs)
+        if "--version" in argv:
+            fake.host_version = "changed-after-report"
+        return result
+
+    monkeypatch.setattr("skill_harness.subject.pi.launcher.subprocess.run", runtime_changes)
+    config = tmp_path / "pi-config.json"
+    config.write_text(json.dumps(asdict(_spec(tmp_path, skills)), default=str), encoding="utf-8")
+    evidence_db, runtime_db = tmp_path / "cli-evidence.db", tmp_path / "cli-runtime.db"
+    args = ["run", "pi-paired", str(config)]
+    args += ["--evidence-db", str(evidence_db), "--runtime-db", str(runtime_db)]
+    result = CliRunner().invoke(cli, args + (["--execute"] if execute else []))
+
+    assert "not scientific qualification or spend authorization" in result.output
+    assert fake.epoch_launches == []
+    assert fake.oracle_calls == []
+    if not execute:
+        assert result.exit_code == 0, result.output
+        assert not evidence_db.exists()
+        assert not runtime_db.exists()
+    else:
+        assert result.exit_code == 4, result.output
+        assert "changed-after-report" in result.output
+        connection = open_evidence(evidence_db)
+        try:
+            assert connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
+            assert connection.execute("SELECT COUNT(*) FROM samples").fetchone()[0] == 0
+        finally:
+            connection.close()

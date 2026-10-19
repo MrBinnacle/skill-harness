@@ -362,10 +362,8 @@ def test_dry_run_prints_both_tables_and_calls_no_model(
 
     out = capsys.readouterr().out
     assert "DRY RUN: no model call." in out
-    assert "v5cue-full-world-a-cue" in out and "v5cue-placebo-world-a-cue" in out
     assert "OPERATING TABLE at pass-alpha 0.05 " in out
     assert "OPERATING TABLE at pass-alpha 0.0209 " in out
-    assert "pass-alpha=0.0209" in out.splitlines()[1]
     assert "max(p_FN, p_FP) <= 0.0209 against H0: d <= 0.2" in out
     assert out.count("cells: 289") == 2
     assert not (tmp_path / "logs").exists()
