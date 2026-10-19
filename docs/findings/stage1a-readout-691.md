@@ -226,8 +226,10 @@ only.
 
 **What can be recovered.** Tag `v3.0.0` of `MrBinnacle/skills` holds five files under
 `skills/engineering/pull-rebase/`: `SKILL.md`, `EVIDENCE.md`, `gotchas.md`,
-`preventive-recipes.md` and `evals/evals.json`. Its `SKILL.md` matches the reviewed copy
-after line-ending normalisation. A cache directory label does not identify bytes, though.
+`preventive-recipes.md` and `evals/evals.json`. Its `SKILL.md` differs from the reviewed copy
+in two ways only: CRLF line endings, and one extra blank line at the end of the file. The
+launcher's check (`card_text`) converted CRLF to LF and stripped trailing newlines before it
+compared, so it treated the two as equal. A cache directory label does not identify bytes, though.
 The host's `3.0.1` cache directory does not match tag `v3.0.1` (the #765 adjudication), so
 the `3.0.0` directory need not have matched tag `v3.0.0`. Tag `v3.0.0` is therefore the
 closest recoverable stand-in for the Stage 1A sibling files. It is not proven identical to
