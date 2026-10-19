@@ -60,7 +60,7 @@ dependencies = [
   # bit-equality corpus and updating IMPLEMENTATION_HASH in verbosity.py.
   # RUNTIME dep (imported by oracles/tier1/verbosity.py) — was mis-filed under dev
   # extras, which broke every non-dev install at the first Tier-1 code path.
-  "tiktoken>=0.7,<1.0",
+  "tiktoken>=0.14.0,<1.0",
   # statsmodels: OLS for AlpacaEval-2 length regression (A35 observation-time half).
   # RUNTIME dep (imported by calibration/length_regression.py) — same dev-extras mis-file.
   "statsmodels>=0.15.0",
