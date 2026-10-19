@@ -1,0 +1,49 @@
+# Repo description sync check - catches drift on the ONE public surface no
+# pull request can touch.
+#
+# tests/test_structural_bans.py pins pyproject.toml's [project].description
+# to a fixed literal, but the live GitHub "About" text is a separate field,
+# edited through the GitHub web UI and entirely out-of-band from any commit.
+# That means the drift this workflow watches for is introduced BETWEEN pull
+# requests, not by one - no PR diff can ever contain the edit that causes it.
+# Making this a required per-PR gate would add a live network dependency to
+# the merge path while still missing the one drift direction that actually
+# happens (an About-box edit with no corresponding commit). A schedule
+# catches that; a merge gate cannot.
+#
+# The `push` trigger on pyproject.toml covers the other, PR-visible drift
+# direction: a commit that changes [project].description without a matching
+# edit to the GitHub About box. That direction a pull request CAN cause, so
+# it is checked as soon as it lands on main rather than waiting for the next
+# scheduled run.
+#
+# scripts/repo_description_check.py is deliberately NOT added to ci.yml: that
+# file's drift-check job (scripts/drift_check.py) is hermetic by design, and
+# this check is the one contract in this family that cannot be.
+name: repo description sync
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  push:
+    branches: [main]
+    paths:
+      - pyproject.toml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  description-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Run repo description sync check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/repo_description_check.py

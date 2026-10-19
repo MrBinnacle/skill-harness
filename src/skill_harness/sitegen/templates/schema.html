@@ -1,0 +1,18 @@
+      <p class="rule">$description</p>
+      <p>
+        The machine-readable schema is published beside these pages as
+        <a href="sers.schema.json">sers.schema.json</a>. Receipts are validated
+        against it at build time by the same code that writes these pages, so a
+        published page and a validated receipt are the same event.
+      </p>
+      <h2>Required fields</h2>
+      <ul class="required">
+$required_rows
+      </ul>
+      <h2>Closed vocabularies</h2>
+      <p>
+        Every vocabulary below is fixed by the schema and checked against the
+        code enums in continuous integration, so a value can drift in neither
+        direction without failing a build.
+      </p>
+$vocabulary_tables

@@ -1,0 +1,16 @@
+# Every change in this repo is reviewed by @MrBinnacle until a wider
+# team forms. Sub-paths can list additional reviewers later without
+# removing the global owner.
+
+* @MrBinnacle
+
+# Architectural artifacts — extra scrutiny zone. Any change to the
+# load-bearing invariants should be discussed in an issue first.
+/docs/PRD.md                     @MrBinnacle
+/docs/PLAN.md                    @MrBinnacle
+/src/skill_harness/storage/migrations_sql/  @MrBinnacle
+
+# Storage / migrations gate — SCHEMA + SECURITY seat sign-off per A30 + dev-team-council
+src/skill_harness/storage/migrations_sql/*    @MrBinnacle
+/.github/                        @MrBinnacle
+/SECURITY.md                     @MrBinnacle

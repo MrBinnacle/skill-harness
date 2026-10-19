@@ -1,0 +1,12 @@
+# Assurance-container build context hygiene (Dockerfile.assurance).
+# .private is a ~2.9G gitignored archive and .sandcastle holds live factory
+# worktrees; copying either into a build context is a multi-gigabyte mistake.
+.private/
+.sandcastle/
+.git/
+node_modules/
+.venv/
+**/__pycache__/
+**/.mypy_cache/
+**/.pytest_cache/
+.hypothesis/

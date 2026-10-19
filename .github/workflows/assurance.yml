@@ -1,0 +1,75 @@
+name: Assurance lane
+
+# Long-running assurance search (#168) and atheris fuzz (#170).
+#
+# Trigger is workflow_dispatch ONLY (owner ruling 2026-08-12, recorded in #170's
+# body and in its acceptance criteria: "carries workflow_dispatch and no other
+# trigger"): an hour-plus lane on any automatic trigger adds latency to a path
+# someone is waiting on. Manual dispatch adds latency to nothing. Do not add
+# schedule, pull_request, or push triggers without revisiting that ruling.
+#
+# That ruling SUPERSEDES the cron schedule this file carried from #205, which had
+# rejected workflow_dispatch-only on the opposite reasoning — for a lane that buys
+# its evidence in runtime, "nobody ran it" and "it passed" produce the same
+# observable. Both statements are the owner's, one day apart; #170's is the later
+# one and is the one in force. Kept here so the reversal is visible to whoever
+# re-opens the question: the cost of manual-only is that this lane's evidence
+# ages silently, and nothing in CI reports that it has.
+#
+# This job is NOT in ci.yml's `all-green` needs list and must not be added to
+# branch protection's required checks without the owner saying so (#168/#170).
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: assurance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  assurance:
+    name: Assurance search (${{ matrix.os }} · py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    # Own timeout, never folded into ci.yml's 25m test cell. Sized for #170's
+    # >=1h fuzz (30m parser + 30m JSON) plus the #168 deep stateful machine.
+    timeout-minutes: 150
+    env:
+      PYTHONHASHSEED: "0"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+            requirements-assurance-container.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements-ci.txt -e ".[dev]"
+      - name: Install container-only tools (Linux)
+        if: runner.os == 'Linux'
+        run: python -m pip install -r requirements-assurance-container.txt
+      - name: pytest assurance
+        run: pytest -q -m assurance --tb=short
+      - name: Upload fuzz artifacts
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-artifacts-py${{ matrix.python-version }}
+          path: |
+            fuzz/artifacts/
+            fuzz/crashes/
+            fuzz/corpus/
+            docs/assurance/fuzz-report.md
+          if-no-files-found: ignore

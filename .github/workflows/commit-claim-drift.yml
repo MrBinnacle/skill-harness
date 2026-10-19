@@ -1,0 +1,53 @@
+# Commit-claim drift check - catches a dated ratio claim going stale
+# while its shape lock stays green (steering repo issue 61).
+#
+# docs/why-this-exists.md states the ratio of machinery commits to collection
+# commits, with a measurement date and the two shell commands a reader can run
+# to reproduce the counts. tests/test_readme_origin_223.py locks the SHAPE of
+# that claim - a date, a ratio, the two commands - and deliberately not the
+# value, because the exact counts rise with every merge and are stale the day
+# after they are written. The durable figure is the ratio, which has stayed
+# between three and five to one across every measurement taken.
+#
+# scripts/check_commit_claim_drift.py is deliberately NOT added to ci.yml, for
+# two reasons.
+#
+# First, the same reason repo-description-sync.yml states: ci.yml's drift-check
+# job (scripts/drift_check.py) is hermetic by design, and this check clones two
+# remote repositories. It cannot be hermetic.
+#
+# Second, and specific to this check: the ratio changes slowly, so an
+# every-push gate would be noise rather than signal. The weekly cadence catches
+# a drift outside the 3-5 band before it matters.
+#
+# A red run here means the ratio has drifted outside its band, which is the
+# signal. The remedy is to re-derive with the page's own commands and update
+# the ratio and date together, in one commit.
+#
+# Cadence: weekly. The drift is real but slow to matter - the durable figure the
+# page relies on is the ratio, which has held between three and five to one
+# across every measurement taken. Revisit if the weekly correction proves to
+# cost more than the dated claim is worth, in which case issue 61's direction 3
+# (retire the dated form and keep the derivation commands) is the exit, rather
+# than a weaker version of this check.
+name: commit claim drift
+
+on:
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  commit-claim-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Run commit claim drift check
+        run: python scripts/check_commit_claim_drift.py

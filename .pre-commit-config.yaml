@@ -1,0 +1,191 @@
+# Skill Harness pre-commit hooks.
+#
+# Install once per clone:    pre-commit install
+# Run on all files:          pre-commit run --all-files
+# Update hook versions:      pre-commit autoupdate
+#
+# The pre-commit config intentionally does NOT run pytest — tests are
+# CI-gated, not commit-gated. Pre-commit catches the cheap-to-detect
+# issues so that CI focuses on the slow ones.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: end-of-file-fixer
+        # libFuzzer corpus/crash inputs are opaque bytes; do not rewrite them.
+        exclude: ^fuzz/(corpus|crashes|artifacts)/
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+        exclude: ^fuzz/(corpus|crashes|artifacts)/
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        # Same reason as the two hooks above: a corpus/crash unit is bytes, and
+        # --fix=lf rewrites the CRLF inside one as readily as in source.
+        exclude: \.(ps1|cmd|bat)$|^fuzz/(corpus|crashes|artifacts)/
+      - id: detect-private-key
+
+  # rev tracks the ruff pin in requirements-ci.txt — keep them in lockstep.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
+      - id: ruff
+        files: ^(src|tests|scripts)/
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+        files: ^(src|tests|scripts)/
+
+  # rev tracks the mypy pin in requirements-ci.txt — keep them in lockstep, or
+  # local hook verdicts (incl. which `type: ignore` comments are needed) diverge
+  # from CI's. additional_dependencies mirrors the runtime deps so strict mode
+  # sees the same imports CI sees.
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.3.0
+    hooks:
+      - id: mypy
+        files: ^(src/|tests/|scripts/drift_check\.py$|scripts/release_gate\.py$|scripts/check_dependency_anchor\.py$)
+        # Override the mirror's default args: its --ignore-missing-imports would
+        # silence import-untyped and flip CI-required `type: ignore` comments to
+        # "unused" — pyproject's per-module overrides are the source of truth.
+        args: [--scripts-are-modules]
+        additional_dependencies:
+          - anthropic>=0.87
+          - click>=8.1
+          - openai>=2.41,<3
+          - pydantic>=2.6
+          - rich>=13.7
+          - scipy>=1.11
+          - statsmodels>=0.14
+          - tiktoken>=0.7,<1.0
+          - pytest>=7.4
+          - pytest-socket>=0.7
+          - hypothesis>=6.100
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # De-personalization gate — fail-closed residue check.
+  #
+  # WHY: this harness is extracted/written alongside a private source tree that
+  # legitimately carries private-project provenance (a codename, ticket ids, private
+  # dir names, a private repo link). That provenance must NOT reach this public repo.
+  # gitleaks above catches secrets; these catch private *identifiers* it ignores.
+  #
+  # It REFUSES the commit and reports file:line + the suggested generic replacement in
+  # the hook NAME. It does NOT auto-rewrite — a silent rewrite would hide the
+  # source<->publish divergence and paper over the root cause.
+  #
+  # SCOPE (H6): covers *.md, *.py, *.yml/*.yaml, *.sql, *.toml, *.cfg, *.json, *.txt —
+  # residue in a code comment or a workflow file is exactly as public as residue in a
+  # doc. This config (.pre-commit-config.yaml) is itself *.yaml and necessarily quotes
+  # every pattern verbatim in its own `name:`/`entry:` fields, so it is explicitly
+  # excluded rather than relying on scope to dodge self-matching (the prior *.md-only
+  # scope avoided this by construction; widening scope removed that side effect, so the
+  # exclude is now load-bearing — do not drop it without re-narrowing scope back down).
+  # The maintainer's name/email are intentionally NOT listed (a public block-list would
+  # itself de-anonymize).
+  #   Full-tree sweep on demand:  pre-commit run --all-files
+  - repo: local
+    hooks:
+      - id: residue-writ
+        name: "residue 'Writ' (private project codename) -> 'a personal production project'"
+        language: pygrep
+        entry: '\bWrit\b'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
+      - id: residue-sec-id
+        name: "residue 'SEC-<n>' (private security ticket id) -> drop, or 'a security-audit item'"
+        language: pygrep
+        entry: '\bSEC-[0-9]+'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
+      - id: residue-wi-id
+        name: "residue 'WI-<n>' (private work-item id) -> drop, or 'a work item'"
+        language: pygrep
+        entry: '\bWI-[0-9]+'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
+      - id: residue-research-dir
+        name: "residue 'skills_research' (private research dir) -> a generic descriptor"
+        language: pygrep
+        entry: 'skills_research'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
+      - id: residue-private-repo-dir
+        name: "residue 'youwontdoit' (private repo dir) -> a generic descriptor"
+        language: pygrep
+        entry: 'youwontdoit'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
+      - id: residue-private-repo-link
+        name: "residue 'MrBinnacle/writ' (PRIVATE repo, 404s for readers) -> drop the link"
+        language: pygrep
+        entry: 'MrBinnacle/writ'
+        files: '\.(md|py|ya?ml|sql|toml|cfg|json|txt)$'
+        exclude: '^\.pre-commit-config\.yaml$'
+
+  # Structural bans — PRD.md #17/#17a (A23 Sec.3, A29). Mirrored in
+  # tests/test_structural_bans.py (pytest-visible, runs in the ordinary
+  # `not live` loop) and re-run standalone in CI's `structural-bans` job
+  # (.github/workflows/ci.yml) so a fresh clone without `pre-commit install`
+  # is still covered — same belt-and-suspenders shape as the
+  # de-personalization gate above.
+  - repo: local
+    hooks:
+      - id: ban-raw-sqlite-connect
+        name: "raw sqlite3 connect() call (bypasses PRAGMA/FK discipline, A23 Sec.3) -> use storage.migrations.open_db()/open_evidence()/open_runtime()"
+        language: pygrep
+        entry: 'sqlite3\.connect\('
+        files: '^(src|tests)/.*\.py$'
+        # migrations.py defines open_db() and is the one legitimate caller;
+        # test_structural_bans.py is the ban's own mirror test — its docstring
+        # and assert message must name the banned call in prose (the pytest
+        # mirror likewise self-excludes via `path == _THIS_FILE`).
+        exclude: '^(src/skill_harness/storage/migrations|tests/test_structural_bans)\.py$'
+      - id: ban-raw-oracle-verdicts
+        name: "raw 'FROM oracle_verdicts' outside the documented allowlist (PRD.md #17, A29) -> route through the admissible_verdicts VIEW, or add to the allowlist here + tests/test_structural_bans.py + PRD.md #17 with justification"
+        language: pygrep
+        entry: '(?i)from\s+oracle_verdicts'
+        files: '^src/.*\.py$'
+        exclude: '^src/skill_harness/(audit/__init__|aggregation/engine|ablation/runner|cli/main|storage/repositories/evidence/frozen_cases)\.py$'
+      - id: ban-unpinned-verdict-insert
+        name: "raw insert_oracle_verdict() call outside the mint-path allowlist (plan item 10, A15) -> route through mint_oracle_verdict (pins an ArticleFingerprint), or extend the allowlist here + tests/test_mint_path_allowlist.py + the plan's item 10 with justification"
+        language: pygrep
+        entry: 'insert_oracle_verdict\s*\('
+        files: '^src/.*\.py$'
+        # oracle_verdicts.py defines the insert and the mint path calls it after
+        # pinning; dual_write.py is the documented historical/reconciler helper.
+        # Mirror test: tests/test_mint_path_allowlist.py (F-8 cross-check).
+        exclude: '^src/skill_harness/storage/(repositories/evidence/oracle_verdicts|dual_write)\.py$'
+      - id: ban-timestamp-final-order-by
+        name: "ORDER BY ending on a timestamp column (*_at / ts / last_updated) -> append a unique tie-break key matching the timestamp's direction, e.g. 'ORDER BY started_at, run_id' (rowid tie order is not stable across dump/restore/VACUUM on append-only tables)"
+        language: pygrep
+        entry: '(?i)ORDER\s+BY\s+[\w.,\s]*\b(\w+_at|ts|last_updated)\b(\s+(ASC|DESC))?\s*["'']?,?\s*$'
+        files: '^src/.*\.py$'
+        # '^$' = match-nothing placeholder (pre-commit's documented default);
+        # no file is exempt. Kept explicit so the F-8 cross-check
+        # (tests/test_structural_bans.py
+        # test_timestamp_order_by_exclude_matches_pre_commit_config) can
+        # extract and verify it against the (empty) Python-side exempt set.
+        exclude: '^$'
+      - id: ban-public-surface-copy
+        name: "public copy uses qualified evidence-admissibility language, avoids earn/earned framing, reports kind precision with its class split, and never quotes recall without its interval"
+        language: system
+        # Field/node/context-aware and stdlib-only; the module's pytest cases
+        # independently prove poison + nearest-legitimate directions.
+        entry: python tests/test_structural_bans.py
+        pass_filenames: false
+        always_run: true
+
+ci:
+  autoupdate_schedule: monthly
+  skip: [mypy]  # mypy is heavy; CI runs it once per PR instead of every pre-commit.autoupdate
