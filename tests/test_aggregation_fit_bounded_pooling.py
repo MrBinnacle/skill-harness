@@ -373,6 +373,12 @@ def _exact_binomial_rejects(false_count: int, clusters: int) -> tuple[bool, floa
     return p_value < KILL_LEVEL, p_value
 
 
+# #760: the three tests that request `tie_heavy_null_refused_cells` share one xdist
+# worker, so the module fixture is built once instead of once per worker that drew
+# one of them (two ~120s setups on windows-latest in job 118154982104).
+_SHARES_REFUSED_CELLS = pytest.mark.xdist_group("bounded_pooling_refused_cells")
+
+
 @pytest.fixture(scope="module")
 def tie_heavy_null_refused_cells() -> dict[str, Any]:
     """Score tie_heavy_null once, both ways, on the same worlds.
@@ -414,6 +420,7 @@ def tie_heavy_null_refused_cells() -> dict[str, Any]:
     return {"form_b": form_b, "unpooled": unpooled, "refused_worlds": refused_worlds}
 
 
+@_SHARES_REFUSED_CELLS
 @pytest.mark.slow
 def test_the_regime_reaches_the_refused_path_at_all(
     tie_heavy_null_refused_cells: dict[str, Any],
@@ -426,6 +433,7 @@ def test_the_regime_reaches_the_refused_path_at_all(
     )
 
 
+@_SHARES_REFUSED_CELLS
 @pytest.mark.slow
 def test_mutant_1_tie_heavy_null_refused_false_fail_rate(
     tie_heavy_null_refused_cells: dict[str, Any],
@@ -449,6 +457,7 @@ def test_mutant_1_tie_heavy_null_refused_false_fail_rate(
     )
 
 
+@_SHARES_REFUSED_CELLS
 @pytest.mark.slow
 def test_control_unpooled_refused_path_rejects_on_the_same_worlds(
     tie_heavy_null_refused_cells: dict[str, Any],
