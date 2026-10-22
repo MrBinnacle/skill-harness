@@ -84,7 +84,7 @@ _tool_dispatch.py  _tool_params.py  _toolsets  agent_toolset.py  mcp.py
 
 The two CVEs above came from the local filesystem Memory Tool. That helper still ships in 1.x as `lib/tools/_beta_builtin_memory_tool.py`.
 
-The 1.x line adds a wider local-execution surface. `lib/tools/agent_toolset.py` implements the `agent_toolset_20260401` tools: `bash`, `read`, `write`, `edit`, `glob` and `grep`. Its docstring says that `bash` "owns a persistent `/bin/bash` subprocess". It also says, "the file tools confine to `workdir` plus any `allowed_roots` (symlink-aware) and are safe without a sandbox; `bash` is unrestricted and should run inside one." The module is kept out of `anthropic.lib.tools.__init__` because it imports `subprocess`. A caller reaches it only through an explicit import.
+The 1.x line adds a wider local-execution surface. `lib/tools/agent_toolset.py` implements the `agent_toolset_20260401` tools: `bash`, `read`, `write`, `edit`, `glob` and `grep`. Its docstring says that `bash` "owns a persistent `/bin/bash` subprocess". It also says, "the file tools confine to `workdir` plus any `allowed_roots` (symlink-aware) and are safe without a sandbox; `bash` is unrestricted and should run inside one." The module is kept out of `anthropic.lib.tools.__init__` because it imports `subprocess`. A caller reaches it only through an explicit import. `import anthropic` does load `anthropic.lib.tools`, because `__init__.py` imports `beta_tool` and `beta_async_tool` from it. That import does not load `agent_toolset.py`.
 
 Other 1.x additions in the same family, from the release notes: the session tool runner, MCP helpers and MCP tunnels (beta), Managed Agents with "auto mode tool permissions", memory stores, and "typed computer and browser toolset tool calls".
 
