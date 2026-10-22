@@ -93,10 +93,18 @@ class AssuranceRequirement(NamedTuple):
 
 ASSURANCE_REQUIREMENTS: dict[str, AssuranceRequirement] = {
     "0.3": AssuranceRequirement(issues=tuple(range(167, 175)), g8_required=True),
+    # Decided on #742 (2026-10-22). An issue is in this row when its open state
+    # means a published claim surface carries a claim the tree cannot support,
+    # or a control guarding one passes for the wrong reason. #691 and #764 are
+    # closed and listed as the Stage 1A chain record. Membership and the
+    # exclusions are argued on #742; change the row there first.
+    "0.4": AssuranceRequirement(
+        issues=(570, 732, 736, 691, 764, 797, 792, 793, 794, 795, 796),
+        g8_required=True,
+    ),
     # Later lines are declared here when their assurance phase is decided.
     # Absence of a row fails closed: G7 and G8 each report NOT RUN and the
-    # gate blocks. Declaring a row is how a line becomes releasable; this
-    # ticket adds no row beyond 0.3.
+    # gate blocks. Declaring a row is how a line becomes releasable.
 }
 """Declared assurance requirements keyed by minor line (``"MAJOR.MINOR"``).
 

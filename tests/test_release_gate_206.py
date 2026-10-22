@@ -38,6 +38,10 @@ ROOT = Path(__file__).resolve().parents[1]
 GATE = ROOT / "scripts" / "release_gate.py"
 RED_RECEIPT = ROOT / "docs" / "assurance" / "release-gate-red-206.md"
 ZERO_THREE_ISSUES = tuple(range(167, 175))
+# The 0.4 row as adjudicated on #742 (2026-10-22). A literal copy on purpose:
+# the membership is the decision, so a change to the script's row must show up
+# here as a deliberate test edit, not pass silently.
+ZERO_FOUR_ISSUES = (570, 732, 736, 691, 764, 797, 792, 793, 794, 795, 796)
 GREEN_RUN = {
     "status": "completed",
     "conclusion": "success",
@@ -404,19 +408,22 @@ def test_unknown_minor_line_fails_closed_with_not_run_for_g7_and_g8(tmp_path: Pa
     RUN``, each adds an error, and the gate exits 1. They do not print
     ``SKIPPED``: a gate with no declared requirement has not been waived, it
     has been refused.
+
+    #742 declared the 0.4 row, so this case moved from 0.4.0 to 0.5.0, the
+    next line with no declared requirement.
     """
-    root = _seed_tree(tmp_path, "0.4.0")
+    root = _seed_tree(tmp_path, "0.5.0")
     result = _run_gate(root, issue_states={}, workflow_runs=[])
 
     assert result.returncode == 1, result.stdout + result.stderr
     assert "RELEASE GATE: BLOCKED" in result.stdout, result.stdout + result.stderr
-    assert "G7: NOT RUN, no assurance requirement is declared for the 0.4 line" in (
+    assert "G7: NOT RUN, no assurance requirement is declared for the 0.5 line" in (
         result.stdout
     ), result.stdout + result.stderr
-    assert "G8: NOT RUN, no assurance requirement is declared for the 0.4 line" in (
+    assert "G8: NOT RUN, no assurance requirement is declared for the 0.5 line" in (
         result.stdout
     ), result.stdout + result.stderr
-    assert "add a row to ASSURANCE_REQUIREMENTS before releasing 0.4.x" in (result.stdout), (
+    assert "add a row to ASSURANCE_REQUIREMENTS before releasing 0.5.x" in (result.stdout), (
         result.stdout + result.stderr
     )
     assert "G7: SKIPPED" not in result.stdout
@@ -435,7 +442,7 @@ def test_unknown_minor_line_fails_closed_with_not_run_for_g7_and_g8(tmp_path: Pa
 def test_unknown_minor_line_blocks_even_a_patch_release(tmp_path: Path) -> None:
     """The same fail-closed rule on another undeclared line.
 
-    Differential pair with the 0.4 case above: identical GitHub state, the
+    Differential pair with the 0.5 case above: identical GitHub state, the
     only difference is the declared version. Before #735 a 0.2.x patch was
     exempt because ``_is_zero_three`` was false; after #735 an undeclared
     line blocks, whatever its patch number. That is the intended outcome.
@@ -866,6 +873,94 @@ def test_g5_reads_yaml_workflows_as_well_as_yml(tmp_path: Path) -> None:
         + red.stderr
     )
     assert red.returncode == 1, red.stdout + red.stderr
+
+
+def _closed_zero_four() -> dict[int, str]:
+    return dict.fromkeys(ZERO_FOUR_ISSUES, "closed")
+
+
+def test_zero_four_release_passes_g7_when_every_row_issue_is_closed(tmp_path: Path) -> None:
+    """#742 test (a): the real script's 0.4 row, satisfied, passes G7.
+
+    The run drives the shipped script, not a copy, so removing the 0.4 row
+    turns this red with G7 and G8 printing NOT RUN. The request-set
+    assertion pins the row's membership: the gate asked for exactly the
+    adjudicated issues, no more and no fewer. Off a tag ref G8 self-skips.
+    """
+    root = _seed_tree(tmp_path / "tree", "0.4.0")
+    seen_paths: list[str] = []
+    result = _run_gate(root, _closed_zero_four(), [], seen_paths=seen_paths)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RELEASE GATE: PASS" in result.stdout
+    assert _failures(result) == []
+    expected = {f"/issues/{n}" for n in ZERO_FOUR_ISSUES}
+    assert set(seen_paths) == expected, (
+        "the 0.4 row's issue reads differ from the #742 decision; "
+        f"requested {sorted(set(seen_paths))}, expected {sorted(expected)}"
+    )
+
+
+def test_zero_four_release_is_blocked_while_a_row_issue_is_open(tmp_path: Path) -> None:
+    """#742 test (b): one open row issue blocks the 0.4 line and is named."""
+    root = _seed_tree(tmp_path / "tree", "0.4.0")
+    result = _run_gate(root, _closed_zero_four() | {797: "open"}, [])
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert _failures(result) == ["G7: assurance issue #797 is open"]
+
+
+def test_zero_four_tag_requires_an_assurance_run_at_the_candidate_sha(tmp_path: Path) -> None:
+    """#742 test (c): the 0.4 row requires G8 on the release tag.
+
+    Two runs on ``refs/tags/v0.4.0`` with every row issue closed. With no
+    ``assurance.yml`` run at ``GITHUB_SHA``, G8 is the only failure and it
+    names the dispatch command. With a green run at that SHA, the gate
+    passes with all eight gates run. A row declared ``g8_required=False``
+    would pass the first run by declaration, so the pair pins the flag.
+    """
+    sha = "c" * 40
+    root = _seed_tree(tmp_path / "tree", "0.4.0")
+
+    missing = _run_gate(root, _closed_zero_four(), [], ref="refs/tags/v0.4.0", sha=sha)
+    assert missing.returncode == 1, missing.stdout + missing.stderr
+    failures = _failures(missing)
+    assert len(failures) == 1 and failures[0].startswith("G8:"), failures
+    assert sha in failures[0], failures[0]
+    assert "gh workflow run assurance.yml --ref v0.4.0" in failures[0], failures[0]
+
+    present = _run_gate(
+        root, _closed_zero_four(), [_run_record(sha)], ref="refs/tags/v0.4.0", sha=sha
+    )
+    assert present.returncode == 0, present.stdout + present.stderr
+    assert _failures(present) == []
+    ran, total, skipped, not_run = _coverage(present.stdout)
+    assert (ran, skipped, not_run) == (total, set(), set()), present.stdout
+
+
+def test_each_line_reads_only_its_own_row(tmp_path: Path) -> None:
+    """#742 test (d): at 0.3.0 the 0.3 row still governs; at 0.4.0 the 0.4 row.
+
+    A differential pair against identical GitHub state that answers both
+    rows' issues. The 0.3.0 tree must read exactly 167 to 174 and none of
+    the 0.4 issues, so adding the 0.4 row changed nothing on ``main`` today.
+    The 0.4.0 tree must read exactly the 0.4 issues, so the pair also fails
+    when the 0.4 row is removed.
+    """
+    states = _closed() | _closed_zero_four()
+    zero_three_paths: list[str] = []
+    zero_four_paths: list[str] = []
+    zero_three = _run_gate(
+        _seed_tree(tmp_path / "zero-three", "0.3.0"), states, [], seen_paths=zero_three_paths
+    )
+    zero_four = _run_gate(
+        _seed_tree(tmp_path / "zero-four", "0.4.0"), states, [], seen_paths=zero_four_paths
+    )
+
+    assert zero_three.returncode == 0, zero_three.stdout + zero_three.stderr
+    assert zero_four.returncode == 0, zero_four.stdout + zero_four.stderr
+    assert set(zero_three_paths) == {f"/issues/{n}" for n in ZERO_THREE_ISSUES}
+    assert set(zero_four_paths) == {f"/issues/{n}" for n in ZERO_FOUR_ISSUES}
 
 
 def _recorded_transcript() -> list[str]:
