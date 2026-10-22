@@ -618,15 +618,15 @@ and covers that section only. This page stays the citable surface for every kind
   unrecorded sibling bytes could not have steered a trajectory; alpha reading B
   (0.0125 per bound, 0.05 total) is the adopted reading, interval
   [−0.3042, 0.3825].
-- **Refuses to claim:** In the record body, a choice between the two alpha
-  readings (Amendment 2 adopts reading B), or a single
+- **Refuses to claim:** A choice between the two alpha readings in the body
+  above Amendment 2, which adopts reading B; or a single
   "n to exclude ±0.20": the figure is a property of the convention (263 or 314
   at evenly-spaced indices, 488 or 570 with the real order repeated), not of the
   data. Any causal reading of the adherence split (manifest-read is
   post-treatment) or of the within-pair correlation. Any claim that #684's
   independence assumption holds; a phi interval that includes zero at n = 97
-  does not establish independence. That the sibling bytes are recorded; they
-  are not.
+  does not establish independence. A claim that the sibling bytes are recorded;
+  they are not.
 
 ---
 

@@ -265,8 +265,10 @@ This block is dated and appended under the amendment rule. Nothing above it is c
 named this count as owed. Across the 97 Full-arm epochs of S486, no tool call names
 `EVIDENCE.md`, `gotchas.md`, `preventive-recipes.md`, `evals/` or `evals.json`. The Full arm
 made 724 Bash calls, 4 Read calls and 51 Skill calls. The only calls that name `pull-rebase`
-are the 51 Skill calls. Positive controls: the same pass counts trace-file reads in 32 Full
-epochs and 28 Placebo epochs, which matches this record's `manifest_read` cross-check. A
+are the 51 Skill calls. Positive controls: the same pass, with the same argument match,
+counts trace-file reads in 32 Full epochs and 28 Placebo epochs. That matches this record's
+`manifest_read` cross-check, so the match finds file names in tool-call arguments when they
+are there, and the zero is not an artifact of the search. A
 sibling name appears in 51 Full-arm messages, all with role `user`. These are the Skill tool
 results: they carry `SKILL.md`, whose line 51 links to `preventive-recipes.md`. No epoch
 followed the link.
@@ -274,7 +276,7 @@ followed the link.
 The finding rests on one premise: the sibling files' bytes reach the model only through a
 tool call that reads them, and the Skill tool result carries `SKILL.md` alone. Under that
 premise the unrecorded sibling files could not have changed a Stage 1A Full-arm trajectory.
-The provenance gap stands as a record gap, because the bytes remain unrecorded. It does not
+The provenance gap stands as a record gap: what the files held is still unknown. It does not
 weigh on any number in this record. From now on the Full arm is described as: the reviewed
 `pull-rebase` `SKILL.md`, plus sibling files whose content is unrecorded and which no epoch
 read.
@@ -297,8 +299,8 @@ of the data (Section 1). The question it stands in for is "what design bounds P 
 **4. Standing of the record.** The Stage 1A verdict is unchanged: CANT_TELL_YET at
 n_max = 97. The S513 wait condition on 0.4.0 ("#691 and its findings record") is met: the
 record exists and its numbers are complete. This amendment completes the record's
-description of the Full arm. The 0.4 assurance row (#742) names #797, so the published
-receipt is complete at the tag.
+description of the Full arm. The 0.4 assurance row (#742) names #797, so the release gate
+refuses the 0.4.0 tag until #797, which this amendment closes, is closed.
 
 *Revisit if:* a receipt turns up that records the `3.0.0` cache directory's bytes at the
 Stage 1A launch (Amendment 1's condition). Also revisit if the Skill tool is shown to deliver
