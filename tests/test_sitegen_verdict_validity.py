@@ -163,7 +163,7 @@ def test_description_only_scope_line_names_the_listing_not_model_pull() -> None:
 
 
 def test_description_only_scope_table_pairs_the_registered_mechanism_with_the_channel() -> None:
-    """verdict_scope is never rewritten, so the row keeps model-pull, never bare."""
+    """S476 amendment 2: the page never says merely model-pull when the body never loaded."""
     page = _render(_description_only(_receipt()))
 
     assert (
@@ -171,6 +171,16 @@ def test_description_only_scope_table_pairs_the_registered_mechanism_with_the_ch
         "measured delivery: skill-listing description; body not loaded</dd>" in page
     )
     assert page.count("model-pull") == 1
+
+
+@pytest.mark.parametrize("channel", ["not_instrumented", "body_and_description"])
+def test_scope_table_row_is_plain_when_the_body_was_not_shown_to_be_skipped(channel: str) -> None:
+    """#814: only a description_only receipt gets the annotation; others stay bare."""
+    receipt = _receipt()
+    receipt["delivery"]["channel"] = channel
+    receipt["verdict_scope"]["delivery_mechanism"] = "model-pull"
+
+    assert "<dt>delivery_mechanism</dt><dd><code>model-pull</code></dd>" in _render(receipt)
 
 
 @pytest.mark.parametrize("channel", ["not_instrumented", "description_only"])
