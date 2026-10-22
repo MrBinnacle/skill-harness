@@ -166,14 +166,17 @@ def test_seed_digest_changes_when_a_file_is_renamed(tmp_path: Path) -> None:
 
 
 def test_seed_digest_is_the_length_prefixed_stream(tmp_path: Path) -> None:
-    """#811: pins the encoding itself, which recorded pins are compared against.
+    """#811: pins the encoding itself, which recorded digests depend on.
 
     The collision cases above each catch one way the prefix can break. A
     variant that fixes a length to a constant, drops the colons or swaps the
     two lengths passes all of them, and still changes every recorded digest.
+    The ten-byte file catches a length written in another base or capped at
+    one digit. The non-ASCII, upper-case path catches a length counted in
+    characters and a path folded to lower case.
     """
-    seed = _seed_of(tmp_path / "s", {"b/c": b"yz", "a": b"x"})
-    stream = b"1:a1:x" + b"3:b/c2:yz"
+    seed = _seed_of(tmp_path / "s", {"b/c": b"yz", "a": b"x", "D/é": b"z" * 10})
+    stream = "4:D/é10:".encode() + b"z" * 10 + b"1:a1:x" + b"3:b/c2:yz"
     assert seed_digest(seed) == hashlib.sha256(stream).hexdigest()
 
 
