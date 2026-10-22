@@ -7,9 +7,16 @@ against the epoch's first hazard entry, so a cue read beforehand is a leak and a
 consequence read afterwards (the origin's rejection of the push) is not.
 
 Steps are the epoch's messages flattened in order: every assistant tool call's
-arguments is one step and every tool result's text is one step. The system
-messages and the first user message are not steps; a cue there was stated to
-the agent before it did anything.
+arguments is one step, every tool result's text is one step, and every user
+message after the first is one step. The system messages and the first user
+message are not steps; a cue there was stated to the agent before it did
+anything.
+
+A later user message that opens with the harness's skill-load preamble
+(``Base directory for this skill: <path>``) is a loaded skill body, and its step
+records the skill's name. Timing is a fact about the epoch whatever the source.
+Whether a cue *leaked* depends on the arm: the treatment skill delivering its
+own constraint is the treatment, not a confound (#803).
 """
 
 from __future__ import annotations
@@ -51,12 +58,14 @@ class CueObservation:
     """One registered cue's timing in one epoch.
 
     ``step`` indexes the epoch's ordered step list, and is ``None`` for
-    :attr:`CueTiming.STATED_INITIALLY` and :attr:`CueTiming.NEVER`.
+    :attr:`CueTiming.STATED_INITIALLY` and :attr:`CueTiming.NEVER`. ``skill``
+    names the loaded skill the first arrival came from, or is ``None``.
     """
 
     cue: str
     timing: CueTiming
     step: int | None
+    skill: str | None = None
 
 
 @dataclass(frozen=True)
@@ -64,25 +73,41 @@ class EpochTrajectory:
     """One epoch's hazard entry and the timing of every registered cue.
 
     ``cues`` holds one observation per registered cue, in registration order.
+    ``leaked`` is true when any cue reached the agent before the hazard entry
+    from a source other than the arm's treatment skill. It reads every arrival,
+    not only the first, so a treatment-skill load cannot mask a later leak.
     """
 
     entered: bool
     hazard_step: int | None
     cues: tuple[CueObservation, ...]
+    leaked: bool
 
-    @property
-    def leaked(self) -> bool:
-        """True when any cue reached the agent before the hazard entry."""
-        return any(
-            obs.timing in (CueTiming.STATED_INITIALLY, CueTiming.BEFORE_HAZARD) for obs in self.cues
-        )
+
+@dataclass(frozen=True)
+class _Step:
+    text: str
+    skill: str | None = None
 
 
 @dataclass(frozen=True)
 class _Flattened:
     stated: tuple[str, ...]
-    steps: tuple[str, ...]
+    steps: tuple[_Step, ...]
     hazard_step: int | None
+
+    def before_hazard(self) -> tuple[_Step, ...]:
+        return self.steps if self.hazard_step is None else self.steps[: self.hazard_step]
+
+
+_SKILL_LOAD = re.compile(r"\ABase directory for this skill:[ \t]*(\S[^\r\n]*)")
+
+
+def _loaded_skill(text: str) -> str | None:
+    match = _SKILL_LOAD.match(text)
+    if match is None:
+        return None
+    return re.split(r"[\\/]", match.group(1).strip().rstrip("\\/"))[-1]
 
 
 def _message_text(message: object) -> str:
@@ -112,7 +137,7 @@ def _enters_hazard(call: object, hazard: re.Pattern[str]) -> bool:
 
 def _flatten(messages: Iterable[object], hazard: re.Pattern[str]) -> _Flattened:
     stated: list[str] = []
-    steps: list[str] = []
+    steps: list[_Step] = []
     hazard_step: int | None = None
     seen_user = False
     for message in messages:
@@ -120,32 +145,47 @@ def _flatten(messages: Iterable[object], hazard: re.Pattern[str]) -> _Flattened:
         if role == "system" or (role == "user" and not seen_user):
             seen_user = seen_user or role == "user"
             stated.append(_message_text(message))
+        elif role == "user":
+            text = _message_text(message)
+            steps.append(_Step(text, _loaded_skill(text)))
         elif role == "tool":
-            steps.append(_message_text(message))
+            steps.append(_Step(_message_text(message)))
         for call in getattr(message, "tool_calls", None) or ():
             if hazard_step is None and _enters_hazard(call, hazard):
                 hazard_step = len(steps)
-            steps.append(_call_text(call))
+            steps.append(_Step(_call_text(call)))
     return _Flattened(tuple(stated), tuple(steps), hazard_step)
 
 
 def _observe(name: str, cue: re.Pattern[str], flat: _Flattened) -> CueObservation:
     if any(cue.search(text) for text in flat.stated):
         return CueObservation(name, CueTiming.STATED_INITIALLY, None)
-    for index, text in enumerate(flat.steps):
-        if cue.search(text):
+    for index, step in enumerate(flat.steps):
+        if cue.search(step.text):
             # The hazard call's own arguments are the agent's action, not a
             # discovery, so only a strictly earlier step counts as before.
             before = flat.hazard_step is None or index < flat.hazard_step
             timing = CueTiming.BEFORE_HAZARD if before else CueTiming.AFTER_HAZARD
-            return CueObservation(name, timing, index)
+            return CueObservation(name, timing, index, step.skill)
     return CueObservation(name, CueTiming.NEVER, None)
+
+
+def _leaks(cue: re.Pattern[str], flat: _Flattened, treatment_skill: str | None) -> bool:
+    if any(cue.search(text) for text in flat.stated):
+        return True
+    return any(
+        cue.search(step.text)
+        for step in flat.before_hazard()
+        if treatment_skill is None or step.skill != treatment_skill
+    )
 
 
 def classify_trajectory(
     messages: Iterable[object],
     hazard_pattern: str | re.Pattern[str],
     cues: Mapping[str, re.Pattern[str]],
+    *,
+    treatment_skill: str | None,
 ) -> EpochTrajectory:
     """Time every cue in one epoch against its first hazard entry.
 
@@ -158,6 +198,9 @@ def classify_trajectory(
         ``content`` and ``tool_calls``.
     :param hazard_pattern: The registered ``hazard_action`` regex.
     :param cues: Cue name to compiled regex, matched with ``re.search``.
+    :param treatment_skill: The skill this arm treats with, whose own load is
+        not a leak. A Null or Placebo arm passes ``None``, so every skill load
+        before the hazard counts.
     """
     hazard = re.compile(hazard_pattern) if isinstance(hazard_pattern, str) else hazard_pattern
     flat = _flatten(messages, hazard)
@@ -165,11 +208,16 @@ def classify_trajectory(
         entered=flat.hazard_step is not None,
         hazard_step=flat.hazard_step,
         cues=tuple(_observe(name, cue, flat) for name, cue in cues.items()),
+        leaked=any(_leaks(cue, flat, treatment_skill) for cue in cues.values()),
     )
 
 
 def trajectory_leak_report(
-    eval_log_path: Path, hazard_pattern: str, cues: Mapping[str, str]
+    eval_log_path: Path,
+    hazard_pattern: str,
+    cues: Mapping[str, str],
+    *,
+    treatment_skill: str | None,
 ) -> tuple[EpochTrajectory, ...]:
     """Classify every epoch in one Inspect ``.eval`` log, in sample order.
 
@@ -188,6 +236,11 @@ def trajectory_leak_report(
     compiled = {name: re.compile(pattern) for name, pattern in cues.items()}
     log = read_eval_log(str(eval_log_path))
     return tuple(
-        classify_trajectory(getattr(sample, "messages", None) or (), hazard, compiled)
+        classify_trajectory(
+            getattr(sample, "messages", None) or (),
+            hazard,
+            compiled,
+            treatment_skill=treatment_skill,
+        )
         for sample in log.samples or []
     )
