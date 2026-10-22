@@ -162,6 +162,17 @@ def test_description_only_scope_line_names_the_listing_not_model_pull() -> None:
     assert "model-pull" not in line
 
 
+def test_description_only_scope_table_pairs_the_registered_mechanism_with_the_channel() -> None:
+    """verdict_scope is never rewritten, so the row keeps model-pull, never bare."""
+    page = _render(_description_only(_receipt()))
+
+    assert (
+        "<dt>delivery_mechanism</dt><dd><code>model-pull</code> registered; "
+        "measured delivery: skill-listing description; body not loaded</dd>" in page
+    )
+    assert page.count("model-pull") == 1
+
+
 def test_description_only_cut_template_names_the_listing_not_model_pull() -> None:
     receipt = _description_only(_receipt(verdict="CUT"))
     receipt["cut_sub_reason"] = "no_lift"

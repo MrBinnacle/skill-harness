@@ -1055,7 +1055,12 @@ def _verdict_scope_section(receipt: Mapping[str, Any]) -> str:
             text = f"refused: {value['refusal']}"
         else:
             text = ABSENT_TEXT
-        rows.append(f"<dt>{safe(key)}</dt><dd><code>{safe(text)}</code></dd>")
+        cell = f"<code>{safe(text)}</code>"
+        if key == "delivery_mechanism":
+            measured = _delivery_wording(receipt, scope)
+            if measured != text:
+                cell += f" registered; measured {safe(measured)}"
+        rows.append(f"<dt>{safe(key)}</dt><dd>{cell}</dd>")
     parts = [
         '<section aria-labelledby="verdict-scope">',
         '  <h2 id="verdict-scope">Verdict scope</h2>',
