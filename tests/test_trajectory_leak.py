@@ -159,8 +159,8 @@ def test_hazard_step_is_the_first_hazard_call_not_a_later_one() -> None:
     assert not trajectory.leaked
 
 
-def test_only_the_first_user_message_is_stated_initially() -> None:
-    # What a later user message counts as is open (#620); this pins only that it
+def test_a_later_user_message_is_not_stated_initially() -> None:
+    # What a later user message counts as is open (#803); this pins only that it
     # is not treated as stated before the agent acted.
     messages = [
         _system("agent"),
