@@ -256,3 +256,52 @@ Stage 1A must say so.
 
 *Revisit if:* a receipt turns up that records the `3.0.0` cache directory's content at the
 Stage 1A launch. Then compare it with the vendored tree and amend this block.
+
+## Amendment 2, 2026-10-22: the sibling-file count is 0, and the bar owner's choices (#797)
+
+This block is dated and appended under the amendment rule. Nothing above it is changed.
+
+**1. The sibling-file count is 0 (#764, comment 6273246267, measured 2026-10-20).** Amendment 1
+named this count as owed. Across the 97 Full-arm epochs of S486, no tool call names
+`EVIDENCE.md`, `gotchas.md`, `preventive-recipes.md`, `evals/` or `evals.json`. The Full arm
+made 724 Bash calls, 4 Read calls and 51 Skill calls. The only calls that name `pull-rebase`
+are the 51 Skill calls. Positive controls: the same pass, with the same argument match,
+counts trace-file reads in 32 Full epochs and 28 Placebo epochs. That matches this record's
+`manifest_read` cross-check, so the match finds file names in tool-call arguments when they
+are there, and the zero is not an artifact of the search. A
+sibling name appears in 51 Full-arm messages, all with role `user`. These are the Skill tool
+results: they carry `SKILL.md`, whose line 51 links to `preventive-recipes.md`. No epoch
+followed the link.
+
+The finding rests on one premise: the sibling files' bytes reach the model only through a
+tool call that reads them, and the Skill tool result carries `SKILL.md` alone. Under that
+premise the unrecorded sibling files could not have changed a Stage 1A Full-arm trajectory.
+The provenance gap stands as a record gap: what the files held is still unknown. It does not
+weigh on any number in this record. From now on the Full arm is described as: the reviewed
+`pull-rebase` `SKILL.md`, plus sibling files whose content is unrecorded and which no epoch
+read.
+
+**2. Alpha reading B is adopted: 0.0125 per one-sided bound, 0.05 in total.** Limits item 2
+left this choice to the bar owner. The Fable adjudication session of 2026-10-22 made it
+(comment 6333961437 on #691). The grounds: the frozen pre-registration (#651 § 4 item 3)
+reads the F − N contrast with separate one-sided bounds per arm, each at half the ledger
+level, so the level is spent once across the union. Applied to a two-sided interval on P − N
+built from four one-sided bounds, the same allocation gives 0.0125 per bound and 0.05 in
+total. Reading A spends 0.10 by the registered design's own accounting. The adopted interval
+is [−0.3042, 0.3825]. The finding is the same under either reading: placebo inertness is not
+established at n = 97.
+
+**3. No n-to-exclude convention is adopted.** The figure is a property of a convention, not
+of the data (Section 1). The question it stands in for is "what design bounds P − N within
+±0.20". That question is routed to the Stage 2 simulator as an operating characteristic
+(#798). No sizing number for the next run is taken from this record.
+
+**4. Standing of the record.** The Stage 1A verdict is unchanged: CANT_TELL_YET at
+n_max = 97. The S513 wait condition on 0.4.0 ("#691 and its findings record") is met: the
+record exists and its numbers are complete. This amendment completes the record's
+description of the Full arm. The 0.4 assurance row (#742) names #797, so the release gate
+refuses the 0.4.0 tag until #797, which this amendment closes, is closed.
+
+*Revisit if:* a receipt turns up that records the `3.0.0` cache directory's bytes at the
+Stage 1A launch (Amendment 1's condition). Also revisit if the Skill tool is shown to deliver
+sibling-file bytes without a tool call: that voids the premise in item 1.
