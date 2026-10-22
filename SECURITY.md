@@ -39,7 +39,7 @@ The harness explicitly avoids:
 
 ## Threat model (informal)
 
-The harness runs locally, hits the Anthropic API, and writes to SQLite. The default v0.1 trust model is **local-trust**: single operator, single host, evidence and runtime DB files live in the operator's filesystem. Remote network attackers, multi-tenant DB hosting, and hostile model providers replacing the SDK at runtime are out of scope. In scope: accidental developer mutation, dependency-tree compromise (passive), and filesystem-adjacent attackers with the same UID as the harness process.
+The harness runs locally, hits the Anthropic API, and writes to SQLite. The default v0.1 trust model is **local-trust**: single operator, single host, evidence and runtime DB files live in the operator's filesystem. Remote network attackers, multi-tenant DB hosting, and hostile model providers replacing the SDK at runtime are out of scope. In scope: accidental developer mutation, dependency-tree compromise (passive), filesystem-adjacent attackers with the same UID as the harness process, and hostile content in a skill under measurement (see *The skill under measurement is untrusted input* below).
 
 The primary threats:
 
@@ -63,6 +63,27 @@ so would need argv-based execution (no shell string) and path
 normalization/validation added first. This is the same "local-trust, single
 operator" boundary as the rest of this document; it does not extend to a
 future design where task/skill content flows into oracle configuration.
+
+### The skill under measurement is untrusted input
+
+skill-harness measures skills, including skills its operator did not write. `run pi-paired` loads
+the measured skill files into the Pi coding agent, and that agent holds tools. Pi's default tools
+are `read`, `bash`, `edit` and `write`; the run config's `tool_allowlist` narrows them. A hostile
+skill can steer those tools. This is how agent evaluation works, and the harness cannot remove it.
+`run ablation` sends text-only model requests with no tools, and `run evaluate-skill` makes no
+model call, so neither gives skill content a tool.
+
+When the run config has no `container` object, the Pi epoch and the oracle run on the host with the
+operator's privileges, filesystem and network. The harness pin records this as
+`local-host:no-container`. Measure any skill you did not write with a `container` object. The
+README section *A skill you did not write* has the template.
+
+The harness does not enforce container isolation. It puts `argv_prefix` in front of the Pi command
+and the oracle command. It records `image_digest` and `network_policy` in the pin, and no code
+checks either one ([#812](https://github.com/MrBinnacle/skill-harness/issues/812)). The agent calls
+the model provider from inside the container, so a container with no network cannot run an epoch.
+The boundary to aim for is egress to the provider only. No run in this repository has used
+container mode.
 
 ### Trust partition between `evidence.db` and `runtime.db`
 

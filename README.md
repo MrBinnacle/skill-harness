@@ -203,6 +203,49 @@ model call and before the API-key check, so a run without one exits 1:
 Error: ratification preflight refused --execute [record-missing]: no ratification record referenced; pass --ratification docs/ratifications/RAT-NNNN-<skill-slug>.md (see that dir's README)
 ```
 
+### A skill you did not write
+
+A skill under measurement is untrusted input. `run pi-paired` loads the skill files into the Pi
+coding agent, and that agent holds tools. Pi's default tools are `read`, `bash`, `edit` and
+`write`, and the run config's `tool_allowlist` narrows them. A hostile skill can steer those tools.
+`run ablation` sends text-only model requests with no tools, and `run evaluate-skill` makes no
+model call.
+
+When the run config has no `container` object, the Pi epoch and the oracle run on your host, as
+your user, with your filesystem and your network. The pin records this as `local-host:no-container`.
+Measure a skill you did not write with a `container` object:
+
+```json
+{
+  "container": {
+    "argv_prefix": [
+      "docker", "run", "--rm",
+      "-e", "ANTHROPIC_API_KEY", "-e", "PI_CAPTURE_DIR",
+      "-v", "/abs/run-root:/abs/run-root",
+      "-w", "/abs/run-root/workspace",
+      "registry.example/pi-runner@sha256:<digest>"
+    ],
+    "image_digest": "sha256:<digest>",
+    "network_policy": "egress to the model provider only"
+  }
+}
+```
+
+This is a template, not a tested recipe. No run in this repository has used container mode. Four
+facts bound it:
+
+- The harness puts `argv_prefix` in front of the Pi command and the oracle command, and does
+  nothing else with the container. The isolation is whatever that prefix builds. The harness
+  records `image_digest` and `network_policy` in the pin and enforces neither
+  ([#812](https://github.com/MrBinnacle/skill-harness/issues/812)).
+- The launcher passes host paths on the command line: the skill directories, the workspace, the
+  session directory and the capture extension inside the installed package. Mount each one at the
+  same path inside the container.
+- The epoch's environment holds only `declared_env`, the `secret_env_names` values and
+  `PI_CAPTURE_DIR`. Pass each name the container needs with `-e`.
+- The agent calls the model provider from inside the container. Docker's `--network none` removes
+  that route, so the epoch cannot run. Restrict egress to the provider instead.
+
 ## The other half
 
 The verdicts land in [MrBinnacle/skills](https://github.com/MrBinnacle/skills). There, each skill
