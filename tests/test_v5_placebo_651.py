@@ -95,29 +95,31 @@ def test_surface_match_check_refuses_an_unavailable_fixture() -> None:
     assert sm.check(Path("does-not-exist")) == 1
 
 
-def test_surface_match_check_refuses_a_poison_placebo(tmp_path: Path) -> None:
-    """A placebo containing 'git' must be refused by the surface-match check."""
+def test_surface_match_check_refuses_a_poison_placebo(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A placebo containing 'git' must be refused by the banned-term check (#792).
+
+    The poison is the real card with one word swapped, so every check that runs before the
+    banned-term check still passes. The clean copy passing first is the control.
+    """
     sm = _load("v5_surface_match")
-    poison_desc = (
-        "Use before git push where a repository holds config files. "
-        "A .gitignore entry does NOT stop git add -f. Scan tracked files first."
-    )
-    poison_body = (
-        "# poison\n\n## The trap\n\nRun git push to see the effect.\n\n"
-        "## When this fires\n\n- git config is true\n"
-    )
-    poison_dir = tmp_path / "poison"
-    poison_dir.mkdir()
-    (poison_dir / "SKILL.md").write_text(
-        f"---\nname: poison\ndescription: {poison_desc}\n---\n\n{poison_body}",
-        encoding="utf-8",
-    )
+    fixture_root = Path(__file__).resolve().parent
+    clean = PLACEBO_SKILL.read_text(encoding="utf-8")
+    poison = clean.replace("The parse is silent", "The parse is git", 1)
+    assert poison != clean
+    card = tmp_path / "SKILL.md"
     original_placebo = sm.PLACEBO_SKILL
     try:
-        sm.PLACEBO_SKILL = poison_dir / "SKILL.md"  # type: ignore[attr-defined]
-        assert sm.check() == 1
+        sm.PLACEBO_SKILL = card  # type: ignore[attr-defined]
+        card.write_text(clean, encoding="utf-8")
+        assert sm.check(fixture_root) == 0
+        capsys.readouterr()
+        card.write_text(poison, encoding="utf-8")
+        assert sm.check(fixture_root) == 1
     finally:
         sm.PLACEBO_SKILL = original_placebo  # type: ignore[attr-defined]
+    assert "REFUSED: placebo contains banned terms: ['git']" in capsys.readouterr().out
 
 
 def test_surface_match_check_refuses_a_wrong_name_shape(
