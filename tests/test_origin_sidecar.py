@@ -146,6 +146,29 @@ def test_from_seed_refuses_a_missing_directory(tmp_path: Path) -> None:
         OriginSidecar.from_seed(tmp_path / "nope")
 
 
+def test_from_seed_refuses_a_seed_containing_a_real_symlink(tmp_path: Path) -> None:
+    seed = make_seed(tmp_path / "s", hook=True)
+    try:
+        (seed / "linked.txt").symlink_to(seed / "protected.txt")
+    except OSError as exc:
+        pytest.skip(f"this host cannot create a symlink: {exc}")
+    with pytest.raises(ValueError, match="symlink"):
+        OriginSidecar.from_seed(seed)
+
+
+def test_from_seed_refuses_a_seed_containing_a_simulated_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real-symlink test above skips where the OS refuses the link, as
+    Windows does without privilege. This twin keeps the refusal checked there."""
+    seed = make_seed(tmp_path / "s", hook=True)
+    link = seed / "protected.txt"
+    real_is_symlink = Path.is_symlink
+    monkeypatch.setattr(Path, "is_symlink", lambda self: self == link or real_is_symlink(self))
+    with pytest.raises(ValueError, match="symlink"):
+        OriginSidecar.from_seed(seed)
+
+
 # ---------------------------------------------------------------------------
 # write_origin_compose
 # ---------------------------------------------------------------------------
