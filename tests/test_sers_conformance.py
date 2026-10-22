@@ -827,6 +827,13 @@ def test_v16_scope_audit_number_never_accepts_null(
         sers_validator.validate(instance)
 
 
+def _sole_error(validator: Draft202012Validator, instance: dict[str, Any]) -> ValidationError:
+    """The one error a poison fixture raises, so the rule under test is what refuses it."""
+    errors = list(validator.iter_errors(instance))
+    assert len(errors) == 1, [error.message for error in errors]
+    return errors[0]
+
+
 def test_poison_validated_sentinel_pass_is_red(sers_validator: Draft202012Validator) -> None:
     """currentness VALIDATED with SENTINEL_PASS basis must fail (criterion 2)."""
     path = _POISON_DIR / "poison_validated_sentinel_pass.json"
@@ -834,9 +841,9 @@ def test_poison_validated_sentinel_pass_is_red(sers_validator: Draft202012Valida
     instance = _load_json(path)
     assert instance["currentness"]["state"] == "VALIDATED"
     assert instance["currentness"]["basis"] == "SENTINEL_PASS"
-    with pytest.raises(ValidationError) as excinfo:
-        sers_validator.validate(instance)
-    assert "SENTINEL_PASS" in str(excinfo.value) or "basis" in str(excinfo.value)
+    error = _sole_error(sers_validator, instance)
+    assert list(error.absolute_path) == ["currentness", "basis"]
+    assert error.validator == "enum"
 
 
 def test_poison_keep_no_model_id_is_red(sers_validator: Draft202012Validator) -> None:
@@ -847,9 +854,9 @@ def test_poison_keep_no_model_id_is_red(sers_validator: Draft202012Validator) ->
     assert instance["verdict"] == "KEEP"
     assert instance["sers_version"] == "1.6.0"
     assert "model_id" not in instance.get("verdict_scope", {})
-    with pytest.raises(ValidationError) as excinfo:
-        sers_validator.validate(instance)
-    assert "model_id" in str(excinfo.value)
+    error = _sole_error(sers_validator, instance)
+    assert list(error.absolute_path) == ["verdict_scope"]
+    assert error.message == "'model_id' is a required property"
 
 
 def test_poison_keep_no_task_family_is_red(sers_validator: Draft202012Validator) -> None:
@@ -859,9 +866,9 @@ def test_poison_keep_no_task_family_is_red(sers_validator: Draft202012Validator)
     instance = _load_json(path)
     assert instance["verdict"] == "KEEP"
     assert "task_family" not in instance.get("verdict_scope", {})
-    with pytest.raises(ValidationError) as excinfo:
-        sers_validator.validate(instance)
-    assert "task_family" in str(excinfo.value)
+    error = _sole_error(sers_validator, instance)
+    assert list(error.absolute_path) == ["verdict_scope"]
+    assert error.message == "'task_family' is a required property"
 
 
 def test_poison_keep_no_delivery_mechanism_is_red(
@@ -873,9 +880,9 @@ def test_poison_keep_no_delivery_mechanism_is_red(
     instance = _load_json(path)
     assert instance["verdict"] == "KEEP"
     assert "delivery_mechanism" not in instance.get("verdict_scope", {})
-    with pytest.raises(ValidationError) as excinfo:
-        sers_validator.validate(instance)
-    assert "delivery_mechanism" in str(excinfo.value)
+    error = _sole_error(sers_validator, instance)
+    assert list(error.absolute_path) == ["verdict_scope"]
+    assert error.message == "'delivery_mechanism' is a required property"
 
 
 def test_carried_forward_requires_tested_at(sers_validator: Draft202012Validator) -> None:
