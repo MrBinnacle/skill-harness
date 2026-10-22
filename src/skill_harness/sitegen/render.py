@@ -1056,7 +1056,7 @@ def _verdict_scope_section(receipt: Mapping[str, Any]) -> str:
         else:
             text = ABSENT_TEXT
         cell = f"<code>{safe(text)}</code>"
-        if key == "delivery_mechanism":
+        if key == "delivery_mechanism" and isinstance(value, str):
             measured = _delivery_wording(receipt, scope)
             if measured != text:
                 cell += f" registered; measured {safe(measured)}"

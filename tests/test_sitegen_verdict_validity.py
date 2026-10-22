@@ -173,6 +173,19 @@ def test_description_only_scope_table_pairs_the_registered_mechanism_with_the_ch
     assert page.count("model-pull") == 1
 
 
+@pytest.mark.parametrize("channel", ["not_instrumented", "description_only"])
+def test_scope_table_claims_no_registration_when_the_mechanism_is_absent(channel: str) -> None:
+    """The schema requires delivery_mechanism only for KEEP, so a CUT may omit it."""
+    receipt = _receipt(verdict="CUT")
+    receipt["cut_sub_reason"] = "no_lift"
+    receipt["delivery"]["channel"] = channel
+    del receipt["verdict_scope"]["delivery_mechanism"]
+
+    assert "<dt>delivery_mechanism</dt><dd><code>absent from this receipt</code></dd>" in _render(
+        receipt
+    )
+
+
 def test_description_only_cut_template_names_the_listing_not_model_pull() -> None:
     receipt = _description_only(_receipt(verdict="CUT"))
     receipt["cut_sub_reason"] = "no_lift"
