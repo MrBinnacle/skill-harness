@@ -138,8 +138,15 @@ def _seed_of(root: Path, files: dict[str, bytes]) -> Path:
         ({"a": b"q", "b": b"z"}, {"a": b"q1:bz"}),
         # A path's trailing digit reads as the start of the byte count.
         ({"a1": b"x" * 12, "b": b"y" * 96}, {"a": b"x" * 12 + b"b96:" + b"y" * 96}),
+        # A byte count that is not the byte length lets one file's bytes spell the next file.
+        ({"a": b"x", "b": b"y"}, {"a": b"x1:b1:y"}),
     ],
-    ids=["path-bytes-boundary", "bytes-spell-a-header", "path-digit-joins-the-count"],
+    ids=[
+        "path-bytes-boundary",
+        "bytes-spell-a-header",
+        "path-digit-joins-the-count",
+        "byte-count-is-the-byte-length",
+    ],
 )
 def test_seed_digest_keeps_file_boundaries(
     tmp_path: Path, left: dict[str, bytes], right: dict[str, bytes]
