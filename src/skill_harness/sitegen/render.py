@@ -658,7 +658,7 @@ def _verdict_template_text(receipt: Mapping[str, Any]) -> str:
             task_family=_string_field(scope, "task_family", "unknown task family"),
             model=_string_field(scope, "model_id", "unknown model"),
             estimand=_string_field(scope, "estimand", "unknown estimand"),
-            delivery=_string_field(scope, "delivery_mechanism", "unknown delivery"),
+            delivery=_delivery_wording(receipt, scope),
         )
         return f'<p class="verdict-template">{safe(text)}</p>'
     unmeasured = receipt.get("unmeasured_sub_reason")
@@ -1055,7 +1055,12 @@ def _verdict_scope_section(receipt: Mapping[str, Any]) -> str:
             text = f"refused: {value['refusal']}"
         else:
             text = ABSENT_TEXT
-        rows.append(f"<dt>{safe(key)}</dt><dd><code>{safe(text)}</code></dd>")
+        cell = f"<code>{safe(text)}</code>"
+        if key == "delivery_mechanism" and isinstance(value, str):
+            measured = _delivery_wording(receipt, scope)
+            if measured != text:
+                cell += f" registered; measured {safe(measured)}"
+        rows.append(f"<dt>{safe(key)}</dt><dd>{cell}</dd>")
     parts = [
         '<section aria-labelledby="verdict-scope">',
         '  <h2 id="verdict-scope">Verdict scope</h2>',
@@ -1153,7 +1158,7 @@ def _scope_line(receipt: Mapping[str, Any]) -> str:
             f"</p>"
         )
     task_family = _string_field(scope, "task_family", "unknown task family")
-    delivery = _string_field(scope, "delivery_mechanism", "unknown delivery")
+    delivery = _delivery_wording(receipt, scope)
     tested_at = _string_field(scope, "tested_at", "unknown date")
     return (
         f'<p class="scope-line">'
@@ -1226,6 +1231,19 @@ def _sub(node: Mapping[str, Any], key: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise SiteBuildError(f"schema is missing the {key!r} object")
     return value
+
+
+def _delivery_wording(receipt: Mapping[str, Any], scope: Mapping[str, Any]) -> str:
+    """The delivery a claim sentence names: the measured channel when the body never loaded.
+
+    S476 amendment 2 (#655): a ``description_only`` receipt measured exposure to
+    the listing description, so naming only the registered mechanism (often
+    ``model-pull``) would claim a treatment that never happened.
+    """
+    delivery = receipt.get("delivery")
+    if isinstance(delivery, Mapping) and delivery.get("channel") == "description_only":
+        return _DELIVERY_CHANNEL_TEXT["description_only"]
+    return _string_field(scope, "delivery_mechanism", "unknown delivery")
 
 
 def _string_field(node: Mapping[str, Any], key: str, default: str) -> str:

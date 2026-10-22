@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -139,6 +140,86 @@ def test_cut_no_lift_renders_verbatim_template() -> None:
         "establish no benefit outside that scope." in page
     )
     assert "verdict-template" in page
+
+
+def _description_only(receipt: dict[str, Any]) -> dict[str, Any]:
+    receipt["delivery"]["channel"] = "description_only"
+    receipt["verdict_scope"]["delivery_mechanism"] = "model-pull"
+    return receipt
+
+
+def _paragraph(page: str, css_class: str) -> str:
+    match = re.search(rf'<p class="{css_class}">(.*?)</p>', page, re.DOTALL)
+    assert match is not None, f"no {css_class} paragraph rendered"
+    return match.group(1)
+
+
+def test_description_only_scope_line_names_the_listing_not_model_pull() -> None:
+    """#655 / S476: the body never loaded, so the claim must not say bare model-pull."""
+    line = _paragraph(_render(_description_only(_receipt())), "scope-line")
+
+    assert "delivery: skill-listing description; body not loaded" in line
+    assert "model-pull" not in line
+
+
+def test_description_only_scope_table_pairs_the_registered_mechanism_with_the_channel() -> None:
+    """verdict_scope is never rewritten, so the row keeps model-pull, never bare."""
+    page = _render(_description_only(_receipt()))
+
+    assert (
+        "<dt>delivery_mechanism</dt><dd><code>model-pull</code> registered; "
+        "measured delivery: skill-listing description; body not loaded</dd>" in page
+    )
+    assert page.count("model-pull") == 1
+
+
+@pytest.mark.parametrize("channel", ["not_instrumented", "description_only"])
+def test_scope_table_claims_no_registration_when_the_mechanism_is_absent(channel: str) -> None:
+    """The schema requires delivery_mechanism only for KEEP, so a CUT may omit it."""
+    receipt = _receipt(verdict="CUT")
+    receipt["cut_sub_reason"] = "no_lift"
+    receipt["delivery"]["channel"] = channel
+    del receipt["verdict_scope"]["delivery_mechanism"]
+
+    assert "<dt>delivery_mechanism</dt><dd><code>absent from this receipt</code></dd>" in _render(
+        receipt
+    )
+
+
+def test_description_only_cut_template_names_the_listing_not_model_pull() -> None:
+    receipt = _description_only(_receipt(verdict="CUT"))
+    receipt["cut_sub_reason"] = "no_lift"
+
+    template = _paragraph(_render(receipt), "verdict-template")
+
+    assert "delivery: skill-listing description; body not loaded" in template
+    assert "model-pull" not in template
+
+
+def test_model_pull_scope_line_keeps_the_registered_mechanism_when_the_body_loaded() -> None:
+    receipt = _receipt()
+    receipt["delivery"]["channel"] = "body_and_description"
+    receipt["verdict_scope"]["delivery_mechanism"] = "model-pull"
+
+    assert "model-pull" in _paragraph(_render(receipt), "scope-line")
+
+
+def test_carried_forward_line_names_the_tested_model_before_the_current_one() -> None:
+    receipt = _receipt(
+        currentness={
+            "state": "CARRIED_FORWARD",
+            "basis": "SENTINEL_PASS",
+            "last_checked_at": "2026-09-23T00:00:00Z",
+            "next_check_due": "2026-09-30T00:00:00Z",
+            "max_age_days": 90,
+        }
+    )
+    receipt["subject_identity"]["subject_model"] = "model-2026-10"
+
+    assert _paragraph(_render(receipt), "scope-line") == (
+        "demonstrated on model-2026-09; carried forward to model-2026-10 "
+        "under the sentinel rule; not re-validated on model-2026-10."
+    )
 
 
 def test_hazard_not_met_renders_verbatim_template(tmp_path: Path) -> None:
