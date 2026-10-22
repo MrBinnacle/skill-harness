@@ -11,6 +11,17 @@
 measures what a skill changes, what the skill costs, and whether the evidence is strong enough to
 justify a claim.
 
+It is for a person who writes or maintains agent skills and has to decide whether to ship one.
+
+## Install
+
+```bash
+pip install skill-harness                              # Python 3.12 or later
+skill-harness skill audit path/to/your/SKILL.md
+```
+
+Section 5 below explains what the audit reports and how to run a paid comparison.
+
 One line carries the design:
 
 > **skill exists ≠ skill was delivered ≠ model used skill**
@@ -19,8 +30,8 @@ A skill **exists** when the file is present, which says almost nothing about wha
 received. It was **delivered** when the runtime put its description into the model's context, which
 this instrument calls **exposure** and treats as the treatment condition. The model **used** it when
 it loaded the body, which is **invocation**, a downstream behavior the instrument records rather
-than the treatment. In a 32-epoch paired run on `git-pull-rebase-trap`, exposure held at 32 of 32
-while the body was invoked in 24 of 32
+than the treatment. In a 32-epoch paired run on `git-pull-rebase-trap` (an epoch is one attempt at
+the task), exposure held at 32 of 32 while the body was invoked in 24 of 32
 ([receipt](https://github.com/MrBinnacle/skill-harness/blob/main/docs/sers/receipts/gitpull-paired-n32-2026-09-03-sized.json)).
 Reading delivery as use would have been wrong about a quarter of the treated arm.
 
@@ -57,9 +68,9 @@ Benefit needs a controlled comparison, and the question there is not whether the
 task but whether the skill changes performance against an otherwise comparable condition. That
 separation is why a skill's benefit can be `UNMEASURED` without the skill being useless.
 
-Four layers do the work: **subject execution** under a controlled Full or Null condition,
-**evidence normalization** of runtime-native records into one representation that keeps their
-provenance, a **scientific decision layer** holding the registered treatment definition, the
+Four layers do the work: **subject execution** under a controlled Full condition (the complete
+skill) or Null condition (no skill), **evidence normalization** of runtime-native records into
+one representation that keeps their provenance, a **scientific decision layer** holding the registered treatment definition, the
 evidence-admissibility rules, the oracle and the statistics, and **reporting** of what survived
 them. They are separate so that **the runtime does not get to define what counts as scientific
 evidence.**
@@ -150,12 +161,7 @@ deliberately poisoned receipts are rejected.
 ## 5. How do I use it?
 
 Start with the zero-cost offline audit. Move to a ratified paid comparison only when the evidence
-path justifies it.
-
-```bash
-pip install skill-harness                              # Python 3.12 or later
-skill-harness skill audit path/to/your/SKILL.md
-```
+path justifies it. The install and audit commands are at the top of this page.
 
 The audit makes no API call, needs no key, and touches no network. It reports the cost triple
 (standing, fired, aux) as arithmetic on text, checks structure against
