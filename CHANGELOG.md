@@ -54,13 +54,16 @@ A program that matched the old value stops matching and reports nothing.
   no longer satisfies this package's requirements. Measured from
   `git diff v0.3.0 HEAD -- pyproject.toml`:
 
-  - `anthropic>=1.15.0` (was `>=1.2.0`; the floor passed through 1.5.0 in
+  - `anthropic>=1.15.0,<2` (was `>=1.2.0`; the floor passed through 1.5.0 in
     #548 and 1.11.0 in #727, which re-asserts the post-patch bound for
     GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3, and landed at 1.15.0 in
-    #749).
-  - `openai>=3.15.0,<4` (was `>=2.41,<4`; the lower bound rose in #604. The
-    `<4` cap is unchanged and still records the supply-chain audit's
-    unaudited-major rule).
+    #749). The `<2` cap is new (#732). anthropic 2.0.0 is a breaking major
+    that no audit has reviewed, so an environment that already resolved
+    2.x no longer satisfies this package.
+  - `openai>=3.31.0,<4` (was `>=2.41,<4`; the lower bound rose in #604 and
+    again in #732. 3.17.0 is the first release that requires the patched
+    `httpx2>=2.12.0`; the floor takes Dependabot's 3.31.0, inside the
+    audited 3.x range. The `<4` cap is unchanged).
   - `click>=8.5.0` (was `>=8.1`; #606).
   - `scipy>=1.18.1` (was `>=1.11`; #729 is the last of the floor bumps in
     the EB-MoM numerical stack).
