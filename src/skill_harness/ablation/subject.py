@@ -43,12 +43,12 @@ import anthropic
 # Allowed: openai.OpenAI, openai.APIStatusError, openai.APIConnectionError.
 # EXCLUDED: openai.beta.*, openai.resources.realtime, openai.resources.assistants,
 #   openai.resources.files, openai.resources.vector_stores, openai.resources.uploads,
-#   openai.resources.webhooks. See .supply-chain-risk-auditor/openai-audit-2026-06-08.md.
+#   openai.resources.webhooks. See docs/supply-chain/openai-audit-2026-06-08.md.
 from openai import APIConnectionError as OpenAIAPIConnectionError
 from openai import APIStatusError as OpenAIAPIStatusError
 from openai import OpenAI
 
-# T3 tracer adapter; supply-chain audit at .supply-chain-risk-auditor/openai-audit-2026-06-08.md
+# T3 tracer adapter; supply-chain audit at docs/supply-chain/openai-audit-2026-06-08.md
 
 # ---------------------------------------------------------------------------
 # SubjectCallError — local to ablation/ (do NOT add transient to OracleAPIError)

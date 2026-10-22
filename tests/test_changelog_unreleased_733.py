@@ -160,7 +160,7 @@ def _changed_runtime_floors() -> list[str]:
     """Runtime requirements whose declared floor moved since v0.3.0.
 
     Measured from ``git diff v0.3.0 HEAD -- pyproject.toml``:
-    anthropic 1.2.0 -> 1.15.0, openai 2.41 -> 3.15.0, click 8.1 -> 8.5.0,
+    anthropic 1.2.0 -> 1.15.0, openai 2.41 -> 3.31.0, click 8.1 -> 8.5.0,
     scipy 1.11 -> 1.18.1, statsmodels 0.14 -> 0.15.0. tiktoken, pydantic and
     rich did not move. The test asserts against pyproject at run time rather
     than these literals, so a future floor bump without a CHANGELOG line fails
@@ -169,7 +169,7 @@ def _changed_runtime_floors() -> list[str]:
     """
     floors = [
         "anthropic>=1.15.0",
-        "openai>=3.15.0,<4",
+        "openai>=3.31.0,<4",
         "click>=8.5.0",
         "scipy>=1.18.1",
         "statsmodels>=0.15.0",
