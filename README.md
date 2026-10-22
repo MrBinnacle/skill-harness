@@ -275,7 +275,7 @@ pre-registered trigger. Each retirement is made against its stated criterion.
 - [Reading guide](https://github.com/MrBinnacle/skill-harness/blob/main/docs/reading-guide.md): the
   case studies, the receipts index and `docs/PRD.md`.
 
-Status: v0.3.0 is the latest published release, on
+Status: v0.4.0 is the latest published release, on
 [PyPI](https://pypi.org/project/skill-harness/). The published package and the current development
 tree are distinct states. Not every older screen record is in the evidence store yet. Work is
 prioritised correctness first, then evidence integrity, runtime portability, measurement breadth

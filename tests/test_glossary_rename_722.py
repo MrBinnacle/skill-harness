@@ -212,15 +212,16 @@ def _unreleased_bullet_naming(unreleased: str, name: str) -> str:
 
 
 def test_changelog_announces_the_rename() -> None:
-    """Criterion 5: the release convention records the rename under Unreleased.
+    """Criterion 5: the release convention records the rename in the 0.4.0 section.
 
-    The rename-language assertion is scoped to the [Unreleased] bullet that
+    #722 wrote the entry under [Unreleased]; the version PR (#572) rolled it to
+    ``## [0.4.0]``. The rename-language assertion is scoped to the bullet that
     names the new glossary file. A section-wide search is vacuous: other
     entries already say "rename" for unrelated renames.
     """
     text = _read("CHANGELOG.md")
-    match = re.search(r"## \[Unreleased\](.*?)(?=\n## \[)", text, re.DOTALL)
-    assert match is not None, "CHANGELOG.md must carry an [Unreleased] section"
+    match = re.search(r"## \[0\.4\.0\][^\n]*(.*?)(?=\n## \[)", text, re.DOTALL)
+    assert match is not None, "CHANGELOG.md must carry a rolled ## [0.4.0] section"
     unreleased = match.group(1)
     assert _NEW_NAME in unreleased, "[Unreleased] must announce the new glossary name"
     assert _OLD_NAME in unreleased, "[Unreleased] must state what it was called before"

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skill-harness"
-version = "0.3.0"
+version = "0.4.0"
 description = "How do you KNOW if a 'skill' is any good - deterministically? This runs controlled skill-vs-no-skill experiments. It doesn't just ask, “Did the skill work?” It asks “Did we actually give the skill to the model, did the comparison remain fair, what changed, what did it cost, and do we have enough evidence to say that confidently?”"
 readme = "README.md"
 keywords = [
