@@ -6,6 +6,7 @@ Docker or the optional inspect extra.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import stat
@@ -155,6 +156,25 @@ def test_seed_digest_keeps_file_boundaries(
     assert seed_digest(_seed_of(tmp_path / "l", left)) != seed_digest(
         _seed_of(tmp_path / "r", right)
     )
+
+
+def test_seed_digest_changes_when_a_file_is_renamed(tmp_path: Path) -> None:
+    """Same bytes under another path is another seed."""
+    assert seed_digest(_seed_of(tmp_path / "l", {"a": b"x"})) != seed_digest(
+        _seed_of(tmp_path / "r", {"b": b"x"})
+    )
+
+
+def test_seed_digest_is_the_length_prefixed_stream(tmp_path: Path) -> None:
+    """#811: pins the encoding itself, which recorded pins are compared against.
+
+    The collision cases above each catch one way the prefix can break. A
+    variant that fixes a length to a constant, drops the colons or swaps the
+    two lengths passes all of them, and still changes every recorded digest.
+    """
+    seed = _seed_of(tmp_path / "s", {"b/c": b"yz", "a": b"x"})
+    stream = b"1:a1:x" + b"3:b/c2:yz"
+    assert seed_digest(seed) == hashlib.sha256(stream).hexdigest()
 
 
 def test_from_seed_digest_ignores_mode_bits(tmp_path: Path) -> None:
