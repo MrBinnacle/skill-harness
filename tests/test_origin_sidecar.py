@@ -6,6 +6,7 @@ Docker or the optional inspect extra.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import stat
@@ -23,7 +24,7 @@ from skill_harness.subject import (
     TwinComposeError,
     prove_seed_only_twins,
 )
-from skill_harness.subject.origin_sidecar import write_origin_compose
+from skill_harness.subject.origin_sidecar import seed_digest, write_origin_compose
 from skill_harness.subject.pin import HarnessPin
 
 INSPECT_INSTALLED = find_spec("inspect_ai") is not None
@@ -120,6 +121,65 @@ def test_from_seed_digest_changes_when_a_file_is_added(tmp_path: Path) -> None:
     on = OriginSidecar.from_seed(make_seed(tmp_path / "on", hook=True))
     off = OriginSidecar.from_seed(make_seed(tmp_path / "off", hook=False))
     assert on.digest != off.digest
+
+
+def _seed_of(root: Path, files: dict[str, bytes]) -> Path:
+    for rel, data in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_bytes(data)
+    return root
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        # Path and bytes concatenate to the same stream: "a"+"bc" == "ab"+"c".
+        ({"a": b"bc"}, {"ab": b"c"}),
+        # One file's bytes spell the next file's header.
+        ({"a": b"q", "b": b"z"}, {"a": b"q1:bz"}),
+        # A path's trailing digit reads as the start of the byte count.
+        ({"a1": b"x" * 12, "b": b"y" * 96}, {"a": b"x" * 12 + b"b96:" + b"y" * 96}),
+        # A byte count that is not the byte length lets one file's bytes spell the next file.
+        ({"a": b"x", "b": b"y"}, {"a": b"x1:b1:y"}),
+    ],
+    ids=[
+        "path-bytes-boundary",
+        "bytes-spell-a-header",
+        "path-digit-joins-the-count",
+        "byte-count-is-the-byte-length",
+    ],
+)
+def test_seed_digest_keeps_file_boundaries(
+    tmp_path: Path, left: dict[str, bytes], right: dict[str, bytes]
+) -> None:
+    """#811: the length prefixes keep two different seeds from hashing alike."""
+    assert seed_digest(_seed_of(tmp_path / "l", left)) != seed_digest(
+        _seed_of(tmp_path / "r", right)
+    )
+
+
+def test_seed_digest_changes_when_a_file_is_renamed(tmp_path: Path) -> None:
+    """Same bytes under another path is another seed."""
+    assert seed_digest(_seed_of(tmp_path / "l", {"a": b"x"})) != seed_digest(
+        _seed_of(tmp_path / "r", {"b": b"x"})
+    )
+
+
+def test_seed_digest_is_the_length_prefixed_stream(tmp_path: Path) -> None:
+    """#811: pins the encoding itself, which recorded digests depend on.
+
+    The collision cases above each catch one way the prefix can break. A
+    variant that fixes a length to a constant, drops the colons or swaps the
+    two lengths passes all of them, and still changes every recorded digest.
+    Each length here appears at least once at 10 or more, so a length written
+    in another base, capped at one digit or reduced mod 10 differs. The path
+    is non-ASCII and upper case, so a length counted in characters or a
+    folded path differs. The empty file pins a zero byte length.
+    """
+    files = {"b/c": b"yz", "a": b"x", "DIR/é/longer": b"z" * 10, "e": b""}
+    seed = _seed_of(tmp_path / "s", files)
+    stream = "13:DIR/é/longer10:".encode() + b"z" * 10 + b"1:a1:x" + b"3:b/c2:yz" + b"1:e0:"
+    assert seed_digest(seed) == hashlib.sha256(stream).hexdigest()
 
 
 def test_from_seed_digest_ignores_mode_bits(tmp_path: Path) -> None:
