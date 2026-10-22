@@ -28,8 +28,9 @@ _PAGES = _REPO_ROOT / ".github" / "workflows" / "pages.yml"
 #
 # The list is the full ci.yml inventory in file order, not just the required
 # names, so ADDING a job is also a deliberate edit here. `dependency-audit`
-# (#172) is additive: it is listed here and deliberately absent from
-# _REQUIRED_JOB_IDS below, which is what keeps it out of `all-green`.
+# (#172) joined `all-green` in #806, so a summary named "All checks green" no
+# longer passes while the audit is red. It is still not a branch-protection
+# context. `linkcheck` stays out of `all-green` by #184.
 _CI_JOB_IDS = (
     "dependency-anchor",
     "lint",
@@ -52,6 +53,7 @@ _REQUIRED_JOB_IDS = (
     "structural-bans",
     "drift-check",
     "release-gate",
+    "dependency-audit",
     "vale",
 )
 

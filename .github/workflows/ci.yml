@@ -454,6 +454,8 @@ jobs:
 
   # NON-required (#172): additive supply-chain check. Branch-protection changes
   # are deliberately outside this ticket; pip-audit's exit status gates this job.
+  # all-green depends on it (#806): the audit result is a fact about what the PR
+  # would ship, so a summary named "All checks green" must not pass over it.
   dependency-audit:
     name: Dependency audit (pip-audit)
     runs-on: ubuntu-latest
@@ -625,7 +627,7 @@ jobs:
   # merge time. Revisit this comment whenever branch protection is edited.
   all-green:
     name: All checks green
-    needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate, vale]
+    needs: [lint, typecheck, test, calibration, structural-bans, drift-check, release-gate, dependency-audit, vale]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -638,6 +640,7 @@ jobs:
              [[ "${{ needs.structural-bans.result }}" != "success" ]] || \
              [[ "${{ needs.drift-check.result }}" != "success" ]] || \
              [[ "${{ needs.release-gate.result }}" != "success" ]] || \
+             [[ "${{ needs.dependency-audit.result }}" != "success" ]] || \
              [[ "${{ needs.vale.result }}" != "success" ]]; then
             echo "One or more CI jobs failed. Not every job here is a required check; see the comment above this job."
             exit 1
