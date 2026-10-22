@@ -171,12 +171,14 @@ def test_seed_digest_is_the_length_prefixed_stream(tmp_path: Path) -> None:
     The collision cases above each catch one way the prefix can break. A
     variant that fixes a length to a constant, drops the colons or swaps the
     two lengths passes all of them, and still changes every recorded digest.
-    The ten-byte file catches a length written in another base or capped at
-    one digit. The non-ASCII, upper-case path catches a length counted in
-    characters and a path folded to lower case.
+    Each length here appears at least once at 10 or more, so a length written
+    in another base, capped at one digit or reduced mod 10 differs. The path
+    is non-ASCII and upper case, so a length counted in characters or a
+    folded path differs. The empty file pins a zero byte length.
     """
-    seed = _seed_of(tmp_path / "s", {"b/c": b"yz", "a": b"x", "D/é": b"z" * 10})
-    stream = "4:D/é10:".encode() + b"z" * 10 + b"1:a1:x" + b"3:b/c2:yz"
+    files = {"b/c": b"yz", "a": b"x", "DIR/é/longer": b"z" * 10, "e": b""}
+    seed = _seed_of(tmp_path / "s", files)
+    stream = "13:DIR/é/longer10:".encode() + b"z" * 10 + b"1:a1:x" + b"3:b/c2:yz" + b"1:e0:"
     assert seed_digest(seed) == hashlib.sha256(stream).hexdigest()
 
 
