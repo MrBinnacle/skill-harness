@@ -44,17 +44,23 @@ def test_closeout_states_named_residual_risks_and_open_findings() -> None:
 
 
 _DRIFT_CANDIDATES = ("AC-1", "AC-2", "AC-3", "AC-4")
+_ROW_STATUS_MARKER = "**Row status.**"
 
 
 def _row_status_violations(closeout: str, drift_config: str) -> list[str]:
     """Disagreements between the close-out's per-candidate status word and the
     rows actually configured in ``scripts/drift_check.py``.
 
-    The close-out text is whitespace-normalized first, so a status word split
+    Only the ``**Row status.**`` paragraph is read. Prose elsewhere quotes the
+    status words back, and before #570 such a quote satisfied the check for
+    AC-2. The paragraph is whitespace-normalized, so a status word split
     across a line wrap still reads as the claim it makes (the drift check's
     registered-text rule, same reason).
     """
-    flat = " ".join(closeout.split())
+    _, marker, after = closeout.partition(_ROW_STATUS_MARKER)
+    if not marker:
+        return [f"close-out has no {_ROW_STATUS_MARKER} paragraph"]
+    flat = " ".join(after.split("\n\n", 1)[0].split())
     violations: list[str] = []
     for candidate in _DRIFT_CANDIDATES:
         claims_configured = f"{candidate} CONFIGURED" in flat
@@ -101,25 +107,68 @@ def test_row_status_check_rejects_both_directions_of_disagreement() -> None:
     """
     table_with_ac1_only = 'dc_id="AC-1"'
 
-    overclaimed = "AC-1 CONFIGURED. AC-2 CONFIGURED. AC-3 NOT CONFIGURED. AC-4 NOT CONFIGURED."
+    overclaimed = (
+        "**Row status.** AC-1 CONFIGURED. AC-2 CONFIGURED."
+        " AC-3 NOT CONFIGURED. AC-4 NOT CONFIGURED."
+    )
     assert any(
         "AC-2" in violation and "has no such row" in violation
         for violation in _row_status_violations(overclaimed, table_with_ac1_only)
     )
 
     underclaimed = (
-        "AC-1 NOT CONFIGURED. AC-2 NOT CONFIGURED. AC-3 NOT CONFIGURED. AC-4 NOT CONFIGURED."
+        "**Row status.** AC-1 NOT CONFIGURED. AC-2 NOT CONFIGURED."
+        " AC-3 NOT CONFIGURED. AC-4 NOT CONFIGURED."
     )
     assert any(
         "AC-1" in violation and "has such row" in violation
         for violation in _row_status_violations(underclaimed, table_with_ac1_only)
     )
 
-    both_words = "AC-1 CONFIGURED. AC-1 NOT CONFIGURED. AC-2 NOT CONFIGURED."
+    both_words = "**Row status.** AC-1 CONFIGURED. AC-1 NOT CONFIGURED. AC-2 NOT CONFIGURED."
     assert any(
         "AC-1: close-out states no single status word" in violation
         for violation in _row_status_violations(both_words, table_with_ac1_only)
     )
+
+
+@pytest.mark.parametrize("candidate", _DRIFT_CANDIDATES)
+def test_row_status_check_fails_when_a_status_claim_is_deleted(candidate: str) -> None:
+    """Deleting one candidate's status claim must redden the check (#570).
+
+    The rest of the real close-out stays intact, including the caveat that quotes
+    `AC-2 CONFIGURED` back. Before #570 that quote satisfied the check, so AC-2's
+    status line was unguarded.
+    """
+    text = CLOSEOUT.read_text(encoding="utf-8")
+    drift_config = (ROOT / "scripts/drift_check.py").read_text(encoding="utf-8")
+    claim = f"{candidate} CONFIGURED:"
+    assert text.count(claim) == 1
+    without_claim = text.replace(claim, f"{candidate}:")
+
+    assert f"{candidate}: close-out states no single status word" in _row_status_violations(
+        without_claim, drift_config
+    )
+
+
+def test_row_status_check_ignores_status_words_quoted_outside_the_status_paragraph() -> None:
+    """Prose that quotes a status word, as the caveats do, is not a status claim (#570)."""
+    table = 'dc_id="AC-1"'
+    closeout = (
+        "**Row status.** AC-1 CONFIGURED: a row. AC-2 NOT CONFIGURED.\n"
+        "AC-3 NOT CONFIGURED. AC-4 NOT CONFIGURED.\n\n"
+        "Read `AC-1 NOT CONFIGURED` and `AC-2 CONFIGURED` as quotes, not claims.\n"
+    )
+
+    assert _row_status_violations(closeout, table) == []
+
+
+def test_row_status_check_fails_without_a_status_paragraph() -> None:
+    closeout = "AC-1 CONFIGURED. AC-2 NOT CONFIGURED. AC-3 NOT CONFIGURED. AC-4 NOT CONFIGURED."
+
+    assert _row_status_violations(closeout, 'dc_id="AC-1"') == [
+        "close-out has no **Row status.** paragraph"
+    ]
 
 
 def test_closeout_omits_operator_banned_vocabulary() -> None:
