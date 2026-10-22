@@ -68,8 +68,8 @@ future design where task/skill content flows into oracle configuration.
 
 skill-harness measures skills, including skills its operator did not write. `run pi-paired` loads
 the measured skill files into the Pi coding agent, and that agent holds tools. Pi's default tools
-are `read`, `bash`, `edit` and `write`; the run config's `tool_allowlist` narrows them. A hostile
-skill can steer those tools. This is how agent evaluation works, and the harness cannot remove it.
+are `read`, `bash`, `edit` and `write`; the run config's `tool_allowlist` replaces that set, so it
+can remove tools or add others. A hostile skill can steer whatever tools the agent holds. This is how agent evaluation works, and the harness cannot remove it.
 `run ablation` sends text-only model requests with no tools, and `run evaluate-skill` makes no
 model call, so neither gives skill content a tool.
 

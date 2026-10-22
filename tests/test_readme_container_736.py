@@ -72,5 +72,4 @@ def test_the_loader_builds_the_container_the_template_declares(tmp_path: Path) -
 def test_the_template_does_not_recommend_a_network_with_no_route_to_the_provider() -> None:
     prefix = " ".join(_template()["container"]["argv_prefix"])
 
-    assert "--network none" not in prefix
-    assert "--network=none" not in prefix
+    assert re.search(r"--net(work)?[= ]none\b", prefix) is None
