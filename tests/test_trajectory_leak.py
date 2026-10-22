@@ -141,6 +141,39 @@ def test_cue_in_the_hazard_call_itself_is_not_before_it() -> None:
     assert not trajectory.leaked
 
 
+def test_hazard_step_is_the_first_hazard_call_not_a_later_one() -> None:
+    messages = [
+        _user("publish"),
+        _bash("git pull"),
+        _result("we never rewrite main"),
+        _bash("git pull"),
+        _result("ok"),
+    ]
+
+    trajectory = classify_trajectory(messages, HAZARD, CUES)
+
+    assert trajectory.hazard_step == 0
+    assert _timing(trajectory, "do_not_rewrite") == CueObservation(
+        "do_not_rewrite", CueTiming.AFTER_HAZARD, 1
+    )
+    assert not trajectory.leaked
+
+
+def test_a_later_user_message_is_not_stated_initially() -> None:
+    # What a later user message counts as is open (#803); this pins only that it
+    # is not treated as stated before the agent acted.
+    messages = [
+        _system("agent"),
+        _user("publish"),
+        _user("never rewrite history"),
+        _bash("git pull"),
+    ]
+
+    observed = _timing(classify_trajectory(messages, HAZARD, CUES), "do_not_rewrite")
+
+    assert observed.timing is not CueTiming.STATED_INITIALLY
+
+
 def test_negative_control_moving_the_cue_one_step_later_clears_the_leak() -> None:
     leaking = [
         _user("publish"),
