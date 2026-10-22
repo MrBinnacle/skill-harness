@@ -23,7 +23,7 @@ from skill_harness.subject import (
     TwinComposeError,
     prove_seed_only_twins,
 )
-from skill_harness.subject.origin_sidecar import write_origin_compose
+from skill_harness.subject.origin_sidecar import seed_digest, write_origin_compose
 from skill_harness.subject.pin import HarnessPin
 
 INSPECT_INSTALLED = find_spec("inspect_ai") is not None
@@ -120,6 +120,34 @@ def test_from_seed_digest_changes_when_a_file_is_added(tmp_path: Path) -> None:
     on = OriginSidecar.from_seed(make_seed(tmp_path / "on", hook=True))
     off = OriginSidecar.from_seed(make_seed(tmp_path / "off", hook=False))
     assert on.digest != off.digest
+
+
+def _seed_of(root: Path, files: dict[str, bytes]) -> Path:
+    for rel, data in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_bytes(data)
+    return root
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        # Path and bytes concatenate to the same stream: "a"+"bc" == "ab"+"c".
+        ({"a": b"bc"}, {"ab": b"c"}),
+        # One file's bytes spell the next file's header.
+        ({"a": b"q", "b": b"z"}, {"a": b"q1:bz"}),
+        # A path's trailing digit reads as the start of the byte count.
+        ({"a1": b"x" * 12, "b": b"y" * 96}, {"a": b"x" * 12 + b"b96:" + b"y" * 96}),
+    ],
+    ids=["path-bytes-boundary", "bytes-spell-a-header", "path-digit-joins-the-count"],
+)
+def test_seed_digest_keeps_file_boundaries(
+    tmp_path: Path, left: dict[str, bytes], right: dict[str, bytes]
+) -> None:
+    """#811: the length prefixes keep two different seeds from hashing alike."""
+    assert seed_digest(_seed_of(tmp_path / "l", left)) != seed_digest(
+        _seed_of(tmp_path / "r", right)
+    )
 
 
 def test_from_seed_digest_ignores_mode_bits(tmp_path: Path) -> None:
