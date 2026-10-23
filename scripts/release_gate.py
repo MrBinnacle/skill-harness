@@ -124,7 +124,7 @@ def _api_base() -> str:
 
 
 def gate_versions_lockstep(root: Path, errors: list[str]) -> str:
-    """G1: pyproject and package __version__ agree; returns the version."""
+    """G1: pyproject, package __version__ and SERS fixtures agree; returns the version."""
     pyproject = tomllib.loads(_read(root, "pyproject.toml"))
     version: str = pyproject["project"]["version"]
 
@@ -143,22 +143,19 @@ def gate_versions_lockstep(root: Path, errors: list[str]) -> str:
 
 
 SERS_FIXTURES = "tests/fixtures/sers"
-_HARNESS_VERSION = re.compile(r'"harness_version"\s*:\s*"([^"]*)"')
+_HARNESS_VERSION_RE = re.compile(r'"harness_version"\s*:\s*"([^"]*)"')
 
 
 def _sers_fixture_lockstep(root: Path, version: str, errors: list[str]) -> None:
     """G1, second half: every stored SERS fixture names the declared version.
 
-    tests/test_sers_conformance.py compares the stored fixtures with a live
-    mint, so a version PR that leaves them behind fails only in the full CI
-    run. Releases 0.3.0 (140b0e3) and 0.4.0 (#828) both did. A receipt that
-    must keep the version that minted it belongs in docs/sers/receipts/,
-    which this check does not read.
+    A receipt that must keep the version that minted it belongs in
+    docs/sers/receipts/, which this check does not read.
     """
     for path in sorted((root / SERS_FIXTURES).glob("*.json")):
         rel = path.relative_to(root).as_posix()
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            for found in _HARNESS_VERSION.findall(line):
+            for found in _HARNESS_VERSION_RE.findall(line):
                 if found != version:
                     errors.append(
                         f"G1: SERS fixture drift - pyproject.toml={version!r} but "
