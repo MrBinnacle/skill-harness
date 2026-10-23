@@ -788,6 +788,51 @@ def test_gate_reports_all_eight_running_on_a_tag_ref(tmp_path: Path) -> None:
     assert ran == total, f"{ran} of {total} gates ran on a tag ref"
 
 
+G1_STALE_SERS_FIXTURE = (
+    "G1: SERS fixture drift - pyproject.toml='0.2.4' but "
+    "tests/fixtures/sers/minted.json:3 harness_version='0.2.3' "
+    "(tests/test_sers_conformance.py compares it with a live mint; "
+    "releases 0.3.0 and 0.4.0 both went red on it in CI)"
+)
+
+
+def _write_sers_fixture(root: Path, version: str) -> None:
+    path = root / "tests" / "fixtures" / "sers" / "minted.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        '{\n  "subject_identity": {\n    "harness_version": "' + version + '"\n  }\n}\n',
+        encoding="utf-8",
+    )
+
+
+def test_release_is_blocked_when_a_sers_fixture_names_another_version(
+    tmp_path: Path,
+) -> None:
+    """The G1 red control for the stored SERS fixtures.
+
+    Differential pair on the G3 pattern. Both arms seed the identical tree at
+    0.2.4 with one SERS fixture; the arms differ only in that fixture's
+    ``harness_version``. A version PR that leaves the fixtures behind fails
+    the conformance test only in the full CI run, after review; G1 moves the
+    failure to the gate the version PR already runs.
+    """
+    script = _script_with_declared_row(tmp_path, "0.2", ZERO_THREE_ISSUES, True)
+    matched = _seed_tree(tmp_path / "matched", "0.2.4")
+    _write_sers_fixture(matched, "0.2.4")
+    green = _run_gate(matched, _closed(), [], script=script)
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert _failures(green) == []
+
+    stale = _seed_tree(tmp_path / "stale", "0.2.4")
+    _write_sers_fixture(stale, "0.2.3")
+    red = _run_gate(stale, _closed(), [], script=script)
+
+    assert _failures(red) == [G1_STALE_SERS_FIXTURE], (
+        "G1 did not report the stale fixture. The gate printed:\n" + red.stdout + red.stderr
+    )
+    assert red.returncode == 1, red.stdout + red.stderr
+
+
 G3_STALE_BANNER = (
     "G3: README.md status banner does not say 'Status: v0.2.4' "
     "(found 'Status: v0.2.3') - repository-internal check against "
