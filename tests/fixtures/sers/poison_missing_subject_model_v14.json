@@ -25,7 +25,7 @@
   "summary": "Poison: sers_version 1.4.0 but subject_identity omits the required subject_model, so the receipt names no subject and a reader cannot tell which model was measured.",
   "subject_identity": {
     "skill_id": "aabbccddee0011223344556677889900aabbccddee0011223344556677889900",
-    "harness_version": "0.3.0",
+    "harness_version": "0.4.0",
     "metric_version": "0.4.1",
     "implementation_hash": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
     "arms": "null"
