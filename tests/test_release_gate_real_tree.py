@@ -19,9 +19,9 @@ missing test, not a change to branch protection.
 
 Scope, stated so a reader does not over-read the green. G1 to G5 are read off
 the tree and are what this control asserts. G6 self-skips off a tag ref. G7
-runs: the real tree declares ``0.3.0``, and the ``0.3`` row of
-``ASSURANCE_REQUIREMENTS`` requires issues #167-#174 closed, which the local
-stub answers. G8 self-skips off a tag ref with "not a tag ref, no release
+runs: the row of ``ASSURANCE_REQUIREMENTS`` for the minor line the real tree
+declares names the issues that must be closed, and the local stub answers
+exactly those. G8 self-skips off a tag ref with "not a tag ref, no release
 candidate commit" (#735): there is no release candidate on an ordinary push,
 so G8 does not read the API at all. The stub is still wired to answer the
 ``actions/runs?head_sha=`` endpoint, because that is the only endpoint the
@@ -55,9 +55,9 @@ The red demonstrations are recorded in
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
-import re
 import subprocess
 import sys
 import threading
@@ -65,6 +65,7 @@ import tomllib
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import ModuleType
 from typing import ClassVar
 
 import pytest
@@ -77,26 +78,27 @@ HEAD_SHA_RUNS_PATH = "/actions/runs"
 
 
 def _script_assurance_issues() -> list[int]:
-    """The issue numbers the ``0.3`` row of the requirements table names.
+    """The issue numbers the row for this tree's minor line names.
 
-    A literal copy here would drift silently: widening the script's range
+    A literal copy here would drift silently: widening the script's row
     would make the stub 404 an issue it never heard of, and G7 fails closed,
     so a required job would redden with ``could not read assurance issue``.
     That reads as a GitHub outage, which is the one failure this module is
-    built never to produce. #735 folded ``ASSURANCE_ISSUES`` into the ``0.3``
-    row of ``ASSURANCE_REQUIREMENTS``, so this parses that row.
+    built never to produce. The row is read from the imported table, keyed
+    by the minor line ``pyproject.toml`` declares, so a version bump to a new
+    line follows that line's row in whatever form it is written (#572).
     """
-    text = GATE.read_text(encoding="utf-8")
-    m = re.search(
-        r'"0\.3":\s*AssuranceRequirement\(issues=tuple\(range\((\d+), (\d+)\)\)',
-        text,
-        re.MULTILINE,
+    spec = importlib.util.spec_from_file_location("release_gate_real_tree", GATE)
+    assert spec is not None and spec.loader is not None
+    gate: ModuleType = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    declared = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    line = gate._minor_line(declared["project"]["version"])
+    row = gate.ASSURANCE_REQUIREMENTS.get(line)
+    assert row is not None, (
+        f"scripts/release_gate.py declares no ASSURANCE_REQUIREMENTS row {line!r}"
     )
-    assert m, (
-        "scripts/release_gate.py no longer declares the 0.3 row of "
-        "ASSURANCE_REQUIREMENTS as AssuranceRequirement(issues=tuple(range(...)))"
-    )
-    return list(range(int(m.group(1)), int(m.group(2))))
+    return [int(issue) for issue in row.issues]
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -261,7 +263,7 @@ def test_the_assurance_gates_asked_for_exactly_the_issues_the_script_names(
     """G7 ran, and the stub answers the paths it actually requests.
 
     The stub 404s anything else and G7 fails closed, so a drift between the
-    script's 0.3 row and what the stub serves would redden a required job
+    script's row for this line and what the stub serves would redden a required job
     with a message that reads like a GitHub outage. Asserting the request set
     turns that into a named mismatch instead. After #735 the only API reads
     on this ref are the G7 issue reads; G8 has no release candidate.

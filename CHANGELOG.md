@@ -7,10 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-This section records the user-visible changes on `main` since v0.3.0. It rolls
-to `## [0.4.0] - YYYY-MM-DD` at the tag; the version PR (release playbook step
-2) performs that roll. Internal test, CI and docs-only commits are omitted
-unless they change a published surface.
+## [0.4.0] - 2026-10-23
+
+This section records the user-visible changes since v0.3.0. Internal test, CI
+and docs-only commits are omitted unless they change a published surface.
 
 Read the first entry under Changed before you upgrade. One rename in this range
 breaks consumers silently. Nothing raises an error and nothing logs a warning.
@@ -44,7 +44,10 @@ A program that matched the old value stops matching and reports nothing.
   What to do. Match `"bounded_pooling_refused"`. If you must read both
   generations, branch on `report_schema_version` rather than accepting either
   string, because the two values report different outcomes. The fit is refused
-  and pooled at the admission bound, rather than falling back to BH-FDR.
+  and pooled at the admission bound, rather than falling back to BH-FDR. A
+  consumer that cannot migrate yet can stay on 0.3.0
+  (`pip install skill-harness==0.3.0`). That release reports
+  `report_schema_version` 1.4.0 and still writes `"bh_fdr_fallback"`.
 
   `docs/PRD.md:757` states the rule this follows. Removals, renames, and type
   changes take a major bump, because they break `diff skill` consumers.
@@ -1058,7 +1061,8 @@ Initial scaffold. Pre-alpha — schema realized and trigger-enforced, CLI surfac
 ### Security
 - `anthropic` pin tightened from `>=0.39` to `>=0.87` to enforce post-patch for GHSA-q5f5-3gjm-7mfm and GHSA-w828-4qhx-vxx3 (Memory Tool CVEs, 2026-03-31)
 
-[Unreleased]: https://github.com/MrBinnacle/skill-harness/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/MrBinnacle/skill-harness/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/MrBinnacle/skill-harness/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/MrBinnacle/skill-harness/compare/v0.2.1...v0.2.2

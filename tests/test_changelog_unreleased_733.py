@@ -1,15 +1,15 @@
-"""#733: the [Unreleased] section records the user-visible range since v0.3.0.
+"""#733: the 0.4.0 section records the user-visible range since v0.3.0.
 
-Criterion 2 pins that the stale commit-count sentence is gone: no [Unreleased]
-text may contain ``133``. Criterion 3 pins every changed runtime floor and the
+#733 wrote that range under ``[Unreleased]``. The version PR (#572) rolled it
+to ``## [0.4.0]``, so every criterion reads the rolled section. Criterion 2
+pins that the stale commit-count sentence is gone: no 0.4.0 text may contain
+``133``. Criterion 3 pins every changed runtime floor and the
 ``geometry`` extra to the values ``pyproject.toml`` declares at the PR head —
 the test reads ``pyproject.toml`` at run time, so a CHANGELOG that drifts from
 the manifest fails here. Criterion 4 pins SERS 1.6.0 and 1.7.0 into the SERS
-lines, each with a reader-facing sentence. Desired behaviour not named as a
-numbered criterion: the 0.4.0 heading is not cut in this PR; the version PR
-rolls the section.
+lines, each with a reader-facing sentence.
 
-``tests/test_glossary_rename_722.py`` separately pins that [Unreleased] still
+``tests/test_glossary_rename_722.py`` separately pins that the 0.4.0 section
 announces the glossary rename (old path to GLOSSARY.md) in rename language.
 This module does not restate that; it asserts only what #733 adds.
 """
@@ -28,9 +28,10 @@ def _read(rel: str) -> str:
 
 
 def _unreleased() -> str:
+    """The rolled 0.4.0 section, which holds what #733 wrote under [Unreleased]."""
     text = _read("CHANGELOG.md")
-    match = re.search(r"## \[Unreleased\](.*?)(?=\n## \[)", text, re.DOTALL)
-    assert match is not None, "CHANGELOG.md must carry an [Unreleased] section"
+    match = re.search(r"## \[0\.4\.0\][^\n]*(.*?)(?=\n## \[)", text, re.DOTALL)
+    assert match is not None, "CHANGELOG.md must carry a rolled ## [0.4.0] section"
     return match.group(1)
 
 
@@ -57,15 +58,6 @@ def test_unreleased_carries_no_stale_commit_count() -> None:
     assert "133" not in unreleased, (
         "[Unreleased] still carries the stale '133 commits' sentence; "
         "drop the count or state it at the PR head with the producing command"
-    )
-
-
-def test_unreleased_does_not_cut_the_0_4_0_heading() -> None:
-    """Desired behaviour: the version PR rolls the section, not this one."""
-    text = _read("CHANGELOG.md")
-    assert not re.search(r"^## \[0\.4\.0\]", text, re.MULTILINE), (
-        "CHANGELOG.md already carries a rolled ## [0.4.0] heading; "
-        "#733 must leave [Unreleased] unrolled"
     )
 
 

@@ -32,7 +32,7 @@
   "summary": "Poison: KEEP receipt without task_family in verdict_scope.",
   "verdict_scope": {
     "model_id": "test-model",
-    "harness_version": "0.3.0",
+    "harness_version": "0.4.0",
     "fixture_version": "abc123",
     "task_id": "test-task",
     "tested_at": "2026-09-22T00:00:00Z",
@@ -41,7 +41,7 @@
   },
   "subject_identity": {
     "skill_id": "aabbccddee0011223344556677889900aabbccddee0011223344556677889900",
-    "harness_version": "0.3.0",
+    "harness_version": "0.4.0",
     "metric_version": "0.4.1",
     "implementation_hash": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
     "arms": "null",
