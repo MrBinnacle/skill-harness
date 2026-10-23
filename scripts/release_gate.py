@@ -18,7 +18,8 @@ e.g. an already-frozen PyPI description):
 
 Checks (all must pass; failures are listed, not first-fail):
 
-  G1  pyproject.toml version == skill_harness.__init__.__version__
+  G1  pyproject.toml version == skill_harness.__init__.__version__, and
+      every ``harness_version`` in tests/fixtures/sers/*.json names it too.
   G2  CHANGELOG.md has a rolled ``## [X.Y.Z] - `` section for the current
       version (an entry under [Unreleased] alone does not count) and a
       ``[X.Y.Z]:`` compare-link reference.
@@ -137,7 +138,34 @@ def gate_versions_lockstep(root: Path, errors: list[str]) -> str:
             f"src/skill_harness/__init__.py __version__={m.group(1)!r} "
             "(this exact drift shipped in the v0.2.1 wheel)"
         )
+    _sers_fixture_lockstep(root, version, errors)
     return version
+
+
+SERS_FIXTURES = "tests/fixtures/sers"
+_HARNESS_VERSION = re.compile(r'"harness_version"\s*:\s*"([^"]*)"')
+
+
+def _sers_fixture_lockstep(root: Path, version: str, errors: list[str]) -> None:
+    """G1, second half: every stored SERS fixture names the declared version.
+
+    tests/test_sers_conformance.py compares the stored fixtures with a live
+    mint, so a version PR that leaves them behind fails only in the full CI
+    run. Releases 0.3.0 (140b0e3) and 0.4.0 (#828) both did. A receipt that
+    must keep the version that minted it belongs in docs/sers/receipts/,
+    which this check does not read.
+    """
+    for path in sorted((root / SERS_FIXTURES).glob("*.json")):
+        rel = path.relative_to(root).as_posix()
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for found in _HARNESS_VERSION.findall(line):
+                if found != version:
+                    errors.append(
+                        f"G1: SERS fixture drift - pyproject.toml={version!r} but "
+                        f"{rel}:{lineno} harness_version={found!r} "
+                        "(tests/test_sers_conformance.py compares it with a live mint; "
+                        "releases 0.3.0 and 0.4.0 both went red on it in CI)"
+                    )
 
 
 def gate_changelog_rolled(root: Path, version: str, errors: list[str]) -> None:
