@@ -75,7 +75,7 @@ pathspec==1.1.1
 patsy==1.0.3
 pip-audit==2.10.1
 playwright==1.63.0
-pluggy==1.6.0
+pluggy==1.7.0
 pydantic==2.14.1
 pydantic_core==2.50.1
 pyee==13.0.1
