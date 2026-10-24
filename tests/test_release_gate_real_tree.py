@@ -283,28 +283,26 @@ def test_the_assurance_gates_asked_for_exactly_the_issues_the_script_names(
     )
 
 
-def test_g1_has_sers_fixtures_to_read_on_the_real_tree() -> None:
+def test_g1_compares_at_least_one_sers_fixture_line_on_the_real_tree() -> None:
     """G1's fixture check reads something on this tree.
 
     ``Path.glob`` on a missing directory yields nothing and raises nothing,
     so a rename of ``tests/fixtures/sers/`` would switch the check off with
     no signal, and the seeded tests in ``test_release_gate_206.py`` would
     stay green because they seed their own directory (verifier note on
-    #834, comment 6367832291). This test pins the directory the script
-    names to the tree: it holds ``*.json`` fixtures, and the script's own
-    pattern finds a ``harness_version`` line in them, so a passing G1 on
-    this tree is a G1 that compared at least one value.
+    #834, comment 6367832291). Rather than copy the script's scan, this
+    test runs it: ``_sers_fixture_lockstep`` against this tree with a
+    version no fixture can carry must report at least one line. A gate
+    whose scan finds no file, or no ``harness_version`` line, reports
+    nothing here and fails.
     """
     gate = _gate_module()
-    fixtures = sorted((REPO_ROOT / gate.SERS_FIXTURES).glob("*.json"))
+    errors: list[str] = []
 
-    assert fixtures, f"{gate.SERS_FIXTURES} holds no *.json fixture, so G1 compares nothing"
-    matched = [
-        path.name
-        for path in fixtures
-        if gate._HARNESS_VERSION_RE.search(path.read_text(encoding="utf-8"))
-    ]
-    assert matched, f"no fixture in {gate.SERS_FIXTURES} has a harness_version line for G1 to read"
+    gate._sers_fixture_lockstep(REPO_ROOT, "0.0.0-no-fixture-carries-this", errors)
+
+    assert errors, f"{gate.SERS_FIXTURES} gave G1 no harness_version line to compare on this tree"
+    assert all(line.startswith("G1: SERS fixture drift") for line in errors), errors
 
 
 def test_red_receipt_names_the_command_the_mutation_and_the_exit_code() -> None:

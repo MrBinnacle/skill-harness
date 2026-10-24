@@ -788,21 +788,31 @@ def test_gate_reports_all_eight_running_on_a_tag_ref(tmp_path: Path) -> None:
     assert ran == total, f"{ran} of {total} gates ran on a tag ref"
 
 
-G1_STALE_SERS_FIXTURE = (
-    "G1: SERS fixture drift - pyproject.toml='0.2.4' but "
-    "tests/fixtures/sers/minted.json:3 harness_version='0.2.3' "
-    "(tests/test_sers_conformance.py compares it with a live mint; "
-    "releases 0.3.0 and 0.4.0 both went red on it in CI)"
-)
+def _g1_stale_fixture_line(rel: str, lineno: int, found: str) -> str:
+    """The G1 failure line for one stale fixture line, as the script prints it."""
+    return (
+        "G1: SERS fixture drift - pyproject.toml='0.2.4' but "
+        f"{rel}:{lineno} harness_version={found!r} "
+        "(tests/test_sers_conformance.py compares it with a live mint; "
+        "releases 0.3.0 and 0.4.0 both went red on it in CI)"
+    )
+
+
+G1_STALE_SERS_FIXTURE = _g1_stale_fixture_line("tests/fixtures/sers/minted.json", 3, "0.2.3")
+
+
+def _write_named_sers_fixture(root: Path, name: str, *versions: str) -> None:
+    """One fixture with a ``harness_version`` line per version, at lines 3, 6, 9, ..."""
+    blocks = [
+        f'  "block_{i}": {{\n    "harness_version": "{v}"\n  }}' for i, v in enumerate(versions)
+    ]
+    path = root / "tests" / "fixtures" / "sers" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{\n" + ",\n".join(blocks) + "\n}\n", encoding="utf-8")
 
 
 def _write_sers_fixture(root: Path, version: str) -> None:
-    path = root / "tests" / "fixtures" / "sers" / "minted.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        '{\n  "subject_identity": {\n    "harness_version": "' + version + '"\n  }\n}\n',
-        encoding="utf-8",
-    )
+    _write_named_sers_fixture(root, "minted.json", version)
 
 
 def test_release_is_blocked_when_a_sers_fixture_names_another_version(
@@ -833,25 +843,6 @@ def test_release_is_blocked_when_a_sers_fixture_names_another_version(
     assert red.returncode == 1, red.stdout + red.stderr
 
 
-def _write_named_sers_fixture(root: Path, name: str, *versions: str) -> None:
-    """One fixture with a ``harness_version`` line per version, at lines 3, 6, 9, ..."""
-    blocks = [
-        f'  "block_{i}": {{\n    "harness_version": "{v}"\n  }}' for i, v in enumerate(versions)
-    ]
-    path = root / "tests" / "fixtures" / "sers" / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("{\n" + ",\n".join(blocks) + "\n}\n", encoding="utf-8")
-
-
-def _g1_sers_drift(rel: str, lineno: int, found: str) -> str:
-    return (
-        "G1: SERS fixture drift - pyproject.toml='0.2.4' but "
-        f"{rel}:{lineno} harness_version={found!r} "
-        "(tests/test_sers_conformance.py compares it with a live mint; "
-        "releases 0.3.0 and 0.4.0 both went red on it in CI)"
-    )
-
-
 def test_g1_lists_every_stale_sers_fixture_line(tmp_path: Path) -> None:
     """G1 names each stale line, not only the first one it meets.
 
@@ -866,20 +857,20 @@ def test_g1_lists_every_stale_sers_fixture_line(tmp_path: Path) -> None:
     script = _script_with_declared_row(tmp_path, "0.2", ZERO_THREE_ISSUES, True)
     matched = _seed_tree(tmp_path / "matched", "0.2.4")
     _write_sers_fixture(matched, "0.2.4")
-    _write_named_sers_fixture(matched, "receipt_two.json", "0.2.4", "0.2.4")
+    _write_named_sers_fixture(matched, "fixture_two.json", "0.2.4", "0.2.4")
     green = _run_gate(matched, _closed(), [], script=script)
     assert green.returncode == 0, green.stdout + green.stderr
     assert _failures(green) == []
 
     stale = _seed_tree(tmp_path / "stale", "0.2.4")
     _write_sers_fixture(stale, "0.2.3")
-    _write_named_sers_fixture(stale, "receipt_two.json", "0.2.3", "0.2.2")
+    _write_named_sers_fixture(stale, "fixture_two.json", "0.2.3", "0.2.2")
     red = _run_gate(stale, _closed(), [], script=script)
 
     assert _failures(red) == [
-        _g1_sers_drift("tests/fixtures/sers/minted.json", 3, "0.2.3"),
-        _g1_sers_drift("tests/fixtures/sers/receipt_two.json", 3, "0.2.3"),
-        _g1_sers_drift("tests/fixtures/sers/receipt_two.json", 6, "0.2.2"),
+        _g1_stale_fixture_line("tests/fixtures/sers/fixture_two.json", 3, "0.2.3"),
+        _g1_stale_fixture_line("tests/fixtures/sers/fixture_two.json", 6, "0.2.2"),
+        _g1_stale_fixture_line("tests/fixtures/sers/minted.json", 3, "0.2.3"),
     ], "G1 did not list every stale line. The gate printed:\n" + red.stdout + red.stderr
     assert red.returncode == 1, red.stdout + red.stderr
 
