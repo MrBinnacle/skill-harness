@@ -15,7 +15,7 @@ name: Accessibility
 #   hand after such a change.
 #
 # WHAT IT TESTS, AND WHAT IT DOES NOT
-#   - WCAG 2.0 and 2.1, level A and AA, through pa11y 10 with two engines:
+#   - WCAG (the W3C Web Content Accessibility Guidelines) 2.0 and 2.1, level A and AA, through pa11y 10 with two engines:
 #     HTML_CodeSniffer and axe-core. pa11y's WCAG2AA standard maps to the 2.0
 #     and 2.1 rule sets only.
 #   - One WCAG 2.2 AA criterion, 2.5.8 Target Size (Minimum), through axe's
@@ -24,14 +24,18 @@ name: Accessibility
 #     movements, consistent help, redundant entry, accessible authentication).
 #     No automated engine decides them. Automated checks find only part of all
 #     accessibility problems; keyboard use, screen-reader order and plain
-#     wording need a person. A pass here is a minimum, not a statement of ADA
-#     or WCAG conformance.
+#     wording need a person. A pass here is a minimum, not a statement of
+#     conformance with WCAG or the ADA (Americans with Disabilities Act).
 #   - Only the light colour scheme is rendered. The dark scheme is not tested.
 #
-# NEEDS-REVIEW RESULTS ARE WARNINGS
-#   axe returns "incomplete" for a result it cannot decide, and pa11y counts
-#   those as errors by default. levelCapWhenNeedsReview: warning reports them
-#   as warnings instead, so they appear in the log without failing the job.
+# WHAT THE JOB DROPS
+#   pa11y keeps only error-level results unless includeWarnings is set, and
+#   pa11y-ci fails the job on any result it is handed, so warnings cannot be
+#   logged without failing it. Two classes are therefore dropped, not logged:
+#   axe "incomplete" results (levelCapWhenNeedsReview: warning makes them
+#   warnings, so they are dropped instead of failing the job), and axe
+#   violations rated moderate or minor, which pa11y maps below error. Only
+#   serious and critical axe violations and HTML_CodeSniffer errors fail the job.
 #   Measured 2026-10-24 on the built site: 7 pages, 0 errors from either engine.
 #
 # NOT A REQUIRED CHECK
@@ -41,14 +45,17 @@ name: Accessibility
 #
 # THE CHECK PROVES IT CAN FAIL
 #   Before the real run, a copy of the landing page with two planted 10px
-#   buttons must fail the axe run on target-size. If it passes, the job fails:
-#   a checker that cannot fail is indistinguishable from one that never ran.
+#   buttons and an image without alt text must fail each engine: axe on
+#   target-size and HTML_CodeSniffer on the missing alt attribute. If either
+#   engine passes it, the job fails: a checker that cannot fail is
+#   indistinguishable from one that never ran.
 #
 # Chrome runs with --no-sandbox because Ubuntu 24.04 runners block the
 # unprivileged user namespaces Chrome's sandbox needs. The browser loads only
 # this repository's own pages from a local server.
 #
-# Undo: delete this file and .github/a11y/.
+# Undo: delete this file, .github/a11y/, and this workflow's row and paragraph in
+# docs/assurance/workflows-audit.md.
 
 on:
   pull_request:
@@ -131,7 +138,7 @@ jobs:
           python -m pip install -c requirements-ci.txt -e ".[dev]"
           rm -rf _site
           python -m skill_harness.sitegen --output _site --marker accessibility-check
-      - name: Plant two undersized targets in a copy
+      - name: Plant two undersized targets and an image without alt text in a copy
         if: steps.release.outputs.run == 'true'
         run: |
           set -euo pipefail
@@ -145,6 +152,7 @@ jobs:
           planted = (
               '<button style="position:absolute;left:0;top:0;width:10px;height:10px;padding:0">a</button>'
               '<button style="position:absolute;left:12px;top:0;width:10px;height:10px;padding:0">b</button>'
+              '<img src="planted.png">'
           )
           text, count = re.subn(r"(<body[^>]*>)", lambda m: m.group(1) + planted, text, count=1)
           assert count == 1, "no <body> tag to plant into"
@@ -158,10 +166,15 @@ jobs:
           python -m http.server 8080 --bind 127.0.0.1 --directory _site >/dev/null 2>&1 &
           python -m http.server 8081 --bind 127.0.0.1 --directory _poison >/dev/null 2>&1 &
           for port in 8080 8081; do
+            ready=false
             for attempt in $(seq 1 20); do
-              curl -fs -o /dev/null "http://127.0.0.1:${port}/" && break
+              if curl -fs -o /dev/null "http://127.0.0.1:${port}/"; then ready=true; break; fi
               sleep 0.5
             done
+            if [[ $ready != true ]]; then
+              echo "::error::the local server on port ${port} did not start"
+              exit 1
+            fi
           done
           mapfile -t pages < <(cd _site && find . -name '*.html' | sort | sed 's|^\./||')
           if [[ ${#pages[@]} -eq 0 ]]; then
@@ -169,14 +182,20 @@ jobs:
             exit 1
           fi
 
-          echo "== control: the planted page must fail on target-size"
-          control="$("$checker" --config .github/a11y/axe.json http://127.0.0.1:8081/index.html 2>&1)"
-          control_status=$?
-          echo "$control"
-          if [[ $control_status -ne 2 ]] || ! grep -q "touch targets" <<<"$control"; then
-            echo "::error::the planted undersized targets did not fail the check (exit ${control_status}); the check cannot fail and its result means nothing"
-            exit 1
-          fi
+          # GitHub runs bash with -e, so each expected failure is caught with || to keep
+          # the step alive long enough to inspect it.
+          check_control() {
+            local engine="$1" expect="$2" output status=0
+            echo "== control (${engine}): the planted page must fail with \"${expect}\""
+            output="$("$checker" --config ".github/a11y/${engine}.json" http://127.0.0.1:8081/index.html 2>&1)" || status=$?
+            echo "$output"
+            if [[ $status -ne 2 ]] || ! grep -qi "$expect" <<<"$output"; then
+              echo "::error::the planted page did not fail the ${engine} run (exit ${status}); that engine cannot fail and its result means nothing"
+              exit 1
+            fi
+          }
+          check_control axe "touch targets"
+          check_control htmlcs "alt attribute"
 
           status=0
           for engine in htmlcs axe; do

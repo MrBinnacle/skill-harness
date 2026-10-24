@@ -21,8 +21,8 @@ inspect all triggers for `pull_request_target` or another untrusted-code privile
 | `.github/workflows/repo-description-sync.yml` (added 2026-08-28) | All actions pinned to commit SHAs | Workflow `contents: read`; no job elevation. Reads `secrets.GITHUB_TOKEN` for GitHub API rate limit only | Daily schedule, `push` on `main` limited to `pyproject.toml`, and manual dispatch; no `pull_request_target` | Pass |
 | `.github/workflows/triage-label-on-open.yml` (added 2026-08-30) | No `uses:` reference; a single `gh issue edit` shell step | Workflow `contents: read`; the one job alone adds `issues: write`, which `gh issue edit --add-label` consumes | `issues: opened` only, gated on the issue carrying zero labels; no `pull_request_target`. Not on the merge path: it acts on an issue event, never on a pull request | Pass |
 | `.github/workflows/commit-claim-drift.yml` (added 2026-09-05) | All actions pinned to commit SHAs | Workflow `contents: read`; no job elevation. Reads no secret; the two clones it makes are anonymous reads of public repositories | Weekly schedule and manual dispatch only. No `push` trigger: it checks whether the fresh machinery-to-collection ratio remains in the durable 3-to-5 band, and that network measurement is not hermetic. No `pull_request_target` | Pass |
-| `.github/workflows/accessibility.yml` (added 2026-10-24) | All actions pinned to commit SHAs. The checker, pa11y-ci 5.0.0, installs with `npm ci` from the lockfile in `.github/a11y/` | Workflow `contents: read`; no job elevation. Reads no secret | `pull_request` limited to `pyproject.toml`, acting only when the version changed, and manual dispatch; no `pull_request_target` | Pass |
 | `.github/workflows/words-to-avoid-drift.yml` (added 2026-09-07) | All actions pinned to commit SHAs | Workflow `contents: read`; no job elevation. Reads `secrets.GITHUB_TOKEN` for GitHub API rate limit only | Daily schedule, `push` on `main` limited to `assets/words_to_avoid.json`, and manual dispatch; no `pull_request_target` | Pass |
+| `.github/workflows/accessibility.yml` (added 2026-10-24) | All actions pinned to commit SHAs. The checker, pa11y-ci 5.0.0, installs with `npm ci` from the lockfile in `.github/a11y/` | Workflow `contents: read`; no job elevation. Reads no secret | `pull_request` limited to `pyproject.toml`, acting only when the version changed, and manual dispatch; no `pull_request_target` | Pass |
 
 ## Findings
 
@@ -55,7 +55,9 @@ band. It runs weekly because that boundary can change outside a pull request.
 
 `Accessibility` (added 2026-10-24) is a separate workflow and is not required. It runs on
 the pull request that bumps the version, so it reports at release review, and a red result
-there does not block the merge.
+there does not block the merge. It is kept off the merge path because it starts a browser
+and a local server, which is slow and less hermetic than the unit gate, and because the
+operator ruled on 2026-10-24 that it runs before a release, not on every pull request.
 
 No branch-protection setting was changed; maintainers alone decide whether any new check
 becomes required.
