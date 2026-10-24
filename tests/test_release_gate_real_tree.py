@@ -77,6 +77,15 @@ RUNS_PATH = "/actions/workflows/assurance.yml/runs"
 HEAD_SHA_RUNS_PATH = "/actions/runs"
 
 
+def _gate_module() -> ModuleType:
+    """The gate script imported as a module, so its constants can be read, not copied."""
+    spec = importlib.util.spec_from_file_location("release_gate_real_tree", GATE)
+    assert spec is not None and spec.loader is not None
+    gate: ModuleType = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    return gate
+
+
 def _script_assurance_issues() -> list[int]:
     """The issue numbers the row for this tree's minor line names.
 
@@ -88,10 +97,7 @@ def _script_assurance_issues() -> list[int]:
     by the minor line ``pyproject.toml`` declares, so a version bump to a new
     line follows that line's row in whatever form it is written (#572).
     """
-    spec = importlib.util.spec_from_file_location("release_gate_real_tree", GATE)
-    assert spec is not None and spec.loader is not None
-    gate: ModuleType = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(gate)
+    gate = _gate_module()
     declared = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     line = gate._minor_line(declared["project"]["version"])
     row = gate.ASSURANCE_REQUIREMENTS.get(line)
@@ -275,6 +281,28 @@ def test_the_assurance_gates_asked_for_exactly_the_issues_the_script_names(
         "the gate's assurance reads have drifted from what this module's stub serves; "
         f"requested {sorted(set(requested))}, stub answers {sorted(expected)}"
     )
+
+
+def test_g1_compares_at_least_one_sers_fixture_line_on_the_real_tree() -> None:
+    """G1's fixture check reads something on this tree.
+
+    ``Path.glob`` on a missing directory yields nothing and raises nothing,
+    so a rename of ``tests/fixtures/sers/`` would switch the check off with
+    no signal, and the seeded tests in ``test_release_gate_206.py`` would
+    stay green because they seed their own directory (verifier note on
+    #834, comment 6367832291). Rather than copy the script's scan, this
+    test runs it: ``_sers_fixture_lockstep`` against this tree with a
+    version no fixture can carry must report at least one line. A gate
+    whose scan finds no file, or no ``harness_version`` line, reports
+    nothing here and fails.
+    """
+    gate = _gate_module()
+    errors: list[str] = []
+
+    gate._sers_fixture_lockstep(REPO_ROOT, "0.0.0-no-fixture-carries-this", errors)
+
+    assert errors, f"{gate.SERS_FIXTURES} gave G1 no harness_version line to compare on this tree"
+    assert all(line.startswith("G1: SERS fixture drift") for line in errors), errors
 
 
 def test_red_receipt_names_the_command_the_mutation_and_the_exit_code() -> None:
