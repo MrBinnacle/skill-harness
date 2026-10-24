@@ -18,6 +18,12 @@ Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root, maintained by `/do
 
 `GLOSSARY.md` is the vocabulary of record: use its terms in prose and identifiers, respect its Avoid-notes, and when code and glossary disagree, the code is the primary source — fix the glossary, then decide whether the code's term deserves a rename of its own.
 
+## Interface and experience
+
+Remove redundant UI copy. Use clear hierarchy, intuitive controls, and contextual cues to make interfaces self-explanatory. If users need extra text, redesign the interaction.
+
+Optimize UX, DX, and AX as one system. Maximize usability, clarity, and reliability without compromising security, accessibility, or existing functionality.
+
 ## Prose voice — literal-humanist register
 
 Instance of the **Register** row of the taste doctrine, class 2 (public prose in `skill-harness`). It lives in `TASTE.md` in the owner's private research repository. The test is stated there once; this section is its application to this repository.
