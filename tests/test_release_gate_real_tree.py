@@ -77,6 +77,15 @@ RUNS_PATH = "/actions/workflows/assurance.yml/runs"
 HEAD_SHA_RUNS_PATH = "/actions/runs"
 
 
+def _gate_module() -> ModuleType:
+    """The gate script imported as a module, so its constants can be read, not copied."""
+    spec = importlib.util.spec_from_file_location("release_gate_real_tree", GATE)
+    assert spec is not None and spec.loader is not None
+    gate: ModuleType = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    return gate
+
+
 def _script_assurance_issues() -> list[int]:
     """The issue numbers the row for this tree's minor line names.
 
@@ -88,10 +97,7 @@ def _script_assurance_issues() -> list[int]:
     by the minor line ``pyproject.toml`` declares, so a version bump to a new
     line follows that line's row in whatever form it is written (#572).
     """
-    spec = importlib.util.spec_from_file_location("release_gate_real_tree", GATE)
-    assert spec is not None and spec.loader is not None
-    gate: ModuleType = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(gate)
+    gate = _gate_module()
     declared = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     line = gate._minor_line(declared["project"]["version"])
     row = gate.ASSURANCE_REQUIREMENTS.get(line)
@@ -275,6 +281,30 @@ def test_the_assurance_gates_asked_for_exactly_the_issues_the_script_names(
         "the gate's assurance reads have drifted from what this module's stub serves; "
         f"requested {sorted(set(requested))}, stub answers {sorted(expected)}"
     )
+
+
+def test_g1_has_sers_fixtures_to_read_on_the_real_tree() -> None:
+    """G1's fixture check reads something on this tree.
+
+    ``Path.glob`` on a missing directory yields nothing and raises nothing,
+    so a rename of ``tests/fixtures/sers/`` would switch the check off with
+    no signal, and the seeded tests in ``test_release_gate_206.py`` would
+    stay green because they seed their own directory (verifier note on
+    #834, comment 6367832291). This test pins the directory the script
+    names to the tree: it holds ``*.json`` fixtures, and the script's own
+    pattern finds a ``harness_version`` line in them, so a passing G1 on
+    this tree is a G1 that compared at least one value.
+    """
+    gate = _gate_module()
+    fixtures = sorted((REPO_ROOT / gate.SERS_FIXTURES).glob("*.json"))
+
+    assert fixtures, f"{gate.SERS_FIXTURES} holds no *.json fixture, so G1 compares nothing"
+    matched = [
+        path.name
+        for path in fixtures
+        if gate._HARNESS_VERSION_RE.search(path.read_text(encoding="utf-8"))
+    ]
+    assert matched, f"no fixture in {gate.SERS_FIXTURES} has a harness_version line for G1 to read"
 
 
 def test_red_receipt_names_the_command_the_mutation_and_the_exit_code() -> None:

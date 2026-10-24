@@ -833,6 +833,57 @@ def test_release_is_blocked_when_a_sers_fixture_names_another_version(
     assert red.returncode == 1, red.stdout + red.stderr
 
 
+def _write_named_sers_fixture(root: Path, name: str, *versions: str) -> None:
+    """One fixture with a ``harness_version`` line per version, at lines 3, 6, 9, ..."""
+    blocks = [
+        f'  "block_{i}": {{\n    "harness_version": "{v}"\n  }}' for i, v in enumerate(versions)
+    ]
+    path = root / "tests" / "fixtures" / "sers" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{\n" + ",\n".join(blocks) + "\n}\n", encoding="utf-8")
+
+
+def _g1_sers_drift(rel: str, lineno: int, found: str) -> str:
+    return (
+        "G1: SERS fixture drift - pyproject.toml='0.2.4' but "
+        f"{rel}:{lineno} harness_version={found!r} "
+        "(tests/test_sers_conformance.py compares it with a live mint; "
+        "releases 0.3.0 and 0.4.0 both went red on it in CI)"
+    )
+
+
+def test_g1_lists_every_stale_sers_fixture_line(tmp_path: Path) -> None:
+    """G1 names each stale line, not only the first one it meets.
+
+    The one-fixture test above seeds one stale line, so it passes under a
+    ``return`` placed after the first finding (the #834 verifier's probe M6,
+    comment 6367832291): the gate still blocks, but it reports one line of
+    many. The 0.4.0 version PR went red on 17 lines across the stored
+    fixtures, and the release engineer fixes them from the list. Three stale
+    lines across two files, two of them in one file, pin the full list in
+    glob order and line order, each with the value that line carries.
+    """
+    script = _script_with_declared_row(tmp_path, "0.2", ZERO_THREE_ISSUES, True)
+    matched = _seed_tree(tmp_path / "matched", "0.2.4")
+    _write_sers_fixture(matched, "0.2.4")
+    _write_named_sers_fixture(matched, "receipt_two.json", "0.2.4", "0.2.4")
+    green = _run_gate(matched, _closed(), [], script=script)
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert _failures(green) == []
+
+    stale = _seed_tree(tmp_path / "stale", "0.2.4")
+    _write_sers_fixture(stale, "0.2.3")
+    _write_named_sers_fixture(stale, "receipt_two.json", "0.2.3", "0.2.2")
+    red = _run_gate(stale, _closed(), [], script=script)
+
+    assert _failures(red) == [
+        _g1_sers_drift("tests/fixtures/sers/minted.json", 3, "0.2.3"),
+        _g1_sers_drift("tests/fixtures/sers/receipt_two.json", 3, "0.2.3"),
+        _g1_sers_drift("tests/fixtures/sers/receipt_two.json", 6, "0.2.2"),
+    ], "G1 did not list every stale line. The gate printed:\n" + red.stdout + red.stderr
+    assert red.returncode == 1, red.stdout + red.stderr
+
+
 G3_STALE_BANNER = (
     "G3: README.md status banner does not say 'Status: v0.2.4' "
     "(found 'Status: v0.2.3') - repository-internal check against "
