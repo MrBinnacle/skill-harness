@@ -58,3 +58,21 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # The pinned accessibility checker (.github/a11y/package.json), which
+  # .github/workflows/accessibility.yml installs. Monthly: it runs only at release.
+  - package-ecosystem: npm
+    directory: "/.github/a11y"
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 1
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "ci(deps)"
+      include: scope
+    groups:
+      accessibility-checker:
+        patterns: ["*"]

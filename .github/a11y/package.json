@@ -1,0 +1,8 @@
+{
+  "name": "skill-harness-a11y-check",
+  "private": true,
+  "description": "Pinned install of the accessibility checker that .github/workflows/accessibility.yml runs. Not part of the published package.",
+  "dependencies": {
+    "pa11y-ci": "5.0.0"
+  }
+}

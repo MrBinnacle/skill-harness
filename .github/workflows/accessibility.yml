@@ -1,0 +1,208 @@
+name: Accessibility
+
+# Checks the receipts site for accessibility before each release.
+#
+# WHEN IT RUNS
+#   On the pull request that bumps the pyproject.toml version (the release
+#   pull request, as in "chore(cli): release 0.4.0", #828), and by hand
+#   (workflow_dispatch). Pull requests that touch pyproject.toml without
+#   changing the version, such as dependency bumps, are detected and skipped
+#   with a one-line message.
+#
+#   The cost of checking only at release is stated rather than hidden:
+#   pages.yml publishes the site on every push to main, so a site change merged
+#   between releases is live before this check sees it. Run this workflow by
+#   hand after such a change.
+#
+# WHAT IT TESTS, AND WHAT IT DOES NOT
+#   - WCAG (the W3C Web Content Accessibility Guidelines) 2.0 and 2.1, level A and AA, through pa11y 10 with two engines:
+#     HTML_CodeSniffer and axe-core. pa11y's WCAG2AA standard maps to the 2.0
+#     and 2.1 rule sets only.
+#   - One WCAG 2.2 AA criterion, 2.5.8 Target Size (Minimum), through axe's
+#     target-size rule, switched on explicitly in .github/a11y/axe.json.
+#   - Not tested: the other WCAG 2.2 AA criteria (focus not obscured, dragging
+#     movements, consistent help, redundant entry, accessible authentication).
+#     No automated engine decides them. Automated checks find only part of all
+#     accessibility problems; keyboard use, screen-reader order and plain
+#     wording need a person. A pass here is a minimum, not a statement of
+#     conformance with WCAG or the ADA (Americans with Disabilities Act).
+#   - Only the light colour scheme is rendered. The dark scheme is not tested.
+#
+# WHAT THE JOB DROPS
+#   pa11y keeps only error-level results unless includeWarnings is set, and
+#   pa11y-ci fails the job on any result it is handed, so warnings cannot be
+#   logged without failing it. Two classes are therefore dropped, not logged:
+#   axe "incomplete" results (levelCapWhenNeedsReview: warning makes them
+#   warnings, so they are dropped instead of failing the job), and axe
+#   violations rated moderate or minor, which pa11y maps below error. Only
+#   serious and critical axe violations and HTML_CodeSniffer errors fail the job.
+#   Measured 2026-10-24 on the built site: 7 pages, 0 errors from either engine.
+#
+# NOT A REQUIRED CHECK
+#   The job goes red on a failure but is not among the protect-main required
+#   checks and is outside ci.yml's all-green gate, so it reports at release
+#   review and does not block the merge.
+#
+# THE CHECK PROVES IT CAN FAIL
+#   Before the real run, a copy of the landing page with two planted 10px
+#   buttons and an image without alt text must fail each engine: axe on
+#   target-size and HTML_CodeSniffer on the missing alt attribute. If either
+#   engine passes it, the job fails: a checker that cannot fail is
+#   indistinguishable from one that never ran.
+#
+# Chrome runs with --no-sandbox because Ubuntu 24.04 runners block the
+# unprivileged user namespaces Chrome's sandbox needs. The browser loads only
+# this repository's own pages from a local server.
+#
+# Undo: delete this file, .github/a11y/, and this workflow's row and paragraph in
+# docs/assurance/workflows-audit.md.
+
+on:
+  pull_request:
+    paths: [pyproject.toml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  accessibility:
+    name: Accessibility (release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Full history and the base branch: release detection compares the
+      # pyproject.toml version with the one at the merge-base.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Fetch base branch for release detection
+        if: github.event_name == 'pull_request'
+        run: git fetch --no-tags origin "$GITHUB_BASE_REF"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      - name: Decide whether this is a release
+        id: release
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "run by hand: checking"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python - <<'PY'
+          import os
+          import subprocess
+          import tomllib
+
+          def version(text):
+              return tomllib.loads(text)["project"]["version"]
+
+          def git(*args):
+              return subprocess.run(["git", *args], capture_output=True, encoding="utf-8", check=True).stdout
+
+          base = f"origin/{os.environ['GITHUB_BASE_REF']}"
+          merge_base = git("merge-base", "HEAD", base).strip()
+          old = version(git("show", f"{merge_base}:pyproject.toml"))
+          with open("pyproject.toml", encoding="utf-8") as handle:
+              new = version(handle.read())
+          release = old != new
+          if release:
+              print(f"the pyproject.toml version changed ({old} to {new}): release pull request, checking")
+          else:
+              print(f"the pyproject.toml version did not change ({new}): not a release pull request, skipping")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"run={'true' if release else 'false'}\n")
+          PY
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.release.outputs.run == 'true'
+        with:
+          node-version: "22"
+      - name: Install the pinned checker
+        if: steps.release.outputs.run == 'true'
+        run: npm ci --prefix .github/a11y --no-audit --no-fund
+      # The same build pages.yml publishes, with a fixed marker.
+      - name: Build the site
+        if: steps.release.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements-ci.txt -e ".[dev]"
+          rm -rf _site
+          python -m skill_harness.sitegen --output _site --marker accessibility-check
+      - name: Plant two undersized targets and an image without alt text in a copy
+        if: steps.release.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          rm -rf _poison
+          cp -r _site _poison
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          page = Path("_poison/index.html")
+          text = page.read_text(encoding="utf-8")
+          planted = (
+              '<button style="position:absolute;left:0;top:0;width:10px;height:10px;padding:0">a</button>'
+              '<button style="position:absolute;left:12px;top:0;width:10px;height:10px;padding:0">b</button>'
+              '<img src="planted.png">'
+          )
+          text, count = re.subn(r"(<body[^>]*>)", lambda m: m.group(1) + planted, text, count=1)
+          assert count == 1, "no <body> tag to plant into"
+          page.write_text(text, encoding="utf-8")
+          PY
+      - name: Check the pages
+        if: steps.release.outputs.run == 'true'
+        run: |
+          set -uo pipefail
+          checker=.github/a11y/node_modules/.bin/pa11y-ci
+          python -m http.server 8080 --bind 127.0.0.1 --directory _site >/dev/null 2>&1 &
+          python -m http.server 8081 --bind 127.0.0.1 --directory _poison >/dev/null 2>&1 &
+          for port in 8080 8081; do
+            ready=false
+            for attempt in $(seq 1 20); do
+              if curl -fs -o /dev/null "http://127.0.0.1:${port}/"; then ready=true; break; fi
+              sleep 0.5
+            done
+            if [[ $ready != true ]]; then
+              echo "::error::the local server on port ${port} did not start"
+              exit 1
+            fi
+          done
+          mapfile -t pages < <(cd _site && find . -name '*.html' | sort | sed 's|^\./||')
+          if [[ ${#pages[@]} -eq 0 ]]; then
+            echo "::error::no HTML pages found in the built site"
+            exit 1
+          fi
+
+          # GitHub runs bash with -e, so each expected failure is caught with || to keep
+          # the step alive long enough to inspect it.
+          check_control() {
+            local engine="$1" expect="$2" output status=0
+            echo "== control (${engine}): the planted page must fail with \"${expect}\""
+            output="$("$checker" --config ".github/a11y/${engine}.json" http://127.0.0.1:8081/index.html 2>&1)" || status=$?
+            echo "$output"
+            if [[ $status -ne 2 ]] || ! grep -qi "$expect" <<<"$output"; then
+              echo "::error::the planted page did not fail the ${engine} run (exit ${status}); that engine cannot fail and its result means nothing"
+              exit 1
+            fi
+          }
+          check_control axe "touch targets"
+          check_control htmlcs "alt attribute"
+
+          status=0
+          for engine in htmlcs axe; do
+            echo "== ${engine}: ${#pages[@]} page(s)"
+            "$checker" --config ".github/a11y/${engine}.json" "${pages[@]/#/http://127.0.0.1:8080/}" || status=1
+          done
+          if [[ $status -ne 0 ]]; then
+            echo "::error::accessibility errors found; see the log above"
+          fi
+          exit $status
