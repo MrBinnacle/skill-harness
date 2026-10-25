@@ -81,7 +81,7 @@ def _gate_module() -> ModuleType:
     """The gate script imported as a module, so its constants can be read, not copied."""
     spec = importlib.util.spec_from_file_location("release_gate_real_tree", GATE)
     assert spec is not None and spec.loader is not None
-    gate: ModuleType = importlib.util.module_from_spec(spec)
+    gate = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gate)
     return gate
 
@@ -104,7 +104,7 @@ def _script_assurance_issues() -> list[int]:
     assert row is not None, (
         f"scripts/release_gate.py declares no ASSURANCE_REQUIREMENTS row {line!r}"
     )
-    return [int(issue) for issue in row.issues]
+    return list(row.issues)
 
 
 class _Handler(BaseHTTPRequestHandler):
