@@ -19,6 +19,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from tests._changelog import release_section
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _OLD_NAME = "CONTEXT" + ".md"
@@ -189,15 +191,15 @@ def test_no_live_file_still_names_context_md() -> None:
     )
 
 
-def _unreleased_bullet_naming(unreleased: str, name: str) -> str:
-    """Return the single [Unreleased] bullet block that names ``name``.
+def _bullet_naming(section: str, name: str) -> str:
+    """Return the single bullet block in ``section`` that names ``name``.
 
     Markdown bullets start at ``- ``; continuation lines are indented. The
     block ends at the next top-level bullet. Restricting the rename assertion
-    to this block keeps unrelated "rename" wording elsewhere in [Unreleased]
+    to this block keeps unrelated "rename" wording elsewhere in the section
     from making a silent path swap pass (round-3 F1).
     """
-    lines = unreleased.splitlines(keepends=True)
+    lines = section.splitlines(keepends=True)
     starts = [i for i, line in enumerate(lines) if line.startswith("- ")]
     matches: list[str] = []
     for idx, start in enumerate(starts):
@@ -206,7 +208,7 @@ def _unreleased_bullet_naming(unreleased: str, name: str) -> str:
         if name in block:
             matches.append(block)
     assert len(matches) == 1, (
-        f"expected exactly one [Unreleased] bullet naming {name!r}, found {len(matches)}"
+        f"expected exactly one bullet naming {name!r} in the section, found {len(matches)}"
     )
     return matches[0]
 
@@ -219,17 +221,14 @@ def test_changelog_announces_the_rename() -> None:
     names the new glossary file. A section-wide search is vacuous: other
     entries already say "rename" for unrelated renames.
     """
-    text = _read("CHANGELOG.md")
-    match = re.search(r"## \[0\.4\.0\][^\n]*(.*?)(?=\n## \[)", text, re.DOTALL)
-    assert match is not None, "CHANGELOG.md must carry a rolled ## [0.4.0] section"
-    unreleased = match.group(1)
-    assert _NEW_NAME in unreleased, "[Unreleased] must announce the new glossary name"
-    assert _OLD_NAME in unreleased, "[Unreleased] must state what it was called before"
-    bullet = _unreleased_bullet_naming(unreleased, _NEW_NAME)
+    section = release_section("0.4.0")
+    assert _NEW_NAME in section, "the 0.4.0 section must announce the new glossary name"
+    assert _OLD_NAME in section, "the 0.4.0 section must state what it was called before"
+    bullet = _bullet_naming(section, _NEW_NAME)
     assert _OLD_NAME in bullet, (
-        "the [Unreleased] bullet that names the new glossary must also name the old path"
+        "the 0.4.0 bullet that names the new glossary must also name the old path"
     )
     assert re.search(r"(?i)renam", bullet), (
-        "the [Unreleased] bullet that names the new glossary must use rename language, "
+        "the 0.4.0 bullet that names the new glossary must use rename language, "
         "not a silent path swap"
     )

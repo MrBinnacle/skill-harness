@@ -20,19 +20,17 @@ import re
 import tomllib
 from pathlib import Path
 
+from tests._changelog import release_section
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# The release #733's range shipped in. #733 wrote it under [Unreleased], and the
+# version PR (#572) rolled it here; the section stays put after later releases.
+_RELEASE = "0.4.0"
 
 
 def _read(rel: str) -> str:
     return (_REPO_ROOT / rel).read_text(encoding="utf-8")
-
-
-def _unreleased() -> str:
-    """The rolled 0.4.0 section, which holds what #733 wrote under [Unreleased]."""
-    text = _read("CHANGELOG.md")
-    match = re.search(r"## \[0\.4\.0\][^\n]*(.*?)(?=\n## \[)", text, re.DOTALL)
-    assert match is not None, "CHANGELOG.md must carry a rolled ## [0.4.0] section"
-    return match.group(1)
 
 
 def _runtime_requirements() -> list[str]:
@@ -47,29 +45,29 @@ def _requirement_name(req: str) -> str:
     return re.split(r"[<>=!~]", bare, maxsplit=1)[0].strip().lower()
 
 
-def test_unreleased_carries_no_stale_commit_count() -> None:
+def test_release_section_carries_no_stale_commit_count() -> None:
     """Criterion 2: the 133-commit sentence is dropped, not corrected.
 
     The count moves with every commit (``git rev-list --count v0.3.0..HEAD``),
     so no figure is pinned here. The preferred fix is to drop the sentence; this test
     fails on any residual count, whatever the number.
     """
-    unreleased = _unreleased()
-    assert "133" not in unreleased, (
-        "[Unreleased] still carries the stale '133 commits' sentence; "
+    section = release_section(_RELEASE)
+    assert "133" not in section, (
+        "The 0.4.0 section still carries the stale '133 commits' sentence; "
         "drop the count or state it at the PR head with the producing command"
     )
 
 
-def test_unreleased_records_every_changed_runtime_floor() -> None:
-    """Criterion 3: each runtime floor in [Unreleased] matches pyproject.
+def test_release_section_records_every_changed_runtime_floor() -> None:
+    """Criterion 3: each runtime floor in the 0.4.0 section matches pyproject.
 
     The acceptance text names anthropic>=1.8.0, but that figure was measured
     at origin/main=b48ee47. PR-head pyproject.toml declares anthropic>=1.15.0
     (bumped again in #727 and #749). The governing rule is the value as declared at the
     PR head, which is what this test reads.
     """
-    unreleased = _unreleased()
+    section = release_section(_RELEASE)
     requirements = _runtime_requirements()
     assert requirements, "pyproject.toml [project.dependencies] is empty"
 
@@ -82,15 +80,15 @@ def test_unreleased_records_every_changed_runtime_floor() -> None:
         # package name followed by the version token on the same logical line
         # by allowing whitespace inside the requirement.
         pattern = re.escape(name) + r">=\s*" + re.escape(_floor_version(req))
-        assert re.search(pattern, unreleased), (
-            f"[Unreleased] does not record the runtime floor {req!r} "
+        assert re.search(pattern, section), (
+            f"The 0.4.0 section does not record the runtime floor {req!r} "
             f"(pattern {pattern!r}); pyproject.toml at the PR head declares it"
         )
 
 
-def test_unreleased_records_the_geometry_extra() -> None:
+def test_release_section_records_the_geometry_extra() -> None:
     """Criterion 3: the new geometry extra appears with its playwright floor."""
-    unreleased = _unreleased()
+    section = release_section(_RELEASE)
     data = tomllib.loads(_read("pyproject.toml"))
     extras = data["project"]["optional-dependencies"]
     assert "geometry" in extras, "pyproject.toml declares no [geometry] extra"
@@ -98,35 +96,35 @@ def test_unreleased_records_the_geometry_extra() -> None:
     assert geometry_reqs, "[geometry] extra is empty"
     # "[geometry]", not "geometry": the bare word is also satisfied by the
     # module path sitegen/geometry.py, so a renamed extra would still pass.
-    assert "[geometry]" in unreleased, "[Unreleased] must name the [geometry] extra"
+    assert "[geometry]" in section, "The 0.4.0 section must name the [geometry] extra"
     for req in geometry_reqs:
         name = _requirement_name(req)
         version = _floor_version(req)
         pattern = re.escape(name) + r">=\s*" + re.escape(version)
-        assert re.search(pattern, unreleased), (
-            f"[Unreleased] does not record [geometry] requirement {req!r}"
+        assert re.search(pattern, section), (
+            f"The 0.4.0 section does not record [geometry] requirement {req!r}"
         )
 
 
-def test_unreleased_records_sers_1_6_0_and_1_7_0() -> None:
+def test_release_section_records_sers_1_6_0_and_1_7_0() -> None:
     """Criterion 4: every SERS version added since 0.3.0 is named.
 
-    1.4.0 and 1.5.0 were already in [Unreleased]; this range added 1.6.0
+    1.4.0 and 1.5.0 were already recorded before #733; this range added 1.6.0
     (#654) and 1.7.0 (#686). Each must appear in a SERS line with one
     sentence on what a receipt reader must handle.
     """
-    unreleased = _unreleased()
+    section = release_section(_RELEASE)
     for version in ("1.6.0", "1.7.0"):
-        assert version in unreleased, (
-            f"[Unreleased] must record SERS {version} with a reader-facing line"
+        assert version in section, (
+            f"The 0.4.0 section must record SERS {version} with a reader-facing line"
         )
     # Each version sits in a bullet that also names SERS, so a bare version
     # token elsewhere in the section does not satisfy the criterion.
-    lines = unreleased.splitlines()
+    lines = section.splitlines()
     for version in ("1.6.0", "1.7.0"):
         hits = [ln for ln in lines if version in ln and "SERS" in ln]
         assert hits, (
-            f"[Unreleased] has no SERS line naming {version}; "
+            f"The 0.4.0 section has no SERS line naming {version}; "
             "each SERS version added since 0.3.0 needs one line on what a "
             "receipt reader must handle"
         )
