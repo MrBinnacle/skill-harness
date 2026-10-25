@@ -175,10 +175,15 @@ def test_seed_digest_is_the_length_prefixed_stream(tmp_path: Path) -> None:
     in another base, capped at one digit or reduced mod 10 differs. The path
     is non-ASCII and upper case, so a length counted in characters or a
     folded path differs. The empty file pins a zero byte length.
+
+    #827: ``b/c`` ends in ``\r\n``, so the stream pins the bytes exactly as
+    ``read_bytes`` returns them. Stripping a trailing newline or folding CRLF to
+    LF changes every realistic seed's digest, and under the strip ``x`` and
+    ``x\n`` would share one.
     """
-    files = {"b/c": b"yz", "a": b"x", "DIR/é/longer": b"z" * 10, "e": b""}
+    files = {"b/c": b"yz\r\n", "a": b"x", "DIR/é/longer": b"z" * 10, "e": b""}
     seed = _seed_of(tmp_path / "s", files)
-    stream = "13:DIR/é/longer10:".encode() + b"z" * 10 + b"1:a1:x" + b"3:b/c2:yz" + b"1:e0:"
+    stream = "13:DIR/é/longer10:".encode() + b"z" * 10 + b"1:a1:x" + b"3:b/c4:yz\r\n" + b"1:e0:"
     assert seed_digest(seed) == hashlib.sha256(stream).hexdigest()
 
 
