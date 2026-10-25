@@ -39,11 +39,15 @@ bit-equality tests refuse to collect without it; on Windows use
 `set PYTHONHASHSEED=0` first):
 
 ```bash
-PYTHONHASHSEED=0 pytest -q -m "not live"   # all green
+PYTHONHASHSEED=0 pytest -q                 # all green; live tests are deselected by default
 mypy --strict src tests                    # 0 errors
 ruff check src tests scripts               # 0 issues
 ruff format --check src tests scripts      # 0 reformats needed
 ```
+
+Live tests reach the Anthropic API and can spend money. `addopts` in `pyproject.toml`
+deselects them, so they run only when you ask for them with `-m live` and
+`ANTHROPIC_API_KEY` is set (#740).
 
 That first line is not the CI command. The Test cell excludes three markers, splits the
 suite across four worker processes with `-n 4`, and sets `COLUMNS=200` so rich renders

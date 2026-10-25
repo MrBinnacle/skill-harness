@@ -163,6 +163,12 @@ addopts = [
   # tests/test_ci_geometry_cell_589.py reads this line and fails if it goes.
   "--dist",
   "loadgroup",
+  # #740: a bare `pytest` never selects the live API tests, which spend money with a
+  # valid key. pytest keeps the last `-m` it receives and addopts comes first, so CI's
+  # own expression and a deliberate `pytest -m live` both still win.
+  # tests/test_live_deselected_by_default_740.py fails if this entry goes.
+  "-m",
+  "not live",
 ]
 markers = [
   "slow: long-running tests (deselect with -m 'not slow')",
