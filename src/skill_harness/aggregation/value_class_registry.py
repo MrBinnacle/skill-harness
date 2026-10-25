@@ -5,14 +5,14 @@ The screen instrument (``screen_verdict``) measures TRANSFORMATIVE LIFT only. It
 value is NOT transformative lift (a trap that guards one wrong action, or a
 calibration skill that makes a measurement sound). The #76 guard withholds the CUT
 for such skills — but only if it KNOWS the skill's class. #76 shipped the guard with
-store rows unclassified (every screen → CAN'T-TELL-YET, honest but undiscriminating).
+store rows unclassified (every screen → CANT_TELL_YET, honest but undiscriminating).
 
 This module is the registration source #76's guard consumes: a static map from the
 skill's ``skill_name`` to its ``ValueClass``. Current entries use the published
 skill-card name. Retired aliases retain the name in immutable historic screen records
 and point to the published successor. The CLI seams look each screened skill up here
 and pass the class into ``screen_verdict`` — so a registered non-transformative skill
-renders CAN'T-TELL-YET *on purpose* (registered wrong-instrument), not by the accident
+renders CANT_TELL_YET *on purpose* (registered wrong-instrument), not by the accident
 of being unclassified. That makes the four false CUTs (OBS-0003..0006) structurally
 impossible to reintroduce (US-3/US-16).
 
@@ -22,13 +22,13 @@ onto them. ``value_class`` is therefore an independent registration keyed by ski
 name, exactly as ``ValueClass``'s docstring requires.
 
 The empty transformative-lift class TRIPS the signed S2-kill criterion (the F6
-sign-off, S166): ship the classification + CAN'T-TELL-YET/field surface, do NOT
+sign-off, S166): ship the classification + CANT_TELL_YET/field surface, do NOT
 build the S3 board apparatus for zero customers.
 
 A skill_name absent from this map resolves to ``None`` (unclassified) → the guard's
-honest default (CAN'T-TELL-YET, never a false CUT). This is the deliberate choice for
+honest default (CANT_TELL_YET, never a false CUT). This is the deliberate choice for
 stale keys: a renamed or removed skill silently falls to the unclassified path rather
-than raising, because CAN'T-TELL-YET is an honest refusal that never produces a false
+than raising, because CANT_TELL_YET is an honest refusal that never produces a false
 CUT. The staleness detection test in ``tests/test_value_class_registry.py`` catches
 stale keys before they reach production, so the silent fall is a defence-in-depth
 backstop, not the primary guard. The map is measured by
@@ -79,7 +79,7 @@ def value_class_for(skill_name: str) -> ValueClass | None:
     """Return the registered ``ValueClass`` for a skill, or ``None`` if unclassified.
 
     ``None`` is the honest default the #76 guard treats as "not transformative-lift"
-    → CAN'T-TELL-YET (wrong instrument), never a false CUT. Pass the result straight
+    → CANT_TELL_YET (wrong instrument), never a false CUT. Pass the result straight
     into ``screen_verdict(p0, value_class=value_class_for(name))``.
     """
     return SKILL_VALUE_CLASS.get(skill_name)

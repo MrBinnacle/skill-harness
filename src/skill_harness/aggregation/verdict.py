@@ -341,7 +341,7 @@ def screen_verdict(
                     f"category error"
                 )
             rationale = (
-                f"CAN'T-TELL-YET (wrong instrument): Null arm p0={p0:.2f} is above the "
+                f"CANT_TELL_YET (wrong instrument): Null arm p0={p0:.2f} is above the "
                 f"~{TRANSFORMATIVE_NULL_CEILING:.2f} transformative bar, but {class_clause}. "
                 f"Verdict withheld. The field-evidence lane that would carry this "
                 f"cell is UNBUILT (#335): nothing in this repository consumes the "
@@ -369,7 +369,7 @@ def screen_verdict(
         return VerdictResult(KeepCutVerdict.CUT, CutSubReason.SUBSUMED, rationale, scope=scope)
 
     rationale = (
-        f"CAN'T-TELL-YET: Null arm p0={p0:.2f} is at or below the "
+        f"CANT_TELL_YET: Null arm p0={p0:.2f} is at or below the "
         f"~{TRANSFORMATIVE_NULL_CEILING:.2f} bar — the model fails often enough that the "
         f"skill could be transformative. No paired Full-vs-Null run has confirmed a "
         f"KEEP; this is a sourced candidate, not a verdict."
@@ -453,7 +453,7 @@ def paired_verdict(
                 KeepCutVerdict.CANT_TELL_YET,
                 None,
                 (
-                    "CAN'T-TELL-YET: paired run is UNMEASURED (underpowered / budget / no "
+                    "CANT_TELL_YET: paired run is UNMEASURED (underpowered / budget / no "
                     "admissible data). Needs more epochs or a better-sourced task."
                     f"{pi_c_line}"
                 ),
@@ -464,7 +464,7 @@ def paired_verdict(
                 KeepCutVerdict.CANT_TELL_YET,
                 None,
                 (
-                    "CAN'T-TELL-YET: paired evidence is CONFOUNDED (a harness/environment "
+                    "CANT_TELL_YET: paired evidence is CONFOUNDED (a harness/environment "
                     "difference co-varies with the arm). Verdict withheld until the "
                     "confound is resolved."
                     f"{pi_c_line}"
@@ -530,7 +530,7 @@ def matched_gate2_verdict(
         vc_label = effective_vc.value if value_class is not None else "unclassified"
         pairs_str = sorted(f"({vc.value}, {ot})" for vc, ot in _PERMITTED_PAIRS)
         rationale = (
-            f"CAN'T-TELL-YET (wrong instrument): the (value_class, outcome_type)"
+            f"CANT_TELL_YET (wrong instrument): the (value_class, outcome_type)"
             f" pair ({vc_label!r}, {_EFFECTIVE_OUTCOME_TYPE!r}) is not a registered"
             f" instrument combination. Registered pairs: {pairs_str}."
             f" Verdict withheld. The field-evidence lane that would carry this"
@@ -629,7 +629,7 @@ def matched_gate2_verdict(
                         f"category error"
                     )
                 rationale = (
-                    f"CAN'T-TELL-YET (wrong instrument): matched Gate-2 certified "
+                    f"CANT_TELL_YET (wrong instrument): matched Gate-2 certified "
                     f"EQUIVALENT ({delta_clause}), but {class_clause}. "
                     f"Verdict withheld. The field-evidence lane that would carry this "
                     f"cell is UNBUILT (#335): nothing in this repository consumes the "
@@ -655,7 +655,7 @@ def matched_gate2_verdict(
             return VerdictResult(
                 KeepCutVerdict.CANT_TELL_YET,
                 None,
-                (f"CAN'T-TELL-YET: matched Gate-2 left the contrast UNRESOLVED ({delta_clause})."),
+                (f"CANT_TELL_YET: matched Gate-2 left the contrast UNRESOLVED ({delta_clause})."),
                 scope=scope,
             )
         case _:
