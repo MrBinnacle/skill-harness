@@ -416,7 +416,7 @@ class TestVerdictContracts:
         result = matched_gate2_verdict(effect, scope=scope)
         assert result.verdict is KeepCutVerdict.CANT_TELL_YET
         assert result.scope is scope
-        assert "CAN'T-TELL-YET" in (result.rationale or "")
+        assert "CANT_TELL_YET" in (result.rationale or "")
 
 
 # ---------------------------------------------------------------------------
@@ -731,7 +731,7 @@ class TestVerdictScopeAndRationale:
         assert result.verdict is KeepCutVerdict.CANT_TELL_YET
         assert result.scope is scope
         assert result.rationale is not None
-        assert "CAN'T-TELL-YET" in result.rationale
+        assert "CANT_TELL_YET" in result.rationale
 
     def test_paired_keep_and_cut_rationale_and_scope(self) -> None:
         from skill_harness.aggregation.status import ClauseStatus

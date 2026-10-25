@@ -31,7 +31,7 @@ class TestDispositionFromVerdict:
         assert disposition_from_verdict(KeepCutVerdict.CUT) == RankingDisposition.EXCLUDED
 
     def test_cant_tell_yet_is_not_yet_rankable(self) -> None:
-        # Author-flagged deviation from the originating spec: a CAN'T-TELL-YET skill
+        # Author-flagged deviation from the originating spec: a CANT_TELL_YET skill
         # is "a sourced candidate, not a verdict yet" (verdict.py) — it is NOT
         # admitted to ranking as if measured.
         assert (

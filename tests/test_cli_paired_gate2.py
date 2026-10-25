@@ -1541,5 +1541,5 @@ class TestPassFailRunReadUnderTrapDiscipline:
         )
 
         assert result.exit_code == 0
-        assert "CANT_TELL_YET" in result.output or "CAN'T-TELL-YET" in result.output
+        assert "CANT_TELL_YET" in result.output
         assert "wrong_instrument" in result.output.lower()

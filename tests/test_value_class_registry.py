@@ -3,7 +3,7 @@
 These lock four things:
   1. The portfolio classification is complete and pins the S2-kill condition
      (0 transformative-lift → the signed kill fires; see F6-signoff-S166).
-  2. The four historical false CUTs (OBS-0003..0006) re-render CAN'T-TELL-YET
+  2. The four historical false CUTs (OBS-0003..0006) re-render CANT_TELL_YET
      (wrong instrument), NEVER CUT, once their registered class flows through the
      guard — the standing regression against re-introducing the day-one falsehood.
   3. ``value_class_for`` is the honest default for an unregistered skill (None).
@@ -206,7 +206,7 @@ def test_renamed_skill_names_preserve_historic_and_published_lookups(
 def test_s2_kill_condition_transformative_lift_class_is_empty() -> None:
     """The machine-checkable form of the signed S2-kill trigger (F6-signoff-S166):
     NO skill is transformative-lift → the harness has zero current customers for its
-    one measurement path → ship field/CAN'T-TELL-YET only, do NOT build the S3 board.
+    one measurement path → ship field/CANT_TELL_YET only, do NOT build the S3 board.
     If a future transformative-lift KEEP is registered here, this test flips and the
     kill calculus is revisited (F6 Revisit-if) — that is the intended trip-wire."""
     assert ValueClass.TRANSFORMATIVE_LIFT not in SKILL_VALUE_CLASS.values()
@@ -227,7 +227,7 @@ def test_f8a_third_class_named_and_populated() -> None:
 
 def test_value_class_for_unregistered_is_none() -> None:
     """The honest default: an unknown skill_name → None → the guard's not-transformative
-    path (CAN'T-TELL-YET), never a false CUT."""
+    path (CANT_TELL_YET), never a false CUT."""
     assert value_class_for("some-unregistered-skill") is None
     assert value_class_for("pull-rebase") is ValueClass.TRAP_DISCIPLINE
     assert value_class_for("closure-mode") is ValueClass.TRAP_DISCIPLINE
@@ -244,7 +244,7 @@ def test_value_class_for_unregistered_is_none() -> None:
 def test_obs_records_ceiling_flips_to_cant_tell_not_cut(skill_name: str) -> None:
     """THE flip regression (US-3): each of OBS-0003..0006 ceilings at p0 = 1.00 on its
     Null screen. Routed through its REGISTERED value_class, the guard must render
-    CAN'T-TELL-YET (wrong instrument), never CUT(subsumed). Reintroducing the false CUT
+    CANT_TELL_YET (wrong instrument), never CUT(subsumed). Reintroducing the false CUT
     (dropping the class, or mapping any of these to transformative-lift) fails here."""
     vc = value_class_for(skill_name)
     assert vc is not None, f"{skill_name} must be registered"
@@ -260,7 +260,7 @@ def test_obs_records_ceiling_flips_to_cant_tell_not_cut(skill_name: str) -> None
 
 def test_calibration_ceiling_is_wrong_instrument_like_trap() -> None:
     """The new CALIBRATION class behaves at the guard exactly like trap-discipline:
-    a screen ceiling is a wrong-instrument CAN'T-TELL-YET, not a subsumed CUT."""
+    a screen ceiling is a wrong-instrument CANT_TELL_YET, not a subsumed CUT."""
     v = screen_verdict(1.0, value_class=ValueClass.CALIBRATION)
     assert v.verdict is KeepCutVerdict.CANT_TELL_YET
     assert v.wrong_instrument is True
