@@ -39,7 +39,7 @@ bit-equality tests refuse to collect without it; on Windows use
 `set PYTHONHASHSEED=0` first):
 
 ```bash
-PYTHONHASHSEED=0 pytest -q                # all green; live tests are deselected by default
+PYTHONHASHSEED=0 pytest -q                 # all green; live tests are deselected by default
 mypy --strict src tests                    # 0 errors
 ruff check src tests scripts               # 0 issues
 ruff format --check src tests scripts      # 0 reformats needed

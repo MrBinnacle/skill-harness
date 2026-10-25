@@ -35,7 +35,7 @@ def test_offline() -> None:
 """
 
 
-def _repo_ini(tmp_path: Path) -> Path:
+def _write_repo_ini(tmp_path: Path) -> Path:
     """Write this repository's ``addopts`` and ``markers`` into an ini under ``tmp_path``.
 
     Pointing ``-c`` at the repository's ``pyproject.toml`` would put the config
@@ -43,6 +43,8 @@ def _repo_ini(tmp_path: Path) -> Path:
     while it collects, and another process deleting a directory there turns the
     run into a collection error. An ini inside ``tmp_path`` keeps the walk there
     while the options under test still come from the real file.
+
+    Only ``addopts`` and ``markers`` are copied: they alone decide ``-m`` selection.
     """
     with PYPROJECT.open("rb") as fh:
         options = tomllib.load(fh)["tool"]["pytest"]["ini_options"]
@@ -62,7 +64,7 @@ def _collect(tmp_path: Path, *extra: str) -> str:
         "-m",
         "pytest",
         "-c",
-        str(_repo_ini(tmp_path)),
+        str(_write_repo_ini(tmp_path)),
         "--rootdir",
         str(tmp_path),
         "-p",
