@@ -35,7 +35,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-GATE = ROOT / "scripts" / "release_gate.py"
+# RELEASE_GATE_SCRIPT_UNDER_TEST points every test at another copy of the
+# gate. The #835 receipt uses it to run this suite against the pre-fix script
+# and record which tests go red there.
+GATE = Path(
+    os.environ.get("RELEASE_GATE_SCRIPT_UNDER_TEST") or ROOT / "scripts" / "release_gate.py"
+)
 RED_RECEIPT = ROOT / "docs" / "assurance" / "release-gate-red-206.md"
 ZERO_THREE_ISSUES = tuple(range(167, 175))
 # The 0.4 row as adjudicated on #742 (2026-10-22). A literal copy on purpose:
@@ -148,7 +153,7 @@ def _invoke(
 def _run_gate(
     root: Path,
     issue_states: dict[int, str],
-    workflow_runs: list[dict[str, str]],
+    workflow_runs: list[dict[str, object]],
     token: str | None = None,
     seen_auth: list[str | None] | None = None,
     seen_paths: list[str] | None = None,
@@ -156,6 +161,7 @@ def _run_gate(
     sha: str | None = None,
     script: Path | None = None,
     filter_runs_by_head_sha: bool = True,
+    jobs_by_run: dict[int, dict[str, object]] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the gate against ``root`` with the GitHub answers seeded locally.
 
@@ -181,6 +187,14 @@ def _run_gate(
             if seen_paths is not None:
                 seen_paths.append(self.path)
             path_only = self.path.split("?", 1)[0]
+            jobs_match = re.fullmatch(r"/actions/runs/(\d+)/jobs", path_only)
+            if jobs_match is not None:
+                run_jobs = (jobs_by_run or {}).get(int(jobs_match.group(1)))
+                if run_jobs is None:
+                    self._respond(404, {"message": f"no jobs seeded for {path_only}"})
+                    return
+                self._respond(200, run_jobs)
+                return
             if path_only == "/actions/runs":
                 sha_query = ""
                 if "?" in self.path:
@@ -257,13 +271,17 @@ def _run_record(
     path: str = ".github/workflows/assurance.yml",
     status: str = "completed",
     conclusion: str = "success",
-) -> dict[str, str]:
-    """One seeded workflow run at ``sha``."""
+    created_at: str = "2026-10-01T00:00:00Z",
+    run_id: int = 1,
+) -> dict[str, object]:
+    """One seeded workflow run at ``sha``. ``created_at`` and ``id`` order runs (#835)."""
     return {
         "status": status,
         "conclusion": conclusion,
         "path": path,
         "head_sha": sha,
+        "created_at": created_at,
+        "id": run_id,
     }
 
 
@@ -339,7 +357,7 @@ def test_zero_three_release_passes_when_assurance_is_closed(tmp_path: Path) -> N
     result = _run_gate(root, _closed(), [])
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RELEASE GATE: PASS" in result.stdout
+    assert "RELEASE GATE: PRELIMINARY" in result.stdout
     assert _failures(result) == []
 
 
@@ -463,22 +481,26 @@ def test_unknown_minor_line_blocks_even_a_patch_release(tmp_path: Path) -> None:
 def test_declared_empty_requirement_passes_by_declaration(tmp_path: Path) -> None:
     """Criterion 2: a declared replacement passes by declaration, never SKIPPED.
 
+    #835 limits this to lines before 0.5, so the row here is the historical
+    ``0.1`` line. The strict twin is
+    ``test_bypass_empty_assurance_declarations_fail_from_zero_five``.
+
     A row whose G7 list is explicitly empty and whose G8 flag is explicitly
     false makes both gates pass and print that they passed by declaration,
     naming the row. The API base points at a dead port: the gate must not
     read the network at all, which is the external proof that the
     declaration, not an empty result set, is what passed the gate.
     """
-    script = _script_with_declared_row(tmp_path, "0.9", (), g8_required=False)
-    root = _seed_tree(tmp_path / "tree", "0.9.0")
+    script = _script_with_declared_row(tmp_path, "0.1", (), g8_required=False)
+    root = _seed_tree(tmp_path / "tree", "0.1.0")
     dead = _dead_port()
     result = _invoke(root, f"http://127.0.0.1:{dead}", script=script)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RELEASE GATE: PASS" in result.stdout, result.stdout + result.stderr
+    assert "RELEASE GATE: PRELIMINARY" in result.stdout, result.stdout + result.stderr
     assert "G7: PASSED by declaration" in result.stdout, result.stdout + result.stderr
     assert "G8: PASSED by declaration" in result.stdout, result.stdout + result.stderr
-    assert "row '0.9'" in result.stdout, result.stdout + result.stderr
+    assert "row '0.1'" in result.stdout, result.stdout + result.stderr
     assert "G7: SKIPPED" not in result.stdout
     assert "G8: SKIPPED" not in result.stdout
 
@@ -592,7 +614,7 @@ def test_g8_passes_when_the_green_run_is_at_the_release_candidate_sha(tmp_path: 
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RELEASE GATE: PASS" in result.stdout
+    assert "RELEASE GATE: AUTHORIZED" in result.stdout
     assert _failures(result) == []
 
 
@@ -979,7 +1001,7 @@ def test_zero_four_release_passes_g7_when_every_row_issue_is_closed(tmp_path: Pa
     result = _run_gate(root, _closed_zero_four(), [], seen_paths=seen_paths)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RELEASE GATE: PASS" in result.stdout
+    assert "RELEASE GATE: PRELIMINARY" in result.stdout
     assert _failures(result) == []
     expected = {f"/issues/{n}" for n in ZERO_FOUR_ISSUES}
     assert set(seen_paths) == expected, (
@@ -1089,3 +1111,298 @@ def test_red_receipt_names_the_command_and_exit_code() -> None:
     assert "RELEASE_GATE_GITHUB_API_URL" in text
     assert "python scripts/release_gate.py --root" in text
     assert "Exit code: `1`" in text
+
+
+# --- #835: the assurance bypasses -------------------------------------------
+#
+# Tests named ``test_bypass_*`` each expose a defect in the gate as it stood
+# at 229d7b1: run with RELEASE_GATE_SCRIPT_UNDER_TEST pointing at that script,
+# each one fails. ``docs/assurance/release-gate-bypass-red-835.md`` records
+# that run. Tests named ``test_protects_*`` pin behavior the pre-fix gate
+# already had; they pass on both scripts and are not evidence of a new defect.
+
+STRICT_LINE_ISSUE = 900
+CANDIDATE = "c" * 40
+OTHER = "d" * 40
+_DOT = chr(0xB7)
+REQUIRED_JOBS = (
+    "Drift check (locked contracts)",
+    "Structural bans (raw sqlite3.connect / oracle_verdicts / timestamp ORDER BY)",
+    f"Calibration CS grid (ubuntu-latest {_DOT} py3.12)",
+    f"Calibration CS grid (ubuntu-latest {_DOT} py3.13)",
+    f"Calibration CS grid (windows-latest {_DOT} py3.12)",
+    f"Calibration CS grid (windows-latest {_DOT} py3.13)",
+    "Dependency audit (pip-audit)",
+)
+CI_PATH = ".github/workflows/ci.yml"
+
+
+def _strict_script(tmp_path: Path, line: str = "0.5") -> Path:
+    """A gate copy with a valid strict row: one closed issue, assurance required."""
+    return _script_with_declared_row(tmp_path, line, (STRICT_LINE_ISSUE,), g8_required=True)
+
+
+def _jobs(overrides: dict[str, dict[str, object] | None] | None = None) -> dict[str, object]:
+    """A jobs document with every required job green; ``None`` removes a job."""
+    jobs: list[dict[str, object]] = []
+    for name in REQUIRED_JOBS:
+        job: dict[str, object] | None = {
+            "name": name,
+            "status": "completed",
+            "conclusion": "success",
+        }
+        if overrides and name in overrides:
+            job = overrides[name]
+        if job is not None:
+            jobs.append(job)
+    jobs.append({"name": "Lint + format", "status": "completed", "conclusion": "success"})
+    return {"total_count": len(jobs), "jobs": jobs}
+
+
+def _strict_tag_run(
+    tmp_path: Path,
+    *,
+    ci_runs: list[dict[str, object]] | None = None,
+    jobs_by_run: dict[int, dict[str, object]] | None = None,
+    assurance_runs: list[dict[str, object]] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a strict 0.5.0 tree on refs/tags/v0.5.0 at CANDIDATE.
+
+    Defaults: a green assurance run and one completed ci.yml run (id 50) whose
+    required jobs are all green. Each test overrides one piece.
+    """
+    script = _strict_script(tmp_path)
+    root = _seed_tree(tmp_path / "tree", "0.5.0")
+    runs = (
+        assurance_runs if assurance_runs is not None else [_run_record(CANDIDATE, run_id=10)]
+    ) + (ci_runs if ci_runs is not None else [_run_record(CANDIDATE, path=CI_PATH, run_id=50)])
+    return _run_gate(
+        root,
+        {STRICT_LINE_ISSUE: "closed"},
+        runs,
+        ref="refs/tags/v0.5.0",
+        sha=CANDIDATE,
+        script=script,
+        jobs_by_run=jobs_by_run if jobs_by_run is not None else {50: _jobs()},
+    )
+
+
+@pytest.mark.parametrize("line", ["0.5", "0.10", "1.0"])
+@pytest.mark.parametrize(
+    ("issues", "g8_required", "gate"),
+    [((), True, "G7"), ((STRICT_LINE_ISSUE,), False, "G8")],
+    ids=["empty-issue-list", "assurance-declared-unnecessary"],
+)
+def test_bypass_empty_assurance_declarations_fail_from_zero_five(
+    tmp_path: Path, line: str, issues: tuple[int, ...], g8_required: bool, gate: str
+) -> None:
+    """From 0.5 on, neither declaration may pass the gate (#835, requirement 1).
+
+    Before the fix both passed "by declaration" on every line. ``0.10`` pins
+    the numeric compare: as strings, "0.10" sorts before "0.5".
+    """
+    script = _script_with_declared_row(tmp_path, line, issues, g8_required=g8_required)
+    root = _seed_tree(tmp_path / "tree", f"{line}.0")
+    result = _run_gate(root, {STRICT_LINE_ISSUE: "closed"}, [], script=script)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    failures = [f for f in _failures(result) if f.startswith(f"{gate}:")]
+    assert len(failures) == 1, _failures(result)
+    assert f"row '{line}'" in failures[0] and "#835" in failures[0], failures[0]
+    assert "PASSED by declaration" not in result.stdout
+
+
+@pytest.mark.parametrize("line", ["0.1", "0.2"])
+def test_protects_historical_lines_still_pass_by_declaration(tmp_path: Path, line: str) -> None:
+    """The compatibility boundary: lines before 0.5 keep their released policy."""
+    script = _script_with_declared_row(tmp_path, line, (), g8_required=False)
+    root = _seed_tree(tmp_path / "tree", f"{line}.0")
+    result = _invoke(root, f"http://127.0.0.1:{_dead_port()}", script=script)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "G7: PASSED by declaration" in result.stdout
+    assert "G8: PASSED by declaration" in result.stdout
+
+
+def test_protects_the_real_zero_four_row_is_unchanged_by_the_strict_policy(
+    tmp_path: Path,
+) -> None:
+    """The shipped 0.4 row on its tag still passes with no G9 evidence at all."""
+    sha = "e" * 40
+    root = _seed_tree(tmp_path / "tree", "0.4.0")
+    result = _run_gate(
+        root, _closed_zero_four(), [_run_record(sha)], ref="refs/tags/v0.4.0", sha=sha
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _failures(result) == []
+
+
+@pytest.mark.parametrize(
+    ("status", "conclusion"),
+    [("completed", "failure"), ("completed", "cancelled"), ("in_progress", "")],
+    ids=["newer-failure", "newer-cancelled", "newer-in-flight"],
+)
+def test_bypass_an_older_success_does_not_mask_a_newer_assurance_run(
+    tmp_path: Path, status: str, conclusion: str
+) -> None:
+    """Stale green (#835, requirement 3): the newest run at the SHA decides.
+
+    Before the fix, G8 accepted ``any`` successful run at the SHA, so an
+    earlier success hid a later failure, cancellation or pending re-run.
+    """
+    sha = "a" * 40
+    root = _seed_tree(tmp_path, "0.3.0")
+    runs: list[dict[str, object]] = [
+        _run_record(sha, created_at="2026-10-01T00:00:00Z", run_id=1),
+        _run_record(
+            sha, status=status, conclusion=conclusion, created_at="2026-10-02T00:00:00Z", run_id=2
+        ),
+    ]
+    result = _run_gate(root, _closed(), runs, ref="refs/tags/v0.3.0", sha=sha)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    g8 = [f for f in _failures(result) if f.startswith("G8:")]
+    assert len(g8) == 1 and "newest" in g8[0], _failures(result)
+
+
+def test_protects_a_newer_success_after_an_older_failure_passes(tmp_path: Path) -> None:
+    """Positive control for the ordering: a fixed re-run at the same SHA counts."""
+    sha = "a" * 40
+    root = _seed_tree(tmp_path, "0.3.0")
+    runs: list[dict[str, object]] = [
+        _run_record(sha, conclusion="failure", created_at="2026-10-01T00:00:00Z", run_id=1),
+        _run_record(sha, created_at="2026-10-02T00:00:00Z", run_id=2),
+    ]
+    result = _run_gate(root, _closed(), runs, ref="refs/tags/v0.3.0", sha=sha)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_bypass_off_a_tag_the_gate_never_prints_an_unqualified_pass(tmp_path: Path) -> None:
+    """Requirement 2: a non-tag run is preliminary and says so."""
+    root = _seed_tree(tmp_path / "tree", "0.3.0")
+    result = _run_gate(root, _closed(), [])
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RELEASE GATE: PASS" not in result.stdout
+    assert "RELEASE GATE: AUTHORIZED" not in result.stdout
+    assert "RELEASE GATE: PRELIMINARY" in result.stdout
+    assert "Not release authorization" in result.stdout
+
+
+def test_bypass_a_strict_line_off_a_tag_skips_g9_and_is_preliminary(tmp_path: Path) -> None:
+    """G9 needs a release candidate; off a tag it self-skips and authorizes nothing."""
+    script = _strict_script(tmp_path)
+    root = _seed_tree(tmp_path / "tree", "0.5.0")
+    result = _run_gate(root, {STRICT_LINE_ISSUE: "closed"}, [], script=script)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    _ran, _total, skipped, _not_run = _coverage(result.stdout)
+    assert skipped == {"G6", "G8", "G9"}, skipped
+    assert "RELEASE GATE: PRELIMINARY" in result.stdout
+
+
+def test_authorizes_only_a_complete_strict_tag_run(tmp_path: Path) -> None:
+    """Positive control: all nine gates ran and passed on the tag."""
+    result = _strict_tag_run(tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RELEASE GATE: AUTHORIZED (9 of 9 gates ran)" in result.stdout, result.stdout
+    assert CANDIDATE in result.stdout
+
+
+@pytest.mark.parametrize("name", REQUIRED_JOBS, ids=range(len(REQUIRED_JOBS)))
+@pytest.mark.parametrize(
+    "job",
+    [
+        None,
+        {"status": "completed", "conclusion": "failure"},
+        {"status": "completed", "conclusion": "skipped"},
+        {"status": "completed", "conclusion": "cancelled"},
+        {"status": "completed", "conclusion": "timed_out"},
+        {"status": "completed", "conclusion": "neutral"},
+        {"status": "in_progress", "conclusion": None},
+    ],
+    ids=["missing", "failure", "skipped", "cancelled", "timed_out", "neutral", "in-flight"],
+)
+def test_bypass_each_required_ci_job_must_be_present_and_green(
+    tmp_path: Path, name: str, job: dict[str, object] | None
+) -> None:
+    """Requirement 3: every named check, every calibration cell, missing or not green fails."""
+    override = None if job is None else {"name": name, **job}
+    result = _strict_tag_run(tmp_path, jobs_by_run={50: _jobs({name: override})})
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    g9 = [f for f in _failures(result) if f.startswith("G9:")]
+    assert len(g9) == 1, _failures(result)
+    assert "RELEASE GATE: AUTHORIZED" not in result.stdout
+
+
+def test_bypass_ci_evidence_at_another_commit_does_not_count(tmp_path: Path) -> None:
+    """A green ci.yml run at another SHA is not the candidate's evidence."""
+    result = _strict_tag_run(tmp_path, ci_runs=[_run_record(OTHER, path=CI_PATH, run_id=50)])
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    g9 = [f for f in _failures(result) if f.startswith("G9:")]
+    assert len(g9) == 1 and CANDIDATE in g9[0], _failures(result)
+
+
+def test_bypass_a_pending_newer_ci_run_blocks_authorization(tmp_path: Path) -> None:
+    """The newest ci.yml run at the SHA must be complete; an older green one does not stand in."""
+    runs = [
+        _run_record(CANDIDATE, path=CI_PATH, run_id=50, created_at="2026-10-01T00:00:00Z"),
+        _run_record(
+            CANDIDATE,
+            path=CI_PATH,
+            run_id=51,
+            status="in_progress",
+            conclusion="",
+            created_at="2026-10-02T00:00:00Z",
+        ),
+    ]
+    result = _strict_tag_run(tmp_path, ci_runs=runs, jobs_by_run={50: _jobs(), 51: _jobs()})
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    g9 = [f for f in _failures(result) if f.startswith("G9:")]
+    assert len(g9) == 1 and "in_progress" in g9[0], _failures(result)
+
+
+def test_bypass_jobs_are_not_combined_across_runs(tmp_path: Path) -> None:
+    """The newest completed run must itself carry every job; no cherry-picking."""
+    drift = REQUIRED_JOBS[0]
+    runs = [
+        _run_record(CANDIDATE, path=CI_PATH, run_id=50, created_at="2026-10-01T00:00:00Z"),
+        _run_record(CANDIDATE, path=CI_PATH, run_id=51, created_at="2026-10-02T00:00:00Z"),
+    ]
+    result = _strict_tag_run(
+        tmp_path, ci_runs=runs, jobs_by_run={50: _jobs(), 51: _jobs({drift: None})}
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert any("Drift check" in f and "run 51" in f for f in _failures(result)), _failures(result)
+
+
+def test_bypass_a_truncated_job_list_fails_closed(tmp_path: Path) -> None:
+    """A job page shorter than ``total_count`` cannot prove a job is absent or green."""
+    document = _jobs()
+    document["total_count"] = 150
+    result = _strict_tag_run(tmp_path, jobs_by_run={50: document})
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert any(f.startswith("G9:") and "incomplete" in f for f in _failures(result))
+
+
+def test_bypass_no_ci_run_at_the_candidate_fails(tmp_path: Path) -> None:
+    result = _strict_tag_run(tmp_path, ci_runs=[])
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert any(f.startswith("G9: no ci.yml run") for f in _failures(result))
+
+
+def test_protects_a_strict_tag_still_requires_the_assurance_run(tmp_path: Path) -> None:
+    """Existing G8 behavior on the strict line: no assurance run, no release."""
+    result = _strict_tag_run(tmp_path, assurance_runs=[])
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert any(f.startswith("G8:") for f in _failures(result))

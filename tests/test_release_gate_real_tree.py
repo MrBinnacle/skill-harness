@@ -58,6 +58,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -205,7 +206,7 @@ def test_real_tree_passes_the_release_gate(
     result, _ = gate_run
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RELEASE GATE: PASS" in result.stdout, result.stdout + result.stderr
+    assert "RELEASE GATE: PRELIMINARY" in result.stdout, result.stdout + result.stderr
 
 
 def test_the_pass_line_names_the_version_this_tree_declares(
@@ -318,3 +319,67 @@ def test_red_receipt_names_the_command_the_mutation_and_the_exit_code() -> None:
     assert "Status: v0.2.9" in text
     assert "Exit code: `1`" in text
     assert "test_the_pass_line_names_the_version_this_tree_declares" in text
+
+
+def _ci_job_names(workflow: str) -> set[str]:
+    """Every job name ci.yml declares, with matrix placeholders expanded.
+
+    Reads the ``name:`` line of each top-level job and, when it carries
+    ``${{ matrix.os }}`` and ``${{ matrix.python-version }}``, the job's own
+    ``os:`` and ``python-version:`` lists. Deliberately narrow: it parses the
+    shapes ci.yml uses today and fails loudly on any other.
+    """
+    names: set[str] = set()
+    jobs_section = workflow.split("\njobs:\n", 1)[1]
+    blocks = re.split(r"\n(?=  [A-Za-z][\w-]*:\n)", "\n" + jobs_section)
+    for block in blocks:
+        name_line = next(
+            (line for line in block.splitlines() if line.startswith("    name: ")), None
+        )
+        if name_line is None:
+            continue
+        template = name_line.removeprefix("    name: ").strip()
+        if "${{" not in template:
+            names.add(template)
+            continue
+        if not template.startswith("Calibration CS grid ("):
+            # Other matrix jobs (the Test matrix uses include:) are not G9's.
+            continue
+        oses = _matrix_list(block, "os")
+        pythons = _matrix_list(block, "python-version")
+        for os_name in oses:
+            for py in pythons:
+                names.add(
+                    template.replace("${{ matrix.os }}", os_name).replace(
+                        "${{ matrix.python-version }}", py
+                    )
+                )
+    return names
+
+
+def _matrix_list(block: str, key: str) -> list[str]:
+    for line in block.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(f"{key}: ["):
+            inner = stripped.removeprefix(f"{key}: [").removesuffix("]")
+            return [item.strip().strip('"') for item in inner.split(",")]
+    raise AssertionError(f"ci.yml job uses matrix.{key} but no inline {key} list was found")
+
+
+def test_every_g9_required_job_name_exists_in_ci_yml() -> None:
+    """#835: G9 matches jobs by exact name, so a rename must fail here first.
+
+    A job renamed in ci.yml without updating REQUIRED_CI_JOBS would make G9
+    fail every release as "appears 0 times". This test moves that failure to
+    the PR that renames the job.
+    """
+    gate = _gate_module()
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    declared = _ci_job_names(workflow)
+
+    missing = [name for name in gate.REQUIRED_CI_JOBS if name not in declared]
+    assert not missing, f"G9 requires jobs ci.yml does not declare: {missing}"
+    calibration = {n for n in declared if n.startswith("Calibration CS grid (")}
+    assert calibration <= set(gate.REQUIRED_CI_JOBS), (
+        f"a calibration matrix cell is not required by G9: {calibration}"
+    )

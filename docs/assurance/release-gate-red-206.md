@@ -27,7 +27,8 @@ Output, verbatim:
 ```text
 G6: not a tag ref (local run) — tag-match check self-skips.
 G8: SKIPPED, not a tag ref, no release candidate commit.
-RELEASE GATE: BLOCKED (6 of 8 gates ran; skipped G6, G8), 1 stale surface(s) at version 0.3.0:
+G9: PASSED, not applicable to the historical 0.3 line (#835).
+RELEASE GATE: BLOCKED (7 of 9 gates ran; skipped G6, G8), 1 stale surface(s) at version 0.3.0:
   FAIL  G7: assurance issue #169 is open
 ```
 
@@ -61,3 +62,9 @@ output of the identical seeded scenario: one failure (the open issue), two
 self-skips (G6 and G8). The finding is unchanged in shape — the same open
 issue still blocks the same release — and the coverage claim now counts G8
 as skipped rather than as a failure the API never answered.
+
+Amended 2026-10-28 under #835. The gate declares a ninth check, G9, which
+reads the release candidate's CI jobs from the 0.5 line on. On the 0.3 line
+G9 passes as not applicable, so the transcript above gains one line and the
+coverage claim reads 7 of 9. The finding is unchanged: the same open issue
+blocks the same release, and G8 still self-skips off a tag ref.

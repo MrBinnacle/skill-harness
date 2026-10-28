@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The release gate closes four assurance bypasses and separates a
+  preliminary result from release authorization** (#835). Each one let a
+  green gate skip assurance:
+  - From the 0.5 line on, an `ASSURANCE_REQUIREMENTS` row with an empty issue
+    list now fails G7, and a row that declares the assurance run unnecessary
+    now fails G8. Lines 0.3 and 0.4 keep the policy they were released under.
+  - G8 now reads only the newest `assurance.yml` run at the release candidate.
+    Before this change, any earlier success at that commit hid a later
+    failure, cancellation or run still in flight.
+  - A new check, G9, applies from the 0.5 line on. On a tag ref it reads the
+    newest `ci.yml` run at the candidate, requires that run to be complete, and
+    requires the drift check, structural bans, dependency audit and all four
+    calibration cells to appear in that one run, each successful. It never
+    combines results across runs or commits. A test fails when `ci.yml`
+    renames one of those jobs.
+  - The gate no longer prints `RELEASE GATE: PASS`. A clean run on a tag ref
+    with all nine gates run prints `RELEASE GATE: AUTHORIZED`. Every other
+    clean run prints `RELEASE GATE: PRELIMINARY` and states that it is not
+    release authorization. Both exit 0, so ordinary CI is unchanged.
+  - A new dispatch-only workflow, `release-authorize.yml`, runs the gate on the
+    release tag before the GitHub Release is created. `publish.yml` still runs
+    the gate after publication, as a downstream defense.
+
+  `docs/assurance/release-gate-bypass-red-835.md` records the new tests
+  against the pre-fix gate: 66 fail there and pass after the fix.
+
 ## [0.4.0] - 2026-10-23
 
 This section records the user-visible changes since v0.3.0. Internal test, CI
