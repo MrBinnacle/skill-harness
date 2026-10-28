@@ -273,9 +273,10 @@ def _run_record(
     conclusion: str = "success",
     created_at: str = "2026-10-01T00:00:00Z",
     run_id: int = 1,
+    run_started_at: str | None = None,
 ) -> dict[str, object]:
-    """One seeded workflow run at ``sha``. ``created_at`` and ``id`` order runs (#835)."""
-    return {
+    """One seeded workflow run at ``sha``. Start time, then ``id``, order runs (#835)."""
+    record: dict[str, object] = {
         "status": status,
         "conclusion": conclusion,
         "path": path,
@@ -283,6 +284,9 @@ def _run_record(
         "created_at": created_at,
         "id": run_id,
     }
+    if run_started_at is not None:
+        record["run_started_at"] = run_started_at
+    return record
 
 
 def _dead_port() -> int:
@@ -1277,6 +1281,61 @@ def test_protects_a_newer_success_after_an_older_failure_passes(tmp_path: Path) 
     result = _run_gate(root, _closed(), runs, ref="refs/tags/v0.3.0", sha=sha)
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_bypass_a_failed_rerun_of_an_older_run_is_not_masked(tmp_path: Path) -> None:
+    """A re-run keeps ``created_at`` and moves ``run_started_at``; the re-run decides.
+
+    Run 1 was created first and re-run last, and the re-run failed. Run 2 was
+    created in between and succeeded. Ordering by ``created_at`` picks run 2.
+    """
+    sha = "a" * 40
+    root = _seed_tree(tmp_path, "0.3.0")
+    runs: list[dict[str, object]] = [
+        _run_record(
+            sha,
+            conclusion="failure",
+            created_at="2026-10-01T00:00:00Z",
+            run_started_at="2026-10-03T00:00:00Z",
+            run_id=1,
+        ),
+        _run_record(sha, created_at="2026-10-02T00:00:00Z", run_id=2),
+    ]
+    result = _run_gate(root, _closed(), runs, ref="refs/tags/v0.3.0", sha=sha)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    g8 = [f for f in _failures(result) if f.startswith("G8:")]
+    assert len(g8) == 1 and "newest" in g8[0], _failures(result)
+
+
+def test_bypass_equal_start_times_fall_to_the_higher_run_id(tmp_path: Path) -> None:
+    """The ``id`` tie-break. The success is listed first, so ``max`` without
+    the ``id`` in its key returns it and this test goes red."""
+    sha = "a" * 40
+    root = _seed_tree(tmp_path, "0.3.0")
+    runs: list[dict[str, object]] = [
+        _run_record(sha, run_id=1),
+        _run_record(sha, conclusion="failure", run_id=2),
+    ]
+    result = _run_gate(root, _closed(), runs, ref="refs/tags/v0.3.0", sha=sha)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    g8 = [f for f in _failures(result) if f.startswith("G8:")]
+    assert len(g8) == 1 and "newest" in g8[0], _failures(result)
+
+
+def test_bypass_a_required_job_listed_twice_fails(tmp_path: Path) -> None:
+    """Exactly once: a duplicated job name cannot say which result is the check."""
+    doc = _jobs()
+    jobs = doc["jobs"]
+    assert isinstance(jobs, list)
+    jobs.append({"name": REQUIRED_JOBS[0], "status": "completed", "conclusion": "success"})
+    doc["total_count"] = len(jobs)
+    result = _strict_tag_run(tmp_path, jobs_by_run={50: doc})
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    g9 = [f for f in _failures(result) if f.startswith("G9:")]
+    assert len(g9) == 1 and "2 times" in g9[0], _failures(result)
 
 
 def test_bypass_off_a_tag_the_gate_never_prints_an_unqualified_pass(tmp_path: Path) -> None:

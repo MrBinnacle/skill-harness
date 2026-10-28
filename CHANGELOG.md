@@ -9,9 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **The release gate closes four assurance bypasses and separates a
-  preliminary result from release authorization** (#835). Each one let a
-  green gate skip assurance:
+- **The release gate closes its assurance bypasses and separates a
+  preliminary result from release authorization** (#835). The first three
+  items below each let a green gate skip assurance; the last two add the
+  check and the verdict that close the gap:
   - From the 0.5 line on, an `ASSURANCE_REQUIREMENTS` row with an empty issue
     list now fails G7, and a row that declares the assurance run unnecessary
     now fails G8. Lines 0.3 and 0.4 keep the policy they were released under.

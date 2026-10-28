@@ -443,9 +443,10 @@ def gate_assurance_lane_green(
     except (OSError, urllib.error.HTTPError, ValueError) as exc:
         errors.append(f"G8: could not read assurance workflow runs at {sha}: {exc}")
         return
+    errors_before = len(errors)
     newest = _newest_run(document, ASSURANCE_WORKFLOW, sha, "G8", errors)
     if newest is None:
-        if not any(e.startswith("G8:") for e in errors):
+        if len(errors) == errors_before:
             errors.append(
                 f"G8: no successful assurance.yml workflow run at the release candidate "
                 f"commit {sha}; produce one with 'gh workflow run assurance.yml "
@@ -481,12 +482,15 @@ def _strict_label() -> str:
 def _newest_run(
     document: object, workflow: str, sha: str, gate: str, errors: list[str]
 ) -> dict[str, object] | None:
-    """The most recently created run of ``workflow`` at exactly ``sha``.
+    """The most recently started run of ``workflow`` at exactly ``sha``.
 
     The newest run is the evidence, so an older success cannot mask a newer
     failure, cancellation or run still in flight (#835). Runs are ordered by
-    ``created_at`` and then ``id``; a matching run without both is an error,
-    because an unordered set cannot say which run is current.
+    ``run_started_at`` and then ``id``. GitHub moves ``run_started_at`` when a
+    run is re-run but keeps ``created_at``, so a failed re-run of an old run
+    outranks a later success. ``created_at`` stands in only when
+    ``run_started_at`` is absent. A matching run with neither, or without an
+    ``id``, is an error, because an unordered set cannot say which run is current.
     """
     runs = document.get("workflow_runs", []) if isinstance(document, dict) else []
     matching = [
@@ -496,14 +500,14 @@ def _newest_run(
     ]
     keyed: list[tuple[str, int, dict[str, object]]] = []
     for run in matching:
-        created, run_id = run.get("created_at"), run.get("id")
-        if not isinstance(created, str) or not isinstance(run_id, int):
+        started, run_id = run.get("run_started_at") or run.get("created_at"), run.get("id")
+        if not isinstance(started, str) or not isinstance(run_id, int):
             errors.append(
-                f"{gate}: a {workflow} run at {sha} has no created_at or id; "
+                f"{gate}: a {workflow} run at {sha} has no start time or id; "
                 "the newest run cannot be identified"
             )
             return None
-        keyed.append((created, run_id, run))
+        keyed.append((started, run_id, run))
     if not keyed:
         return None
     return max(keyed, key=lambda item: (item[0], item[1]))[2]
@@ -540,9 +544,10 @@ def gate_ci_evidence(version: str, errors: list[str], skipped: list[str]) -> Non
     except (OSError, urllib.error.HTTPError, ValueError) as exc:
         errors.append(f"G9: could not read ci.yml runs at {sha}: {exc}")
         return
+    errors_before = len(errors)
     run = _newest_run(runs_document, CI_WORKFLOW, sha, "G9", errors)
     if run is None:
-        if not any(e.startswith("G9:") for e in errors):
+        if len(errors) == errors_before:
             errors.append(f"G9: no ci.yml run at the release candidate commit {sha}")
         return
     if run.get("status") != "completed":
@@ -622,6 +627,15 @@ def main(argv: list[str] | None = None) -> int:
         for e in errors:
             print(f"  FAIL  {e}")
         return 1
+    return _print_verdict(coverage, version, skipped, not_run)
+
+
+def _print_verdict(coverage: str, version: str, skipped: list[str], not_run: list[str]) -> int:
+    """Print the clean-run verdict. Only a complete tag-ref run is AUTHORIZED (#835).
+
+    Both verdicts exit 0 so ordinary CI stays green; the word PASS is withheld
+    on purpose, so no clean run can be read as permission to publish.
+    """
     on_tag = os.environ.get("GITHUB_REF", "").startswith("refs/tags/")
     if on_tag and not skipped and not not_run:
         sha = os.environ.get("GITHUB_SHA", "")
@@ -630,7 +644,6 @@ def main(argv: list[str] | None = None) -> int:
             f"version {version}, release candidate {sha}."
         )
         return 0
-    # Exit 0 so ordinary CI stays green; the word PASS is withheld on purpose (#835).
     print(
         f"RELEASE GATE: PRELIMINARY ({coverage}), public surfaces in lockstep at "
         f"version {version}. Not release authorization: G6, G8 and G9 run only on a "

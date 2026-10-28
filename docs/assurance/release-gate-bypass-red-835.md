@@ -15,10 +15,10 @@ script.
 $ git show 229d7b1:scripts/release_gate.py > /tmp/release_gate_229d7b1.py
 $ RELEASE_GATE_SCRIPT_UNDER_TEST=/tmp/release_gate_229d7b1.py PYTHONHASHSEED=0 \
     python -m pytest -q -n 4 tests/test_release_gate_206.py -k "bypass or protects or authorizes"
-66 failed, 5 passed
+69 failed, 5 passed
 $ PYTHONHASHSEED=0 python -m pytest -q -n 4 \
     tests/test_release_gate_206.py tests/test_release_gate_real_tree.py
-112 passed
+116 passed
 ```
 
 The host ran Python 3.13 on Windows. CI on the pull request is the record for
@@ -31,7 +31,7 @@ read from its name.
 
 | Prefix | Meaning | Pre-fix | Post-fix |
 |---|---|---|---|
-| `test_bypass_` | Exposes a defect in the pre-fix gate | 65 fail | 65 pass |
+| `test_bypass_` | Exposes a defect in the pre-fix gate | 68 fail | 68 pass |
 | `test_authorizes_` | Positive control for the new `AUTHORIZED` verdict | 1 fails (the old gate printed `PASS`) | passes |
 | `test_protects_` | Pins behavior the pre-fix gate already had | 5 pass | 5 pass |
 
@@ -41,9 +41,29 @@ read from its name.
 |---|---|---|
 | From 0.5 on, an empty issue list passed G7 "by declaration" | `test_bypass_empty_assurance_declarations_fail_from_zero_five[empty-issue-list-*]` (lines 0.5, 0.10, 1.0) | Exit 0, no G7 failure |
 | From 0.5 on, `g8_required=False` passed G8 "by declaration" | `...[assurance-declared-unnecessary-*]` (lines 0.5, 0.10, 1.0) | Exit 0, no G8 failure |
-| An older success masked a newer failed, cancelled or running assurance run at the same commit | `test_bypass_an_older_success_does_not_mask_a_newer_assurance_run` (3 cases) | `RELEASE GATE: PASS (8 of 8 gates ran)` |
-| The drift check, structural bans, dependency audit and four calibration cells were never read | `test_bypass_each_required_ci_job_must_be_present_and_green` (7 jobs × missing, failure, skipped, cancelled, timed_out, neutral, in flight = 49 cases); `test_bypass_ci_evidence_at_another_commit_does_not_count`; `test_bypass_a_pending_newer_ci_run_blocks_authorization`; `test_bypass_jobs_are_not_combined_across_runs`; `test_bypass_a_truncated_job_list_fails_closed`; `test_bypass_no_ci_run_at_the_candidate_fails` | `RELEASE GATE: PASS (8 of 8 gates ran)` in all 54 |
+| An older success masked a newer failed, cancelled or running assurance run at the same commit | `test_bypass_an_older_success_does_not_mask_a_newer_assurance_run` (3 cases); `test_bypass_a_failed_rerun_of_an_older_run_is_not_masked`; `test_bypass_equal_start_times_fall_to_the_higher_run_id` | `RELEASE GATE: PASS (8 of 8 gates ran)` |
+| The drift check, structural bans, dependency audit and four calibration cells were never read | `test_bypass_each_required_ci_job_must_be_present_and_green` (7 jobs × missing, failure, skipped, cancelled, timed_out, neutral, in flight = 49 cases); `test_bypass_ci_evidence_at_another_commit_does_not_count`; `test_bypass_a_pending_newer_ci_run_blocks_authorization`; `test_bypass_jobs_are_not_combined_across_runs`; `test_bypass_a_truncated_job_list_fails_closed`; `test_bypass_no_ci_run_at_the_candidate_fails`; `test_bypass_a_required_job_listed_twice_fails` | `RELEASE GATE: PASS (8 of 8 gates ran)` in all 55 |
 | A run off a tag printed an unqualified `RELEASE GATE: PASS` | `test_bypass_off_a_tag_the_gate_never_prints_an_unqualified_pass`; `test_bypass_a_strict_line_off_a_tag_skips_g9_and_is_preliminary` | `PASS` printed; G9 absent from the skipped set |
+
+The pre-fix gate had no ninth check at all. So the 55 tests in the fourth row
+fail before the fix for one reason, the missing check, and not for 55
+separate defects. Each one pins a case that the new check must refuse.
+
+## Mutation evidence for the ordering and the job count
+
+Three rules in the new code fail open if they are weakened. Each was weakened
+in a copy of the fixed script, and the bypass tests were run against that copy
+through `RELEASE_GATE_SCRIPT_UNDER_TEST`.
+
+| Weakened copy | Test that went red | Result |
+|---|---|---|
+| Order runs by start time only, without the run `id` | `test_bypass_equal_start_times_fall_to_the_higher_run_id` | 1 failed, 73 passed |
+| Accept a required job found one or more times, not exactly once | `test_bypass_a_required_job_listed_twice_fails` | 1 failed, 73 passed |
+| Order runs by `created_at`, which a re-run does not change | `test_bypass_a_failed_rerun_of_an_older_run_is_not_masked` | 1 failed, 73 passed |
+
+GitHub keeps a run's `created_at` when the run is re-run and moves its
+`run_started_at`. The gate therefore orders by `run_started_at`, and uses
+`created_at` only when a run record has no `run_started_at`.
 
 The ninth check's rename guard is `test_every_g9_required_job_name_exists_in_ci_yml`
 in `tests/test_release_gate_real_tree.py`. It was shown red by renaming
@@ -74,7 +94,8 @@ behavior. They are not counted as new findings.
   is dispatched on the 0.5.0 tag.
 - That a maintainer cannot bypass the gate. A maintainer can still edit the
   workflows, or create a release without dispatching `release-authorize.yml`.
-  The playbook makes the authorize run a required step, and `publish.yml` runs
+  The owner's release procedure, kept outside this repository, makes the
+  authorize run a required step, and `publish.yml` runs
   the same gate again after publication.
-- The squash-merge tree comparison. That control belongs to the release
-  playbook's step 4 and the release record, not to this script.
+- The squash-merge tree comparison. That control belongs to the owner's
+  release procedure and its release record, not to this script.

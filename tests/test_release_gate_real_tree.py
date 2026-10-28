@@ -39,7 +39,7 @@ Three mutation shapes are measured to survive this module:
 3. ``errors = []`` inserted immediately before ``if errors:`` in ``main``,
    which discards every finding the gate made. This one survives here even
    when a genuinely stale surface is seeded at the same time, because the gate
-   still prints PASS and exits 0.
+   still prints a clean verdict and exits 0.
 
 ``tests/test_release_gate_206.py`` kills shapes 2 and 3 and not shape 1. It
 seeds a tree it has made stale on purpose and asserts the named failure rather
@@ -214,8 +214,8 @@ def test_the_pass_line_names_the_version_this_tree_declares(
 ) -> None:
     """The verdict is about this tree, not a constant the gate carries.
 
-    Exit 0 and the PASS line alone cannot separate a working gate from one
-    short-circuited to an empty failure list. The version in the PASS line
+    Exit 0 and the verdict line alone cannot separate a working gate from one
+    short-circuited to an empty failure list. The version in the verdict line
     can: the gate reads it from pyproject.toml at run time, so a gate that
     stopped reading the tree would have to invent it. This is the assertion
     that goes red under the second red demonstration in the receipt.
@@ -383,3 +383,15 @@ def test_every_g9_required_job_name_exists_in_ci_yml() -> None:
     assert calibration <= set(gate.REQUIRED_CI_JOBS), (
         f"a calibration matrix cell is not required by G9: {calibration}"
     )
+
+
+def test_the_bypass_suite_requires_exactly_the_gate_s_jobs() -> None:
+    """#835: the bypass tests copy REQUIRED_CI_JOBS as a literal; the copy must match.
+
+    The copy is literal so the suite can run against the pre-fix gate, which has
+    no such constant. This test makes a job added to the gate without a matching
+    test fail here.
+    """
+    from tests.test_release_gate_206 import REQUIRED_JOBS
+
+    assert tuple(_gate_module().REQUIRED_CI_JOBS) == REQUIRED_JOBS
