@@ -1,0 +1,112 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-22\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "tests_collected": 1,
+        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+      },
+      "description": "the --rebuild branch returns 0 unconditionally, so a rebuilt directory whose calibration fails reports success",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_of_measured_fixture_writes_its_summary_and_exits_one"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-22\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "62bf721b863f2d675560caff3723c054dd8280645654769a69f8b0975adb4918",
+        "tests_collected": 1,
+        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+      },
+      "mutant_id": "M-S1A-22",
+      "notes": [],
+      "obligation": "715-stage1a-rebuild-exit-zero",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_of_measured_fixture_writes_its_summary_and_exits_one"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-23\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "tests_collected": 1,
+        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+      },
+      "description": "results_from_output_dir reads p_cut from the p_pass column, so every rebuilt P(CUT) is a P(PASS)",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_of_measured_fixture_writes_its_summary_and_exits_one"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-23\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "9635607429ff76ee4960a6da9b3e4ffb5f3f038eef776080f74f89c3655a7c24",
+        "tests_collected": 1,
+        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+      },
+      "mutant_id": "M-S1A-23",
+      "notes": [],
+      "obligation": "715-stage1a-rebuild-p-cut-from-p-pass",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_of_measured_fixture_writes_its_summary_and_exits_one"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-24\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "tests_collected": 2,
+        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+      },
+      "description": "the --rebuild branch ignores run_meta.json, so the rebuilt summary reports the --seed default and the per_look.tsv replicate count",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_of_measured_fixture_writes_its_summary_and_exits_one",
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_reports_the_run_meta_seed_and_replicates"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-24\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "04f5c0e0113d9a86ce63b9393f53b231682d31843e1230eee68ce573d94e49b0",
+        "tests_collected": 2,
+        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+      },
+      "mutant_id": "M-S1A-24",
+      "notes": [],
+      "obligation": "715-stage1a-rebuild-ignores-run-meta",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_of_measured_fixture_writes_its_summary_and_exits_one",
+        "tests/test_simulate_stage1a_regime_685.py::test_rebuild_reports_the_run_meta_seed_and_replicates"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "663ed72e95acdbe47357d10e3e4504c4993d516b",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+  },
+  "production_tree_digest_before": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.1",
+  "target_digests": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+  },
+  "target_files": [
+    "scripts/screens/419/simulate_stage1a_regime_685.py"
+  ]
+}

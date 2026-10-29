@@ -7,10 +7,10 @@ calibration read, constant pin, and replicate-count model statement for the
 record:** `docs/assurance/stage1a-regime-708-mutation-receipt.json`.
 **Pinned by content, not by commit:**
 `scripts/screens/419/simulate_stage1a_regime_685.py` at
-`sha256:0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee`.
-**Commit at generation:** `0ec2266d2330d9c2cceec4799df78aae18cb7e1a` —
+`sha256:a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c`.
+**Commit at generation:** `663ed72e95acdbe47357d10e3e4504c4993d516b` —
 informational only; currency is checked against the digest above by
-`tests/test_mutation_receipt.py`. **Python:** 3.13.15.
+`tests/test_mutation_receipt.py`. **Python:** 3.13.1.
 
 Regenerated after #712 changed the simulator; the five mutants and their
 killing assertions are unchanged and were re-run against the committed tree.

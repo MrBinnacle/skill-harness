@@ -6,10 +6,10 @@ CUT half of the calibration read, and the simulator's inability to read its
 own output. **Generator:** `scripts/mutation_receipt.py --select 712-stage1a`.
 **Machine-readable record:** `docs/assurance/stage1a-regime-712-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685.py` at
-`sha256:0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee`.
-**Commit at generation:** `f09c1ac1695f4e8ceff128b795eecf64391f117b` —
+`sha256:a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c`.
+**Commit at generation:** `663ed72e95acdbe47357d10e3e4504c4993d516b` —
 informational only; currency is checked against the digest above by
-`tests/test_mutation_receipt.py`. **Python:** 3.13.15.
+`tests/test_mutation_receipt.py`. **Python:** 3.13.1.
 
 Each case runs in its own git worktree at a fixed commit. Production is never
 mutated in place. All four cases resolved `simulate_stage1a_regime_685` inside
