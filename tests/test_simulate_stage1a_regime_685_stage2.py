@@ -1311,7 +1311,7 @@ def test_full_grid_structure() -> None:
             assert design.fn_construction == "direct"
         if design.stopping == "anytime":
             assert design.pass_alpha in (0.0209, 0.0105)
-            assert design.starting_wealth == 1.0
+            assert design.starting_wealth in reg.STAGE2_SWEEP.anytime_starting_wealths
         if design.stopping == "anytime-tuned":
             assert design.starting_wealth in reg.STAGE2_SWEEP.starting_wealths
         if design.stopping in ("fixed-n-betting", "fixed-n-score"):
@@ -1709,3 +1709,83 @@ def test_main_writes_the_per_regime_headline_and_fails_on_a_new_row(
     assert code == 1
     headline = (out / "headline_by_accounting.md").read_text(encoding="utf-8")
     assert "## Accounting: carry-over" in headline
+
+
+# ---------------------------------------------------------------------------
+# #868: starting wealth on anytime rows, one CUT rule, the header
+# ---------------------------------------------------------------------------
+
+
+def test_stage2_anytime_rows_sweep_the_anytime_tuned_starting_wealths() -> None:
+    def wealths(grid: list[tuple[Any, Any]], stopping: str) -> set[float]:
+        return {
+            d.starting_wealth
+            for _c, d in grid
+            if d.stopping == stopping and math.isclose(d.pass_alpha, reg.PASS_ALPHA)
+        }
+
+    stage2 = reg.stage2_grid()
+    assert {0.1, 0.05, 0.025, 0.01} <= wealths(stage2, "anytime")
+    assert wealths(stage2, "anytime") == wealths(stage2, "anytime-tuned")
+    new_slot = {
+        d.starting_wealth
+        for _c, d in stage2
+        if d.stopping == "anytime" and math.isclose(d.pass_alpha, reg.NEW_SLOT_ALPHA)
+    }
+    assert new_slot == {1.0}
+    assert wealths(reg.reduced_grid(), "anytime") == {1.0}
+    assert wealths(reg.build_grid(reg.ORIGINAL_SWEEP), "anytime") == {1.0}
+
+
+@pytest.mark.parametrize("fn_construction", ["union", "direct"])
+def test_starting_wealth_changes_anytime_decisions(fn_construction: str) -> None:
+    cell = reg.Cell(0.75, 0.35, 0.35)
+    base = reg.Design(100, 1.0, fn_construction, "anytime", 0.0209, 1.0)
+    low = reg.Design(100, 1.0, fn_construction, "anytime", 0.0209, 0.05)
+    r1 = reg.run_cell(cell, base, replicates=200, seed=41)
+    r05 = reg.run_cell(cell, low, replicates=200, seed=41)
+    assert r05.design.starting_wealth == 0.05
+    assert r1.p_joint_pass > 0.0, "the fixture must produce some PASS at W0 = 1.0"
+    assert r05.p_joint_pass < r1.p_joint_pass
+
+
+@pytest.mark.parametrize("stopping", ["anytime", "anytime-tuned"])
+def test_both_anytime_paths_follow_the_one_cut_rule(
+    stopping: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#868: flipping the CUT rule in the #685 engine moves P(CUT) on both paths."""
+    cell = reg.Cell(0.45, 0.35, 0.35)
+    design = reg.Design(60, 1.0, "direct", stopping, 0.0209, 0.05)
+    applied = reg.run_cell(cell, design, replicates=200, seed=43)
+    monkeypatch.setattr(_s685, "CUT_USES_STARTING_WEALTH", False)
+    unit_cut = reg.run_cell(cell, design, replicates=200, seed=43)
+    assert applied.p_cut < unit_cut.p_cut, (
+        f"{stopping}: CUT must start at the rule's wealth: {applied.p_cut} vs {unit_cut.p_cut}"
+    )
+
+
+def test_summary_header_prints_the_sweep_constants_used() -> None:
+    stage2 = reg.summary_md([], replicates=200, seed=685, sweep=reg.STAGE2_SWEEP)
+    assert f"Pairs: {reg.STAGE2_SWEEP.pairs}." in stage2
+    assert f"Null per pair: {reg.STAGE2_SWEEP.null_per_pair}." in stage2
+    assert f"Fixed-n pass alphas: {reg.STAGE2_SWEEP.fixed_pass_alphas}." in stage2
+    assert f"Starting wealths: {reg.STAGE2_SWEEP.starting_wealths}." in stage2
+    assert f"Anytime pass alphas: {reg.STAGE2_SWEEP.anytime_pass_alphas}." in stage2
+    assert f"Anytime starting wealths: {reg.STAGE2_SWEEP.anytime_starting_wealths}." in stage2
+    reduced = reg.summary_md([], replicates=200, seed=685, sweep=reg.REDUCED_SWEEP)
+    assert f"Pairs: {reg.REDUCED_PAIRS}." in reduced
+    assert "Anytime" not in reduced.split("## Headline")[0]
+
+
+def test_a_run_records_its_sweep_and_rebuild_prints_it(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    grid = [
+        (reg.Cell(0.55, 0.35, 0.35), reg.Design(100, 1.0, "direct", "anytime", 0.0209, 0.05)),
+        (reg.Cell(0.55, 0.35, 0.35), reg.Design(100, 1.0, "direct", "anytime-tuned", 0.0209, 1.0)),
+    ]
+    reg.main(["--out", str(out), "--replicates", "20", "--workers", "1"], grid=grid)
+    written = (out / "summary.md").read_text(encoding="utf-8")
+    assert "Pairs: (100,). Null per pair: (1.0,)." in written
+    assert "Anytime pass alphas: (0.0209,). Anytime starting wealths: (0.05,)." in written
+    reg.main(["--out", str(out), "--rebuild"])
+    assert (out / "summary.md").read_text(encoding="utf-8") == written

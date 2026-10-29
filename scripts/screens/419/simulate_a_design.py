@@ -120,6 +120,7 @@ def one_sided_betting_bound(
     *,
     alpha: float = DEFAULT_ALPHA,
     side: Literal["lower", "upper"],
+    starting_wealth: float = 1.0,
 ) -> float:
     """Terminal one-sided (1-alpha) anytime-valid bound on the mean of [0, 1] observations.
 
@@ -128,9 +129,14 @@ def one_sided_betting_bound(
     engine's version once #649 merges. A lower bound uses only the plus capital process and an
     upper bound only the minus process, with the plug-in lambda at log(1/alpha), inverted at
     1/alpha. Empty input yields the vacuous bound: 0 for ``lower``, 1 for ``upper``.
+
+    Each capital process starts at ``starting_wealth`` (#868) instead of 1; the bet size still
+    reads alpha, so this is not the same test as alpha * starting_wealth.
     """
     if not 0.0 < alpha < 1.0:
         raise ValueError(f"alpha must be in (0, 1), got {alpha!r}")
+    if not 0.0 < starting_wealth <= 1.0:
+        raise ValueError(f"starting_wealth must be in (0, 1], got {starting_wealth!r}")
     if side not in ("lower", "upper"):
         raise ValueError(f"side must be 'lower' or 'upper', got {side!r}")
     xs = [float(x) for x in observations]
@@ -140,7 +146,7 @@ def one_sided_betting_bound(
     if not xs:
         return 0.0 if side == "lower" else 1.0
 
-    log_threshold = math.log(1.0 / alpha)
+    log_threshold = math.log(1.0 / alpha) - math.log(starting_wealth)
 
     def rejected(mu: float) -> bool:
         log_pos, log_neg = _branch_log_wealths(xs, mu, alpha=alpha, sides=1)

@@ -12,7 +12,7 @@ The four stopping designs (``stopping`` column):
 
   anytime           The registered rule, as the #685 simulator runs it.
                     The reference row; F - N construction may be union or
-                    direct; pass alpha 0.0209; starting wealth 1.0.
+                    direct; pass alpha 0.0209; starting wealth 1.0, 0.5 or 0.25.
   anytime-tuned     The same anytime-valid test, with a bet sized for a
                     declared alternative. Direct F - N only. Starting wealth
                     1.0, 0.5 or 0.25.
@@ -22,8 +22,8 @@ The four stopping designs (``stopping`` column):
                     Direct F - N only. Pass alpha 0.0209, 0.0105 or 0.005.
 
 #720 extends the sweep (STAGE2_SWEEP): starting wealth 0.1, 0.05, 0.025 and
-0.01 on anytime-tuned rows; PASS alpha 0.002, 0.001 and 0.0005 on fixed-n
-rows; Null per pair 2.0; 1,000 and 1,200 pairs; and anytime and
+0.01 on anytime-tuned rows, and from #868 on anytime rows; PASS alpha 0.002,
+0.001 and 0.0005 on fixed-n rows; Null per pair 2.0; 1,000 and 1,200 pairs; and anytime and
 anytime-tuned rows at PASS alpha 0.0105. Each row carries an ``accounting``
 label (none, carry-over, new-slot) set by rule from its declared parameters,
 and headline_by_accounting.md reports one headline table per regime.
@@ -44,9 +44,9 @@ import json
 import math
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -692,7 +692,14 @@ def _run_anytime(
         fn_construction=design.fn_construction,
         stopping="anytime",
     )
-    result = s685.run_cell(cell, s_design, replicates=replicates, seed=seed, pass_alpha=alpha)
+    result = s685.run_cell(
+        cell,
+        s_design,
+        replicates=replicates,
+        seed=seed,
+        pass_alpha=alpha,
+        starting_wealth=design.starting_wealth,
+    )
     return _row_from_anytime(cell, design, result)
 
 
@@ -752,7 +759,7 @@ def _run_anytime_tuned(
     running maximum of the wealth reaches 1/alpha. CUT mirrors it: null
     d >= 0.20, bet downward, sized for d = 0.10, alpha 0.05. The direct F-N
     test uses the same construction on the Full-minus-mean-Null observation.
-    W0 is design.starting_wealth.
+    W0 is design.starting_wealth; CUT starts at s685.cut_starting_wealth(W0).
     """
     full, placebo, null_all, null_draws, fn_mask = _draw_streams(
         cell, design, replicates=replicates, seed=seed
@@ -764,7 +771,9 @@ def _run_anytime_tuned(
     horizon = design.n_pairs
 
     fp_pass = TunedWealth(replicates, w0, LAMBDA_FP_PASS, _TUNED_M0, upward=True)
-    fp_cut = TunedWealth(replicates, w0, LAMBDA_FP_CUT, _TUNED_M0, upward=False)
+    fp_cut = TunedWealth(
+        replicates, s685.cut_starting_wealth(w0), LAMBDA_FP_CUT, _TUNED_M0, upward=False
+    )
     fn_pass = TunedWealth(replicates, w0, LAMBDA_FN_PASS, _TUNED_M0, upward=True)
 
     stop_at = np.full(replicates, horizon + 1, dtype=np.int64)
@@ -1313,7 +1322,8 @@ class Sweep:
 
     ``anytime_pass_alphas`` are the PASS alphas of anytime and anytime-tuned
     rows at starting wealth 1.0; ``starting_wealths`` apply to anytime-tuned
-    rows at PASS_ALPHA only, so every row carries one accounting regime.
+    rows and ``anytime_starting_wealths`` to anytime rows, at PASS_ALPHA only,
+    so every row carries one accounting regime.
     """
 
     pairs: tuple[int, ...]
@@ -1322,6 +1332,7 @@ class Sweep:
     anytime_pass_alphas: tuple[float, ...]
     starting_wealths: tuple[float, ...]
     fixed_pass_alphas: tuple[float, ...]
+    anytime_starting_wealths: tuple[float, ...] = (1.0,)
 
 
 ORIGINAL_SWEEP = Sweep(
@@ -1339,6 +1350,7 @@ STAGE2_SWEEP = Sweep(
     anytime_pass_alphas=(PASS_ALPHA, NEW_SLOT_ALPHA),
     starting_wealths=STARTING_WEALTHS + ADDED_STARTING_WEALTHS,
     fixed_pass_alphas=FIXED_PASS_ALPHAS + ADDED_FIXED_PASS_ALPHAS,
+    anytime_starting_wealths=STARTING_WEALTHS + ADDED_STARTING_WEALTHS,
 )
 REDUCED_SWEEP = Sweep(
     pairs=REDUCED_PAIRS,
@@ -1350,14 +1362,38 @@ REDUCED_SWEEP = Sweep(
 )
 
 
+def sweep_of(grid: Sequence[tuple[Cell, Design]]) -> Sweep:
+    """The values ``grid`` actually sweeps, each in first-appearance order."""
+
+    def values(
+        pick: Callable[[Design], float], stoppings: tuple[str, ...] = STOPPINGS
+    ) -> tuple[float, ...]:
+        return tuple(dict.fromkeys(pick(d) for _c, d in grid if d.stopping in stoppings))
+
+    anytime_family = ("anytime", "anytime-tuned")
+    return Sweep(
+        pairs=tuple(dict.fromkeys(d.n_pairs for _c, d in grid)),
+        null_per_pair=values(lambda d: d.null_per_pair),
+        effects=tuple(dict.fromkeys(round(c.p_full - c.p_placebo, 10) for c, _d in grid)),
+        anytime_pass_alphas=values(lambda d: d.pass_alpha, anytime_family),
+        starting_wealths=values(lambda d: d.starting_wealth, ("anytime-tuned",)),
+        fixed_pass_alphas=values(lambda d: d.pass_alpha, ("fixed-n-betting", "fixed-n-score")),
+        anytime_starting_wealths=values(lambda d: d.starting_wealth, ("anytime",)),
+    )
+
+
 def _designs(sweep: Sweep, n_pairs: int, null_pp: float) -> list[Design]:
     def make(stopping: str, fn_con: str, alpha: float, w0: float) -> Design:
         return Design(n_pairs, null_pp, fn_con, stopping, alpha, w0)
 
     out: list[Design] = []
     for alpha in sweep.anytime_pass_alphas:
-        out += [make("anytime", fn_con, alpha, 1.0) for fn_con in FN_ANYTIME]
-        wealths = sweep.starting_wealths if math.isclose(alpha, PASS_ALPHA) else (1.0,)
+        at_pass_alpha = math.isclose(alpha, PASS_ALPHA)
+        anytime_wealths = sweep.anytime_starting_wealths if at_pass_alpha else (1.0,)
+        out += [
+            make("anytime", fn_con, alpha, w0) for w0 in anytime_wealths for fn_con in FN_ANYTIME
+        ]
+        wealths = sweep.starting_wealths if at_pass_alpha else (1.0,)
         out += [make("anytime-tuned", "direct", alpha, w0) for w0 in wealths]
         if math.isclose(alpha, PASS_ALPHA):
             out += [
@@ -1568,15 +1604,29 @@ def headline_by_accounting_md(rows: Sequence[Row]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def summary_md(rows: Sequence[Row], replicates: int, seed: int) -> str:
+def _anytime_sweep_lines(sweep: Sweep) -> list[str]:
+    """Empty for a sweep without #720 anytime values, so older summaries rebuild unchanged."""
+    if sweep.anytime_pass_alphas == (PASS_ALPHA,) and sweep.anytime_starting_wealths == (1.0,):
+        return []
+    return [
+        f"Anytime pass alphas: {sweep.anytime_pass_alphas}. "
+        f"Anytime starting wealths: {sweep.anytime_starting_wealths}."
+    ]
+
+
+def summary_md(
+    rows: Sequence[Row], replicates: int, seed: int, sweep: Sweep = ORIGINAL_SWEEP
+) -> str:
     headline = headline_rows(rows)
     lines = [
         "#718 Stage 2: stopping design x pairs under #685",
         "",
         f"Replicates per cell: {replicates}. Seed: {seed}.",
         f"Stoppings: {', '.join(STOPPINGS)}.",
-        f"Pairs: {PAIRS}. Null per pair: {NULL_PER_PAIR}.",
-        f"Fixed-n pass alphas: {FIXED_PASS_ALPHAS}. Starting wealths: {STARTING_WEALTHS}.",
+        f"Pairs: {sweep.pairs}. Null per pair: {sweep.null_per_pair}.",
+        f"Fixed-n pass alphas: {sweep.fixed_pass_alphas}. "
+        f"Starting wealths: {sweep.starting_wealths}.",
+        *_anytime_sweep_lines(sweep),
         "CUT alpha 0.05 on every row. F - N construction: direct on every new design;",
         "union only on anytime rows.",
         "",
@@ -1659,19 +1709,26 @@ def summary_md(rows: Sequence[Row], replicates: int, seed: int) -> str:
 _RUN_META_NAME = "run_meta.json"
 
 
-def _write_run_meta(out_dir: Path, *, replicates: int, seed: int) -> None:
-    payload = {"replicates": replicates, "seed": seed}
+def _write_run_meta(out_dir: Path, *, replicates: int, seed: int, sweep: Sweep) -> None:
+    payload = {"replicates": replicates, "seed": seed, "sweep": asdict(sweep)}
     (out_dir / _RUN_META_NAME).write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
 
-def _read_run_meta(out_dir: Path) -> tuple[int, int] | None:
+def _read_run_meta(out_dir: Path) -> tuple[int, int, Sweep] | None:
+    """Replicates, seed and sweep of a run; a run from before #868 recorded the original sweep."""
     path = out_dir / _RUN_META_NAME
     if not path.is_file():
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
-    return int(data["replicates"]), int(data["seed"])
+    raw = data.get("sweep")
+    sweep = (
+        ORIGINAL_SWEEP
+        if raw is None
+        else Sweep(**{name: tuple(values) for name, values in raw.items()})
+    )
+    return int(data["replicates"]), int(data["seed"]), sweep
 
 
 def _design_from_row(cells: list[str], cols: dict[str, int]) -> Design:
@@ -1836,9 +1893,10 @@ def main(
         rows, replicates = rows_from_output_dir(args.out)
         meta = _read_run_meta(args.out)
         seed = args.seed if meta is None else meta[1]
+        sweep = ORIGINAL_SWEEP if meta is None else meta[2]
         if meta is not None:
             replicates = meta[0]
-        summary = summary_md(rows, replicates, seed)
+        summary = summary_md(rows, replicates, seed, sweep)
         (args.out / "summary.md").write_text(summary, encoding="utf-8")
         _write_headline_by_accounting(args.out, rows)
         print(summary)
@@ -1855,8 +1913,9 @@ def main(
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
             rows = list(pool.map(_run, jobs))
     (args.out / "per_look.tsv").write_text(per_look_tsv(rows), encoding="utf-8")
-    _write_run_meta(args.out, replicates=args.replicates, seed=args.seed)
-    summary = summary_md(rows, args.replicates, args.seed)
+    sweep = sweep_of(chosen)
+    _write_run_meta(args.out, replicates=args.replicates, seed=args.seed, sweep=sweep)
+    summary = summary_md(rows, args.replicates, args.seed, sweep)
     (args.out / "summary.md").write_text(summary, encoding="utf-8")
     _write_headline_by_accounting(args.out, rows)
     pn_configs = sorted({(d.n_pairs, d.null_per_pair) for _c, d in chosen})
