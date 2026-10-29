@@ -568,6 +568,22 @@ and covers that section only. This page stays the citable surface for every kind
   campaign's mutant set and was not edited; no registered constant in the
   simulator or in `scripts/screens/419/v5_cue_stage1a.py` changed.
 
+### [`docs/assurance/stage1a-regime-715-mutation-receipt.md`](assurance/stage1a-regime-715-mutation-receipt.md)
+
+- **Claims:** Three mutants against the `--rebuild` path of the Stage 1A
+  regime simulator under the #715 repair, each run in its own git worktree at a
+  fixed commit with a clean baseline passing first and the production tree
+  byte-unchanged afterwards. All three KILLED: M-S1A-22 makes a rebuild return
+  0 unconditionally, M-S1A-23 reads `p_cut` from the `p_pass` column, and
+  M-S1A-24 ignores `run_meta.json`. The campaign pins
+  `scripts/screens/419/simulate_stage1a_regime_685.py` at
+  `sha256:a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c`.
+  The companion 685, 708 and 712 receipts were regenerated against the same
+  digest with unchanged per-mutant verdicts.
+- **Refuses to claim:** Any mutation score, adequacy of the Stage 1A suite as
+  a whole, that any surviving mutant outside the three named cases is safe, or
+  anything about the committed full-grid data.
+
 ### [`docs/assurance/stage1a-regime-718-mutation-receipt.md`](assurance/stage1a-regime-718-mutation-receipt.md)
 
 - **Claims:** Sixteen mutants against the Stage 2 stopping-design simulator

@@ -4,9 +4,9 @@
 failed on the whole ticket. **Generator:** `scripts/mutation_receipt.py --select 695-stage1a`.
 **Machine-readable record:** `docs/assurance/stage1a-regime-685-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685.py` at
-`sha256:0fcea0f8c12913f3a3aa27375dd3a18f434a54b2e048fd1cb02bc8c02d36d7ee`.
-**Commit at generation:** `66ea37bf69ebdbdb4960fc2652555b69b5aa5a38` — informational only; currency is checked against the
-digest above by `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
+`sha256:a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c`.
+**Commit at generation:** `663ed72e95acdbe47357d10e3e4504c4993d516b` — informational only; currency is checked against the
+digest above by `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
 
 Regenerated after #712 changed the simulator; the twelve mutants and their
 killing assertions are unchanged and were re-run against the committed tree.

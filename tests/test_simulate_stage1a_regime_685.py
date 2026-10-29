@@ -1292,7 +1292,7 @@ def test_committed_full_summary_is_what_rebuild_writes_and_calibration_holds(
     for name in ("per_look.tsv", "terminal_states.tsv"):
         (out / name).write_bytes((_DATA_DIR / name).read_bytes())
 
-    assert reg.main(["--out", str(out), "--rebuild"]) == 0
+    assert reg.main(["--out", str(out), "--rebuild"], grid=_tiny_grid()) == 0
 
     committed = (_DATA_DIR / "summary.md").read_text(encoding="utf-8")
     assert (out / "summary.md").read_text(encoding="utf-8") == committed
@@ -1561,10 +1561,123 @@ def test_rebuild_refuses_to_invent_missing_terminal_states(tmp_path: Path) -> No
     for name in ("per_look.tsv", "terminal_states.tsv"):
         (out / name).write_text((_SMOKE_DIR / name).read_text(encoding="utf-8"), encoding="utf-8")
 
-    code = reg.main(["--out", str(out), "--rebuild"])
+    code = reg.main(["--out", str(out), "--rebuild"], grid=_tiny_grid())
     summary = (out / "summary.md").read_text(encoding="utf-8")
     terminal_block = summary[summary.find("## Joint terminal state") :]
 
     assert code in (0, 1)
     assert "Terminal-state data are unavailable for one or more cap cells" in terminal_block
     assert "| n_pairs | null_per_pair | fn_construction |" not in terminal_block
+
+
+# ---------------------------------------------------------------------------
+# #715: a hand-written rebuild fixture whose summary carries measured values
+# ---------------------------------------------------------------------------
+
+_FIXTURE_SEED = 4242
+_FIXTURE_REPLICATES = 2000
+_FIXTURE_FAILING_CELL = reg.Cell(0.55, 0.35, 0.35)
+
+
+def _rebuild_fixture_results() -> list[Any]:
+    """One 400-pair union family over the nine baselines at d = 0.10, 0.20, 0.30.
+
+    The diagonal reaches 0.80 on both halves, so the headline, target check and
+    sensitivity rows read measured numbers. P(CUT) differs from P(PASS) in every
+    row. The d = 0.20 cell at (0.35, 0.35) over-cuts, so calibration fails there.
+    """
+    design = reg.Design(n_pairs=reg.PAIRS_CAP, null_per_pair=1.0, fn_construction="union")
+    results: list[Any] = []
+    for p_p in reg.BASELINES:
+        for p_n in reg.BASELINES:
+            diag = p_p == p_n
+            margin = (p_p, p_n) == (0.30, 0.40)
+            for d, p_pass, p_cut in (
+                (0.10, 0.0040, 0.8600 if diag else 0.8300),
+                (0.20, 0.0150, 0.0350),
+                (0.30, 0.0180 if margin else (0.8700 if diag else 0.8200), 0.0010),
+            ):
+                cell = reg.Cell(round(p_p + d, 10), p_p, p_n)
+                cut = 0.2000 if cell == _FIXTURE_FAILING_CELL else p_cut
+                results.append(
+                    _hand_result(
+                        cell, design, p_pass=p_pass, p_cut=cut, replicates=_FIXTURE_REPLICATES
+                    )
+                )
+    return results
+
+
+def _write_rebuild_fixture(out: Path, results: list[Any], *, seed: int) -> None:
+    out.mkdir()
+    (out / "per_look.tsv").write_text(reg.per_look_tsv(results), encoding="utf-8")
+    (out / "terminal_states.tsv").write_text(reg.terminal_tsv(results), encoding="utf-8")
+    (out / "run_meta.json").write_text(
+        f'{{"replicates": {_FIXTURE_REPLICATES}, "seed": {seed}}}\n', encoding="utf-8"
+    )
+
+
+def _tiny_grid() -> list[tuple[Any, Any]]:
+    """Bounds a disabled rebuild branch to one cheap cell instead of the stage-1 grid."""
+    return [(reg.Cell(0.55, 0.35, 0.30), reg.Design(n_pairs=30, null_per_pair=0.5))]
+
+
+def test_rebuild_of_measured_fixture_writes_its_summary_and_exits_one(tmp_path: Path) -> None:
+    """#715: rebuild exit code and summary carry measured headline, calibration, sensitivity."""
+    out = tmp_path / "out"
+    results = _rebuild_fixture_results()
+    _write_rebuild_fixture(out, results, seed=_FIXTURE_SEED)
+
+    code = reg.main(["--out", str(out), "--rebuild"], grid=_tiny_grid())
+    rebuilt = (out / "summary.md").read_text(encoding="utf-8")
+
+    assert code == 1, "the (0.35, 0.35) d=0.20 cell over-cuts, so calibration fails"
+    assert rebuilt == reg.summary_md(results, _FIXTURE_REPLICATES, _FIXTURE_SEED)
+    for measured in (
+        "| union | 0.35 | 0.35 | 0.30 |",
+        "| union | 0.30 | 0.40 | not reached on this grid |",
+        "| 400 | 1.00 | union | 0.35 | 0.35 | 0.20 | calibration | 0.55 | 0.0150 "
+        "| 0.0000 | 0.2000 |",
+        "| NO |",
+        "| 0.80 | 1.00 | union | 400 pairs | 1200 |",
+        "| 0.8700 | 0.8600 | - | does not fire |",
+        "| 0.80 | 1.00 | union | 1200 | 0.0180 | 0.8300 |",
+    ):
+        assert measured in rebuilt, f"rebuilt summary is missing {measured!r}"
+
+
+def test_rebuild_reports_the_run_meta_seed_and_replicates(tmp_path: Path) -> None:
+    """#715: run_meta.json, not --seed or per_look.tsv, sets the rebuilt seed and replicates."""
+    out = tmp_path / "out"
+    results = _rebuild_fixture_results()
+    _write_rebuild_fixture(out, results, seed=_FIXTURE_SEED)
+    (out / "run_meta.json").write_text('{"replicates": 2500, "seed": 4242}\n', encoding="utf-8")
+
+    reg.main(["--out", str(out), "--rebuild"], grid=_tiny_grid())
+    rebuilt = (out / "summary.md").read_text(encoding="utf-8")
+
+    assert "Replicates per cell: 2500. Seed: 4242." in rebuilt
+
+
+def test_rebuild_prints_the_same_calibration_failures_as_the_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """#715: a failing rebuild names its failing cells exactly as the run did."""
+    out = tmp_path / "out"
+    grid = _tiny_grid()
+    run_code = reg.main(
+        ["--out", str(out), "--replicates", "600", "--workers", "1", "--seed", "685"],
+        grid=grid,
+        pass_alpha=0.6,
+    )
+    run_lines = [
+        line for line in capsys.readouterr().out.splitlines() if "CALIBRATION FAILURE" in line
+    ]
+
+    rebuild_code = reg.main(["--out", str(out), "--rebuild"], grid=grid)
+    rebuild_lines = [
+        line for line in capsys.readouterr().out.splitlines() if "CALIBRATION FAILURE" in line
+    ]
+
+    assert run_code == rebuild_code == 1
+    assert run_lines, "the loosened run must report a failing cell"
+    assert rebuild_lines == run_lines
