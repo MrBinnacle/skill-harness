@@ -200,7 +200,10 @@ def classify_trajectory(
     :param cues: Cue name to compiled regex, matched with ``re.search``.
     :param treatment_skill: The skill this arm treats with, whose own load is
         not a leak. A Null or Placebo arm passes ``None``, so every skill load
-        before the hazard counts.
+        before the hazard counts. Pass the skill's directory basename, the
+        last path segment of the load preamble, not its frontmatter ``name``:
+        a skill whose directory is named differently would otherwise read as
+        a leak of itself.
     """
     hazard = re.compile(hazard_pattern) if isinstance(hazard_pattern, str) else hazard_pattern
     flat = _flatten(messages, hazard)
