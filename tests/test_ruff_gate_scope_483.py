@@ -2,7 +2,8 @@
 
 The two gates disagreed: CI ran ``ruff check src tests`` while the pre-commit
 ruff hook had no ``files:`` restriction and therefore linted ``prototypes/``
-too. The three findings in ``prototypes/PROTOTYPE_firewall_walkthrough.py``
+(moved to ``examples/prototypes/`` by #858) too. The three findings in
+``prototypes/PROTOTYPE_firewall_walkthrough.py``
 were latent in CI and fatal in ``pre-commit run --all-files``.
 
 This test parses both configs and asserts the ruff path sets are identical.
@@ -189,9 +190,9 @@ def test_ruff_src_config_includes_scripts() -> None:
 
 
 def test_extend_exclude_includes_prototypes() -> None:
-    """prototypes/ must be in ruff's extend-exclude (issue #483)."""
+    """examples/prototypes/ must be in ruff's extend-exclude (issue #483)."""
     excludes = _extend_exclude()
-    assert "prototypes" in excludes, (
-        f"prototypes/ not in extend-exclude; found {sorted(excludes)}. "
+    assert "examples/prototypes" in excludes, (
+        f"examples/prototypes/ not in extend-exclude; found {sorted(excludes)}. "
         "Throwaway walkthrough scripts are not held to production lint."
     )

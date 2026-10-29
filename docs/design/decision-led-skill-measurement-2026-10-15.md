@@ -8,7 +8,7 @@ Sources: skill-harness `49a77f6`; the owner's private research repository at `3d
 **What changes when I add this skill to the setup where I intend to use it, and what does
 it cost?** The author decides whether to ship, revise, restrict use or leave benefit unresolved.
 [ADR 0002](../adr/0002-reader-facing-record-cost-grade-scoped-verdict.md) reconciles the earlier
-cost-only destination with [PRODUCT.md](../../PRODUCT.md): publish cost, evidence grade and a
+cost-only destination with [PRODUCT.md](../PRODUCT.md): publish cost, evidence grade and a
 scoped verdict together; the reader decides deployment. A research milestone of one KEEP or
 CUT does not supersede the product's acceptance of `CANT_TELL_YET`.
 

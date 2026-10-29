@@ -216,7 +216,7 @@ class SiteShell:
     ``nav`` is a sequence of (href, label). It differs between the two flag
     states, which is why the nav is data rather than markup in the template, and
     it is what supplies the page identity ``aria-current`` needs. One change,
-    two fixes: the current-page marker has been open as DESIGN.md Known
+    two fixes: the current-page marker has been open as docs/design/DESIGN.md Known
     Divergence 7 since #308.
 
     Every field except ``marker`` carries the flag-off default, so a caller that

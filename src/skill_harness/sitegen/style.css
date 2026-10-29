@@ -6,7 +6,7 @@
  * refusal is a result here, not an absence.
  *
  * Every colour, font-family and font-size literal below is a value declared in
- * DESIGN.md's token block (the Test Bench); the conformance test reads that
+ * docs/design/DESIGN.md's token block (the Test Bench); the conformance test reads that
  * block and fails on any literal it does not find.
  *
  * All styling lives here. A <style> block or a style= attribute in a template

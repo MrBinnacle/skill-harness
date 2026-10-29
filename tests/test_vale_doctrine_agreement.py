@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_STYLES_DIR = _REPO_ROOT / "styles" / "Taste"
-_FIXTURES_DIR = _REPO_ROOT / "fixtures" / "vale"
+_STYLES_DIR = _REPO_ROOT / ".config" / "vale" / "styles" / "Taste"
+_FIXTURES_DIR = _REPO_ROOT / "tests" / "fixtures" / "vale"
 
 _EXPECTED_ROWS = {
     "Dressing",
@@ -106,7 +106,7 @@ def _run_vale_json(file_path: Path) -> dict[str, list[dict[str, object]]]:
         [
             str(_VALE_BIN),
             "--config",
-            str(_REPO_ROOT / ".vale.ini"),
+            str(_REPO_ROOT / ".config" / "vale" / ".vale.ini"),
             "--output=JSON",
             str(file_path),
         ],

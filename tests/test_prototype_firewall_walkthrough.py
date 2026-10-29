@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-WALKTHROUGH = REPO_ROOT / "prototypes" / "PROTOTYPE_firewall_walkthrough.py"
+WALKTHROUGH = REPO_ROOT / "examples" / "prototypes" / "PROTOTYPE_firewall_walkthrough.py"
 
 
 def test_walkthrough_runs_and_every_attack_fails() -> None:

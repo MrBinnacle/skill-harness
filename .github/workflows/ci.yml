@@ -551,10 +551,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # Promoted by ticket #108 (the cross-repo Taste-promotion ticket): five of the six Taste rows are
-    # ERROR level now (see .vale.ini per-row overrides), and this job gates on them --
+    # ERROR level now (see .config/vale/.vale.ini per-row overrides), and this job gates on them --
     # it is in all-green.needs and _REQUIRED_JOB_IDS below. Generic-ness stays warning
     # (two hits sit in an ADR this pass's canonical-document guard would not let it
-    # touch; see .vale.ini for the full reason), so it reports without failing the job.
+    # touch; see .config/vale/.vale.ini for the full reason), so it reports without failing the job.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Cache Vale binary
@@ -595,21 +595,21 @@ jobs:
         # is proof the rule fires, not a build defect, so this step never gates.
         continue-on-error: true
         run: |
-          vale --config .vale.ini fixtures/vale/
+          vale --config .config/vale/.vale.ini tests/fixtures/vale/
       - name: Run Vale on prose (report, all rows)
         # Warning-level rows (currently Generic-ness) are visible here without gating.
         # The error-level gate is the step below.
         continue-on-error: true
         run: |
-          vale --config .vale.ini --glob='*.md' README.md docs/
+          vale --config .config/vale/.vale.ini --glob='*.md' README.md docs/
       - name: Run Vale on prose (gate, error-level rows only)
         # --glob='*.md' is load-bearing, and it is here because a screenshot reddened
         # this gate. Vale walks EVERY file under docs/ regardless of type, and
-        # .vale.ini applies the Taste style under a `[*]` section, so the first PNG
+        # .config/vale/.vale.ini applies the Taste style under a `[*]` section, so the first PNG
         # committed under docs/ produced thirteen Dressing errors -- each one a glyph
         # Vale found by decoding image bytes as text. The prose was never at fault.
         #
-        # An empty BasedOnStyles under an extension glob in .vale.ini does NOT fix
+        # An empty BasedOnStyles under an extension glob in .config/vale/.vale.ini does NOT fix
         # this; it was tried and the thirteen errors survived. The flag is Vale's
         # documented mechanism and it is the one that works.
         #
@@ -619,7 +619,7 @@ jobs:
         # or PDF added under docs/ would have reddened this gate the same way, so the
         # trap was latent rather than specific to one file.
         run: |
-          vale --config .vale.ini --minAlertLevel=error --glob='*.md' README.md docs/
+          vale --config .config/vale/.vale.ini --minAlertLevel=error --glob='*.md' README.md docs/
 
   # NON-required (#563): this job is not itself a branch-protection context. Branch
   # protection on main requires exactly: Lint + format, mypy --strict, the four

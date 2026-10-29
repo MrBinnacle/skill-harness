@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DESIGN_MD = REPO_ROOT / "DESIGN.md"
+DESIGN_MD = REPO_ROOT / "docs" / "design" / "DESIGN.md"
 STYLE_CSS = REPO_ROOT / "src" / "skill_harness" / "sitegen" / "style.css"
 ASSETS_DIR = REPO_ROOT / "assets"
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures" / "design_tokens"

@@ -70,5 +70,5 @@ suggests: build the world, then let the documenter write `DESIGN.md` from what w
 `new-work.md`. The conformance suite runs red on the branch in between, and green before the
 pull request.
 
-Still to do: the seven remaining pages, the four fenced SVG assets, `.impeccable/design.json`
+Still to do: the seven remaining pages, the four fenced SVG assets, `docs/design/design.json`
 re-derived against the new `DESIGN.md`, and the tests that assert the retired world.
