@@ -1287,7 +1287,6 @@ MUTANTS: tuple[Mutant, ...] = (
         "        n_null = int(fn_mask.sum())  # mutant: pairs, not draws",
         (_S2_NULL_COUNT, _S2_NULL_COUNT_RUN),
     ),
-    # #798: the P - N bound read at 0.025 per side instead of 0.0125.
     Mutant(
         "M-S2-21",
         "798-stage2-pn-alpha-025",
