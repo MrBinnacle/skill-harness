@@ -1,0 +1,94 @@
+name: dependency-audit
+
+# #702: ci.yml's dependency-audit job runs only when a commit or pull request
+# arrives, so an advisory published against an unchanged dependency stayed
+# unseen until a pull request happened to run it. This weekly run audits the
+# same environment and files an issue when it turns red. Advisory: it has no
+# push or pull_request trigger and is not a required check.
+on:
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      findings: ${{ steps.audit.outputs.findings }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-ci.txt
+      - name: Install the constrained CI environment
+        run: python -m pip install -c requirements-ci.txt -e ".[dev]" pip-audit
+      # The human-readable audit is the command ci.yml runs, and it decides the
+      # step's exit code. The JSON report only names the findings for the issue,
+      # so the step runs without `set -e` and exits with the audit's status.
+      - name: Audit installed dependencies
+        id: audit
+        run: |
+          set -uo pipefail
+          status=0
+          python -m pip_audit --local || status=$?
+          python -m pip_audit --local --format json --output "$RUNNER_TEMP/audit.json" || true
+          findings=$(python scripts/summarize_pip_audit.py "$RUNNER_TEMP/audit.json") \
+            || findings="The JSON report could not be read; see the run log."
+          {
+            echo "findings<<FINDINGS_EOF"
+            echo "$findings"
+            echo "FINDINGS_EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+  # One open issue owns a red run: the first red run opens it, and each later
+  # one comments on it.
+  report-failure:
+    needs: audit
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the audit-failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: 'dependency-audit: the scheduled pip-audit is failing'
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref_name }}
+          FINDINGS: ${{ needs.audit.outputs.findings }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/body.md"
+          {
+            echo "The \`dependency-audit\` workflow failed (\`python -m pip_audit --local\` against the \`requirements-ci.txt\` environment)."
+            echo
+            echo "- Run: $RUN_URL"
+            echo "- Trigger: \`$EVENT\` on \`$REF\`"
+            echo
+            echo "Package, advisory and fix version:"
+            echo
+            if [ -n "${FINDINGS:-}" ]; then
+              printf '%s\n' "$FINDINGS" | sed 's/^/- /'
+            else
+              echo "- None captured; the run failed before the audit finished, so read its log."
+            fi
+          } > "$body"
+          number=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title \
+            --jq 'map(select(.title == env.TITLE)) | first | .number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body-file "$body"
+          else
+            gh issue create --title "$TITLE" --body-file "$body"
+          fi
