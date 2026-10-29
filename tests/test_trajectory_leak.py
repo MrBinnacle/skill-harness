@@ -244,6 +244,20 @@ def test_later_user_message_without_the_preamble_names_no_skill() -> None:
     assert trajectory.leaked
 
 
+def test_preamble_quoted_mid_message_is_not_a_skill_load() -> None:
+    quoted = _user(
+        "The log said\nBase directory for this skill: /home/u/.skills/gitpull\n"
+        "and the notes say never rewrite main"
+    )
+
+    trajectory = classify_trajectory(
+        _loads_then_pulls(quoted), HAZARD, CUES, treatment_skill="gitpull"
+    )
+
+    assert _timing(trajectory, "do_not_rewrite").skill is None
+    assert trajectory.leaked
+
+
 @pytest.mark.parametrize(
     "path", ["C:\\Users\\u\\.skills\\gitpull", "/home/u/.skills/gitpull/", "gitpull"]
 )
