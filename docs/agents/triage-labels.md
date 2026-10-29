@@ -26,6 +26,22 @@ Measured 2026-09-02 (S394): seven open `ready-for-human` tickets across the thre
 
 Edit the right-hand column to match whatever vocabulary you actually use.
 
+## Category labels
+
+A category says what kind of change the issue asks for. Every open issue carries exactly one,
+because the `triage` skill sorts on it ("Every triaged issue should carry exactly one category
+role and one state role"):
+
+- `bug`: something is broken or states a false fact.
+- `enhancement`: new behaviour or an improvement.
+
+`documentation` is a topic label. It may sit beside a category and never replaces one.
+`wayfinder:*`, `dependencies` and `github_actions` are type and tooling labels outside every axis.
+
+This section is a list, not a table, on purpose. The issue-creation guard reads every table row
+under the nearest axis heading as a value of that axis. A category table here would count `bug`
+as a role or a disposition, and the guard would then accept an issue that carries no next actor.
+
 ## Disposition axis
 
 A disposition records what was decided. An issue carrying a disposition carries no role, because a
