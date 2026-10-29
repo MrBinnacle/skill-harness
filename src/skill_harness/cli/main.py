@@ -11,7 +11,7 @@ import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 from rich.console import Console
@@ -29,6 +29,9 @@ from skill_harness.extractor import (
 from skill_harness.ratification import check_execute_ratification
 from skill_harness.storage.context import StorageContext
 from skill_harness.storage.recovery import find_resumable_run_for_skill
+
+if TYPE_CHECKING:
+    from skill_harness.preflight import ArtifactAuditReport
 
 
 def _console() -> Console:
@@ -296,12 +299,30 @@ extraction output (skill init --out) and render via skill audit --extraction."""
         "(zero-power; no DB)."
     ),
 )
+@click.option(
+    "--persist",
+    is_flag=True,
+    default=False,
+    help=(
+        "Write a hash-bound JSON audit record to --out (one file per skill, "
+        "replacing the previous audit). Still no DB and no cost."
+    ),
+)
+@click.option(
+    "--out",
+    "out_dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Directory for --persist records [default: docs/sers/audits].",
+)
 @click.pass_context
 def skill_audit(
     ctx: click.Context,
     path: Path,
     strict: bool,
     extraction_path: Path | None,
+    persist: bool,
+    out_dir: Path | None,
 ) -> None:
     """Offline preflight of a skill artifact — no API key, no DB, no cost.
 
@@ -312,6 +333,8 @@ def skill_audit(
     """
     from skill_harness.preflight import audit_skill_artifact
 
+    if out_dir is not None and not persist:
+        raise click.UsageError("--out only applies with --persist.")
     try:
         report = audit_skill_artifact(path)
     except MalformedSkillError as exc:
@@ -406,8 +429,27 @@ def skill_audit(
         "UNMEASURED is a recorded state, not a failure (docs/concepts/why-unmeasured.md)."
     )
     _print_clause_evidence(report.source_sha256, extraction_path)
+    if persist:
+        _persist_audit_record(report, out_dir)
     if strict and report.warn_count > 0:
         ctx.exit(1)
+
+
+def _persist_audit_record(report: ArtifactAuditReport, out_dir: Path | None) -> None:
+    """Write the #673 audit record; refuse an unsafe skill name as a ClickException."""
+    from skill_harness.audit_record import (
+        DEFAULT_AUDITS_DIR,
+        AuditRecordError,
+        record_from_report,
+        write_audit_record,
+    )
+
+    record = record_from_report(report, audited_at_utc=datetime.now(UTC).isoformat())
+    try:
+        written = write_audit_record(record, out_dir or DEFAULT_AUDITS_DIR)
+    except AuditRecordError as exc:
+        raise click.ClickException(str(exc)) from exc
+    _console().print(f"\nAudit record written: {written}")
 
 
 def _print_clause_evidence(source_sha256: str, extraction_path: Path | None) -> None:
