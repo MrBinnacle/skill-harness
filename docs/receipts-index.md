@@ -1215,6 +1215,22 @@ this entry.
   that it covers records outside `docs/assurance/`, unmutated modules, or the
   platforms and cores the fuzz and coverage lanes did not reach.
 
+### [`docs/assurance/release-gate-bypass-red-835.md`](assurance/release-gate-bypass-red-835.md)
+
+The red-before/green-after receipt for the release gate's assurance bypasses
+(#835).
+
+- **Claims:** The bypass tests in `tests/test_release_gate_206.py`, run against
+  the pre-fix gate at `229d7b1`, give 69 failed and 5 passed: 68 bypass tests
+  and one authorization control fail, and the five regression-protect tests
+  pass. The fixed gate passes all 116 tests in the two gate test modules.
+  Three weakened copies of the fixed gate each fail exactly one named test.
+- **Refuses to claim:** That the live GitHub API returns the shapes the local
+  stand-in serves; that a maintainer cannot publish without dispatching
+  `release-authorize.yml`; that the 55 G9 failures before the fix are 55
+  separate defects rather than one missing check; that the squash-merge tree
+  comparison is enforced by the gate.
+
 ### [`docs/assurance/release-gate-red-206.md`](assurance/release-gate-red-206.md)
 
 The deterministic falsification receipt for the `0.3.0` assurance release gate
