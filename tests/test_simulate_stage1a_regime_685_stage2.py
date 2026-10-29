@@ -1382,6 +1382,11 @@ def test_tuned_betting_path_is_available_and_uses_starting_wealth(tmp_path: Path
     assert {row[i_w0] for row in rows} == {"0.50"}
 
 
+# ---------------------------------------------------------------------------
+# Sweep extension, accounting regimes, Null-draw count
+# ---------------------------------------------------------------------------
+
+
 def _spy_farrington_manning(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, int, int, int]]:
     calls: list[tuple[int, int, int, int]] = []
     original = reg.farrington_manning_z
