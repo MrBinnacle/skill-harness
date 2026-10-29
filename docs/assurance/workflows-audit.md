@@ -41,10 +41,11 @@ inspect all triggers for `pull_request_target` or another untrusted-code privile
 No existing job was renamed. The new `dependency-audit` job is intentionally absent from
 `all-green`'s `needs` list, and Scorecard is a separate workflow.
 
-Addendum (added 2026-10-28, #817). The sentence above is no longer true and stays as
-written. From #817, `dependency-audit` is in `all-green`'s `needs` list and in its
-success condition in `.github/workflows/ci.yml`, so a failed audit blocks the merge.
-`linkcheck` stays out of both.
+Addendum (added 2026-10-28, #817). The second sentence of the paragraph above is no
+longer true and stays as written. From #817, `dependency-audit` is in `all-green`'s
+`needs` list and in its success condition in `.github/workflows/ci.yml`, so a failed
+audit turns the `All checks green` summary red. That job is not a required status check,
+so a failed audit does not block a merge on its own. `linkcheck` stays out of both.
 
 `repo description sync` (added 2026-08-28) is a separate workflow for the same reason, and
 deliberately so. It reads a live GitHub API field, so it is the one check in this
