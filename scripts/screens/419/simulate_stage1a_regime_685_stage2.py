@@ -22,7 +22,7 @@ The four stopping designs (``stopping`` column):
                     Direct F - N only. Pass alpha 0.0209, 0.0105 or 0.005.
 
 #720 extends the sweep (STAGE2_SWEEP): starting wealth 0.1, 0.05, 0.025 and
-0.01 on anytime-tuned rows, and from #868 on anytime rows; PASS alpha 0.002,
+0.01 on anytime and anytime-tuned rows; PASS alpha 0.002,
 0.001 and 0.0005 on fixed-n rows; Null per pair 2.0; 1,000 and 1,200 pairs; and anytime and
 anytime-tuned rows at PASS alpha 0.0105. Each row carries an ``accounting``
 label (none, carry-over, new-slot) set by rule from its declared parameters,
@@ -1605,7 +1605,6 @@ def headline_by_accounting_md(rows: Sequence[Row]) -> str:
 
 
 def _anytime_sweep_lines(sweep: Sweep) -> list[str]:
-    """Empty for a sweep without #720 anytime values, so older summaries rebuild unchanged."""
     if sweep.anytime_pass_alphas == (PASS_ALPHA,) and sweep.anytime_starting_wealths == (1.0,):
         return []
     return [
@@ -1717,7 +1716,6 @@ def _write_run_meta(out_dir: Path, *, replicates: int, seed: int, sweep: Sweep) 
 
 
 def _read_run_meta(out_dir: Path) -> tuple[int, int, Sweep] | None:
-    """Replicates, seed and sweep of a run; a run from before #868 recorded the original sweep."""
     path = out_dir / _RUN_META_NAME
     if not path.is_file():
         return None

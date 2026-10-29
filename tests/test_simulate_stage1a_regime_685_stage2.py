@@ -1753,7 +1753,6 @@ def test_starting_wealth_changes_anytime_decisions(fn_construction: str) -> None
 def test_both_anytime_paths_follow_the_one_cut_rule(
     stopping: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """#868: flipping the CUT rule in the #685 engine moves P(CUT) on both paths."""
     cell = reg.Cell(0.45, 0.35, 0.35)
     design = reg.Design(60, 1.0, "direct", stopping, 0.0209, 0.05)
     applied = reg.run_cell(cell, design, replicates=200, seed=43)

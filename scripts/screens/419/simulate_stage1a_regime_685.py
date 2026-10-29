@@ -567,14 +567,11 @@ CUT_USES_STARTING_WEALTH = True
 
 
 def cut_starting_wealth(starting_wealth: float) -> float:
-    """Starting wealth of the CUT e-process under CUT_USES_STARTING_WEALTH."""
     return starting_wealth if CUT_USES_STARTING_WEALTH else 1.0
 
 
 def wealth_grid(replicates: int, alpha: float, starting_wealth: float = 1.0) -> a650.WealthGrid:
-    """A #684 wealth grid whose capital processes start at ``starting_wealth``.
-
-    Starting at W0 and rejecting at 1/alpha is rejecting at 1/(alpha W0) from 1;
+    """Starting at W0 and rejecting at 1/alpha is rejecting at 1/(alpha W0) from 1;
     the bet size still reads alpha.
     """
     grid = a650.WealthGrid(replicates, alpha, 1)
@@ -814,9 +811,7 @@ def run_cell(
 ) -> CellResult:
     """Run one cell: draw streams, apply the rule, record per-look and terminal.
 
-    Supports variable null allocation and union/direct F-N construction. Every
-    PASS e-process starts at ``starting_wealth``; the CUT e-process starts at
-    ``cut_starting_wealth(starting_wealth)`` (#868).
+    Supports variable null allocation and union/direct F-N construction.
     """
     w0 = starting_wealth
     w_cut = cut_starting_wealth(w0)

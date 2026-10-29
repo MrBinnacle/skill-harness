@@ -130,7 +130,7 @@ def one_sided_betting_bound(
     upper bound only the minus process, with the plug-in lambda at log(1/alpha), inverted at
     1/alpha. Empty input yields the vacuous bound: 0 for ``lower``, 1 for ``upper``.
 
-    Each capital process starts at ``starting_wealth`` (#868) instead of 1; the bet size still
+    Each capital process starts at ``starting_wealth`` instead of 1; the bet size still
     reads alpha, so this is not the same test as alpha * starting_wealth.
     """
     if not 0.0 < alpha < 1.0:

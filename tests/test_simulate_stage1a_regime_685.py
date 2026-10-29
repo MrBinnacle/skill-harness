@@ -1705,7 +1705,6 @@ def _wealth_engine_stop_at(
     pass_alpha: float,
     starting_wealth: float,
 ) -> tuple[int, str]:
-    """The stated rule from scalar bounds that start at ``starting_wealth``."""
     null_draws = reg.null_draw_counts(len(full), design.null_per_pair)
     w_cut = reg.cut_starting_wealth(starting_wealth)
     null_observations: list[float] = []
@@ -1740,7 +1739,6 @@ def _wealth_engine_stop_at(
 def test_every_decision_at_a_starting_wealth_equals_the_scalar_bound(
     starting_wealth: float, fn_construction: str, pass_alpha: float
 ) -> None:
-    """#868: the grid and the exact fallback both start at the starting wealth."""
     cell = reg.Cell(0.85, 0.25, 0.30)
     design = reg.Design(n_pairs=30, null_per_pair=1.0, fn_construction=fn_construction)
     replicates = 16
@@ -1812,7 +1810,6 @@ def test_a_lower_starting_wealth_widens_the_scalar_bound() -> None:
 
 
 def test_the_cut_rule_applies_the_starting_wealth() -> None:
-    """#868: one wealth for every test of a row, CUT included."""
     assert reg.CUT_USES_STARTING_WEALTH is True
     assert reg.cut_starting_wealth(0.25) == 0.25
     assert reg.cut_starting_wealth(1.0) == 1.0
