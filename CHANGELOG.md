@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`skill audit --persist` writes a hash-bound audit record (#673).** The
+  free audit printed its report and kept nothing, so no later step could tell
+  that a card had been audited. With `--persist`, the audit writes
+  `docs/sers/audits/<skill-name>.json` (or `--out DIR`). A name that is not a
+  lowercase slug maps to a slug plus 12 hex digits of its sha256, so every
+  card the audit accepts persists and no two names share a file. The record holds the
+  SKILL.md sha256, the tool version, a UTC timestamp, the standing cost as a
+  calibrated estimate with its measured range, and the evaluability
+  classification. `audit_record_for` returns the record only while its sha256
+  matches the current SKILL.md, so a stale audit grants nothing. Without
+  `--persist` the command writes no file, and `--out` alone is a usage error.
+
 ### Changed
 
 - **The release gate reads every run at the candidate, not the first page.**

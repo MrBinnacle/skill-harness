@@ -206,9 +206,11 @@ def _listing_block(text_after_header: str) -> str:
 
     The message that carries the listing can also carry task text or other
     context, which can contain Markdown bullets. Only the contiguous card lines
-    following Claude Code's header are part of the delivered listing. Blank
-    lines between the header and the first card are skipped: current Claude
-    Code writes one there.
+    following Claude Code's header are part of the delivered listing. One blank
+    line between the header and the first card is skipped, because current
+    Claude Code writes exactly one there; a second blank line ends the listing
+    (#690). A ``- name: description`` line after that one blank line is read as
+    a card even when it is unrelated context, because its shape is a card's.
     """
     lines = text_after_header.splitlines()
     if not lines:
@@ -216,7 +218,7 @@ def _listing_block(text_after_header: str) -> str:
 
     listing_lines = [lines[0]]
     body = lines[1:]
-    while body and not body[0].strip():
+    if body and not body[0].strip():
         body = body[1:]
     for line in body:
         stripped = line.strip()

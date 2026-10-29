@@ -49,7 +49,7 @@ The causal chain stages: eligible situation, availability, invocation,
 adherence, outcome. A failed outcome does not identify a failed skill when
 invocation did not occur.
 
-- `landed_as: UNLANDED #520`
+- `landed_as: UNLANDED #527`
 
 ### 2. The tested component set — Declined
 

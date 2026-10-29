@@ -420,6 +420,27 @@ class TestDeliveryIntegrityFlag:
         assert integrity.flagged_names == (missing,)
         assert integrity.intended_names == draw.card_names
 
+    def test_an_intended_card_missing_from_the_subject_map_raises_the_flag(
+        self,
+    ) -> None:
+        """#700: the arm intended a card that the listing's subject map does
+        not hold at all (no ``dropped`` entry either). The flag still raises
+        and names that card."""
+        package = _package(14)
+        draw = draw_subset_arm(package, seed=_SEED_A)
+        unknown = draw.card_names[0]
+        reference = {n: d for n, d in package.items() if n != unknown}
+
+        listing = extract_delivered_listing(
+            [_delivered_without(package, unknown)],
+            reference,
+        )
+        assert unknown not in {card.name for card in listing.subject_cards}
+        integrity = check_delivery_integrity(listing, draw.card_names)
+
+        assert integrity.integrity_ok is False
+        assert integrity.flagged_names == (unknown,)
+
     def test_when_every_intended_card_is_delivered_the_flag_does_not_raise(
         self,
     ) -> None:

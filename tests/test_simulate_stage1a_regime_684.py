@@ -159,6 +159,19 @@ def test_the_observed_regime_boundary_cell_passes_at_most_the_pass_alpha() -> No
     )
 
 
+def test_the_off_diagonal_boundary_cell_calibrates_at_the_default_pass_alpha() -> None:
+    # run_cell is called without pass_alpha, so this goes red if the default is loosened. On the
+    # diagonal a default of 0.6 still sits inside the 600-replicate limit (0.0367 against 0.0384);
+    # off it, F - N clears its margin and the F - P test alone decides, so it over-passes.
+    replicates = 600
+    result = reg.run_cell(
+        reg.Cell(0.55, 0.35, 0.30), reg.Design(n_pairs=97), replicates=replicates, seed=reg.SEED
+    )
+    assert result.per_look[-1].p_pass <= reg.a650.PASS_ALPHA + (
+        reg.a650.calibration_tolerance(replicates)
+    )
+
+
 def test_the_calibration_check_fails_in_this_regime_when_the_pass_test_is_loosened() -> None:
     # Off the diagonal (p_N = 0.30), so F - N sits above its margin and the loosened F - P test
     # is what over-passes. On the diagonal both conditions sit at their margin at once.
