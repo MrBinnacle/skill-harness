@@ -560,10 +560,31 @@ def calibration_exit_code(results: Sequence[CellResult]) -> int:
     return 0 if all_hold else 1
 
 
-def _bound(xs: a650.Floats, alpha: float, side: a650.Side) -> a650.Floats:
+# #868: the one rule for the CUT test. A row's starting wealth applies to every
+# e-process in the row, CUT included; this is what the anytime-tuned path
+# already did, so no recorded #720 row moves.
+CUT_USES_STARTING_WEALTH = True
+
+
+def cut_starting_wealth(starting_wealth: float) -> float:
+    return starting_wealth if CUT_USES_STARTING_WEALTH else 1.0
+
+
+def wealth_grid(replicates: int, alpha: float, starting_wealth: float = 1.0) -> a650.WealthGrid:
+    """Starting at W0 and rejecting at 1/alpha is rejecting at 1/(alpha W0) from 1;
+    the bet size still reads alpha.
+    """
+    grid = a650.WealthGrid(replicates, alpha, 1)
+    grid.log_threshold -= math.log(starting_wealth)
+    return grid
+
+
+def _bound(
+    xs: a650.Floats, alpha: float, side: a650.Side, starting_wealth: float = 1.0
+) -> a650.Floats:
     """Vectorised one_sided_betting_bound, reusing the #684 grid machinery."""
     replicates, n = xs.shape
-    grid = a650.WealthGrid(replicates, alpha, 1)
+    grid = wealth_grid(replicates, alpha, starting_wealth)
     for k in range(n):
         grid.step(xs[:, k])
     br = a650.bracket(grid, side, "one_sided")
@@ -573,7 +594,7 @@ def _bound(xs: a650.Floats, alpha: float, side: a650.Side) -> a650.Floats:
     outside = np.where(idle, 0.5, br.lo if side == "lower" else br.hi)
     inside = np.where(idle, 0.5, br.hi if side == "lower" else br.lo)
     targets = _plug_in_targets(xs, alpha)
-    threshold = math.log(1.0 / alpha)
+    threshold = grid.log_threshold
     for _ in range(64):
         mid = 0.5 * (outside + inside)
         rejected = _branch_log_wealth(xs, targets, mid, side) >= threshold
@@ -581,7 +602,12 @@ def _bound(xs: a650.Floats, alpha: float, side: a650.Side) -> a650.Floats:
         inside = np.where(rejected, inside, mid)
     out = np.where(vacuous, edge, inside)
     for r in np.flatnonzero(br.unsure).tolist():
-        out[r] = one_sided_betting_bound(xs[r].tolist(), alpha=alpha, side=side)
+        if starting_wealth == 1.0:
+            out[r] = one_sided_betting_bound(xs[r].tolist(), alpha=alpha, side=side)
+        else:
+            out[r] = a650.one_sided_betting_bound(
+                xs[r].tolist(), alpha=alpha, side=side, starting_wealth=starting_wealth
+            )
     return out
 
 
@@ -703,27 +729,37 @@ def _joint_state(lb_fp: float, lb_fn: float) -> JointState:
 
 
 def _terminal_bounds_union(
-    full: a650.Ints, placebo: a650.Ints, null_used: a650.Ints, pass_alpha: float
+    full: a650.Ints,
+    placebo: a650.Ints,
+    null_used: a650.Ints,
+    pass_alpha: float,
+    starting_wealth: float = 1.0,
 ) -> tuple[a650.Floats, a650.Floats, a650.Floats]:
     """Union-bound terminal bounds: registered construction."""
+    w0 = starting_wealth
     xs_fp = (full - placebo + 1) / 2.0
     half = pass_alpha / 2
-    lb_fp = 2 * _bound(xs_fp, pass_alpha, "lower") - 1
-    ub_fp = 2 * _bound(xs_fp, a650.FUTILITY_ALPHA, "upper") - 1
-    lb_fn = _bound(full.astype(np.float64), half, "lower") - _bound(
-        null_used.astype(np.float64), half, "upper"
+    lb_fp = 2 * _bound(xs_fp, pass_alpha, "lower", w0) - 1
+    ub_fp = 2 * _bound(xs_fp, a650.FUTILITY_ALPHA, "upper", cut_starting_wealth(w0)) - 1
+    lb_fn = _bound(full.astype(np.float64), half, "lower", w0) - _bound(
+        null_used.astype(np.float64), half, "upper", w0
     )
     return lb_fp, ub_fp, lb_fn
 
 
 def _terminal_bounds_direct(
-    full: a650.Ints, placebo: a650.Ints, xs_fn: a650.Floats, pass_alpha: float
+    full: a650.Ints,
+    placebo: a650.Ints,
+    xs_fn: a650.Floats,
+    pass_alpha: float,
+    starting_wealth: float = 1.0,
 ) -> tuple[a650.Floats, a650.Floats, a650.Floats]:
     """Direct one-sided bound on mu_F - mu_N at alpha."""
+    w0 = starting_wealth
     xs_fp = (full - placebo + 1) / 2.0
-    lb_fp = 2 * _bound(xs_fp, pass_alpha, "lower") - 1
-    ub_fp = 2 * _bound(xs_fp, a650.FUTILITY_ALPHA, "upper") - 1
-    lb_fn = 2 * _bound(xs_fn, pass_alpha, "lower") - 1
+    lb_fp = 2 * _bound(xs_fp, pass_alpha, "lower", w0) - 1
+    ub_fp = 2 * _bound(xs_fp, a650.FUTILITY_ALPHA, "upper", cut_starting_wealth(w0)) - 1
+    lb_fn = 2 * _bound(xs_fn, pass_alpha, "lower", w0) - 1
     return lb_fp, ub_fp, lb_fn
 
 
@@ -734,11 +770,16 @@ def tally_terminal(
     xs_fn: a650.Floats,
     fn_construction: str,
     pass_alpha: float,
+    starting_wealth: float = 1.0,
 ) -> dict[JointState, TerminalSample]:
     if fn_construction == "direct":
-        lb_fp, ub_fp, lb_fn = _terminal_bounds_direct(full, placebo, xs_fn, pass_alpha)
+        lb_fp, ub_fp, lb_fn = _terminal_bounds_direct(
+            full, placebo, xs_fn, pass_alpha, starting_wealth
+        )
     else:
-        lb_fp, ub_fp, lb_fn = _terminal_bounds_union(full, placebo, null_used, pass_alpha)
+        lb_fp, ub_fp, lb_fn = _terminal_bounds_union(
+            full, placebo, null_used, pass_alpha, starting_wealth
+        )
     if bool(np.any(ub_fp < a650.BOUNDARY)):
         raise RuntimeError("an open replicate has UB(F - P) < 0.20")
     states = [_joint_state(float(f), float(n)) for f, n in zip(lb_fp, lb_fn, strict=True)]
@@ -766,11 +807,14 @@ def run_cell(
     replicates: int,
     seed: int,
     pass_alpha: float = a650.PASS_ALPHA,
+    starting_wealth: float = 1.0,
 ) -> CellResult:
     """Run one cell: draw streams, apply the rule, record per-look and terminal.
 
     Supports variable null allocation and union/direct F-N construction.
     """
+    w0 = starting_wealth
+    w_cut = cut_starting_wealth(w0)
     horizon = design.n_pairs
     rng = cell_rng(seed, cell)
     full = (rng.random((replicates, horizon)) < cell.p_full).astype(np.int64)
@@ -794,12 +838,12 @@ def run_cell(
     half = pass_alpha / 2
 
     # --- Anytime-valid rule ---
-    fp_fut = a650.WealthGrid(replicates, a650.FUTILITY_ALPHA, 1)
-    fp_pass = a650.WealthGrid(replicates, pass_alpha, 1)
-    f_pass = a650.WealthGrid(replicates, half, 1)
-    n_pass = a650.WealthGrid(replicates, half, 1)
+    fp_fut = wealth_grid(replicates, a650.FUTILITY_ALPHA, w_cut)
+    fp_pass = wealth_grid(replicates, pass_alpha, w0)
+    f_pass = wealth_grid(replicates, half, w0)
+    n_pass = wealth_grid(replicates, half, w0)
     if design.fn_construction == "direct":
-        fn_diff = a650.WealthGrid(replicates, pass_alpha, 1)
+        fn_diff = wealth_grid(replicates, pass_alpha, w0)
 
     xs_fp_all = (full - placebo + 1) / 2.0
     xs_f_all = full.astype(np.float64)
@@ -833,16 +877,18 @@ def run_cell(
             xs_n = null_used[r, : null_counts[k]].astype(np.float64).tolist()
             used = 0
 
-            def _exact(xs: list[float], alpha: float, side: a650.Side) -> float:
+            def _exact(xs: list[float], alpha: float, side: a650.Side, wealth: float = w0) -> float:
                 nonlocal used
                 used += 1
-                return float(a650.one_sided_betting_bound(xs, alpha=alpha, side=side))
+                return float(
+                    a650.one_sided_betting_bound(xs, alpha=alpha, side=side, starting_wealth=wealth)
+                )
 
             # CUT check
             if ub.unsure[r] or not (
                 2 * ub.hi[r] - 1 < a650.BOUNDARY or 2 * ub.lo[r] - 1 >= a650.BOUNDARY
             ):
-                cut_now = 2 * _exact(xs_fp, a650.FUTILITY_ALPHA, "upper") - 1 < a650.BOUNDARY
+                cut_now = 2 * _exact(xs_fp, a650.FUTILITY_ALPHA, "upper", w_cut) - 1 < a650.BOUNDARY
             else:
                 cut_now = bool(2 * ub.hi[r] - 1 < a650.BOUNDARY)
             if cut_now:
@@ -907,6 +953,7 @@ def run_cell(
             unresolved_fn,
             design.fn_construction,
             pass_alpha,
+            w0,
         ),
         library_calls=calls,
     )

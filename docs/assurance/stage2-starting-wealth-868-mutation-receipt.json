@@ -1,0 +1,239 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-1\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
+        "tests_collected": 8,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "description": "the online F-P PASS grid starts at wealth 1 whatever the starting wealth",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_at_a_starting_wealth_equals_the_scalar_bound[0.0209-direct-0.5]",
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_at_a_starting_wealth_equals_the_scalar_bound[0.6-direct-0.5]",
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_at_a_starting_wealth_equals_the_scalar_bound[0.6-direct-0.1]"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-1\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "425435cfda74380d0ee8905ef31cea4dd29dd6e121f70e822e3756d23b0945bd",
+        "tests_collected": 8,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "mutant_id": "M-868-1",
+      "notes": [],
+      "obligation": "868-engine-grid-ignores-wealth",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_at_a_starting_wealth_equals_the_scalar_bound"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-2\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
+        "tests_collected": 8,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "description": "the exact-bound fallback starts at wealth 1 whatever the starting wealth",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_at_a_starting_wealth_equals_the_scalar_bound[0.6-union-0.5]"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-2\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "0237a04ac9769293f11b71c2ea663323c4ff7bc42960072a4927cfd34355b896",
+        "tests_collected": 8,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "mutant_id": "M-868-2",
+      "notes": [],
+      "obligation": "868-engine-exact-ignores-wealth",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_every_decision_at_a_starting_wealth_equals_the_scalar_bound"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-3\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
+        "tests_collected": 2,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "description": "the direct F-N terminal bound starts at wealth 1 whatever the starting wealth",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685.py::test_direct_terminal_bounds_start_at_the_starting_wealth[0.25]"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-3\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "d08ba59ac6ae6c1b4579d3b564e7919120121255b2f81482920999601aab8ad6",
+        "tests_collected": 2,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "mutant_id": "M-868-3",
+      "notes": [],
+      "obligation": "868-engine-terminal-ignores-wealth",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685.py::test_direct_terminal_bounds_start_at_the_starting_wealth"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-4\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc",
+        "tests_collected": 2,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "description": "the Stage 2 anytime path never passes the row's starting wealth to the engine",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_starting_wealth_changes_anytime_decisions[union]",
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_starting_wealth_changes_anytime_decisions[direct]"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-4\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "cfc723df070ebf10abe5a2644892c354b31d9404430b96493db32db1caa549a8",
+        "tests_collected": 2,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "mutant_id": "M-868-4",
+      "notes": [],
+      "obligation": "868-anytime-ignores-wealth",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_starting_wealth_changes_anytime_decisions"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-5\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc",
+        "tests_collected": 2,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "description": "the anytime-tuned CUT test reads W0 directly instead of the one CUT rule",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_both_anytime_paths_follow_the_one_cut_rule[anytime-tuned]"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-5\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "998ff8fba1b4ad2040b6156c309e161058bdee36c6e3d0ef7ea394f3a6cdd009",
+        "tests_collected": 2,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "mutant_id": "M-868-5",
+      "notes": [],
+      "obligation": "868-tuned-cut-bypasses-rule",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_both_anytime_paths_follow_the_one_cut_rule"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-6\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc",
+        "tests_collected": 1,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "description": "STAGE2_SWEEP keeps anytime rows at starting wealth 1.0",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_stage2_anytime_rows_sweep_the_anytime_tuned_starting_wealths"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-6\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "c8dd90ca691628e3b6eca162060f0b388167d8d90baf0bf24d12200d0f3c4e0c",
+        "tests_collected": 1,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "mutant_id": "M-868-6",
+      "notes": [],
+      "obligation": "868-anytime-sweep-dropped",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_stage2_anytime_rows_sweep_the_anytime_tuned_starting_wealths"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-7\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc",
+        "tests_collected": 2,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "description": "the summary header prints the original module constants, not the sweep used",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_summary_header_prints_the_sweep_constants_used",
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_a_run_records_its_sweep_and_rebuild_prints_it"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-n00ilts9\\M-868-7\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "16d1214505e5c042d7b54eff75d01c10cb186fecfd36bb28839b3253d5401038",
+        "tests_collected": 2,
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
+      },
+      "mutant_id": "M-868-7",
+      "notes": [],
+      "obligation": "868-header-prints-constants",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_summary_header_prints_the_sweep_constants_used",
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_a_run_records_its_sweep_and_rebuild_prints_it"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "93d81af07ff9e7c847763050d4cbc9e847edeb96",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc"
+  },
+  "production_tree_digest_before": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.1",
+  "target_digests": {
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc"
+  },
+  "target_files": [
+    "scripts/screens/419/simulate_stage1a_regime_685.py",
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py"
+  ]
+}

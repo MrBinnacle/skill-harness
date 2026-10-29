@@ -1681,3 +1681,135 @@ def test_rebuild_prints_the_same_calibration_failures_as_the_run(
     assert run_code == rebuild_code == 1
     assert run_lines, "the loosened run must report a failing cell"
     assert rebuild_lines == run_lines
+
+
+# ---------------------------------------------------------------------------
+# #868: starting wealth as an engine parameter
+# ---------------------------------------------------------------------------
+
+
+def _wealth_bound(xs: Any, alpha: float, side: str, starting_wealth: float) -> float:
+    return float(
+        a650.one_sided_betting_bound(
+            [float(x) for x in xs], alpha=alpha, side=side, starting_wealth=starting_wealth
+        )
+    )
+
+
+def _wealth_engine_stop_at(
+    full: list[int],
+    placebo: list[int],
+    null_all: list[list[int]],
+    design: Any,
+    *,
+    pass_alpha: float,
+    starting_wealth: float,
+) -> tuple[int, str]:
+    null_draws = reg.null_draw_counts(len(full), design.null_per_pair)
+    w_cut = reg.cut_starting_wealth(starting_wealth)
+    null_observations: list[float] = []
+    direct_observations: list[float] = []
+    half = pass_alpha / 2
+    for k, f in enumerate(full):
+        xs_fp = a650.paired_xs(full[: k + 1], placebo[: k + 1])
+        for draw in range(null_draws[k]):
+            null_observations.append(float(null_all[k][draw]))
+        if null_draws[k]:
+            mean_null = sum(null_all[k][: null_draws[k]]) / null_draws[k]
+            direct_observations.append((f - mean_null + 1) / 2)
+        if design.fn_construction == "direct":
+            lb_fn = 2 * _wealth_bound(direct_observations, pass_alpha, "lower", starting_wealth) - 1
+        else:
+            lb_fn = _wealth_bound(full[: k + 1], half, "lower", starting_wealth) - _wealth_bound(
+                null_observations, half, "upper", starting_wealth
+            )
+        outcome = a650.stop_rule(
+            ub_fp=2 * _wealth_bound(xs_fp, a650.FUTILITY_ALPHA, "upper", w_cut) - 1,
+            lb_fp=2 * _wealth_bound(xs_fp, pass_alpha, "lower", starting_wealth) - 1,
+            lb_fn=lb_fn,
+        )
+        if outcome != "UNRESOLVED_CONTINUE":
+            return k + 1, str(outcome)
+    return len(full) + 1, "UNRESOLVED_CONTINUE"
+
+
+@pytest.mark.parametrize("starting_wealth", [0.5, 0.1])
+@pytest.mark.parametrize("fn_construction", reg.FN_CONSTRUCTIONS)
+@pytest.mark.parametrize("pass_alpha", [a650.PASS_ALPHA, 0.6])
+def test_every_decision_at_a_starting_wealth_equals_the_scalar_bound(
+    starting_wealth: float, fn_construction: str, pass_alpha: float
+) -> None:
+    cell = reg.Cell(0.85, 0.25, 0.30)
+    design = reg.Design(n_pairs=30, null_per_pair=1.0, fn_construction=fn_construction)
+    replicates = 16
+    rng = reg.cell_rng(685, cell)
+    full = (rng.random((replicates, design.n_pairs)) < cell.p_full).astype(np.int64)
+    placebo = (rng.random((replicates, design.n_pairs)) < cell.p_placebo).astype(np.int64)
+    null_all = (rng.random((replicates, design.n_pairs, 2)) < cell.p_null).astype(np.int64)
+    expected = [
+        _wealth_engine_stop_at(
+            full[r].tolist(),
+            placebo[r].tolist(),
+            null_all[r].tolist(),
+            design,
+            pass_alpha=pass_alpha,
+            starting_wealth=starting_wealth,
+        )
+        for r in range(replicates)
+    ]
+
+    result = reg.run_cell(
+        cell,
+        design,
+        replicates=replicates,
+        seed=685,
+        pass_alpha=pass_alpha,
+        starting_wealth=starting_wealth,
+    )
+    unit = reg.run_cell(cell, design, replicates=replicates, seed=685, pass_alpha=pass_alpha)
+
+    for k, row in enumerate(result.per_look, start=1):
+        assert row.p_pass == pytest.approx(
+            sum(stop <= k and o == "A_PASSES_EARLY" for stop, o in expected) / replicates
+        )
+        assert row.p_cut == pytest.approx(
+            sum(stop <= k and o == "CUT_NO_LIFT" for stop, o in expected) / replicates
+        )
+    assert (result.per_look, result.terminal) != (unit.per_look, unit.terminal), (
+        "a starting wealth below 1.0 must change some decision on this fixture"
+    )
+
+
+@pytest.mark.parametrize("starting_wealth", [1.0, 0.25])
+def test_direct_terminal_bounds_start_at_the_starting_wealth(starting_wealth: float) -> None:
+    full = np.array([[1, 1, 0, 1, 1, 1], [0, 1, 1, 0, 1, 1]], dtype=np.int64)
+    placebo = np.array([[0, 1, 0, 0, 0, 0], [1, 0, 0, 1, 0, 0]], dtype=np.int64)
+    xs_fn = np.array([[1.0, 0.5, 0.0, 1.0], [0.5, 1.0, 0.5, 1.0]], dtype=np.float64)
+    w_cut = reg.cut_starting_wealth(starting_wealth)
+    lb_fp, ub_fp, lb_fn = reg._terminal_bounds_direct(
+        full, placebo, xs_fn, a650.PASS_ALPHA, starting_wealth
+    )
+    for r in range(len(full)):
+        xs_fp = (full[r] - placebo[r] + 1) / 2.0
+        assert lb_fp[r] == pytest.approx(
+            2 * _wealth_bound(xs_fp, a650.PASS_ALPHA, "lower", starting_wealth) - 1, abs=1e-9
+        )
+        assert ub_fp[r] == pytest.approx(
+            2 * _wealth_bound(xs_fp, a650.FUTILITY_ALPHA, "upper", w_cut) - 1, abs=1e-9
+        )
+        assert lb_fn[r] == pytest.approx(
+            2 * _wealth_bound(xs_fn[r], a650.PASS_ALPHA, "lower", starting_wealth) - 1, abs=1e-9
+        )
+
+
+def test_a_lower_starting_wealth_widens_the_scalar_bound() -> None:
+    xs = [1.0] * 12 + [0.0] * 2
+    unit = _wealth_bound(xs, 0.05, "lower", 1.0)
+    assert unit == a650.one_sided_betting_bound(xs, alpha=0.05, side="lower")
+    assert _wealth_bound(xs, 0.05, "lower", 0.1) < unit
+
+
+def test_the_cut_rule_applies_the_starting_wealth() -> None:
+    assert reg.CUT_USES_STARTING_WEALTH is True
+    assert reg.cut_starting_wealth(0.25) == 0.25
+    assert reg.cut_starting_wealth(1.0) == 1.0

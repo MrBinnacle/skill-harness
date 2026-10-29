@@ -4,7 +4,7 @@
 **Generator:** `scripts/mutation_receipt.py --select 798-stage2`.
 **Machine-readable record:** `docs/assurance/stage2-pn-bound-798-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
-`sha256:50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875`.
+`sha256:9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc`.
 **Commit at generation:** `fbd9df8d2696900e6171479702127312497fdf2c`. It is informational only.
 `tests/test_mutation_receipt.py` checks currency against the digest above.
 

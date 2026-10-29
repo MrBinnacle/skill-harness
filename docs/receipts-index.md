@@ -577,7 +577,7 @@ and covers that section only. This page stays the citable surface for every kind
   0 unconditionally, M-S1A-23 reads `p_cut` from the `p_pass` column, and
   M-S1A-24 ignores `run_meta.json`. The campaign pins
   `scripts/screens/419/simulate_stage1a_regime_685.py` at
-  `sha256:a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c`.
+  `sha256:ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429`.
   The companion 685, 708 and 712 receipts were regenerated against the same
   digest with unchanged per-mutant verdicts.
 - **Refuses to claim:** Any mutation score, adequacy of the Stage 1A suite as
@@ -604,7 +604,7 @@ and covers that section only. This page stays the citable surface for every kind
   at 0.10 instead of 0.05, and fixed-n-score joint PASS reporting the F - N
   half alone. The campaign pins
   `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
-  `sha256:50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875`.
+  `sha256:9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc`.
 - **Refuses to claim:** Any mutation score, adequacy of the Stage 2 suite as a
   whole, or that any surviving mutant outside the sixteen named cases is
   safe. It refuses any operating characteristic from the reduced committed
@@ -625,7 +625,7 @@ and covers that section only. This page stays the citable surface for every kind
   reporting its F - P half as the joint PASS, and the fixed-n-score F - N test
   counting pairs with a Null draw instead of Null draws. The campaign pins
   `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
-  `sha256:50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875`.
+  `sha256:9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc`.
 - **Refuses to claim:** Any mutation score, adequacy of the Stage 2 suite as a
   whole, or any operating characteristic of the extended grid, which has not
   been run in full. It refuses any claim about the anytime starting-wealth
@@ -639,10 +639,28 @@ and covers that section only. This page stays the citable surface for every kind
   KILLED: the P - N interval computed at 0.025 per one-sided bound instead of
   0.0125. The campaign pins
   `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
-  `sha256:50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875`.
+  `sha256:9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc`.
 - **Refuses to claim:** Any mutation score, adequacy of the Stage 2 suite as a
   whole, or any value of `p_pn_bounded` on the full grid, which has not been
   run.
+
+### [`docs/assurance/stage2-starting-wealth-868-mutation-receipt.md`](assurance/stage2-starting-wealth-868-mutation-receipt.md)
+
+- **Claims:** Seven mutants against starting wealth in the #685 engine and the
+  Stage 2 simulator (#868), each run in its own git worktree at a fixed commit
+  with a clean baseline passing first and the production tree unchanged
+  afterwards. All seven KILLED: the online PASS grid, the exact fallback and
+  the direct F - N terminal bound each ignoring the starting wealth; the
+  anytime path not passing the row's wealth to the engine; the anytime-tuned
+  CUT test bypassing the one CUT rule; the anytime sweep dropped; and the
+  header printing module constants. The campaign pins
+  `scripts/screens/419/simulate_stage1a_regime_685.py` at
+  `sha256:ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429` and
+  `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
+  `sha256:9e0a049d8785fd7ed1e5545e770db1defff37d305d8b45b1d07eb4ec520951dc`.
+- **Refuses to claim:** Any mutation score, any operating characteristic of
+  the new anytime rows (the full grid has not been run), or that the CUT rule
+  value is decided; the receipt pins the rule's mechanism, not its choice.
 
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 
