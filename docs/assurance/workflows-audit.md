@@ -24,6 +24,7 @@ inspect all triggers for `pull_request_target` or another untrusted-code privile
 | `.github/workflows/words-to-avoid-drift.yml` (added 2026-09-07) | All actions pinned to commit SHAs | Workflow `contents: read`; no job elevation. Reads `secrets.GITHUB_TOKEN` for GitHub API rate limit only | Daily schedule, `push` on `main` limited to `assets/words_to_avoid.json`, and manual dispatch; no `pull_request_target` | Pass |
 | `.github/workflows/release-authorize.yml` (added 2026-10-28) | All actions pinned to commit SHAs | Workflow `contents: read`, `actions: read` and `issues: read`; no job elevation. Reads `secrets.GITHUB_TOKEN` to read workflow runs, job lists and issue states | Manual dispatch only; the first step refuses any ref that is not a `v*` tag. No `pull_request_target` | Pass |
 | `.github/workflows/accessibility.yml` (added 2026-10-24) | All actions pinned to commit SHAs. The checker, pa11y-ci 5.0.0, installs with `npm ci` from the lockfile in `.github/a11y/` | Workflow `contents: read`; no job elevation. Reads no secret | `pull_request` limited to `pyproject.toml`, acting only when the version changed, and manual dispatch; no `pull_request_target` | Pass |
+| `.github/workflows/dependency-audit.yml` (added 2026-10-28) | All actions pinned to commit SHAs | Workflow `contents: read`; the `report-failure` job alone adds `issues: write`, which `gh issue create` and `gh issue comment` consume. Reads `secrets.GITHUB_TOKEN` for those calls only | Weekly schedule and manual dispatch only; no `push`, no `pull_request`, no `pull_request_target` | Pass |
 
 ## Findings
 
@@ -59,6 +60,11 @@ the pull request that bumps the version, so it reports at release review, and a 
 there does not block the merge. It is kept off the merge path because it starts a browser
 and a local server, which is slow and less hermetic than the unit gate, and because the
 operator ruled on 2026-10-24 that it runs before a release, not on every pull request.
+
+`dependency-audit` (added 2026-10-28, #702) is a separate workflow and is not required. It
+runs the same `pip-audit --local` command as ci.yml's `dependency-audit` job, weekly and on
+dispatch, because an advisory can be published against a dependency no pull request touches.
+A red run opens one issue, or comments on the one already open.
 
 No branch-protection setting was changed; maintainers alone decide whether any new check
 becomes required.
