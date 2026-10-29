@@ -37,6 +37,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import simulate_a_design as a650  # the sibling #650 simulator, reused unchanged
 
+# The vectorised bound below repeats the engine's arithmetic, so it reads four private engine
+# constants (_BISECT_ITERS, _TRUNC_C, _MEAN_PRIOR, _VAR_PRIOR) instead of copying their values.
+# A copy would drift silently; the read follows the engine, and
+# test_terminal_bounds_equal_the_engine_bounds fails if the arithmetic stops matching. This is
+# a research script, not library code, so the engine keeps these names private.
 from skill_harness.aggregation import confidence_sequence as cs_mod
 from skill_harness.aggregation.confidence_sequence import one_sided_betting_bound
 
