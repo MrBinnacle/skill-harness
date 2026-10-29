@@ -241,3 +241,26 @@ instrument (per the census) while classification coverage becomes the binding co
 the script on exactly two synthetic receipts. It asserts the trap-discipline receipt at p0=1.0
 changes from CANT_TELL_YET to CUT(subsumed), and the transformative-lift receipt at p0=0.0 stays
 CANT_TELL_YET. The first assertion fails if the ablation is not applied.
+
+---
+
+## Amendment 2 — 2026-10-28: construct result for "ability versus procedure" (issue #850)
+
+This block is dated and appended under the amendment rule. Nothing above it is changed.
+
+**What was decided.** Issue #850 proposes arms of "ability-style" and "procedure/trap" cards.
+Tested against this registry's written class definitions on 2026-10-28 (three candidate cards a
+side; table in `ability-vs-procedure-preregistration.md` section 2), "ability versus procedure" is
+a mechanism axis, not a new `value_class`. Procedure cards map onto `trap-discipline`. Ability
+cards map onto `transformative-lift`, the class recorded above as having zero members. No class
+definition turns on whether the model already holds the capability, so the mapping is defensible
+and is not an identity.
+
+**What it does not do.** The mapping does not make #850 a test of H1. H1 concerns what a null
+means by class; #850 measures named cards against no card. #850 is registered as a separate
+document, `docs/findings/ability-vs-procedure-preregistration.md`, with a $0 budget and a Stage 0
+feasibility stop. Whether any ability card enters `value_class_registry.py` under
+`TRANSFORMATIVE_LIFT` is the operator's value call and is not made by either document.
+
+*Revisit if:* a design is registered that varies class while holding task, liveness and
+sensitivity fixed; that design, not #850, tests H1.
