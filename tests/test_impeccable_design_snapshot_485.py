@@ -1,4 +1,4 @@
-"""Tests that .impeccable/design.json agrees with DESIGN.md on the paper retirement.
+"""Tests that docs/design/design.json agrees with DESIGN.md on the paper retirement.
 
 Issue #485: the tracked snapshot still declares six receipt-* tokens and four
 receipt-* faces that DESIGN.md filed under Retiring at #308. The snapshot also
@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DESIGN_JSON = REPO_ROOT / ".impeccable" / "design.json"
+DESIGN_JSON = REPO_ROOT / "docs" / "design" / "design.json"
 
 # Site faces DESIGN.md declares in place of the retired receipt-* faces.
 _SITE_BENCH_FACES = ("bench-prose", "bench-h1", "bench-h2", "bench-figure")

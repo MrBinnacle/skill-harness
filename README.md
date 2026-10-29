@@ -1,4 +1,11 @@
 <p>
+  <a href="https://github.com/MrBinnacle/skill-harness/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/MrBinnacle/skill-harness/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://pypi.org/project/skill-harness/"><img alt="PyPI" src="https://img.shields.io/pypi/v/skill-harness"></a>
+  <a href="https://github.com/MrBinnacle/skill-harness/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/pypi/l/skill-harness"></a>
+  <a href="https://pypi.org/project/skill-harness/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/skill-harness"></a>
+</p>
+
+<p>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/MrBinnacle/skill-harness/main/assets/banner-dark.svg">
     <img alt="skill-harness. Compares one task with a skill and without it." src="https://raw.githubusercontent.com/MrBinnacle/skill-harness/main/assets/banner-light.svg" width="680">
@@ -39,7 +46,7 @@ Reading delivery as use would have been wrong about a quarter of the treated arm
 
 I wanted to know if you could tell if a skill was any good.
 
-That sentence is the owner's. The long account:
+The long account of how that question became this instrument is in
 [docs/why-this-exists.md](https://github.com/MrBinnacle/skill-harness/blob/main/docs/why-this-exists.md).
 
 ## 1. What problem does this solve?

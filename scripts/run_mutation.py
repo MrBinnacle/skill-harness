@@ -109,7 +109,6 @@ SETUP_CFG_TEMPLATE = textwrap.dedent(
         README.md
         LICENSE
         CHANGELOG.md
-        pyrightconfig.json
     pytest_add_cli_args_test_selection =
     {tests}
     pytest_add_cli_args =

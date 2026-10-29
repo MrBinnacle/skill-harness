@@ -2,7 +2,7 @@
 
 The README is the PyPI long description. Its first screen must tell a stranger
 who the tool is for and how to install it, and must not use a term before it
-defines it (PRODUCT.md, Brand Commitments: "A term met before it is defined is
+defines it (docs/PRODUCT.md, Brand Commitments: "A term met before it is defined is
 a defect").
 """
 
@@ -29,7 +29,7 @@ def _sentence_holding_first(term: str) -> str:
 
 
 def _audience() -> str:
-    product = (_ROOT / "PRODUCT.md").read_text(encoding="utf-8")
+    product = (_ROOT / "docs" / "PRODUCT.md").read_text(encoding="utf-8")
     users = product.split("## Users\n\n", 1)[1]
     return users.split("\n", 1)[0].removeprefix("A person ").rstrip(".")
 

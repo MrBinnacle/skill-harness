@@ -1,6 +1,6 @@
 """PROTOTYPE -- THROWAWAY. Not production. No error handling, no polish.
 
-Lives on main under prototypes/, which pyproject.toml excludes from ruff on
+Lives on main under examples/prototypes/, which pyproject.toml excludes from ruff on
 purpose (issue #483; the exclusion is asserted by
 tests/test_ruff_gate_scope_483.py). A smoke test --
 tests/test_prototype_firewall_walkthrough.py -- runs it end to end and checks
@@ -11,7 +11,7 @@ WHAT QUESTION THIS ANSWERS
     "You say the three pools of tasks can't leak into each other. Show me."
 
 Run it:
-    python prototypes/PROTOTYPE_firewall_walkthrough.py
+    python examples/prototypes/PROTOTYPE_firewall_walkthrough.py
 
 Press Enter to step through. Every step prints the full state so you can watch
 what changes. Nothing here calls a model. Nothing costs money. The database is
