@@ -38,7 +38,6 @@ def test_runs_weekly_and_on_dispatch_only() -> None:
     assert "schedule:" in triggers
     assert "- cron: " in triggers
     assert "workflow_dispatch:" in triggers
-    # Advisory: no push or pull_request trigger, so it can never sit on the merge path.
     assert "push:" not in triggers
     assert "pull_request" not in triggers
 

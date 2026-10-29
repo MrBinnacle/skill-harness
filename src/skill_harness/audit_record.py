@@ -28,9 +28,6 @@ from skill_harness.preflight import ArtifactAuditReport
 
 DEFAULT_AUDITS_DIR: Final[Path] = Path("docs/sers/audits")
 
-# A name that is already a plain lowercase slug is its own filename. Any other
-# name gets a slug plus a hash of the original, so no name the audit accepts is
-# refused, no two names share a file, and no separator or traversal survives.
 _SAFE_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 _UNSAFE_RUN: Final[re.Pattern[str]] = re.compile(r"[^a-z0-9-]+")
 _SLUG_MAX: Final[int] = 50
@@ -62,7 +59,6 @@ class ClaimClassification(BaseModel):
     model_config = ConfigDict(frozen=True, strict=True)
 
     tier1_mechanical_axes: tuple[str, ...]
-    # Fixed because the preflight's v0.1 evaluability statement fixes them.
     behavior_shaped: Literal["UNMEASURED"] = "UNMEASURED"
     judge_graded: Literal["UNMEASURED"] = "UNMEASURED"
 

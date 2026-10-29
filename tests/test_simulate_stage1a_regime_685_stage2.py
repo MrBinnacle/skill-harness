@@ -1383,7 +1383,7 @@ def test_tuned_betting_path_is_available_and_uses_starting_wealth(tmp_path: Path
 
 
 # ---------------------------------------------------------------------------
-# #720: sweep extension, accounting regimes, Null-draw count
+# Sweep extension, accounting regimes, Null-draw count
 # ---------------------------------------------------------------------------
 
 

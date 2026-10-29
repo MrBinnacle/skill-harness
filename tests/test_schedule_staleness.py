@@ -6,8 +6,12 @@ fetching half is never invoked here, only the pure evaluation half.
 
 from __future__ import annotations
 
+import base64
 import importlib.util
+import io
+import json
 import sys
+import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
@@ -100,3 +104,33 @@ def test_crons_are_read_from_workflow_text() -> None:
 def test_report_names_each_stale_workflow() -> None:
     body = ss.render_report([_schedule(None)], NOW)
     assert "o/r" in body and ".github/workflows/x.yml" in body and "never" in body
+
+
+def test_every_api_request_goes_to_the_github_https_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workflow = "on:\n  schedule:\n    - cron: '30 1 * * 6'\n"
+    replies = iter(
+        [
+            {"workflows": [{"path": ".github/workflows/a.yml", "id": 1, "state": "active"}]},
+            {"content": base64.b64encode(workflow.encode()).decode()},
+            {"workflow_runs": []},
+        ]
+    )
+    urls: list[str] = []
+
+    class _Response(io.StringIO):
+        def __enter__(self) -> _Response:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int) -> _Response:
+        urls.append(request.full_url)
+        return _Response(json.dumps(next(replies)))
+
+    monkeypatch.setattr(ss.urllib.request, "urlopen", fake_urlopen)
+    ss.fetch_schedules("owner/repo", "token")
+    assert len(urls) == 3
+    assert all(url.startswith("https://api.github.com/repos/owner/repo/") for url in urls)

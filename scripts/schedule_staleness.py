@@ -121,9 +121,9 @@ def render_report(stale: Sequence[Schedule], now: datetime) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _get(url: str, token: str) -> Any:
-    request = urllib.request.Request(  # noqa: S310, RUF100 - URL is fixed to GitHub's HTTPS API origin
-        url,
+def _get(path: str, token: str) -> Any:
+    request = urllib.request.Request(
+        f"https://api.github.com{path}",
         headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
     )
     with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
@@ -131,7 +131,7 @@ def _get(url: str, token: str) -> Any:
 
 
 def fetch_schedules(repo: str, token: str) -> list[Schedule]:
-    api = f"https://api.github.com/repos/{repo}"
+    api = f"/repos/{repo}"
     schedules = []
     for wf in _get(f"{api}/actions/workflows?per_page=100", token)["workflows"]:
         if not wf["path"].startswith(".github/workflows/"):
