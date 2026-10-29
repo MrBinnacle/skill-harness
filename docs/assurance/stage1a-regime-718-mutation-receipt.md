@@ -4,8 +4,8 @@
 pairs. **Generator:** `scripts/mutation_receipt.py --select 718-stage2`.
 **Machine-readable record:** `docs/assurance/stage1a-regime-718-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
-`sha256:b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09`.
-**Commit at generation:** `7d7c699b3dde46bdc6f9da0c17fc906bfcb1d719` —
+`sha256:50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875`.
+**Commit at generation:** `b08891d8a59154fd4ed5e54584ec76c16045742c` —
 informational only; currency is checked against the digest above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
 

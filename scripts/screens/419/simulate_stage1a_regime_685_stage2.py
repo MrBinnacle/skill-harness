@@ -46,7 +46,8 @@ import os
 import sys
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -97,6 +98,13 @@ ADDED_NULL_PER_PAIR = (2.0,)
 ADDED_STARTING_WEALTHS = (0.1, 0.05, 0.025, 0.01)
 ADDED_FIXED_PASS_ALPHAS = (0.002, 0.001, 0.0005)
 NEW_SLOT_ALPHA = 0.0105
+
+# #798: the P - N bound. Four one-sided bounds at 0.0125 each, 0.05 in total
+# (Amendment 2 of the #691 record). The calibration cells put p_P - p_N at
+# +0.20 and -0.20.
+PN_ALPHA_ARM = 0.0125
+PN_ALPHA_TOTAL = 4 * PN_ALPHA_ARM
+PN_CALIBRATION_P_ARMS = ((0.30, 0.50), (0.50, 0.30))
 
 Accounting = Literal["none", "carry-over", "new-slot"]
 ACCOUNTING_REGIMES: tuple[Accounting, ...] = ("none", "carry-over", "new-slot")
@@ -213,6 +221,8 @@ class Row:
     expected_epochs: float
     holds_level: bool
     per_look: tuple[s685.LookRow, ...] = ()
+    p_pn_bounded: float = math.nan
+    se_pn_bounded: float = math.nan
 
 
 # ---------------------------------------------------------------------------
@@ -619,6 +629,21 @@ def run_cell(
     ``design.pass_alpha``, so an override that makes the rule too liberal is
     visible to the calibration read. The negative controls use it.
     """
+    row = _run_stopping(
+        cell, design, replicates=replicates, seed=seed, pass_alpha_override=pass_alpha_override
+    )
+    p_pn = pn_bounded_rate(cell, design.n_pairs, design.null_per_pair, replicates, seed)
+    return replace(row, p_pn_bounded=p_pn, se_pn_bounded=_se(p_pn, replicates))
+
+
+def _run_stopping(
+    cell: Cell,
+    design: Design,
+    *,
+    replicates: int,
+    seed: int,
+    pass_alpha_override: float | None,
+) -> Row:
     rule_alpha = design.pass_alpha if pass_alpha_override is None else pass_alpha_override
     sim_design = Design(
         n_pairs=design.n_pairs,
@@ -946,6 +971,97 @@ def _run_fixed_n_score(
         holds_level=holds,
         per_look=(look,),
     )
+
+
+# ---------------------------------------------------------------------------
+# P - N bound (#798)
+# ---------------------------------------------------------------------------
+
+
+def pn_interval(placebo: np.ndarray, null: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Two-sided anytime-valid interval on p_P - p_N, one per replicate row.
+
+    lo = LB_P - UB_N and hi = UB_P - LB_N, each bound one_sided_betting_bound
+    at PN_ALPHA_ARM, as stage1a_readout_691.av_interval computes it.
+    """
+    p = placebo.astype(np.float64)
+    n = null.astype(np.float64)
+    lo = s685._bound(p, PN_ALPHA_ARM, "lower") - s685._bound(n, PN_ALPHA_ARM, "upper")
+    hi = s685._bound(p, PN_ALPHA_ARM, "upper") - s685._bound(n, PN_ALPHA_ARM, "lower")
+    return lo, hi
+
+
+@lru_cache(maxsize=64)
+def pn_bounded_rate(
+    cell: Cell, n_pairs: int, null_per_pair: float, replicates: int, seed: int
+) -> float:
+    """P(the P - N interval at the read time n_pairs lies inside (-0.20, 0.20)).
+
+    Every stopping design at this cell, pair count and Null allocation reads
+    the same Placebo and Null draws, so the rate is computed once per key.
+    """
+    design = Design(n_pairs=n_pairs, null_per_pair=null_per_pair)
+    full, placebo, null_all, null_draws, fn_mask = _draw_streams(
+        cell, design, replicates=replicates, seed=seed
+    )
+    null_used, _xs_fn = _null_used_and_fn_obs(full, placebo, null_all, null_draws, fn_mask)
+    lo, hi = pn_interval(placebo, null_used)
+    return float(np.mean((lo > -BOUNDARY) & (hi < BOUNDARY)))
+
+
+PN_CALIBRATION_CELLS = tuple(Cell(p_p, p_p, p_n) for p_p, p_n in PN_CALIBRATION_P_ARMS)
+
+
+@dataclass(frozen=True)
+class PnCalibrationRow:
+    cell: Cell
+    n_pairs: int
+    null_per_pair: float
+    replicates: int
+    p_pn_bounded: float
+    se_pn_bounded: float
+    holds_level: bool
+
+
+def pn_calibration_holds(p_pn_bounded: float, *, replicates: int) -> bool:
+    """Where |p_P - p_N| = 0.20, P(bounded) must sit at or below 0.05 plus 3 MC SE."""
+    return p_pn_bounded <= PN_ALPHA_TOTAL + 3.0 * _se(p_pn_bounded, replicates)
+
+
+def pn_calibration_rows(
+    configs: Sequence[tuple[int, float]], *, replicates: int, seed: int
+) -> list[PnCalibrationRow]:
+    """P(bounded) at each PN_CALIBRATION_CELLS cell for each (n_pairs, null_per_pair)."""
+    out: list[PnCalibrationRow] = []
+    for n_pairs, null_pp in configs:
+        for cell in PN_CALIBRATION_CELLS:
+            p = pn_bounded_rate(cell, n_pairs, null_pp, replicates, seed)
+            out.append(
+                PnCalibrationRow(
+                    cell=cell,
+                    n_pairs=n_pairs,
+                    null_per_pair=null_pp,
+                    replicates=replicates,
+                    p_pn_bounded=p,
+                    se_pn_bounded=_se(p, replicates),
+                    holds_level=pn_calibration_holds(p, replicates=replicates),
+                )
+            )
+    return out
+
+
+def pn_calibration_tsv(rows: Sequence[PnCalibrationRow]) -> str:
+    lines = [
+        "n_pairs\tnull_per_pair\tp_placebo\tp_null\treplicates"
+        "\tp_pn_bounded\tse_pn_bounded\tholds_level"
+    ]
+    lines += [
+        f"{r.n_pairs}\t{r.null_per_pair:.2f}\t{r.cell.p_placebo:.2f}\t{r.cell.p_null:.2f}"
+        f"\t{r.replicates}\t{r.p_pn_bounded:.10f}\t{r.se_pn_bounded:.10f}"
+        f"\t{'yes' if r.holds_level else 'NO'}"
+        for r in rows
+    ]
+    return "\n".join(lines) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -1303,6 +1419,17 @@ def _cell_cols(cell: Cell) -> str:
     )
 
 
+def _fmt_rate(value: float) -> str:
+    return "NA" if math.isnan(value) else f"{value:.10f}"
+
+
+def _read_rate(cells: list[str], cols: dict[str, int], name: str) -> float:
+    """A rate column, NaN when a file written before the column existed lacks it."""
+    if name not in cols or cells[cols[name]] == "NA":
+        return math.nan
+    return float(cells[cols[name]])
+
+
 def per_look_tsv(rows: Sequence[Row]) -> str:
     lines = [
         "\t".join(
@@ -1319,6 +1446,8 @@ def per_look_tsv(rows: Sequence[Row]) -> str:
                 "holds_level",
                 "look",
                 "accounting",
+                "p_pn_bounded",
+                "se_pn_bounded",
             )
         )
     ]
@@ -1339,18 +1468,42 @@ def per_look_tsv(rows: Sequence[Row]) -> str:
             f"\t{look.expected_pairs:.10f}\t{look.expected_epochs:.10f}"
             f"\t{_expected_spend(look.expected_epochs)}\t{price}"
             f"\t{'yes' if row.holds_level else 'NO'}\t{look.look}\t{accounting(row.design)}"
+            f"\t{_fmt_rate(row.p_pn_bounded)}\t{_fmt_rate(row.se_pn_bounded)}"
         )
     return "\n".join(lines) + "\n"
 
 
-def _headline_table(headline: Sequence[HeadlineRow]) -> list[str]:
+def _pn_at_config(rows: Sequence[Row], h: HeadlineRow) -> str:
+    """Min P(P - N bounded) over the three p_P = p_N cells of the chosen configuration."""
+    if not h.reached:
+        return "-"
+    vals = [
+        r.p_pn_bounded
+        for r in rows
+        if (r.design.stopping, r.design.n_pairs, r.design.fn_construction)
+        == (h.stopping, h.n_pairs, h.fn_construction)
+        and math.isclose(r.design.pass_alpha, h.pass_alpha, abs_tol=1e-12)
+        and math.isclose(r.design.starting_wealth, h.starting_wealth, abs_tol=1e-12)
+        and math.isclose(r.design.null_per_pair, h.null_per_pair or 0.0, abs_tol=1e-9)
+        and math.isclose(r.cell.p_placebo, r.cell.p_null, abs_tol=1e-9)
+        and math.isclose(r.cell.d, 0.30, abs_tol=1e-9)
+    ]
+    if not vals or any(math.isnan(v) for v in vals):
+        return "NA"
+    return f"{min(vals):.4f}"
+
+
+def _headline_table(
+    headline: Sequence[HeadlineRow], pn_column: Sequence[str] | None = None
+) -> list[str]:
+    pn_head, pn_rule = (" P(P - N bounded) |", " --- |") if pn_column is not None else ("", "")
     lines = [
         "| stopping | pass_alpha | starting_wealth | target | smallest priced configuration "
         "| total_epochs | expected spend | cap price | P(PASS) at d=0.30 | P(CUT) at d=0.10 "
-        "| missing half | holds level |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| missing half | holds level |" + pn_head,
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |" + pn_rule,
     ]
-    for h in headline:
+    for i, h in enumerate(headline):
         config = (
             f"{h.n_pairs} pairs, null_pp={h.null_per_pair:.2f}, {h.fn_construction}"
             if h.reached and h.n_pairs is not None
@@ -1367,6 +1520,7 @@ def _headline_table(headline: Sequence[HeadlineRow]) -> list[str]:
             f"| {h.stopping} | {h.pass_alpha:.4f} | {_fmt_wealth(h.starting_wealth)} "
             f"| {h.target:.2f} | {config} | {epochs} | {spend} | {cap} | {min_pass} "
             f"| {min_cut} | {missing} | {holds} |"
+            + ("" if pn_column is None else f" {pn_column[i]} |")
         )
     return lines
 
@@ -1401,11 +1555,16 @@ def headline_by_accounting_md(rows: Sequence[Row]) -> str:
         "",
         "Target, margin, estimand, CUT alpha and calibration criteria are those of",
         "the Stage 2 simulator. Rows that fail calibration are excluded.",
+        "",
+        "P(P - N bounded) is the minimum over the three p_P = p_N cells at d = 0.30",
+        "of the probability that the anytime-valid interval on p_P - p_N, four",
+        "one-sided bounds at 0.0125, lies inside (-0.20, 0.20) at the row's read time.",
     ]
     for regime in ACCOUNTING_REGIMES:
         members = [h for h in headline if _headline_accounting(h) == regime]
         lines += ["", f"## Accounting: {regime}", ""]
-        lines += _headline_table(members) if members else ["No rows in this run."]
+        pn = [_pn_at_config(rows, h) for h in members]
+        lines += _headline_table(members, pn) if members else ["No rows in this run."]
     return "\n".join(lines) + "\n"
 
 
@@ -1581,6 +1740,8 @@ def rows_from_output_dir(out_dir: Path) -> tuple[list[Row], int]:
                 "expected_epochs": float(cells[cols["expected_epochs"]]),
                 "holds": cells[cols["holds_level"]] == "yes",
                 "look": int(cells[cols["look"]]),
+                "p_pn_bounded": _read_rate(cells, cols, "p_pn_bounded"),
+                "se_pn_bounded": _read_rate(cells, cols, "se_pn_bounded"),
             }
     if len(replicates_values) != 1:
         raise ValueError(f"per_look.tsv disagrees on replicates: {sorted(replicates_values)}")
@@ -1616,6 +1777,8 @@ def rows_from_output_dir(out_dir: Path) -> tuple[list[Row], int]:
                 expected_epochs=float(b["expected_epochs"]),  # type: ignore[arg-type]
                 holds_level=bool(b["holds"]),  # type: ignore[arg-type]
                 per_look=(look,),
+                p_pn_bounded=float(b["p_pn_bounded"]),  # type: ignore[arg-type]
+                se_pn_bounded=float(b["se_pn_bounded"]),  # type: ignore[arg-type]
             )
         )
     return rows, replicates
@@ -1696,6 +1859,9 @@ def main(
     summary = summary_md(rows, args.replicates, args.seed)
     (args.out / "summary.md").write_text(summary, encoding="utf-8")
     _write_headline_by_accounting(args.out, rows)
+    pn_configs = sorted({(d.n_pairs, d.null_per_pair) for _c, d in chosen})
+    pn_rows = pn_calibration_rows(pn_configs, replicates=args.replicates, seed=args.seed)
+    (args.out / "pn_calibration.tsv").write_text(pn_calibration_tsv(pn_rows), encoding="utf-8")
     print(summary)
 
     cal = [r for r in rows if is_calibration_cell(r.cell)]

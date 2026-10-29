@@ -604,7 +604,7 @@ and covers that section only. This page stays the citable surface for every kind
   at 0.10 instead of 0.05, and fixed-n-score joint PASS reporting the F - N
   half alone. The campaign pins
   `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
-  `sha256:b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09`.
+  `sha256:50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875`.
 - **Refuses to claim:** Any mutation score, adequacy of the Stage 2 suite as a
   whole, or that any surviving mutant outside the sixteen named cases is
   safe. It refuses any operating characteristic from the reduced committed
@@ -625,11 +625,24 @@ and covers that section only. This page stays the citable surface for every kind
   reporting its F - P half as the joint PASS, and the fixed-n-score F - N test
   counting pairs with a Null draw instead of Null draws. The campaign pins
   `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
-  `sha256:b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09`.
+  `sha256:50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875`.
 - **Refuses to claim:** Any mutation score, adequacy of the Stage 2 suite as a
   whole, or any operating characteristic of the extended grid, which has not
   been run in full. It refuses any claim about the anytime starting-wealth
   sweep, which is deferred to #868.
+
+### [`docs/assurance/stage2-pn-bound-798-mutation-receipt.md`](assurance/stage2-pn-bound-798-mutation-receipt.md)
+
+- **Claims:** One mutant against the P - N bound added to the Stage 2
+  simulator (#798), run in its own git worktree at a fixed commit with a clean
+  baseline passing first and the production tree unchanged afterwards. It is
+  KILLED: the P - N interval computed at 0.025 per one-sided bound instead of
+  0.0125. The campaign pins
+  `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
+  `sha256:50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875`.
+- **Refuses to claim:** Any mutation score, adequacy of the Stage 2 suite as a
+  whole, or any value of `p_pn_bounded` on the full grid, which has not been
+  run.
 
 ### [`docs/findings/cross-card-audit-screen.md`](findings/cross-card-audit-screen.md)
 

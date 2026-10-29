@@ -1,0 +1,50 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-1w5xpz4r\\M-S2-21\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875",
+        "tests_collected": 1,
+        "worktree_head": "fbd9df8d2696900e6171479702127312497fdf2c"
+      },
+      "description": "the P - N interval uses 0.025 per one-sided bound instead of 0.0125",
+      "killing_assertions": [
+        "tests/test_stage2_pn_bound_798.py::test_pn_interval_uses_0_0125_per_side_not_0_025"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-1w5xpz4r\\M-S2-21\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "0c295bd165df5d0d3d5ab61a096a69b18f6f167738007b9dbef9c9cc821165e2",
+        "tests_collected": 1,
+        "worktree_head": "fbd9df8d2696900e6171479702127312497fdf2c"
+      },
+      "mutant_id": "M-S2-21",
+      "notes": [],
+      "obligation": "798-stage2-pn-alpha-025",
+      "selection": [
+        "tests/test_stage2_pn_bound_798.py::test_pn_interval_uses_0_0125_per_side_not_0_025"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "fbd9df8d2696900e6171479702127312497fdf2c",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875"
+  },
+  "production_tree_digest_before": {
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.1",
+  "target_digests": {
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875"
+  },
+  "target_files": [
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py"
+  ]
+}

@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-17\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-kmt4mgz7\\M-S2-17\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875",
         "tests_collected": 1,
-        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+        "worktree_head": "b08891d8a59154fd4ed5e54584ec76c16045742c"
       },
       "description": "the fixed-n-betting CUT test runs at 0.10 instead of the registered 0.05",
       "killing_assertions": [
@@ -17,10 +17,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-17\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "252ba6cdf46e3515b0727ecfd19dacc46a0f435eb7d7fe4213fba59c3330a778",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-kmt4mgz7\\M-S2-17\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "9bae9b541376e8e76022ce832a1c54a57815b13dbc23c53a3fe79e1a8364a828",
         "tests_collected": 1,
-        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+        "worktree_head": "b08891d8a59154fd4ed5e54584ec76c16045742c"
       },
       "mutant_id": "M-S2-17",
       "notes": [],
@@ -34,10 +34,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-18\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-kmt4mgz7\\M-S2-18\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875",
         "tests_collected": 1,
-        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+        "worktree_head": "b08891d8a59154fd4ed5e54584ec76c16045742c"
       },
       "description": "the anytime-tuned CUT test runs at 0.10 instead of the registered 0.05",
       "killing_assertions": [
@@ -47,10 +47,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-18\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "d62f5eebf9872086794453a80790b8dbaee1b842f103b2b5ebe9011660c8570b",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-kmt4mgz7\\M-S2-18\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "519d1ac56d500e769599f82c773b974c49842d4613608fc043105092411b800c",
         "tests_collected": 1,
-        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+        "worktree_head": "b08891d8a59154fd4ed5e54584ec76c16045742c"
       },
       "mutant_id": "M-S2-18",
       "notes": [],
@@ -64,10 +64,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-19\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-kmt4mgz7\\M-S2-19\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875",
         "tests_collected": 1,
-        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+        "worktree_head": "b08891d8a59154fd4ed5e54584ec76c16045742c"
       },
       "description": "an anytime-tuned row reports its F - P half as the joint PASS",
       "killing_assertions": [
@@ -77,10 +77,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-19\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "a30500420d0e31b496c13a8d99169992303e5874c65c1739b7094f5b2f78faae",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-kmt4mgz7\\M-S2-19\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "a16ccc73ca0ec5389742a2d990845f9da9047f1e7c7f99bf84a445146d02f538",
         "tests_collected": 1,
-        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+        "worktree_head": "b08891d8a59154fd4ed5e54584ec76c16045742c"
       },
       "mutant_id": "M-S2-19",
       "notes": [],
@@ -94,10 +94,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-20\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-kmt4mgz7\\M-S2-20\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875",
         "tests_collected": 2,
-        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+        "worktree_head": "b08891d8a59154fd4ed5e54584ec76c16045742c"
       },
       "description": "the fixed-n-score F - N test is given the number of pairs with a Null draw instead of the number of Null draws",
       "killing_assertions": [
@@ -108,10 +108,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-20\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
-        "source_digest": "1f802eb3a5a6206eed8bf2541807a027ee3cfdd57edd988dcb3f748597bda375",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-kmt4mgz7\\M-S2-20\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "db6256822a9c4cbcc3c3dbfa0e8a9272b21265e0ae449a0f5d2d8a2baf2dc258",
         "tests_collected": 2,
-        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+        "worktree_head": "b08891d8a59154fd4ed5e54584ec76c16045742c"
       },
       "mutant_id": "M-S2-20",
       "notes": [],
@@ -123,18 +123,18 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "248f3f3e97fbe293c0e4ad3615c6ade45683c307",
+  "commit_under_test": "b08891d8a59154fd4ed5e54584ec76c16045742c",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09"
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875"
   },
   "production_tree_digest_before": {
-    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09"
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875"
   },
   "production_tree_unchanged": true,
   "python": "3.13.1",
   "target_digests": {
-    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09"
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "50e5401a11653c32e73272798ad6914f85d794fa566b948c3c616203a8913875"
   },
   "target_files": [
     "scripts/screens/419/simulate_stage1a_regime_685_stage2.py"
