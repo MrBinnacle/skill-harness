@@ -4,8 +4,8 @@
 pairs. **Generator:** `scripts/mutation_receipt.py --select 718-stage2`.
 **Machine-readable record:** `docs/assurance/stage1a-regime-718-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at
-`sha256:2256a2abe304393a178bbb546788cb1476f437665246f164f3338df73807bf6d`.
-**Commit at generation:** `10fb0cc2d1283a4e4fc0472531299035e7191ae5` —
+`sha256:b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09`.
+**Commit at generation:** `7d7c699b3dde46bdc6f9da0c17fc906bfcb1d719` —
 informational only; currency is checked against the digest above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.15.
 
@@ -81,6 +81,8 @@ committed run reports every diagonal configuration as not reached at 100
 pairs, and the full pair grid has not been simulated. It says sixteen
 specific defects are detected, in isolated worktrees, against baselines that
 passed first, and that the production tree was byte-unchanged throughout.
+
+Regenerated for #720, which extended the sweep and changed the simulator bytes; all sixteen cases are still KILLED.
 
 *Revisit if:* the #718 deliverable changes. Then regenerate with
 `scripts/mutation_receipt.py --select 718-stage2`; the currency gate reddens

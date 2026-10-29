@@ -21,6 +21,13 @@ The four stopping designs (``stopping`` column):
   fixed-n-score     One look at n, with a score test against the margin.
                     Direct F - N only. Pass alpha 0.0209, 0.0105 or 0.005.
 
+#720 extends the sweep (STAGE2_SWEEP): starting wealth 0.1, 0.05, 0.025 and
+0.01 on anytime-tuned rows; PASS alpha 0.002, 0.001 and 0.0005 on fixed-n
+rows; Null per pair 2.0; 1,000 and 1,200 pairs; and anytime and
+anytime-tuned rows at PASS alpha 0.0105. Each row carries an ``accounting``
+label (none, carry-over, new-slot) set by rule from its declared parameters,
+and headline_by_accounting.md reports one headline table per regime.
+
 CUT alpha is 0.05 on every row. Output goes under
 ``docs/findings/data/stage1a-regime-685-stage2/``.
 
@@ -83,6 +90,17 @@ REDUCED_NULL_PER_PAIR = (1.0, 0.5)
 REDUCED_EFFECTS = (0.00, 0.10, 0.20, 0.30)
 REDUCED_REPLICATES = 200
 
+# #720: values added after the S486 wealth was read. They extend the sweep;
+# every row of the original sweep is unchanged.
+ADDED_PAIRS = (1000, 1200)
+ADDED_NULL_PER_PAIR = (2.0,)
+ADDED_STARTING_WEALTHS = (0.1, 0.05, 0.025, 0.01)
+ADDED_FIXED_PASS_ALPHAS = (0.002, 0.001, 0.0005)
+NEW_SLOT_ALPHA = 0.0105
+
+Accounting = Literal["none", "carry-over", "new-slot"]
+ACCOUNTING_REGIMES: tuple[Accounting, ...] = ("none", "carry-over", "new-slot")
+
 DESIGN_FIELDS = (
     "n_full",
     "n_placebo",
@@ -143,6 +161,28 @@ class Design:
     @property
     def total_epochs(self) -> int:
         return self.n_full + self.n_placebo + self.n_null
+
+
+def accounting(design: Design) -> Accounting:
+    """The accounting regime a row prices, by rule from its declared parameters.
+
+    none        starting wealth 1.0 at PASS alpha 0.0209.
+    carry-over  anytime rows with starting wealth below 1.0 at 0.0209;
+                fixed-n rows at PASS alpha below 0.0105.
+    new-slot    starting wealth 1.0 at PASS alpha 0.0105, any stopping design.
+    """
+    unit_wealth = math.isclose(design.starting_wealth, 1.0)
+    if unit_wealth and math.isclose(design.pass_alpha, PASS_ALPHA):
+        return "none"
+    if unit_wealth and math.isclose(design.pass_alpha, NEW_SLOT_ALPHA):
+        return "new-slot"
+    anytime_family = design.stopping in ("anytime", "anytime-tuned")
+    below_unit = design.starting_wealth < 1.0
+    if anytime_family and below_unit and math.isclose(design.pass_alpha, PASS_ALPHA):
+        return "carry-over"
+    if not anytime_family and unit_wealth and design.pass_alpha < NEW_SLOT_ALPHA:
+        return "carry-over"
+    raise ValueError(f"no accounting regime covers {design}")
 
 
 @dataclass(frozen=True)
@@ -844,7 +884,8 @@ def _run_fixed_n_score(
     0.05 (reject for small z).
 
     The Farrington-Manning marginals are the Full successes over all pairs and
-    the Null successes over the Null draws that were scheduled.
+    the Null successes over the Null draws used. At Null per pair 2.0 that is
+    two draws per pair, not the number of pairs with a Null draw.
     """
     full, placebo, null_all, null_draws, fn_mask = _draw_streams(
         cell, design, replicates=replicates, seed=seed
@@ -861,7 +902,7 @@ def _run_fixed_n_score(
     if xs_fn.shape[1] > 0:
         k_f = full.sum(axis=1)
         k_n = _null_used.sum(axis=1)
-        n_null = int(fn_mask.sum())
+        n_null = int(_null_used.shape[1])
         z_fn = np.array(
             [
                 farrington_manning_z(int(ff), n, int(nn), n_null, delta0)
@@ -1150,113 +1191,91 @@ def _cells(effects: Sequence[float]) -> list[Cell]:
     ]
 
 
-def stage2_grid() -> list[tuple[Cell, Design]]:
-    """Full Stage 2 grid: stopping x pairs x null allocation x parameter variants."""
-    jobs: list[tuple[Cell, Design]] = []
-    for cell in _cells(EFFECTS):
-        for n_pairs in PAIRS:
-            for null_pp in NULL_PER_PAIR:
-                for fn_con in FN_ANYTIME:
-                    jobs.append(
-                        (
-                            cell,
-                            Design(
-                                n_pairs=n_pairs,
-                                null_per_pair=null_pp,
-                                fn_construction=fn_con,
-                                stopping="anytime",
-                                pass_alpha=PASS_ALPHA,
-                                starting_wealth=1.0,
-                            ),
-                        )
-                    )
-                for w0 in STARTING_WEALTHS:
-                    jobs.append(
-                        (
-                            cell,
-                            Design(
-                                n_pairs=n_pairs,
-                                null_per_pair=null_pp,
-                                fn_construction="direct",
-                                stopping="anytime-tuned",
-                                pass_alpha=PASS_ALPHA,
-                                starting_wealth=w0,
-                            ),
-                        )
-                    )
-                for alpha in FIXED_PASS_ALPHAS:
-                    for stopping in ("fixed-n-betting", "fixed-n-score"):
-                        jobs.append(
-                            (
-                                cell,
-                                Design(
-                                    n_pairs=n_pairs,
-                                    null_per_pair=null_pp,
-                                    fn_construction="direct",
-                                    stopping=stopping,
-                                    pass_alpha=alpha,
-                                    starting_wealth=1.0,
-                                ),
-                            )
-                        )
-    return jobs
+@dataclass(frozen=True)
+class Sweep:
+    """The swept values of a grid. A later value is a new Sweep, not new code.
+
+    ``anytime_pass_alphas`` are the PASS alphas of anytime and anytime-tuned
+    rows at starting wealth 1.0; ``starting_wealths`` apply to anytime-tuned
+    rows at PASS_ALPHA only, so every row carries one accounting regime.
+    """
+
+    pairs: tuple[int, ...]
+    null_per_pair: tuple[float, ...]
+    effects: tuple[float, ...]
+    anytime_pass_alphas: tuple[float, ...]
+    starting_wealths: tuple[float, ...]
+    fixed_pass_alphas: tuple[float, ...]
 
 
-def reduced_grid() -> list[tuple[Cell, Design]]:
+ORIGINAL_SWEEP = Sweep(
+    pairs=PAIRS,
+    null_per_pair=NULL_PER_PAIR,
+    effects=EFFECTS,
+    anytime_pass_alphas=(PASS_ALPHA,),
+    starting_wealths=STARTING_WEALTHS,
+    fixed_pass_alphas=FIXED_PASS_ALPHAS,
+)
+STAGE2_SWEEP = Sweep(
+    pairs=PAIRS + ADDED_PAIRS,
+    null_per_pair=NULL_PER_PAIR + ADDED_NULL_PER_PAIR,
+    effects=EFFECTS,
+    anytime_pass_alphas=(PASS_ALPHA, NEW_SLOT_ALPHA),
+    starting_wealths=STARTING_WEALTHS + ADDED_STARTING_WEALTHS,
+    fixed_pass_alphas=FIXED_PASS_ALPHAS + ADDED_FIXED_PASS_ALPHAS,
+)
+REDUCED_SWEEP = Sweep(
+    pairs=REDUCED_PAIRS,
+    null_per_pair=REDUCED_NULL_PER_PAIR,
+    effects=REDUCED_EFFECTS,
+    anytime_pass_alphas=(PASS_ALPHA,),
+    starting_wealths=STARTING_WEALTHS,
+    fixed_pass_alphas=FIXED_PASS_ALPHAS,
+)
+
+
+def _designs(sweep: Sweep, n_pairs: int, null_pp: float) -> list[Design]:
+    def make(stopping: str, fn_con: str, alpha: float, w0: float) -> Design:
+        return Design(n_pairs, null_pp, fn_con, stopping, alpha, w0)
+
+    out: list[Design] = []
+    for alpha in sweep.anytime_pass_alphas:
+        out += [make("anytime", fn_con, alpha, 1.0) for fn_con in FN_ANYTIME]
+        wealths = sweep.starting_wealths if math.isclose(alpha, PASS_ALPHA) else (1.0,)
+        out += [make("anytime-tuned", "direct", alpha, w0) for w0 in wealths]
+        if math.isclose(alpha, PASS_ALPHA):
+            out += [
+                make(stopping, "direct", fixed_alpha, 1.0)
+                for fixed_alpha in sweep.fixed_pass_alphas
+                for stopping in ("fixed-n-betting", "fixed-n-score")
+            ]
+    return out
+
+
+def build_grid(sweep: Sweep) -> list[tuple[Cell, Design]]:
+    """Every (cell, design) job of ``sweep``: stopping x pairs x null allocation x variants."""
+    return [
+        (cell, design)
+        for cell in _cells(sweep.effects)
+        for n_pairs in sweep.pairs
+        for null_pp in sweep.null_per_pair
+        for design in _designs(sweep, n_pairs, null_pp)
+    ]
+
+
+def stage2_grid(sweep: Sweep = STAGE2_SWEEP) -> list[tuple[Cell, Design]]:
+    """Full Stage 2 grid, the original sweep extended by #720."""
+    return build_grid(sweep)
+
+
+def reduced_grid(sweep: Sweep = REDUCED_SWEEP) -> list[tuple[Cell, Design]]:
     """Reduced grid for the test suite and the committed data run.
 
-    One pair count, both null allocations, four effects spanning calibration
-    and real-effect cells, all nine baseline cells, and every stopping design
-    with its declared parameter variants.
+    One pair count, both original null allocations, four effects spanning
+    calibration and real-effect cells, all nine baseline cells, and every
+    stopping design with its original parameter variants.
     """
-    jobs: list[tuple[Cell, Design]] = []
-    for cell in _cells(REDUCED_EFFECTS):
-        for n_pairs in REDUCED_PAIRS:
-            for null_pp in REDUCED_NULL_PER_PAIR:
-                for fn_con in FN_ANYTIME:
-                    jobs.append(
-                        (
-                            cell,
-                            Design(
-                                n_pairs=n_pairs,
-                                null_per_pair=null_pp,
-                                fn_construction=fn_con,
-                                stopping="anytime",
-                                pass_alpha=PASS_ALPHA,
-                                starting_wealth=1.0,
-                            ),
-                        )
-                    )
-                for w0 in STARTING_WEALTHS:
-                    jobs.append(
-                        (
-                            cell,
-                            Design(
-                                n_pairs=n_pairs,
-                                null_per_pair=null_pp,
-                                fn_construction="direct",
-                                stopping="anytime-tuned",
-                                pass_alpha=PASS_ALPHA,
-                                starting_wealth=w0,
-                            ),
-                        )
-                    )
-                for alpha in FIXED_PASS_ALPHAS:
-                    for stopping in ("fixed-n-betting", "fixed-n-score"):
-                        jobs.append(
-                            (
-                                cell,
-                                Design(
-                                    n_pairs=n_pairs,
-                                    null_per_pair=null_pp,
-                                    fn_construction="direct",
-                                    stopping=stopping,
-                                    pass_alpha=alpha,
-                                    starting_wealth=1.0,
-                                ),
-                            )
-                        )
-    return jobs
+    return build_grid(sweep)
 
 
 # ---------------------------------------------------------------------------
@@ -1264,11 +1283,17 @@ def reduced_grid() -> list[tuple[Cell, Design]]:
 # ---------------------------------------------------------------------------
 
 
+def _fmt_wealth(w0: float) -> str:
+    """Two decimals, as before #720, unless that would misstate the value (0.025)."""
+    two = f"{w0:.2f}"
+    return two if math.isclose(float(two), w0, abs_tol=1e-12) else f"{w0:g}"
+
+
 def _design_cols(design: Design) -> str:
     return (
         f"{design.n_full}\t{design.n_placebo}\t{design.n_null}\t{design.total_epochs}"
         f"\t{design.null_per_pair:.2f}\t{design.fn_construction}\t{design.stopping}"
-        f"\t{design.pass_alpha:.6f}\t{design.starting_wealth:.2f}"
+        f"\t{design.pass_alpha:.6f}\t{_fmt_wealth(design.starting_wealth)}"
     )
 
 
@@ -1293,6 +1318,7 @@ def per_look_tsv(rows: Sequence[Row]) -> str:
                 *_PRICE_FIELDS,
                 "holds_level",
                 "look",
+                "accounting",
             )
         )
     ]
@@ -1312,8 +1338,74 @@ def per_look_tsv(rows: Sequence[Row]) -> str:
             f"\t{row.p_cut:.10f}\t{row.p_cant_tell_yet:.10f}\t{row.se_pass:.10f}"
             f"\t{look.expected_pairs:.10f}\t{look.expected_epochs:.10f}"
             f"\t{_expected_spend(look.expected_epochs)}\t{price}"
-            f"\t{'yes' if row.holds_level else 'NO'}\t{look.look}"
+            f"\t{'yes' if row.holds_level else 'NO'}\t{look.look}\t{accounting(row.design)}"
         )
+    return "\n".join(lines) + "\n"
+
+
+def _headline_table(headline: Sequence[HeadlineRow]) -> list[str]:
+    lines = [
+        "| stopping | pass_alpha | starting_wealth | target | smallest priced configuration "
+        "| total_epochs | expected spend | cap price | P(PASS) at d=0.30 | P(CUT) at d=0.10 "
+        "| missing half | holds level |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for h in headline:
+        config = (
+            f"{h.n_pairs} pairs, null_pp={h.null_per_pair:.2f}, {h.fn_construction}"
+            if h.reached and h.n_pairs is not None
+            else _NOT_REACHED
+        )
+        epochs = "-" if h.total_epochs is None else str(h.total_epochs)
+        spend = h.expected_spend or "-"
+        cap = h.cap_price or "-"
+        min_pass = "-" if h.p_pass_at_d030 is None else f"{h.p_pass_at_d030:.4f}"
+        min_cut = "-" if h.p_cut_at_d010 is None else f"{h.p_cut_at_d010:.4f}"
+        missing = h.missing_half or "-"
+        holds = "yes" if h.any_row_holds_level else "NO"
+        lines.append(
+            f"| {h.stopping} | {h.pass_alpha:.4f} | {_fmt_wealth(h.starting_wealth)} "
+            f"| {h.target:.2f} | {config} | {epochs} | {spend} | {cap} | {min_pass} "
+            f"| {min_cut} | {missing} | {holds} |"
+        )
+    return lines
+
+
+def _headline_accounting(h: HeadlineRow) -> Accounting:
+    return accounting(
+        Design(
+            n_pairs=1,
+            stopping=h.stopping,
+            pass_alpha=h.pass_alpha,
+            starting_wealth=h.starting_wealth,
+        )
+    )
+
+
+def headline_by_accounting_md(rows: Sequence[Row]) -> str:
+    """The headline split by accounting regime: one table per regime, no ranking across them.
+
+    Each table lists, for every stopping design and declared parameter in that
+    regime, the smallest priced configuration meeting the diagonal target, or
+    "not reached". Regimes are listed in a fixed order that carries no rank.
+    """
+    headline = headline_rows(rows)
+    lines = [
+        "#720 Stage 2 headline by accounting regime",
+        "",
+        "none: a card with no earlier run (starting wealth 1.0, PASS alpha 0.0209).",
+        "carry-over: the second test inherits the first stream's wealth (anytime",
+        "starting wealth below 1.0; fixed-n PASS alpha below 0.0105).",
+        "new-slot: the second test is a new ledger hypothesis at PASS alpha 0.0105,",
+        "starting wealth 1.0.",
+        "",
+        "Target, margin, estimand, CUT alpha and calibration criteria are those of",
+        "the Stage 2 simulator. Rows that fail calibration are excluded.",
+    ]
+    for regime in ACCOUNTING_REGIMES:
+        members = [h for h in headline if _headline_accounting(h) == regime]
+        lines += ["", f"## Accounting: {regime}", ""]
+        lines += _headline_table(members) if members else ["No rows in this run."]
     return "\n".join(lines) + "\n"
 
 
@@ -1337,29 +1429,8 @@ def summary_md(rows: Sequence[Row], replicates: int, seed: int) -> str:
         "fails is labelled as not holding its level and does not fail the run.",
         "Configurations are ranked by total_epochs (the cap price), then by expected epochs.",
         "",
-        "| stopping | pass_alpha | starting_wealth | target | smallest priced configuration "
-        "| total_epochs | expected spend | cap price | P(PASS) at d=0.30 | P(CUT) at d=0.10 "
-        "| missing half | holds level |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        *_headline_table(headline),
     ]
-    for h in headline:
-        config = (
-            f"{h.n_pairs} pairs, null_pp={h.null_per_pair:.2f}, {h.fn_construction}"
-            if h.reached and h.n_pairs is not None
-            else _NOT_REACHED
-        )
-        epochs = "-" if h.total_epochs is None else str(h.total_epochs)
-        spend = h.expected_spend or "-"
-        cap = h.cap_price or "-"
-        min_pass = "-" if h.p_pass_at_d030 is None else f"{h.p_pass_at_d030:.4f}"
-        min_cut = "-" if h.p_cut_at_d010 is None else f"{h.p_cut_at_d010:.4f}"
-        missing = h.missing_half or "-"
-        holds = "yes" if h.any_row_holds_level else "NO"
-        lines.append(
-            f"| {h.stopping} | {h.pass_alpha:.4f} | {h.starting_wealth:.2f} | {h.target:.2f} "
-            f"| {config} | {epochs} | {spend} | {cap} | {min_pass} | {min_cut} "
-            f"| {missing} | {holds} |"
-        )
     lines += [
         "",
         headline_price_sentence(headline),
@@ -1555,6 +1626,12 @@ def rows_from_output_dir(out_dir: Path) -> tuple[list[Row], int]:
 # ---------------------------------------------------------------------------
 
 
+def _write_headline_by_accounting(out_dir: Path, rows: Sequence[Row]) -> None:
+    (out_dir / "headline_by_accounting.md").write_text(
+        headline_by_accounting_md(rows), encoding="utf-8"
+    )
+
+
 def _run(job: tuple[Cell, Design, int, int]) -> Row:
     cell, design, replicates, seed = job
     row = run_cell(cell, design, replicates=replicates, seed=seed)
@@ -1600,6 +1677,7 @@ def main(
             replicates = meta[0]
         summary = summary_md(rows, replicates, seed)
         (args.out / "summary.md").write_text(summary, encoding="utf-8")
+        _write_headline_by_accounting(args.out, rows)
         print(summary)
         return calibration_exit_code(rows)
 
@@ -1617,6 +1695,7 @@ def main(
     _write_run_meta(args.out, replicates=args.replicates, seed=args.seed)
     summary = summary_md(rows, args.replicates, args.seed)
     (args.out / "summary.md").write_text(summary, encoding="utf-8")
+    _write_headline_by_accounting(args.out, rows)
     print(summary)
 
     cal = [r for r in rows if is_calibration_cell(r.cell)]
