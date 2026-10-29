@@ -252,7 +252,7 @@ class DelegatedGuard:
 
     ``symbol`` must name a callable with the house gate signature,
     ``(root: Path, errors: list[str]) -> None``, appending one string per
-    violation. That is release_gate.py's shape for all eight of its gates, so
+    violation. That is release_gate.py's shape for each of its gates, so
     the convention is the repository's, not this kind's invention.
 
     ``requires`` is the vacuity control, and it is why this is a check function

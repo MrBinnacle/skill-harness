@@ -1,0 +1,43 @@
+name: Release authorize
+
+# The pre-publication authorization run (#835). Dispatch it on the release
+# tag after the assurance.yml run and the ci.yml run at the tagged commit have
+# completed, and before `gh release create`:
+#
+#   gh workflow run release-authorize.yml --ref v<version>
+#
+# The gate prints RELEASE GATE: AUTHORIZED only on a tag ref with all nine
+# gates run and passed. It reads other workflows' completed runs, never its
+# own, so it does not certify a run that is still in progress. publish.yml
+# runs the same gate after the release is published, as a downstream defense.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: read
+
+jobs:
+  authorize:
+    name: Release gate (authorization)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Refuse a non-tag ref
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          echo "release-authorize must be dispatched on a v* tag, not ${GITHUB_REF}" >&2
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Run release gate on the tag
+        shell: bash  # explicit bash runs with -o pipefail, so the gate's exit code survives tee
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/release_gate.py | tee gate.txt
+          grep -q '^RELEASE GATE: AUTHORIZED' gate.txt

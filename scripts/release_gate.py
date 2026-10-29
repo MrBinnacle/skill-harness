@@ -12,9 +12,13 @@ edit the workflows, and this script cannot see surfaces outside the repo,
 e.g. an already-frozen PyPI description):
 
 - ``ci.yml`` on every push/PR (early feedback; tag check self-skips).
+- ``release-authorize.yml``, dispatched on the release tag after the
+  assurance and CI runs at the candidate have completed and before the
+  GitHub Release exists. This is the authorization run (#835).
 - ``publish.yml`` as the first job of the release pipeline: the build and
   PyPI upload jobs depend on it, so a release of a stale tree fails before
-  an artifact exists.
+  an artifact exists. It runs after the release is published, so it is a
+  downstream defense, not the authorization.
 
 Checks (all must pass; failures are listed, not first-fail):
 
@@ -47,9 +51,18 @@ Checks (all must pass; failures are listed, not first-fail):
       either require a green assurance run or declare that it does not. When
       required, a tag ref must carry a successful ``assurance.yml`` run at
       ``GITHUB_SHA`` itself; off a tag ref G8 self-skips (no release
-      candidate). A missing row is NOT RUN and blocks (#735).
+      candidate). A missing row is NOT RUN and blocks (#735). The newest
+      assurance run at the SHA decides; an older success never masks a newer
+      failure, cancellation or run in flight (#835).
+  G9  From the 0.5 line on (#835): on a tag ref, the newest ``ci.yml`` run
+      at ``GITHUB_SHA`` is completed and carries every job in
+      ``REQUIRED_CI_JOBS`` exactly once, successful. Off a tag ref G9
+      self-skips. Earlier lines pass it as not applicable.
 
-G7 and G8 read the GitHub REST API and fail CLOSED: an unreadable API blocks
+From the 0.5 line on, G7 refuses an empty issue list and G8 refuses
+``g8_required=False`` (#835). Lines 0.3 and 0.4 keep their released policy.
+
+G7, G8 and G9 read the GitHub REST API and fail CLOSED: an unreadable API blocks
 the release rather than passing it. ``RELEASE_GATE_GITHUB_API_URL`` names the
 repository API base (default ``https://api.github.com/repos/MrBinnacle/skill-harness``)
 so tests can seed both answers from a local server instead of the network.
@@ -59,7 +72,10 @@ version override, because a version the tree does not declare is the exact
 drift this script exists to catch.
 
 Run locally: ``python scripts/release_gate.py [--root <repo-root>]``.
-Exit code 0 = releasable; 1 = at least one surface is stale (each listed).
+Exit code 1 = at least one surface is stale (each listed). Exit code 0 prints
+one of two verdicts. ``RELEASE GATE: AUTHORIZED`` appears only on a tag ref
+with all nine gates run and passed. ``RELEASE GATE: PRELIMINARY`` is every
+other clean run and is not release authorization (#835).
 """
 
 from __future__ import annotations
@@ -105,13 +121,43 @@ ASSURANCE_REQUIREMENTS: dict[str, AssuranceRequirement] = {
     ),
     # Later lines are declared here when their assurance phase is decided.
     # Absence of a row fails closed: G7 and G8 each report NOT RUN and the
-    # gate blocks. Declaring a row is how a line becomes releasable.
+    # gate blocks. Declaring a row is how a line becomes releasable. From
+    # STRICT_ASSURANCE_FROM on, a row must name at least one issue and must
+    # require the assurance run (#835).
 }
 """Declared assurance requirements keyed by minor line (``"MAJOR.MINOR"``).
 
 The table is a tree property: it lives in this repo, so an undeclared line
 fails on every ref, including ordinary CI. That is intended — a version bump
 to a line with no declared requirement cannot merge.
+"""
+
+STRICT_ASSURANCE_FROM = (0, 5)
+"""The first minor line on which the assurance policy is strict (#835).
+
+From this line on, an empty G7 issue list and ``g8_required=False`` are
+failures, not declarations, and G9 reads the candidate's CI evidence. Lines
+0.3 and 0.4 keep the behavior they were released under.
+"""
+
+ASSURANCE_WORKFLOW = ".github/workflows/assurance.yml"
+CI_WORKFLOW = ".github/workflows/ci.yml"
+
+_DOT = chr(0xB7)  # ci.yml separates matrix values with a middle dot; source stays ASCII.
+REQUIRED_CI_JOBS: tuple[str, ...] = (
+    "Drift check (locked contracts)",
+    "Structural bans (raw sqlite3.connect / oracle_verdicts / timestamp ORDER BY)",
+    f"Calibration CS grid (ubuntu-latest {_DOT} py3.12)",
+    f"Calibration CS grid (ubuntu-latest {_DOT} py3.13)",
+    f"Calibration CS grid (windows-latest {_DOT} py3.12)",
+    f"Calibration CS grid (windows-latest {_DOT} py3.13)",
+    "Dependency audit (pip-audit)",
+)
+"""The ci.yml jobs G9 requires green at the candidate, by exact name (#835).
+
+Branch protection does not require these, so G9 does. Every calibration
+matrix cell is named. tests/test_release_gate_real_tree.py checks this tuple
+against ci.yml, so a renamed job fails the suite instead of the release.
 """
 
 
@@ -255,8 +301,8 @@ def gate_tag_matches(version: str, errors: list[str], skipped: list[str]) -> Non
         print(f"G6: not a tag ref ({ref_name or 'local run'}) — tag-match check self-skips.")
 
 
-TOTAL_GATES = 8
-"""Gates this script declares. G1 to G8, counted in the run summary.
+TOTAL_GATES = 9
+"""Gates this script declares. G1 to G9, counted in the run summary.
 
 A gate that does not run must say so. Before #576, G7 and G8 returned in
 silence off the 0.3 minor line, so ``RELEASE GATE: PASS`` covered six of eight
@@ -327,6 +373,12 @@ def gate_assurance_issues_closed(
         errors.append(_undeclared_line_error("G7", line))
         return
     if not row.issues:
+        if _is_strict_line(line):
+            errors.append(
+                f"G7: ASSURANCE_REQUIREMENTS row {line!r} declares no assurance issues; "
+                f"from {_strict_label()} on a line must name at least one (#835)"
+            )
+            return
         print(
             f"G7: PASSED by declaration, ASSURANCE_REQUIREMENTS row {line!r} "
             f"declares no assurance issues for the {line} line."
@@ -364,6 +416,12 @@ def gate_assurance_lane_green(
         errors.append(_undeclared_line_error("G8", line))
         return
     if not row.g8_required:
+        if _is_strict_line(line):
+            errors.append(
+                f"G8: ASSURANCE_REQUIREMENTS row {line!r} declares the assurance run "
+                f"unnecessary; from {_strict_label()} on every line requires it (#835)"
+            )
+            return
         print(
             f"G8: PASSED by declaration, ASSURANCE_REQUIREMENTS row {line!r} "
             f"does not require a green assurance run for the {line} line."
@@ -385,21 +443,150 @@ def gate_assurance_lane_green(
     except (OSError, urllib.error.HTTPError, ValueError) as exc:
         errors.append(f"G8: could not read assurance workflow runs at {sha}: {exc}")
         return
-    runs = document.get("workflow_runs", []) if isinstance(document, dict) else []
-    green = any(
-        isinstance(run, dict)
-        and run.get("path") == ".github/workflows/assurance.yml"
-        and run.get("head_sha") == sha
-        and run.get("status") == "completed"
-        and run.get("conclusion") == "success"
-        for run in runs
-    )
-    if not green:
+    errors_before = len(errors)
+    newest = _newest_run(document, ASSURANCE_WORKFLOW, sha, "G8", errors)
+    if newest is None:
+        if len(errors) == errors_before:
+            errors.append(
+                f"G8: no successful assurance.yml workflow run at the release candidate "
+                f"commit {sha}; produce one with 'gh workflow run assurance.yml "
+                f"--ref v{version}'"
+            )
+        return
+    if newest.get("status") != "completed" or newest.get("conclusion") != "success":
         errors.append(
-            f"G8: no successful assurance.yml workflow run at the release candidate "
-            f"commit {sha}; produce one with 'gh workflow run assurance.yml "
+            f"G8: the newest assurance.yml run at the release candidate commit {sha} "
+            f"is {newest.get('status')}/{newest.get('conclusion')}; an earlier success "
+            f"does not count. Produce a green one with 'gh workflow run assurance.yml "
             f"--ref v{version}'"
         )
+
+
+def _is_strict_line(line: str) -> bool:
+    """Whether ``line`` is at or after STRICT_ASSURANCE_FROM, compared as integers.
+
+    A string compare would put "0.10" before "0.5". A line that does not parse
+    as integers is treated as strict, so an odd version never loosens policy.
+    """
+    try:
+        key = tuple(int(part) for part in line.split("."))
+    except ValueError:
+        return True
+    return key >= STRICT_ASSURANCE_FROM
+
+
+def _strict_label() -> str:
+    return ".".join(str(part) for part in STRICT_ASSURANCE_FROM)
+
+
+def _newest_run(
+    document: object, workflow: str, sha: str, gate: str, errors: list[str]
+) -> dict[str, object] | None:
+    """The most recently started run of ``workflow`` at exactly ``sha``.
+
+    The newest run is the evidence, so an older success cannot mask a newer
+    failure, cancellation or run still in flight (#835). Runs are ordered by
+    ``run_started_at`` and then ``id``. GitHub moves ``run_started_at`` when a
+    run is re-run but keeps ``created_at``, so a failed re-run of an old run
+    outranks a later success. ``created_at`` stands in only when
+    ``run_started_at`` is absent. A matching run with neither, or without an
+    ``id``, is an error, because an unordered set cannot say which run is current.
+    """
+    runs = document.get("workflow_runs", []) if isinstance(document, dict) else []
+    matching = [
+        run
+        for run in runs
+        if isinstance(run, dict) and run.get("path") == workflow and run.get("head_sha") == sha
+    ]
+    keyed: list[tuple[str, int, dict[str, object]]] = []
+    for run in matching:
+        started, run_id = run.get("run_started_at") or run.get("created_at"), run.get("id")
+        if not isinstance(started, str) or not isinstance(run_id, int):
+            errors.append(
+                f"{gate}: a {workflow} run at {sha} has no start time or id; "
+                "the newest run cannot be identified"
+            )
+            return None
+        keyed.append((started, run_id, run))
+    if not keyed:
+        return None
+    return max(keyed, key=lambda item: (item[0], item[1]))[2]
+
+
+def _ascii(text: str) -> str:
+    """``text`` with non-ASCII escaped, for lines a cp1252 console may print."""
+    return text.encode("ascii", "backslashreplace").decode("ascii")
+
+
+def gate_ci_evidence(version: str, errors: list[str], skipped: list[str]) -> None:
+    """G9: the candidate's own completed ci.yml run carries every required job, green.
+
+    Historical lines (before STRICT_ASSURANCE_FROM) pass as not applicable.
+    Off a tag ref there is no release candidate, so G9 self-skips. On a tag
+    ref, G9 takes the newest ci.yml run at ``GITHUB_SHA``, requires it to be
+    completed, reads that one run's latest-attempt jobs, and requires every
+    name in REQUIRED_CI_JOBS present exactly once and successful. Results are
+    never combined across runs or commits.
+    """
+    line = _minor_line(version)
+    if not _is_strict_line(line):
+        print(f"G9: PASSED, not applicable to the historical {line} line (#835).")
+        return
+    if not os.environ.get("GITHUB_REF", "").startswith("refs/tags/"):
+        _record_skip(skipped, "G9", "not a tag ref, no release candidate commit")
+        return
+    sha = os.environ.get("GITHUB_SHA", "")
+    if not sha:
+        errors.append("G9: GITHUB_SHA is unset on a tag ref; the release candidate is unknown")
+        return
+    try:
+        runs_document = _get_json(f"{_api_base()}/actions/runs?head_sha={sha}")
+    except (OSError, urllib.error.HTTPError, ValueError) as exc:
+        errors.append(f"G9: could not read ci.yml runs at {sha}: {exc}")
+        return
+    errors_before = len(errors)
+    run = _newest_run(runs_document, CI_WORKFLOW, sha, "G9", errors)
+    if run is None:
+        if len(errors) == errors_before:
+            errors.append(f"G9: no ci.yml run at the release candidate commit {sha}")
+        return
+    if run.get("status") != "completed":
+        errors.append(
+            f"G9: the newest ci.yml run at {sha} is {run.get('status')}; "
+            "pending evidence does not authorize a release"
+        )
+        return
+    _check_required_jobs(run, sha, errors)
+
+
+def _check_required_jobs(run: dict[str, object], sha: str, errors: list[str]) -> None:
+    """G9's per-job check against the one ci.yml run ``run``."""
+    try:
+        document = _get_json(
+            f"{_api_base()}/actions/runs/{run.get('id')}/jobs?filter=latest&per_page=100"
+        )
+    except (OSError, urllib.error.HTTPError, ValueError) as exc:
+        errors.append(f"G9: could not read the jobs of ci.yml run {run.get('id')}: {exc}")
+        return
+    jobs = document.get("jobs", []) if isinstance(document, dict) else []
+    total = document.get("total_count") if isinstance(document, dict) else None
+    if not isinstance(total, int) or total > len(jobs):
+        errors.append(f"G9: the job list of ci.yml run {run.get('id')} is incomplete or unreadable")
+        return
+    for name in REQUIRED_CI_JOBS:
+        found = [j for j in jobs if isinstance(j, dict) and j.get("name") == name]
+        if len(found) != 1:
+            errors.append(
+                f"G9: required job {_ascii(name)!r} appears {len(found)} times in ci.yml "
+                f"run {run.get('id')} at {sha}"
+            )
+            continue
+        conclusion = found[0].get("conclusion")
+        if found[0].get("status") != "completed" or conclusion != "success":
+            errors.append(
+                f"G9: required job {_ascii(name)!r} is {conclusion or found[0].get('status')} "
+                f"in ci.yml run {run.get('id')} at {sha}"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -424,6 +611,7 @@ def main(argv: list[str] | None = None) -> int:
     gate_tag_matches(version, errors, skipped)
     gate_assurance_issues_closed(version, errors, skipped, not_run)
     gate_assurance_lane_green(version, errors, skipped, not_run)
+    gate_ci_evidence(version, errors, skipped)
     ran = TOTAL_GATES - len(skipped) - len(not_run)
     coverage = f"{ran} of {TOTAL_GATES} gates ran"
     if skipped:
@@ -439,7 +627,28 @@ def main(argv: list[str] | None = None) -> int:
         for e in errors:
             print(f"  FAIL  {e}")
         return 1
-    print(f"RELEASE GATE: PASS ({coverage}), public surfaces in lockstep at version {version}.")
+    return _print_verdict(coverage, version, skipped, not_run)
+
+
+def _print_verdict(coverage: str, version: str, skipped: list[str], not_run: list[str]) -> int:
+    """Print the clean-run verdict. Only a complete tag-ref run is AUTHORIZED (#835).
+
+    Both verdicts exit 0 so ordinary CI stays green; the word PASS is withheld
+    on purpose, so no clean run can be read as permission to publish.
+    """
+    on_tag = os.environ.get("GITHUB_REF", "").startswith("refs/tags/")
+    if on_tag and not skipped and not not_run:
+        sha = os.environ.get("GITHUB_SHA", "")
+        print(
+            f"RELEASE GATE: AUTHORIZED ({coverage}), public surfaces in lockstep at "
+            f"version {version}, release candidate {sha}."
+        )
+        return 0
+    print(
+        f"RELEASE GATE: PRELIMINARY ({coverage}), public surfaces in lockstep at "
+        f"version {version}. Not release authorization: G6, G8 and G9 run only on a "
+        "tag ref."
+    )
     return 0
 
 

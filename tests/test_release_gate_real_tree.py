@@ -39,7 +39,7 @@ Three mutation shapes are measured to survive this module:
 3. ``errors = []`` inserted immediately before ``if errors:`` in ``main``,
    which discards every finding the gate made. This one survives here even
    when a genuinely stale surface is seeded at the same time, because the gate
-   still prints PASS and exits 0.
+   still prints a clean verdict and exits 0.
 
 ``tests/test_release_gate_206.py`` kills shapes 2 and 3 and not shape 1. It
 seeds a tree it has made stale on purpose and asserts the named failure rather
@@ -58,6 +58,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -205,7 +206,7 @@ def test_real_tree_passes_the_release_gate(
     result, _ = gate_run
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RELEASE GATE: PASS" in result.stdout, result.stdout + result.stderr
+    assert "RELEASE GATE: PRELIMINARY" in result.stdout, result.stdout + result.stderr
 
 
 def test_the_pass_line_names_the_version_this_tree_declares(
@@ -213,8 +214,8 @@ def test_the_pass_line_names_the_version_this_tree_declares(
 ) -> None:
     """The verdict is about this tree, not a constant the gate carries.
 
-    Exit 0 and the PASS line alone cannot separate a working gate from one
-    short-circuited to an empty failure list. The version in the PASS line
+    Exit 0 and the verdict line alone cannot separate a working gate from one
+    short-circuited to an empty failure list. The version in the verdict line
     can: the gate reads it from pyproject.toml at run time, so a gate that
     stopped reading the tree would have to invent it. This is the assertion
     that goes red under the second red demonstration in the receipt.
@@ -318,3 +319,79 @@ def test_red_receipt_names_the_command_the_mutation_and_the_exit_code() -> None:
     assert "Status: v0.2.9" in text
     assert "Exit code: `1`" in text
     assert "test_the_pass_line_names_the_version_this_tree_declares" in text
+
+
+def _ci_job_names(workflow: str) -> set[str]:
+    """Every job name ci.yml declares, with matrix placeholders expanded.
+
+    Reads the ``name:`` line of each top-level job and, when it carries
+    ``${{ matrix.os }}`` and ``${{ matrix.python-version }}``, the job's own
+    ``os:`` and ``python-version:`` lists. Deliberately narrow: it parses the
+    shapes ci.yml uses today and fails loudly on any other.
+    """
+    names: set[str] = set()
+    jobs_section = workflow.split("\njobs:\n", 1)[1]
+    blocks = re.split(r"\n(?=  [A-Za-z][\w-]*:\n)", "\n" + jobs_section)
+    for block in blocks:
+        name_line = next(
+            (line for line in block.splitlines() if line.startswith("    name: ")), None
+        )
+        if name_line is None:
+            continue
+        template = name_line.removeprefix("    name: ").strip()
+        if "${{" not in template:
+            names.add(template)
+            continue
+        if not template.startswith("Calibration CS grid ("):
+            # Other matrix jobs (the Test matrix uses include:) are not G9's.
+            continue
+        oses = _matrix_list(block, "os")
+        pythons = _matrix_list(block, "python-version")
+        for os_name in oses:
+            for py in pythons:
+                names.add(
+                    template.replace("${{ matrix.os }}", os_name).replace(
+                        "${{ matrix.python-version }}", py
+                    )
+                )
+    return names
+
+
+def _matrix_list(block: str, key: str) -> list[str]:
+    for line in block.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(f"{key}: ["):
+            inner = stripped.removeprefix(f"{key}: [").removesuffix("]")
+            return [item.strip().strip('"') for item in inner.split(",")]
+    raise AssertionError(f"ci.yml job uses matrix.{key} but no inline {key} list was found")
+
+
+def test_every_g9_required_job_name_exists_in_ci_yml() -> None:
+    """#835: G9 matches jobs by exact name, so a rename must fail here first.
+
+    A job renamed in ci.yml without updating REQUIRED_CI_JOBS would make G9
+    fail every release as "appears 0 times". This test moves that failure to
+    the PR that renames the job.
+    """
+    gate = _gate_module()
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    declared = _ci_job_names(workflow)
+
+    missing = [name for name in gate.REQUIRED_CI_JOBS if name not in declared]
+    assert not missing, f"G9 requires jobs ci.yml does not declare: {missing}"
+    calibration = {n for n in declared if n.startswith("Calibration CS grid (")}
+    assert calibration <= set(gate.REQUIRED_CI_JOBS), (
+        f"a calibration matrix cell is not required by G9: {calibration}"
+    )
+
+
+def test_the_bypass_suite_requires_exactly_the_gate_s_jobs() -> None:
+    """#835: the bypass tests copy REQUIRED_CI_JOBS as a literal; the copy must match.
+
+    The copy is literal so the suite can run against the pre-fix gate, which has
+    no such constant. This test makes a job added to the gate without a matching
+    test fail here.
+    """
+    from tests.test_release_gate_206 import REQUIRED_JOBS
+
+    assert tuple(_gate_module().REQUIRED_CI_JOBS) == REQUIRED_JOBS
