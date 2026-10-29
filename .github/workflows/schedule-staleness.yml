@@ -1,0 +1,57 @@
+# Schedule staleness meta-check (#703).
+#
+# A scheduled workflow that fails, or that GitHub disables after 60 days of
+# repository inactivity, reports nothing on its own. This weekly run lists
+# every scheduled workflow in skill-harness and skills, flags each whose last
+# success is older than twice its cron period, and keeps one open issue that
+# names them. Advisory: it is not a required check and never blocks a merge.
+name: schedule staleness
+
+on:
+  schedule:
+    - cron: "41 5 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  staleness:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Read last successful runs
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/schedule_staleness.py \
+            --repo "${{ github.repository }}" --repo MrBinnacle/skills \
+            --out report.md | tee summary.txt
+          echo "stale=$(sed -n 's/^STALE //p' summary.txt)" >> "$GITHUB_OUTPUT"
+      - name: Open, update or close the staleness issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STALE: ${{ steps.check.outputs.stale }}
+          TITLE: "Scheduled workflows have stopped succeeding"
+        run: |
+          number=$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq "map(select(.title == \"$TITLE\"))[0].number // empty")
+          if [ "$STALE" != "0" ]; then
+            if [ -n "$number" ]; then
+              gh issue edit "$number" --body-file report.md
+            else
+              gh issue create --title "$TITLE" --body-file report.md
+            fi
+          elif [ -n "$number" ]; then
+            gh issue close "$number" --comment "Every scheduled workflow has a recent success."
+          fi
