@@ -1243,8 +1243,6 @@ MUTANTS: tuple[Mutant, ...] = (
         "    passed = fn_pass  # mutant: F - P half dropped",
         (_S2_JOINT_FN_ALONE,),
     ),
-    # #720: three #718 behaviours an independent check found unpinned, and the
-    # Null-draw count the Farrington-Manning test is given.
     Mutant(
         "M-S2-17",
         "720-stage2-betting-cut-level-010",
