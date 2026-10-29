@@ -37,3 +37,5 @@ def test_addendum_matches_all_green_membership() -> None:
     assert "`dependency-audit` is in `all-green`'s `needs`" in addendum
     assert "`linkcheck` stays out" in addendum
     assert "sentence above" in addendum
+    assert "blocks the merge" not in addendum
+    assert "not a required status check" in addendum
