@@ -439,7 +439,7 @@ def gate_assurance_lane_green(
         )
         return
     try:
-        document = _get_json(f"{_api_base()}/actions/runs?head_sha={sha}")
+        document = _get_json(f"{_api_base()}/actions/runs?head_sha={sha}&per_page={RUNS_PAGE_SIZE}")
     except (OSError, urllib.error.HTTPError, ValueError) as exc:
         errors.append(f"G8: could not read assurance workflow runs at {sha}: {exc}")
         return
@@ -479,6 +479,10 @@ def _strict_label() -> str:
     return ".".join(str(part) for part in STRICT_ASSURANCE_FROM)
 
 
+RUNS_PAGE_SIZE = 100
+"""GitHub's largest page for the runs list. The default is 30 (#835 follow-up)."""
+
+
 def _newest_run(
     document: object, workflow: str, sha: str, gate: str, errors: list[str]
 ) -> dict[str, object] | None:
@@ -493,6 +497,14 @@ def _newest_run(
     ``id``, is an error, because an unordered set cannot say which run is current.
     """
     runs = document.get("workflow_runs", []) if isinstance(document, dict) else []
+    total = document.get("total_count") if isinstance(document, dict) else None
+    if not isinstance(runs, list) or not isinstance(total, int) or total > len(runs):
+        returned = len(runs) if isinstance(runs, list) else 0
+        errors.append(
+            f"{gate}: GitHub reports {total} runs at {sha} but returned {returned}; "
+            "a run left off the page could be the newest"
+        )
+        return None
     matching = [
         run
         for run in runs
@@ -540,7 +552,9 @@ def gate_ci_evidence(version: str, errors: list[str], skipped: list[str]) -> Non
         errors.append("G9: GITHUB_SHA is unset on a tag ref; the release candidate is unknown")
         return
     try:
-        runs_document = _get_json(f"{_api_base()}/actions/runs?head_sha={sha}")
+        runs_document = _get_json(
+            f"{_api_base()}/actions/runs?head_sha={sha}&per_page={RUNS_PAGE_SIZE}"
+        )
     except (OSError, urllib.error.HTTPError, ValueError) as exc:
         errors.append(f"G9: could not read ci.yml runs at {sha}: {exc}")
         return
