@@ -391,6 +391,14 @@ _S1A_REBUILD_BYTE_KILL = (
     "tests/test_simulate_stage1a_regime_685.py"
     "::test_rebuild_reproduces_summary_and_exit_code_byte_identically"
 )
+_S1A_REBUILD_FIXTURE_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_rebuild_of_measured_fixture_writes_its_summary_and_exits_one"
+)
+_S1A_REBUILD_META_KILL = (
+    "tests/test_simulate_stage1a_regime_685.py"
+    "::test_rebuild_reports_the_run_meta_seed_and_replicates"
+)
 _S1A_SENS_ROWS_KILL = (
     "tests/test_simulate_stage1a_regime_685.py"
     "::test_sensitivity_rows_report_off_diagonal_minima_not_nine_cell_minima"
@@ -1035,6 +1043,41 @@ MUTANTS: tuple[Mutant, ...] = (
         "    return tuple((p_p, p_n) for p_p in BASELINES for p_n in BASELINES)"
         "  # mutant: nine cells",
         (_S1A_SENS_ROWS_KILL, _S1A_SENS_SENTENCE_KILL),
+    ),
+    # #715: the rebuild path on a hand-written fixture whose summary carries
+    # measured numbers and whose calibration fails in one cell.
+    Mutant(
+        "M-S1A-22",
+        "715-stage1a-rebuild-exit-zero",
+        "the --rebuild branch returns 0 unconditionally, so a rebuilt directory "
+        "whose calibration fails reports success",
+        _S1A,
+        _S1A_MODULE,
+        "        return calibration_exit_code(results)",
+        "        return 0  # mutant: rebuild exit code ignores calibration",
+        (_S1A_REBUILD_FIXTURE_KILL,),
+    ),
+    Mutant(
+        "M-S1A-23",
+        "715-stage1a-rebuild-p-cut-from-p-pass",
+        "results_from_output_dir reads p_cut from the p_pass column, so every "
+        "rebuilt P(CUT) is a P(PASS)",
+        _S1A,
+        _S1A_MODULE,
+        '                p_cut=float(row[per_cols["p_cut"]]),',
+        '                p_cut=float(row[per_cols["p_pass"]]),  # mutant: wrong column',
+        (_S1A_REBUILD_FIXTURE_KILL,),
+    ),
+    Mutant(
+        "M-S1A-24",
+        "715-stage1a-rebuild-ignores-run-meta",
+        "the --rebuild branch ignores run_meta.json, so the rebuilt summary "
+        "reports the --seed default and the per_look.tsv replicate count",
+        _S1A,
+        _S1A_MODULE,
+        "        meta = _read_run_meta(args.out)",
+        "        meta = None  # mutant: run_meta.json ignored",
+        (_S1A_REBUILD_FIXTURE_KILL, _S1A_REBUILD_META_KILL),
     ),
     # #718: thirteen Stage 2 mutants, each under its own obligation prefix.
     Mutant(

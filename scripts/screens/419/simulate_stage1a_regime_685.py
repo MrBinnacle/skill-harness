@@ -1434,6 +1434,30 @@ def results_from_output_dir(out_dir: Path) -> tuple[list[CellResult], int, bool]
     return results, replicates, terminal_available
 
 
+def _print_calibration_failures(results: Sequence[CellResult]) -> None:
+    """Print one CALIBRATION FAILURE line per failing calibration cell.
+
+    #715: a run and a rebuild of its output directory both call this, so a
+    failing rebuild names the same cells the run named.
+    """
+    for r in results:
+        if not is_calibration_cell(r.cell) or calibration_holds(r):
+            continue
+        dsg = r.design
+        c = r.cell
+        pp = r.per_look[-1].p_pass
+        pc = r.per_look[-1].p_cut
+        print(
+            f"CALIBRATION FAILURE: n={dsg.n_pairs} "
+            f"null_pp={dsg.null_per_pair:.2f} "
+            f"{dsg.fn_construction} p_P={c.p_placebo:.2f} "
+            f"p_N={c.p_null:.2f} d={c.d:.2f} "
+            f"p_pass={pp:.5f} p_cut={pc:.5f} "
+            f"pass_check={is_pass_calibration_cell(c)} "
+            f"cut_check={is_cut_calibration_cell(c)}"
+        )
+
+
 def _run(job: tuple[Cell, Design, int, int, float]) -> CellResult:
     cell, design, replicates, seed, pass_alpha = job
     result = run_cell(cell, design, replicates=replicates, seed=seed, pass_alpha=pass_alpha)
@@ -1475,6 +1499,7 @@ def main(
         summary = summary_md(results, replicates, seed, terminal_available=terminal_available)
         (args.out / "summary.md").write_text(summary, encoding="utf-8")
         print(summary)
+        _print_calibration_failures(results)
         return calibration_exit_code(results)
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -1490,24 +1515,7 @@ def main(
     summary = summary_md(results, args.replicates, args.seed)
     (args.out / "summary.md").write_text(summary, encoding="utf-8")
     print(summary)
-
-    cal_results = [r for r in results if is_calibration_cell(r.cell)]
-    if not all(calibration_holds(r) for r in cal_results):
-        for r in cal_results:
-            if not calibration_holds(r):
-                dsg = r.design
-                c = r.cell
-                pp = r.per_look[-1].p_pass
-                pc = r.per_look[-1].p_cut
-                print(
-                    f"CALIBRATION FAILURE: n={dsg.n_pairs} "
-                    f"null_pp={dsg.null_per_pair:.2f} "
-                    f"{dsg.fn_construction} p_P={c.p_placebo:.2f} "
-                    f"p_N={c.p_null:.2f} d={c.d:.2f} "
-                    f"p_pass={pp:.5f} p_cut={pc:.5f} "
-                    f"pass_check={is_pass_calibration_cell(c)} "
-                    f"cut_check={is_cut_calibration_cell(c)}"
-                )
+    _print_calibration_failures(results)
     return calibration_exit_code(results)
 
 
