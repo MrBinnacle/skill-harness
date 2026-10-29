@@ -29,6 +29,7 @@ import socket
 import subprocess
 import sys
 import threading
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -196,16 +197,23 @@ def _run_gate(
                 self._respond(200, run_jobs)
                 return
             if path_only == "/actions/runs":
-                sha_query = ""
-                if "?" in self.path:
-                    for pair in self.path.split("?", 1)[1].split("&"):
-                        if pair.startswith("head_sha="):
-                            sha_query = pair.removeprefix("head_sha=")
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                sha_query = query.get("head_sha", [""])[0]
                 if filter_runs_by_head_sha:
                     matching = [run for run in workflow_runs if run.get("head_sha") == sha_query]
                 else:
                     matching = list(workflow_runs)
-                self._respond(200, {"workflow_runs": matching})
+                # GitHub pages this list: 30 per page unless per_page asks for up to 100.
+                per_page = min(int(query.get("per_page", ["30"])[0]), 100)
+                page = int(query.get("page", ["1"])[0])
+                start = (page - 1) * per_page
+                self._respond(
+                    200,
+                    {
+                        "total_count": len(matching),
+                        "workflow_runs": matching[start : start + per_page],
+                    },
+                )
                 return
             if path_only == FORBIDDEN_RUNS_PATH:
                 self._respond(
@@ -1306,6 +1314,44 @@ def test_bypass_a_failed_rerun_of_an_older_run_is_not_masked(tmp_path: Path) -> 
     assert result.returncode == 1, result.stdout + result.stderr
     g8 = [f for f in _failures(result) if f.startswith("G8:")]
     assert len(g8) == 1 and "newest" in g8[0], _failures(result)
+
+
+def test_bypass_the_newest_run_past_the_first_page_is_still_read(tmp_path: Path) -> None:
+    """GitHub returns 30 runs per page by default. Thirty successes come first in
+    the API's order, and the newest-started run, a failed re-run, is the 31st.
+    A gate that reads one default page never sees the failure."""
+    sha = "a" * 40
+    root = _seed_tree(tmp_path, "0.3.0")
+    runs: list[dict[str, object]] = [
+        _run_record(sha, created_at=f"2026-10-01T00:{minute:02d}:00Z", run_id=100 + minute)
+        for minute in range(30)
+    ]
+    runs.append(
+        _run_record(
+            sha,
+            conclusion="failure",
+            created_at="2026-09-30T00:00:00Z",
+            run_started_at="2026-10-02T00:00:00Z",
+            run_id=99,
+        )
+    )
+    result = _run_gate(root, _closed(), runs, ref="refs/tags/v0.3.0", sha=sha)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    g8 = [f for f in _failures(result) if f.startswith("G8:")]
+    assert len(g8) == 1 and "newest" in g8[0], _failures(result)
+
+
+def test_bypass_more_runs_than_one_page_holds_fails_closed(tmp_path: Path) -> None:
+    """Past 100 runs at one commit, one page cannot show which run is newest."""
+    sha = "a" * 40
+    root = _seed_tree(tmp_path, "0.3.0")
+    runs = [_run_record(sha, run_id=n) for n in range(1, 102)]
+    result = _run_gate(root, _closed(), runs, ref="refs/tags/v0.3.0", sha=sha)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    g8 = [f for f in _failures(result) if f.startswith("G8:")]
+    assert len(g8) == 1 and "101" in g8[0], _failures(result)
 
 
 def test_bypass_equal_start_times_fall_to_the_higher_run_id(tmp_path: Path) -> None:

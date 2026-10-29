@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The release gate reads every run at the candidate, not the first page.**
+  G8 and G9 asked GitHub for the runs at a commit without a page size, so
+  they saw at most 30. A newer failed run past the 30th was invisible, and the
+  gate could authorize over it. The gate now asks for 100 runs, and it fails
+  when GitHub reports more runs than it returned.
 - **The release gate closes its assurance bypasses and separates a
   preliminary result from release authorization** (#835). The first three
   items below each let a green gate skip assurance; the last two add the
