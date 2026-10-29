@@ -258,6 +258,13 @@ _S2_ALPHA = f"{_S2_TESTS}::test_pass_alpha_label_matches_computation"
 _S2_W0 = f"{_S2_TESTS}::test_starting_wealth_changes_anytime_tuned_decisions"
 _S2_LOOKAHEAD = f"{_S2_TESTS}::test_tuned_lambda_is_fixed_before_the_first_pair"
 _S2_CAL_FIXED = f"{_S2_TESTS}::test_calibration_exit_code_covers_fixed_n_rows"
+_S2_BETTING_CUT_LEVEL = f"{_S2_TESTS}::test_fixed_n_betting_cut_is_decided_at_the_registered_0_05"
+_S2_TUNED_CUT_LEVEL = f"{_S2_TESTS}::test_anytime_tuned_cut_is_decided_at_the_registered_0_05"
+_S2_TUNED_JOINT = f"{_S2_TESTS}::test_anytime_tuned_joint_pass_is_not_the_fp_half"
+_S2_NULL_COUNT = f"{_S2_TESTS}::test_fixed_n_score_fn_test_counts_null_draws_not_pairs"
+_S2_NULL_COUNT_RUN = (
+    f"{_S2_TESTS}::test_fixed_n_score_fn_pass_at_the_margin_does_not_collapse_at_null_per_pair_2"
+)
 _S2_LABEL = f"{_S2_TESTS}::test_stopping_column_on_the_tsv_matches_the_path_that_produced_it"
 _S2_LABEL2 = f"{_S2_TESTS}::test_anytime_stopping_label_agrees_with_the_simulation_path"
 _S2_HEADLINE = f"{_S2_TESTS}::test_headline_reads_n_pairs_from_each_row"
@@ -1235,6 +1242,50 @@ MUTANTS: tuple[Mutant, ...] = (
         "    passed = fp_pass & fn_pass",
         "    passed = fn_pass  # mutant: F - P half dropped",
         (_S2_JOINT_FN_ALONE,),
+    ),
+    # #720: three #718 behaviours an independent check found unpinned, and the
+    # Null-draw count the Farrington-Manning test is given.
+    Mutant(
+        "M-S2-17",
+        "720-stage2-betting-cut-level-010",
+        "the fixed-n-betting CUT test runs at 0.10 instead of the registered 0.05",
+        _S2,
+        _S2_MODULE,
+        "    fp_cut = fixed_n_rejects(xs_fp, FUTILITY_ALPHA, m0, upward=False)",
+        "    fp_cut = fixed_n_rejects(xs_fp, 0.10, m0, upward=False)  # mutant: CUT at 0.10",
+        (_S2_BETTING_CUT_LEVEL,),
+    ),
+    Mutant(
+        "M-S2-18",
+        "720-stage2-tuned-cut-level-010",
+        "the anytime-tuned CUT test runs at 0.10 instead of the registered 0.05",
+        _S2,
+        _S2_MODULE,
+        "            if fp_cut.rejects(FUTILITY_ALPHA)[r]:",
+        "            if fp_cut.rejects(0.10)[r]:  # mutant: CUT at 0.10",
+        (_S2_TUNED_CUT_LEVEL,),
+    ),
+    Mutant(
+        "M-S2-19",
+        "720-stage2-tuned-joint-pass-fp-half",
+        "an anytime-tuned row reports its F - P half as the joint PASS",
+        _S2,
+        _S2_MODULE,
+        "                passed[r] = True\n\n    p_joint = float(np.mean(passed))",
+        "                passed[r] = True\n\n"
+        "    p_joint = float(np.mean(fp_pass.rejects(alpha)))  # mutant: F - P half as joint",
+        (_S2_TUNED_JOINT,),
+    ),
+    Mutant(
+        "M-S2-20",
+        "720-stage2-fn-null-count-pairs",
+        "the fixed-n-score F - N test is given the number of pairs with a Null draw "
+        "instead of the number of Null draws",
+        _S2,
+        _S2_MODULE,
+        "        n_null = int(_null_used.shape[1])",
+        "        n_null = int(fn_mask.sum())  # mutant: pairs, not draws",
+        (_S2_NULL_COUNT, _S2_NULL_COUNT_RUN),
     ),
 )
 

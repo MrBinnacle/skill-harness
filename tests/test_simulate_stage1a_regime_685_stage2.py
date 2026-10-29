@@ -1310,12 +1310,12 @@ def test_full_grid_structure() -> None:
         if design.stopping in reg.NEW_DESIGN_STOPPINGS:
             assert design.fn_construction == "direct"
         if design.stopping == "anytime":
-            assert design.pass_alpha == 0.0209
+            assert design.pass_alpha in (0.0209, 0.0105)
             assert design.starting_wealth == 1.0
         if design.stopping == "anytime-tuned":
-            assert design.starting_wealth in reg.STARTING_WEALTHS
+            assert design.starting_wealth in reg.STAGE2_SWEEP.starting_wealths
         if design.stopping in ("fixed-n-betting", "fixed-n-score"):
-            assert design.pass_alpha in reg.FIXED_PASS_ALPHAS
+            assert design.pass_alpha in reg.STAGE2_SWEEP.fixed_pass_alphas
             assert design.starting_wealth == 1.0
 
 
@@ -1380,3 +1380,332 @@ def test_tuned_betting_path_is_available_and_uses_starting_wealth(tmp_path: Path
     cols, rows = _split_tsv((out / "per_look.tsv").read_text(encoding="utf-8"))
     i_w0 = cols.index("starting_wealth")
     assert {row[i_w0] for row in rows} == {"0.50"}
+
+
+# ---------------------------------------------------------------------------
+# #720: sweep extension, accounting regimes, Null-draw count
+# ---------------------------------------------------------------------------
+
+
+def _spy_farrington_manning(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, int, int, int]]:
+    calls: list[tuple[int, int, int, int]] = []
+    original = reg.farrington_manning_z
+
+    def _spy(k_f: int, n_f: int, k_n: int, n_n: int, delta0: float) -> float:
+        calls.append((k_f, n_f, k_n, n_n))
+        return float(original(k_f, n_f, k_n, n_n, delta0))
+
+    monkeypatch.setattr(reg, "farrington_manning_z", _spy)
+    return calls
+
+
+def test_fixed_n_score_fn_test_counts_null_draws_not_pairs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """At Null per pair 2.0 every Null draw succeeds, so the Null rate must read 1.0."""
+    calls = _spy_farrington_manning(monkeypatch)
+    design = reg.Design(
+        n_pairs=40,
+        null_per_pair=2.0,
+        fn_construction="direct",
+        stopping="fixed-n-score",
+        pass_alpha=0.0209,
+    )
+    reg.run_cell(reg.Cell(0.55, 0.35, 1.0), design, replicates=5, seed=3)
+    assert calls, "the F - N score test must run"
+    for _k_f, _n_f, k_n, n_n in calls:
+        assert n_n == design.n_null == 80
+        assert k_n / n_n == pytest.approx(1.0), f"Null rate read {k_n}/{n_n}, not 1.0"
+
+
+def test_fixed_n_score_fn_pass_at_the_margin_does_not_collapse_at_null_per_pair_2() -> None:
+    """P(F - N half) at the F - N margin stays near the 1.0 allocation, not near 0."""
+    cell = reg.Cell(0.55, 0.35, 0.35)
+    replicates = 2000
+    rates = {}
+    for null_pp in (1.0, 2.0):
+        design = reg.Design(
+            n_pairs=100,
+            null_per_pair=null_pp,
+            fn_construction="direct",
+            stopping="fixed-n-score",
+            pass_alpha=0.0209,
+        )
+        rates[null_pp] = reg.run_cell(cell, design, replicates=replicates, seed=685).p_fn_half
+    se = math.sqrt(sum(p * (1.0 - p) / replicates for p in rates.values()))
+    assert rates[2.0] > 0.005, f"F - N half collapsed at Null per pair 2.0: {rates}"
+    assert abs(rates[2.0] - rates[1.0]) <= 3.0 * se, f"F - N half disagrees: {rates}"
+
+
+def _cut_rates_at_registered_and_loosened_level(
+    design: Any, cell: Any, monkeypatch: pytest.MonkeyPatch
+) -> tuple[float, float]:
+    assert reg.FUTILITY_ALPHA == 0.05
+    at_05 = reg.run_cell(cell, design, replicates=400, seed=72).p_cut
+    monkeypatch.setattr(reg, "FUTILITY_ALPHA", 0.10)
+    at_10 = reg.run_cell(cell, design, replicates=400, seed=72).p_cut
+    return at_05, at_10
+
+
+def test_fixed_n_betting_cut_is_decided_at_the_registered_0_05(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """X1: the fixed-n-betting CUT test reads the registered CUT level, 0.05."""
+    design = reg.Design(
+        n_pairs=150,
+        null_per_pair=1.0,
+        fn_construction="direct",
+        stopping="fixed-n-betting",
+        pass_alpha=0.0209,
+    )
+    at_05, at_10 = _cut_rates_at_registered_and_loosened_level(
+        design, reg.Cell(0.45, 0.35, 0.35), monkeypatch
+    )
+    assert at_05 < at_10, f"CUT is not decided at the registered level: {at_05} vs {at_10}"
+
+
+def test_anytime_tuned_cut_is_decided_at_the_registered_0_05(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """X2: the anytime-tuned CUT test reads the registered CUT level, 0.05."""
+    design = reg.Design(
+        n_pairs=100,
+        null_per_pair=1.0,
+        fn_construction="direct",
+        stopping="anytime-tuned",
+        pass_alpha=0.0209,
+        starting_wealth=1.0,
+    )
+    at_05, at_10 = _cut_rates_at_registered_and_loosened_level(
+        design, reg.Cell(0.45, 0.35, 0.35), monkeypatch
+    )
+    assert at_05 < at_10, f"CUT is not decided at the registered level: {at_05} vs {at_10}"
+
+
+def test_anytime_tuned_joint_pass_is_not_the_fp_half() -> None:
+    """X4: an anytime-tuned row reports its F - P half and joint PASS apart.
+
+    F - P is 0.30 and clears often; F - N is 0.00 and almost never clears, so
+    joint PASS must stay near zero while the F - P half is high.
+    """
+    cell = reg.Cell(0.65, 0.35, 0.65)
+    design = reg.Design(
+        n_pairs=400,
+        null_per_pair=1.0,
+        fn_construction="direct",
+        stopping="anytime-tuned",
+        pass_alpha=0.0209,
+        starting_wealth=1.0,
+    )
+    row = reg.run_cell(cell, design, replicates=400, seed=11)
+    assert row.p_fp_half > 0.3, f"the fixture must clear the F - P half: {row.p_fp_half}"
+    assert row.p_joint_pass < 0.05, f"joint PASS must need F - N too: {row.p_joint_pass}"
+    assert row.p_joint_pass < row.p_fp_half - 0.2
+
+
+def test_added_starting_wealth_is_applied_and_labelled() -> None:
+    """Wealth 0.025 must not be computed at 1.0, and the TSV must say 0.025."""
+    cell = reg.Cell(0.75, 0.35, 0.35)
+    rows = []
+    for w0 in (1.0, 0.025):
+        design = reg.Design(
+            n_pairs=100,
+            null_per_pair=1.0,
+            fn_construction="direct",
+            stopping="anytime-tuned",
+            pass_alpha=0.0209,
+            starting_wealth=w0,
+        )
+        rows.append(reg.run_cell(cell, design, replicates=400, seed=41))
+    assert rows[1].p_joint_pass < rows[0].p_joint_pass
+    cols, tsv = _split_tsv(reg.per_look_tsv(rows))
+    assert [float(r[cols.index("starting_wealth")]) for r in tsv] == [1.0, 0.025]
+
+
+def test_added_pass_alpha_is_applied_and_labelled() -> None:
+    """Alpha 0.0005 must not be computed at 0.005, and the TSV must say 0.0005."""
+    cell = reg.Cell(0.75, 0.30, 0.30)
+    rows = []
+    for alpha in (0.005, 0.0005):
+        design = reg.Design(
+            n_pairs=80,
+            null_per_pair=1.0,
+            fn_construction="direct",
+            stopping="fixed-n-betting",
+            pass_alpha=alpha,
+        )
+        rows.append(reg.run_cell(cell, design, replicates=600, seed=31))
+    assert rows[0].p_joint_pass > 0.0, "the fixture must pass sometimes at 0.005"
+    assert rows[1].p_joint_pass < rows[0].p_joint_pass
+    cols, tsv = _split_tsv(reg.per_look_tsv(rows))
+    assert [float(r[cols.index("pass_alpha")]) for r in tsv] == [0.005, 0.0005]
+
+
+def test_added_null_allocation_draws_two_nulls_per_pair(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Null per pair 2.0 must not be computed with one Null draw per pair."""
+    calls = _spy_farrington_manning(monkeypatch)
+    design = reg.Design(
+        n_pairs=30,
+        null_per_pair=2.0,
+        fn_construction="direct",
+        stopping="fixed-n-score",
+        pass_alpha=0.0209,
+    )
+    row = reg.run_cell(reg.Cell(0.55, 0.35, 0.35), design, replicates=4, seed=2)
+    assert {call[3] for call in calls} == {60}
+    assert row.expected_epochs == 30 + 30 + 60
+    cols, tsv = _split_tsv(reg.per_look_tsv([row]))
+    assert tsv[0][cols.index("n_null")] == "60"
+    assert tsv[0][cols.index("null_per_pair")] == "2.00"
+
+
+def test_full_grid_carries_every_added_sweep_value() -> None:
+    grid = reg.stage2_grid()
+    pairs = {d.n_pairs for _c, d in grid}
+    nulls = {d.null_per_pair for _c, d in grid}
+    tuned_w0 = {d.starting_wealth for _c, d in grid if d.stopping == "anytime-tuned"}
+    fixed_alphas = {d.pass_alpha for _c, d in grid if d.stopping.startswith("fixed-n")}
+    assert {1000, 1200} <= pairs
+    assert nulls == {0.5, 1.0, 2.0}
+    assert {0.1, 0.05, 0.025, 0.01} <= tuned_w0
+    assert {0.002, 0.001, 0.0005} <= fixed_alphas
+    new_slot = {d.stopping for _c, d in grid if d.starting_wealth == 1.0 and d.pass_alpha == 0.0105}
+    assert new_slot == set(reg.STOPPINGS)
+
+
+def test_sweep_values_are_grid_parameters() -> None:
+    """A later sweep value needs no code change: the grid takes it as a parameter."""
+    sweep = reg.Sweep(
+        pairs=(50,),
+        null_per_pair=(1.0,),
+        effects=(0.30,),
+        anytime_pass_alphas=(0.0209,),
+        starting_wealths=(1.0, 0.003),
+        fixed_pass_alphas=(0.0209, 0.0001),
+    )
+    grid = reg.build_grid(sweep)
+    assert {d.starting_wealth for _c, d in grid if d.stopping == "anytime-tuned"} == {1.0, 0.003}
+    assert {d.pass_alpha for _c, d in grid if d.stopping == "fixed-n-score"} == {0.0209, 0.0001}
+
+
+def test_original_sweep_rows_are_unchanged() -> None:
+    """The original sweep builds the pre-#720 grid, in order, inside the new full grid."""
+    original = reg.build_grid(reg.ORIGINAL_SWEEP)
+    assert reg.reduced_grid() == reg.build_grid(reg.REDUCED_SWEEP)
+    assert len(original) == len(set(original))
+    full = reg.stage2_grid()
+    position = {job: k for k, job in enumerate(full)}
+    assert all(job in position for job in original)
+    indices = [position[job] for job in original]
+    assert indices == sorted(indices)
+
+
+def test_original_rows_reproduce_the_committed_data() -> None:
+    """Rows from the original sweep reproduce the committed 200-replicate values."""
+    cols, committed = _split_tsv((_DATA_DIR / "per_look.tsv").read_text(encoding="utf-8"))
+    key_cols = (
+        "stopping",
+        "pass_alpha",
+        "starting_wealth",
+        "null_per_pair",
+        "p_full",
+        "p_placebo",
+        "p_null",
+    )
+    by_key = {tuple(r[cols.index(c)] for c in key_cols): r for r in committed}
+    cell = reg.Cell(0.65, 0.35, 0.35)
+    designs = [
+        reg.Design(100, 1.0, "direct", "anytime-tuned", 0.0209, 0.25),
+        reg.Design(100, 0.5, "direct", "fixed-n-betting", 0.005, 1.0),
+        reg.Design(100, 1.0, "direct", "fixed-n-score", 0.0105, 1.0),
+    ]
+    for design in designs:
+        row = reg.run_cell(cell, design, replicates=200, seed=685)
+        fresh_cols, fresh = _split_tsv(reg.per_look_tsv([row]))
+        old = by_key[tuple(fresh[0][fresh_cols.index(c)] for c in key_cols)]
+        for name in cols:
+            assert fresh[0][fresh_cols.index(name)] == old[cols.index(name)], (design, name)
+
+
+_REGIMES = ("none", "carry-over", "new-slot")
+
+
+def _expected_accounting(design: Any) -> str:
+    """The #720 rule table, restated independently of the script."""
+    at_unit_wealth = design.starting_wealth == 1.0
+    if at_unit_wealth and design.pass_alpha == 0.0209:
+        return "none"
+    if at_unit_wealth and design.pass_alpha == 0.0105:
+        return "new-slot"
+    if design.stopping in ("anytime", "anytime-tuned"):
+        assert design.starting_wealth < 1.0 and design.pass_alpha == 0.0209
+    else:
+        assert at_unit_wealth and design.pass_alpha < 0.0105
+    return "carry-over"
+
+
+def test_accounting_label_follows_the_rule_on_every_grid_row() -> None:
+    labels = set()
+    for _cell, design in reg.stage2_grid():
+        label = reg.accounting(design)
+        assert label == _expected_accounting(design), design
+        labels.add(label)
+    assert labels == set(_REGIMES)
+
+
+def test_accounting_label_refuses_a_row_the_rule_does_not_cover() -> None:
+    with pytest.raises(ValueError, match="accounting"):
+        reg.accounting(reg.Design(100, 1.0, "direct", "anytime-tuned", 0.0105, 0.5))
+
+
+def test_accounting_column_is_on_the_tsv() -> None:
+    design = reg.Design(100, 1.0, "direct", "fixed-n-betting", 0.001, 1.0)
+    row = _hand_row(reg.Cell(0.65, 0.35, 0.35), design, p_pass=0.5, p_cut=0.0)
+    cols, rows = _split_tsv(reg.per_look_tsv([row]))
+    assert rows[0][cols.index("accounting")] == "carry-over"
+
+
+def test_headline_by_accounting_has_one_table_per_regime_and_selects_nothing() -> None:
+    cell = reg.Cell(0.65, 0.35, 0.35)
+    designs = (
+        reg.Design(100, 1.0, "direct", "anytime-tuned", 0.0209, 1.0),
+        reg.Design(100, 1.0, "direct", "anytime-tuned", 0.0209, 0.05),
+        reg.Design(100, 1.0, "direct", "fixed-n-score", 0.0105, 1.0),
+    )
+    rows = [_hand_row(cell, design, p_pass=0.1, p_cut=0.0) for design in designs]
+    text = reg.headline_by_accounting_md(rows)
+    for regime in _REGIMES:
+        assert text.count(f"## Accounting: {regime}\n") == 1
+    lowered = text.lower()
+    for word in ("recommend", "prefer", "best", "should", "choose", "optimal"):
+        assert word not in lowered, word
+    assert "not reached" in text
+
+
+def test_main_writes_the_per_regime_headline_and_fails_on_a_new_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A loosened rule on an added carry-over row fails the calibration read."""
+    grid = [
+        (
+            reg.Cell(0.55, 0.35, 0.35),
+            reg.Design(30, 2.0, "direct", "anytime-tuned", 0.0209, 0.025),
+        ),
+    ]
+    original = reg.run_cell
+
+    def _loosened(cell: Any, design: Any, **kwargs: Any) -> Any:
+        kwargs["pass_alpha_override"] = 0.60
+        return original(cell, design, **kwargs)
+
+    monkeypatch.setattr(reg, "run_cell", _loosened)
+    out = tmp_path / "out"
+    code = reg.main(
+        ["--out", str(out), "--replicates", "200", "--workers", "1", "--seed", "685"],
+        grid=grid,
+    )
+    assert code == 1
+    headline = (out / "headline_by_accounting.md").read_text(encoding="utf-8")
+    assert "## Accounting: carry-over" in headline
