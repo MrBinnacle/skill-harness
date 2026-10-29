@@ -1,7 +1,7 @@
 """Tests for #798: the P - N bound as a fifth Stage 2 operating characteristic.
 
 Each acceptance criterion of #798 has one named test here. The fixture
-``tests/fixtures/stage2_798/per_look_pre_798.tsv`` was written by the
+``tests/fixtures/stage2_798/per_look_pre_798.golden`` was written by the
 simulator at ``origin/main`` ff0f557, before this change, on the grid that
 ``_GOLDEN_GRID`` rebuilds.
 """
@@ -21,7 +21,7 @@ from skill_harness.aggregation.confidence_sequence import one_sided_betting_boun
 
 _REPO = Path(__file__).resolve().parents[1]
 _SCREEN_DIR = _REPO / "scripts" / "screens" / "419"
-_GOLDEN = _REPO / "tests" / "fixtures" / "stage2_798" / "per_look_pre_798.tsv"
+_GOLDEN = _REPO / "tests" / "fixtures" / "stage2_798" / "per_look_pre_798.golden"
 
 
 def _load(name: str) -> ModuleType:
@@ -102,6 +102,11 @@ def test_p_pn_bounded_holds_its_level_where_p_minus_n_is_0_20() -> None:
         limit = reg.PN_ALPHA_TOTAL + 3.0 * row.se_pn_bounded
         assert row.p_pn_bounded <= limit, row
         assert row.holds_level
+
+
+def test_p_pn_bounded_fires_when_p_equals_n_and_the_run_is_long() -> None:
+    cell = reg.Cell(0.30, 0.30, 0.30)
+    assert reg.pn_bounded_rate(cell, 600, 1.0, replicates=200, seed=685) > 0.5
 
 
 def test_pn_calibration_flags_a_row_above_its_limit() -> None:
