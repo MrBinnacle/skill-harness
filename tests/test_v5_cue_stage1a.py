@@ -26,11 +26,6 @@ def _load(name: str) -> ModuleType:
     return module
 
 
-def _fixture_present() -> bool:
-    cue_audit = _load("cue_audit")
-    return bool((cue_audit.FIXTURE_ROOT_DEFAULT / "fixture_shas.json").is_file())
-
-
 @pytest.fixture(scope="module")
 def s1a() -> ModuleType:
     return _load("v5_cue_stage1a")
@@ -339,22 +334,16 @@ def test_null_a_counts_only_uses_the_worst_placement(s1a: ModuleType, tmp_path: 
     assert ub == pytest.approx(max(placed))
 
 
-@pytest.mark.skipif(
-    not _fixture_present(),
-    reason="the v5-cue fixture is private and lives only on the steering host",
-)
 def test_dry_run_prints_both_tables_and_calls_no_model(
     s1a: ModuleType,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    inspect_ai = pytest.importorskip("inspect_ai")
-
-    def refuse(*args: Any, **kwargs: Any) -> None:
-        raise AssertionError("the dry run called eval")
-
-    monkeypatch.setattr(inspect_ai, "eval", refuse)
+    """The test was the stale side: a1dd143 (#662) moved the dry-run return above task
+    construction, so the dry run no longer prints the task names or the config line."""
+    monkeypatch.setitem(sys.modules, "inspect_ai", None)
+    monkeypatch.setitem(sys.modules, "inspect_ai.log", None)
     monkeypatch.setattr(s1a, "DRY_RUN_SHUFFLES", 0)
     readout = _null_readout(tmp_path, [0, 0, 0, 0, 0, 1, 0])
     argv = ["--out", str(tmp_path / "logs"), "--null-readout", str(readout), "--dry-run"]
@@ -366,6 +355,8 @@ def test_dry_run_prints_both_tables_and_calls_no_model(
     assert "OPERATING TABLE at pass-alpha 0.0209 " in out
     assert "max(p_FN, p_FP) <= 0.0209 against H0: d <= 0.2" in out
     assert out.count("cells: 289") == 2
+    assert "new epochs: 41 (3*16 - 7)" in out
+    assert "cap: $12.30 (new epochs * $0.3)" in out
     assert not (tmp_path / "logs").exists()
     assert pytest.approx(0.30) == s1a.PER_SAMPLE_CAP
     assert s1a.EPOCHS_PER_ARM == 16
