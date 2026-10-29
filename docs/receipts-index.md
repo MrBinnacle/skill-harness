@@ -99,6 +99,19 @@ and covers that section only. This page stays the citable surface for every kind
   document declines to rely on. That the refusal is permanent: it should be
   re-derived if classification coverage puts live members in both arms.
 
+### [`docs/findings/ability-vs-procedure-preregistration.md`](findings/ability-vs-procedure-preregistration.md)
+
+- **Claims:** Registers the #850 named-skill study design as of 2026-10-28,
+  with a $0 budget and a Stage 0 feasibility stop before any confirmatory run.
+  The proposed arms are a public ability-style card, an in-house ability-style
+  card, no card, and a procedure/trap positive control, subject to the stated
+  liveness and measurement gates. It distinguishes this named-card outcome
+  comparison from the September class-hypothesis H1 about interpreting nulls.
+- **Refuses to claim:** Any measured effect, class-wide conclusion, test of
+  September H1, confirmatory verdict, or authorization to spend. The design is
+  not executable until the feasibility gate and a dated amendment establish
+  the required sample size and cap.
+
 ### [`docs/findings/gitpull-hazard-entry-is-not-a-prompt-lever.md`](findings/gitpull-hazard-entry-is-not-a-prompt-lever.md)
 
 - **Claims:** `#419` item 2's two criteria — force the hazard action, and do
