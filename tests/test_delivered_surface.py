@@ -324,6 +324,40 @@ def test_unrelated_bullets_in_the_first_user_message_are_not_a_listing() -> None
     assert result.subject_cards[0].status == "dropped"
 
 
+def test_a_bullet_after_more_than_one_blank_line_is_not_a_card() -> None:
+    """#690: Claude Code writes exactly one blank line after the header.
+
+    A ``- x: y`` bullet separated from the header by two blank lines is other
+    context, not a delivered card.
+    """
+    subject = {"my-skill": "My skill description."}
+    messages = [
+        _system("The following skills are available for use with the Skill tool:\n\n\n- x: y"),
+        _assistant("Working on it."),
+    ]
+    result = extract_delivered_listing(messages, subject)
+
+    assert result.empty_reason == "listing_empty"
+    assert result.non_subject_cards == ()
+    assert result.listing_description_tokens == 0
+
+
+def test_a_card_shaped_bullet_after_one_blank_line_is_read_as_a_card() -> None:
+    """#690: the stated tolerance. After the header and its one blank line, a
+    ``- x: y`` line has the exact shape of a card, so it is read as one. No
+    structural test can tell it from a skill named ``x``.
+    """
+    subject = {"my-skill": "My skill description."}
+    messages = [
+        _system("The following skills are available for use with the Skill tool:\n\n- x: y"),
+        _assistant("Working on it."),
+    ]
+    result = extract_delivered_listing(messages, subject)
+
+    assert result.empty_reason is None
+    assert result.non_subject_cards == ("x",)
+
+
 # ---------------------------------------------------------------------------
 # AC5: Built-in and third-party skills recorded apart, never counted as
 #       subject cards
