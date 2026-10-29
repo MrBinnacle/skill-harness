@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-1\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-1\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the exit-on-calibration-failure path returns 0 anyway, so a run whose boundary cells over-pass publishes its tables as if calibration held",
       "killing_assertions": [
@@ -17,10 +17,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-1\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "c5516b9564b228d1bc398e3af7976faa7d7ef9354cf7f334162728c47d0c38a7",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-1\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "b248b1ddbb84b9af7f9565700ada47b428175c763272f1744fcdbf8b8fdd3427",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-1",
       "notes": [],
@@ -35,10 +35,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-2\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-2\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the direct F-N grid shortcut compares the raw one-sided bound against the d-scale boundary instead of 2*bound - 1 (the #694 R1 defect)",
       "killing_assertions": [
@@ -48,10 +48,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-2\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "f03a6edc4f93e4cfb3ca1deead71f773d13559d1ca46ff91275ddeb2bce968ed",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-2\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "76374d5493fc351cd2c51ce943525283377e930f3a5b6de0a49e1110a8788377",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-2",
       "notes": [],
@@ -66,10 +66,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-3\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-3\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 1,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the direct F-N terminal bound drops the 2*bound - 1 scale",
       "killing_assertions": [
@@ -79,10 +79,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-3\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a9267c73516e97eb86bffbe5dd431a084909ab43b9316cafe5db2cf2a657f9a3",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-3\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "2824c74e5bc983bee424cdb4db968cc0d308d3a9227c6461bbee0a757a876dc5",
         "tests_collected": 1,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-3",
       "notes": [],
@@ -96,10 +96,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-4\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-4\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the grid compares null allocations at a fixed pair cap again, so allocations are no longer compared at equal total epochs",
       "killing_assertions": [
@@ -110,10 +110,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-4\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "7d799d877a43b7801d236e1de0c14cda58c626f1893ceae4e3efb6ef6ae68718",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-4\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "09c8c7a6579a235431a20d9f42952e777853a1e3d8bfb138d74eadfb17a1e6e2",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-4",
       "notes": [],
@@ -128,10 +128,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-5\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-5\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the exact F-P fallback swaps pass_alpha for FUTILITY_ALPHA (the #694 M1b survivor), so the fallback tests at the wrong level",
       "killing_assertions": [
@@ -141,10 +141,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-5\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "e615344d22b5e82741e4b2557e2540fbd56d3aeefa53b7f1503e19c18b68ca8a",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-5\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "cb9ac30c68add90c221443f0cf7327768309f735c53c8aa0251f7e24556f1a77",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-5",
       "notes": [],
@@ -159,10 +159,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-6\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-6\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the direct F-N exact fallback evaluates the bound at alpha/2 instead of pass_alpha (the exact-path defect the #704 verdict left open; the pure always-true form is observationally equivalent on this grid)",
       "killing_assertions": [
@@ -172,10 +172,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-6\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "547a0bd68eef1051360e3e2ef0fb49c3ad2669d5962da4566faec77852cdd22b",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-6\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "3843b06b9eb591c7c76d65a2a380560931502064eef045b307afef895df071be",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-6",
       "notes": [],
@@ -190,10 +190,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-7\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-7\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the union F-N exact fallback is forced true (the #694 M2b survivor)",
       "killing_assertions": [
@@ -204,10 +204,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-7\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "960ec00031b648f755581906d5339c4cefedb6ee12c3a9aba63ed7faed8f2805",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-7\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "78b69f9efa372164df210b0f353d64fe7a42c8410f099fe267c70f7b2951d8dd",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-7",
       "notes": [],
@@ -222,10 +222,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-8\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-8\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the list high price rate is shifted from $0.087 to $0.078 (the #694 M5 survivor)",
       "killing_assertions": [
@@ -235,10 +235,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-8\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "cfa9a7dc1272de5087c7be42bfedb92ec4b13eacee7c79546a085c74025f4a37",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-8\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "dde08bfd66847bfa69589d4328e730cae3c9be974c25302f689d140f5b79d267",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-8",
       "notes": [],
@@ -253,10 +253,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-9\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-9\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the cap price rate is shifted from $0.30 to $0.03 (the #694 M6 survivor)",
       "killing_assertions": [
@@ -267,10 +267,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-9\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "cdaf88fcece51b11af4b4c6921c2204791e2e6fa73c651c1e4d7babe82bf2cea",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-9\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "f56db8f0a03fcdf9b0c65a0880c4c6f9524465bd5418ff3e3ca59811538efe63",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-9",
       "notes": [],
@@ -285,10 +285,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-10\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-10\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "role() uses d < 0.15 instead of d <= 0.15 (the #694 M8 survivor), so d = 0.15 is relabelled from no-lift to a real effect",
       "killing_assertions": [
@@ -298,10 +298,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-10\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "33ad135f5cc6c83753a6b5f2ef7c8ce7fe885472473bb3824af818472da26c38",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-10\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "25265c4794ac6bc151879f66c77803c24841c0834e748fb2dfda57fe27f08376",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-10",
       "notes": [],
@@ -316,10 +316,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-11\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-11\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "pass_calibration_holds reads look 1 instead of the cap (the #694 M9 survivor), so a loosened rule that fails only at the cap is called calibrated",
       "killing_assertions": [
@@ -329,10 +329,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-11\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "14f1de5757ff409ecafd5eb28b310b17ff69ee70a00811c7d4942b281aa92755",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-11\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "fa9a6de6f11a9abea47cc3ba7e45b763e8cd159a7e81998c462e86ba308d57ef",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-11",
       "notes": [],
@@ -347,10 +347,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-12\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-12\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "headline filters on a stale 97-pair count instead of PAIRS_CAP (the #694 M10 survivor)",
       "killing_assertions": [
@@ -360,10 +360,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ir735_ss\\M-S1A-12\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "cbaf7743ecd3efb0ff588ff74fcbeb382400f77abd3f7993d6545c86e6715f40",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-nkh8z_hi\\M-S1A-12\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "29957805bda4c98d8e74e3a5e91ed3faa80d5452f6b9ab0929fb97b0fdeb28af",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-12",
       "notes": [],
@@ -375,18 +375,18 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "663ed72e95acdbe47357d10e3e4504c4993d516b",
+  "commit_under_test": "93d81af07ff9e7c847763050d4cbc9e847edeb96",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429"
   },
   "production_tree_digest_before": {
-    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429"
   },
   "production_tree_unchanged": true,
   "python": "3.13.1",
   "target_digests": {
-    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429"
   },
   "target_files": [
     "scripts/screens/419/simulate_stage1a_regime_685.py"

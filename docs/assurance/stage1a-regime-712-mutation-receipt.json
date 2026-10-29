@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-l80le71a\\M-S1A-18\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-oo1cbl81\\M-S1A-18\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the sensitivity sentence is restored to the false claim that the numbers describe what a nine-cell aggregate would have read; on the #712 fixture the off-diagonal minimum is 0.75 and the nine-cell minimum is 0.40, so the sentence and the printed numbers disagree",
       "killing_assertions": [
@@ -17,10 +17,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-l80le71a\\M-S1A-18\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "71f8a0b699aeea680abf2831ee4e4932724b114ac0be49d5e10851658f70942a",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-oo1cbl81\\M-S1A-18\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "a2fe564895b395bdd024ef62a0d0b122b824215e12416254be78f3e5ffbe8a1b",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-18",
       "notes": [],
@@ -35,10 +35,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-l80le71a\\M-S1A-19\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-oo1cbl81\\M-S1A-19\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 3,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "is_calibration_cell returns only the PASS half, so every CUT-error cell above d = 0.20 leaves the exit-code filter and a broken futility side exits 0",
       "killing_assertions": [
@@ -49,10 +49,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-l80le71a\\M-S1A-19\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "d8f8856690b91e7a5f2aa0191d1716ec268bcb83df7ac592674aa6531c21f4bd",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-oo1cbl81\\M-S1A-19\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "9e119796a847a9b43eb2ddec0641a80d2e7612d2bc58c59785c3ba447a970485",
         "tests_collected": 3,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-19",
       "notes": [],
@@ -68,10 +68,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-l80le71a\\M-S1A-20\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-oo1cbl81\\M-S1A-20\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the --rebuild early return is removed, so rebuilding from an output directory runs a second simulation instead of reading the files",
       "killing_assertions": [
@@ -82,10 +82,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-l80le71a\\M-S1A-20\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "499239d6f418a9f30cdca53123122792dc433617c86481232d4a1865f1ed5130",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-oo1cbl81\\M-S1A-20\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "1ad3260b675b812a7eb79a58cb6aedb8102e08cce72bb95778898ff06ac3673d",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-20",
       "notes": [],
@@ -100,10 +100,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-l80le71a\\M-S1A-21\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-oo1cbl81\\M-S1A-21\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "off_diagonal_cells returns the full nine-cell grid, so the sensitivity rows and the sentence that names them report nine-cell minima",
       "killing_assertions": [
@@ -114,10 +114,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-l80le71a\\M-S1A-21\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5dc432626084c2a34e9d941b2424ad425aed60d70fc2b4a2c425e9b79dd94fd",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-oo1cbl81\\M-S1A-21\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "d502a0551478680543bb914bd06d5b464ea354ca07dbd0013d78cbfb00877cf1",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-21",
       "notes": [],
@@ -129,18 +129,18 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "663ed72e95acdbe47357d10e3e4504c4993d516b",
+  "commit_under_test": "93d81af07ff9e7c847763050d4cbc9e847edeb96",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429"
   },
   "production_tree_digest_before": {
-    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429"
   },
   "production_tree_unchanged": true,
   "python": "3.13.1",
   "target_digests": {
-    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429"
   },
   "target_files": [
     "scripts/screens/419/simulate_stage1a_regime_685.py"

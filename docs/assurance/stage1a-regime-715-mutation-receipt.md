@@ -7,7 +7,7 @@ return 0 unconditionally, read `p_cut` from the `p_pass` column, or ignore
 `scripts/mutation_receipt.py --select 715-stage1a`.
 **Machine-readable record:** `docs/assurance/stage1a-regime-715-mutation-receipt.json`.
 **Pinned by content, not by commit:** `scripts/screens/419/simulate_stage1a_regime_685.py` at
-`sha256:a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c`.
+`sha256:ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429`.
 **Commit at generation:** `663ed72e95acdbe47357d10e3e4504c4993d516b` —
 informational only; currency is checked against the digest above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.1.

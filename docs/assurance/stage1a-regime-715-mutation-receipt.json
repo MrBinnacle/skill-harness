@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-22\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ws9d6i7v\\M-S1A-22\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 1,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the --rebuild branch returns 0 unconditionally, so a rebuilt directory whose calibration fails reports success",
       "killing_assertions": [
@@ -17,10 +17,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-22\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "62bf721b863f2d675560caff3723c054dd8280645654769a69f8b0975adb4918",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ws9d6i7v\\M-S1A-22\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "bf48f074b47739605cf334e237f4715bcf59901f3689f73b0a2c808241e50664",
         "tests_collected": 1,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-22",
       "notes": [],
@@ -34,10 +34,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-23\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ws9d6i7v\\M-S1A-23\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 1,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "results_from_output_dir reads p_cut from the p_pass column, so every rebuilt P(CUT) is a P(PASS)",
       "killing_assertions": [
@@ -47,10 +47,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-23\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "9635607429ff76ee4960a6da9b3e4ffb5f3f038eef776080f74f89c3655a7c24",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ws9d6i7v\\M-S1A-23\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "2234e67995abbb238586f894153a0cd9c2d7eb07c4131e2f27b1e62ce2671929",
         "tests_collected": 1,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-23",
       "notes": [],
@@ -64,10 +64,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-24\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ws9d6i7v\\M-S1A-24\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "description": "the --rebuild branch ignores run_meta.json, so the rebuilt summary reports the --seed default and the per_look.tsv replicate count",
       "killing_assertions": [
@@ -78,10 +78,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-4_cwmvy5\\M-S1A-24\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
-        "source_digest": "04f5c0e0113d9a86ce63b9393f53b231682d31843e1230eee68ce573d94e49b0",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-ws9d6i7v\\M-S1A-24\\scripts\\screens\\419\\simulate_stage1a_regime_685.py",
+        "source_digest": "54589a0f75dcc8190fe72dd053216841333930680f00c6924aa53a9d7360317c",
         "tests_collected": 2,
-        "worktree_head": "663ed72e95acdbe47357d10e3e4504c4993d516b"
+        "worktree_head": "93d81af07ff9e7c847763050d4cbc9e847edeb96"
       },
       "mutant_id": "M-S1A-24",
       "notes": [],
@@ -93,18 +93,18 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "663ed72e95acdbe47357d10e3e4504c4993d516b",
+  "commit_under_test": "93d81af07ff9e7c847763050d4cbc9e847edeb96",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429"
   },
   "production_tree_digest_before": {
-    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429"
   },
   "production_tree_unchanged": true,
   "python": "3.13.1",
   "target_digests": {
-    "scripts/screens/419/simulate_stage1a_regime_685.py": "a5d5de22ec1d7227066eb0359fcb50de311566597da9b132075bf250f436390c"
+    "scripts/screens/419/simulate_stage1a_regime_685.py": "ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429"
   },
   "target_files": [
     "scripts/screens/419/simulate_stage1a_regime_685.py"
