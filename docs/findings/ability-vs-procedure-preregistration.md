@@ -161,3 +161,42 @@ recorded. Either is a complete outcome of this registration.
 judge-graded task family becomes admissible by amendment); a second trap card shows a measured
 effect on a deterministic task (then P has an alternative); or the operator records a registry
 entry for an ability card (section 2).
+
+---
+
+## Correction 1 — 2026-10-28: arm P's bytes, and two overstated phrases (same session, before any run)
+
+This block is dated and appended under the amendment rule. Nothing above it is changed. The
+SHA-256 posted on #850 and PR #851 for the first commit (`bf87f1c`) names the file without this
+block; the hash of the file with it is in the commit that adds it.
+
+**1. Arm P names one version and the pin names another.** Section 3 reads "`pull-rebase` 3.1.0
+… vendored and blob-pinned at `scripts/screens/419/v4_arms/full/pull-rebase/`". Measured
+2026-10-28 with a CRLF-normalised `diff`: the vendored tree is the tag `v3.0.0` card text, and the
+installed 3.1.0 card differs from it in the description and in seven further hunks (dated source
+citations, a measured `--ff-only` exit, a `git range-diff` recovery step, a hooks note). The
+launcher's `v4_cells.FULL_TREE_BLOBS` refuses any tree but the vendored one
+(`stage1a-readout-691.md` Amendment 1).
+
+**Decision (Revisable).** Arm P delivers the **installed 3.1.0 card**, blob-pinned fresh at
+selection. The eligibility rule in section 3 is the issue's non-negotiable, and the study exists to
+stop category from standing in for liveness; delivering the 2026-09 bytes would reintroduce the
+proxy. Two consequences follow and are stated: (a) Stage 1A's P − N of +0.164 was measured on the
+`v3.0.0` text, so for sizing it is a **prior**, not P's expected effect, and Stage 0 item 1 sizes
+on it as such; (b) the launcher needs a `FULL_TREE_BLOBS` entry for the 3.1.0 tree, a code change
+ticketed under Stage 0, with the 3.1.0 tree vendored byte for byte beside the `v3.0.0` one. A result
+on 3.1.0 is not pooled with Stage 1A. *Revisit if:* the operator rules that comparability with
+Stage 1A outranks liveness for the control arm; P then delivers the vendored `v3.0.0` tree and
+section 3 says the live version is the card, not the bytes.
+
+**2. "The only family in the record with a non-ceiling Null" (section 5) is too strong.** The
+record also holds `cue-v5-stage1-null-screen.md` (Null(A+cue) Y 1/7, Null(B) Y 5/8, n = 7 and 8)
+and the 2026-09-01 gitpull k = 8 pilot (Null 0/8; v0.2 Amendment 3). Both are ancestors of the #419
+cue task and both are small. Read section 5 as: the #419 cue task is **the best-characterised
+non-ceiling Null in the record** (0.351 at n = 97). `twin-v4-stage1-null-screen.md` records Null(A)
+correctness 8/8, a ceiling, and is not a candidate.
+
+**3. "Measured non-null" (sections 3 and 5) reads loosely.** The literal form: Stage 1A recorded a
++0.164 point difference, Full 50/97 against Null-A 34/97, **not established** at alpha reading B
+(verdict CANT_TELL_YET at n_max = 97). No sentence above should be read as a claim that P has an
+established effect.
