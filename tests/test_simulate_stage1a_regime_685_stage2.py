@@ -1691,7 +1691,7 @@ def test_main_writes_the_per_regime_headline_and_fails_on_a_new_row(
     grid = [
         (
             reg.Cell(0.55, 0.35, 0.35),
-            reg.Design(30, 2.0, "direct", "anytime-tuned", 0.0209, 0.025),
+            reg.Design(30, 2.0, "direct", "fixed-n-betting", 0.0005, 1.0),
         ),
     ]
     original = reg.run_cell
