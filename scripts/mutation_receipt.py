@@ -242,6 +242,7 @@ _S1A_MODULE = "simulate_stage1a_regime_685"
 _S2 = "scripts/screens/419/simulate_stage1a_regime_685_stage2.py"
 _S2_MODULE = "simulate_stage1a_regime_685_stage2"
 _S2_TESTS = "tests/test_simulate_stage1a_regime_685_stage2.py"
+_S1A_TESTS = "tests/test_simulate_stage1a_regime_685.py"
 _S2_FIXED_N_ONCE = f"{_S2_TESTS}::test_fixed_n_designs_read_once_at_n"
 _S2_HORIZON = f"{_S2_TESTS}::test_fixed_n_betting_uses_horizon_scaled_bets_not_time_scaled"
 _S2_HORIZON_RUN = (
@@ -813,8 +814,8 @@ MUTANTS: tuple[Mutant, ...] = (
         "the direct F-N terminal bound drops the 2*bound - 1 scale",
         _S1A,
         _S1A_MODULE,
-        '    lb_fn = 2 * _bound(xs_fn, pass_alpha, "lower") - 1',
-        '    lb_fn = _bound(xs_fn, pass_alpha, "lower") - 1  # mutant: unscaled',
+        '    lb_fn = 2 * _bound(xs_fn, pass_alpha, "lower", w0) - 1',
+        '    lb_fn = _bound(xs_fn, pass_alpha, "lower", w0) - 1  # mutant: unscaled',
         (_S1A_TERMINAL_SCALE_KILL,),
     ),
     Mutant(
@@ -1337,6 +1338,82 @@ MUTANTS: tuple[Mutant, ...] = (
         "PN_ALPHA_ARM = 0.0125",
         "PN_ALPHA_ARM = 0.025  # mutant: the narrower interval",
         ("tests/test_stage2_pn_bound_798.py::test_pn_interval_uses_0_0125_per_side_not_0_025",),
+    ),
+    # #868: starting wealth in the #685 engine, the anytime sweep and the CUT rule.
+    Mutant(
+        "M-868-1",
+        "868-engine-grid-ignores-wealth",
+        "the online F-P PASS grid starts at wealth 1 whatever the starting wealth",
+        _S1A,
+        _S1A_MODULE,
+        "    fp_pass = wealth_grid(replicates, pass_alpha, w0)",
+        "    fp_pass = wealth_grid(replicates, pass_alpha)  # mutant: wealth ignored",
+        (f"{_S1A_TESTS}::test_every_decision_at_a_starting_wealth_equals_the_scalar_bound",),
+    ),
+    Mutant(
+        "M-868-2",
+        "868-engine-exact-ignores-wealth",
+        "the exact-bound fallback starts at wealth 1 whatever the starting wealth",
+        _S1A,
+        _S1A_MODULE,
+        "                    a650.one_sided_betting_bound(xs, alpha=alpha, side=side, "
+        "starting_wealth=wealth)",
+        "                    a650.one_sided_betting_bound(xs, alpha=alpha, side=side)"
+        "  # mutant: wealth ignored",
+        (f"{_S1A_TESTS}::test_every_decision_at_a_starting_wealth_equals_the_scalar_bound",),
+    ),
+    Mutant(
+        "M-868-3",
+        "868-engine-terminal-ignores-wealth",
+        "the direct F-N terminal bound starts at wealth 1 whatever the starting wealth",
+        _S1A,
+        _S1A_MODULE,
+        '    lb_fn = 2 * _bound(xs_fn, pass_alpha, "lower", w0) - 1',
+        '    lb_fn = 2 * _bound(xs_fn, pass_alpha, "lower") - 1  # mutant: wealth ignored',
+        (f"{_S1A_TESTS}::test_direct_terminal_bounds_start_at_the_starting_wealth",),
+    ),
+    Mutant(
+        "M-868-4",
+        "868-anytime-ignores-wealth",
+        "the Stage 2 anytime path never passes the row's starting wealth to the engine",
+        _S2,
+        _S2_MODULE,
+        "        pass_alpha=alpha,\n        starting_wealth=design.starting_wealth,\n    )",
+        "        pass_alpha=alpha,\n    )",
+        (f"{_S2_TESTS}::test_starting_wealth_changes_anytime_decisions",),
+    ),
+    Mutant(
+        "M-868-5",
+        "868-tuned-cut-bypasses-rule",
+        "the anytime-tuned CUT test reads W0 directly instead of the one CUT rule",
+        _S2,
+        _S2_MODULE,
+        "        replicates, s685.cut_starting_wealth(w0), LAMBDA_FP_CUT,",
+        "        replicates, w0, LAMBDA_FP_CUT,",
+        (f"{_S2_TESTS}::test_both_anytime_paths_follow_the_one_cut_rule",),
+    ),
+    Mutant(
+        "M-868-6",
+        "868-anytime-sweep-dropped",
+        "STAGE2_SWEEP keeps anytime rows at starting wealth 1.0",
+        _S2,
+        _S2_MODULE,
+        "    anytime_starting_wealths=STARTING_WEALTHS + ADDED_STARTING_WEALTHS,\n",
+        "",
+        (f"{_S2_TESTS}::test_stage2_anytime_rows_sweep_the_anytime_tuned_starting_wealths",),
+    ),
+    Mutant(
+        "M-868-7",
+        "868-header-prints-constants",
+        "the summary header prints the original module constants, not the sweep used",
+        _S2,
+        _S2_MODULE,
+        '        f"Pairs: {sweep.pairs}. Null per pair: {sweep.null_per_pair}.",',
+        '        f"Pairs: {PAIRS}. Null per pair: {NULL_PER_PAIR}.",',
+        (
+            f"{_S2_TESTS}::test_summary_header_prints_the_sweep_constants_used",
+            f"{_S2_TESTS}::test_a_run_records_its_sweep_and_rebuild_prints_it",
+        ),
     ),
 )
 
