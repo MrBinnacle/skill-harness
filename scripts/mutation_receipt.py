@@ -1287,6 +1287,17 @@ MUTANTS: tuple[Mutant, ...] = (
         "        n_null = int(fn_mask.sum())  # mutant: pairs, not draws",
         (_S2_NULL_COUNT, _S2_NULL_COUNT_RUN),
     ),
+    # #798: the P - N bound read at 0.025 per side instead of 0.0125.
+    Mutant(
+        "M-S2-21",
+        "798-stage2-pn-alpha-025",
+        "the P - N interval uses 0.025 per one-sided bound instead of 0.0125",
+        _S2,
+        _S2_MODULE,
+        "PN_ALPHA_ARM = 0.0125",
+        "PN_ALPHA_ARM = 0.025  # mutant: the narrower interval",
+        ("tests/test_stage2_pn_bound_798.py::test_pn_interval_uses_0_0125_per_side_not_0_025",),
+    ),
 )
 
 
