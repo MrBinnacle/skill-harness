@@ -1,0 +1,142 @@
+{
+  "cases": [
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-17\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09",
+        "tests_collected": 1,
+        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+      },
+      "description": "the fixed-n-betting CUT test runs at 0.10 instead of the registered 0.05",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_betting_cut_is_decided_at_the_registered_0_05"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-17\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "252ba6cdf46e3515b0727ecfd19dacc46a0f435eb7d7fe4213fba59c3330a778",
+        "tests_collected": 1,
+        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+      },
+      "mutant_id": "M-S2-17",
+      "notes": [],
+      "obligation": "720-stage2-betting-cut-level-010",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_betting_cut_is_decided_at_the_registered_0_05"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-18\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09",
+        "tests_collected": 1,
+        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+      },
+      "description": "the anytime-tuned CUT test runs at 0.10 instead of the registered 0.05",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_anytime_tuned_cut_is_decided_at_the_registered_0_05"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-18\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "d62f5eebf9872086794453a80790b8dbaee1b842f103b2b5ebe9011660c8570b",
+        "tests_collected": 1,
+        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+      },
+      "mutant_id": "M-S2-18",
+      "notes": [],
+      "obligation": "720-stage2-tuned-cut-level-010",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_anytime_tuned_cut_is_decided_at_the_registered_0_05"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-19\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09",
+        "tests_collected": 1,
+        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+      },
+      "description": "an anytime-tuned row reports its F - P half as the joint PASS",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_anytime_tuned_joint_pass_is_not_the_fp_half"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-19\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "a30500420d0e31b496c13a8d99169992303e5874c65c1739b7094f5b2f78faae",
+        "tests_collected": 1,
+        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+      },
+      "mutant_id": "M-S2-19",
+      "notes": [],
+      "obligation": "720-stage2-tuned-joint-pass-fp-half",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_anytime_tuned_joint_pass_is_not_the_fp_half"
+      ],
+      "verdict": "KILLED"
+    },
+    {
+      "clean": {
+        "baseline_passes": true,
+        "exit_code": 0,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-20\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09",
+        "tests_collected": 2,
+        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+      },
+      "description": "the fixed-n-score F - N test is given the number of pairs with a Null draw instead of the number of Null draws",
+      "killing_assertions": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_fn_test_counts_null_draws_not_pairs",
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_fn_pass_at_the_margin_does_not_collapse_at_null_per_pair_2"
+      ],
+      "mutant": {
+        "compiles": true,
+        "digests_differ": true,
+        "exit_code": 1,
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-rnraxgc1\\M-S2-20\\scripts\\screens\\419\\simulate_stage1a_regime_685_stage2.py",
+        "source_digest": "1f802eb3a5a6206eed8bf2541807a027ee3cfdd57edd988dcb3f748597bda375",
+        "tests_collected": 2,
+        "worktree_head": "248f3f3e97fbe293c0e4ad3615c6ade45683c307"
+      },
+      "mutant_id": "M-S2-20",
+      "notes": [],
+      "obligation": "720-stage2-fn-null-count-pairs",
+      "selection": [
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_fn_test_counts_null_draws_not_pairs",
+        "tests/test_simulate_stage1a_regime_685_stage2.py::test_fixed_n_score_fn_pass_at_the_margin_does_not_collapse_at_null_per_pair_2"
+      ],
+      "verdict": "KILLED"
+    }
+  ],
+  "commit_under_test": "248f3f3e97fbe293c0e4ad3615c6ade45683c307",
+  "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
+  "production_tree_digest_after": {
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09"
+  },
+  "production_tree_digest_before": {
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09"
+  },
+  "production_tree_unchanged": true,
+  "python": "3.13.1",
+  "target_digests": {
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py": "b3f01a9567e391b6843a5359185dbc9ea408b518cb2b32aa7fe1927aeb09ca09"
+  },
+  "target_files": [
+    "scripts/screens/419/simulate_stage1a_regime_685_stage2.py"
+  ]
+}
