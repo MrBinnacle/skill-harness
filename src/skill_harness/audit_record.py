@@ -13,7 +13,10 @@ holds the latest audit only.
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Final, Literal
 
@@ -25,9 +28,12 @@ from skill_harness.preflight import ArtifactAuditReport
 
 DEFAULT_AUDITS_DIR: Final[Path] = Path("docs/sers/audits")
 
-# The skill name becomes a filename, so it must be a plain slug: no separators,
-# no traversal, no case games on case-insensitive filesystems.
+# A name that is already a plain lowercase slug is its own filename. Any other
+# name gets a slug plus a hash of the original, so no name the audit accepts is
+# refused, no two names share a file, and no separator or traversal survives.
 _SAFE_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
+_UNSAFE_RUN: Final[re.Pattern[str]] = re.compile(r"[^a-z0-9-]+")
+_SLUG_MAX: Final[int] = 50
 
 
 class AuditRecordError(ValueError):
@@ -56,6 +62,7 @@ class ClaimClassification(BaseModel):
     model_config = ConfigDict(frozen=True, strict=True)
 
     tier1_mechanical_axes: tuple[str, ...]
+    # Fixed because the preflight's v0.1 evaluability statement fixes them.
     behavior_shaped: Literal["UNMEASURED"] = "UNMEASURED"
     judge_graded: Literal["UNMEASURED"] = "UNMEASURED"
 
@@ -93,18 +100,26 @@ def record_from_report(report: ArtifactAuditReport, *, audited_at_utc: str) -> A
 
 
 def _record_path(skill_name: str, audits_dir: Path) -> Path:
-    if not _SAFE_NAME.fullmatch(skill_name):
-        raise AuditRecordError(
-            f"skill name {skill_name!r} is not a lowercase slug; refusing to use it as a filename"
-        )
-    return audits_dir / f"{skill_name}.json"
+    if _SAFE_NAME.fullmatch(skill_name):
+        return audits_dir / f"{skill_name}.json"
+    slug = _UNSAFE_RUN.sub("-", skill_name.lower()).strip("-")[:_SLUG_MAX].strip("-")
+    digest = hashlib.sha256(skill_name.encode("utf-8")).hexdigest()[:12]
+    stem = f"{slug}-{digest}" if slug else digest
+    return audits_dir / f"{stem}.json"
 
 
 def write_audit_record(record: AuditRecord, audits_dir: Path) -> Path:
-    """Write ``<audits_dir>/<skill_name>.json``, replacing any earlier audit."""
+    """Write the record atomically, replacing any earlier audit of the same name."""
     path = _record_path(record.skill_name, audits_dir)
     audits_dir.mkdir(parents=True, exist_ok=True)
-    path.write_text(record.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    fd, tmp = tempfile.mkstemp(dir=audits_dir, prefix=".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(record.model_dump_json(indent=2) + "\n")
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
     return path
 
 
@@ -113,6 +128,7 @@ def audit_record_for(skill_md_path: Path, audits_dir: Path) -> AuditRecord | Non
 
     :returns: None when no record exists or its sha256 no longer matches.
     :raises AuditRecordError: the record file exists but does not parse.
+    :raises MalformedSkillError: ``parse_skill_file`` cannot parse the SKILL.md.
     """
     parsed = parse_skill_file(skill_md_path)
     path = _record_path(parsed.name, audits_dir)

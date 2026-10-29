@@ -436,7 +436,7 @@ def skill_audit(
 
 
 def _persist_audit_record(report: ArtifactAuditReport, out_dir: Path | None) -> None:
-    """Write the #673 audit record; refuse an unsafe skill name as a ClickException."""
+    """Write the #673 audit record; report a write failure as a ClickException."""
     from skill_harness.audit_record import (
         DEFAULT_AUDITS_DIR,
         AuditRecordError,
@@ -449,7 +449,8 @@ def _persist_audit_record(report: ArtifactAuditReport, out_dir: Path | None) -> 
         written = write_audit_record(record, out_dir or DEFAULT_AUDITS_DIR)
     except AuditRecordError as exc:
         raise click.ClickException(str(exc)) from exc
-    _console().print(f"\nAudit record written: {written}")
+    shown = _sanitize_clause_text(str(written), max_len=None)
+    _console().print(f"\nAudit record written: {shown}")
 
 
 def _print_clause_evidence(source_sha256: str, extraction_path: Path | None) -> None:

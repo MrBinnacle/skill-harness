@@ -119,13 +119,65 @@ def test_malformed_record_raises_rather_than_granting(tmp_path: Path) -> None:
         audit_record_for(skill, audits)
 
 
-@pytest.mark.parametrize("name", ["../escape", "a/b", "A_Upper", "", "x\\y"])
-def test_unsafe_skill_name_is_refused_as_a_filename(tmp_path: Path, name: str) -> None:
+NAMELESS_SKILL = """---
+description: Extracts text and tables from PDF files. Use when working with PDFs.
+---
+
+# PDF Processing
+"""
+
+ODD_NAME_SKILL = GOOD_SKILL.replace("name: processing-pdfs", "name: My_Helper")
+
+
+@pytest.mark.parametrize("content", [NAMELESS_SKILL, ODD_NAME_SKILL])
+def test_any_name_the_audit_accepts_persists_and_reads_back(tmp_path: Path, content: str) -> None:
+    skill = _skill(tmp_path, content)
+    audits = tmp_path / "audits"
+    record = record_from_report(audit_skill_artifact(skill), audited_at_utc=AUDITED_AT)
+
+    written = write_audit_record(record, audits)
+
+    assert written.parent == audits
+    assert audit_record_for(skill, audits) == record
+
+
+@pytest.mark.parametrize("name", ["../escape", "a/b", "A_Upper", "", "x\\y", "..", "CON"])
+def test_odd_name_maps_to_a_file_inside_audits_dir(tmp_path: Path, name: str) -> None:
     record = record_from_report(audit_skill_artifact(_skill(tmp_path)), audited_at_utc=AUDITED_AT)
-    unsafe = record.model_copy(update={"skill_name": name})
-    with pytest.raises(AuditRecordError):
-        write_audit_record(unsafe, tmp_path / "audits")
-    assert not (tmp_path / "audits").exists() or not any((tmp_path / "audits").iterdir())
+    audits = tmp_path / "audits"
+    written = write_audit_record(record.model_copy(update={"skill_name": name}), audits)
+    assert written.resolve().parent == audits.resolve()
+    assert sorted(p.name for p in audits.iterdir()) == [written.name]
+
+
+def test_distinct_odd_names_never_share_a_file(tmp_path: Path) -> None:
+    record = record_from_report(audit_skill_artifact(_skill(tmp_path)), audited_at_utc=AUDITED_AT)
+    audits = tmp_path / "audits"
+    names = ["My_Helper", "my-helper", "my_helper", "MY HELPER", "../my-helper", "", "_", "-"]
+    paths = {write_audit_record(record.model_copy(update={"skill_name": n}), audits) for n in names}
+    assert len(paths) == len(names)
+
+
+def test_reader_returns_none_for_an_odd_name_with_no_record(tmp_path: Path) -> None:
+    assert audit_record_for(_skill(tmp_path, ODD_NAME_SKILL), tmp_path / "audits") is None
+    (tmp_path / "n").mkdir()
+    assert audit_record_for(_skill(tmp_path / "n", NAMELESS_SKILL), tmp_path / "audits") is None
+
+
+def test_write_leaves_no_temp_file_behind(tmp_path: Path) -> None:
+    record = record_from_report(audit_skill_artifact(_skill(tmp_path)), audited_at_utc=AUDITED_AT)
+    audits = tmp_path / "audits"
+    write_audit_record(record, audits)
+    write_audit_record(record, audits)
+    assert [p.name for p in audits.iterdir()] == ["processing-pdfs.json"]
+
+
+def test_cli_persist_writes_record_for_a_nameless_card(tmp_path: Path) -> None:
+    skill = _skill(tmp_path, NAMELESS_SKILL)
+    out = tmp_path / "audits"
+    result = CliRunner().invoke(cli, ["skill", "audit", str(skill), "--persist", "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    assert isinstance(audit_record_for(skill, out), AuditRecord)
 
 
 def test_cli_persist_writes_record(tmp_path: Path) -> None:
@@ -135,7 +187,8 @@ def test_cli_persist_writes_record(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     record = audit_record_for(skill, out)
     assert isinstance(record, AuditRecord)
-    assert str(out / "processing-pdfs.json") in result.output.replace("\n", "")
+    assert (out / "processing-pdfs.json").is_file()
+    assert "Audit record written" in result.output
 
 
 def test_cli_without_persist_writes_nothing(
