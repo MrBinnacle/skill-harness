@@ -65,11 +65,12 @@ every break into a standing rule, and then build the same honesty into the tool.
 The machinery work has outweighed the collection work at every measurement, by an amount
 that moves. Machinery commits against collection commits came to 4.55 to 1 on 2026-08-15,
 3.36 on 2026-09-02, 3.36 on 2026-09-05, 3.17 on 2026-09-20, 3.25 on 2026-09-22, 3.05 on
-2026-10-12 and 2.05 on 2026-11-01. The latest fall comes from the collection side. Between
-2026-10-12 and 2026-11-01 the collection gained 151 commits and the machinery gained 64.
+2026-10-12, 2.61 on 2026-10-19, 2.03 on 2026-10-26 and 2.05 on 2026-11-01. The latest fall
+comes from the collection side. Between 2026-10-12 and 2026-11-01 the collection repository
+gained 151 commits and the machinery repository gained 64.
 
 This page used to call three to five to one the durable claim, and a weekly check failed
-when the ratio left that range. The check first failed on 2026-10-19, at 2.61. The check was right
+when the ratio left that range. The ratio first measured outside that range on 2026-10-19. The check was right
 and the claim was wrong: the range described the measurements up to that date and nothing
 held the work inside it. So the range and its check are gone. The measurements stay, and so
 do the commands that reproduce today's figure.

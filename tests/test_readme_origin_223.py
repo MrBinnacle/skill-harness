@@ -42,9 +42,26 @@ def test_commit_claim_stays_dated_and_reproducible() -> None:
     """
     section = _section(_why(), "The size of the detour")
 
-    assert re.search(r"\d+\.\d+ on 2026-\d{2}-\d{2}", section), (
-        "the section must carry dated measurements"
-    )
+    measured = {
+        measured_on: float(value)
+        for value, measured_on in re.findall(
+            r"(\d+\.\d+)(?: to 1)?\s+on\s+(2026-\d{2}-\d{2})", section
+        )
+    }
+    assert (
+        measured.items()
+        >= {
+            "2026-08-15": 4.55,
+            "2026-09-02": 3.36,
+            "2026-09-05": 3.36,
+            "2026-09-20": 3.17,
+            "2026-09-22": 3.25,
+            "2026-10-12": 3.05,
+            "2026-10-19": 2.61,
+            "2026-10-26": 2.03,
+            "2026-11-01": 2.05,
+        }.items()
+    ), "a dated measurement is a record; add to the list and do not rewrite it"
     assert "across every measurement taken" not in section, (
         "the ratio moves, so the page must not claim it holds across measurements"
     )
