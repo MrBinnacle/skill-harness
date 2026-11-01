@@ -89,7 +89,7 @@ def test_manifest_names_its_source_and_the_ruling() -> None:
     """A vendored copy with no provenance cannot be repaired by whoever finds
     it stale."""
     payload = json.loads(_MANIFEST.read_text(encoding="utf-8"))
-    assert payload["source"].startswith("MrBinnacle/skills@main:assets/tokens.json")
+    assert payload["source"].startswith("MrBinnacle/skills@dca024d:assets/tokens.json")
     assert "2026-09-06" in payload["ruling"]
 
 

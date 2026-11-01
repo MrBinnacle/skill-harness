@@ -202,8 +202,8 @@ class WordListBan:
     that digest from the array it just read, so editing the array without
     editing the digest is drift caught here, per-commit and hermetic. The
     OTHER direction -- the collection editing its list while this copy stands
-    still -- needs a cross-repository read, so it runs on a schedule in
-    ``scripts/words_to_avoid_drift_check.py`` instead.
+    still -- has no automated check. The collection stopped tracking its list
+    file on 2026-10-24 (skills#630), so this copy follows it by hand.
 
     Matching is whole-word and case-insensitive, with a hyphen counting as a
     word character: ``earn`` must not fire on "learn", and ``unlock`` must not
@@ -237,9 +237,7 @@ class DelegatedGuard:
     written in the table. This one does not, and the difference is the point:
     the rules AC-3 and AC-4 register are already implemented, already enforced,
     and already have a caller. Restating them here would put one meaning in two
-    places, which is the failure scripts/words_to_avoid_drift_check.py names in
-    its own import comment: two guards over one subject that canonicalize
-    differently invent drift that is not there.
+    places.
 
     The callee owns the WORDING of a violation it finds, which is the wording
     its other caller already prints, so an operator reads one sentence for one
@@ -344,7 +342,7 @@ _OC_BAN_EXEMPTIONS = frozenset({"src/skill_harness/oc/crosschecks.py"})
 # A gate that is red by default on a developer machine over files its reader
 # cannot act on is a gate that gets muted, which is the cost the digest half
 # of this same contract already wrote down
-# (MrBinnacle/skills@main:assets/tokens.json, copy.words_to_avoid_digest).
+# (MrBinnacle/skills@dca024d:assets/tokens.json, copy.words_to_avoid_digest).
 #
 # The pruned-directory list is gone rather than extended. Every name on it was
 # a hand-maintained guess at "generated, vendored, or not ours", and git
@@ -1242,8 +1240,7 @@ def read_word_list_manifest(path: Path) -> tuple[list[str], str]:
     """Return ``(words, recorded_digest)`` from a vendored manifest.
 
     Raises ``WordListManifestError`` when the file is missing, unparseable, or
-    shaped wrong. ``scripts/words_to_avoid_drift_check.py`` reads the same
-    manifest through this function, so both guards agree on what the file is."""
+    shaped wrong."""
     if not path.is_file():
         raise WordListManifestError(f"{path}: vendored word list missing")
     try:
@@ -1769,11 +1766,6 @@ def _check_asset_pairs(root: Path, contract: AssetPairsContract) -> list[str]:
 
 def _load_guard_module(module_rel: str) -> ModuleType:
     """Import a guard module from THIS script's repository, by file path.
-
-    ``scripts`` and ``tests`` carry no ``__init__.py`` and are not packages
-    (the same note scripts/words_to_avoid_drift_check.py carries), so this is
-    the loader tests/test_words_to_avoid_ban.py already uses to reach this
-    script. The direction here is the reverse and the mechanism is identical.
 
     The module is registered in ``sys.modules`` BEFORE ``exec_module``:
     @dataclass resolves a field annotation by looking its defining module up in

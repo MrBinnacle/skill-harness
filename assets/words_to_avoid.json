@@ -1,6 +1,6 @@
 {
-  "$note": "The collection's words_to_avoid list, vendored. MrBinnacle/skills owns the list; this repository holds a copy so its per-commit check stays hermetic. Two guards keep the copy honest: scripts/drift_check.py DC-16 recomputes `sha256` from `words` on every run, so editing the array without editing the digest is drift; scripts/words_to_avoid_drift_check.py fetches the live collection file on a daily schedule and compares. Change the list here only to track a change upstream.",
-  "source": "MrBinnacle/skills@main:assets/tokens.json > copy.words_to_avoid",
+  "$note": "The collection's words_to_avoid list, vendored. MrBinnacle/skills owns the list; this repository holds a copy so its per-commit check stays hermetic. scripts/drift_check.py DC-16 recomputes `sha256` from `words` on every run, so editing the array without editing the digest is drift. The collection stopped tracking its list file on 2026-10-24 (skills#630), so no automated check compares this copy with it. Change the list here by hand only to track a change upstream.",
+  "source": "MrBinnacle/skills@dca024d:assets/tokens.json > copy.words_to_avoid",
   "ruling": "Operator ruling 2026-09-06: one voice across all repositories, every line of prose under the same rules. Filed for this repository as MrBinnacle/skill-harness#462, sibling of MrBinnacle/skills#261.",
   "vendored_on": "2026-09-07",
   "sha256": "79701ff6e706cb3d7ddc42ac73edde8564700ce3c7c95c2432da0c47f5bbdea7",
