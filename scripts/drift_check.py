@@ -237,8 +237,7 @@ class DelegatedGuard:
     written in the table. This one does not, and the difference is the point:
     the rules AC-3 and AC-4 register are already implemented, already enforced,
     and already have a caller. Restating them here would put one meaning in two
-    places: two guards over one subject that canonicalize differently invent
-    drift that is not there.
+    places.
 
     The callee owns the WORDING of a violation it finds, which is the wording
     its other caller already prints, so an operator reads one sentence for one
@@ -1767,10 +1766,6 @@ def _check_asset_pairs(root: Path, contract: AssetPairsContract) -> list[str]:
 
 def _load_guard_module(module_rel: str) -> ModuleType:
     """Import a guard module from THIS script's repository, by file path.
-
-    ``scripts`` and ``tests`` carry no ``__init__.py`` and are not packages,
-    so this is the loader tests/test_words_to_avoid_ban.py already uses to reach this
-    script. The direction here is the reverse and the mechanism is identical.
 
     The module is registered in ``sys.modules`` BEFORE ``exec_module``:
     @dataclass resolves a field annotation by looking its defining module up in
