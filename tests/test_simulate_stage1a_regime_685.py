@@ -1780,10 +1780,15 @@ def test_every_decision_at_a_starting_wealth_equals_the_scalar_bound(
     )
 
 
+def _wealth_sensitive_upper_bound_pairs() -> tuple[Any, Any]:
+    full = np.array([[1] * 5 + [0] * 25, [1] * 8 + [0] * 22], dtype=np.int64)
+    placebo = np.array([[1] * 20 + [0] * 10, [0] * 5 + [1] * 20 + [0] * 5], dtype=np.int64)
+    return full, placebo
+
+
 @pytest.mark.parametrize("starting_wealth", [1.0, 0.25])
 def test_direct_terminal_bounds_start_at_the_starting_wealth(starting_wealth: float) -> None:
-    full = np.array([[1, 1, 0, 1, 1, 1], [0, 1, 1, 0, 1, 1]], dtype=np.int64)
-    placebo = np.array([[0, 1, 0, 0, 0, 0], [1, 0, 0, 1, 0, 0]], dtype=np.int64)
+    full, placebo = _wealth_sensitive_upper_bound_pairs()
     xs_fn = np.array([[1.0, 0.5, 0.0, 1.0], [0.5, 1.0, 0.5, 1.0]], dtype=np.float64)
     w_cut = reg.cut_starting_wealth(starting_wealth)
     lb_fp, ub_fp, lb_fn = reg._terminal_bounds_direct(
@@ -1800,6 +1805,28 @@ def test_direct_terminal_bounds_start_at_the_starting_wealth(starting_wealth: fl
         assert lb_fn[r] == pytest.approx(
             2 * _wealth_bound(xs_fn[r], a650.PASS_ALPHA, "lower", starting_wealth) - 1, abs=1e-9
         )
+
+
+@pytest.mark.parametrize("starting_wealth", [1.0, 0.25])
+def test_union_terminal_upper_bound_starts_at_the_cut_wealth(starting_wealth: float) -> None:
+    full, placebo = _wealth_sensitive_upper_bound_pairs()
+    w_cut = reg.cut_starting_wealth(starting_wealth)
+    _, ub_fp, _ = reg._terminal_bounds_union(
+        full, placebo, placebo, a650.PASS_ALPHA, starting_wealth
+    )
+    for r in range(len(full)):
+        xs_fp = (full[r] - placebo[r] + 1) / 2.0
+        assert ub_fp[r] == pytest.approx(
+            2 * _wealth_bound(xs_fp, a650.FUTILITY_ALPHA, "upper", w_cut) - 1, abs=1e-9
+        )
+
+
+def test_the_terminal_fixture_upper_bound_moves_with_the_starting_wealth() -> None:
+    full, placebo = _wealth_sensitive_upper_bound_pairs()
+    for r in range(len(full)):
+        xs_fp = (full[r] - placebo[r] + 1) / 2.0
+        unit, lowered = (_wealth_bound(xs_fp, a650.FUTILITY_ALPHA, "upper", w) for w in (1.0, 0.25))
+        assert unit < lowered < 1.0
 
 
 def test_a_lower_starting_wealth_widens_the_scalar_bound() -> None:
