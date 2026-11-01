@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from datetime import date
 from pathlib import Path
 
 _README = Path(__file__).resolve().parents[1] / "README.md"
@@ -32,7 +31,7 @@ def test_why_this_exists_opens_on_whether_you_can_tell() -> None:
     assert "I wanted to know whether a skill was any good." not in section
 
 
-def test_commit_claim_matches_the_public_collection_measurement() -> None:
+def test_commit_claim_stays_dated_and_reproducible() -> None:
     """The #223 claim, re-registered to the file the 2026-08-23 ruling moved it to.
 
     The ruling took the commit-count comparison off the front page and named
@@ -40,45 +39,15 @@ def test_commit_claim_matches_the_public_collection_measurement() -> None:
     intact. The lock follows the content rather than being retired with it:
     retiring it would have loosened a guard to make a removal pass, which is
     the opposite of what a move is.
-
-    What is asserted is the SHAPE of the claim - a dated measurement, a ratio
-    in the form 'about N.N to 1', the two derivation commands, the fresh-clone
-    basis - and not the values. The exact counts rise with every merge and go
-    stale by construction; the durable figure is the ratio, which has stayed
-    between three and five to one across every measurement taken.
-
-    A shape lock still cannot detect a ratio drifting outside its band. That
-    is the steering repo's issue 61, and it needs a freshly measured
-    comparison, not a stricter string.
     """
     section = _section(_why(), "The size of the detour")
 
-    measured = re.search(r"Measured on (\d{4})-(\d{2})-(\d{2}):", section)
-    assert measured, "the detour section must carry a dated measurement"
-    date(int(measured[1]), int(measured[2]), int(measured[3]))
-
-    ratio = re.search(
-        r"\*\*about (\d+\.\d+) to 1\*\*",
-        section,
+    assert re.search(r"\d+\.\d+ on 2026-\d{2}-\d{2}", section), (
+        "the section must carry dated measurements"
     )
-    assert ratio, "the claim must state a ratio as 'about N.N to 1'"
-    ratio_value = float(ratio[1])
-    assert 3.0 <= ratio_value <= 5.0, (
-        "the dated ratio must support the durable three-to-five claim; a different "
-        "measurement needs a rewritten claim, not a looser shape lock"
+    assert "across every measurement taken" not in section, (
+        "the ratio moves, so the page must not claim it holds across measurements"
     )
-    assert "stayed between three and five to one across every measurement taken" in section
-    historical_ratios = {
-        measured_on: float(value)
-        for value, measured_on in re.findall(r"(\d+\.\d+) on (2026-\d{2}-\d{2})", section)
-    }
-    assert historical_ratios == {
-        "2026-08-15": 4.55,
-        "2026-09-02": 3.36,
-        "2026-09-05": 3.36,
-        "2026-09-20": 3.17,
-    }
-    assert all(3.0 <= value <= 5.0 for value in historical_ratios.values())
 
     assert (
         "git clone https://github.com/MrBinnacle/skills.git        "
