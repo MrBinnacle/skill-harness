@@ -1415,6 +1415,32 @@ MUTANTS: tuple[Mutant, ...] = (
             f"{_S2_TESTS}::test_a_run_records_its_sweep_and_rebuild_prints_it",
         ),
     ),
+    Mutant(
+        "M-868-8",
+        "868-union-terminal-cut-ignores-wealth",
+        "the union terminal F-P upper bound starts at wealth 1 whatever the CUT rule says",
+        _S1A,
+        _S1A_MODULE,
+        '    ub_fp = 2 * _bound(xs_fp, a650.FUTILITY_ALPHA, "upper", cut_starting_wealth(w0)) - 1\n'
+        "    lb_fn = _bound(",
+        '    ub_fp = 2 * _bound(xs_fp, a650.FUTILITY_ALPHA, "upper") - 1'
+        "  # mutant: wealth ignored\n"
+        "    lb_fn = _bound(",
+        (f"{_S1A_TESTS}::test_union_terminal_upper_bound_starts_at_the_cut_wealth",),
+    ),
+    Mutant(
+        "M-868-9",
+        "868-direct-terminal-cut-ignores-wealth",
+        "the direct terminal F-P upper bound starts at wealth 1 whatever the CUT rule says",
+        _S1A,
+        _S1A_MODULE,
+        '    ub_fp = 2 * _bound(xs_fp, a650.FUTILITY_ALPHA, "upper", cut_starting_wealth(w0)) - 1\n'
+        "    lb_fn = 2 * _bound(",
+        '    ub_fp = 2 * _bound(xs_fp, a650.FUTILITY_ALPHA, "upper") - 1'
+        "  # mutant: wealth ignored\n"
+        "    lb_fn = 2 * _bound(",
+        (f"{_S1A_TESTS}::test_direct_terminal_bounds_start_at_the_starting_wealth",),
+    ),
 )
 
 
