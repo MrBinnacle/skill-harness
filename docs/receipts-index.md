@@ -646,14 +646,15 @@ and covers that section only. This page stays the citable surface for every kind
 
 ### [`docs/assurance/stage2-starting-wealth-868-mutation-receipt.md`](assurance/stage2-starting-wealth-868-mutation-receipt.md)
 
-- **Claims:** Seven mutants against starting wealth in the #685 engine and the
-  Stage 2 simulator (#868), each run in its own git worktree at a fixed commit
-  with a clean baseline passing first and the production tree unchanged
-  afterwards. All seven KILLED: the online PASS grid, the exact fallback and
+- **Claims:** Nine mutants against starting wealth in the #685 engine and the
+  Stage 2 simulator (#868, #876), each run in its own git worktree at a fixed
+  commit with a clean baseline passing first and the production tree unchanged
+  afterwards. All nine KILLED: the online PASS grid, the exact fallback and
   the direct F - N terminal bound each ignoring the starting wealth; the
   anytime path not passing the row's wealth to the engine; the anytime-tuned
-  CUT test bypassing the one CUT rule; the anytime sweep dropped; and the
-  header printing module constants. The campaign pins
+  CUT test bypassing the one CUT rule; the anytime sweep dropped; the
+  header printing module constants; and the union and direct terminal F - P
+  upper bounds each ignoring the CUT wealth. The campaign pins
   `scripts/screens/419/simulate_stage1a_regime_685.py` at
   `sha256:ddf29746026bcd6bde8435fd0f0cc12aa1e6942b5ed65235f39f033313e62429` and
   `scripts/screens/419/simulate_stage1a_regime_685_stage2.py` at

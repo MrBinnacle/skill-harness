@@ -22,6 +22,8 @@ with nonzero collection, and the production digests were identical before and af
 | M-868-5 | 868-tuned-cut-bypasses-rule | anytime-tuned CUT reads W0, not the CUT rule | **KILLED** |
 | M-868-6 | 868-anytime-sweep-dropped | STAGE2_SWEEP keeps anytime rows at 1.0 | **KILLED** |
 | M-868-7 | 868-header-prints-constants | header prints module constants, not the sweep | **KILLED** |
+| M-868-8 | 868-union-terminal-cut-ignores-wealth | union terminal F-P upper bound starts at wealth 1 | **KILLED** |
+| M-868-9 | 868-direct-terminal-cut-ignores-wealth | direct terminal F-P upper bound starts at wealth 1 | **KILLED** |
 
 The killing tests for each case are recorded in the JSON.
 
