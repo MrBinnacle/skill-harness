@@ -1130,12 +1130,16 @@ def _find_incomplete_run_for_execute(
 ) -> str | None:
     """Return the run_id of an incomplete prior run for skill_id, or None (A52, E.3).
 
-    Used exclusively by `_cmd_execute` bare-rerun guard. Opens both DBs read-only,
-    delegates to find_resumable_run_for_skill (storage.recovery, A61).
+    Used exclusively by `_cmd_execute` bare-rerun guard. Opens the runtime DB and
+    the evidence DB read-only, delegates to find_resumable_run_for_skill
+    (storage.recovery, A61).
 
     Module-level so tests can patch find_resumable_run_for_skill at cli.main scope.
-    Returns None when either DB is absent (no prior runs possible).
+    Returns None when a store is not yet bootstrapped (no prior runs possible).
+    Every other failure propagates: None would mean "no incomplete run" when the
+    guard could not check, and the caller would pay for the samples again (#887).
     """
+    from skill_harness.storage.errors import BootstrapError
     from skill_harness.storage.migrations import open_evidence_readonly, open_runtime
 
     if runtime_db is None or evidence_db is None:
@@ -1146,16 +1150,10 @@ def _find_incomplete_run_for_execute(
     try:
         try:
             rt = open_runtime(runtime_db)
-        except Exception:
-            return None
-        try:
             ev_ro = open_evidence_readonly(evidence_db)
-        except Exception:  # includes BootstrapError when DB not yet bootstrapped
-            # evidence.db not yet created — no runs can exist
+        except BootstrapError:
             return None
         return find_resumable_run_for_skill(skill_id, evidence_conn_ro=ev_ro, runtime_conn=rt)
-    except Exception:
-        return None
     finally:
         if ev_ro is not None:
             ev_ro.close()
@@ -1441,6 +1439,7 @@ def _cmd_execute(
     state).
     """
     from skill_harness.ablation.runner import BudgetAbortedError
+    from skill_harness.aggregation.errors import PreconditionError
 
     # m3: model-aware API key pre-flight BEFORE any DB write (no orphan run rows)
     resolved_model = _resolve_subject_model_with_fallback(subject_model)
@@ -1458,9 +1457,16 @@ def _cmd_execute(
     # A52: bare re-run guard — detect incomplete prior run BEFORE opening DB (B1 fix, E.3 refactor)
     # Uses find_resumable_run_for_skill (storage.recovery) directly — shim deleted in E.3.
     if resume_run_id is None:
-        incomplete_run_id = _find_incomplete_run_for_execute(
-            skill_id, runtime_db=runtime_db, evidence_db=evidence_db
-        )
+        try:
+            incomplete_run_id = _find_incomplete_run_for_execute(
+                skill_id, runtime_db=runtime_db, evidence_db=evidence_db
+            )
+        except (PreconditionError, sqlite3.Error) as exc:
+            raise click.ClickException(
+                f"Run refused: the check for an incomplete prior run of {skill_id!r} failed: {exc}"
+                "\n  A fresh run could pay again for samples an incomplete run already holds."
+                "\n  Repair the runtime and evidence databases, then re-run."
+            ) from exc
         if incomplete_run_id is not None:
             _console().print(
                 f"\n[bold yellow]WARNING:[/] Incomplete prior run detected for skill {skill_id!r}."
