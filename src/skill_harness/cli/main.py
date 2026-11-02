@@ -26,11 +26,12 @@ from skill_harness.extractor import (
     MalformedSkillError,
     extract_skill,
 )
-from skill_harness.ratification import check_execute_ratification
+from skill_harness.ratification import RatificationError, check_execute_ratification
 from skill_harness.storage.context import StorageContext
 from skill_harness.storage.recovery import find_resumable_run_for_skill
 
 if TYPE_CHECKING:
+    from skill_harness.ablation.runner import RunConfig
     from skill_harness.preflight import ArtifactAuditReport
 
 
@@ -694,7 +695,11 @@ def run() -> None:
     "resume_run_id",
     default=None,
     metavar="RUN_ID",
-    help="Resume an incomplete prior run by run_id (A52).",
+    help=(
+        "Resume an incomplete prior run by run_id (A52). The run keeps the model, clauses, "
+        "prompt and ratification frozen at its start; --subject-model and --user-message "
+        "are ignored."
+    ),
 )
 @click.option(
     "--show-rendered",
@@ -834,7 +839,8 @@ def run_ablation(
         runtime_db=runtime_db,
         # #368 Path C: the same record the preflight above just accepted supplies
         # the registered Gate-2 thresholds. Threaded rather than re-read, so the
-        # thresholds a clause is decided under are the ones the gate approved.
+        # thresholds a clause is decided under are the ones the gate approved. A
+        # resume uses the record frozen in its plan instead (#886).
         ratification_path=ratification_path,
     )
 
@@ -1181,25 +1187,7 @@ def _execute_ablation_run(
     from skill_harness.ablation.subject import make_subject_client
 
     with StorageContext(evidence_db, runtime_db) as ctx:
-        operator = AblationOperator()
-        renderer = ConditionRenderer(operator=operator)
-        subject = make_subject_client(subject_model)
-        runner = AblationRunner(
-            evidence_conn=ctx.evidence_conn,
-            runtime_conn=ctx.runtime_conn,
-            subject_client=subject,
-            operator=operator,
-            renderer=renderer,
-        )
-
-        # In v0.1, clauses are loaded from the evidence DB (via skill_id FK).
-        clauses = _load_clauses_from_db(ctx, skill_id, clause_id)
-
-        if not clauses:
-            raise click.ClickException(
-                f"No testable clauses found for skill {skill_id!r}. Run 'skill init <path>' first."
-            )
-
+        plan: RunConfig | None = None
         if resume_run_id is not None:
             # m2: load user_message from runs.config_json (not empty string)
             user_message = _load_user_message_from_run(ctx.evidence_conn, resume_run_id)
@@ -1217,18 +1205,51 @@ def _execute_ablation_run(
                     "Refusing to proceed with an empty prompt -- verify --resume "
                     "RUN_ID against evidence.runs and re-run."
                 )
-            results = runner.resume_ablation(
-                run_id=resume_run_id,
-                clauses=clauses,
-                user_message=user_message,
-                max_usd=max_usd,
+            plan, clauses = _load_frozen_plan(ctx, resume_run_id, skill_id, clause_id)
+            subject_model = plan.subject_model
+        else:
+            # In v0.1, clauses are loaded from the evidence DB (via skill_id FK).
+            clauses = _load_clauses_from_db(ctx, skill_id, clause_id)
+
+        if not clauses:
+            raise click.ClickException(
+                f"No testable clauses found for skill {skill_id!r}. Run 'skill init <path>' first."
             )
+
+        operator = AblationOperator()
+        renderer = ConditionRenderer(operator=operator)
+        subject = make_subject_client(subject_model)
+        runner = AblationRunner(
+            evidence_conn=ctx.evidence_conn,
+            runtime_conn=ctx.runtime_conn,
+            subject_client=subject,
+            operator=operator,
+            renderer=renderer,
+        )
+
+        if plan is not None:
+            try:
+                results = runner.resume_ablation(
+                    run_id=plan.run_id,
+                    clauses=clauses,
+                    user_message=user_message,
+                    max_usd=max_usd,
+                    subject_model=subject_model,
+                    ratification_path=plan.ratification_path,
+                )
+            except RatificationError as exc:
+                raise click.ClickException(
+                    f"Cannot resume run {plan.run_id!r}: its frozen ratification record "
+                    f"{plan.ratification_path} cannot be read ({exc}). Restore the record "
+                    "at that path and re-run."
+                ) from exc
         else:
             results = runner.run_ablation(
                 skill_id=skill_id,
                 clauses=clauses,
                 user_message=user_message,
                 max_usd=max_usd,
+                subject_model=subject_model,
                 # #368 Path C: supplies the registered Gate-2 thresholds. On a
                 # dry run or a run without --ratification this is None, and every
                 # clause result then records that the effect-size floor was not
@@ -1237,6 +1258,83 @@ def _execute_ablation_run(
             )
 
     return results
+
+
+def _read_run_config(evidence_conn: sqlite3.Connection, run_id: str) -> RunConfig | None:
+    """Parse a run's frozen plan. None if the run is absent or its config_json is not a plan."""
+    from skill_harness.ablation.runner import RunConfig
+
+    row = evidence_conn.execute(
+        "SELECT config_json FROM runs WHERE run_id = ?", (run_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        return RunConfig.from_json(row[0])
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def _load_frozen_plan(
+    ctx: StorageContext, run_id: str, skill_id: str, clause_id: str | None
+) -> tuple[RunConfig, list[Any]]:
+    """Return the plan a resume must run and its clauses, or refuse a resume that changes it.
+
+    Clause specs come from evidence.clauses, which is append-only, because the clause
+    dicts in config_json do not carry the comparator a 'decrease' clause needs (A2).
+    """
+    plan = _read_run_config(ctx.evidence_conn, run_id)
+    if plan is None:
+        raise click.ClickException(
+            f"Cannot resume run {run_id!r}: runs.config_json is not a complete frozen plan."
+        )
+    if plan.skill_id != skill_id:
+        raise click.ClickException(
+            f"Cannot resume run {run_id!r}: it belongs to skill {plan.skill_id!r}, not "
+            f"{skill_id!r}."
+        )
+
+    frozen_ids = [clause["clause_id"] for clause in plan.clauses]
+    if clause_id is not None and frozen_ids != [clause_id]:
+        raise click.ClickException(
+            f"Cannot resume run {run_id!r} with --clause {clause_id}: its frozen plan is "
+            f"{frozen_ids!r}, and a resume runs the whole plan. Remove --clause."
+        )
+
+    rows = ctx.evidence_conn.execute(
+        "SELECT DISTINCT subject_model FROM samples WHERE run_id = ?", (run_id,)
+    ).fetchall()
+    stray_models = sorted({row[0] for row in rows} - {plan.subject_model})
+    if stray_models:
+        raise click.ClickException(
+            f"Cannot resume run {run_id!r}: runs.config_json records model "
+            f"{plan.subject_model!r}, and its samples also came from {stray_models!r}. "
+            "Its posterior would pool models. Start a fresh run."
+        )
+
+    clauses_by_id = {c.clause_id: c for c in _load_clauses_from_db(ctx, skill_id, None)}
+    absent = [cid for cid in frozen_ids if cid not in clauses_by_id]
+    if absent:
+        raise click.ClickException(
+            f"Cannot resume run {run_id!r}: frozen clauses {absent!r} are not in evidence.clauses."
+        )
+    return plan, [clauses_by_id[cid] for cid in frozen_ids]
+
+
+def _frozen_subject_model(evidence_db: Path, run_id: str) -> str | None:
+    """Read the model a run froze, without a write. None if there is no readable plan."""
+    from skill_harness.storage.errors import BootstrapError
+    from skill_harness.storage.migrations import open_evidence_readonly
+
+    try:
+        conn = open_evidence_readonly(evidence_db)
+    except BootstrapError:
+        return None
+    try:
+        plan = _read_run_config(conn, run_id)
+    finally:
+        conn.close()
+    return plan.subject_model if plan is not None else None
 
 
 def _load_clauses_from_db(
@@ -1444,8 +1542,16 @@ def _cmd_execute(
     from skill_harness.ablation.runner import BudgetAbortedError
     from skill_harness.aggregation.errors import PreconditionError
 
-    # m3: model-aware API key pre-flight BEFORE any DB write (no orphan run rows)
-    resolved_model = _resolve_subject_model_with_fallback(subject_model)
+    # m3: model-aware API key pre-flight BEFORE any DB write (no orphan run rows).
+    # #886: a resume keys it on the frozen model, and a key change must not reroute it.
+    frozen_model = _frozen_subject_model(evidence_db, resume_run_id) if resume_run_id else None
+    resolved_model = _resolve_subject_model_with_fallback(frozen_model or subject_model)
+    if frozen_model is not None and resolved_model != frozen_model:
+        raise click.ClickException(
+            f"Cannot resume run {resume_run_id!r}: its frozen model is {frozen_model!r}, and "
+            f"the available API keys would route it as {resolved_model!r}. Set the direct "
+            "key for that model and re-run."
+        )
     _refuse_unpriced_model(resolved_model)
 
     # B2: daily-cap pre-run check BEFORE any DB write
@@ -1485,6 +1591,7 @@ def _cmd_execute(
         _console().print(
             f"\n[bold cyan]Resuming run:[/] {resume_run_id}"
             f"\n  skill_id: {skill_id}"
+            f"\n  subject_model: {resolved_model}"
             "\n  Skipping already-collected samples (A40 idempotency)."
         )
 

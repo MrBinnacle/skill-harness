@@ -23,6 +23,7 @@ from unittest.mock import MagicMock, patch
 import click
 import pytest
 
+from skill_harness.ablation.runner import RunConfig
 from skill_harness.cli.main import _execute_ablation_run
 from skill_harness.storage.migrations import open_evidence, open_runtime
 from skill_harness.storage.models import ClauseWrite, RunWrite, SkillWrite
@@ -202,6 +203,35 @@ def test_resume_missing_user_message_key_refuses(
 
 @patch("skill_harness.ablation.subject.make_subject_client")
 @patch("skill_harness.ablation.runner.AblationRunner")
+def test_resume_config_without_the_rest_of_the_plan_refuses(
+    mock_runner_cls: MagicMock, mock_make_subject: MagicMock, tmp_path: Path
+) -> None:
+    """A user_message alone is not a plan: without a model and clauses, nothing can be frozen."""
+    evidence_db = tmp_path / "evidence.db"
+    runtime_db = tmp_path / "runtime.db"
+    _seed_skill_and_clause(evidence_db)
+    open_runtime(runtime_db).close()
+
+    run_id = "run-message-only"
+    _seed_run(evidence_db, run_id, config_json=json.dumps({"user_message": "m"}))
+
+    with pytest.raises(click.ClickException, match="not a complete frozen plan"):
+        _execute_ablation_run(
+            skill_id=_SKILL_ID,
+            clause_id=None,
+            subject_model="claude-sonnet-4-6",
+            user_message="original CLI-provided prompt",
+            max_usd=5.0,
+            resume_run_id=run_id,
+            evidence_db=evidence_db,
+            runtime_db=runtime_db,
+        )
+
+    mock_runner_cls.return_value.resume_ablation.assert_not_called()
+
+
+@patch("skill_harness.ablation.subject.make_subject_client")
+@patch("skill_harness.ablation.runner.AblationRunner")
 def test_resume_valid_config_proceeds_to_resume_ablation(
     mock_runner_cls: MagicMock, mock_make_subject: MagicMock, tmp_path: Path
 ) -> None:
@@ -214,7 +244,17 @@ def test_resume_valid_config_proceeds_to_resume_ablation(
 
     run_id = "run-valid-config-001"
     expected_msg = "Write a detailed essay about climate change."
-    _seed_run(evidence_db, run_id, config_json=json.dumps({"user_message": expected_msg}))
+    _seed_run(
+        evidence_db,
+        run_id,
+        config_json=RunConfig(
+            run_id=run_id,
+            skill_id=_SKILL_ID,
+            clauses=[{"clause_id": _CLAUSE_ID}],
+            subject_model="claude-sonnet-4-6",
+            user_message=expected_msg,
+        ).to_json(),
+    )
 
     mock_runner_instance = mock_runner_cls.return_value
     mock_runner_instance.resume_ablation.return_value = []
