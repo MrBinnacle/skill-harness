@@ -55,9 +55,6 @@ def test_pure_ties_are_structurally_unmeasured() -> None:
 def test_low_discordance_verdict_needs_n_min_discordant_by_n_max(
     q: float, verdict_field: str
 ) -> None:
-    # At q = 1 or q = 0 every discordant comparison points one way, and eight of
-    # them clear the threshold. So the verdict mass is P(Binomial(40, 0.1) >= 8)
-    # = 0.0419. Before #885 a verdict also absorbed at 40 with 3 to 7 discordant.
     result = solve(discordance_rate=0.1, win_given_discordant=q)
 
     assert getattr(result, verdict_field) == pytest.approx(binom.sf(N_MIN - 1, N_MAX, 0.1))
@@ -97,20 +94,16 @@ def test_low_discordance_is_structurally_unmeasurable() -> None:
     much evidence a 40%-discordant axis carries. It was an artifact of the
     encoding, which spent the sample budget crediting ties to both sides of
     the posterior until nothing could clear the bar.
-
-    Conditioning on the discordant table removes the artifact and the
-    measurable region extended down to d = 0.2. #885 then moved it back to
-    d = 0.25, because a verdict at N_MAX now needs N_MIN discordant comparisons.
-
-    That caps P(PASS) at P(Binomial(40, d) >= 8) for every q: 0.818 at d = 0.25,
-    so q = 0.99 still reaches 80% power, and 0.563 at d = 0.2, so no q does.
-    d = 0.1 is capped at 0.042. That is a structural limit, not an encoding one.
     """
     assert minimum_detectable_q(0.4) == pytest.approx(0.87)
     assert minimum_detectable_q(0.25) == pytest.approx(0.99)
     assert minimum_detectable_q(0.2) is None
     assert minimum_detectable_q(0.1) is None
-    assert solve(0.2, 1.0).p_pass == pytest.approx(binom.sf(N_MIN - 1, N_MAX, 0.2))
+
+
+@pytest.mark.parametrize("d", [0.25, 0.2])
+def test_p_pass_is_capped_by_the_chance_of_n_min_discordant(d: float) -> None:
+    assert solve(d, 1.0).p_pass == pytest.approx(binom.sf(N_MIN - 1, N_MAX, d))
 
 
 def test_out_of_range_parameters_raise() -> None:

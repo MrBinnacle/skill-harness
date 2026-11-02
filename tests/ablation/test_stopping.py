@@ -139,18 +139,14 @@ class TestBetaBinomialAccumulator:
     @pytest.mark.parametrize(
         ("wins", "losses", "ties", "p_exceeds"),
         [
-            # Beta(6, 1): P(q > 0.6) = 1 - 0.6**6. Clears PASS on five directional comparisons.
-            (5, 0, 35, 0.953344),
-            # Beta(1, 4): P(q > 0.6) = 0.4**4. Clears FAIL on three directional comparisons.
-            (0, 3, 37, 0.0256),
-            # Beta(8, 1): P(q > 0.6) = 1 - 0.6**8. One short of the bar.
-            (7, 0, 33, 0.98320384),
+            pytest.param(5, 0, 35, 1 - 0.6**6, id="beta-6-1-clears-pass"),
+            pytest.param(0, 3, 37, 0.4**4, id="beta-1-4-clears-fail"),
+            pytest.param(7, 0, 33, 1 - 0.6**8, id="beta-8-1-one-short-of-n-min"),
         ],
     )
     def test_ties_cannot_buy_a_verdict_at_n_max(
         self, wins: int, losses: int, ties: int, p_exceeds: float
     ) -> None:
-        """Below N_MIN discordant at N_MAX is UNDERPOWERED_NMAX (#885)."""
         decision = _decision_after(wins, losses, ties)
 
         assert decision.n_samples == N_MAX
@@ -175,14 +171,12 @@ class TestBetaBinomialAccumulator:
     @pytest.mark.parametrize(
         ("wins", "losses", "ties", "reason"),
         [
-            # Exactly N_MIN discordant at N_MAX still decides.
-            (8, 0, 32, StoppingReason.PASSED),
-            (0, 8, 32, StoppingReason.FAILED),
-            (4, 4, 32, StoppingReason.UNDERPOWERED_NMAX),
-            # No ties: all 40 comparisons are discordant, so #885 changes nothing.
-            (40, 0, 0, StoppingReason.PASSED),
-            (0, 40, 0, StoppingReason.FAILED),
-            (24, 16, 0, StoppingReason.UNDERPOWERED_NMAX),
+            pytest.param(8, 0, 32, StoppingReason.PASSED, id="floor-wins"),
+            pytest.param(0, 8, 32, StoppingReason.FAILED, id="floor-losses"),
+            pytest.param(4, 4, 32, StoppingReason.UNDERPOWERED_NMAX, id="floor-inconclusive"),
+            pytest.param(40, 0, 0, StoppingReason.PASSED, id="no-ties-wins"),
+            pytest.param(0, 40, 0, StoppingReason.FAILED, id="no-ties-losses"),
+            pytest.param(24, 16, 0, StoppingReason.UNDERPOWERED_NMAX, id="no-ties-inconclusive"),
         ],
     )
     def test_n_min_discordant_at_n_max_applies_the_thresholds(

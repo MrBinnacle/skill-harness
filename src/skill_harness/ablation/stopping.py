@@ -298,7 +298,6 @@ class BetaBinomialAccumulator:
         at_cap = self.n >= N_MAX
         no_verdict = StoppingReason.UNDERPOWERED_NMAX if at_cap else None
 
-        # Before N_MIN discordant comparisons: no verdict (not enough evidence)
         if self.n_discordant < N_MIN:
             return self._decide(at_cap, no_verdict)
 
@@ -309,7 +308,6 @@ class BetaBinomialAccumulator:
         if p <= FAIL_PROB_THRESHOLD:
             return self._decide(True, StoppingReason.FAILED)
 
-        # Inconclusive - add more samples (up to next N_INC boundary check)
         return self._decide(at_cap, no_verdict)
 
 
