@@ -62,21 +62,18 @@ every break into a standing rule, and then build the same honesty into the tool.
 
 ## The size of the detour
 
-The machinery work has consistently outweighed the collection work. Measured on 2026-09-22:
-the ratio is **about 3.25 to 1** — machinery commits against collection commits — and has
-stayed between three and five to one across every measurement taken: 4.55 on 2026-08-15,
-3.36 on 2026-09-02, 3.36 on 2026-09-05, 3.17 on 2026-09-20, and 3.25 now.
+The machinery work has outweighed the collection work at every measurement, by an amount
+that moves. Machinery commits against collection commits came to 4.55 to 1 on 2026-08-15,
+3.36 on 2026-09-02, 3.36 on 2026-09-05, 3.17 on 2026-09-20, 3.25 on 2026-09-22, 3.05 on
+2026-10-12, 2.61 on 2026-10-19, 2.03 on 2026-10-26 and 2.05 on 2026-11-01. The latest fall
+comes from the collection side. Between 2026-10-12 and 2026-11-01 the collection repository
+gained 151 commits and the machinery repository gained 64.
 
-A ratio that cannot go stale does not need a detector. The absolute counts rise with
-every merge and are stale the day after they are written. This page carried exact
-counts three times and was wrong about them three times: the first two corrections
-were made by a person noticing, the third was detected by machine and repaired
-thirteen days later. The durable claim is the ratio, not the counts.
-
-`scripts/check_commit_claim_drift.py` derives both counts from this page's own
-commands and asserts that the ratio stays between three and five to one. It runs
-weekly rather than on every commit, because the ratio changes slowly and an
-every-push gate would be noise.
+This page used to call three to five to one the durable claim, and a weekly check failed
+when the ratio left that range. The ratio first measured outside that range on 2026-10-19. The check was right
+and the claim was wrong: the range described the measurements up to that date and nothing
+held the work inside it. So the range and its check are gone. The measurements stay, and so
+do the commands that reproduce today's figure.
 
 The basis is a fresh clone at `HEAD` — what a plain `git clone` gets you —
 so you can land on the same ratio yourself, give or take what has merged since:
@@ -88,7 +85,7 @@ git clone https://github.com/MrBinnacle/skill-harness.git && git -C skill-harnes
 
 This used to be on the front page. It came off on 2026-08-23, and the reason is worth
 stating rather than hiding: the figures are checkable, but the inference they invite is
-not supported. A three- or four-to-one ratio does not establish that the instrument was
+not supported. A ratio of two, three or four to one does not establish that the instrument was
 worth building, that the collection is small, or that either number is the right size. It
 establishes one thing, which is where the time went.
 
