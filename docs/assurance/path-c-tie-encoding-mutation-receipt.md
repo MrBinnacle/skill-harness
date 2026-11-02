@@ -7,11 +7,13 @@ the item 5 detector, #347).
 **Generator:** `scripts/mutation_receipt.py --select 368-`.
 **Machine-readable record:** `docs/assurance/path-c-tie-encoding-mutation-receipt.json`.
 **Pinned by content, not by commit:**
-`src/skill_harness/ablation/stopping.py` at `sha256:fc85702bb73904f95aca14910871cbe546f507720ce28a0e41827a97650b3a8a`,
-`src/skill_harness/ablation/path_c.py` at `sha256:4af1162c84634ca7daa5454a5fb5859babd8e8071938f197a80d92449199ae20`.
-**Commit at generation:** `24c1cdc` — informational only. A rebase rewrites it and
+`src/skill_harness/ablation/stopping.py` at `sha256:555a54b9708d4175b31396dc60cae001d04120da4414753484f9466150adce6f`,
+`src/skill_harness/ablation/path_c.py` at `sha256:d0492483614f1408da0c00812120aad04c18ec182cdcda569e2fd189de5b93d8`.
+**Commit at generation:** `7fdff7a` — informational only. A rebase rewrites it and
 later commits move HEAD past it, so currency is checked against the digests above by
 `tests/test_mutation_receipt.py`. **Python:** 3.13.1.
+**Regenerated:** 2026-11-01 for #885, which changed both files. All four verdicts and
+all seven killing test nodes match the previous run at `24c1cdc`.
 
 Each case runs in its **own git worktree** at a fixed commit. Production is never
 mutated in place. `PYTHONPATH` pins every case to its own sources, because the

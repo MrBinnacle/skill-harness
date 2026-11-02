@@ -4,10 +4,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7gvxruy8\\M-T1\\src\\skill_harness\\ablation\\stopping.py",
-        "source_digest": "fc85702bb73904f95aca14910871cbe546f507720ce28a0e41827a97650b3a8a",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-fc5bwtic\\M-T1\\src\\skill_harness\\ablation\\stopping.py",
+        "source_digest": "555a54b9708d4175b31396dc60cae001d04120da4414753484f9466150adce6f",
         "tests_collected": 13,
-        "worktree_head": "24c1cdca2fe9c42a84713f5532f8f523e3c61bd6"
+        "worktree_head": "7fdff7a9cc05ddff65b68bcdcbfd18e91736ecaf"
       },
       "description": "restore the half-update posterior: ties are credited to both sides again, which is the WRONG_NUMBER defect #347 measured",
       "killing_assertions": [
@@ -19,10 +19,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7gvxruy8\\M-T1\\src\\skill_harness\\ablation\\stopping.py",
-        "source_digest": "d1e4e585dad53f7c4685a8b22d220c1adba6d92a93ff494b217d0590abfd7a08",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-fc5bwtic\\M-T1\\src\\skill_harness\\ablation\\stopping.py",
+        "source_digest": "0782ace283d6599ba5656e494f8c2d2a1f9c0826a18c74338a9c110908a42faa",
         "tests_collected": 13,
-        "worktree_head": "24c1cdca2fe9c42a84713f5532f8f523e3c61bd6"
+        "worktree_head": "7fdff7a9cc05ddff65b68bcdcbfd18e91736ecaf"
       },
       "mutant_id": "M-T1",
       "notes": [],
@@ -37,10 +37,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7gvxruy8\\M-T2\\src\\skill_harness\\ablation\\stopping.py",
-        "source_digest": "fc85702bb73904f95aca14910871cbe546f507720ce28a0e41827a97650b3a8a",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-fc5bwtic\\M-T2\\src\\skill_harness\\ablation\\stopping.py",
+        "source_digest": "555a54b9708d4175b31396dc60cae001d04120da4414753484f9466150adce6f",
         "tests_collected": 1,
-        "worktree_head": "24c1cdca2fe9c42a84713f5532f8f523e3c61bd6"
+        "worktree_head": "7fdff7a9cc05ddff65b68bcdcbfd18e91736ecaf"
       },
       "description": "point the N_MIN evidence gate at the TOTAL comparison count, so ties buy a clause past the bar on too few directional comparisons",
       "killing_assertions": [
@@ -50,10 +50,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7gvxruy8\\M-T2\\src\\skill_harness\\ablation\\stopping.py",
-        "source_digest": "8226418bac9a7cee061c7110703e4b91ba3f6118b1e925194bdb8fdb746a6f41",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-fc5bwtic\\M-T2\\src\\skill_harness\\ablation\\stopping.py",
+        "source_digest": "620dc7165667ebf19fd564953b3ad8fea881c8b01ce02b2e4ddfd5d4e2681833",
         "tests_collected": 1,
-        "worktree_head": "24c1cdca2fe9c42a84713f5532f8f523e3c61bd6"
+        "worktree_head": "7fdff7a9cc05ddff65b68bcdcbfd18e91736ecaf"
       },
       "mutant_id": "M-T2",
       "notes": [],
@@ -67,10 +67,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7gvxruy8\\M-T3\\src\\skill_harness\\ablation\\path_c.py",
-        "source_digest": "4af1162c84634ca7daa5454a5fb5859babd8e8071938f197a80d92449199ae20",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-fc5bwtic\\M-T3\\src\\skill_harness\\ablation\\path_c.py",
+        "source_digest": "d0492483614f1408da0c00812120aad04c18ec182cdcda569e2fd189de5b93d8",
         "tests_collected": 2,
-        "worktree_head": "24c1cdca2fe9c42a84713f5532f8f523e3c61bd6"
+        "worktree_head": "7fdff7a9cc05ddff65b68bcdcbfd18e91736ecaf"
       },
       "description": "size the Gate-2 design by the DISCORDANT count, discarding the tie cell and collapsing Path C to a plain drop-ties recompute with no effect-size floor",
       "killing_assertions": [
@@ -81,10 +81,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7gvxruy8\\M-T3\\src\\skill_harness\\ablation\\path_c.py",
-        "source_digest": "00d507257627463180a6fb8b01888530cfaf318db8c6f7f8ee1b3dd163139985",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-fc5bwtic\\M-T3\\src\\skill_harness\\ablation\\path_c.py",
+        "source_digest": "4fbb09df543d32f12aa196e8a580df5c1ee0854f6123d1e6a65c560aa434c2ec",
         "tests_collected": 2,
-        "worktree_head": "24c1cdca2fe9c42a84713f5532f8f523e3c61bd6"
+        "worktree_head": "7fdff7a9cc05ddff65b68bcdcbfd18e91736ecaf"
       },
       "mutant_id": "M-T3",
       "notes": [],
@@ -99,10 +99,10 @@
       "clean": {
         "baseline_passes": true,
         "exit_code": 0,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7gvxruy8\\M-T4\\src\\skill_harness\\ablation\\path_c.py",
-        "source_digest": "4af1162c84634ca7daa5454a5fb5859babd8e8071938f197a80d92449199ae20",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-fc5bwtic\\M-T4\\src\\skill_harness\\ablation\\path_c.py",
+        "source_digest": "d0492483614f1408da0c00812120aad04c18ec182cdcda569e2fd189de5b93d8",
         "tests_collected": 1,
-        "worktree_head": "24c1cdca2fe9c42a84713f5532f8f523e3c61bd6"
+        "worktree_head": "7fdff7a9cc05ddff65b68bcdcbfd18e91736ecaf"
       },
       "description": "accept a record that omits a Gate-2 threshold, so an unregistered decision is made under a defaulted value while looking registered",
       "killing_assertions": [
@@ -112,10 +112,10 @@
         "compiles": true,
         "digests_differ": true,
         "exit_code": 1,
-        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-7gvxruy8\\M-T4\\src\\skill_harness\\ablation\\path_c.py",
-        "source_digest": "7145889d2d2ebfecf9a250996eb608ffd06c7df28f23d7a1f3563b4f67a9d010",
+        "module_file": "C:\\Users\\mlpgr\\AppData\\Local\\Temp\\mutation-receipt-fc5bwtic\\M-T4\\src\\skill_harness\\ablation\\path_c.py",
+        "source_digest": "09cda70f66ca6ada6a6186e95daabbd8b8bae5189d1cfcb70f89177322c6a4a9",
         "tests_collected": 1,
-        "worktree_head": "24c1cdca2fe9c42a84713f5532f8f523e3c61bd6"
+        "worktree_head": "7fdff7a9cc05ddff65b68bcdcbfd18e91736ecaf"
       },
       "mutant_id": "M-T4",
       "notes": [],
@@ -126,21 +126,21 @@
       "verdict": "KILLED"
     }
   ],
-  "commit_under_test": "24c1cdca2fe9c42a84713f5532f8f523e3c61bd6",
+  "commit_under_test": "7fdff7a9cc05ddff65b68bcdcbfd18e91736ecaf",
   "commit_under_test_is_informational": "A rebase rewrites this and later commits move HEAD past it. The authoritative pin is target_digests; currency is checked against those.",
   "production_tree_digest_after": {
-    "src/skill_harness/ablation/path_c.py": "4af1162c84634ca7daa5454a5fb5859babd8e8071938f197a80d92449199ae20",
-    "src/skill_harness/ablation/stopping.py": "fc85702bb73904f95aca14910871cbe546f507720ce28a0e41827a97650b3a8a"
+    "src/skill_harness/ablation/path_c.py": "d0492483614f1408da0c00812120aad04c18ec182cdcda569e2fd189de5b93d8",
+    "src/skill_harness/ablation/stopping.py": "555a54b9708d4175b31396dc60cae001d04120da4414753484f9466150adce6f"
   },
   "production_tree_digest_before": {
-    "src/skill_harness/ablation/path_c.py": "4af1162c84634ca7daa5454a5fb5859babd8e8071938f197a80d92449199ae20",
-    "src/skill_harness/ablation/stopping.py": "fc85702bb73904f95aca14910871cbe546f507720ce28a0e41827a97650b3a8a"
+    "src/skill_harness/ablation/path_c.py": "d0492483614f1408da0c00812120aad04c18ec182cdcda569e2fd189de5b93d8",
+    "src/skill_harness/ablation/stopping.py": "555a54b9708d4175b31396dc60cae001d04120da4414753484f9466150adce6f"
   },
   "production_tree_unchanged": true,
   "python": "3.13.1",
   "target_digests": {
-    "src/skill_harness/ablation/path_c.py": "4af1162c84634ca7daa5454a5fb5859babd8e8071938f197a80d92449199ae20",
-    "src/skill_harness/ablation/stopping.py": "fc85702bb73904f95aca14910871cbe546f507720ce28a0e41827a97650b3a8a"
+    "src/skill_harness/ablation/path_c.py": "d0492483614f1408da0c00812120aad04c18ec182cdcda569e2fd189de5b93d8",
+    "src/skill_harness/ablation/stopping.py": "555a54b9708d4175b31396dc60cae001d04120da4414753484f9466150adce6f"
   },
   "target_files": [
     "src/skill_harness/ablation/path_c.py",

@@ -9,6 +9,7 @@ BetaBinomialAccumulator on a deterministic path.
 from __future__ import annotations
 
 import pytest
+from scipy.stats import binom  # type: ignore[import-untyped]
 
 from skill_harness.ablation.sizing import SizingResult, minimum_detectable_q, solve
 from skill_harness.ablation.stopping import (
@@ -47,6 +48,19 @@ def test_pure_ties_are_structurally_unmeasured() -> None:
     assert result.expected_n == pytest.approx(float(N_MAX))
 
 
+@pytest.mark.parametrize(
+    ("q", "verdict_field"),
+    [(1.0, "p_pass"), (0.0, "p_fail")],
+)
+def test_low_discordance_verdict_needs_n_min_discordant_by_n_max(
+    q: float, verdict_field: str
+) -> None:
+    result = solve(discordance_rate=0.1, win_given_discordant=q)
+
+    assert getattr(result, verdict_field) == pytest.approx(binom.sf(N_MIN - 1, N_MAX, 0.1))
+    assert result.p_unmeasured == pytest.approx(binom.cdf(N_MIN - 1, N_MAX, 0.1))
+
+
 def test_null_false_pass_rate_is_small() -> None:
     # q=0.5 is the no-effect null; the rule's false-PASS mass stays under 2%
     # at full discordance (exact value ~0.018).
@@ -80,24 +94,16 @@ def test_low_discordance_is_structurally_unmeasurable() -> None:
     much evidence a 40%-discordant axis carries. It was an artifact of the
     encoding, which spent the sample budget crediting ties to both sides of
     the posterior until nothing could clear the bar.
-
-    Conditioning on the discordant table removes the artifact and the
-    measurable region extends down to d = 0.2. The frontier does not vanish,
-    it moves, and the values below are its new location.
-
-    d = 0.1 remains genuinely unmeasurable: 40 samples yield about four
-    discordant comparisons, short of the N_MIN = 8 evidence bar, so no q
-    saves it. That is a structural limit rather than an encoding one, which
-    is why it did not move.
-
-    Note what this does NOT license. A detectable q at d = 0.2 is a statement
-    about the scalar rule's power, not a licence to ship the clause: the net
-    lift there is 0.188, below the registered delta_min, and Path C is what
-    stops it. See tests/test_ablation_path_c.py.
     """
     assert minimum_detectable_q(0.4) == pytest.approx(0.87)
-    assert minimum_detectable_q(0.2) == pytest.approx(0.97)
+    assert minimum_detectable_q(0.25) == pytest.approx(0.99)
+    assert minimum_detectable_q(0.2) is None
     assert minimum_detectable_q(0.1) is None
+
+
+@pytest.mark.parametrize("d", [0.25, 0.2])
+def test_p_pass_is_capped_by_the_chance_of_n_min_discordant(d: float) -> None:
+    assert solve(d, 1.0).p_pass == pytest.approx(binom.sf(N_MIN - 1, N_MAX, d))
 
 
 def test_out_of_range_parameters_raise() -> None:
