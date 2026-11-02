@@ -26,7 +26,11 @@ from skill_harness.extractor import (
     MalformedSkillError,
     extract_skill,
 )
-from skill_harness.ratification import RatificationError, check_execute_ratification
+from skill_harness.ratification import (
+    RatificationError,
+    check_execute_ratification,
+    parse_rat_record,
+)
 from skill_harness.storage.context import StorageContext
 from skill_harness.storage.recovery import find_resumable_run_for_skill
 
@@ -698,7 +702,7 @@ def run() -> None:
     help=(
         "Resume an incomplete prior run by run_id (A52). The run keeps the model, clauses, "
         "prompt and ratification frozen at its start; --subject-model and --user-message "
-        "are ignored."
+        "are ignored, and --ratification must name the frozen record."
     ),
 )
 @click.option(
@@ -1228,6 +1232,7 @@ def _execute_ablation_run(
 
         if plan is not None:
             try:
+                _refuse_a_different_record(plan, ratification_path)
                 results = runner.resume_ablation(
                     run_id=plan.run_id,
                     clauses=clauses,
@@ -1273,9 +1278,40 @@ def _read_run_config(evidence_conn: sqlite3.Connection, run_id: str) -> RunConfi
         return None
 
 
+def _refuse_a_different_record(plan: RunConfig, named_record: Path | None) -> None:
+    from skill_harness.ablation.path_c import UnregisteredThresholdsError, registered_thresholds
+
+    frozen_path = plan.ratification_path
+    registered_id: str | None = None
+    if frozen_path is not None:
+        try:
+            registered_id = registered_thresholds(frozen_path).ratification_id
+        except UnregisteredThresholdsError:
+            registered_id = None
+    if registered_id != plan.ratification_id:
+        raise click.ClickException(
+            f"Cannot resume run {plan.run_id!r}: it froze the thresholds of "
+            f"{plan.ratification_id or 'no record'}, and the record at {frozen_path} registers "
+            f"those of {registered_id or 'no record'}. Restore that record, or re-run from "
+            "the working directory the run started in."
+        )
+
+    if frozen_path is None or named_record is None:
+        return
+    frozen_rat = parse_rat_record(Path(frozen_path)).rat_id
+    named_rat = parse_rat_record(named_record).rat_id
+    if named_rat != frozen_rat:
+        raise click.ClickException(
+            f"Cannot resume run {plan.run_id!r}: it froze {frozen_rat}, and --ratification "
+            f"names {named_rat}. Name the frozen record."
+        )
+
+
 def _load_frozen_plan(
     ctx: StorageContext, run_id: str, skill_id: str, clause_id: str | None
 ) -> tuple[RunConfig, list[Any]]:
+    from skill_harness.ablation.subject import resolve_price_key
+
     plan = _read_run_config(ctx.evidence_conn, run_id)
     if plan is None:
         raise click.ClickException(
@@ -1297,12 +1333,15 @@ def _load_frozen_plan(
     rows = ctx.evidence_conn.execute(
         "SELECT DISTINCT subject_model FROM samples WHERE run_id = ?", (run_id,)
     ).fetchall()
-    stray_models = sorted({row[0] for row in rows} - {plan.subject_model})
+    # The provider prefix names the route, not the model.
+    frozen_identity = resolve_price_key(plan.subject_model)
+    stray_models = sorted(row[0] for row in rows if resolve_price_key(row[0]) != frozen_identity)
     if stray_models:
         raise click.ClickException(
             f"Cannot resume run {run_id!r}: runs.config_json records model "
             f"{plan.subject_model!r}, and its samples also came from {stray_models!r}. "
-            "Its posterior would pool models. Start a fresh run."
+            "Its posterior would pool models. The run stays incomplete, and the CLI has no "
+            "command to retire it."
         )
 
     clauses_by_id = {c.clause_id: c for c in _load_clauses_from_db(ctx, skill_id, None)}
@@ -1603,7 +1642,10 @@ def _cmd_execute(
         raise click.ClickException(
             f"Run aborted — per-run budget exhausted."
             f"\n  --max-usd cap: ${exc.usd_cap:.2f}  ·  spent: ${exc.usd_spent:.4f}"
-            f"\n  Increase --max-usd or resume with --resume <run_id>."
+            "\n  --max-usd must equal the hard_cap_usd of the ratification record, and a resume"
+            "\n  accepts only the record the run froze, so a resume cannot raise this cap."
+            "\n  To spend more, start a fresh run under a record with a larger hard_cap_usd."
+            "\n  A fresh run does not reuse this run's samples."
         ) from exc
     except _DailyCapExceededError as exc:
         raise click.ClickException(
