@@ -86,7 +86,6 @@ def test_unknown_model_behind_a_route_prefix_also_refuses() -> None:
 
 
 def test_the_table_has_no_fallback_row() -> None:
-    """#884 removed '_default', so naming it refuses like any other unknown model."""
     with pytest.raises(KeyError):
         lookup_price_row("_default")
     with pytest.raises(KeyError):

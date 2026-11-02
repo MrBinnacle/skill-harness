@@ -300,7 +300,7 @@ def resolve_price_key(model: str) -> str:
     batch-1 runner carried its own price table instead of calling this.
 
     Lookup stays exact after the strip. An unrecognised model raises KeyError at
-    the call site: a cap projection must never silently price the wrong model.
+    the call site.
 
     :param model: Subject-model identifier as recorded or supplied.
     :returns: The key to look up in PRICE_PER_MTOK.
@@ -318,15 +318,7 @@ def lookup_price_row(model: str) -> dict[str, float]:
        before the lookup, so ``anthropic/claude-sonnet-5`` finds the
        ``claude-sonnet-5`` row instead of missing it.
     2. A model with no row raises ``KeyError`` naming the identifier the caller
-       passed. There is no fallback rate (#884): one would price an unpriced
-       model at another model's rates, enforce ``--max-usd`` against that
-       figure, and write it to the append-only evidence store as if it were
-       measured. A missing price is a typed refusal here, the same call
-       ``cost_projection`` makes pre-call.
-
-    ``run ablation --execute`` calls this in its preflight, so the CLI refuses
-    before any database write or API call. A caller that builds ``AblationRunner``
-    itself has no preflight, and its refusal costs at most one API call.
+       passed.
 
     :param model: Subject-model identifier as recorded or supplied.
     :returns: The per-million-token rate row for that model.
@@ -355,8 +347,7 @@ def _estimate_usd(
 
     Anthropic's ``input_tokens`` already excludes both cache counts (#883).
 
-    :raises KeyError: If ``model`` has no PRICE_PER_MTOK row (#333). The
-        pre-#333 behaviour silently priced such a model at Sonnet 4.6's rate.
+    :raises KeyError: If ``model`` has no PRICE_PER_MTOK row (#333).
     """
     rates = lookup_price_row(model)
     mtok = 1_000_000.0
@@ -393,7 +384,6 @@ def _estimate_usd_openai(
     :param cache_read_input_tokens: Cached prompt tokens
         (usage.prompt_tokens_details.cached_tokens). 0 if not present.
     :returns: Estimated USD cost, rounded to 8 decimal places.
-    :raises KeyError: If ``model`` has no PRICE_PER_MTOK row (#884).
     """
     rates = lookup_price_row(model)
     mtok = 1_000_000.0

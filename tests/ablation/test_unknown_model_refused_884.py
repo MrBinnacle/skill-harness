@@ -1,11 +1,3 @@
-"""A subject model with no price row is refused, never priced at another model's rate (#884).
-
-#333 removed the Sonnet-4.6 fallback from ``_estimate_usd`` and left it at the
-budget gate and in the OpenAI estimate. ``run ablation --execute`` accepted
-``o4-mini``, projected its cost at $3/$15 per MTok, and enforced ``--max-usd``
-against that figure.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -39,7 +31,6 @@ ratified_date: "2026-08-02"
 def _execute(
     tmp_path: Path, subject_model: str, *, key_env: str
 ) -> tuple[Result, Path, Path, list[str]]:
-    """Run ``run ablation --execute`` through the ratification gate with one API key set."""
     record = tmp_path / "RAT-0001-skill-abc.md"
     record.write_text(_RECORD, encoding="utf-8")
     evidence_db = tmp_path / "evidence.db"
@@ -96,12 +87,10 @@ def test_openai_estimate_refuses_a_model_with_no_row() -> None:
 
 
 def test_budget_gate_prices_a_routed_model_at_its_own_row() -> None:
-    """1M in at $2 plus 1M out at $10 is $12, where the fallback's $3/$15 gave $18."""
     assert project_call_cost("anthropic/claude-sonnet-5", 1_000_000, 1_000_000) == 12.00
 
 
 def test_openai_estimate_prices_a_routed_model_at_its_own_row() -> None:
-    """1M in at $5 plus 1M out at $30 is $35."""
     assert _estimate_usd_openai("openai/gpt-5.5", 1_000_000, 1_000_000, 0) == 35.00
 
 

@@ -1372,6 +1372,15 @@ def _resolve_subject_model_with_fallback(subject_model: str) -> str:
     return subject_model
 
 
+def _refuse_unpriced_model(model: str) -> None:
+    from skill_harness.ablation.subject import lookup_price_row
+
+    try:
+        lookup_price_row(model)
+    except KeyError as exc:
+        raise click.ClickException(exc.args[0]) from exc
+
+
 def _check_daily_cap(runtime_db: Path, daily_cap: float) -> None:
     """Compute trailing-24h SUM(usd) from runtime.cost_ledger; raise _DailyCapExceededError
     if it would exceed daily_cap (B2 fix, A42).
@@ -1433,17 +1442,11 @@ def _cmd_execute(
     state).
     """
     from skill_harness.ablation.runner import BudgetAbortedError
-    from skill_harness.ablation.subject import lookup_price_row
     from skill_harness.aggregation.errors import PreconditionError
 
     # m3: model-aware API key pre-flight BEFORE any DB write (no orphan run rows)
     resolved_model = _resolve_subject_model_with_fallback(subject_model)
-
-    # #884: the --max-usd gate cannot project a model it cannot price.
-    try:
-        lookup_price_row(resolved_model)
-    except KeyError as exc:
-        raise click.ClickException(exc.args[0]) from exc
+    _refuse_unpriced_model(resolved_model)
 
     # B2: daily-cap pre-run check BEFORE any DB write
     try:
