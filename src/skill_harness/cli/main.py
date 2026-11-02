@@ -1130,14 +1130,7 @@ def _find_incomplete_run_for_execute(
 ) -> str | None:
     """Return the run_id of an incomplete prior run for skill_id, or None (A52, E.3).
 
-    Used exclusively by `_cmd_execute` bare-rerun guard. Opens the runtime DB and
-    the evidence DB read-only, delegates to find_resumable_run_for_skill
-    (storage.recovery, A61).
-
     Module-level so tests can patch find_resumable_run_for_skill at cli.main scope.
-    Returns None when a store is not yet bootstrapped (no prior runs possible).
-    Every other failure propagates: None would mean "no incomplete run" when the
-    guard could not check, and the caller would pay for the samples again (#887).
     """
     from skill_harness.storage.errors import BootstrapError
     from skill_harness.storage.migrations import open_evidence_readonly, open_runtime

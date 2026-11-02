@@ -1116,7 +1116,6 @@ class TestM4ExitCodeContract:
         return result, execute
 
     def test_recovery_query_failure_refuses_the_run(self, tmp_path: Path) -> None:
-        """#887: a failed recovery query must refuse, not read as "no incomplete run"."""
         from skill_harness.aggregation.errors import PreconditionError
 
         _close_pair(*_open_pair(tmp_path))
@@ -1131,7 +1130,6 @@ class TestM4ExitCodeContract:
         execute.assert_not_called()
 
     def test_missing_run_progress_table_refuses_the_run(self, tmp_path: Path) -> None:
-        """#887's failing case, unpatched: the real run_progress query fails."""
         ev, rt = _open_pair(tmp_path)
         rt.execute("DROP TABLE run_progress")
         _close_pair(ev, rt)
@@ -1143,7 +1141,6 @@ class TestM4ExitCodeContract:
         execute.assert_not_called()
 
     def test_unreadable_evidence_db_refuses_the_run(self, tmp_path: Path) -> None:
-        """#887: an evidence.db that exists but cannot be read is not an absent one."""
         with patch(
             "skill_harness.storage.migrations.open_evidence_readonly",
             side_effect=sqlite3.DatabaseError("file is not a database"),
@@ -1155,14 +1152,12 @@ class TestM4ExitCodeContract:
         execute.assert_not_called()
 
     def test_absent_evidence_db_passes_the_guard(self, tmp_path: Path) -> None:
-        """#887: a store with no evidence.db yet has no runs, so the run proceeds."""
         result, execute = self._invoke_guard(tmp_path)
 
         assert result.exit_code == 0, result.output
         execute.assert_called_once()
 
     def test_runtime_bootstrap_error_passes_the_guard(self, tmp_path: Path) -> None:
-        """#887: BootstrapError on the runtime open is the not-yet-bootstrapped case."""
         from skill_harness.storage.errors import BootstrapError
 
         with patch(
