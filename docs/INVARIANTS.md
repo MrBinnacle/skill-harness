@@ -225,14 +225,13 @@ stops as `underpowered_nmax`, whatever its posterior says.
 
 **(b) Conditioning ALONE would have opened a new hole, so it is not the whole
 migration.** `q = P(Full wins | discordant)` cannot see how often a direction
-occurs at all. A clause that wins 7 of the 8 comparisons it did not tie, having
-tied 30, has `Beta(8, 2)` and a net lift of 0.158. The scalar rule passes it.
-This is exactly the practical-significance inversion the previous version of
-this section named in its Revisit-if clause. A realised table at the cap reaches
-it: 8 wins, 1 loss and 31 ties has `Beta(9, 2)`, `P(q > 0.60) = 0.954`, and a net
-lift of 0.175, under the registered `delta_min` of 0.20. The sizing frontier at
-80% power no longer reaches it. Since #885 a verdict at N_MAX needs N_MIN discordant
-comparisons, so the frontier ends at `d = 0.25`, `q = 0.99`, a net lift of 0.245.
+occurs at all. A clause that wins 8 of the 9 comparisons it did not tie, having
+tied 31, has `Beta(9, 2)`, `P(q > 0.60) = 0.954`, and a net lift of 0.175, under
+the registered `delta_min` of 0.20. The scalar rule passes it. This is exactly
+the practical-significance inversion the previous version of this section named
+in its Revisit-if clause. The sizing frontier at 80% power no longer reaches it.
+Since #885 a verdict at N_MAX needs N_MIN discordant comparisons, so the frontier
+ends at `d = 0.25`, `q = 0.99`, a net lift of 0.245.
 
 `ablation/path_c.py` closes it by routing the realised table through
 `gate2_decide`. Gate 2's Dirichlet pools the two tie cells, so the tie count

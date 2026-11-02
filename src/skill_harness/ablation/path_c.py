@@ -9,9 +9,9 @@ discordant table
 ------------------------------------------------------------------------
 Conditioning is necessary and not sufficient. ``BetaBinomialAccumulator``
 reports q = P(Full wins | discordant), and q alone cannot see how often a
-direction occurs at all. A clause that wins seven of the eight comparisons it
-did not tie, having tied thirty, has an excellent q and a net lift of about
-0.05. The scalar rule PASSES it. Nothing in the conditional posterior objects,
+direction occurs at all. A clause that wins eight of the nine comparisons it
+did not tie, having tied thirty-one, has an excellent q and a net lift of
+0.175. The scalar rule PASSES it. Nothing in the conditional posterior objects,
 because the tie count was conditioned away.
 
 That is the practical-significance inversion section 8 names in its Revisit-if
