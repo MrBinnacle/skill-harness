@@ -9,6 +9,7 @@ BetaBinomialAccumulator on a deterministic path.
 from __future__ import annotations
 
 import pytest
+from scipy.stats import binom  # type: ignore[import-untyped]
 
 from skill_harness.ablation.sizing import SizingResult, minimum_detectable_q, solve
 from skill_harness.ablation.stopping import (
@@ -45,6 +46,22 @@ def test_pure_ties_are_structurally_unmeasured() -> None:
     result = solve(discordance_rate=0.0, win_given_discordant=0.5)
     assert result.p_unmeasured == pytest.approx(1.0)
     assert result.expected_n == pytest.approx(float(N_MAX))
+
+
+@pytest.mark.parametrize(
+    ("q", "verdict_field"),
+    [(1.0, "p_pass"), (0.0, "p_fail")],
+)
+def test_low_discordance_verdict_needs_n_min_discordant_by_n_max(
+    q: float, verdict_field: str
+) -> None:
+    # At q = 1 or q = 0 every discordant comparison points one way, and eight of
+    # them clear the threshold. So the verdict mass is P(Binomial(40, 0.1) >= 8)
+    # = 0.0419. Before #885 a verdict also absorbed at 40 with 3 to 7 discordant.
+    result = solve(discordance_rate=0.1, win_given_discordant=q)
+
+    assert getattr(result, verdict_field) == pytest.approx(binom.sf(N_MIN - 1, N_MAX, 0.1))
+    assert result.p_unmeasured == pytest.approx(binom.cdf(N_MIN - 1, N_MAX, 0.1))
 
 
 def test_null_false_pass_rate_is_small() -> None:

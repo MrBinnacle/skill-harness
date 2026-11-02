@@ -19,9 +19,18 @@ from skill_harness.ablation.stopping import (
     N_MIN,
     PASS_PROB_THRESHOLD,
     BetaBinomialAccumulator,
+    StopDecision,
     StoppingReason,
     next_check_at,
 )
+
+
+def _decision_after(wins: int, losses: int, ties: int) -> StopDecision:
+    acc = BetaBinomialAccumulator()
+    for observation, count in ((1.0, wins), (0.0, losses), (0.5, ties)):
+        for _ in range(count):
+            acc.add(observation)
+    return acc.check_stop()
 
 
 class TestBetaBinomialAccumulator:
@@ -126,6 +135,64 @@ class TestBetaBinomialAccumulator:
         assert decision.p_win_rate_exceeds_threshold > PASS_PROB_THRESHOLD
         assert not decision.should_stop
         assert decision.stopping_reason is None
+
+    @pytest.mark.parametrize(
+        ("wins", "losses", "ties", "p_exceeds"),
+        [
+            # Beta(6, 1): P(q > 0.6) = 1 - 0.6**6. Clears PASS on five directional comparisons.
+            (5, 0, 35, 0.953344),
+            # Beta(1, 4): P(q > 0.6) = 0.4**4. Clears FAIL on three directional comparisons.
+            (0, 3, 37, 0.0256),
+            # Beta(8, 1): P(q > 0.6) = 1 - 0.6**8. One short of the bar.
+            (7, 0, 33, 0.98320384),
+        ],
+    )
+    def test_ties_cannot_buy_a_verdict_at_n_max(
+        self, wins: int, losses: int, ties: int, p_exceeds: float
+    ) -> None:
+        """Below N_MIN discordant at N_MAX is UNDERPOWERED_NMAX (#885)."""
+        decision = _decision_after(wins, losses, ties)
+
+        assert decision.n_samples == N_MAX
+        assert decision.n_discordant == wins + losses < N_MIN
+        assert decision.p_win_rate_exceeds_threshold == pytest.approx(p_exceeds)
+        assert decision.should_stop
+        assert decision.stopping_reason == StoppingReason.UNDERPOWERED_NMAX
+
+    @pytest.mark.parametrize(
+        ("wins", "losses", "ties"),
+        [(5, 0, 34), (0, 3, 36)],
+    )
+    def test_one_comparison_before_n_max_keeps_sampling(
+        self, wins: int, losses: int, ties: int
+    ) -> None:
+        decision = _decision_after(wins, losses, ties)
+
+        assert decision.n_samples == N_MAX - 1
+        assert not decision.should_stop
+        assert decision.stopping_reason is None
+
+    @pytest.mark.parametrize(
+        ("wins", "losses", "ties", "reason"),
+        [
+            # Exactly N_MIN discordant at N_MAX still decides.
+            (8, 0, 32, StoppingReason.PASSED),
+            (0, 8, 32, StoppingReason.FAILED),
+            (4, 4, 32, StoppingReason.UNDERPOWERED_NMAX),
+            # No ties: all 40 comparisons are discordant, so #885 changes nothing.
+            (40, 0, 0, StoppingReason.PASSED),
+            (0, 40, 0, StoppingReason.FAILED),
+            (24, 16, 0, StoppingReason.UNDERPOWERED_NMAX),
+        ],
+    )
+    def test_n_min_discordant_at_n_max_applies_the_thresholds(
+        self, wins: int, losses: int, ties: int, reason: StoppingReason
+    ) -> None:
+        decision = _decision_after(wins, losses, ties)
+
+        assert decision.n_samples == N_MAX
+        assert decision.should_stop
+        assert decision.stopping_reason == reason
 
     def test_rejects_invalid_observation(self) -> None:
         """add() raises ValueError for non-{0.0, 0.5, 1.0} values."""
