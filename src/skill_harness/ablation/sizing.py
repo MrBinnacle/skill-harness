@@ -26,7 +26,8 @@ Method: exact dynamic programming over the (n, 2w) lattice. The win-weight
 w advances in half-steps (Tie = 0.5), so 2w is an integer in [0, 2n] and
 the state space is exact — no Monte Carlo, no seeds. Stop checks are
 applied exactly where the runner applies them: at N_MIN, then every N_INC,
-with unconditional absorption at N_MAX.
+with absorption at N_MAX, where a path below N_MIN discordant comparisons
+absorbs as UNMEASURED whatever its posterior says.
 
 All rule constants are imported from the stopping module — this module
 must never restate them (single source of truth for the locked rule).
@@ -160,11 +161,13 @@ def solve(discordance_rate: float, win_given_discordant: float) -> SizingResult:
                     surviving[(x_f, x_n)] = pr
             alive = surviving
 
-    # N_MAX: every surviving path absorbs (mirrors check_stop's hard cap,
-    # which does NOT consult the N_MIN discordant gate).
+    # N_MAX: every surviving path absorbs (mirrors check_stop's hard cap, which
+    # returns a verdict only at or above the N_MIN discordant gate).
     for (x_f, x_n), pr in alive.items():
         p = _p_exceeds(x_f, x_n)
-        if p >= PASS_PROB_THRESHOLD:
+        if x_f + x_n < N_MIN:
+            p_unmeasured += pr
+        elif p >= PASS_PROB_THRESHOLD:
             p_pass += pr
         elif p <= FAIL_PROB_THRESHOLD:
             p_fail += pr

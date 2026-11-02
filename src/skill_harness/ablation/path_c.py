@@ -15,9 +15,9 @@ did not tie, having tied thirty, has an excellent q and a net lift of about
 because the tie count was conditioned away.
 
 That is the practical-significance inversion section 8 names in its Revisit-if
-clause, and it is not hypothetical: the sizing frontier reaches d = 0.2, where
-the minimum detectable q of 0.97 corresponds to a net lift of 0.188, under the
-registered delta_min of 0.20 (tests/test_ablation_sizing.py pins it).
+clause, and it is not hypothetical: 8 wins, 1 loss and 31 ties at N_MAX has
+Beta(9, 2), P(q > 0.60) = 0.954, and a net lift of 0.175, under the registered
+delta_min of 0.20.
 
 Gate 2 resolves it without reintroducing the blended rate. Its posterior is
 Dirichlet over the four paired cells with the two tie cells pooled, so the tie

@@ -99,22 +99,18 @@ def test_low_discordance_is_structurally_unmeasurable() -> None:
     the posterior until nothing could clear the bar.
 
     Conditioning on the discordant table removes the artifact and the
-    measurable region extends down to d = 0.2. The frontier does not vanish,
-    it moves, and the values below are its new location.
+    measurable region extended down to d = 0.2. #885 then moved it back to
+    d = 0.25, because a verdict at N_MAX now needs N_MIN discordant comparisons.
 
-    d = 0.1 remains genuinely unmeasurable: 40 samples yield about four
-    discordant comparisons, short of the N_MIN = 8 evidence bar, so no q
-    saves it. That is a structural limit rather than an encoding one, which
-    is why it did not move.
-
-    Note what this does NOT license. A detectable q at d = 0.2 is a statement
-    about the scalar rule's power, not a licence to ship the clause: the net
-    lift there is 0.188, below the registered delta_min, and Path C is what
-    stops it. See tests/test_ablation_path_c.py.
+    That caps P(PASS) at P(Binomial(40, d) >= 8) for every q: 0.818 at d = 0.25,
+    so q = 0.99 still reaches 80% power, and 0.563 at d = 0.2, so no q does.
+    d = 0.1 is capped at 0.042. That is a structural limit, not an encoding one.
     """
     assert minimum_detectable_q(0.4) == pytest.approx(0.87)
-    assert minimum_detectable_q(0.2) == pytest.approx(0.97)
+    assert minimum_detectable_q(0.25) == pytest.approx(0.99)
+    assert minimum_detectable_q(0.2) is None
     assert minimum_detectable_q(0.1) is None
+    assert solve(0.2, 1.0).p_pass == pytest.approx(binom.sf(N_MIN - 1, N_MAX, 0.2))
 
 
 def test_out_of_range_parameters_raise() -> None:

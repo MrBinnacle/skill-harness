@@ -8,7 +8,8 @@ TABLE (#368 Path C, ruled 2026-08-31; see docs/INVARIANTS.md section 8):
           enter the posterior.
   PASS  : P(q > 0.60) >= 0.95
   FAIL  : P(q > 0.60) <= 0.05
-  STOP  : N_max reached without pass/fail -> UNMEASURED(underpowered_nmax)
+  STOP  : N_max reached without pass/fail, or with fewer than N_min discordant
+          comparisons -> UNMEASURED(underpowered_nmax)
 
 The estimand is q = P(Full wins | discordant). A tie is a concordant
 comparison: Full and Ablated_k scored equal on the axis, so it carries no
@@ -92,7 +93,7 @@ class StoppingReason(StrEnum):
     """P(win_rate > 0.60) <= 0.05 — clause failed."""
 
     UNDERPOWERED_NMAX = "underpowered_nmax"
-    """N_MAX reached without a stop → UNMEASURED(underpowered)."""
+    """N_MAX reached without a verdict, or below N_MIN discordant -> UNMEASURED(underpowered)."""
 
     BUDGET_EXHAUSTED = "budget_exhausted"
     """Budget cap exceeded before N_MAX — sampling aborted."""
@@ -281,9 +282,10 @@ class BetaBinomialAccumulator:
         - n >= N_MAX (UNDERPOWERED_NMAX) - caller is responsible for NOT calling
           this beyond N_MAX; this is the hard-stop gate.
 
-        should_stop=False when n_discordant < N_MIN (not enough directional
-        evidence for a first check) OR FAIL < p < PASS (inconclusive - add
-        more samples).
+        PASSED and FAILED both require n_discordant >= N_MIN, at N_MAX too.
+        should_stop=False when n < N_MAX and either n_discordant < N_MIN (not
+        enough directional evidence for a first check) or FAIL < p < PASS
+        (inconclusive - add more samples).
 
         The N_MAX gate reads the TOTAL comparison count and the N_MIN gate
         reads the DISCORDANT count. A tie costs a sample but supplies no
@@ -293,18 +295,12 @@ class BetaBinomialAccumulator:
         :returns: StopDecision with full posterior metadata.
         """
         p = self.p_exceeds()
+        at_cap = self.n >= N_MAX
+        no_verdict = StoppingReason.UNDERPOWERED_NMAX if at_cap else None
 
-        # Hard cap - N_MAX total comparisons reached
-        if self.n >= N_MAX:
-            if p >= PASS_PROB_THRESHOLD:
-                return self._decide(True, StoppingReason.PASSED)
-            if p <= FAIL_PROB_THRESHOLD:
-                return self._decide(True, StoppingReason.FAILED)
-            return self._decide(True, StoppingReason.UNDERPOWERED_NMAX)
-
-        # Before N_MIN discordant comparisons: never stop (not enough evidence)
+        # Before N_MIN discordant comparisons: no verdict (not enough evidence)
         if self.n_discordant < N_MIN:
-            return self._decide(False, None)
+            return self._decide(at_cap, no_verdict)
 
         # After N_MIN: check thresholds
         if p >= PASS_PROB_THRESHOLD:
@@ -314,7 +310,7 @@ class BetaBinomialAccumulator:
             return self._decide(True, StoppingReason.FAILED)
 
         # Inconclusive - add more samples (up to next N_INC boundary check)
-        return self._decide(False, None)
+        return self._decide(at_cap, no_verdict)
 
 
 def legacy_halfupdate_decision(wins: int, losses: int, ties: int) -> StopDecision:
