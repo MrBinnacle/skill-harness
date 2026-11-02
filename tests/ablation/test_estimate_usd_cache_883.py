@@ -1,13 +1,4 @@
-"""Anthropic's ``input_tokens`` excludes cache tokens, so it is charged as given (#883).
-
-A live ``claude-sonnet-4-6`` call measured it: ``count_tokens`` returned 4839 for a
-prompt that the cache-write and the cache-read responses each reported as 13 plain
-tokens plus 4826 cache tokens.
-
-The expected figures are hand-derived dollar literals at $3 input, $15 output,
-$3.75 cache write and $0.30 cache read per million tokens. Copying the production
-formula here is the mirror that hid this bug in ``test_estimate_usd_pricing_333``.
-"""
+"""Anthropic's ``input_tokens`` excludes cache tokens, so it is charged as given (#883)."""
 
 from __future__ import annotations
 
@@ -16,6 +7,7 @@ import pytest
 from skill_harness.ablation.subject import _estimate_usd
 
 
+# Hand-derived at Sonnet 4.6's $3 input, $3.75 cache write, $0.30 cache read, $15 output per MTok.
 @pytest.mark.parametrize(
     ("input_tokens", "cache_read", "cache_creation", "output_tokens", "billed_usd"),
     [

@@ -362,9 +362,7 @@ def _estimate_usd(
 ) -> float:
     """Estimate USD cost from token counts and model pricing (Anthropic-style).
 
-    The three input counts are disjoint. Anthropic's ``input_tokens`` already
-    excludes both cache counts (#883), unlike OpenAI's ``prompt_tokens``, so
-    each count is charged in full at its own rate.
+    Anthropic's ``input_tokens`` already excludes both cache counts (#883).
 
     :raises KeyError: If ``model`` has no PRICE_PER_MTOK row (#333). The
         pre-#333 behaviour silently priced such a model at the ``_default``

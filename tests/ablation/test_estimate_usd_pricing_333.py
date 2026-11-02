@@ -37,11 +37,8 @@ _CACHE_READ = 200_000
 _CACHE_CREATION = 100_000
 _OUTPUT_TOKENS = 50_000
 
-# Hand-derived for those counts, as input + cache write + cache read + output.
-# Sonnet-5 at $2/$2.50/$0.20/$10 per MTok: 2.00 + 0.25 + 0.04 + 0.50.
-_SONNET_5_USD = 2.79
-# '_default' at $3/$3.75/$0.30/$15 per MTok: 3.00 + 0.375 + 0.06 + 0.75.
-_DEFAULT_USD = 4.185
+_SONNET_5_USD = round(2.00 + 0.25 + 0.04 + 0.50, 8)
+_DEFAULT_USD = round(3.00 + 0.375 + 0.06 + 0.75, 8)
 
 
 def _estimate(model: str) -> float:
@@ -63,7 +60,6 @@ def test_default_row_differs_from_sonnet_5_row() -> None:
     assert PRICE_PER_MTOK["_default"] != PRICE_PER_MTOK["claude-sonnet-5"]
     assert _estimate("_default") == _DEFAULT_USD
     assert _estimate("claude-sonnet-5") == _SONNET_5_USD
-    assert _DEFAULT_USD != _SONNET_5_USD
 
 
 def test_recorded_prefixed_sonnet_5_prices_at_the_sonnet_5_rate() -> None:
