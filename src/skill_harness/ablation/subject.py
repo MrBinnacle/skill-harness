@@ -261,13 +261,6 @@ PRICE_PER_MTOK: dict[str, dict[str, float]] = {
         "cache_write": 2.50,
         "cache_read": 0.20,
     },
-    # Default fallback (uses Anthropic Sonnet rates — adjust when other models are used).
-    "_default": {
-        "input": 3.00,
-        "output": 15.00,
-        "cache_write": 3.75,
-        "cache_read": 0.30,
-    },
 }
 
 
@@ -306,9 +299,8 @@ def resolve_price_key(model: str) -> str:
     the call site, which fails safe rather than mispricing, and it is why the
     batch-1 runner carried its own price table instead of calling this.
 
-    Lookup stays exact after the strip. An unrecognised model still raises
-    KeyError at the call site rather than falling back to ``_default`` - a cap
-    projection must never silently price the wrong model.
+    Lookup stays exact after the strip. An unrecognised model raises KeyError at
+    the call site: a cap projection must never silently price the wrong model.
 
     :param model: Subject-model identifier as recorded or supplied.
     :returns: The key to look up in PRICE_PER_MTOK.
@@ -326,15 +318,15 @@ def lookup_price_row(model: str) -> dict[str, float]:
        before the lookup, so ``anthropic/claude-sonnet-5`` finds the
        ``claude-sonnet-5`` row instead of missing it.
     2. A model with no row raises ``KeyError`` naming the identifier the caller
-       passed. It does NOT fall back to ``_default``. ``_default`` carries
-       Sonnet-4.6's rates, so a silent fallback prices an unpriced model at
-       $3/$15 per MTok and writes that figure to the append-only evidence store
-       as if it were measured. A missing price is a typed refusal here, the
-       same call ``cost_projection`` makes pre-call.
+       passed. There is no fallback rate (#884): one would price an unpriced
+       model at another model's rates, enforce ``--max-usd`` against that
+       figure, and write it to the append-only evidence store as if it were
+       measured. A missing price is a typed refusal here, the same call
+       ``cost_projection`` makes pre-call.
 
-    The refusal costs at most one API call: the raised KeyError propagates out
-    of ``AnthropicSubjectClient.call`` and aborts the run at its first sample,
-    before a second call is paid for.
+    ``run ablation --execute`` calls this in its preflight, so the CLI refuses
+    before any database write or API call. A caller that builds ``AblationRunner``
+    itself has no preflight, and its refusal costs at most one API call.
 
     :param model: Subject-model identifier as recorded or supplied.
     :returns: The per-million-token rate row for that model.
@@ -346,9 +338,8 @@ def lookup_price_row(model: str) -> dict[str, float]:
         raise KeyError(
             f"No PRICE_PER_MTOK row for subject model {model!r} "
             f"(resolved to price key {key!r}). Add the vendor's published rates to "
-            "skill_harness.ablation.subject.PRICE_PER_MTOK. The harness refuses to "
-            "record a cost it cannot price rather than apply the '_default' rate, "
-            "which is Sonnet-4.6's and would be wrong for any other model."
+            "skill_harness.ablation.subject.PRICE_PER_MTOK. The harness refuses a "
+            "cost it cannot price."
         )
     return row
 
@@ -365,8 +356,7 @@ def _estimate_usd(
     Anthropic's ``input_tokens`` already excludes both cache counts (#883).
 
     :raises KeyError: If ``model`` has no PRICE_PER_MTOK row (#333). The
-        pre-#333 behaviour silently priced such a model at the ``_default``
-        (Sonnet-4.6) rate.
+        pre-#333 behaviour silently priced such a model at Sonnet 4.6's rate.
     """
     rates = lookup_price_row(model)
     mtok = 1_000_000.0
@@ -403,8 +393,9 @@ def _estimate_usd_openai(
     :param cache_read_input_tokens: Cached prompt tokens
         (usage.prompt_tokens_details.cached_tokens). 0 if not present.
     :returns: Estimated USD cost, rounded to 8 decimal places.
+    :raises KeyError: If ``model`` has no PRICE_PER_MTOK row (#884).
     """
-    rates = PRICE_PER_MTOK.get(model, PRICE_PER_MTOK["_default"])
+    rates = lookup_price_row(model)
     mtok = 1_000_000.0
     # Non-cached input = total input minus cached subset
     non_cached_input = max(0, input_tokens - cache_read_input_tokens)
@@ -811,8 +802,9 @@ def project_call_cost(
     :param estimated_output_tokens: Estimated output token count (projection).
     :param cache_hit_fraction: Expected cache hit fraction (0.0 = worst case = no cache).
     :returns: Projected USD cost.
+    :raises KeyError: If ``model`` has no PRICE_PER_MTOK row (#884).
     """
-    rates = PRICE_PER_MTOK.get(model, PRICE_PER_MTOK["_default"])
+    rates = lookup_price_row(model)
     mtok = 1_000_000.0
     # Worst case: assume all input is uncached (cache_hit_fraction=0)
     cached_tokens = int(estimated_input_tokens * cache_hit_fraction)

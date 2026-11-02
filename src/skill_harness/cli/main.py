@@ -663,11 +663,12 @@ def run() -> None:
     default="claude-sonnet-4-6",
     show_default=True,
     help=(
-        "Subject model id. Direct: 'claude-sonnet-4-6' (Anthropic), 'gpt-5.5' (OpenAI), "
-        "'o4-mini' (OpenAI o-series). Via OpenRouter: '<provider>/<model>' e.g. "
-        "'openai/gpt-5.5', 'anthropic/claude-sonnet-4-6', 'google/gemini-2-pro'. "
+        "Subject model id. Direct: 'claude-sonnet-4-6' (Anthropic), 'gpt-5.5' (OpenAI). "
+        "Via OpenRouter: '<provider>/<model>' e.g. 'openai/gpt-5.5', "
+        "'anthropic/claude-sonnet-4-6'. "
         "If only OPENROUTER_API_KEY is set, direct claude-* / gpt-* / o<N>-* models "
-        "are auto-routed through OpenRouter with a stderr warning."
+        "are auto-routed through OpenRouter with a stderr warning. "
+        "--execute refuses a model with no row in PRICE_PER_MTOK."
     ),
 )
 @click.option(
@@ -1432,10 +1433,17 @@ def _cmd_execute(
     state).
     """
     from skill_harness.ablation.runner import BudgetAbortedError
+    from skill_harness.ablation.subject import lookup_price_row
     from skill_harness.aggregation.errors import PreconditionError
 
     # m3: model-aware API key pre-flight BEFORE any DB write (no orphan run rows)
     resolved_model = _resolve_subject_model_with_fallback(subject_model)
+
+    # #884: the --max-usd gate cannot project a model it cannot price.
+    try:
+        lookup_price_row(resolved_model)
+    except KeyError as exc:
+        raise click.ClickException(exc.args[0]) from exc
 
     # B2: daily-cap pre-run check BEFORE any DB write
     try:

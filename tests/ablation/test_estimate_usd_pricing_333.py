@@ -38,7 +38,6 @@ _CACHE_CREATION = 100_000
 _OUTPUT_TOKENS = 50_000
 
 _SONNET_5_USD = round(2.00 + 0.25 + 0.04 + 0.50, 8)
-_DEFAULT_USD = round(3.00 + 0.375 + 0.06 + 0.75, 8)
 
 
 def _estimate(model: str) -> float:
@@ -49,17 +48,6 @@ def _estimate(model: str) -> float:
         cache_creation_input_tokens=_CACHE_CREATION,
         output_tokens=_OUTPUT_TOKENS,
     )
-
-
-def test_default_row_differs_from_sonnet_5_row() -> None:
-    """Premise of the whole file: the wrong row produces a different figure.
-
-    If ``_default`` and ``claude-sonnet-5`` ever carry the same rates, the
-    assertions below go vacuous while still passing loudly.
-    """
-    assert PRICE_PER_MTOK["_default"] != PRICE_PER_MTOK["claude-sonnet-5"]
-    assert _estimate("_default") == _DEFAULT_USD
-    assert _estimate("claude-sonnet-5") == _SONNET_5_USD
 
 
 def test_recorded_prefixed_sonnet_5_prices_at_the_sonnet_5_rate() -> None:
@@ -97,12 +85,9 @@ def test_unknown_model_behind_a_route_prefix_also_refuses() -> None:
     assert "anthropic/claude-nonexistent-model" in str(excinfo.value)
 
 
-def test_default_row_is_reachable_only_by_naming_it() -> None:
-    """'_default' stays in the table, but no longer catches an unknown model.
-
-    The row is still used by ``_estimate_usd_openai``, so it is not removed.
-    What #333 removes is its reachability as a silent fallback.
-    """
-    assert lookup_price_row("_default") is PRICE_PER_MTOK["_default"]
+def test_the_table_has_no_fallback_row() -> None:
+    """#884 removed '_default', so naming it refuses like any other unknown model."""
+    with pytest.raises(KeyError):
+        lookup_price_row("_default")
     with pytest.raises(KeyError):
         lookup_price_row("_no_such_model_")
