@@ -10,7 +10,7 @@ from click.testing import CliRunner, Result
 
 from skill_harness.ablation.runner import AblationRunner, RunConfig
 from skill_harness.ablation.subject import SubjectClient
-from skill_harness.cli.main import cli
+from skill_harness.cli.main import _execute_ablation_run, cli
 from skill_harness.storage.migrations import open_evidence, open_runtime
 from skill_harness.storage.models import (
     ClauseWrite,
@@ -35,6 +35,7 @@ _CLAUSE_B1 = "clause-b1"
 _RAT_ID = "RAT-0009"
 _FROZEN_MODEL = "gpt-5.5"
 _CLI_DEFAULT_MODEL = "claude-sonnet-4-6"
+_ROUTED_MODEL = f"anthropic/{_CLI_DEFAULT_MODEL}"
 _WARMUP_AND_ONE_COMPARISON_CALLS = 4
 
 _RECORD = """---
@@ -57,6 +58,22 @@ q_min: 0.70
 
 # {rat} - resume fixture
 """
+
+
+def _record_text(
+    rat: str = _RAT_ID,
+    *,
+    cap: str = "5.00",
+    gamma: str = "gamma: 0.90",
+    delta_min: str = "delta_min: 0.20",
+) -> str:
+    return (
+        _RECORD.format(rat=rat, skill_id=_SKILL_A)
+        .replace("worst_case_cost_usd: 5.00", f"worst_case_cost_usd: {cap}")
+        .replace("hard_cap_usd: 5.00", f"hard_cap_usd: {cap}")
+        .replace("gamma: 0.90", gamma)
+        .replace("delta_min: 0.20", delta_min)
+    )
 
 
 class _Store:
@@ -185,6 +202,79 @@ class _Store:
         assert self.sampled_models(run_id) == {_FROZEN_MODEL}
         return run_id
 
+    def write_record(self, name: str, text: str) -> Path:
+        path = self.root / name
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def seed_partial_run(
+        self,
+        run_id: str,
+        *,
+        recorded: str,
+        sampled: str | None,
+        clause_id: str = _CLAUSE_A1,
+    ) -> None:
+        ev = open_evidence(self.evidence)
+        try:
+            with writer_transaction(ev):
+                insert_run(
+                    ev,
+                    RunWrite(
+                        run_id=run_id,
+                        skill_id=_SKILL_A,
+                        run_kind="ablation",
+                        config_json=RunConfig(
+                            run_id=run_id,
+                            skill_id=_SKILL_A,
+                            clauses=[{"clause_id": clause_id}],
+                            subject_model=recorded,
+                            user_message="m",
+                        ).to_json(),
+                        started_at=_TS,
+                        completed_at=None,
+                    ),
+                )
+                if sampled is not None:
+                    insert_sample(
+                        ev,
+                        SampleWrite(
+                            sample_id="s-0",
+                            run_id=run_id,
+                            clause_id=clause_id,
+                            condition="full",
+                            subject_model=sampled,
+                            subject_seed=None,
+                            output_text="x",
+                            output_sha256="a" * 64,
+                            sampled_at=_TS,
+                            sample_index=0,
+                            input_tokens=1,
+                            cache_read_input_tokens=0,
+                            cache_creation_input_tokens=0,
+                            output_tokens=1,
+                            usd=0.001,
+                        ),
+                    )
+        finally:
+            ev.close()
+        rt = open_runtime(self.runtime)
+        try:
+            with writer_transaction(rt):
+                insert_run_progress(
+                    rt,
+                    RunProgressWrite(
+                        run_id=run_id,
+                        state="running",
+                        samples_planned=3,
+                        samples_collected=0 if sampled is None else 1,
+                        last_heartbeat=_TS,
+                        error=None,
+                    ),
+                )
+        finally:
+            rt.close()
+
     def scalar(self, sql: str, *params: Any) -> Any:
         ev = open_evidence(self.evidence)
         try:
@@ -292,73 +382,73 @@ class TestResumeKeepsTheModel:
         _assert_refused_before_spend(store, result, run_id, "would route")
         assert store.sample_count(run_id) == before
 
-    def test_refuses_when_stored_samples_disagree_with_the_recorded_model(
-        self, store: _Store
+    def test_preview_prints_the_frozen_model_over_the_flag(self, store: _Store) -> None:
+        run_id = store.start_and_crash()
+
+        result = store.invoke(_SKILL_A, "--subject-model", _CLI_DEFAULT_MODEL, "--resume", run_id)
+
+        assert f"subject_model: {_FROZEN_MODEL}" in result.output
+
+    def test_direct_caller_cannot_override_the_frozen_model(self, store: _Store) -> None:
+        run_id = store.start_and_crash()
+
+        with patch("skill_harness.ablation.subject.make_subject_client", store.make_client):
+            _execute_ablation_run(
+                skill_id=_SKILL_A,
+                clause_id=None,
+                subject_model=_CLI_DEFAULT_MODEL,
+                user_message="ignored on a resume",
+                max_usd=5.0,
+                resume_run_id=run_id,
+                evidence_db=store.evidence,
+                runtime_db=store.runtime,
+            )
+
+        assert store.factory_models[-1] == _FROZEN_MODEL
+        assert store.sampled_models(run_id) == {_FROZEN_MODEL}
+
+
+class TestStoredSamplesAgainstTheRecordedModel:
+    @pytest.mark.parametrize(
+        ("recorded", "sampled"),
+        [
+            (_CLI_DEFAULT_MODEL, _FROZEN_MODEL),
+            (_ROUTED_MODEL, "openai/gpt-5.5"),
+        ],
+    )
+    def test_refuses_another_model_and_says_the_run_is_stranded(
+        self, store: _Store, recorded: str, sampled: str
     ) -> None:
         run_id = "run-wrong-record"
-        ev = open_evidence(store.evidence)
-        try:
-            with writer_transaction(ev):
-                insert_run(
-                    ev,
-                    RunWrite(
-                        run_id=run_id,
-                        skill_id=_SKILL_A,
-                        run_kind="ablation",
-                        config_json=RunConfig(
-                            run_id=run_id,
-                            skill_id=_SKILL_A,
-                            clauses=[{"clause_id": _CLAUSE_A1}],
-                            subject_model=_CLI_DEFAULT_MODEL,
-                            user_message="m",
-                        ).to_json(),
-                        started_at=_TS,
-                        completed_at=None,
-                    ),
-                )
-                insert_sample(
-                    ev,
-                    SampleWrite(
-                        sample_id="s-0",
-                        run_id=run_id,
-                        clause_id=_CLAUSE_A1,
-                        condition="full",
-                        subject_model=_FROZEN_MODEL,
-                        subject_seed=None,
-                        output_text="x",
-                        output_sha256="a" * 64,
-                        sampled_at=_TS,
-                        sample_index=0,
-                        input_tokens=1,
-                        cache_read_input_tokens=0,
-                        cache_creation_input_tokens=0,
-                        output_tokens=1,
-                        usd=0.001,
-                    ),
-                )
-        finally:
-            ev.close()
-        rt = open_runtime(store.runtime)
-        try:
-            with writer_transaction(rt):
-                insert_run_progress(
-                    rt,
-                    RunProgressWrite(
-                        run_id=run_id,
-                        state="running",
-                        samples_planned=3,
-                        samples_collected=1,
-                        last_heartbeat=_TS,
-                        error=None,
-                    ),
-                )
-        finally:
-            rt.close()
+        store.seed_partial_run(run_id, recorded=recorded, sampled=sampled)
 
-        result = store.invoke(_SKILL_A, "--resume", run_id)
+        result = store.invoke(_SKILL_A, "--resume", run_id, env={"OPENROUTER_API_KEY": "sk-test"})
 
-        _assert_refused_before_spend(store, result, run_id, _FROZEN_MODEL)
+        _assert_refused_before_spend(store, result, run_id, sampled)
+        assert run_id in result.output
+        assert "stays incomplete" in result.output
+        assert "no command to retire" in result.output
+        assert "fresh" not in result.output
         assert store.sample_count(run_id) == 1
+
+    @pytest.mark.parametrize(
+        ("recorded", "sampled"),
+        [
+            (_CLI_DEFAULT_MODEL, _ROUTED_MODEL),
+            (_ROUTED_MODEL, _CLI_DEFAULT_MODEL),
+        ],
+    )
+    def test_another_route_to_the_same_model_resumes(
+        self, store: _Store, recorded: str, sampled: str
+    ) -> None:
+        run_id = "run-other-route"
+        store.seed_partial_run(run_id, recorded=recorded, sampled=sampled)
+
+        result = store.invoke(_SKILL_A, "--resume", run_id, env={"OPENROUTER_API_KEY": "sk-test"})
+
+        assert result.exit_code in (0, 2), result.output
+        assert store.completed_at(run_id) is not None
+        assert store.sampled_models(run_id) == {_CLI_DEFAULT_MODEL, _ROUTED_MODEL}
 
 
 class TestResumeKeepsTheRatification:
@@ -383,8 +473,142 @@ class TestResumeKeepsTheRatification:
         _assert_refused_before_spend(store, result, run_id, str(frozen))
         assert store.sample_count(run_id) == before
 
+    def test_refuses_a_same_named_record_with_another_id(
+        self, store: _Store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        start_dir = tmp_path / "start"
+        other_dir = tmp_path / "other"
+        start_dir.mkdir()
+        other_dir.mkdir()
+        name = f"{_RAT_ID}-relative.md"
+        (start_dir / name).write_text(_record_text(), encoding="utf-8")
+        monkeypatch.chdir(start_dir)
+        run_id = store.start_and_crash(record=Path(name))
+        before = store.sample_count(run_id)
+        (other_dir / name).write_text(
+            _record_text("RAT-0077", gamma="gamma: 0.51", delta_min="delta_min: 0.01"),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(other_dir)
+
+        result = store.invoke(_SKILL_A, "--resume", run_id)
+
+        _assert_refused_before_spend(store, result, run_id, "RAT-0077")
+        assert _RAT_ID in result.output
+        assert store.sample_count(run_id) == before
+
+    def test_refuses_a_flag_naming_another_record(self, store: _Store) -> None:
+        run_id = store.start_and_crash()
+        before = store.sample_count(run_id)
+        other = store.write_record("RAT-0010-other.md", _record_text("RAT-0010"))
+
+        result = store.invoke(_SKILL_A, "--resume", run_id, record=other)
+
+        _assert_refused_before_spend(store, result, run_id, "RAT-0010")
+        assert _RAT_ID in result.output
+        assert store.sample_count(run_id) == before
+
+    def test_refuses_when_the_frozen_record_no_longer_registers_thresholds(
+        self, store: _Store
+    ) -> None:
+        frozen = store.write_record(f"{_RAT_ID}-frozen.md", _record_text())
+        run_id = store.start_and_crash(record=frozen)
+        before = store.sample_count(run_id)
+        frozen.write_text(_record_text(gamma=""), encoding="utf-8")
+
+        result = store.invoke(_SKILL_A, "--resume", run_id)
+
+        _assert_refused_before_spend(store, result, run_id, str(frozen))
+        assert store.sample_count(run_id) == before
+
+    def test_the_same_id_at_another_path_resumes(self, store: _Store) -> None:
+        frozen = store.write_record(f"{_RAT_ID}-frozen.md", _record_text())
+        run_id = store.start_and_crash(record=frozen)
+
+        result = store.invoke(_SKILL_A, "--resume", run_id, record=store.record())
+
+        assert result.exit_code in (0, 2), result.output
+        assert store.completed_at(run_id) is not None
+
+
+class TestRunFrozenWithoutThresholds:
+    def _start(self, store: _Store) -> tuple[Path, str]:
+        frozen = store.write_record(f"{_RAT_ID}-unregistered.md", _record_text(gamma=""))
+        run_id = store.start_and_crash(record=frozen)
+        assert store.config(run_id).ratification_id is None
+        return frozen, run_id
+
+    def test_resumes_under_the_same_record(self, store: _Store) -> None:
+        frozen, run_id = self._start(store)
+
+        result = store.invoke(_SKILL_A, "--resume", run_id, record=frozen)
+
+        assert result.exit_code in (0, 2), result.output
+        assert store.completed_at(run_id) is not None
+
+    def test_refuses_thresholds_that_arrived_after_the_freeze(self, store: _Store) -> None:
+        frozen, run_id = self._start(store)
+        before = store.sample_count(run_id)
+        frozen.write_text(_record_text(), encoding="utf-8")
+
+        result = store.invoke(_SKILL_A, "--resume", run_id, record=frozen)
+
+        _assert_refused_before_spend(store, result, run_id, str(frozen))
+        assert store.sample_count(run_id) == before
+
+    def test_refuses_a_flag_naming_another_record(self, store: _Store) -> None:
+        _, run_id = self._start(store)
+        before = store.sample_count(run_id)
+        other = store.write_record("RAT-0010-other.md", _record_text("RAT-0010", gamma=""))
+
+        result = store.invoke(_SKILL_A, "--resume", run_id, record=other)
+
+        _assert_refused_before_spend(store, result, run_id, "RAT-0010")
+        assert store.sample_count(run_id) == before
+
+
+class TestBudgetAbortMessage:
+    def test_states_the_exit_that_works(self, store: _Store) -> None:
+        small = store.write_record(f"{_RAT_ID}-small.md", _record_text(cap="0.01"))
+        big = store.write_record("RAT-0010-big.md", _record_text("RAT-0010"))
+
+        aborted = store.invoke(
+            _SKILL_A,
+            "--subject-model",
+            _CLI_DEFAULT_MODEL,
+            "--max-usd",
+            "0.01",
+            record=small,
+        )
+
+        assert aborted.exit_code == 1, aborted.output
+        assert "budget exhausted" in aborted.output
+        assert "Increase --max-usd" not in aborted.output
+        assert "cannot raise" in aborted.output
+        run_id = store.scalar("SELECT run_id FROM runs")
+
+        same_record_higher_cap = store.invoke(_SKILL_A, "--resume", run_id, record=small)
+        assert same_record_higher_cap.exit_code == 1
+        assert "cap-mismatch" in same_record_higher_cap.output
+
+        other_record = store.invoke(_SKILL_A, "--resume", run_id, record=big)
+        assert other_record.exit_code == 1
+        assert "RAT-0010" in other_record.output
+
+        fresh = store.invoke(_SKILL_A, "--subject-model", _CLI_DEFAULT_MODEL, record=big)
+        assert fresh.exit_code in (0, 2), fresh.output
+        assert store.scalar("SELECT COUNT(*) FROM runs") == 2
+
 
 class TestResumeKeepsTheClauses:
+    def test_refuses_a_frozen_clause_missing_from_the_store(self, store: _Store) -> None:
+        run_id = "run-unknown-clause"
+        store.seed_partial_run(run_id, recorded=_FROZEN_MODEL, sampled=None, clause_id="gone")
+
+        result = store.invoke(_SKILL_A, "--resume", run_id)
+
+        _assert_refused_before_spend(store, result, run_id, "not in evidence.clauses")
+
     @pytest.mark.parametrize("narrowed_to", [_CLAUSE_A1, _CLAUSE_A2])
     def test_refuses_a_clause_that_narrows_the_plan(self, store: _Store, narrowed_to: str) -> None:
         run_id = store.start_and_crash()
