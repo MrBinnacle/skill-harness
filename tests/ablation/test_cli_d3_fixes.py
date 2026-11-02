@@ -1151,6 +1151,14 @@ class TestM4ExitCodeContract:
         assert "Run refused" in result.output
         execute.assert_not_called()
 
+    def test_healthy_store_passes_the_guard(self, tmp_path: Path) -> None:
+        _close_pair(*_open_pair(tmp_path))
+
+        result, execute = self._invoke_guard(tmp_path)
+
+        assert result.exit_code == 0, result.output
+        execute.assert_called_once()
+
     def test_absent_evidence_db_passes_the_guard(self, tmp_path: Path) -> None:
         result, execute = self._invoke_guard(tmp_path)
 
