@@ -206,7 +206,6 @@ def test_resume_missing_user_message_key_refuses(
 def test_resume_config_without_the_rest_of_the_plan_refuses(
     mock_runner_cls: MagicMock, mock_make_subject: MagicMock, tmp_path: Path
 ) -> None:
-    """A user_message alone is not a plan: without a model and clauses, nothing can be frozen."""
     evidence_db = tmp_path / "evidence.db"
     runtime_db = tmp_path / "runtime.db"
     _seed_skill_and_clause(evidence_db)

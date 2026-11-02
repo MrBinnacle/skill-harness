@@ -922,7 +922,6 @@ class AblationRunner:
         return clause_results
 
     def _resolve_path_c(self, ratification_path: Path | str | None) -> None:
-        """Set the registered Gate-2 thresholds a clause decision reads (#368 Path C)."""
         self._path_c_thresholds = None
         self._path_c_unavailable_reason = "no_ratification_reference"
         if ratification_path is not None:

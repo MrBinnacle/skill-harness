@@ -839,8 +839,7 @@ def run_ablation(
         runtime_db=runtime_db,
         # #368 Path C: the same record the preflight above just accepted supplies
         # the registered Gate-2 thresholds. Threaded rather than re-read, so the
-        # thresholds a clause is decided under are the ones the gate approved. A
-        # resume uses the record frozen in its plan instead (#886).
+        # thresholds a clause is decided under are the ones the gate approved.
         ratification_path=ratification_path,
     )
 
@@ -1261,7 +1260,6 @@ def _execute_ablation_run(
 
 
 def _read_run_config(evidence_conn: sqlite3.Connection, run_id: str) -> RunConfig | None:
-    """Parse a run's frozen plan. None if the run is absent or its config_json is not a plan."""
     from skill_harness.ablation.runner import RunConfig
 
     row = evidence_conn.execute(
@@ -1278,11 +1276,6 @@ def _read_run_config(evidence_conn: sqlite3.Connection, run_id: str) -> RunConfi
 def _load_frozen_plan(
     ctx: StorageContext, run_id: str, skill_id: str, clause_id: str | None
 ) -> tuple[RunConfig, list[Any]]:
-    """Return the plan a resume must run and its clauses, or refuse a resume that changes it.
-
-    Clause specs come from evidence.clauses, which is append-only, because the clause
-    dicts in config_json do not carry the comparator a 'decrease' clause needs (A2).
-    """
     plan = _read_run_config(ctx.evidence_conn, run_id)
     if plan is None:
         raise click.ClickException(
@@ -1322,7 +1315,6 @@ def _load_frozen_plan(
 
 
 def _frozen_subject_model(evidence_db: Path, run_id: str) -> str | None:
-    """Read the model a run froze, without a write. None if there is no readable plan."""
     from skill_harness.storage.errors import BootstrapError
     from skill_harness.storage.migrations import open_evidence_readonly
 
@@ -1542,8 +1534,7 @@ def _cmd_execute(
     from skill_harness.ablation.runner import BudgetAbortedError
     from skill_harness.aggregation.errors import PreconditionError
 
-    # m3: model-aware API key pre-flight BEFORE any DB write (no orphan run rows).
-    # #886: a resume keys it on the frozen model, and a key change must not reroute it.
+    # m3: model-aware API key pre-flight BEFORE any DB write (no orphan run rows)
     frozen_model = _frozen_subject_model(evidence_db, resume_run_id) if resume_run_id else None
     resolved_model = _resolve_subject_model_with_fallback(frozen_model or subject_model)
     if frozen_model is not None and resolved_model != frozen_model:

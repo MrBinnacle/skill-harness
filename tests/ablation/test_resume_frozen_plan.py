@@ -1,10 +1,3 @@
-"""`run ablation --resume` runs the plan frozen in runs.config_json (#886).
-
-Every test drives the real command, the real runner and real SQLite stores. Only
-the SDK client under the subject adapter is faked, and a run is interrupted by
-making that client raise, so a resume always continues a run the runner started.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -42,6 +35,7 @@ _CLAUSE_B1 = "clause-b1"
 _RAT_ID = "RAT-0009"
 _FROZEN_MODEL = "gpt-5.5"
 _CLI_DEFAULT_MODEL = "claude-sonnet-4-6"
+_WARMUP_AND_ONE_COMPARISON_CALLS = 4
 
 _RECORD = """---
 rat: {rat}
@@ -66,8 +60,6 @@ q_min: 0.70
 
 
 class _Store:
-    """A scratch evidence and runtime store with two skills seeded."""
-
     def __init__(self, root: Path) -> None:
         self.root = root
         self.evidence = root / "evidence.db"
@@ -182,8 +174,7 @@ class _Store:
             )
 
     def start_and_crash(self, *extra: str, record: Path | None = None) -> str:
-        """Start a run of skill A under gpt-5.5 and crash it after one comparison."""
-        self.calls_until_crash = 4  # warmup, then Full, Ablated and Null of one comparison
+        self.calls_until_crash = _WARMUP_AND_ONE_COMPARISON_CALLS
         result = self.invoke(
             _SKILL_A, "--subject-model", _FROZEN_MODEL, *extra, record=record or self.record()
         )
@@ -304,7 +295,6 @@ class TestResumeKeepsTheModel:
     def test_refuses_when_stored_samples_disagree_with_the_recorded_model(
         self, store: _Store
     ) -> None:
-        """A run from before this fix recorded the default and sampled the flag's model."""
         run_id = "run-wrong-record"
         ev = open_evidence(store.evidence)
         try:
