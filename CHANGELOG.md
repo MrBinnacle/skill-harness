@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   excludes them, so each cached call recorded too little. `--max-usd` and the
   daily cap now compare against the billed figure, so a run near its cap stops
   earlier. `samples.usd` rows already written stay as written.
+- **`run ablation --execute` refuses a subject model with no price row (#884).**
+  The `--max-usd` gate priced any model missing from `PRICE_PER_MTOK` at Sonnet
+  4.6's $3/$15 per MTok. The CLI now refuses such a model before any database
+  write, and `PRICE_PER_MTOK` no longer has a `_default` row. OpenRouter models
+  with no local row, such as `google/gemini-2-pro`, refuse until the table has
+  one, although OpenRouter reports their real cost after each call.
 - **The release gate reads every run at the candidate, not the first page.**
   G8 and G9 asked GitHub for the runs at a commit without a page size, so
   they saw at most 30. A newer failed run past the 30th was invisible, and the

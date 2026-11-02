@@ -663,11 +663,12 @@ def run() -> None:
     default="claude-sonnet-4-6",
     show_default=True,
     help=(
-        "Subject model id. Direct: 'claude-sonnet-4-6' (Anthropic), 'gpt-5.5' (OpenAI), "
-        "'o4-mini' (OpenAI o-series). Via OpenRouter: '<provider>/<model>' e.g. "
-        "'openai/gpt-5.5', 'anthropic/claude-sonnet-4-6', 'google/gemini-2-pro'. "
+        "Subject model id. Direct: 'claude-sonnet-4-6' (Anthropic), 'gpt-5.5' (OpenAI). "
+        "Via OpenRouter: '<provider>/<model>' e.g. 'openai/gpt-5.5', "
+        "'anthropic/claude-sonnet-4-6'. "
         "If only OPENROUTER_API_KEY is set, direct claude-* / gpt-* / o<N>-* models "
-        "are auto-routed through OpenRouter with a stderr warning."
+        "are auto-routed through OpenRouter with a stderr warning. "
+        "--execute refuses a model with no row in PRICE_PER_MTOK."
     ),
 )
 @click.option(
@@ -1371,6 +1372,15 @@ def _resolve_subject_model_with_fallback(subject_model: str) -> str:
     return subject_model
 
 
+def _refuse_unpriced_model(model: str) -> None:
+    from skill_harness.ablation.subject import lookup_price_row
+
+    try:
+        lookup_price_row(model)
+    except KeyError as exc:
+        raise click.ClickException(exc.args[0]) from exc
+
+
 def _check_daily_cap(runtime_db: Path, daily_cap: float) -> None:
     """Compute trailing-24h SUM(usd) from runtime.cost_ledger; raise _DailyCapExceededError
     if it would exceed daily_cap (B2 fix, A42).
@@ -1436,6 +1446,7 @@ def _cmd_execute(
 
     # m3: model-aware API key pre-flight BEFORE any DB write (no orphan run rows)
     resolved_model = _resolve_subject_model_with_fallback(subject_model)
+    _refuse_unpriced_model(resolved_model)
 
     # B2: daily-cap pre-run check BEFORE any DB write
     try:
