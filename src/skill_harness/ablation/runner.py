@@ -639,14 +639,7 @@ class AblationRunner:
         # spend. A record that does not carry them is refused here rather than
         # part-way through a paid run, and the refusal is recorded on every
         # clause result instead of leaving the decision silently unmade.
-        self._path_c_thresholds = None
-        self._path_c_unavailable_reason = "no_ratification_reference"
-        if ratification_path is not None:
-            try:
-                self._path_c_thresholds = registered_thresholds(ratification_path)
-                self._path_c_unavailable_reason = None
-            except UnregisteredThresholdsError:
-                self._path_c_unavailable_reason = "unregistered_thresholds"
+        self._resolve_path_c(ratification_path)
 
         run_config = RunConfig(
             run_id=run_id,
@@ -809,6 +802,7 @@ class AblationRunner:
         user_message: str,
         max_usd: float = 5.0,
         subject_model: str = "claude-sonnet-4-6",
+        ratification_path: Path | str | None = None,
     ) -> list[ClauseResult]:
         """Resume an incomplete run (A40 idempotency + resume).
 
@@ -819,10 +813,16 @@ class AblationRunner:
         :param clauses: Clause specs (same as original run).
         :param user_message: Task prompt (same as original run).
         :param max_usd: Budget cap.
-        :param subject_model: Subject model ID.
+        :param subject_model: Subject model ID (same as original run).
+        :param ratification_path: RATIFIED record frozen by the original run. It
+            supplies the Path C thresholds, as it does in run_ablation.
         :returns: List of ClauseResult.
         :raises ValueError: If the run does not exist or is already complete.
+        :raises RatificationError: If the record cannot be read. Raised before any
+            write or subject call.
         """
+        self._resolve_path_c(ratification_path)
+
         # Verify run exists and is resumable
         existing = self._get_existing_samples(run_id)
         progress = get_run_progress_by_id(self._runtime, run_id)
@@ -920,6 +920,16 @@ class AblationRunner:
         )
 
         return clause_results
+
+    def _resolve_path_c(self, ratification_path: Path | str | None) -> None:
+        self._path_c_thresholds = None
+        self._path_c_unavailable_reason = "no_ratification_reference"
+        if ratification_path is not None:
+            try:
+                self._path_c_thresholds = registered_thresholds(ratification_path)
+                self._path_c_unavailable_reason = None
+            except UnregisteredThresholdsError:
+                self._path_c_unavailable_reason = "unregistered_thresholds"
 
     # ------------------------------------------------------------------
     # Declared-arm runs (#554): composition studies sample named arms.
