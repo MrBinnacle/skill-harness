@@ -362,16 +362,16 @@ def _estimate_usd(
 ) -> float:
     """Estimate USD cost from token counts and model pricing (Anthropic-style).
 
+    Anthropic's ``input_tokens`` already excludes both cache counts (#883).
+
     :raises KeyError: If ``model`` has no PRICE_PER_MTOK row (#333). The
         pre-#333 behaviour silently priced such a model at the ``_default``
         (Sonnet-4.6) rate.
     """
     rates = lookup_price_row(model)
     mtok = 1_000_000.0
-    # Non-cache input = total input minus cache components
-    plain_input = max(0, input_tokens - cache_read_input_tokens - cache_creation_input_tokens)
     cost = (
-        plain_input * rates["input"] / mtok
+        input_tokens * rates["input"] / mtok
         + cache_creation_input_tokens * rates["cache_write"] / mtok
         + cache_read_input_tokens * rates["cache_read"] / mtok
         + output_tokens * rates["output"] / mtok
