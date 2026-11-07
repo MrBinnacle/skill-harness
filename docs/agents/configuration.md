@@ -29,14 +29,14 @@ Keep session continuity in the active runtime and private records, not a public 
 | Surface | Responsibility and authority |
 |---|---|
 | `AGENTS.md`, `CONTRIBUTING.md`, `GLOSSARY.md`, `docs/agents/`, `docs/adr/` | Shared instructions, contribution procedure, vocabulary and accepted decisions. |
-| `pyproject.toml` | Package metadata; Hatch build settings; pytest markers, options and coverage; Ruff, mypy and Pyright settings. Ruff and strict mypy are the CI authorities, not editor diagnostics. |
+| `pyproject.toml` | Package metadata; Hatch build settings; pytest markers and options; Ruff, mypy and Pyright settings. Ruff and strict mypy are the CI authorities, not editor diagnostics. |
 | `requirements-ci.txt` | CI dependency constraints. Compare actual installed versions before describing a local run as equivalent. |
 | `.pre-commit-config.yaml` | Formatting, parsing, key detection, residue and structural bans. The config is tracked; installation in each checkout is separate. |
 | `.gitattributes`, `.gitignore`, `.dockerignore` | Git text handling, publication exclusions and assurance-container build exclusions. An ignore rule does not protect an existing file from checkout or deletion. |
-| `.github/workflows/ci.yml` | Lint, types, test matrix, calibration, residue, structural bans, drift, release, dependency and prose gates. Read the current commands rather than copying a second gate list into agent instructions. |
+| `.github/workflows/ci.yml` | Lint, types, test matrix, calibration, structural bans, drift, release, dependency and prose gates. Read the current commands rather than copying a second gate list into agent instructions. |
 | `.github/workflows/assurance.yml`, `dependency-audit.yml`, `accessibility.yml` | Assurance, dependency and accessibility workflows. |
 | `.github/workflows/publish.yml`, `release-authorize.yml`, `pages.yml`, `repo-description-sync.yml` | Package release, release authorization and public-site/repository publication. Configuration work does not authorize a release. |
-| `.github/workflows/depersonalization-gate.yml`, `schedule-staleness.yml`, `scorecard.yml`, `triage-label-on-open.yml` | Publication-boundary checks, schedule freshness, security reporting and issue triage. |
+| `.github/workflows/depersonalization-gate.yml`, `schedule-staleness.yml`, `scorecard.yml`, `triage-label-on-open.yml` | Required residue/publication-boundary check, schedule freshness, security reporting and issue triage. |
 | `.github/CODEOWNERS`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/ISSUE_TEMPLATE/` | Review ownership and contribution templates. Live branch protection, not the template, determines required checks. |
 | `.github/dependabot.yml` | Dependency-update scheduling and grouping. Do not merge unrelated update PRs as configuration maintenance. |
 | `.config/vale/.vale.ini`, `.config/vale/styles/Taste/*.yml` | Public prose rules. These implement the register stated in `AGENTS.md`. |
@@ -63,6 +63,7 @@ Do not force-add them, copy their contents into a PR, or relocate credentials.
 | `.gitnexusrc`, `.gitnexus/` | Local graph configuration and generated index. Index freshness must be checked before graph evidence is used. Lexical inspection does not require a rebuild. |
 | `.git/config`, `.git/info/exclude`, `.git/hooks/` | Per-checkout Git settings, local publication exclusions and installed hooks. Never copy machine paths into tracked configuration. |
 | `.venv/`, `uv.lock`, tool caches, local databases and backups | Local environment, resolver output and evidence artifacts excluded by the existing publication boundary. Do not delete them as cleanup. |
+| Local plugin reference files | Ignored, integration-specific guidance. Keep private details out of shared instructions; these files do not override the public contract. |
 | User-level Claude and Pi configuration | Inherited settings, authentication, skills and hooks. Outside this repository's freeze; no project override is added merely to shadow them. |
 
 No project `.pi/` directory, shared `.claude/settings.json`, project MCP configuration,

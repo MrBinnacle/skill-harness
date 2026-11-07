@@ -52,7 +52,8 @@ Code changes follow RED → GREEN → REFACTOR, including a test that fails for 
 reason before the fix. Do not disable tests to get a pass. Prose-only changes need document,
 link and configuration checks, not manufactured code tests.
 
-The gate definitions are `.github/workflows/ci.yml`; tool settings are in `pyproject.toml`,
+Gate definitions are in `.github/workflows/ci.yml` and
+`.github/workflows/depersonalization-gate.yml`; tool settings are in `pyproject.toml`,
 and CI dependency constraints are in `requirements-ci.txt`. `CONTRIBUTING.md` explains local
 commands and seeded replay. Run the applicable gates with their full configured scope,
 including calibration, structural bans, drift and release checks. A host run with different
