@@ -4,6 +4,10 @@ Thanks for your interest. This project is pre-1.0 and changing fast, but contrib
 
 ## Before you start
 
+Agents start with [`AGENTS.md`](AGENTS.md). The
+[configuration baseline](docs/agents/configuration.md) identifies shared and local settings;
+use their existing owners rather than adding another instruction or configuration layer.
+
 Read these in order:
 
 1. [`docs/PRD.md`](docs/PRD.md) — what the harness is and what it claims to measure
