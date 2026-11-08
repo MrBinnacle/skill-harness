@@ -62,10 +62,10 @@ iniconfig==2.3.0
 jiter==0.18.0
 jsonschema-specifications==2025.9.1
 jsonschema==4.26.0
-librt==0.15.0
+librt==0.16.0
 markdown-it-py==4.2.0
 mdurl==0.1.2
-mypy==2.3.1
+mypy==2.4.1
 mypy_extensions==1.1.0
 numpy==2.5.3
 openai==3.31.0
