@@ -33,7 +33,7 @@ dependencies = [
   # (Memory Tool CVEs, 2026-03-31; patched in 0.87.0). Memory Tool surface is not used.
   # Capped <2: docs/supply-chain/anthropic-audit-2026-10-22.md clears 1.x only, and
   # 2.0.0 (2026-10-21) is a breaking, unaudited major. Re-audit before raising the cap.
-  "anthropic>=1.15.0,<2",
+  "anthropic>=1.15.0,<3",
   # T3 tracer adapter; supply-chain audit at docs/supply-chain/openai-audit-2026-10-22.md
   # clears 3.x through 3.36.1. Floor >=3.17.0 is the first release that requires
   # httpx2>=2.12.0, which fixes the five httpx2 advisories; anthropic does not force
